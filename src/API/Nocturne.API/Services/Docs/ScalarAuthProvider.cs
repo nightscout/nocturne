@@ -6,6 +6,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
@@ -83,6 +84,7 @@ public sealed class ScalarAuthProvider
     private static readonly TimeSpan DemoTokenCacheTtl = TimeSpan.FromMinutes(10);
 
     private readonly INocturneDbContextFactory _factory;
+    private readonly ITenantRepository _tenants;
     private readonly DemoTenantService _demoTenantService;
     private readonly ISessionService _sessionService;
     private readonly RedirectUriValidator _redirectUriValidator;
@@ -93,6 +95,7 @@ public sealed class ScalarAuthProvider
 
     public ScalarAuthProvider(
         INocturneDbContextFactory factory,
+        ITenantRepository tenants,
         DemoTenantService demoTenantService,
         ISessionService sessionService,
         RedirectUriValidator redirectUriValidator,
@@ -102,6 +105,7 @@ public sealed class ScalarAuthProvider
         ILogger<ScalarAuthProvider> logger)
     {
         _factory = factory;
+        _tenants = tenants;
         _demoTenantService = demoTenantService;
         _sessionService = sessionService;
         _redirectUriValidator = redirectUriValidator;
@@ -276,25 +280,12 @@ public sealed class ScalarAuthProvider
         if (_cache.TryGetValue(cacheKey, out ResolvedDocsTenant? cached) && cached is not null)
             return cached;
 
-        await using var db = await _factory.CreatePlatformAsync(ct);
+        var tenant = slug is null
+            ? await _tenants.FindSoleTenantAsync(ct)
+            : await _tenants.FindBySlugAsync(slug, ct) is { IsActive: true } bySlug ? bySlug : null;
 
-        TenantEntity? tenant;
-        if (slug is null)
-        {
-            tenant = await db.Set<TenantEntity>().SoleTenantAsync(ct);
-
-            if (tenant is null)
-                return null;
-        }
-        else
-        {
-            tenant = await db.Set<TenantEntity>()
-                .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive, ct);
-
-            if (tenant is null)
-                return null;
-        }
+        if (tenant is null)
+            return null;
 
         var resolved = new ResolvedDocsTenant(
             tenant.Id,

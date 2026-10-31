@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -46,21 +47,12 @@ public sealed class RuleScopeClassBackfillService : BackgroundService
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
             var alerts = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
             var rules = scope.ServiceProvider.GetRequiredService<IAlertRuleRepository>();
             var classifier = scope.ServiceProvider.GetRequiredService<IRuleScopeClassifier>();
 
-            // Tenants are not RLS-scoped, so this list read is safe without a tenant context.
-            List<Guid> tenantIds;
-            await using (var lookup = await factory.CreatePlatformAsync(stoppingToken))
-            {
-                tenantIds = await lookup.Tenants
-                    .AsNoTracking()
-                    .Where(t => t.IsActive)
-                    .Select(t => t.Id)
-                    .ToListAsync(stoppingToken);
-            }
+            var tenantIds = await scope.ServiceProvider.GetRequiredService<ITenantRepository>()
+                .ListIdsAsync(activeOnly: true, stoppingToken);
 
             var updatedTotal = 0;
             foreach (var tenantId in tenantIds)

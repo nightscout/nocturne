@@ -13,6 +13,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.Admin;
 
@@ -247,7 +248,7 @@ public class TenantControllerLoginCodeTests : IDisposable
         var contexts = _db.ContextFactory.AsNocturneFactory();
         return _controller.IssueRecoveryCode(
             _tenantId, _memberSubjectId, contexts, _loginCodeService,
-            new MemberRecoveryEligibility(new TenantMemberService(contexts)), CancellationToken.None);
+            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts))), CancellationToken.None);
     }
 
     private TenantDetailDto TenantDetail(bool isActive) => new(

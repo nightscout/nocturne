@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -23,7 +24,8 @@ public static class AlertDeliveryCheck
     public static bool DeliversWhileClosed(ChannelType type) =>
         type is not (ChannelType.InApp or ChannelType.WebPush or ChannelType.DeviceAction);
 
-    public static async Task<bool> VerifiedAsync(NocturneDbContext db, IAlertRuleRepository rules, CancellationToken ct)
+    public static async Task<bool> VerifiedAsync(
+        NocturneDbContext db, ITenantRepository tenants, IAlertRuleRepository rules, CancellationToken ct)
     {
         var tests = await db.AlertInstances.AsNoTracking()
             .Where(i => i.IsTest
@@ -35,10 +37,7 @@ public static class AlertDeliveryCheck
         if (tests.Count == 0)
             return false;
 
-        var caregiver = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == db.TenantId)
-            .Select(t => t.PatientRelationship)
-            .FirstOrDefaultAsync(ct) == PatientRelationship.Caregiver;
+        var caregiver = (await tenants.GetAsync(db.TenantId, ct))?.PatientRelationship == PatientRelationship.Caregiver;
 
         var ruleIds = tests.Select(t => t.AlertRuleId).Distinct().ToList();
         var channels = await rules.GetChannelsAsync(ruleIds, ct);

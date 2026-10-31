@@ -57,6 +57,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 public class AlertRulesController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contextFactory;
+    private readonly ITenantMembershipRepository _members;
     private readonly IAlertRepository _alerts;
     private readonly IAlertRuleRepository _rules;
     private readonly ITenantAccessor _tenantAccessor;
@@ -74,6 +75,7 @@ public class AlertRulesController : ControllerBase
     /// </summary>
     public AlertRulesController(
         INocturneDbContextFactory contextFactory,
+        ITenantMembershipRepository members,
         IAlertRepository alerts,
         IAlertRuleRepository rules,
         ITenantAccessor tenantAccessor,
@@ -87,6 +89,7 @@ public class AlertRulesController : ControllerBase
         ILogger<AlertRulesController> logger)
     {
         _contextFactory = contextFactory;
+        _members = members;
         _alerts = alerts;
         _rules = rules;
         _tenantAccessor = tenantAccessor;
@@ -432,7 +435,8 @@ public class AlertRulesController : ControllerBase
         IReadOnlySet<string> storedRecipients,
         NocturneDbContext db,
         CancellationToken ct) =>
-        await _channels.ResolveAndValidateAsync(channels, storedRecipients, db, HttpContext?.GetSubjectId(), ct) is { } message
+        await _channels.ResolveAndValidateAsync(
+            channels, storedRecipients, db, _members, HttpContext?.GetSubjectId(), ct) is { } message
             ? BadRequest(new { message })
             : null;
 
@@ -483,8 +487,7 @@ public class AlertRulesController : ControllerBase
             return responses;
         }
 
-        await using var db = await _contextFactory.CreateAsync(ct);
-        var recipients = await InAppRecipients.ListAsync(db, db.TenantId, ct);
+        var recipients = await InAppRecipients.ListAsync(_members, _tenantAccessor.TenantId, ct);
         foreach (var channel in inApp)
         {
             Guid? subjectId = Guid.TryParse(channel.Destination, out var parsed) ? parsed : null;
@@ -510,9 +513,7 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(typeof(List<InAppRecipientResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<InAppRecipientResponse>>> GetInAppRecipients(CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
-
-        var members = await InAppRecipients.ListAsync(db, db.TenantId, ct);
+        var members = await InAppRecipients.ListAsync(_members, _tenantAccessor.TenantId, ct);
         return Ok(members
             .Select(m => new InAppRecipientResponse { SubjectId = m.Key, Name = m.Value, CanReceive = true })
             .OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)

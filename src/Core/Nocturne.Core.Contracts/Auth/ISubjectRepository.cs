@@ -193,4 +193,7 @@ public interface ISubjectRepository
     /// </summary>
     /// <remarks>System-pinned, as <see cref="TenantHasCredentialedMemberAsync"/> is.</remarks>
     Task<bool> HasOrphanedMemberAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>When any subject was last updated, read as the scope's reader; null when there is none.</summary>
+    Task<DateTime?> LastModifiedAsync(CancellationToken ct);
 }

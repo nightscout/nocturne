@@ -36,6 +36,8 @@ public sealed class TenantServicePatientRelationshipTests : IDisposable
 
     private TenantService Service() => new(
         _db.ContextFactory.AsNocturneFactory(),
+        new TenantRepository(_db.ContextFactory.AsNocturneFactory()),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory()),
         new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),

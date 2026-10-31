@@ -367,8 +367,8 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             new InstanceKeyCheck(root, _key),
             new UndecryptableSecretScanner(root, _key),
             new OwnerNoticeLedger(root),
-            new ActiveTenantSnapshot(snapshotContexts ?? root, _clock, NullLogger<ActiveTenantSnapshot>.Instance),
-            root,
+            new ActiveTenantSnapshot(new TenantRepository(snapshotContexts ?? root), _clock, NullLogger<ActiveTenantSnapshot>.Instance),
+            new TenantMembershipRepository(root),
             _clock,
             _log);
     }

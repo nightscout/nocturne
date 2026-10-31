@@ -6,6 +6,7 @@ using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -34,6 +35,8 @@ namespace Nocturne.API.Services.SetupHub;
 /// </remarks>
 public class AlertSetupService(
     INocturneDbContextFactory contexts,
+    ITenantRepository tenants,
+    ITenantMembershipRepository members,
     ISubjectRepository subjects,
     IAlertRuleRepository rules,
     IRuleScopeClassifier scopeClassifier,
@@ -101,7 +104,7 @@ public class AlertSetupService(
             ChannelTypesOffered,
             primary.Any(c => AlertDeliveryCheck.DeliversWhileClosed(c.ChannelType)),
             routing == AlertRouting.ToYouAsCaregiver,
-            await AlertDeliveryCheck.VerifiedAsync(db, rules, ct),
+            await AlertDeliveryCheck.VerifiedAsync(db, tenants, rules, ct),
             members);
     }
 
@@ -150,7 +153,7 @@ public class AlertSetupService(
 
         var channelRequests = ChannelsFor(callerId, request.Channels);
         if (await _channels.ResolveAndValidateAsync(
-            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, callerId, ct) is { } badChannel)
+            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, members, callerId, ct) is { } badChannel)
             throw new ArgumentException(badChannel);
 
         var units = await UnitsAsync(db, callerId, ct);
@@ -399,11 +402,8 @@ public class AlertSetupService(
         };
     }
 
-    private static async Task<AlertRouting> RoutingAsync(NocturneDbContext db, CancellationToken ct) =>
-        await db.Tenants.AsNoTracking()
-                .Where(t => t.Id == db.TenantId)
-                .Select(t => t.PatientRelationship)
-                .FirstOrDefaultAsync(ct) switch
+    private async Task<AlertRouting> RoutingAsync(NocturneDbContext db, CancellationToken ct) =>
+        (await tenants.GetAsync(db.TenantId, ct))?.PatientRelationship switch
             {
                 PatientRelationship.Helper => AlertRouting.LeftForRecipient,
                 PatientRelationship.Caregiver => AlertRouting.ToYouAsCaregiver,
@@ -413,14 +413,11 @@ public class AlertSetupService(
     private async Task<string> UnitsAsync(NocturneDbContext db, Guid callerId, CancellationToken ct)
     {
         var preferences = (await subjects.GetAsync(callerId, ct))?.Preferences;
-        var tenantUnits = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == db.TenantId)
-            .Select(t => t.DefaultGlucoseUnits)
-            .FirstOrDefaultAsync(ct);
+        var tenantUnits = (await tenants.GetAsync(db.TenantId, ct))?.DefaultGlucoseUnits;
         return UserDisplayPreferences.Deserialize(preferences).GlucoseUnits ?? tenantUnits ?? GlucoseUnitDefaults.MgDl;
     }
 
-    private static async Task<List<AlertSetupMember>> MembersAsync(
+    private async Task<List<AlertSetupMember>> MembersAsync(
         NocturneDbContext db, Guid callerId, AlertRuleRecord? urgentLow, CancellationToken ct)
     {
         var alerted = urgentLow?.Channels
@@ -428,15 +425,11 @@ public class AlertSetupService(
             .Select(c => c.Destination)
             .ToHashSet() ?? [];
 
-        var members = await db.TenantMembers.AsNoTracking()
-            .Where(m => m.TenantId == db.TenantId && m.SubjectId != callerId
-                        && !m.Subject!.IsSystemSubject && m.Subject.IsActive)
-            .OrderBy(m => m.SysCreatedAt)
-            .Select(m => new { m.SubjectId, Name = m.Label ?? m.Subject!.Name })
-            .ToListAsync(ct);
+        var people = await members.ListPeopleAsync(db.TenantId, ct);
 
-        return members
-            .Select(m => new AlertSetupMember(m.SubjectId, m.Name, alerted.Contains(m.SubjectId.ToString())))
+        return people
+            .Where(m => m.SubjectId != callerId)
+            .Select(m => new AlertSetupMember(m.SubjectId, m.Label ?? m.SubjectName ?? string.Empty, alerted.Contains(m.SubjectId.ToString())))
             .ToList();
     }
 

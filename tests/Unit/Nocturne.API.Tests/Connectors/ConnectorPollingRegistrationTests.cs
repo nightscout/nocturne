@@ -16,6 +16,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Tests.Connectors;
 
@@ -150,6 +152,7 @@ public class ConnectorPollingRegistrationTests
         services.AddLogging();
         services.AddApiCoreServices(new ConfigurationBuilder().Build());
         services.AddSingleton(Mock.Of<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
+        services.AddTransient<ITenantRepository, TenantRepository>();
         services.AddSingleton(new ConnectorSyncBudget());
         services.AddSingleton(TimeProvider.System);
         using var provider = services.BuildServiceProvider();

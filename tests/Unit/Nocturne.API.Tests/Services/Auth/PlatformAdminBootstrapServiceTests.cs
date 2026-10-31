@@ -134,7 +134,8 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
 
     private Task<bool> EnsureFirstOwnerAsync(Guid subjectId) =>
         new PlatformAdminBootstrapService(
-            _sqlite.ContextFactory.AsNocturneFactory(),
+            new TenantRepository(_sqlite.ContextFactory.AsNocturneFactory()),
+            new TenantMembershipRepository(_sqlite.ContextFactory.AsNocturneFactory()),
             new SubjectRepository(_sqlite.ContextFactory.AsNocturneFactory()),
             Options.Create(new PlatformOptions { AdminSubjectIds = [] }),
             NullLogger<PlatformAdminBootstrapService>.Instance)
@@ -142,7 +143,8 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
 
     private Task BootstrapAsync(List<Guid>? adminSubjectIds = null) =>
         new PlatformAdminBootstrapService(
-            _sqlite.ContextFactory.AsNocturneFactory(),
+            new TenantRepository(_sqlite.ContextFactory.AsNocturneFactory()),
+            new TenantMembershipRepository(_sqlite.ContextFactory.AsNocturneFactory()),
             new SubjectRepository(_sqlite.ContextFactory.AsNocturneFactory()),
             Options.Create(new PlatformOptions { AdminSubjectIds = adminSubjectIds ?? [] }),
             NullLogger<PlatformAdminBootstrapService>.Instance)

@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
 
@@ -95,10 +96,10 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
             Mock.Of<ITenantService>(),
-            new TenantRoleService(_db.AsFactory(), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory()), TimeProvider.System),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            _db.AsFactory())
+            new TenantMembershipRepository(_db.AsFactory()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

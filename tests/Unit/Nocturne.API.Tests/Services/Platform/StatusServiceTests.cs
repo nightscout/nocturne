@@ -203,7 +203,11 @@ public class StatusServiceTests
         var tenantFactory = new Mock<INocturneDbContextFactory>();
         tenantFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
+            .ReturnsAsync(() =>
+            {
+                opened++;
+                return TestDbContextFactory.CreateInMemoryContext(dbName);
+            });
         tenantFactory
             .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => mockFactory.Object.CreateDbContextAsync().GetAwaiter().GetResult());
@@ -218,6 +222,7 @@ public class StatusServiceTests
             new CacheFlights(),
             _mockDemoModeService.Object,
             tenantFactory.Object,
+            new TenantRepository(tenantFactory.Object), new SubjectRepository(tenantFactory.Object), new RoleRepository(tenantFactory.Object), new OidcProviderRepository(tenantFactory.Object),
             _httpContextAccessor,
             MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
             TestPublicAccessCache.Create(),
@@ -1069,6 +1074,8 @@ public class StatusServiceTests
         var flights = new CacheFlights();
         StatusService Service() => new(
             _configuration, cache, flights, _mockDemoModeService.Object, Mock.Of<INocturneDbContextFactory>(),
+            new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>()),
+            new RoleRepository(Mock.Of<INocturneDbContextFactory>()), new OidcProviderRepository(Mock.Of<INocturneDbContextFactory>()),
             _httpContextAccessor, _mockTenantAccessor.Object, TestPublicAccessCache.Create(), _tenants.Object,
             Mock.Of<ITenantAppearanceReader>(r =>
                 r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())
@@ -1500,6 +1507,7 @@ public class StatusServiceTests
             flights ?? new CacheFlights(),
             _mockDemoModeService.Object,
             mockTenantDbContextFactory.Object,
+            new TenantRepository(mockTenantDbContextFactory.Object), new SubjectRepository(mockTenantDbContextFactory.Object), new RoleRepository(mockTenantDbContextFactory.Object), new OidcProviderRepository(mockTenantDbContextFactory.Object),
             httpContextAccessor ?? _httpContextAccessor,
             tenantAccessor ?? _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),

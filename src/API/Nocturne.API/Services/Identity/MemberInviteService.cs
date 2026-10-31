@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Utilities;
@@ -8,9 +7,6 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -24,7 +20,7 @@ public class MemberInviteService : IMemberInviteService
     /// <summary>Longest lifetime an invite token may be minted with.</summary>
     private const int MaxExpiresInDays = 90;
 
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly ITenantMembershipRepository _members;
     private readonly IMemberInviteRepository _invites;
     private readonly ISubjectRepository _subjects;
     private readonly IJwtService _jwtService;
@@ -34,11 +30,11 @@ public class MemberInviteService : IMemberInviteService
     private readonly TimeProvider _time;
     private readonly ILogger<MemberInviteService> _logger;
 
-    /// <param name="contexts">For the roles and memberships an invite names.</param>
+    /// <param name="members">For the roles and memberships an invite names.</param>
     /// <param name="invites">The stored invites.</param>
     /// <param name="subjects">For the name of the member who minted an invite.</param>
     public MemberInviteService(
-        INocturneDbContextFactory contexts,
+        ITenantMembershipRepository members,
         IMemberInviteRepository invites,
         ISubjectRepository subjects,
         IJwtService jwtService,
@@ -48,7 +44,7 @@ public class MemberInviteService : IMemberInviteService
         TimeProvider timeProvider,
         ILogger<MemberInviteService> logger)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _members = members ?? throw new ArgumentNullException(nameof(members));
         _invites = invites ?? throw new ArgumentNullException(nameof(invites));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _jwtService = jwtService;
@@ -144,8 +140,7 @@ public class MemberInviteService : IMemberInviteService
         if (invite == null)
             return null;
 
-        await using var db = await _contexts.CreateAsync();
-        return MapToInfo(invite, _time.GetUtcNow().UtcDateTime, await LoadRolesAsync(db, tenantId, invite.RoleIds));
+        return MapToInfo(invite, _time.GetUtcNow().UtcDateTime, await LoadRolesAsync(tenantId, invite.RoleIds));
     }
 
     /// <inheritdoc />
@@ -174,23 +169,15 @@ public class MemberInviteService : IMemberInviteService
         if (invite.IsExhausted)
             return new AcceptMemberInviteResult(false, "exhausted", "This invite has reached its maximum uses.");
 
-        await using var db = await _contexts.CreateAsync();
-
-        // Check if already an active member of this tenant
-        var existingMember = await db.TenantMembers
-            .Where(m => m.TenantId == invite.TenantId
-                        && m.SubjectId == acceptingSubjectId)
-            .FirstOrDefaultAsync();
-
-        if (existingMember != null)
+        if (await _members.IsMemberAsync(invite.TenantId, acceptingSubjectId, CancellationToken.None))
             return new AcceptMemberInviteResult(false, "already_member", "You are already a member of this tenant.");
 
         // Filter out deleted roles from the invite
         var validRoleIds = invite.RoleIds.Count > 0
-            ? await db.TenantRoles
-                .Where(r => r.TenantId == invite.TenantId && invite.RoleIds.Contains(r.Id))
+            ? (await _members.ListRolesAsync(invite.TenantId, CancellationToken.None))
+                .Where(r => invite.RoleIds.Contains(r.Id))
                 .Select(r => r.Id)
-                .ToListAsync()
+                .ToList()
             : [];
 
         if (validRoleIds.Count == 0 && (invite.DirectPermissions == null || invite.DirectPermissions.Count == 0))
@@ -217,14 +204,10 @@ public class MemberInviteService : IMemberInviteService
             invite.Label,
             invite.LimitTo24Hours);
 
-        // Get the member ID for the result
-        var member = await db.TenantMembers
-            .Where(m => m.TenantId == invite.TenantId && m.SubjectId == acceptingSubjectId)
-            .FirstAsync();
+        var member = await _members.FindMemberAsync(invite.TenantId, acceptingSubjectId, CancellationToken.None)
+            ?? throw new InvalidOperationException($"Subject {acceptingSubjectId} did not become a member of tenant {invite.TenantId}.");
 
-        // Update the invite link to the member
-        member.CreatedFromInviteId = invite.Id;
-        await db.SaveChangesAsync();
+        await _members.SetCreatedFromInviteAsync(invite.TenantId, member.Id, invite.Id, CancellationToken.None);
 
         _logger.LogInformation(
             "MemberInviteAudit: {Event} invite_id={InviteId} tenant_id={TenantId} subject_id={SubjectId} member_id={MemberId}",
@@ -238,8 +221,7 @@ public class MemberInviteService : IMemberInviteService
     {
         var invites = await _invites.GetForTenantAsync(tenantId, CancellationToken.None);
 
-        await using var db = await _contexts.CreateAsync();
-        var roles = await LoadRolesAsync(db, tenantId, invites.SelectMany(i => i.RoleIds).Distinct().ToList());
+        var roles = await LoadRolesAsync(tenantId, invites.SelectMany(i => i.RoleIds).Distinct().ToList());
         var now = _time.GetUtcNow().UtcDateTime;
         return invites.Select(i => MapToInfo(i, now, roles)).ToList();
     }
@@ -263,18 +245,18 @@ public class MemberInviteService : IMemberInviteService
         return true;
     }
 
-    private async Task<Dictionary<Guid, TenantRoleEntity>> LoadRolesAsync(NocturneDbContext db, Guid tenantId, IReadOnlyList<Guid> roleIds)
+    private async Task<Dictionary<Guid, TenantRoleRecord>> LoadRolesAsync(Guid tenantId, IReadOnlyList<Guid> roleIds)
     {
         if (roleIds.Count == 0)
             return [];
 
-        return await db.TenantRoles
-            .Where(r => r.TenantId == tenantId && roleIds.Contains(r.Id))
-            .ToDictionaryAsync(r => r.Id);
+        return (await _members.ListRolesAsync(tenantId, CancellationToken.None))
+            .Where(r => roleIds.Contains(r.Id))
+            .ToDictionary(r => r.Id);
     }
 
     private static MemberInviteInfo MapToInfo(
-        MemberInviteRecord invite, DateTime now, IReadOnlyDictionary<Guid, TenantRoleEntity> roles)
+        MemberInviteRecord invite, DateTime now, IReadOnlyDictionary<Guid, TenantRoleRecord> roles)
     {
         // A deleted role grants nothing on acceptance, so it is not described either.
         var grantedRoles = invite.RoleIds

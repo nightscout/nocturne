@@ -576,6 +576,16 @@ public class SubjectRepository : ISubjectRepository
         return await db.OrphanedSubjectsOf(tenantId).AnyAsync(ct);
     }
 
+    /// <inheritdoc/>
+    public virtual async Task<DateTime?> LastModifiedAsync(CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        return await lease.Context.Subjects.AsNoTracking()
+            .OrderByDescending(s => s.UpdatedAt)
+            .Select(s => (DateTime?)s.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
     private static SubjectRecord? ToRecord(SubjectEntity? subject) =>
         subject is null ? null : new SubjectRecord(
             subject.Id,

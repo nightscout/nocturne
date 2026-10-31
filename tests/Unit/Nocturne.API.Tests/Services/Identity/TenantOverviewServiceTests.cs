@@ -475,7 +475,7 @@ public class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         var service = new TenantOverviewService(
-            (new InMemoryContextFactory(options)).AsNocturneFactory(),
+            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory()),
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
@@ -520,6 +520,9 @@ public class TenantOverviewServiceTests
             LastReadingAt = lastReadingAt,
         };
         db.Tenants.Add(tenant);
+
+        if (!db.Subjects.Any(s => s.Id == subjectId))
+            db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member" });
 
         var member = new TenantMemberEntity
         {
@@ -605,7 +608,7 @@ public class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(
-            (new InMemoryContextFactory(options)).AsNocturneFactory(),
+            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory()),
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),

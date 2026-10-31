@@ -46,11 +46,11 @@ public class SetupHubServiceTests
     private static SetupHubService ServiceOver(NocturneDbContext db)
     {
         var factory = new TestNocturneDbContextFactory(db);
-        return new(factory, new ISetupHubItem[]
+        return new(factory, new TenantRepository(factory), new TenantMembershipRepository(factory), new ISetupHubItem[]
         {
             // Registered out of order on purpose: the key decides the hub order.
-            new AboutItem(factory), new SharingItem(factory, new MemberInviteRepository(factory), new OAuthGrantRepository(factory), TimeProvider.System), new TherapyItem(factory),
-            DevicesItemOver(db), new AlertsItem(factory, new AlertRuleRepository(factory)), new ConnectDataItem(factory),
+            new AboutItem(factory), new SharingItem(factory, new TenantRepository(factory), new TenantMembershipRepository(factory), new MemberInviteRepository(factory), new OAuthGrantRepository(factory), TimeProvider.System), new TherapyItem(factory),
+            DevicesItemOver(db), new AlertsItem(factory, new TenantRepository(factory), new AlertRuleRepository(factory)), new ConnectDataItem(factory),
         });
     }
 
@@ -286,7 +286,7 @@ public class SetupHubServiceTests
         AddInvite(expiry.UtcDateTime);
         AddGrant(OAuthGrantTypes.Guest, expiresAt: expiry.UtcDateTime);
         await _db.SaveChangesAsync();
-        var item = new SharingItem(new TestNocturneDbContextFactory(_db), new MemberInviteRepository(new TestNocturneDbContextFactory(_db)), new OAuthGrantRepository(new TestNocturneDbContextFactory(_db)), clock);
+        var item = new SharingItem(new TestNocturneDbContextFactory(_db), new TenantRepository(new TestNocturneDbContextFactory(_db)), new TenantMembershipRepository(new TestNocturneDbContextFactory(_db)), new MemberInviteRepository(new TestNocturneDbContextFactory(_db)), new OAuthGrantRepository(new TestNocturneDbContextFactory(_db)), clock);
 
         (await item.WorksAsync(CancellationToken.None)).Should().BeTrue();
 

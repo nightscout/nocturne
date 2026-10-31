@@ -95,8 +95,10 @@ public class PasskeyControllerTests : IDisposable
             _tenantService.Object,
             // The real service, not a mock: the enrolment probe's cross-tenant reach is the
             // property under test, and a mock would assert the mock.
-            new TenantMemberService((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
+            new TenantMemberService(new TenantMembershipRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory())),
             new SubjectRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
+            new TenantRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
+            new TenantMembershipRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
             (new SharedSqliteFactory(_db.Options)).AsNocturneFactory(),
             oidcOptions,
             logger.Object);
@@ -452,7 +454,7 @@ public class PasskeyControllerTests : IDisposable
     }
 
     private MemberRecoveryEligibility Eligibility() =>
-        new(new TenantMemberService(new SharedSqliteFactory(_db.Options).AsNocturneFactory()));
+        new(new TenantMemberService(new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory())));
 
     private Task<ActionResult<RecoveryModeRedeemResponse>> RedeemAsync(
         Mock<ILoginCodeService> loginCodes, string code = "issued-code") =>
@@ -577,8 +579,9 @@ public class PasskeyControllerTests : IDisposable
         var controller = new PasskeyController(
             _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
-            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(tenantContexts),
-            new SubjectRepository(tenantContexts), tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts)),
+            new SubjectRepository(tenantContexts), new TenantRepository(tenantContexts), new TenantMembershipRepository(tenantContexts),
+            tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
         {
             ControllerContext = _controller.ControllerContext,
         };
@@ -611,8 +614,9 @@ public class PasskeyControllerTests : IDisposable
         var controller = new PasskeyController(
             _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
-            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(failingContexts.Object),
-            new SubjectRepository(failingContexts.Object), failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object)),
+            new SubjectRepository(failingContexts.Object), new TenantRepository(failingContexts.Object), new TenantMembershipRepository(failingContexts.Object),
+            failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
         {
             ControllerContext = _controller.ControllerContext,
         };

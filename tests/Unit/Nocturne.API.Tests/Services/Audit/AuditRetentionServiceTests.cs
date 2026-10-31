@@ -6,6 +6,7 @@ using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Audit;
 
@@ -26,6 +27,7 @@ public class AuditRetentionServiceTests
 
     private AuditRetentionService CreateService(Dictionary<string, string?> settings) =>
         new(_contextFactory.Object.AsNocturneFactory(),
+            new TenantRepository(_contextFactory.Object.AsNocturneFactory()),
             new ConfigurationBuilder().AddInMemoryCollection(settings).Build(),
             _logger.Object);
 
@@ -286,7 +288,7 @@ public class AuditRetentionServiceTests
         IDbContextFactory<NocturneDbContext> contextFactory,
         IConfiguration configuration,
         ILogger<AuditRetentionService> logger)
-        : AuditRetentionService(contextFactory.AsNocturneFactory(), configuration, logger)
+        : AuditRetentionService(contextFactory.AsNocturneFactory(), new TenantRepository(contextFactory.AsNocturneFactory()), configuration, logger)
     {
         public List<(Guid TenantId, string Table, TimeSpan MinAge)> Purges { get; } = [];
 

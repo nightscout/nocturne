@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Demo;
 
@@ -63,7 +64,9 @@ public class DemoDataPurgeParityTests : IDisposable
     }
 
     private DemoAdminController CreateController() =>
-        new(Mock.Of<ITenantService>(), null!, (new ContextFactory(_db.Options)).AsNocturneFactory(), TimeProvider.System);
+        new(Mock.Of<ITenantService>(), null!, new TenantRepository((new ContextFactory(_db.Options)).AsNocturneFactory()),
+            new TenantMembershipRepository((new ContextFactory(_db.Options)).AsNocturneFactory()),
+            (new ContextFactory(_db.Options)).AsNocturneFactory(), TimeProvider.System);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
         context.AsFactory(),

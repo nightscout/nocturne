@@ -22,6 +22,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.SetupHub;
 
@@ -67,7 +68,7 @@ public class TherapySetupServiceTests : IDisposable
             TimeProvider.System);
     }
 
-    private SetupHubService Hub() => new(_factory, [new TherapyItem(_factory)]);
+    private SetupHubService Hub() => new(_factory, new TenantRepository(_factory), new TenantMembershipRepository(_factory), [new TherapyItem(_factory)]);
 
     private ProfileDecomposer Decomposer() => new(
         SettingsRepo,

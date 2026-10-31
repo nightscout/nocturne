@@ -57,15 +57,9 @@ internal sealed class TempBasalOriginCorroborationService(
         try
         {
             var factory = serviceProvider.GetRequiredService<INocturneDbContextFactory>();
-            List<(Guid Id, string Slug, string DisplayName, bool IsActive)> tenants;
-            await using (var platform = await factory.CreatePlatformAsync(ct))
-            {
-                tenants = (await platform.Tenants.AsNoTracking()
-                        .Select(t => new { t.Id, t.Slug, t.DisplayName, t.IsActive })
-                        .ToListAsync(ct))
-                    .Select(t => (t.Id, t.Slug, t.DisplayName, t.IsActive))
-                    .ToList();
-            }
+            var tenants = (await serviceProvider.GetRequiredService<ITenantRepository>().ListAsync(activeOnly: false, ct))
+                .Select(t => (t.Id, t.Slug, t.DisplayName, t.IsActive))
+                .ToList();
 
             var settledBefore = timeProvider.GetUtcNow().UtcDateTime - SettlingDelay;
             var writtenTotal = 0;

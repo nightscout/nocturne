@@ -26,6 +26,7 @@ public class ChatIdentityDirectoryController : ControllerBase
     private readonly ChatIdentityDirectoryService _directory;
     private readonly ChatIdentityPendingLinkService _pending;
     private readonly INocturneDbContextFactory _contextFactory;
+    private readonly ITenantRepository _tenants;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertAcknowledgementService _acknowledgementService;
 
@@ -41,12 +42,14 @@ public class ChatIdentityDirectoryController : ControllerBase
         ChatIdentityDirectoryService directory,
         ChatIdentityPendingLinkService pending,
         INocturneDbContextFactory contextFactory,
+        ITenantRepository tenants,
         ITenantAccessor tenantAccessor,
         IAlertAcknowledgementService acknowledgementService)
     {
         _directory = directory;
         _pending = pending;
         _contextFactory = contextFactory;
+        _tenants = tenants;
         _tenantAccessor = tenantAccessor;
         _acknowledgementService = acknowledgementService;
     }
@@ -72,12 +75,8 @@ public class ChatIdentityDirectoryController : ControllerBase
         var rows = await _directory.GetCandidatesAsync(platform, platformUserId, ct);
         if (rows.Count == 0) return NotFound();
 
-        await using var db = await _contextFactory.CreatePlatformAsync(ct);
-        var tenantIds = rows.Select(r => r.TenantId).ToList();
-        var tenants = await db.Tenants.AsNoTracking()
-            .Where(t => tenantIds.Contains(t.Id))
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(ct);
+        var tenantIds = rows.Select(r => r.TenantId).Distinct().ToList();
+        var tenants = await _tenants.GetManyAsync(tenantIds, ct);
         var slugByTenant = tenants.ToDictionary(t => t.Id, t => t.Slug);
 
         return Ok(new DirectoryCandidatesResponse

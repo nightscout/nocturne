@@ -9,6 +9,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
@@ -42,6 +44,9 @@ public class TempBasalOriginCorroborationServiceTests
             .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
             .Returns(() => ValueTask.FromResult(TestDbContextFactory.CreateInMemoryContext(database)));
         factory
+            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => ValueTask.FromResult(TestDbContextFactory.CreateInMemoryContext(database)));
+        factory
             .Setup(f => f.CreateForTenantAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns((Guid tenantId, CancellationToken _) =>
             {
@@ -51,7 +56,7 @@ public class TempBasalOriginCorroborationServiceTests
                 return ValueTask.FromResult(context);
             });
 
-        var provider = new ServiceCollection().AddSingleton(factory.Object).BuildServiceProvider();
+        var provider = new ServiceCollection().AddSingleton(factory.Object).AddTransient<ITenantRepository, TenantRepository>().BuildServiceProvider();
         var logger = new ListLogger<TempBasalOriginCorroborationService>();
         var service = new TempBasalOriginCorroborationService(provider, TimeProvider.System, logger);
 

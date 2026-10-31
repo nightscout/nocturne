@@ -38,7 +38,7 @@ public class AlertSetupServiceTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private AlertSetupService Service() => new(_factory, new SubjectRepository(_factory), new AlertRuleRepository(_factory), null!, null!, null!, null!, null!, TimeProvider.System);
+    private AlertSetupService Service() => new(_factory, new TenantRepository(_factory), new TenantMembershipRepository(_factory), new SubjectRepository(_factory), new AlertRuleRepository(_factory), null!, null!, null!, null!, null!, TimeProvider.System);
 
     private async Task MigrationRun(
         string state, NightscoutAlarmSettings? settings, DateTime? startedAt = null, string? rawSettings = null)

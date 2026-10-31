@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -61,12 +62,12 @@ internal sealed class ApsSnapshotCurvesBackfillService(
             using var scope = serviceProvider.CreateScope();
             var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
 
-            // Tenants are not RLS-scoped, so this list read is safe without a tenant context.
+            // The tenant list and the completion rows are read with no tenant pinned.
             List<Guid> tenantIds;
             HashSet<Guid> completed;
             await using (var lookup = await factory.CreatePlatformAsync(stoppingToken))
             {
-                tenantIds = await lookup.Tenants.AsNoTracking().Select(t => t.Id).ToListAsync(stoppingToken);
+                tenantIds = [.. await scope.ServiceProvider.GetRequiredService<ITenantRepository>().ListIdsAsync(activeOnly: false, stoppingToken)];
                 completed = (await lookup.BackfillCompletions.AsNoTracking()
                     .Where(c => c.Backfill == BackfillName)
                     .Select(c => c.TenantId)

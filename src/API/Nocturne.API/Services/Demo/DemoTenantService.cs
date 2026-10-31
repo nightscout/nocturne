@@ -1,13 +1,13 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Demo;
 
@@ -51,6 +51,8 @@ public sealed class DemoTenantService
     public const string DemoRoleSlug = "demo-visitor";
 
     private readonly INocturneDbContextFactory _factory;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
     private readonly ISubjectRepository _subjects;
     private readonly IFirstPartyTokenRepository _sessions;
     private readonly ITenantService _tenantService;
@@ -59,9 +61,12 @@ public sealed class DemoTenantService
     private readonly TimeProvider _time;
     private readonly ILogger<DemoTenantService> _logger;
 
+    /// <param name="factory">For the units of work a reset and a provision run in.</param>
     /// <param name="sessions">The first-party sessions a retired demo visitor's rows are deleted from.</param>
     public DemoTenantService(
         INocturneDbContextFactory factory,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
         ISubjectRepository subjects,
         IFirstPartyTokenRepository sessions,
         ITenantService tenantService,
@@ -71,6 +76,8 @@ public sealed class DemoTenantService
         ILogger<DemoTenantService> logger)
     {
         _factory = factory;
+        _tenants = tenants;
+        _members = members;
         _subjects = subjects;
         _sessions = sessions;
         _tenantService = tenantService;
@@ -83,14 +90,8 @@ public sealed class DemoTenantService
     /// <summary>
     /// Returns the demo tenant, or <see langword="null"/> when none is provisioned.
     /// </summary>
-    public async Task<TenantEntity?> FindDemoTenantAsync(CancellationToken ct = default)
-    {
-        await using var db = await _factory.CreatePlatformAsync(ct);
-        return await db.Set<TenantEntity>()
-            .AsNoTracking()
-            .Include(t => t.DemoConfig)
-            .FirstOrDefaultAsync(t => t.IsDemo, ct);
-    }
+    public Task<TenantRecord?> FindDemoTenantAsync(CancellationToken ct = default) =>
+        _tenants.FindDemoTenantAsync(ct);
 
     /// <summary>
     /// Resolves the subject id behind the demo tenant's member membership, or
@@ -107,15 +108,8 @@ public sealed class DemoTenantService
     /// </remarks>
     public async Task<Guid?> FindDemoMemberSubjectIdAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var db = await _factory.CreateForTenantAsync(tenantId, ct);
-
-        return await db.TenantMembers
-            .AsNoTracking()
-            .Where(m => m.TenantId == tenantId
-                && m.Username == DemoMemberUsername
-                && m.Subject!.IsDemoSubject)
-            .Select(m => (Guid?)m.SubjectId)
-            .FirstOrDefaultAsync(ct);
+        var member = await _members.FindMemberByUsernameAsync(tenantId, DemoMemberUsername, ct);
+        return member is { IsDemoSubject: true } ? member.SubjectId : null;
     }
 
     /// <summary>
@@ -128,20 +122,29 @@ public sealed class DemoTenantService
     /// </summary>
     public async Task ConfigureAccessAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var db = await _factory.CreateForTenantAsync(tenantId, ct);
-
-        var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        var tenant = await _tenants.GetAsync(tenantId, ct);
         if (tenant is null)
             return;
 
-        ApplyTenantDefaults(tenant);
+        // One unit, pinned to the tenant: the role, the Public grant and the demo member, with its
+        // subject, land together.
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
+        var tenants = new TenantRepository(unit);
+        var members = new TenantMembershipRepository(unit);
+        var subjects = new SubjectRepository(unit, _time);
 
-        var demoRole = await EnsureDemoRoleAsync(db, tenantId, ct);
+        await unit.CommitAsync(async t =>
+        {
+            await tenants.UpdateAsync(tenantId, TenantDefaults(tenant), t);
 
-        await GrantPublicAccessAsync(db, tenantId, ct);
-        await EnsureDemoMemberAsync(db, tenantId, demoRole.Id, ct);
+            var demoRoleId = await EnsureDemoRoleAsync(members, tenantId, t);
+            await unit.Context.SaveChangesAsync(t);
 
-        await db.SaveChangesAsync(ct);
+            await GrantPublicAccessAsync(members, tenantId, t);
+            await EnsureDemoMemberAsync(members, subjects, tenantId, demoRoleId, t);
+
+            await unit.Context.SaveChangesAsync(t);
+        }, ct);
 
         // The Public membership's permissions and history limit were just rewritten, and
         // misses are cached too — evict so the share host sees the new grant at once.
@@ -173,34 +176,27 @@ public sealed class DemoTenantService
     /// <returns>The reset demo tenant's id, or <see langword="null"/> when no demo tenant exists.</returns>
     public async Task<Guid?> ResetAsync(CancellationToken ct = default)
     {
-        var tenantId = await FindDemoTenantIdAsync(ct);
-        if (tenantId is null)
+        var tenant = await _tenants.FindDemoTenantAsync(ct);
+        if (tenant is null)
             return null;
 
         // Resolve the outgoing demo member before the wipe: the cascade removes its
         // membership, so afterwards there is nothing left to resolve its subject from.
-        var outgoingMemberSubjectId = await FindDemoMemberSubjectIdAsync(tenantId.Value, ct);
+        var outgoingMemberSubjectId = await FindDemoMemberSubjectIdAsync(tenant.Id, ct);
 
-        await using (var db = await _factory.CreatePlatformAsync(ct))
+        await using (var unit = await DbUnitOfWork.OpenPlatformAsync(_factory, ct))
         {
-            await db.ExecuteInTransactionAsync(async token =>
+            var tenants = new TenantRepository(unit);
+
+            await unit.CommitAsync(async token =>
             {
-                var tenant = await db.Set<TenantEntity>()
-                    .Include(t => t.DemoConfig)
-                    .FirstOrDefaultAsync(t => t.Id == tenantId.Value, token);
-
-                if (tenant is null)
+                if (await tenants.GetAsync(tenant.Id, token) is not { } current)
                     return;
+                await tenants.DeleteAsync(tenant.Id, token);
+                await unit.Context.SaveChangesAsync(token);
 
-                var preserved = SnapshotTenant(tenant);
-                var preservedConfig = SnapshotDemoConfig(tenant);
-
-                db.Set<TenantEntity>().Remove(tenant);
-                await db.SaveChangesAsync(token);
-
-                db.Set<TenantEntity>().Add(preserved);
-                db.Set<TenantDemoConfigEntity>().Add(preservedConfig);
-                await db.SaveChangesAsync(token);
+                await tenants.CreateAsync(SnapshotTenant(current), token);
+                await unit.Context.SaveChangesAsync(token);
             }, ct);
         }
 
@@ -210,76 +206,51 @@ public sealed class DemoTenantService
 
         // The wipe empties the tables but not the tenant cache, so without this the demo keeps
         // serving the data it just deleted until each entry's TTL expires.
-        await _cache.RemoveTenantAsync(tenantId.Value, ct);
+        await _cache.RemoveTenantAsync(tenant.Id, ct);
 
         // Re-seed roles and the Public membership, then
         // re-apply the demo tenant's own grants on top.
-        await _tenantService.SeedAfterResetAsync(tenantId.Value, ct);
-        await ConfigureAccessAsync(tenantId.Value, ct);
+        await _tenantService.SeedAfterResetAsync(tenant.Id, ct);
+        await ConfigureAccessAsync(tenant.Id, ct);
 
-        _logger.LogInformation("Demo tenant {TenantId} reset: data and configuration cleared", tenantId);
-        return tenantId;
-    }
-
-    private async Task<Guid?> FindDemoTenantIdAsync(CancellationToken ct)
-    {
-        await using var db = await _factory.CreatePlatformAsync(ct);
-        return await db.Set<TenantEntity>()
-            .AsNoTracking()
-            .Where(t => t.IsDemo)
-            .Select(t => (Guid?)t.Id)
-            .FirstOrDefaultAsync(ct);
+        _logger.LogInformation("Demo tenant {TenantId} reset: data and configuration cleared", tenant.Id);
+        return tenant.Id;
     }
 
     /// <summary>Tenant state that survives a reset: identity, plus the demo defaults.</summary>
-    private TenantEntity SnapshotTenant(TenantEntity tenant)
-    {
-        var preserved = new TenantEntity
-        {
-            Id = tenant.Id,
-            Slug = tenant.Slug,
-            DisplayName = tenant.DisplayName,
-            IsActive = tenant.IsActive,
-            IsDemo = true,
-            ShareToken = tenant.ShareToken,
-            ShareTokenEncrypted = tenant.ShareTokenEncrypted,
-            ShareTokenSetAt = tenant.ShareTokenSetAt,
-        };
-
-        ApplyTenantDefaults(preserved);
-        return preserved;
-    }
-
-    private TenantDemoConfigEntity SnapshotDemoConfig(TenantEntity tenant)
-    {
-        var config = tenant.DemoConfig;
-        return new TenantDemoConfigEntity
-        {
-            TenantId = tenant.Id,
-            NextResetAt = config?.NextResetAt,
-            LastResetAt = _time.GetUtcNow().UtcDateTime,
-            AccessMode = config?.AccessMode ?? "open",
-            BackfillDays = config?.BackfillDays ?? 90,
-            IntervalMinutes = config?.IntervalMinutes ?? 5,
-            ResetIntervalMinutes = config?.ResetIntervalMinutes ?? 0,
-        };
-    }
+    private NewTenant SnapshotTenant(TenantRecord tenant) => new(
+        tenant.Slug,
+        tenant.DisplayName,
+        Id: tenant.Id,
+        IsActive: tenant.IsActive,
+        IsDemo: true,
+        AllowAccessRequests: false,
+        AllowPublicDocs: true,
+        OnboardingCompletedAt: _time.GetUtcNow().UtcDateTime,
+        ShareTokenHash: tenant.ShareTokenHash,
+        ShareTokenEncrypted: tenant.ShareTokenEncrypted,
+        ShareTokenSetAt: tenant.ShareTokenSetAt,
+        DemoConfig: new DemoTenantConfig(
+            tenant.DemoConfig?.NextResetAt,
+            _time.GetUtcNow().UtcDateTime,
+            tenant.DemoConfig?.AccessMode ?? "open",
+            tenant.DemoConfig?.BackfillDays ?? 90,
+            tenant.DemoConfig?.IntervalMinutes ?? 5,
+            tenant.DemoConfig?.ResetIntervalMinutes ?? 0));
 
     /// <summary>
     /// The tenant-row state a demo tenant is expected to hold. Applied at provisioning and
     /// re-applied by every reset, so a demo that predates one of these defaults picks it up.
     /// </summary>
-    internal void ApplyTenantDefaults(TenantEntity tenant)
-    {
+    internal TenantEdit TenantDefaults(TenantRecord tenant) => new(
         // The web app's authenticated layout bounces a tenant whose onboarding is
         // incomplete to /setup, which would strand a signed-in demo visitor.
-        tenant.OnboardingCompletedAt ??= _time.GetUtcNow().UtcDateTime;
+        OnboardingCompletedAt: tenant.OnboardingCompletedAt ?? _time.GetUtcNow().UtcDateTime,
         // A demo tenant has no owner to review access requests.
-        tenant.AllowAccessRequests = false;
+        AllowAccessRequests: false,
         // The demo's Scalar page prefills a working token, which needs the docs served on the
         // demo's own host.
-        tenant.AllowPublicDocs = true;
-    }
+        AllowPublicDocs: true);
 
     /// <summary>
     /// Retires the demo member the reset has just unseated: deletes its refresh tokens, so no
@@ -313,7 +284,7 @@ public sealed class DemoTenantService
     /// tenant across every reset.
     /// </para>
     /// <para>
-    /// <c>subjects</c> and <c>tenant_members</c> are not tenant-scoped, so these queries see
+    /// <c>subjects</c> and <c>tenant_members</c> are not tenant-scoped, so these reads see
     /// every tenant — which is what makes the cleanup complete.
     /// </para>
     /// </remarks>
@@ -331,14 +302,7 @@ public sealed class DemoTenantService
         }
 
         await _sessions.DeleteAllForSubjectAsync(subjectId.Value, ct);
-
-        await using (var db = await _factory.CreatePlatformAsync(ct))
-        {
-            await db.TenantMembers
-                .Where(m => m.SubjectId == subjectId.Value)
-                .ExecuteDeleteAsync(ct);
-        }
-
+        await _members.RemoveMembershipsOfSubjectAsync(subjectId.Value, ct);
         await _subjects.DeleteAsync(subjectId.Value, ct);
     }
 
@@ -353,31 +317,22 @@ public sealed class DemoTenantService
     /// effective set, so holding either is the ability to grant oneself <c>*</c>. Anyone can
     /// get a session for the demo member, so it must not hold an escalation primitive.
     /// </remarks>
-    private async Task<TenantRoleEntity> EnsureDemoRoleAsync(
-        NocturneDbContext db, Guid tenantId, CancellationToken ct)
+    private async Task<Guid> EnsureDemoRoleAsync(
+        ITenantMembershipRepository members, Guid tenantId, CancellationToken ct)
     {
-        var role = await db.TenantRoles
-            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Slug == DemoRoleSlug, ct);
-
-        if (role is null)
+        var roleId = await members.FindRoleIdBySlugAsync(tenantId, DemoRoleSlug, ct);
+        if (roleId is null)
         {
-            role = new TenantRoleEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                Name = "Demo Visitor",
-                Slug = DemoRoleSlug,
-                Permissions = new List<string>(Scope.DemoVisitorPermissions),
-                IsSystem = true,
-            };
-            db.TenantRoles.Add(role);
-            await db.SaveChangesAsync(ct);
-            return role;
+            var created = await members.CreateRoleAsync(
+                new NewTenantRole(tenantId, "Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions], IsSystem: true), ct);
+            return created.Id;
         }
 
-        role.Permissions = new List<string>(Scope.DemoVisitorPermissions);
-        role.SysUpdatedAt = _time.GetUtcNow().UtcDateTime;
-        return role;
+        await members.UpdateRoleAsync(
+            tenantId, roleId.Value,
+            new TenantRoleEdit("Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions]),
+            _time.GetUtcNow().UtcDateTime, ct);
+        return roleId.Value;
     }
 
     /// <summary>
@@ -404,13 +359,9 @@ public sealed class DemoTenantService
     /// </para>
     /// </remarks>
     private async Task GrantPublicAccessAsync(
-        NocturneDbContext db, Guid tenantId, CancellationToken ct)
+        ITenantMembershipRepository members, Guid tenantId, CancellationToken ct)
     {
-        var publicMember = await db.TenantMembers
-            .Include(m => m.Subject)
-            .Include(m => m.MemberRoles)
-            .FirstOrDefaultAsync(
-                m => m.TenantId == tenantId && m.Subject!.IsSystemSubject && m.Subject.Name == "Public", ct);
+        var publicMember = await members.FindPublicMemberAsync(tenantId, ct);
 
         if (publicMember is null)
         {
@@ -419,16 +370,18 @@ public sealed class DemoTenantService
             return;
         }
 
-        publicMember.LimitTo24Hours = false;
-        publicMember.DirectPermissions = [.. Scope.PublicShareScopes];
+        var now = _time.GetUtcNow().UtcDateTime;
+        await members.SetLimitTo24HoursAsync(tenantId, publicMember.Id, false, now, ct);
+        await members.SetDirectPermissionsAsync(tenantId, publicMember.Id, [.. Scope.PublicShareScopes], now, ct);
 
-        if (publicMember.MemberRoles.Count > 0)
+        if (publicMember.Roles.Count > 0)
         {
             _logger.LogInformation(
                 "Removing {Count} role assignment(s) from the Public membership on demo tenant {TenantId}: " +
                 "its grant is the share vocabulary alone",
-                publicMember.MemberRoles.Count, tenantId);
-            db.TenantMemberRoles.RemoveRange(publicMember.MemberRoles);
+                publicMember.Roles.Count, tenantId);
+            await members.ReplaceRolesAsync(
+                tenantId, publicMember.Id, publicMember.Roles.Select(r => r.RoleId).ToList(), [], now, ct);
         }
     }
 
@@ -438,53 +391,27 @@ public sealed class DemoTenantService
     /// it can never collide with — or resolve to — an operator's or invitee's account.
     /// </summary>
     private async Task EnsureDemoMemberAsync(
-        NocturneDbContext db, Guid tenantId, Guid demoRoleId, CancellationToken ct)
+        ITenantMembershipRepository members, ISubjectRepository subjects, Guid tenantId, Guid demoRoleId, CancellationToken ct)
     {
-        var member = await db.TenantMembers
-            .FirstOrDefaultAsync(
-                m => m.TenantId == tenantId && m.Username == DemoMemberUsername, ct);
+        var member = await members.FindMemberByUsernameAsync(tenantId, DemoMemberUsername, ct);
 
         if (member is null)
         {
             // Anyone can obtain a session for this account, so it is flagged a demo subject and
             // refused wherever "authenticated" is read as "a person who signed up".
-            var subjectId = await _subjects.CreateAsync(
+            var subjectId = await subjects.CreateAsync(
                 new NewSubject(DemoMemberName, IsDemoSubject: true), ct);
 
-            member = new TenantMemberEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                SubjectId = subjectId,
-                Username = DemoMemberUsername,
-                LimitTo24Hours = false,
-                Label = DemoMemberName,
-            };
-            db.TenantMembers.Add(member);
-            await db.SaveChangesAsync(ct);
-        }
-        else
-        {
-            member.LimitTo24Hours = false;
-        }
-
-        await AssignRoleAsync(db, member.Id, demoRoleId, ct);
-    }
-
-    private static async Task AssignRoleAsync(
-        NocturneDbContext db, Guid memberId, Guid roleId, CancellationToken ct)
-    {
-        var assigned = await db.TenantMemberRoles
-            .AnyAsync(mr => mr.TenantMemberId == memberId && mr.TenantRoleId == roleId, ct);
-
-        if (assigned)
+            await members.AddMemberAsync(
+                new NewTenantMember(
+                    tenantId, subjectId, [demoRoleId], Label: DemoMemberName, Username: DemoMemberUsername, LimitTo24Hours: false),
+                ct);
             return;
+        }
 
-        db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantMemberId = memberId,
-            TenantRoleId = roleId,
-        });
+        var now = _time.GetUtcNow().UtcDateTime;
+        await members.SetLimitTo24HoursAsync(tenantId, member.Id, false, now, ct);
+        if (member.Roles.All(r => r.RoleId != demoRoleId))
+            await members.ReplaceRolesAsync(tenantId, member.Id, [], [demoRoleId], now, ct);
     }
 }

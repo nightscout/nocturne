@@ -9,6 +9,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Services.Auth;
@@ -87,11 +88,13 @@ public class PasskeyController : ControllerBase
     private readonly ITenantService _tenantService;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly ISubjectRepository _subjects;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
 
-    /// <param name="dbContextFactory">For the tenant rows and login codes the ceremonies read beside the subjects.</param>
+    /// <param name="dbContextFactory">For the login codes the ceremonies read beside the subjects.</param>
     public PasskeyController(
         IPasskeyService passkeyService,
         ITotpService totpService,
@@ -104,6 +107,8 @@ public class PasskeyController : ControllerBase
         ITenantService tenantService,
         ITenantMemberService tenantMemberService,
         ISubjectRepository subjects,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
         INocturneDbContextFactory dbContextFactory,
         IOptions<OidcOptions> oidcOptions,
         ILogger<PasskeyController> logger)
@@ -119,6 +124,8 @@ public class PasskeyController : ControllerBase
         _tenantService = tenantService;
         _tenantMemberService = tenantMemberService;
         _subjects = subjects;
+        _tenants = tenants;
+        _members = members;
         _dbContextFactory = dbContextFactory;
         _oidcOptions = oidcOptions.Value;
         _logger = logger;
@@ -742,7 +749,7 @@ public class PasskeyController : ControllerBase
         var setupRequired = !hasCredentials;
         var recoveryMode = hasCredentials && await _subjects.HasOrphanedMemberAsync(tenantId, HttpContext.RequestAborted);
 
-        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 
         return Ok(new AuthStatusResponse
         {
@@ -762,17 +769,16 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> CompleteOnboarding()
     {
-        await using var db = await _dbContextFactory.CreateAsync();
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
         if (tenant == null)
             return NotFound();
 
         if (tenant.OnboardingCompletedAt == null)
         {
-            tenant.OnboardingCompletedAt = DateTime.UtcNow;
-            tenant.SetupHubEnrolledAt = tenant.OnboardingCompletedAt;
-            await db.SaveChangesAsync();
+            var now = DateTime.UtcNow;
+            await _tenants.UpdateAsync(
+                tenantId, new TenantEdit(OnboardingCompletedAt: now, SetupHubEnrolledAt: now), HttpContext.RequestAborted);
         }
 
         return NoContent();
@@ -801,8 +807,7 @@ public class PasskeyController : ControllerBase
             return refusal;
 
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 
         if (tenant == null || !tenant.AllowAccessRequests)
             return NotFound();
@@ -875,10 +880,8 @@ public class PasskeyController : ControllerBase
         [FromBody] AccessRequestCompleteRequest request,
         [FromServices] IInAppNotificationService notificationService)
     {
-        await using var db = await _dbContextFactory.CreateAsync();
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 
         if (tenant == null || !tenant.AllowAccessRequests)
             return NotFound();
@@ -899,13 +902,8 @@ public class PasskeyController : ControllerBase
 
             var message = (await _subjects.GetAsync(credResult.SubjectId, HttpContext.RequestAborted))?.AccessRequestMessage;
 
-            // System-pinned: "Request access" is rendered on a share host's login page too.
-            await using var ownerCtx = await _dbContextFactory.CreateSystemPinnedAsync(
-                tenant.Id, HttpContext.RequestAborted);
-            var ownerIds = await ownerCtx.TenantMembers
-                .OwnersOf(tenant.Id)
-                .Select(tm => tm.SubjectId)
-                .ToListAsync();
+            // System-pinned in the repository: "Request access" is rendered on a share host's login page too.
+            var ownerIds = await _members.GetOwnerSubjectIdsForAccessRequestAsync(tenant.Id, HttpContext.RequestAborted);
 
             foreach (var ownerId in ownerIds)
             {

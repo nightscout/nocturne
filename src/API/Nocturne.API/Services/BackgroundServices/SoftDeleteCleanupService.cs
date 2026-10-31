@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
@@ -12,6 +13,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// </summary>
 public class SoftDeleteCleanupService(
     INocturneDbContextFactory contextFactory,
+    ITenantRepository tenants,
     IConfiguration configuration,
     ILogger<SoftDeleteCleanupService> logger) : BackgroundService
 {
@@ -68,9 +70,7 @@ public class SoftDeleteCleanupService(
         IReadOnlyList<PurgeTable> tables;
         await using (var platform = await contextFactory.CreatePlatformAsync(ct))
         {
-            allTenantIds = await platform.Tenants
-                .Select(t => t.Id)
-                .ToListAsync(ct);
+            allTenantIds = [.. await tenants.ListIdsAsync(activeOnly: false, ct)];
             tables = SoftDeletableTables(platform.Model);
         }
 

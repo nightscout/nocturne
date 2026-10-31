@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
 
@@ -133,10 +134,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             Mock.Of<ITenantService>(),
             // The real service, not a mock: the tenant check and the ceiling are the properties
             // under test, and a mock would assert the mock.
-            new TenantRoleService(_dbContext.AsFactory(), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), TimeProvider.System),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            _dbContext.AsFactory())
+            new TenantMembershipRepository(_dbContext.AsFactory()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

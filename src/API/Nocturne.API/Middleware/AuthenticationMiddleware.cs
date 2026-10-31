@@ -123,7 +123,7 @@ public class AuthenticationMiddleware
                 if (carriesPlatformAdmin || RequestMembership.Of(context, subjectId, tenantId) is null)
                 {
                     var (membership, isPlatformAdmin) = await RequestMembership.ReadAsync(
-                        context.RequestServices.GetRequiredService<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(),
+                        context.RequestServices.GetRequiredService<Nocturne.Core.Contracts.Multitenancy.ITenantMembershipRepository>(),
                         subjectId, tenantId, context.RequestAborted);
                     membership.StoreOn(context);
                     authContext.IsPlatformAdmin = carriesPlatformAdmin && isPlatformAdmin;

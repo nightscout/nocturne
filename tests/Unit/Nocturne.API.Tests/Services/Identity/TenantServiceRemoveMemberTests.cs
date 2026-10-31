@@ -53,6 +53,8 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
     private TenantService Service() => new(
         (new Factory(_db.Options, _tenantId)).AsNocturneFactory(),
+        new TenantRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
+        new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
         new SubjectRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),

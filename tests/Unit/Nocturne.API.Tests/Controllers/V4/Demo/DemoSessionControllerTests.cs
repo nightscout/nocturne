@@ -217,7 +217,7 @@ public class DemoSessionControllerTests : IDisposable
     private DemoSessionController BuildController(Guid tenantId, bool isDemo, bool shareAccess = false)
     {
         var demoTenantService = new DemoTenantService(
-            BuildDbFactory().AsNocturneFactory(), new SubjectRepository(BuildDbFactory().AsNocturneFactory()),
+            BuildDbFactory().AsNocturneFactory(), new TenantRepository(BuildDbFactory().AsNocturneFactory()), new TenantMembershipRepository(BuildDbFactory().AsNocturneFactory()), new SubjectRepository(BuildDbFactory().AsNocturneFactory()),
             new EfFirstPartyTokenRepository(BuildDbFactory().AsNocturneFactory()),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),

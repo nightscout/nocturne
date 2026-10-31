@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
 
@@ -70,6 +71,7 @@ public class TrackerAlertRuleBackfillServiceTests : IDisposable
             new StubDbContextFactory(options));
         services.AddSingleton(sp =>
             sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
+        services.AddTransient<ITenantRepository, TenantRepository>();
         services.AddScoped(sp => new TenantReadContext(
             sp.GetRequiredService<ITenantAccessor>(), null, sp.GetRequiredService<IAuditContext>()));
         services.AddScoped<IAuditContext, AuditContext>();

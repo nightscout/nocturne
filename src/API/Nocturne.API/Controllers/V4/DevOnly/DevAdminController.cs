@@ -36,6 +36,7 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 public class DevAdminController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ITenantMembershipRepository _members;
     private readonly ISubjectRepository _subjects;
     private readonly IPasskeyCredentialRepository _passkeys;
     private readonly ISecretEncryptionService _encryption;
@@ -59,6 +60,7 @@ public class DevAdminController : ControllerBase
     /// <param name="logger">Logger instance.</param>
     public DevAdminController(
         INocturneDbContextFactory contexts,
+        ITenantMembershipRepository members,
         ISubjectRepository subjects,
         IPasskeyCredentialRepository passkeys,
         ISecretEncryptionService encryption,
@@ -69,6 +71,7 @@ public class DevAdminController : ControllerBase
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _members = members;
         _subjects = subjects;
         _passkeys = passkeys;
         _encryption = encryption;
@@ -1155,16 +1158,10 @@ public class DevAdminController : ControllerBase
         if (tenant is null)
             return NotFound(new { error = $"Tenant {id} not found" });
 
-        await db.PinTenantAsync(tenant.Id, ct);
-        var members = await db.TenantMembers
-            .AsNoTracking()
-            .Include(m => m.Subject)
-            .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)
-            .Where(m => m.TenantId == tenant.Id)
-            .ToListAsync(ct);
+        var members = await _members.ListMembersAsync(tenant.Id, ct);
         var candidates = DevTenantMemberSelection.Candidates(members);
         var owner = candidates.Count > 0
-            ? DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id)
+            ? DevTenantMemberSelection.PickOwnerOrFirst(candidates)
             : null;
 
         var seeded = await SampleDataSeeder.SeedInTenantScopeAsync(
@@ -1202,11 +1199,7 @@ public class DevAdminController : ControllerBase
 
         await db.PinTenantAsync(tenant.Id, ct);
 
-        var members = await db.TenantMembers
-            .Include(m => m.Subject)
-            .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)
-            .Where(m => m.TenantId == tenant.Id)
-            .ToListAsync(ct);
+        var members = await _members.ListMembersAsync(tenant.Id, ct);
 
         var candidates = DevTenantMemberSelection.Candidates(members);
         if (candidates.Count == 0)
@@ -1214,7 +1207,7 @@ public class DevAdminController : ControllerBase
 
         var target = request?.SubjectId is { } subjectId
             ? candidates.FirstOrDefault(m => m.SubjectId == subjectId)
-            : DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id);
+            : DevTenantMemberSelection.PickOwnerOrFirst(candidates);
         if (target is null)
             return NotFound(new { error = $"Subject {request?.SubjectId} is not a member of '{tenant.Slug}'" });
 

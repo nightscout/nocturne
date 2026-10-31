@@ -23,6 +23,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
@@ -642,7 +643,7 @@ public class CompressionLowDetectionServiceTests
             var services = new ServiceCollection();
             database.AddToServices(services);
             services.AddSingleton(sp => new ActiveTenantSnapshot(
-                sp.GetRequiredService<INocturneDbContextFactory>(),
+                new TenantRepository(sp.GetRequiredService<INocturneDbContextFactory>()),
                 clock,
                 NullLogger<ActiveTenantSnapshot>.Instance));
             services.AddScoped<ITenantAccessor, RecordingTenantAccessor>();

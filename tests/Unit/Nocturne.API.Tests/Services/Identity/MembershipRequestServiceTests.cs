@@ -51,10 +51,11 @@ public class MembershipRequestServiceTests : IDisposable
             .ReturnsAsync(new InAppNotificationDto());
 
         _service = new MembershipRequestService(
-            _dbContext.AsFactory(),
+            new TenantRepository(_dbContext.AsFactory()),
+            new TenantMembershipRepository(_dbContext.AsFactory()),
             new SubjectRepository(_dbContext.AsFactory()),
             _tenantService.Object,
-            new TenantRoleService(_dbContext.AsFactory(), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), TimeProvider.System),
             _notificationService.Object,
             TimeProvider.System,
             NullLogger<MembershipRequestService>.Instance);

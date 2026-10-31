@@ -61,8 +61,6 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
     private async Task<T?> Memo<T>(object key, Func<Task<T?>> load) where T : class =>
         (T?)await _memo.GetOrAdd(key, _ => new Lazy<Task<object?>>(async () => await load())).Value;
 
-    private INocturneDbContextFactory Contexts => services.GetRequiredService<INocturneDbContextFactory>();
-
     private Task<OAuthGrantState?> GrantAsync(Guid tenantId, Guid grantId) =>
         Memo(("grant", tenantId, grantId), () =>
             services.GetRequiredService<IOAuthGrantRepository>().GetStateAsync(tenantId, grantId, CancellationToken.None));
@@ -98,10 +96,7 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
 
     private async Task<bool> IsTenantActiveAsync(Guid tenantId) =>
         await Memo<object>(("tenant", tenantId), async () =>
-        {
-            await using var db = await Contexts.CreatePlatformAsync();
-            return await db.Tenants.AnyAsync(t => t.Id == tenantId && t.IsActive);
-        }) is true;
+            await services.GetRequiredService<ITenantRepository>().IsActiveAsync(tenantId, CancellationToken.None)) is true;
 
     private bool IsLive(OAuthGrantState? grant) =>
         grant is { RevokedAt: null } && (grant.ExpiresAt is null || grant.ExpiresAt > _now);

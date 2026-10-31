@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
@@ -12,10 +11,9 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Auth;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -38,7 +36,7 @@ public class MemberInviteController : ControllerBase
     private readonly ITenantRoleService _tenantRoleService;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly ITenantAccessor _tenantAccessor;
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly ITenantMembershipRepository _members;
 
     /// <summary>
     /// Initializes a new instance of <see cref="MemberInviteController"/>.
@@ -48,20 +46,21 @@ public class MemberInviteController : ControllerBase
     /// <param name="tenantRoleService">Service for member role assignment.</param>
     /// <param name="tenantMemberService">Service for membership lookups.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
+    /// <param name="members">The memberships and roles the member-management actions edit.</param>
     public MemberInviteController(
         IMemberInviteService memberInviteService,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
         ITenantMemberService tenantMemberService,
         ITenantAccessor tenantAccessor,
-        INocturneDbContextFactory contexts)
+        ITenantMembershipRepository members)
     {
         _memberInviteService = memberInviteService;
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
         _tenantMemberService = tenantMemberService;
         _tenantAccessor = tenantAccessor;
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _members = members ?? throw new ArgumentNullException(nameof(members));
     }
 
     /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
@@ -301,16 +300,11 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
-        var member = await db.TenantMembers
-            .Include(m => m.MemberRoles)
-            .Include(m => m.Subject)
-            .Where(m => m.Id == id && m.TenantId == tenantId)
-            .FirstOrDefaultAsync(ct);
+        var member = await _members.GetMemberAsync(tenantId, id, ct);
 
         if (member == null)
             return NotFound();
@@ -327,7 +321,7 @@ public class MemberInviteController : ControllerBase
             return Problem(detail: reason, statusCode: 400);
         }
 
-        var held = member.MemberRoles.Select(mr => mr.TenantRoleId).ToList();
+        var held = member.Roles.Select(r => r.RoleId).ToList();
         var added = request.RoleIds.Except(held).ToList();
         var removed = held.Except(request.RoleIds).ToList();
         var grantedScopes = HttpContext.GetGrantedScopes();
@@ -339,18 +333,18 @@ public class MemberInviteController : ControllerBase
         if (!(await _tenantRoleService.ValidateRoleGrantAsync(tenantId, removed, grantedScopes, ct)).Ok)
             return Problem(detail: UngrantableRoleRemovalDetail, statusCode: 403);
 
-        var keepsOwner = await db.TenantRoles.AnyAsync(
-            r => r.TenantId == tenantId && request.RoleIds.Contains(r.Id) && r.Slug == RoleSeeds.Owner, ct);
-        if (!keepsOwner && await db.TenantMembers.IsLastOwnerAsync(tenantId, member.Id, ct))
+        var ownerRoleId = await _members.FindRoleIdBySlugAsync(tenantId, RoleSeeds.Owner, ct);
+        var keepsOwner = ownerRoleId is { } owner && request.RoleIds.Contains(owner);
+        if (!keepsOwner && await _members.IsLastOwnerAsync(tenantId, member.Id, ct))
             return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
 
         var rolesAfter = await _tenantRoleService.GetRolePermissionsAsync(tenantId, request.RoleIds, ct);
         if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
-        await ReplaceRolesAsync(db, member, removed, added, ct);
+        await _members.ReplaceRolesAsync(tenantId, member.Id, removed, added, DateTime.UtcNow, ct);
 
-        if (member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public")
+        if (IsPublicSubject(member))
             publicAccessCache.Evict(tenantId);
 
         return NoContent();
@@ -378,39 +372,35 @@ public class MemberInviteController : ControllerBase
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
-        await using var db = await _contexts.CreateAsync(ct);
         var tenantId = _tenantAccessor.TenantId;
-        var member = await db.TenantMembers
-            .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)
-            .FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
-        var caretaker = await db.TenantRoles
-            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Slug == RoleSeeds.Caretaker, ct);
-        if (member == null || caretaker == null)
+        var member = await _members.FindMemberAsync(tenantId, subjectId, ct);
+        var caretakerId = await _members.FindRoleIdBySlugAsync(tenantId, RoleSeeds.Caretaker, ct);
+        if (member == null || caretakerId is not { } caretaker)
             return NotFound();
 
         if (!(await _tenantRoleService.ValidateRoleGrantAsync(
-                tenantId, [caretaker.Id], HttpContext.GetGrantedScopes(), ct)).Ok)
+                tenantId, [caretaker], HttpContext.GetGrantedScopes(), ct)).Ok)
             return Problem(detail: "Cannot step down to a role with more access than you have.", statusCode: 403);
 
-        if (await db.TenantMembers.IsLastOwnerAsync(tenantId, member.Id, ct))
+        if (await _members.IsLastOwnerAsync(tenantId, member.Id, ct))
             return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
 
-        var removed = member.MemberRoles.Where(mr => mr.TenantRoleId != caretaker.Id).ToList();
-        var assigned = member.MemberRoles.All(mr => mr.TenantRoleId != caretaker.Id);
-        await ReplaceRolesAsync(
-            db, member, removed.Select(mr => mr.TenantRoleId).ToList(), assigned ? [caretaker.Id] : [], ct);
+        var removed = member.Roles.Where(r => r.RoleId != caretaker).ToList();
+        var assigned = member.Roles.All(r => r.RoleId != caretaker);
+        await _members.ReplaceRolesAsync(
+            tenantId, member.Id, removed.Select(r => r.RoleId).ToList(), assigned ? [caretaker] : [], DateTime.UtcNow, ct);
 
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var userAgent = Request.Headers.UserAgent.ToString();
         foreach (var role in removed)
         {
             await audit.LogAsync(AuthAuditEventType.RoleRemoved, subjectId, success: true, ipAddress: ip,
-                userAgent: userAgent, detailsJson: JsonSerializer.Serialize(new { role = role.TenantRole?.Slug, kind = "tenant" }));
+                userAgent: userAgent, detailsJson: JsonSerializer.Serialize(new { role = role.Slug, kind = "tenant" }));
         }
         if (assigned)
         {
             await audit.LogAsync(AuthAuditEventType.RoleAssigned, subjectId, success: true, ipAddress: ip,
-                userAgent: userAgent, detailsJson: JsonSerializer.Serialize(new { role = caretaker.Slug, kind = "tenant" }));
+                userAgent: userAgent, detailsJson: JsonSerializer.Serialize(new { role = RoleSeeds.Caretaker, kind = "tenant" }));
         }
 
         return NoContent();
@@ -431,16 +421,11 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
-        var member = await db.TenantMembers
-            .Include(m => m.MemberRoles)
-            .Include(m => m.Subject)
-            .Where(m => m.Id == id && m.TenantId == tenantId)
-            .FirstOrDefaultAsync(ct);
+        var member = await _members.GetMemberAsync(tenantId, id, ct);
 
         if (member == null)
             return NotFound();
@@ -451,7 +436,7 @@ public class MemberInviteController : ControllerBase
         if (DeviceHolderDetail(member) is { } deviceHolder)
             return Problem(detail: deviceHolder, statusCode: 400);
 
-        if ((request.DirectPermissions == null || request.DirectPermissions.Count == 0) && member.MemberRoles.Count == 0)
+        if ((request.DirectPermissions == null || request.DirectPermissions.Count == 0) && member.Roles.Count == 0)
         {
             const string reason = "Cannot remove all permissions when member has no roles";
             return Problem(detail: reason, statusCode: 400);
@@ -461,7 +446,7 @@ public class MemberInviteController : ControllerBase
         // permissions are the wrong bound: an owner holding "*" would otherwise be able to give an
         // unauthenticated reader everything. ShareLinkService.SetScopesAsync bounds the same rows to
         // PublicShareScopes; both writers have to agree or the narrower one is decorative.
-        var isPublicSubject = member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public";
+        var isPublicSubject = IsPublicSubject(member);
         if (isPublicSubject)
         {
             var outsideShareVocabulary = (request.DirectPermissions ?? [])
@@ -482,16 +467,14 @@ public class MemberInviteController : ControllerBase
         }
 
         var rolePermissions = await _tenantRoleService.GetRolePermissionsAsync(
-            tenantId, member.MemberRoles.Select(mr => mr.TenantRoleId).ToList(), ct);
+            tenantId, member.Roles.Select(r => r.RoleId).ToList(), ct);
         if (await WouldExemptAClampedMemberAsync(
                 member, rolePermissions.Concat(request.DirectPermissions ?? []), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
-        member.DirectPermissions = request.DirectPermissions;
-        member.SysUpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        await _members.SetDirectPermissionsAsync(tenantId, member.Id, request.DirectPermissions, DateTime.UtcNow, ct);
 
-        if (member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public")
+        if (isPublicSubject)
             publicAccessCache.Evict(tenantId);
 
         return NoContent();
@@ -507,16 +490,11 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetEffectivePermissions(Guid id, CancellationToken ct)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
-        var member = await db.TenantMembers
-            .Where(m => m.Id == id && m.TenantId == tenantId)
-            .FirstOrDefaultAsync(ct);
-
-        if (member == null)
+        if (await _members.GetMemberAsync(tenantId, id, ct) == null)
             return NotFound();
 
         var permissions = await _tenantRoleService.GetEffectivePermissionsAsync(id, ct);
@@ -537,15 +515,11 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
-        var member = await db.TenantMembers
-            .Include(m => m.Subject)
-            .Where(m => m.Id == id && m.TenantId == tenantId)
-            .FirstOrDefaultAsync(ct);
+        var member = await _members.GetMemberAsync(tenantId, id, ct);
 
         if (member == null)
             return NotFound();
@@ -566,11 +540,9 @@ public class MemberInviteController : ControllerBase
                 await _tenantRoleService.GetEffectivePermissionsAsync(id, ct)))
             return Problem(detail: MemberScopeResolver.ExemptFromHistoryClampDetail, statusCode: 400);
 
-        member.LimitTo24Hours = request.LimitTo24Hours;
-        member.SysUpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        await _members.SetLimitTo24HoursAsync(tenantId, member.Id, request.LimitTo24Hours, DateTime.UtcNow, ct);
 
-        if (member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public")
+        if (IsPublicSubject(member))
             publicAccessCache.Evict(tenantId);
 
         return NoContent();
@@ -585,28 +557,8 @@ public class MemberInviteController : ControllerBase
 
     private const string UngrantableRoleRemovalDetail = "Cannot remove a role you cannot grant.";
 
-    private static async Task ReplaceRolesAsync(
-        NocturneDbContext db,
-        TenantMemberEntity member,
-        IReadOnlyCollection<Guid> removedIds,
-        IReadOnlyCollection<Guid> addedIds,
-        CancellationToken ct)
-    {
-        db.TenantMemberRoles.RemoveRange(member.MemberRoles.Where(mr => removedIds.Contains(mr.TenantRoleId)));
-
-        foreach (var roleId in addedIds)
-        {
-            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantMemberId = member.Id,
-                TenantRoleId = roleId,
-            });
-        }
-
-        member.SysUpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-    }
+    private static bool IsPublicSubject(TenantMemberRecord member) =>
+        member is { IsSystemSubject: true, SubjectName: "Public" };
 
     /// <summary>
     /// True when a history-clamped caller's edit would leave a clamped member holding permissions
@@ -614,7 +566,7 @@ public class MemberInviteController : ControllerBase
     /// clamp sideways. See <see cref="HttpContextExtensions.IsCallerHistoryClamped"/>.
     /// </summary>
     private async Task<bool> WouldExemptAClampedMemberAsync(
-        TenantMemberEntity member, IEnumerable<string> permissionsAfter, CancellationToken ct) =>
+        TenantMemberRecord member, IEnumerable<string> permissionsAfter, CancellationToken ct) =>
         member.LimitTo24Hours
         && HttpContext.IsCallerHistoryClamped()
         && MemberScopeResolver.IsExemptFromHistoryClamp(permissionsAfter)
@@ -658,8 +610,8 @@ public class MemberInviteController : ControllerBase
     /// it caps or clamps every uploader on the site at once, from a screen that shows one row and
     /// says nothing about the blast radius. Tokens are bounded individually, on the grant.
     /// </remarks>
-    private static string? DeviceHolderDetail(TenantMemberEntity member) =>
-        member.Subject is { IsSystemSubject: true, Name: DeviceSubjectFilter.DeviceSubjectName }
+    private static string? DeviceHolderDetail(TenantMemberRecord member) =>
+        member is { IsSystemSubject: true, SubjectName: DeviceSubjectFilter.DeviceSubjectName }
             ? "This member holds the site's API tokens. Change what a token can do on the token itself."
             : null;
 }

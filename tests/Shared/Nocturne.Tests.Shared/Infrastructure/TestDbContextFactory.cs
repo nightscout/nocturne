@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Tests.Shared.Infrastructure;
 
@@ -130,6 +131,10 @@ public sealed class SqliteTestDatabase : IDisposable
         services.AddSingleton(ContextFactory);
         services.AddSingleton(ContextFactory.AsNocturneFactory());
         services.AddTransient<ISubjectRepository, SubjectRepository>();
+        services.AddTransient<ITenantRepository, TenantRepository>();
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<IRoleRepository, RoleRepository>();
+        services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
         return services;
     }
 

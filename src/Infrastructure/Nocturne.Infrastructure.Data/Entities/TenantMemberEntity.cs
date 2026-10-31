@@ -117,19 +117,11 @@ public class TenantMemberEntity : ISystemTimestamped
     /// </summary>
     /// <param name="excludingRoleId">A role to leave out, to ask what would remain without it.</param>
     public IEnumerable<string> EffectivePermissions(Guid? excludingRoleId = null) =>
-        EffectivePermissionsOf(
+        MemberPermissions.Effective(
             MemberRoles
                 .Where(mr => mr.TenantRoleId != excludingRoleId)
                 .Select(mr => mr.TenantRole.Permissions),
             DirectPermissions);
-
-    /// <summary>
-    /// The effective permissions of a membership read as columns rather than as an entity with its
-    /// roles loaded: each role's permissions unioned with the direct permissions.
-    /// </summary>
-    public static IEnumerable<string> EffectivePermissionsOf(
-        IEnumerable<IEnumerable<string>> rolePermissions, IEnumerable<string>? directPermissions) =>
-        rolePermissions.SelectMany(permissions => permissions).Union(directPermissions ?? []);
 
     /// <summary>
     /// Whether the effective permissions, normalised as member permissions, satisfy

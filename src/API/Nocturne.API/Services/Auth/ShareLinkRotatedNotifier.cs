@@ -93,14 +93,11 @@ public sealed class ShareLinkRotatedNotifier : IShareLinkRotatedNotifier
         Guid tenantId,
         CancellationToken cancellationToken)
     {
-        await using var db = await scopedServices
-            .GetRequiredService<INocturneDbContextFactory>()
-            .CreatePlatformAsync(cancellationToken);
+        var tenant = await scopedServices
+            .GetRequiredService<ITenantRepository>()
+            .GetAsync(tenantId, cancellationToken);
 
-        return await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == tenantId)
-            .Select(t => new TenantIdentity(t.Id, t.Slug, t.DisplayName))
-            .FirstOrDefaultAsync(cancellationToken);
+        return tenant is null ? null : new TenantIdentity(tenant.Id, tenant.Slug, tenant.DisplayName);
     }
 
     private sealed record TenantIdentity(Guid Id, string Slug, string DisplayName);

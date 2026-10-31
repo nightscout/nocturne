@@ -1,12 +1,9 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Models.Identity;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -16,7 +13,8 @@ namespace Nocturne.API.Services.Identity;
 /// </summary>
 public class MembershipRequestService : IMembershipRequestService
 {
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
     private readonly ISubjectRepository _subjects;
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
@@ -25,7 +23,8 @@ public class MembershipRequestService : IMembershipRequestService
     private readonly ILogger<MembershipRequestService> _logger;
 
     public MembershipRequestService(
-        INocturneDbContextFactory contexts,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
         ISubjectRepository subjects,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
@@ -33,7 +32,8 @@ public class MembershipRequestService : IMembershipRequestService
         TimeProvider timeProvider,
         ILogger<MembershipRequestService> logger)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
+        _members = members ?? throw new ArgumentNullException(nameof(members));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
@@ -46,47 +46,25 @@ public class MembershipRequestService : IMembershipRequestService
     public async Task<CreateMembershipRequestResult> CreateRequestAsync(
         Guid tenantId, Guid subjectId, string? message, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        var tenant = await _tenants.GetAsync(tenantId, ct);
         if (tenant == null)
             return new CreateMembershipRequestResult(false, "Tenant not found.");
         if (!tenant.AllowAccessRequests)
             return new CreateMembershipRequestResult(false, "This profile is not accepting membership requests.");
 
-        var existingPending = await db.MembershipRequests
-            .AnyAsync(r => r.SubjectId == subjectId && r.Status == "pending", ct);
-
-        if (existingPending)
+        if (await _members.AnyPendingRequestAsync(tenantId, subjectId, ct))
             return new CreateMembershipRequestResult(false, "A pending request already exists.");
 
-        var entity = new Infrastructure.Data.Entities.MembershipRequestEntity
-        {
-            TenantId = tenantId,
-            SubjectId = subjectId,
-            Message = message,
-            Status = "pending",
-            CreatedAt = _time.GetUtcNow().UtcDateTime,
-        };
-
-        db.MembershipRequests.Add(entity);
-        await db.SaveChangesAsync(ct);
+        var requestId = await _members.CreateRequestAsync(
+            new NewMembershipRequest(tenantId, subjectId, message, _time.GetUtcNow().UtcDateTime), ct);
 
         _logger.LogInformation(
             "MembershipRequestAudit: {Event} request_id={RequestId} tenant_id={TenantId} subject_id={SubjectId}",
-            "request_created", entity.Id, tenantId, subjectId);
+            "request_created", requestId, tenantId, subjectId);
 
-        // Look up the requester's name for the notification
         var subjectName = (await _subjects.GetManyAsync([subjectId], ct)).SingleOrDefault()?.Name ?? "Someone";
 
-        var candidates = await db.TenantMembers
-            .AsNoTracking()
-            .Include(m => m.MemberRoles)
-                .ThenInclude(mr => mr.TenantRole)
-            .PeopleOf(tenantId)
-            .ToListAsync(ct);
-
-        var membersToNotify = candidates
+        var membersToNotify = (await _members.ListPeopleAsync(tenantId, ct))
             .Where(m => m.Holds(Scope.MembersManage))
             .Select(m => m.SubjectId)
             .Distinct()
@@ -99,7 +77,7 @@ public class MembershipRequestService : IMembershipRequestService
                 "membership.requested",
                 $"Membership request from {subjectName}",
                 subtitle: message,
-                sourceId: entity.Id.ToString(),
+                sourceId: requestId.ToString(),
                 cancellationToken: ct);
         }
 
@@ -110,37 +88,20 @@ public class MembershipRequestService : IMembershipRequestService
     public async Task<MembershipRequestDto?> GetMyRequestAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var entity = await db.MembershipRequests
-            .Where(r => r.SubjectId == subjectId)
-            .OrderByDescending(r => r.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (entity == null)
+        var request = await _members.FindLatestRequestAsync(tenantId, subjectId, ct);
+        if (request == null)
             return null;
 
         var subject = await _subjects.GetAsync(subjectId, ct);
 
-        return new MembershipRequestDto(
-            entity.Id,
-            entity.SubjectId,
-            subject?.Name,
-            subject?.AvatarUrl,
-            entity.Message,
-            entity.Status,
-            entity.CreatedAt);
+        return ToDto(request, subject?.Name, subject?.AvatarUrl);
     }
 
     /// <inheritdoc />
     public async Task<List<MembershipRequestDto>> GetPendingRequestsAsync(
         Guid tenantId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var requests = await db.MembershipRequests
-            .Where(r => r.Status == "pending")
-            .OrderByDescending(r => r.CreatedAt)
-            .ToListAsync(ct);
-
+        var requests = await _members.ListPendingRequestsAsync(tenantId, ct);
         if (requests.Count == 0)
             return [];
 
@@ -150,14 +111,7 @@ public class MembershipRequestService : IMembershipRequestService
         return requests.Select(r =>
         {
             subjects.TryGetValue(r.SubjectId, out var subject);
-            return new MembershipRequestDto(
-                r.Id,
-                r.SubjectId,
-                subject?.Name,
-                subject?.AvatarUrl,
-                r.Message,
-                r.Status,
-                r.CreatedAt);
+            return ToDto(r, subject?.Name, subject?.AvatarUrl);
         }).ToList();
     }
 
@@ -168,7 +122,6 @@ public class MembershipRequestService : IMembershipRequestService
         bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var roleGrant = await _tenantRoleService.ValidateRoleGrantAsync(
             tenantId, roleIds, granterScopes, ct);
         if (!roleGrant.Ok)
@@ -179,20 +132,18 @@ public class MembershipRequestService : IMembershipRequestService
                 await _tenantRoleService.GetRolePermissionsAsync(tenantId, roleIds, ct)))
             return new DecideMembershipRequestResult(false, MemberScopeResolver.ExemptFromHistoryClampDetail);
 
-        var request = await db.MembershipRequests
-            .FirstOrDefaultAsync(r => r.Id == requestId, ct);
+        var request = await _members.GetRequestAsync(tenantId, requestId, ct);
 
         if (request == null)
             return new DecideMembershipRequestResult(false, "Request not found.");
 
-        if (request.Status != "pending")
+        if (request.Status != MembershipRequestRecord.Pending)
             return new DecideMembershipRequestResult(false, "Request is no longer pending.");
 
-        request.Status = "approved";
-        request.DecidedBySubjectId = decidedBySubjectId;
-        request.DecidedAt = _time.GetUtcNow().UtcDateTime;
-        request.RoleIds = roleIds;
-        await db.SaveChangesAsync(ct);
+        await _members.DecideRequestAsync(
+            tenantId, requestId,
+            new MembershipRequestDecision(MembershipRequestRecord.Approved, decidedBySubjectId, _time.GetUtcNow().UtcDateTime, roleIds),
+            ct);
 
         await _tenantService.AddMemberAsync(
             tenantId, request.SubjectId, roleIds, limitTo24Hours: limitTo24Hours, ct: ct);
@@ -216,20 +167,18 @@ public class MembershipRequestService : IMembershipRequestService
         Guid requestId, Guid tenantId,
         Guid decidedBySubjectId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var request = await db.MembershipRequests
-            .FirstOrDefaultAsync(r => r.Id == requestId, ct);
+        var request = await _members.GetRequestAsync(tenantId, requestId, ct);
 
         if (request == null)
             return new DecideMembershipRequestResult(false, "Request not found.");
 
-        if (request.Status != "pending")
+        if (request.Status != MembershipRequestRecord.Pending)
             return new DecideMembershipRequestResult(false, "Request is no longer pending.");
 
-        request.Status = "denied";
-        request.DecidedBySubjectId = decidedBySubjectId;
-        request.DecidedAt = _time.GetUtcNow().UtcDateTime;
-        await db.SaveChangesAsync(ct);
+        await _members.DecideRequestAsync(
+            tenantId, requestId,
+            new MembershipRequestDecision(MembershipRequestRecord.Denied, decidedBySubjectId, _time.GetUtcNow().UtcDateTime, null),
+            ct);
 
         _logger.LogInformation(
             "MembershipRequestAudit: {Event} request_id={RequestId} tenant_id={TenantId} subject_id={SubjectId} decided_by={DecidedBy}",
@@ -246,25 +195,26 @@ public class MembershipRequestService : IMembershipRequestService
     }
 
     /// <inheritdoc />
-    public async Task<bool> GetAllowRequestsAsync(Guid tenantId, CancellationToken ct = default)
-    {
-        await using var db = await _contexts.CreateAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct)
-            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
-        return tenant.AllowAccessRequests;
-    }
+    public async Task<bool> GetAllowRequestsAsync(Guid tenantId, CancellationToken ct = default) =>
+        (await RequireTenantAsync(tenantId, ct)).AllowAccessRequests;
 
     /// <inheritdoc />
     public async Task<bool> SetAllowRequestsAsync(Guid tenantId, bool allowRequests, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var tenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct)
-            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
-
-        tenant.AllowAccessRequests = allowRequests;
-        await db.SaveChangesAsync(ct);
-        return tenant.AllowAccessRequests;
+        await RequireTenantAsync(tenantId, ct);
+        await _tenants.UpdateAsync(tenantId, new TenantEdit(AllowAccessRequests: allowRequests), ct);
+        return allowRequests;
     }
+
+    private async Task<TenantRecord> RequireTenantAsync(Guid tenantId, CancellationToken ct) =>
+        await _tenants.GetAsync(tenantId, ct) ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
+
+    private static MembershipRequestDto ToDto(MembershipRequestRecord request, string? subjectName, string? avatarUrl) => new(
+        request.Id,
+        request.SubjectId,
+        subjectName,
+        avatarUrl,
+        request.Message,
+        request.Status,
+        request.CreatedAt);
 }

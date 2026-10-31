@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -14,6 +15,7 @@ namespace Nocturne.API.Services.Audit;
 /// </summary>
 public class AuditRetentionService(
     INocturneDbContextFactory contextFactory,
+    ITenantRepository tenants,
     IConfiguration configuration,
     ILogger<AuditRetentionService> logger) : BackgroundService
 {
@@ -74,11 +76,7 @@ public class AuditRetentionService(
         var tenantIds = new HashSet<Guid>(configs.Keys);
         if (defaultReadDays is not null || defaultMutationDays is not null)
         {
-            var allTenantIds = await configContext.Tenants
-                .AsNoTracking()
-                .Select(t => t.Id)
-                .ToListAsync(ct);
-            tenantIds.UnionWith(allTenantIds);
+            tenantIds.UnionWith(await tenants.ListIdsAsync(activeOnly: false, ct));
         }
 
         var cycleReadDeleted = 0;

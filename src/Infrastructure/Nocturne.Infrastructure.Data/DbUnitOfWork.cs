@@ -104,6 +104,32 @@ public readonly struct DbContextLease : IAsyncDisposable
         return new DbContextLease(await contexts.CreateAsync(ct), owned: true);
     }
 
+    /// <summary>
+    /// Leases <paramref name="unit"/>'s context when there is one, whose pin its owner set, else a
+    /// new context from <paramref name="contexts"/> pinned to <paramref name="tenantId"/>.
+    /// </summary>
+    public static async ValueTask<DbContextLease> OpenForTenantAsync(
+        DbUnitOfWork? unit, INocturneDbContextFactory? contexts, Guid tenantId, CancellationToken ct = default)
+    {
+        if (unit is not null)
+            return new DbContextLease(unit.Context, owned: false);
+        ArgumentNullException.ThrowIfNull(contexts);
+        return new DbContextLease(await contexts.CreateForTenantAsync(tenantId, ct), owned: true);
+    }
+
+    /// <summary>
+    /// Leases <paramref name="unit"/>'s context when there is one, else a new platform context
+    /// from <paramref name="contexts"/>.
+    /// </summary>
+    public static async ValueTask<DbContextLease> OpenPlatformAsync(
+        DbUnitOfWork? unit, INocturneDbContextFactory? contexts, CancellationToken ct = default)
+    {
+        if (unit is not null)
+            return new DbContextLease(unit.Context, owned: false);
+        ArgumentNullException.ThrowIfNull(contexts);
+        return new DbContextLease(await contexts.CreatePlatformAsync(ct), owned: true);
+    }
+
     /// <inheritdoc />
     public ValueTask DisposeAsync() => _owned ? Context.DisposeAsync() : ValueTask.CompletedTask;
 }

@@ -8,6 +8,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
@@ -114,6 +115,7 @@ public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Datab
 
         var service = new SoftDeleteCleanupService(
             new Factory(Context),
+            new TenantRepository(new Factory(Context)),
             new ConfigurationBuilder().Build(),
             NullLogger<SoftDeleteCleanupService>.Instance);
 
@@ -154,6 +156,7 @@ public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Datab
 
         var service = new SoftDeleteCleanupService(
             new Factory(Context),
+            new TenantRepository(new Factory(Context)),
             new ConfigurationBuilder().Build(),
             NullLogger<SoftDeleteCleanupService>.Instance);
 

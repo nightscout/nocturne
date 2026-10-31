@@ -17,6 +17,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.API.Tests.Services.Platform.Releases.ReleaseStatusServiceTests;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Platform.Releases;
 
@@ -226,7 +227,7 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
         (await TenantsAsync()).SelectMany(OwnersOf);
 
     private ActiveTenantSnapshot Snapshot() => new(
-        _provider.GetRequiredService<INocturneDbContextFactory>(), _clock, NullLogger<ActiveTenantSnapshot>.Instance);
+        new TenantRepository(_provider.GetRequiredService<INocturneDbContextFactory>()), _clock, NullLogger<ActiveTenantSnapshot>.Instance);
 
     private ReleaseNoticeService CreateService(string version, bool isRelease = true)
     {

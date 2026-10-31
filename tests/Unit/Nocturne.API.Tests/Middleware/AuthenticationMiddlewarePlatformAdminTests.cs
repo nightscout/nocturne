@@ -62,6 +62,7 @@ public class AuthenticationMiddlewarePlatformAdminTests
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
         var provider = services.BuildServiceProvider();
 

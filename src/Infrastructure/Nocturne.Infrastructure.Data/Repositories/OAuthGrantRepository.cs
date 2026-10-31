@@ -450,7 +450,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
             ? new DirectGrantMembership(
                 id,
                 new TenantMemberAccess(
-                    TenantMemberEntity.EffectivePermissionsOf(RolePermissions, DirectPermissions).ToHashSet(),
+                    MemberPermissions.Effective(RolePermissions, DirectPermissions).ToHashSet(),
                     MemberLimitTo24Hours == true),
                 MemberLastUsedAt)
             : null;

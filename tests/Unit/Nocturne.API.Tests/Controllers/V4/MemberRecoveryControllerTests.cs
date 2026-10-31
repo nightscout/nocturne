@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -57,9 +58,10 @@ public sealed class MemberRecoveryControllerTests : IDisposable
         var contexts = _context.AsFactory();
         _controller = new MemberRecoveryController(
             contexts,
+            new TenantMembershipRepository(contexts),
             MockTenantAccessor.Create(_tenantId).Object,
             _roles.Object,
-            new MemberRecoveryEligibility(new TenantMemberService(contexts)),
+            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts))),
             _recoveryCodes.Object,
             _loginCodes.Object)
         {

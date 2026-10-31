@@ -47,7 +47,7 @@ public class PasskeyCeremonyHostExtensionsTests
 
         var contexts = TestDbContextFactory.CreateInMemoryContext().AsFactory();
         return new PasskeyService(
-            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts), new TenantMemberService(contexts),
+            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts), new TenantMemberService(new TenantMembershipRepository(contexts)),
             new Fido2(fido2Config),
             new EphemeralDataProtectionProvider(),
             Options.Create(fido2Config),

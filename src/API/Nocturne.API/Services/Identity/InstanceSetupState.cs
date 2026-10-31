@@ -1,18 +1,17 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Services.Identity;
 
 /// <inheritdoc cref="IInstanceSetupState"/>
 public sealed class InstanceSetupState : IInstanceSetupState
 {
-    private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ITenantRepository _tenants;
     private readonly ISubjectRepository _subjects;
 
-    public InstanceSetupState(INocturneDbContextFactory dbFactory, ISubjectRepository subjects)
+    public InstanceSetupState(ITenantRepository tenants, ISubjectRepository subjects)
     {
-        _dbFactory = dbFactory;
+        _tenants = tenants;
         _subjects = subjects;
     }
 
@@ -24,15 +23,7 @@ public sealed class InstanceSetupState : IInstanceSetupState
     /// </remarks>
     public async Task<bool> IsSetupCompleteAsync(CancellationToken ct = default)
     {
-        List<Guid> tenantIds;
-        await using (var context = await _dbFactory.CreatePlatformAsync(ct))
-        {
-            tenantIds = await context.Tenants.AsNoTracking()
-                .Select(t => t.Id)
-                .ToListAsync(ct);
-        }
-
-        foreach (var tenantId in tenantIds)
+        foreach (var tenantId in await _tenants.ListIdsAsync(activeOnly: false, ct))
         {
             if (await TenantHasCredentialedMemberAsync(tenantId, ct))
                 return true;

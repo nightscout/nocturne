@@ -21,7 +21,7 @@ public class InstanceSetupStateTests : IDisposable
     public InstanceSetupStateTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(_tenantId, "site");
-        _state = new InstanceSetupState(_db.ContextFactory.AsNocturneFactory(), new SubjectRepository(_db.ContextFactory.AsNocturneFactory()));
+        _state = new InstanceSetupState(new TenantRepository(_db.ContextFactory.AsNocturneFactory()), new SubjectRepository(_db.ContextFactory.AsNocturneFactory()));
     }
 
     public void Dispose()

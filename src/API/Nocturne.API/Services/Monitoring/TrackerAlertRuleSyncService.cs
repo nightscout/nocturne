@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -116,7 +117,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             && !(definition.LowReservoirUnits is not null && TrackerCoverage.HoldsInsulin(definition)))
             return;
 
-        var recipient = await InAppRecipientOfAsync(db, tenantId, definition, ct);
+        var recipient = await InAppRecipientOfAsync(new TenantMembershipRepository(unit), tenantId, definition, ct);
 
         // The threshold editor replaces the whole threshold list (new row ids), which
         // clears the AlertRuleId links. Adopt orphaned managed rules so a threshold keeps
@@ -371,10 +372,10 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// the tenant has neither, which delivery records as failed.
     /// </summary>
     private static async Task<string> InAppRecipientOfAsync(
-        NocturneDbContext db, Guid tenantId, TrackerDefinitionEntity definition, CancellationToken ct)
+        ITenantMembershipRepository members, Guid tenantId, TrackerDefinitionEntity definition, CancellationToken ct)
     {
-        var recipient = await InAppRecipients.ResolveAsync(db, tenantId, definition.CreatedBy, ct)
-            ?? await InAppRecipients.EarliestOwnerAsync(db, tenantId, ct);
+        var recipient = await InAppRecipients.ResolveAsync(members, tenantId, definition.CreatedBy, ct)
+            ?? await InAppRecipients.EarliestOwnerAsync(members, tenantId, ct);
         return recipient?.ToString() ?? string.Empty;
     }
 

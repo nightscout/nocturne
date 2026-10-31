@@ -144,7 +144,7 @@ public class DemoAdminProvisionCacheTests : IDisposable
             });
 
         var demoTenantService = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
+            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory()), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             tenantService.Object,
             TestPublicAccessCache.Create(),
@@ -152,7 +152,10 @@ public class DemoAdminProvisionCacheTests : IDisposable
             TimeProvider.System,
             new Mock<ILogger<DemoTenantService>>().Object);
 
-        return new DemoAdminController(tenantService.Object, demoTenantService, dbFactory.Object.AsNocturneFactory(), TimeProvider.System);
+        return new DemoAdminController(
+            tenantService.Object, demoTenantService,
+            new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory()),
+            dbFactory.Object.AsNocturneFactory(), TimeProvider.System);
     }
 
     public void Dispose()

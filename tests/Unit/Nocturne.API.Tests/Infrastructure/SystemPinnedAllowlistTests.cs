@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Infrastructure;
@@ -9,9 +10,9 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// <summary>
 /// <see cref="INocturneDbContextFactory.CreateSystemPinnedAsync"/> reads as no reader, past every
 /// share and history narrowing, so it is limited to the members listed here; its remarks give the
-/// reason. The two <see cref="ISubjectRepository"/> reads that take the pin inside Infrastructure
-/// are limited the same way in the host, so a new caller of either gets a cross-tenant,
-/// share-blind read only by adding itself here. An entry names the file and the member the call
+/// reason. The <see cref="ISubjectRepository"/> and <see cref="ITenantMembershipRepository"/> reads
+/// that take the pin inside Infrastructure are limited the same way in the host, so a new caller
+/// of any of them gets a cross-tenant, share-blind read only by adding itself here. An entry names the file and the member the call
 /// sits in, so a new action in an allowlisted file is not covered by its neighbour. A new caller
 /// is added here deliberately or not at all.
 /// </summary>
@@ -25,30 +26,40 @@ public class SystemPinnedAllowlistTests
     [
         nameof(ISubjectRepository.TenantHasCredentialedMemberAsync),
         nameof(ISubjectRepository.HasOrphanedMemberAsync),
+        nameof(ITenantMembershipRepository.ReadSetupGateAsync),
+        nameof(ITenantMembershipRepository.CountSetupCredentialsAsync),
+        nameof(ITenantMembershipRepository.ListOrphanedMembersAsync),
+        nameof(ITenantMembershipRepository.GetOwnerSubjectIdsForAccessRequestAsync),
     ];
 
     private static readonly string[] ScannedTrees = ["src"];
 
     private static readonly string[] Allowed =
     [
-        "src/API/Nocturne.API/Middleware/TenantSetupMiddleware.cs: TenantSetupMiddleware.EvaluateGateAsync",
-        "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.AccessRequestComplete",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.TenantHasCredentialedMemberAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.HasOrphanedMemberAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.GetOwnerSubjectIdsForAccessRequestAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.ReadSetupGateAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.CountSetupCredentialsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.ListOrphanedMembersAsync",
     ];
 
     /// <summary>
     /// The members outside the module that call a <see cref="SystemPinnedReads"/> read: the anonymous auth
-    /// status a share host's login page asks, and the setup state asked on public-share requests.
-    /// The scan is by name, so <c>IInstanceSetupState.TenantHasCredentialedMemberAsync</c>, the
-    /// facade over the same pinned read, pins its callers too.
+    /// status a share host's login page asks, the setup state asked on public-share requests, the
+    /// setup gate every API request passes through, and the owners told of an access request made
+    /// from a share host's login page. The scan is by name, so
+    /// <c>IInstanceSetupState.TenantHasCredentialedMemberAsync</c>, the facade over the same pinned
+    /// read, pins its callers too.
     /// </summary>
     private static readonly string[] AllowedReadCallers =
     [
+        "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.AccessRequestComplete",
         "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.GetAuthStatus",
         "src/API/Nocturne.API/Controllers/V4/SetupController.cs: SetupController.GetSoleTenantWithoutOwnerAsync",
         "src/API/Nocturne.API/Services/Identity/InstanceSetupState.cs: InstanceSetupState.IsSetupCompleteAsync",
         "src/API/Nocturne.API/Services/Identity/InstanceSetupState.cs: InstanceSetupState.TenantHasCredentialedMemberAsync",
+        "src/API/Nocturne.API/Middleware/TenantSetupMiddleware.cs: TenantSetupMiddleware.EvaluateGateAsync",
     ];
 
     private static readonly IReadOnlyList<string> Callers = Scan(ScannedTrees, [Method]);

@@ -46,7 +46,7 @@ public class DemoTenantServiceResetTests : IDisposable
             .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
 
         _service = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
+            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory()), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             _tenantService.Object,
             TestPublicAccessCache.Create(),

@@ -21,6 +21,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -80,11 +81,13 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         return new ShareLinkService(
             db.AsFactory(),
+            new TenantRepository(db.AsFactory()),
+            new TenantMembershipRepository(db.AsFactory()),
             new ShareTokenGenerator(),
             new ShareTokenCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<ShareTokenCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantRepository(factory.Object.AsNocturneFactory()), NullLogger<ShareTokenCacheService>.Instance),
             new PublicAccessCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<PublicAccessCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory()), NullLogger<PublicAccessCacheService>.Instance),
             secrets,
             NullLogger<ShareLinkService>.Instance,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }));

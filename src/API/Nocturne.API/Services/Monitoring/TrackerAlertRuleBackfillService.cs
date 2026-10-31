@@ -47,18 +47,9 @@ public sealed class TrackerAlertRuleBackfillService : BackgroundService
             using var scope = _serviceProvider.CreateScope();
             var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
 
-            // Tenants are not RLS-scoped, so this list read is safe without a tenant context.
-            List<(Guid TenantId, string? Slug, string? DisplayName)> tenants;
-            await using (var lookup = await factory.CreatePlatformAsync(stoppingToken))
-            {
-                tenants = (await lookup.Tenants
-                    .AsNoTracking()
-                    .Where(t => t.IsActive)
-                    .Select(t => new { t.Id, t.Slug, t.DisplayName })
-                    .ToListAsync(stoppingToken))
-                    .Select(t => (t.Id, (string?)t.Slug, (string?)t.DisplayName))
-                    .ToList();
-            }
+            var tenants = (await scope.ServiceProvider.GetRequiredService<ITenantRepository>().ListAsync(activeOnly: true, stoppingToken))
+                .Select(t => (TenantId: t.Id, Slug: (string?)t.Slug, DisplayName: (string?)t.DisplayName))
+                .ToList();
 
             var syncedTotal = 0;
             foreach (var (tenantId, slug, displayName) in tenants)

@@ -113,7 +113,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
                 .Where(row => row.TenantId == first).Select(row => row.SecretsJson).SingleAsync());
 
         var holders = new PostgresGoogleHealthGrantHolders(real.GetRequiredService<IServiceScopeFactory>(),
-            real.GetRequiredService<INocturneDbContextFactory>(), NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
+            real.GetRequiredService<INocturneDbContextFactory>(), real.GetRequiredService<ITenantRepository>(),
+            NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
         Assert.Equal(GoogleHealthGrantSharing.Shared, await holders.SharingAsync(second, "encrypted-account", default));
         Assert.Equal(GoogleHealthGrantSharing.NotShared, await holders.SharingAsync(first, "disconnected-account", default));

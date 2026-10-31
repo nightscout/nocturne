@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Docs;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
@@ -24,6 +25,7 @@ namespace Nocturne.API.Services.Auth;
 public class OAuthCodeCleanupService : BackgroundService
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ITenantRepository _tenants;
     private readonly IOAuthTokenRepository _tokens;
     private readonly ILogger<OAuthCodeCleanupService> _logger;
 
@@ -52,11 +54,13 @@ public class OAuthCodeCleanupService : BackgroundService
     /// <param name="tokens">Root-resolved likewise; the sweep pins each tenant on the call.</param>
     public OAuthCodeCleanupService(
         INocturneDbContextFactory contexts,
+        ITenantRepository tenants,
         IOAuthTokenRepository tokens,
         ILogger<OAuthCodeCleanupService> logger
     )
     {
         _contexts = contexts;
+        _tenants = tenants;
         _tokens = tokens;
         _logger = logger;
     }
@@ -112,7 +116,7 @@ public class OAuthCodeCleanupService : BackgroundService
         int deletedStepUpTokens;
         await using (var platform = await _contexts.CreatePlatformAsync(ct))
         {
-            tenantIds = await platform.Tenants.Select(t => t.Id).ToListAsync(ct);
+            tenantIds = [.. await _tenants.ListIdsAsync(activeOnly: false, ct)];
             deletedStepUpTokens = await platform
                 .TotpStepUpTokens.Where(t => t.ExpiresAt < codeCutoff)
                 .ExecuteDeleteAsync(ct);

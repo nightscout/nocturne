@@ -108,6 +108,7 @@ public record TenantCursorResetResult(
 public class ConnectorCursorResetService : IConnectorCursorResetService
 {
     private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ITenantRepository _tenants;
     private readonly IConnectorSyncService _syncService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly TimeProvider _time;
@@ -116,12 +117,14 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
     /// <summary>Initializes a new instance of <see cref="ConnectorCursorResetService"/>.</summary>
     public ConnectorCursorResetService(
         INocturneDbContextFactory dbFactory,
+        ITenantRepository tenants,
         IConnectorSyncService syncService,
         ITenantAccessor tenantAccessor,
         TimeProvider timeProvider,
         ILogger<ConnectorCursorResetService> logger)
     {
         _dbFactory = dbFactory;
+        _tenants = tenants;
         _syncService = syncService;
         _tenantAccessor = tenantAccessor;
         _time = timeProvider;
@@ -137,8 +140,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         CancellationToken ct)
     {
         await using var db = await _dbFactory.CreateAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        var tenant = await _tenants.GetAsync(tenantId, ct);
 
         if (tenant is null)
         {
@@ -218,9 +220,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
     /// <inheritdoc />
     public async Task<TenantConnectorsDto?> GetTenantConnectorsAsync(Guid tenantId, CancellationToken ct)
     {
-        await using var db = await _dbFactory.CreateAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        var tenant = await _tenants.GetAsync(tenantId, ct);
 
         if (tenant is null)
             return null;

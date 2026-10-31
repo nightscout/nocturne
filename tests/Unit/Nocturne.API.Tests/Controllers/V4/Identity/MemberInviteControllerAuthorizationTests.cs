@@ -15,6 +15,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
 
@@ -70,7 +71,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 == Task.FromResult(new List<string>())),
             _tenantMemberService.Object,
             tenantAccessor.Object,
-            _dbContext.AsFactory())
+            new TenantMembershipRepository(_dbContext.AsFactory()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

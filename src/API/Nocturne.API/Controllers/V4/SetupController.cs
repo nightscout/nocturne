@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
@@ -16,10 +15,7 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Core.Models.Identity;
 using Nocturne.API.Configuration;
 using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 
@@ -45,7 +41,8 @@ public partial class SetupController : ControllerBase
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
     private readonly ISubjectRepository _subjects;
-    private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
     private readonly OidcOptions _oidcOptions;
     private readonly IOidcAuthService _oidcAuthService;
     private readonly OperatorConfiguration _operatorConfig;
@@ -61,7 +58,8 @@ public partial class SetupController : ControllerBase
         ISessionService sessionService,
         ISubjectService subjectService,
         ISubjectRepository subjects,
-        INocturneDbContextFactory dbFactory,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
         IOptions<OidcOptions> oidcOptions,
         IOidcAuthService oidcAuthService,
         IOptions<OperatorConfiguration> operatorConfig,
@@ -76,7 +74,8 @@ public partial class SetupController : ControllerBase
         _sessionService = sessionService;
         _subjectService = subjectService;
         _subjects = subjects;
-        _dbFactory = dbFactory;
+        _tenants = tenants;
+        _members = members;
         _oidcOptions = oidcOptions.Value;
         _oidcAuthService = oidcAuthService;
         _operatorConfig = operatorConfig.Value;
@@ -150,18 +149,11 @@ public partial class SetupController : ControllerBase
         if (ReservedUsernames.Contains(normalized))
             return Ok(new SlugValidationResult(false, "This username is reserved"));
 
-        await using var context = await _dbFactory.CreatePlatformAsync(ct);
-
-        var tenant = await context.Tenants.AsNoTracking().ExcludeDemo().FirstOrDefaultAsync(ct);
+        var tenant = (await _tenants.ListNonDemoAsync(1, ct)).FirstOrDefault();
         if (tenant == null)
             return Ok(new SlugValidationResult(false, "No tenant exists"));
 
-        await context.PinTenantAsync(tenant.Id, ct);
-
-        var exists = await context.TenantMembers.AsNoTracking()
-            .AnyAsync(m => m.TenantId == tenant.Id && m.Username == normalized, ct);
-
-        if (exists)
+        if (await _members.UsernameExistsAsync(tenant.Id, normalized, ct))
             return Ok(new SlugValidationResult(false, "This username is already taken"));
 
         if (await AskUsernameWebhookAsync(normalized, ct) is { IsValid: false } refusal)
@@ -480,11 +472,9 @@ public partial class SetupController : ControllerBase
     /// created, rather than <c>setup_already_complete</c>, which would strand the operator on a
     /// tenant nobody can adopt.
     /// </remarks>
-    private async Task<(TenantEntity? Tenant, IActionResult? Error)> GetSoleTenantWithoutOwnerAsync(CancellationToken ct)
+    private async Task<(TenantRecord? Tenant, IActionResult? Error)> GetSoleTenantWithoutOwnerAsync(CancellationToken ct)
     {
-        await using var context = await _dbFactory.CreatePlatformAsync(ct);
-
-        var tenants = await context.Tenants.ExcludeDemo().Take(2).ToListAsync(ct);
+        var tenants = await _tenants.ListNonDemoAsync(2, ct);
 
         if (tenants.Count == 0)
             return (null, Conflict(new { error = "no_tenant_exists" }));
@@ -510,7 +500,7 @@ public partial class SetupController : ControllerBase
     /// (<see cref="ISubjectRepository.FindSetupOwnerCandidateAsync"/>), or <see langword="null"/>
     /// when the options step has not created it yet.
     /// </summary>
-    private async Task<Guid?> FindSetupOwnerSubjectIdAsync(TenantEntity tenant, CancellationToken ct) =>
+    private async Task<Guid?> FindSetupOwnerSubjectIdAsync(TenantRecord tenant, CancellationToken ct) =>
         (await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct))?.Id;
 
     /// <summary>
@@ -520,7 +510,7 @@ public partial class SetupController : ControllerBase
     /// and when reusing a subject created for a previously deleted tenant.
     /// </summary>
     private async Task<Guid> EnsureOwnerSubjectAsync(
-        TenantEntity tenant, string displayName, string username, CancellationToken ct)
+        TenantRecord tenant, string displayName, string username, CancellationToken ct)
     {
         var existingSubject = await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct);
 
@@ -539,29 +529,15 @@ public partial class SetupController : ControllerBase
                 subjectId, username, tenant.Id);
         }
 
-        await using var context = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
-
         // Ensure tenant membership with owner role — required when reusing a
         // subject from a previously deleted tenant.
-        var ownerRole = await context.TenantRoles
-            .FirstOrDefaultAsync(r => r.TenantId == tenant.Id && r.Slug == "owner", ct);
-        if (ownerRole != null)
-        {
-            var isMember = await context.TenantMembers
-                .AnyAsync(m => m.TenantId == tenant.Id && m.SubjectId == subjectId, ct);
-            if (!isMember)
-                await _tenantService.AddMemberAsync(tenant.Id, subjectId, [ownerRole.Id], ct: ct);
-        }
+        var ownerRoleId = await _members.FindRoleIdBySlugAsync(tenant.Id, RoleSeeds.Owner, ct);
+        if (ownerRoleId is { } roleId && !await _members.IsMemberAsync(tenant.Id, subjectId, ct))
+            await _tenantService.AddMemberAsync(tenant.Id, subjectId, [roleId], ct: ct);
 
         // Set per-tenant username on the membership
-        await using var memberCtx = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
-        var membership = await memberCtx.TenantMembers
-            .FirstOrDefaultAsync(m => m.TenantId == tenant.Id && m.SubjectId == subjectId, ct);
-        if (membership != null)
-        {
-            membership.Username = username;
-            await memberCtx.SaveChangesAsync(ct);
-        }
+        if (await _members.FindMemberAsync(tenant.Id, subjectId, ct) is { } membership)
+            await _members.SetUsernameAsync(tenant.Id, membership.Id, username, ct);
 
         await _subjectService.AssignRoleAsync(subjectId, "admin");
 

@@ -8,6 +8,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -42,7 +43,7 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
     }
 
     private ShareTokenCacheService Service() =>
-        new(_cache, _factory.AsNocturneFactory(), Microsoft.Extensions.Logging.Abstractions.NullLogger<ShareTokenCacheService>.Instance);
+        new(_cache, new TenantRepository(_factory.AsNocturneFactory()), Microsoft.Extensions.Logging.Abstractions.NullLogger<ShareTokenCacheService>.Instance);
 
     [Fact]
     public async Task ResolveByTokenAsync_returns_the_owning_tenant()

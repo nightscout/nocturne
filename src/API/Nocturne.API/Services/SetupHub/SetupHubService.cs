@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.SetupHub;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -18,11 +20,19 @@ namespace Nocturne.API.Services.SetupHub;
 public class SetupHubService : ISetupHubService
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
     private readonly IReadOnlyList<ISetupHubItem> _items;
 
-    public SetupHubService(INocturneDbContextFactory contexts, IEnumerable<ISetupHubItem> items)
+    public SetupHubService(
+        INocturneDbContextFactory contexts,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
+        IEnumerable<ISetupHubItem> items)
     {
         _contexts = contexts;
+        _tenants = tenants;
+        _members = members;
         _items = items.OrderBy(i => i.Key).ToList();
     }
 
@@ -78,9 +88,8 @@ public class SetupHubService : ISetupHubService
     {
         await using (var db = await _contexts.CreateAsync(ct))
         {
-            var tenant = await db.Tenants.FirstAsync(t => t.Id == db.TenantId, ct);
-            tenant.SetupStripDismissedRevision = revision;
-            await db.SaveChangesAsync(ct);
+            if (!await _tenants.UpdateAsync(db.TenantId, new TenantEdit(SetupStripDismissedRevision: revision), ct))
+                throw new InvalidOperationException($"Tenant {db.TenantId} not found");
         }
 
         return await GetAsync(callerId, ct);
@@ -125,23 +134,15 @@ public class SetupHubService : ISetupHubService
         return listed;
     }
 
-    private static async Task<SetupHubStatus> DescribeAsync(
+    private async Task<SetupHubStatus> DescribeAsync(
         NocturneDbContext db, List<SetupHubItemEntity> rows, Guid? callerId, CancellationToken ct)
     {
         var items = rows.Select(r => new SetupHubItem(r.ItemKey, r.State)).ToList();
         var resolved = items.Count(i => i.State != SetupHubItemState.Open);
         var revision = RevisionOf(items);
 
-        var tenant = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == db.TenantId)
-            .Select(t => new
-            {
-                t.SetupHubEnrolledAt,
-                t.SetupStripDismissedRevision,
-                t.PatientRelationship,
-                t.HandedOverAt,
-            })
-            .FirstAsync(ct);
+        var tenant = await _tenants.GetAsync(db.TenantId, ct)
+            ?? throw new InvalidOperationException($"Tenant {db.TenantId} not found");
 
         var showStrip = tenant.SetupHubEnrolledAt != null
             && resolved < items.Count
@@ -150,7 +151,7 @@ public class SetupHubService : ISetupHubService
         return new SetupHubStatus(
             items, resolved, items.Count - resolved, items.Count, revision, showStrip,
             await Handover.DescribeAsync(
-                db, db.TenantId, tenant.PatientRelationship, tenant.HandedOverAt, callerId, ct));
+                _members, db.TenantId, tenant.PatientRelationship, tenant.HandedOverAt, callerId, ct));
     }
 
     private static string RevisionOf(IEnumerable<SetupHubItem> items)

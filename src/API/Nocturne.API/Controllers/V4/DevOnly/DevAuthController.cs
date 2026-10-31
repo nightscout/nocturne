@@ -1,3 +1,5 @@
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,6 +33,8 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 public class DevAuthController : ControllerBase
 {
     private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
     private readonly IPasskeyCredentialRepository _passkeys;
     private readonly ISessionService _sessionService;
     private readonly IOptions<OidcOptions> _oidcOptions;
@@ -39,6 +43,8 @@ public class DevAuthController : ControllerBase
 
     public DevAuthController(
         INocturneDbContextFactory dbFactory,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
         IPasskeyCredentialRepository passkeys,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
@@ -46,6 +52,8 @@ public class DevAuthController : ControllerBase
         ILogger<DevAuthController> logger)
     {
         _dbFactory = dbFactory;
+        _tenants = tenants;
+        _members = members;
         _passkeys = passkeys;
         _sessionService = sessionService;
         _oidcOptions = oidcOptions;
@@ -150,17 +158,16 @@ public class DevAuthController : ControllerBase
             slug = SubdomainParser.Extract(Request.Host.Host, _baseDomainOptions.Value.BaseDomain);
         }
 
-        TenantEntity? tenant;
+        TenantRecord? tenant;
         if (!string.IsNullOrWhiteSpace(slug))
         {
-            tenant = await db.Tenants.AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Slug == slug, ct);
+            tenant = await _tenants.FindBySlugAsync(slug, ct);
             if (tenant == null)
                 return (NotFound(new { error = $"No tenant with slug '{slug}'" }), null);
         }
         else
         {
-            tenant = await db.Tenants.SoleTenantAsync(ct);
+            tenant = await _tenants.FindSoleTenantAsync(ct);
             if (tenant is null)
                 return (BadRequest(new
                 {
@@ -168,26 +175,20 @@ public class DevAuthController : ControllerBase
                 }), null);
         }
 
-        // ?tenant= may name a tenant other than the host's.
-        await using var tenantDb = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
-        var members = await tenantDb.TenantMembers
-            .AsNoTracking()
-            .Include(m => m.Subject)
-            .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)
-            .Where(m => m.TenantId == tenant.Id)
-            .ToListAsync(ct);
+        // ?tenant= may name a tenant other than the host's; the repository pins the read to it.
+        var members = await _members.ListMembersAsync(tenant.Id, ct);
 
         var candidates = DevTenantMemberSelection.Candidates(members);
         if (candidates.Count == 0)
             return (BadRequest(new { error = $"Tenant '{tenant.Slug}' has no members" }), null);
 
-        TenantMemberEntity? member;
+        TenantMemberRecord? member;
         if (!string.IsNullOrWhiteSpace(username))
         {
             member = candidates.FirstOrDefault(m =>
                 string.Equals(m.Username, username, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(m.Subject!.Username, username, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(m.Subject!.Name, username, StringComparison.OrdinalIgnoreCase));
+                || string.Equals(m.SubjectUsername, username, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(m.SubjectName, username, StringComparison.OrdinalIgnoreCase));
             if (member == null)
                 return (NotFound(new
                 {
@@ -196,7 +197,7 @@ public class DevAuthController : ControllerBase
         }
         else
         {
-            member = DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id);
+            member = DevTenantMemberSelection.PickOwnerOrFirst(candidates);
         }
 
         var session = await _sessionService.IssueSessionAsync(
@@ -216,7 +217,7 @@ public class DevAuthController : ControllerBase
             tenant.Id,
             tenant.Slug,
             member.SubjectId,
-            member.Username ?? member.Subject!.Username ?? member.Subject!.Name,
+            member.Username ?? member.SubjectUsername ?? member.SubjectName ?? string.Empty,
             session.AccessToken,
             session.RefreshToken,
             session.ExpiresInSeconds));

@@ -21,6 +21,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services;
 
@@ -97,6 +98,7 @@ public class ServiceCacheTests
             new CacheFlights(),
             _mockDemoModeService.Object,
             tenantDbContextFactory.Object,
+            new TenantRepository(tenantDbContextFactory.Object), new SubjectRepository(tenantDbContextFactory.Object), new RoleRepository(tenantDbContextFactory.Object), new OidcProviderRepository(tenantDbContextFactory.Object),
             httpContextAccessor,
             _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
@@ -191,6 +193,7 @@ public class ServiceCacheTests
             new CacheFlights(),
             _mockDemoModeService.Object,
             tenantDbContextFactory.Object,
+            new TenantRepository(tenantDbContextFactory.Object), new SubjectRepository(tenantDbContextFactory.Object), new RoleRepository(tenantDbContextFactory.Object), new OidcProviderRepository(tenantDbContextFactory.Object),
             httpContextAccessor,
             _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),

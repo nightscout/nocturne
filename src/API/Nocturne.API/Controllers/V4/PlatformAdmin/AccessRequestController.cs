@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Auth;
@@ -8,10 +7,8 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Extensions;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -32,7 +29,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 [Authorize(Roles = "platform_admin")]
 [AllowDuringSetup]
 public class AccessRequestController(
-    INocturneDbContextFactory contexts,
+    ITenantMembershipRepository members,
     ISubjectRepository subjects,
     ISubjectService subjectService,
     ITenantService tenantService,
@@ -77,7 +74,6 @@ public class AccessRequestController(
 
         await subjects.UpdateAsync(subjectId, new SubjectEdit(IsActive: true, ApprovalStatus: "Approved"), ct);
 
-        await using var db = await contexts.CreateAsync(ct);
         var tenantContext = tenantAccessor.Context;
         if (tenantContext != null)
         {
@@ -97,10 +93,7 @@ public class AccessRequestController(
                 tenantId, subjectId, request.RoleIds, request.DirectPermissions,
                 limitTo24Hours: request.LimitTo24Hours, ct: ct);
 
-            var ownerIds = await db.TenantMembers
-                .OwnersOf(tenantId)
-                .Select(tm => tm.SubjectId)
-                .ToListAsync(ct);
+            var ownerIds = await members.GetOwnerSubjectIdsAsync(tenantId, ct);
 
             foreach (var ownerId in ownerIds)
             {
@@ -132,14 +125,10 @@ public class AccessRequestController(
         if (subject is not { ApprovalStatus: "Pending" })
             return NotFound();
 
-        await using var db = await contexts.CreateAsync(ct);
         var denyTenantContext = tenantAccessor.Context;
         if (denyTenantContext != null)
         {
-            var ownerIds = await db.TenantMembers
-                .OwnersOf(denyTenantContext.TenantId)
-                .Select(tm => tm.SubjectId)
-                .ToListAsync(ct);
+            var ownerIds = await members.GetOwnerSubjectIdsAsync(denyTenantContext.TenantId, ct);
 
             foreach (var ownerId in ownerIds)
             {

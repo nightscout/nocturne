@@ -11,6 +11,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
@@ -48,6 +49,7 @@ public class AlertDeliveryServiceMuteTests
             .BuildServiceProvider();
         return new AlertDeliveryService(
             factory.Object.AsNocturneFactory(),
+            new TenantMembershipRepository(factory.Object.AsNocturneFactory()),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),

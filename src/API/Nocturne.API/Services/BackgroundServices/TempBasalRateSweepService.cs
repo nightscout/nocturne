@@ -29,17 +29,18 @@ internal sealed class TempBasalRateSweepService(
         try
         {
             var factory = serviceProvider.GetRequiredService<INocturneDbContextFactory>();
-            List<(Guid Id, string Slug, string DisplayName, bool IsActive)> tenants;
+            List<Guid> pending;
             await using (var platform = await factory.CreatePlatformAsync(stoppingToken))
             {
-                tenants = (await platform.PendingTenantJobs.AsNoTracking()
-                        .Where(j => j.Job == PendingTenantJobs.ProfileVersionsMoved)
-                        .Join(platform.Tenants, j => j.TenantId, t => t.Id,
-                            (_, t) => new { t.Id, t.Slug, t.DisplayName, t.IsActive })
-                        .ToListAsync(stoppingToken))
-                    .Select(t => (t.Id, t.Slug, t.DisplayName, t.IsActive))
-                    .ToList();
+                pending = await platform.PendingTenantJobs.AsNoTracking()
+                    .Where(j => j.Job == PendingTenantJobs.ProfileVersionsMoved)
+                    .Select(j => j.TenantId)
+                    .ToListAsync(stoppingToken);
             }
+
+            var tenants = (await serviceProvider.GetRequiredService<ITenantRepository>().GetManyAsync(pending, stoppingToken))
+                .Select(t => (t.Id, t.Slug, t.DisplayName, t.IsActive))
+                .ToList();
 
             foreach (var tenant in tenants)
             {

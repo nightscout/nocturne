@@ -1,6 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
@@ -19,6 +19,8 @@ namespace Nocturne.API.Services.SetupHub.Items;
 /// </summary>
 public class SharingItem(
     INocturneDbContextFactory contexts,
+    ITenantRepository tenants,
+    ITenantMembershipRepository members,
     IMemberInviteRepository invites,
     IOAuthGrantRepository grants,
     TimeProvider time) : ISetupHubItem
@@ -28,18 +30,15 @@ public class SharingItem(
     public async Task<bool> WorksAsync(CancellationToken ct)
     {
         await using var db = await contexts.CreateAsync(ct);
-        var relationship = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == db.TenantId)
-            .Select(t => t.PatientRelationship)
-            .FirstOrDefaultAsync(ct);
-        if (relationship == PatientRelationship.Helper)
-            return await Handover.RecipientJoinedAsync(db, db.TenantId, await Handover.HelperAsync(db, db.TenantId, ct), ct);
+        var tenantId = db.TenantId;
+        var tenant = await tenants.GetAsync(tenantId, ct);
+        if (tenant?.PatientRelationship == PatientRelationship.Helper)
+            return await Handover.RecipientJoinedAsync(members, tenantId, await Handover.HelperAsync(members, tenantId, ct), ct);
 
         var now = time.GetUtcNow().UtcDateTime;
         return await invites.AnyUsedOrLiveAsync(now, ct)
             || await grants.HasLiveShareGrantAsync(now, ct)
-            || await db.Tenants.AnyAsync(t => t.Id == db.TenantId && t.ShareToken != null, ct)
-            || await db.TenantMembers.CountAsync(
-                m => m.TenantId == db.TenantId && !m.Subject!.IsSystemSubject, ct) > 1;
+            || tenant?.ShareTokenHash != null
+            || (await members.ListMembersAsync(tenantId, ct)).Count(m => !m.IsSystemSubject) > 1;
     }
 }

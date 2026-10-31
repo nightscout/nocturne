@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Notifications;
 
@@ -67,7 +68,7 @@ public sealed class NotificationResolutionServiceTests : IDisposable
         services.AddScoped(_ => repository.Object);
         services.AddScoped(_ => Mock.Of<ISignalRBroadcastService>());
         services.AddSingleton(new ActiveTenantSnapshot(
-            _db.ContextFactory.AsNocturneFactory(), clock, NullLogger<ActiveTenantSnapshot>.Instance));
+            new TenantRepository(_db.ContextFactory.AsNocturneFactory()), clock, NullLogger<ActiveTenantSnapshot>.Instance));
         await using var provider = services.BuildServiceProvider();
         using var service = new NotificationResolutionService(
             provider,

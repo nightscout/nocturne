@@ -312,13 +312,8 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
     /// <summary>The target tenant, or null when it no longer exists.</summary>
     private async Task<TenantContext?> LoadTenantAsync(CancellationToken ct)
     {
-        await using var db = await _serviceProvider.GetRequiredService<INocturneDbContextFactory>()
-            .CreatePlatformAsync(ct);
-
-        return await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == _tenantId)
-            .Select(t => new TenantContext(t.Id, t.Slug, t.DisplayName, t.IsActive, t.IsDemo))
-            .FirstOrDefaultAsync(ct);
+        var tenant = await _serviceProvider.GetRequiredService<ITenantRepository>().GetAsync(_tenantId, ct);
+        return tenant?.ToContext();
     }
 
     /// <summary>

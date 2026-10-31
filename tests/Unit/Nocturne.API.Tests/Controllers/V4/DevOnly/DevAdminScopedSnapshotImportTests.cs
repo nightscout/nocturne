@@ -228,6 +228,7 @@ public class DevAdminScopedSnapshotImportTests : IDisposable
     private static DevAdminController NewController(NocturneDbContext context) =>
         new(
             context.AsFactory(),
+            new TenantMembershipRepository(context.AsFactory()),
             new SubjectRepository(context.AsFactory()),
             new PasskeyCredentialRepository(context.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),

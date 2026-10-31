@@ -99,6 +99,7 @@ public class AlertDeliveryWebhookSigningTests
 
         var service = new AlertDeliveryService(
             factory.AsNocturneFactory(),
+            new TenantMembershipRepository(factory.AsNocturneFactory()),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),

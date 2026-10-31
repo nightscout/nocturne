@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Alerts;
@@ -35,19 +36,11 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
             var alerts = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
             var validator = scope.ServiceProvider.GetRequiredService<IAlertRuleConditionValidator>();
 
-            List<Guid> tenantIds;
-            await using (var lookup = await factory.CreatePlatformAsync(stoppingToken))
-            {
-                tenantIds = await lookup.Tenants
-                    .AsNoTracking()
-                    .Where(t => t.IsActive)
-                    .Select(t => t.Id)
-                    .ToListAsync(stoppingToken);
-            }
+            var tenantIds = await scope.ServiceProvider.GetRequiredService<ITenantRepository>()
+                .ListIdsAsync(activeOnly: true, stoppingToken);
 
             var flagged = 0;
             foreach (var tenantId in tenantIds)

@@ -19,7 +19,8 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// The text scan does not see an entity reached through a navigation property, so a host member
 /// that holds one that way is caught only by the reflection half, and a query that goes through a
 /// navigation is not caught at all: a subject read as <c>TenantMember.Subject</c> is a membership
-/// read, which lands with that concept. An <see cref="Exemption"/> names a file that may still use the
+/// read, and a tenant read as <c>MemberInvite.Tenant</c> off a
+/// table outside every concept is not seen either. An <see cref="Exemption"/> names a file that may still use the
 /// concept's <c>DbSet</c>s or types, with the reason; a later slice or follow-up deletes it. One
 /// that <see cref="Exemption.CoversMembers"/> also exempts, for its own concept only, the members
 /// of the type the file is named after and of the types nested in it, which is where a local the
@@ -80,20 +81,22 @@ public class HostPersistenceGuardTests
                 new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
                     "dev-only whole-schema snapshot export and restore of a tenant's subjects and passkeys alongside every other table",
                     CoversMembers: true),
-                new("src/API/Nocturne.API/Middleware/RequestMembership.cs",
-                    "reads the subject's platform-admin flag joined to its membership in one statement; the join moves with memberships in 3c"),
-                new("src/API/Nocturne.API/Middleware/TenantSetupMiddleware.cs",
-                    "one-statement setup gate joining the tenant's memberships to passkeys and identities, with the counts it logs on refusal; moves with tenants in 3c"),
-                new("src/API/Nocturne.API/Services/Auth/RoleService.cs",
-                    "deletes a global role together with its subject assignments in one save; moves with roles in 3c"),
-                new("src/API/Nocturne.API/Services/Platform/StatusService.cs",
-                    "last-modified sweep over every auth table for the status document; moves with 3c"),
-                new("src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs",
-                    "counts platform admins beside their memberships for the instance-key notice; moves with 3c"),
                 new("src/API/Nocturne.API/Services/Alerts/AlertReceiptService.cs",
                     "static helper over the alert read's own context that names the members who saw an alarm from their subject rows"),
                 new("src/API/Nocturne.API/Services/Connectors/ConnectorConfigurationService.cs",
                     "demo-subject refusal on connector configuration writes; moves with connector configuration persistence (#2129)"),
+            ]),
+        new("tenants and memberships (#3102)",
+            ["TenantEntity", "TenantMemberEntity", "TenantRoleEntity", "TenantMemberRoleEntity", "MembershipRequestEntity",
+                "OidcProviderEntity", "RoleEntity", "TenantDemoConfigEntity"],
+            // Roles is not listed: ".Roles" is also a member of AuthContext, the Nightscout Subject, the
+            // token claims and TenantMemberDto, so the global role catalogue is guarded by its entity type
+            // alone, and a bare "db.Roles" query that names no RoleEntity is the one shape the scan misses.
+            ["Tenants", "TenantMembers", "TenantRoles", "TenantMemberRoles", "MembershipRequests", "OidcProviders", "TenantDemoConfigs"],
+            [
+                new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
+                    "dev-only whole-schema snapshot export and restore of a tenant, its roles and memberships alongside every other table",
+                    CoversMembers: true),
             ]),
     ];
 

@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
@@ -23,18 +21,18 @@ namespace Nocturne.API.Services.Auth;
 public sealed class ShareTokenCacheService : IShareTokenResolver
 {
     private readonly IMemoryCache _cache;
-    private readonly INocturneDbContextFactory _dbContextFactory;
+    private readonly ITenantRepository _tenants;
     private readonly ILogger<ShareTokenCacheService> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
 
     public ShareTokenCacheService(
         IMemoryCache cache,
-        INocturneDbContextFactory dbContextFactory,
+        ITenantRepository tenants,
         ILogger<ShareTokenCacheService> logger)
     {
         _cache = cache;
-        _dbContextFactory = dbContextFactory;
+        _tenants = tenants;
         _logger = logger;
     }
 
@@ -57,13 +55,7 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
 
-        await using var dbContext = await _dbContextFactory.CreatePlatformAsync(ct);
-
-        var tenant = await dbContext.Tenants
-            .AsNoTracking()
-            .Where(t => t.ShareToken == tokenHash)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName, t.IsActive, t.IsDemo })
-            .FirstOrDefaultAsync(ct);
+        var tenant = await _tenants.FindByShareTokenHashAsync(tokenHash, ct);
 
         if (tenant == null)
             return null;
@@ -78,11 +70,9 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
         {
             try
             {
-                await dbContext.Tenants
-                    .Where(t => t.Id == tenant.Id)
-                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, DateTime.UtcNow), ct);
+                await _tenants.RecordShareAccessAsync(tenant.Id, DateTime.UtcNow, ct);
             }
-            catch (DbUpdateException ex)
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
             {
                 _logger.LogWarning(ex, "Failed to stamp share_last_accessed_at for tenant {TenantId}", tenant.Id);
             }
@@ -92,7 +82,7 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
             }
         }
 
-        var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
+        var tenantContext = tenant.ToContext();
         _cache.Set(cacheKey, tenantContext, CacheTtl);
         return tenantContext;
     }

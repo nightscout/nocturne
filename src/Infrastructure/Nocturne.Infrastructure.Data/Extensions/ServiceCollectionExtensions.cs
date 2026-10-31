@@ -161,6 +161,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IOAuthGrantRepository, OAuthGrantRepository>();
         services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
+        services.AddTransient<ITenantRepository, TenantRepository>();
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
+        services.AddTransient<IRoleRepository, RoleRepository>();
         services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();
         services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
         services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();

@@ -14,6 +14,7 @@ using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Platform;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -46,6 +47,10 @@ public class StatusService : IStatusService
     private readonly CacheFlights _flights;
     private readonly IDemoModeService _demoModeService;
     private readonly INocturneDbContextFactory _dbContextFactory;
+    private readonly ITenantRepository _tenantRepository;
+    private readonly ISubjectRepository _subjects;
+    private readonly IRoleRepository _roles;
+    private readonly IOidcProviderRepository _oidcProviders;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly PublicAccessCacheService _publicAccessCacheService;
@@ -77,6 +82,10 @@ public class StatusService : IStatusService
         CacheFlights flights,
         IDemoModeService demoModeService,
         INocturneDbContextFactory dbContextFactory,
+        ITenantRepository tenantRepository,
+        ISubjectRepository subjects,
+        IRoleRepository roles,
+        IOidcProviderRepository oidcProviders,
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
         PublicAccessCacheService publicAccessCacheService,
@@ -94,6 +103,10 @@ public class StatusService : IStatusService
         _flights = flights;
         _demoModeService = demoModeService;
         _dbContextFactory = dbContextFactory;
+        _tenantRepository = tenantRepository;
+        _subjects = subjects;
+        _roles = roles;
+        _oidcProviders = oidcProviders;
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;
         _publicAccessCacheService = publicAccessCacheService;
@@ -173,12 +186,7 @@ public class StatusService : IStatusService
         {
             isDemo = true;
 
-            await using var ctx = await _dbContextFactory.CreatePlatformAsync();
-            nextResetAt = await ctx.Tenants
-                .AsNoTracking()
-                .Where(t => t.Id == tenantContext.TenantId)
-                .Select(t => t.DemoConfig != null ? t.DemoConfig.NextResetAt : null)
-                .FirstOrDefaultAsync();
+            nextResetAt = (await _tenantRepository.GetAsync(tenantContext.TenantId, CancellationToken.None))?.DemoConfig?.NextResetAt;
         }
 
         // Resolve whether this tenant grants anonymous read access (its public subject carries a
@@ -673,20 +681,9 @@ public class StatusService : IStatusService
                 (DateTime?)(s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt))
             .FirstOrDefaultAsync());
 
-        var authSubjectsTask = LastModifiedAsync(ctx => ctx.Subjects.AsNoTracking()
-            .OrderByDescending(s => s.UpdatedAt)
-            .Select(s => (DateTime?)s.UpdatedAt)
-            .FirstOrDefaultAsync());
-
-        var roleTask = LastModifiedAsync(ctx => ctx.Roles.AsNoTracking()
-            .OrderByDescending(r => r.UpdatedAt)
-            .Select(r => (DateTime?)r.UpdatedAt)
-            .FirstOrDefaultAsync());
-
-        var oidcProviderTask = LastModifiedAsync(ctx => ctx.OidcProviders.AsNoTracking()
-            .OrderByDescending(p => p.UpdatedAt)
-            .Select(p => (DateTime?)p.UpdatedAt)
-            .FirstOrDefaultAsync());
+        var authSubjectsTask = _subjects.LastModifiedAsync(CancellationToken.None);
+        var roleTask = _roles.LastModifiedAsync(CancellationToken.None);
+        var oidcProviderTask = _oidcProviders.LastModifiedAsync(CancellationToken.None);
 
         await Task.WhenAll(
             entriesTask, treatmentsTask, profileTask, deviceStatusTask,

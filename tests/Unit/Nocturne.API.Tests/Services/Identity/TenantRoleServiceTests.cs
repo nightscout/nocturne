@@ -5,6 +5,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -50,7 +51,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(factory.AsNocturneFactory(), TimeProvider.System);
+        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory()), TimeProvider.System);
     }
 
     [Fact]
@@ -161,7 +162,9 @@ public class TenantRoleServiceTests : IDisposable
         var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
         var caretakerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "caretaker" && r.TenantId == _tenantId);
 
-        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = Guid.CreateVersion7() };
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Member" };
+        _context.Subjects.Add(subject);
+        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = subject.Id };
         _context.TenantMembers.Add(member);
         _context.TenantMemberRoles.AddRange(
             new TenantMemberRoleEntity { Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = followerRole.Id },
@@ -183,7 +186,9 @@ public class TenantRoleServiceTests : IDisposable
         await _service.SeedRolesForTenantAsync(_tenantId);
         var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
 
-        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = Guid.CreateVersion7() };
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Member" };
+        _context.Subjects.Add(subject);
+        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = subject.Id };
         _context.TenantMembers.Add(member);
         _context.TenantMemberRoles.Add(new TenantMemberRoleEntity { Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = followerRole.Id });
         await _context.SaveChangesAsync();
@@ -199,11 +204,13 @@ public class TenantRoleServiceTests : IDisposable
         await _service.SeedRolesForTenantAsync(_tenantId);
         var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
 
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Member" };
+        _context.Subjects.Add(subject);
         var member = new TenantMemberEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
-            SubjectId = Guid.CreateVersion7(),
+            SubjectId = subject.Id,
             DirectPermissions = ["treatments.read"],
         };
         _context.TenantMembers.Add(member);
