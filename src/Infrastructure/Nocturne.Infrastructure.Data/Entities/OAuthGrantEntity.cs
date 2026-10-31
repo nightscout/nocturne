@@ -188,15 +188,6 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public bool LimitTo24Hours { get; set; }
 
     /// <summary>
-    /// The RFC 8707 resource the latest consent named: a host's MCP endpoint, or null for the API.
-    /// Every access token minted from the grant carries it as its audience, so a token issued to an
-    /// assistant is accepted by that MCP endpoint and nowhere else. A grant with a resource holds
-    /// read scopes only.
-    /// </summary>
-    [Column("resource")]
-    public string? Resource { get; set; }
-
-    /// <summary>
     /// True when this grant was seeded from a pre-existing Nightscout credential, either the master
     /// API secret or a per-subject access token, rather than minted as a scoped <c>noc_</c> token.
     /// Drives the rotation nudge and the "Legacy" badge in the UI; not part of authentication.

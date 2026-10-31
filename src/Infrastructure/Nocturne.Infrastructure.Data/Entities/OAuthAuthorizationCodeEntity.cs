@@ -95,13 +95,6 @@ public class OAuthAuthorizationCodeEntity : ITenantScoped, IEntityCreated
     public bool LimitTo24Hours { get; set; }
 
     /// <summary>
-    /// The RFC 8707 resource the code was requested for: this host's MCP endpoint, or null for the
-    /// API. Carried to the grant, whose tokens it becomes the audience of.
-    /// </summary>
-    [Column("resource")]
-    public string? Resource { get; set; }
-
-    /// <summary>
     /// Whether this authorization code has expired
     /// </summary>
     [NotMapped]

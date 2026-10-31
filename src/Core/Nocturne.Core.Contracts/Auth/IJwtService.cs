@@ -57,32 +57,8 @@ public interface IJwtService
         Guid? grantId = null
     );
 
-    /// <summary>
-    /// An OAuth access token for a grant bound to an RFC 8707 resource (an MCP endpoint):
-    /// <paramref name="audience"/> replaces the API audience, so <see cref="ValidateAccessToken(string)"/>
-    /// refuses it and only <see cref="ValidateAccessToken(string, string)"/> naming that resource
-    /// accepts it.
-    /// </summary>
-    string GenerateResourceAccessToken(
-        SubjectInfo subject,
-        IEnumerable<string> permissions,
-        IEnumerable<string> roles,
-        IEnumerable<string> scopes,
-        string? clientId,
-        bool limitTo24Hours,
-        Guid tenantId,
-        Guid grantId,
-        string audience
-    );
-
     /// <returns>Validation result with claims if valid</returns>
     JwtValidationResult ValidateAccessToken(string token);
-
-    /// <summary>
-    /// <see cref="ValidateAccessToken(string)"/> that also accepts a token whose audience is
-    /// <paramref name="resourceAudience"/>; <see cref="JwtClaims.Audience"/> says which it carried.
-    /// </summary>
-    JwtValidationResult ValidateAccessToken(string token, string resourceAudience);
 
     /// <summary>
     /// Generate a refresh token (random string, stored in DB)
@@ -147,9 +123,6 @@ public class JwtValidationResult
 
 public class JwtClaims
 {
-    /// <summary>The token's audience: the API's, or the RFC 8707 resource it was issued for.</summary>
-    public string? Audience { get; set; }
-
     public Guid SubjectId { get; set; }
 
     public string? Name { get; set; }

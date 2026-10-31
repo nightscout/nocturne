@@ -2,11 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Controllers;
-using Nocturne.API.Mcp;
 using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
@@ -38,12 +34,10 @@ public sealed class WellKnownControllerTests : IClassFixture<AuthenticationTestF
         "service_documentation",
     ];
 
-    private readonly AuthenticationTestFactory _factory;
     private readonly HttpClient _client;
 
     public WellKnownControllerTests(AuthenticationTestFactory factory)
     {
-        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -195,57 +189,6 @@ public sealed class WellKnownControllerTests : IClassFixture<AuthenticationTestF
                     "service_documentation",
                 ]
             );
-    }
-
-    [Fact]
-    public async Task Protected_resource_metadata_names_this_hosts_mcp_endpoint_and_read_scopes()
-    {
-        using var metadata = await GetDiscoveryDocumentAsync("/.well-known/oauth-protected-resource");
-        var root = metadata.RootElement;
-
-        var resource = new Uri(root.GetProperty("resource").GetString()!);
-        resource.AbsolutePath.Should().Be("/mcp");
-        resource.Authority.Should().Be(_client.BaseAddress!.Authority);
-        root.GetProperty("bearer_methods_supported").EnumerateArray().Select(e => e.GetString())
-            .Should().Equal("header");
-        root.GetProperty("scopes_supported").EnumerateArray().Select(e => e.GetString())
-            .Should().BeEquivalentTo(McpScopes.Offered)
-            .And.OnlyContain(scope => scope!.EndsWith(".read"));
-    }
-
-    [Theory]
-    [InlineData("/.well-known/oauth-protected-resource")]
-    [InlineData("/.well-known/oauth-protected-resource/mcp")]
-    public async Task Protected_resource_names_the_issuer_the_authorization_server_reports(string path)
-    {
-        using var resource = await GetDiscoveryDocumentAsync(path);
-        using var server = await GetDiscoveryDocumentAsync("/.well-known/oauth-authorization-server");
-
-        var issuer = server.RootElement.GetProperty("issuer").GetString();
-        resource.RootElement.GetProperty("authorization_servers").EnumerateArray()
-            .Select(e => e.GetString()).Should().Equal(issuer);
-        new Uri(issuer!).GetLeftPart(UriPartial.Authority).Should().Be(issuer,
-            "RFC 8414: the issuer is the origin the metadata was fetched from");
-        new Uri(server.RootElement.GetProperty("registration_endpoint").GetString()!)
-            .GetLeftPart(UriPartial.Authority).Should().Be(issuer,
-                "a client registers with the host it will be authorized by");
-    }
-
-    [Fact]
-    public async Task Mcp_switched_off_serves_neither_the_endpoint_nor_its_metadata()
-    {
-        using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(
-            services => services.Configure<McpOptions>(options => options.Enabled = false)));
-        using var client = factory.CreateClient();
-
-        (await client.GetAsync("/.well-known/oauth-protected-resource"))
-            .StatusCode.Should().Be(HttpStatusCode.NotFound);
-        factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
-            .Where(e => e.Metadata.GetMetadata<McpEndpointMetadata>() is not null)
-            .Should().BeEmpty();
-        _factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
-            .Should().Contain(e => e.Metadata.GetMetadata<McpEndpointMetadata>() != null,
-                "the probe above would pass if the marker were never attached");
     }
 
     private static string[] MemberNamesOf(JsonDocument document) =>

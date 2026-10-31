@@ -3,7 +3,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
-using Nocturne.API.Mcp;
 using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -83,12 +82,7 @@ public class OAuthAccessTokenHandler : IAuthHandler
 
         using var scope = _scopeFactory.CreateScope();
         var credentialValidator = scope.ServiceProvider.GetRequiredService<IJwtCredentialValidator>();
-        // Only the MCP endpoint accepts a token issued for it, and only for this host's MCP URL;
-        // every other path validates against the API audience alone, so a token an assistant's
-        // provider holds cannot be replayed against the API.
-        var validationResult = context.GetEndpoint()?.Metadata.GetMetadata<McpEndpointMetadata>() is not null
-            ? await credentialValidator.ValidateAsync(token, McpAccessGateMiddleware.ResourceUrl(context.Request))
-            : await credentialValidator.ValidateAsync(token);
+        var validationResult = await credentialValidator.ValidateAsync(token);
 
         if (!validationResult.IsValid)
         {
@@ -125,9 +119,6 @@ public class OAuthAccessTokenHandler : IAuthHandler
             Scopes = claims.Scopes,
             TokenId = claims.GrantId,
             ClientId = claims.ClientId,
-            Audience = claims.Audience == McpAccessGateMiddleware.ResourceUrl(context.Request)
-                ? claims.Audience
-                : null,
             RawToken = token,
             ExpiresAt = claims.ExpiresAt,
             LimitTo24Hours = claims.LimitTo24Hours,

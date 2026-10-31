@@ -117,19 +117,6 @@ public static class ServiceRegistrationExtensions
     public const string ConnectorVerifyRateLimitPolicy = "connector-verify";
 
     /// <summary>
-    /// Rate-limiting policy for <c>/mcp</c>, which is mapped rather than a controller action.
-    /// </summary>
-    public const string McpRateLimitPolicy = "mcp";
-
-    /// <summary>
-    /// <see cref="McpRateLimitPolicy"/>'s partition: the tenant host and the calling address. An
-    /// assistant's provider calls every tenant's endpoint from the same few addresses, so the
-    /// address alone would let one busy tenant use up the others' allowance.
-    /// </summary>
-    internal static Func<HttpContext, string> McpPartitionKey(ClientRateLimitKey clientRateLimitKey) =>
-        context => $"{StatisticsComputePartitionKey(context)}|{clientRateLimitKey.Resolve(context)}";
-
-    /// <summary>
     /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
     /// each applies. Held as one table so all of them resolve their partition through
     /// <see cref="ClientRateLimitKey"/> and the trust decision behind a forwarded address is taken
@@ -318,7 +305,6 @@ public static class ServiceRegistrationExtensions
             [StatisticsComputeRateLimitPolicy] = StatisticsComputePartitionKey,
             [TranslationDraftsRateLimitPolicy] = TranslationDraftPartitionKey,
             [NoAccountAlertsRateLimitPolicy] = NoAccountAlertsPartitionKey,
-            [McpRateLimitPolicy] = McpPartitionKey(clientRateLimitKey),
         };
         foreach (var (policy, _, _) in ClientAddressPolicies)
             keys[policy] = clientRateLimitKey.Resolve;
@@ -528,22 +514,6 @@ public static class ServiceRegistrationExtensions
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
                             PermitLimit = 300,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // An assistant answering one question makes a handful of tool calls, and each chart call
-            // runs the dashboard's IOB/COB pipeline.
-            options.AddPolicy(
-                McpRateLimitPolicy,
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: partitionKeys[McpRateLimitPolicy](context),
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 120,
                             Window = TimeSpan.FromMinutes(1),
                             QueueLimit = 0,
                         }

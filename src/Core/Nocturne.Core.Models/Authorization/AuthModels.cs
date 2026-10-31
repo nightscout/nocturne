@@ -114,12 +114,6 @@ public class AuthContext
     public string? ClientId { get; set; }
 
     /// <summary>
-    /// An OAuth access token's audience when it was issued for an RFC 8707 resource (an MCP
-    /// endpoint); null for every token issued for the API and every other credential.
-    /// </summary>
-    public string? Audience { get; set; }
-
-    /// <summary>
     /// Raw token string (for legacy compatibility)
     /// </summary>
     public string? RawToken { get; set; }

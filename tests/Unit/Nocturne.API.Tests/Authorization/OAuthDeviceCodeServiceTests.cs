@@ -80,8 +80,8 @@ public class OAuthDeviceCodeServiceTests : IDisposable
                 It.IsAny<string?>(),
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
-                It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, bool _, string? _, CancellationToken _) =>
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, bool _, CancellationToken _) =>
                 new OAuthGrantInfo
                 {
                     LimitTo24Hours = limitTo24Hours,
@@ -337,7 +337,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             It.IsAny<string?>(),
             It.IsAny<bool>(),
             true,
-            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -364,7 +364,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             It.IsAny<string?>(),
             It.IsAny<bool>(),
             It.IsAny<bool>(),
-            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -385,7 +385,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(),
             It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>(),
             It.IsAny<bool>(),
-            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

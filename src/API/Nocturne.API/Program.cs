@@ -22,7 +22,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
 using Nocturne.API.Hubs;
-using Nocturne.API.Mcp;
+using Nocturne.API.Reports;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
@@ -223,7 +223,7 @@ builder.Services.AddRealTimeAndNotifications(builder.Configuration);
 builder.Services.AddAlertingAndMonitoring(builder.Configuration);
 builder.Services.AddConnectorInfrastructure(builder.Configuration);
 builder.Services.AddMigrationServices();
-builder.Services.AddNocturneMcp(builder.Configuration);
+builder.Services.AddCustomReports();
 
 
 // Configure JWT authentication - derive signing key from instance key
@@ -402,7 +402,6 @@ app.UseWhen(
     context => context.Request.Path.StartsWithSegments("/hubs"),
     hubs => hubs.UseMiddleware<ReaderRecordingMiddleware>());
 app.UseMiddleware<AuditContextMiddleware>();
-app.UseMiddleware<McpAccessGateMiddleware>();
 
 // There is no app.UseAuthentication() call here, and adding one would be a security regression.
 //
@@ -435,8 +434,6 @@ app.MapHub<AlertHub>("/hubs/alerts");
 app.MapHub<ConfigHub>("/hubs/config");
 app.MapHub<HomeAssistantHub>("/hubs/home-assistant");
 app.MapHub<OverviewHub>("/hubs/overview");
-
-app.MapNocturneMcp();
 
 // Serve OpenAPI specs at /openapi/{documentName}.json
 app.MapOpenApi().RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);

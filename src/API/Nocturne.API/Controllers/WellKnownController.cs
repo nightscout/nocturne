@@ -5,8 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
-using Nocturne.API.Mcp;
-using Nocturne.API.Services.Auth;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
@@ -26,16 +24,7 @@ namespace Nocturne.API.Controllers;
 /// </list>
 ///
 /// Both endpoints are <see cref="AllowAnonymousAttribute"/> and are consumed by OAuth clients during
-/// the dynamic discovery phase.
-/// <para>
-/// The two discovery documents report different issuers. The OpenID document's issuer is the one
-/// its ID tokens carry as <c>iss</c>, <see cref="JwtOptions.Issuer"/>. The OAuth document's issuer
-/// and endpoints, and the protected resource document's authorization server, are the requesting
-/// tenant host's own origin, never the apex; the configured public origin is used only for a request
-/// to the apex itself (<see cref="Services.Auth.OAuthIssuer"/>). RFC 8414 requires the metadata to be
-/// fetched under the issuer, an OAuth client compares it with the <c>iss</c> of every authorization
-/// response (RFC 9207), and a client registers with and is authorized by the tenant host it calls.
-/// </para>
+/// the dynamic discovery phase. The issuer URL and signing key are derived from <see cref="JwtOptions"/>.
 /// </remarks>
 /// <seealso cref="JwtOptions"/>
 [ApiController]
@@ -47,20 +36,17 @@ public class WellKnownController : ControllerBase
 {
     private readonly JwtOptions _jwtOptions;
     private readonly BaseDomainOptions _baseDomain;
-    private readonly McpOptions _mcp;
 
     /// <summary>
     /// Creates a new instance of WellKnownController
     /// </summary>
     public WellKnownController(
         IOptions<JwtOptions> jwtOptions,
-        IOptions<BaseDomainOptions> baseDomainOptions,
-        IOptions<McpOptions> mcpOptions
+        IOptions<BaseDomainOptions> baseDomainOptions
     )
     {
         _jwtOptions = jwtOptions.Value;
         _baseDomain = baseDomainOptions.Value;
-        _mcp = mcpOptions.Value;
     }
 
     /// <summary>
@@ -153,15 +139,14 @@ public class WellKnownController : ControllerBase
     /// </summary>
     [HttpGet("oauth-authorization-server")]
     [ProducesResponseType(typeof(OAuthAuthorizationServerMetadata), StatusCodes.Status200OK)]
-    /// <remarks>Its issuer differs from the OpenID document's; see the class remarks.</remarks>
     public ActionResult<OAuthAuthorizationServerMetadata> GetOAuthMetadata()
     {
-        var baseUrl = OAuthIssuer.Of(Request);
+        var baseUrl = GetBaseUrl();
 
         return Ok(
             new OAuthAuthorizationServerMetadata
             {
-                Issuer = baseUrl,
+                Issuer = _jwtOptions.Issuer,
                 AuthorizationEndpoint = $"{baseUrl}/api/oauth/authorize",
                 TokenEndpoint = $"{baseUrl}/api/oauth/token",
                 DeviceAuthorizationEndpoint = $"{baseUrl}/api/oauth/device",
@@ -184,35 +169,6 @@ public class WellKnownController : ControllerBase
                 ScopesSupported = Enum.GetValues<OAuthScope>(),
                 CodeChallengeMethodsSupported = new[] { "S256" },
                 ServiceDocumentation = "https://github.com/nightscout/nocturne",
-            }
-        );
-    }
-
-    /// <summary>
-    /// OAuth 2.0 Protected Resource Metadata (RFC 9728) for this host's MCP endpoint.
-    /// </summary>
-    /// <remarks>
-    /// Served at the root path, which the <c>WWW-Authenticate</c> challenge from <c>/mcp</c> names,
-    /// and at the path RFC 9728 derives from the resource URL, which a client tries when it was
-    /// given none. Not found when MCP is switched off.
-    /// </remarks>
-    [HttpGet("oauth-protected-resource")]
-    [HttpGet("oauth-protected-resource/mcp")]
-    [ProducesResponseType(typeof(OAuthProtectedResourceMetadata), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<OAuthProtectedResourceMetadata> GetOAuthProtectedResourceMetadata()
-    {
-        if (!_mcp.Enabled)
-            return NotFound();
-
-        return Ok(
-            new OAuthProtectedResourceMetadata
-            {
-                Resource = McpAccessGateMiddleware.ResourceUrl(Request),
-                AuthorizationServers = [OAuthIssuer.Of(Request)],
-                ScopesSupported = [.. McpScopes.Offered],
-                BearerMethodsSupported = ["header"],
-                ResourceName = "Nocturne",
             }
         );
     }
@@ -370,29 +326,6 @@ public class OAuthAuthorizationServerMetadata
     [JsonPropertyName("service_documentation")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ServiceDocumentation { get; set; }
-}
-
-/// <summary>
-/// OAuth 2.0 Protected Resource Metadata
-/// See: https://datatracker.ietf.org/doc/html/rfc9728
-/// </summary>
-public class OAuthProtectedResourceMetadata
-{
-    [JsonPropertyName("resource")]
-    public string Resource { get; set; } = string.Empty;
-
-    [JsonPropertyName("authorization_servers")]
-    public string[] AuthorizationServers { get; set; } = Array.Empty<string>();
-
-    [JsonPropertyName("scopes_supported")]
-    public string[] ScopesSupported { get; set; } = Array.Empty<string>();
-
-    [JsonPropertyName("bearer_methods_supported")]
-    public string[] BearerMethodsSupported { get; set; } = Array.Empty<string>();
-
-    [JsonPropertyName("resource_name")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ResourceName { get; set; }
 }
 
 #endregion

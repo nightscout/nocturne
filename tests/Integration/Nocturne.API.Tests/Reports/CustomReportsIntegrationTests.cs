@@ -1,11 +1,7 @@
-using System.Buffers.Text;
-using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Integration.Infrastructure;
@@ -264,27 +260,18 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
-    public async Task The_open_link_a_run_returns_runs_the_same_spec_and_an_oversized_link_is_refused()
+    public async Task A_run_writes_a_title_as_data_and_an_oversized_spec_is_refused()
     {
         await PostGlucoseAsync(_slugA, _sessionA, 140, TimeSpan.FromMinutes(5));
         using var a = Session(_slugA, _sessionA);
 
-        var first = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec("<b>bold</b>") }), HttpStatusCode.OK);
-        var openUrl = first.GetProperty("result").GetProperty("openUrl").GetString()!;
-        Log(openUrl);
-        openUrl.Should().StartWith($"http://{_slugA}.{_baseDomain}/reports/custom/new?spec=");
-        var encoded = QueryHelpers.ParseQuery(new Uri(openUrl).Query)["spec"].ToString();
+        var run = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec("<b>bold</b>") }), HttpStatusCode.OK);
+        run.GetProperty("errors").GetArrayLength().Should().Be(0);
+        run.GetProperty("result").GetProperty("spec").GetProperty("title").GetString().Should().Be("<b>bold</b>", "a title is data; the page writes it as text");
+        run.GetProperty("result").TryGetProperty("openUrl", out _).Should().BeFalse("a run carries no link that opens a spec");
 
-        var linked = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { encoded }), HttpStatusCode.OK);
-        linked.GetProperty("errors").GetArrayLength().Should().Be(0);
-        linked.GetProperty("spec").GetRawText().Should().Be(first.GetProperty("spec").GetRawText());
-        linked.GetProperty("result").GetProperty("spec").GetProperty("title").GetString().Should().Be("<b>bold</b>", "a title is data; the page writes it as text");
-
-        using var output = new MemoryStream();
-        using (var deflate = new DeflateStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
-            deflate.Write(Encoding.UTF8.GetBytes(new string(' ', 1024 * 1024)));
-        var bomb = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { encoded = Base64Url.EncodeToString(output.ToArray()) }), HttpStatusCode.OK);
-        bomb.GetProperty("errors")[0].GetProperty("message").GetString().Should().Contain("at most 16 kB");
+        var over = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = new { version = 1, title = new string('a', 17 * 1024), panels = Array.Empty<object>() } }), HttpStatusCode.OK);
+        over.GetProperty("errors")[0].GetProperty("message").GetString().Should().Contain("at most 16 kB");
 
         var tooLong = await a.PostAsJsonAsync($"{Route}/run", new { spec = new { version = 1, title = new string('a', 64 * 1024), panels = Array.Empty<object>() } });
         tooLong.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge, "the body is refused while it is read");
@@ -333,6 +320,83 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         {
             (await a.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = false })).StatusCode.Should().Be(HttpStatusCode.OK);
         }
+    }
+
+    [Fact]
+    public async Task The_catalogue_lists_every_dataset_and_says_which_the_caller_may_read()
+    {
+        using var owner = Session(_slugA, _sessionA);
+        var full = await ReadAsync(await owner.GetAsync($"{Route}/catalogue"), HttpStatusCode.OK);
+        full.GetProperty("maxPanels").GetInt32().Should().Be(6);
+        var datasets = full.GetProperty("datasets").EnumerateArray().ToList();
+        datasets.Select(d => d.GetProperty("name").GetString()).Should().Contain(["glucose_series", "event_response", "treatments"]);
+        datasets.Should().OnlyContain(d => d.GetProperty("permitted").GetBoolean(), "an owner reads every category");
+        datasets.Should().OnlyContain(d => d.GetProperty("parameters").GetProperty("type").GetString() == "object");
+
+        var (_, viewerSession) = await SeedViewerAsync("Catalogue Viewer");
+        using var viewer = Session(_slugA, viewerSession);
+        var narrow = await ReadAsync(await viewer.GetAsync($"{Route}/catalogue"), HttpStatusCode.OK);
+        var byName = narrow.GetProperty("datasets").EnumerateArray().ToDictionary(d => d.GetProperty("name").GetString()!);
+        byName.Keys.Should().BeEquivalentTo(datasets.Select(d => d.GetProperty("name").GetString()), "the catalogue reads no data, so it lists every dataset");
+        byName["glucose_statistics"].GetProperty("permitted").GetBoolean().Should().BeTrue();
+        byName["treatments"].GetProperty("permitted").GetBoolean().Should().BeFalse("the viewer holds glucose.read and reports.read only");
+        byName["glucose_statistics"].GetProperty("fields").EnumerateArray()
+            .Single(f => f.GetProperty("name").GetString() == "tdd").GetProperty("permitted").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Every_template_runs_and_a_glucose_only_caller_gets_the_degraded_panels_with_the_scope_note()
+    {
+        using var owner = Session(_slugA, _sessionA);
+        var templates = await ReadAsync(await owner.GetAsync($"{Route}/templates"), HttpStatusCode.OK);
+        templates.EnumerateArray().Select(t => t.GetProperty("id").GetString()).Should().Equal("glucose", "agp", "treatments", "comparison");
+        foreach (var template in templates.EnumerateArray())
+        {
+            var run = await ReadAsync(await owner.PostAsJsonAsync($"{Route}/run", new { spec = template.GetProperty("spec") }), HttpStatusCode.OK);
+            run.GetProperty("errors").GetArrayLength().Should().Be(0, template.GetProperty("id").GetString());
+        }
+
+        var (_, viewerSession) = await SeedViewerAsync("Template Viewer");
+        using var viewer = Session(_slugA, viewerSession);
+        var agp = (await ReadAsync(await viewer.GetAsync($"{Route}/templates"), HttpStatusCode.OK)).EnumerateArray()
+            .Single(t => t.GetProperty("id").GetString() == "agp");
+        var degraded = await ReadAsync(await viewer.PostAsJsonAsync($"{Route}/run", new { spec = agp.GetProperty("spec") }), HttpStatusCode.OK);
+        var figures = degraded.GetProperty("result").GetProperty("panels")[0];
+        figures.GetProperty("status").GetString().Should().Be("ok");
+        figures.GetProperty("omitted").EnumerateArray().Select(o => o.GetProperty("field").GetString()).Should().Contain("tdd");
+        figures.GetProperty("summary").GetString().Should().Contain("Fields omitted: tdd, basalPercent, carbsPerDay (scope not granted).");
+
+        var treatments = (await ReadAsync(await viewer.GetAsync($"{Route}/templates"), HttpStatusCode.OK)).EnumerateArray()
+            .Single(t => t.GetProperty("id").GetString() == "treatments");
+        var records = (await ReadAsync(await viewer.PostAsJsonAsync($"{Route}/run", new { spec = treatments.GetProperty("spec") }), HttpStatusCode.OK))
+            .GetProperty("result").GetProperty("panels")[1];
+        records.GetProperty("status").GetString().Should().Be("not_permitted", "the treatment records need treatments.read");
+    }
+
+    [Fact]
+    public async Task The_catalogue_and_templates_are_refused_to_a_share_host()
+    {
+        string shareHost;
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            var link = await scope.ServiceProvider.GetRequiredService<IShareLinkService>().RotateAsync(_tenantAId);
+            shareHost = new Uri(link.Url!).Host;
+        }
+
+        using var share = Fixture.CreateHttpClient("nocturne-api", "http");
+        share.DefaultRequestHeaders.Host = $"{shareHost.Split('.')[0]}.share.{_baseDomain}";
+        (await share.GetAsync($"{Route}/catalogue")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await share.GetAsync($"{Route}/templates")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task No_assistant_endpoint_or_protected_resource_document_is_served()
+    {
+        using var owner = Session(_slugA, _sessionA);
+        (await owner.PostAsJsonAsync("/mcp", new { jsonrpc = "2.0", id = 1, method = "initialize" }))
+            .StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed);
+        (await owner.GetAsync("/.well-known/oauth-protected-resource")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await owner.GetAsync("/.well-known/oauth-protected-resource/mcp")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     private async Task<(Guid Subject, string Session)> SeedViewerAsync(string name)

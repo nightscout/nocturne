@@ -21,10 +21,6 @@ public interface IOAuthGrantService
     /// Whether tokens minted from the grant may read only the last 24 hours. The latest consent
     /// sets it, as it does the label.
     /// </param>
-    /// <param name="resource">
-    /// The RFC 8707 resource the consent named, or null for the API. The latest consent sets it;
-    /// with a resource the grant keeps its read scopes only.
-    /// </param>
     /// <param name="approvedByDeviceCode">
     /// Whether a device-code approval is creating or updating the grant. Once set it stays set, and
     /// the grant's client is no longer reported as verified.
@@ -37,7 +33,6 @@ public interface IOAuthGrantService
         string? label = null,
         bool limitTo24Hours = false,
         bool approvedByDeviceCode = false,
-        string? resource = null,
         CancellationToken ct = default
     );
 
@@ -154,8 +149,5 @@ public class OAuthGrantInfo
     public bool IsRevoked { get; set; }
 
     /// <summary>Whether tokens minted from the grant may read only the last 24 hours.</summary>
-    /// <summary>The RFC 8707 resource the grant's tokens are bound to; null for the API.</summary>
-    public string? Resource { get; set; }
-
     public bool LimitTo24Hours { get; set; }
 }

@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Extensions;
-using Nocturne.API.Mcp;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Docs;
@@ -97,9 +96,6 @@ public class OAuthController : ControllerBase
     /// <param name="state">Optional state value passed back to the redirect URI.</param>
     /// <param name="code_challenge">PKCE code challenge (required).</param>
     /// <param name="code_challenge_method">Must be <c>S256</c>.</param>
-    /// <param name="resource">RFC 8707 resource indicator. An MCP client names this host's
-    /// <c>/mcp</c> endpoint here, and the consent page then says that what it reads goes to the
-    /// assistant's provider.</param>
     /// <returns>Redirect to the consent page, or directly issues an authorization code if a valid grant already covers all requested scopes.</returns>
     [HttpGet("authorize")]
     [AllowAnonymous]
@@ -112,8 +108,7 @@ public class OAuthController : ControllerBase
         [FromQuery] string scope,
         [FromQuery] string? state = null,
         [FromQuery] string? code_challenge = null,
-        [FromQuery] string? code_challenge_method = null,
-        [FromQuery] string? resource = null
+        [FromQuery] string? code_challenge_method = null
     )
     {
         // Validate response_type
@@ -155,26 +150,6 @@ public class OAuthController : ControllerBase
                 Error = "invalid_scope",
                 ErrorDescription = "At least one scope must be requested.",
             });
-        }
-
-        if (!string.IsNullOrEmpty(resource) && !NamesThisMcpServer(resource))
-        {
-            return BadRequest(new OAuthError
-            {
-                Error = "invalid_target",
-                ErrorDescription = "The only resource this server issues tokens for is "
-                    + $"{McpAccessGateMiddleware.ResourceUrl(Request)}.",
-            });
-        }
-
-        var mcpResource = string.IsNullOrEmpty(resource) ? null : McpAccessGateMiddleware.ResourceUrl(Request);
-        if (mcpResource is not null)
-        {
-            requestedScopes = [.. McpScopes.ForResource(requestedScopes, mcpResource)];
-            if (requestedScopes.Length == 0)
-            {
-                return BadRequest(McpReadOnlyRefusal());
-            }
         }
 
         // Look up the registered client; clients must register via DCR before authorize
@@ -232,8 +207,7 @@ public class OAuthController : ControllerBase
                     redirect_uri,
                     code_challenge,
                     state,
-                    HttpContext.InheritHistoryClamp(existingGrant.LimitTo24Hours),
-                    mcpResource
+                    HttpContext.InheritHistoryClamp(existingGrant.LimitTo24Hours)
                 );
             }
         }
@@ -242,9 +216,7 @@ public class OAuthController : ControllerBase
         var existingScopeString = existingGrant != null
             ? string.Join(" ", existingGrant.Scopes)
             : null;
-        var consentUrl = BuildConsentUrl(
-            client_id, redirect_uri, string.Join(' ', requestedScopes), state, code_challenge,
-            existingScopeString, mcpResource);
+        var consentUrl = BuildConsentUrl(client_id, redirect_uri, scope!, state, code_challenge, existingScopeString);
         return Redirect(consentUrl);
     }
 
@@ -298,27 +270,9 @@ public class OAuthController : ControllerBase
             );
         }
 
-        string? mcpResource = null;
-        if (!string.IsNullOrEmpty(request.Resource))
-        {
-            if (!NamesThisMcpServer(request.Resource))
-            {
-                return BadRequest(new OAuthError
-                {
-                    Error = "invalid_target",
-                    ErrorDescription = "The resource is not this server's MCP endpoint.",
-                });
-            }
-            mcpResource = McpAccessGateMiddleware.ResourceUrl(Request);
-        }
-
         // Validate scopes
         var scopes = request.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        var normalizedScopes = Scope.Normalize(McpScopes.ForResource(scopes, mcpResource));
-        if (mcpResource is not null && normalizedScopes.Count == 0)
-        {
-            return BadRequest(McpReadOnlyRefusal());
-        }
+        var normalizedScopes = Scope.Normalize(scopes);
 
         if (normalizedScopes.Count == 0)
         {
@@ -349,8 +303,7 @@ public class OAuthController : ControllerBase
             request.RedirectUri,
             request.CodeChallenge,
             request.State,
-            HttpContext.InheritHistoryClamp(request.LimitTo24Hours),
-            mcpResource
+            HttpContext.InheritHistoryClamp(request.LimitTo24Hours)
         );
     }
 
@@ -741,8 +694,7 @@ public class OAuthController : ControllerBase
         string redirectUri,
         string codeChallenge,
         string? state,
-        bool limitTo24Hours = false,
-        string? resource = null
+        bool limitTo24Hours = false
     )
     {
         var code = await _tokenService.GenerateAuthorizationCodeAsync(
@@ -751,8 +703,7 @@ public class OAuthController : ControllerBase
             scopes,
             redirectUri,
             codeChallenge,
-            limitTo24Hours,
-            resource
+            limitTo24Hours
         );
 
         var separator = redirectUri.Contains('?') ? '&' : '?';
@@ -762,8 +713,6 @@ public class OAuthController : ControllerBase
         {
             redirectUrl += $"&state={Uri.EscapeDataString(state)}";
         }
-
-        redirectUrl += $"&iss={Uri.EscapeDataString(OAuthIssuer.Of(Request))}";
 
         return Redirect(redirectUrl);
     }
@@ -789,8 +738,6 @@ public class OAuthController : ControllerBase
             redirectUrl += $"&state={Uri.EscapeDataString(state)}";
         }
 
-        redirectUrl += $"&iss={Uri.EscapeDataString(OAuthIssuer.Of(Request))}";
-
         return Redirect(redirectUrl);
     }
 
@@ -800,8 +747,7 @@ public class OAuthController : ControllerBase
         string scope,
         string? state,
         string codeChallenge,
-        string? existingScopes = null,
-        string? mcpResource = null
+        string? existingScopes = null
     )
     {
         var qs = $"client_id={Uri.EscapeDataString(clientId)}" +
@@ -819,32 +765,8 @@ public class OAuthController : ControllerBase
             qs += $"&existing_scopes={Uri.EscapeDataString(existingScopes)}";
         }
 
-        if (mcpResource is not null)
-        {
-            qs += $"&resource={Uri.EscapeDataString(mcpResource)}";
-        }
-
         return $"/oauth/consent?{qs}";
     }
-
-    /// <summary>
-    /// Whether an RFC 8707 resource indicator names this host's MCP endpoint. When it does, the
-    /// grant holds read scopes only and its tokens carry that endpoint as their audience, which the
-    /// API refuses and the MCP endpoint requires.
-    /// </summary>
-    private static OAuthError McpReadOnlyRefusal() => new()
-    {
-        Error = "invalid_scope",
-        ErrorDescription = "An assistant connected through MCP can only read data. Request one or more "
-            + $"read scopes: {string.Join(", ", McpScopes.Offered)}.",
-    };
-
-    private bool NamesThisMcpServer(string? resource) =>
-        !string.IsNullOrEmpty(resource)
-        && string.Equals(
-            resource.TrimEnd('/'),
-            McpAccessGateMiddleware.ResourceUrl(Request),
-            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// List all active grants for the authenticated user.

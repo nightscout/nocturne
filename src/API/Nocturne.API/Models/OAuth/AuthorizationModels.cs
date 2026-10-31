@@ -50,13 +50,6 @@ public class ConsentApprovalRequest
     /// </summary>
     [FromForm(Name = "limit_to_24_hours")]
     public bool LimitTo24Hours { get; set; }
-
-    /// <summary>
-    /// The RFC 8707 resource from the authorization request, which the consent page carries back:
-    /// this host's MCP endpoint, or absent for the API.
-    /// </summary>
-    [FromForm(Name = "resource")]
-    public string? Resource { get; set; }
 }
 
 /// <summary>

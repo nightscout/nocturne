@@ -3,15 +3,15 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
-using Nocturne.API.Mcp.Reports;
+using Nocturne.API.Reports;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Custom reports: report specs, as an assistant composes them over MCP, run and saved in the web
-/// app. Reads need <see cref="Scope.ReportsRead"/>; a run reads each panel's dataset under the
-/// dataset's own scope, as <c>render_report</c> does.
+/// Custom reports: report specs a member composes in the web app's report builder from a closed
+/// catalogue of datasets and chart primitives, run and saved. Reads need
+/// <see cref="Scope.ReportsRead"/>; a run reads each panel's dataset under the dataset's own scope.
 /// </summary>
 /// <remarks>
 /// A spec is a definition, not a patient record, and the taxonomy has no <c>reports.readwrite</c>.
@@ -32,10 +32,31 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Produces("application/json")]
 [ClientPropertyName("customReports")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public class CustomReportsController(IReportSpecStore store, ICustomReportRunner runner) : ControllerBase
+public class CustomReportsController(
+    IReportSpecStore store,
+    ICustomReportRunner runner,
+    ICustomReportCatalogue catalogue) : ControllerBase
 {
     /// <summary>The largest request body: a spec at its limit, a name and the JSON around them.</summary>
-    private const long MaxBodyBytes = ReportSpecLink.MaxSpecBytes + 4 * 1024;
+    private const long MaxBodyBytes = ReportSpec.MaxSpecBytes + 4 * 1024;
+
+    /// <summary>
+    /// What a report may hold: every dataset with its parameters as JSON Schema, its fields, the
+    /// primitives that draw it with their bindings and range limits, and whether the caller may read
+    /// it. Reads no data.
+    /// </summary>
+    [HttpGet("catalogue")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(CustomReportCatalogue), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CustomReportCatalogue>> GetCustomReportCatalogue(CancellationToken cancellationToken) =>
+        Ok(await catalogue.CatalogueAsync(cancellationToken));
+
+    /// <summary>The specs the report builder offers as a start, normalised.</summary>
+    [HttpGet("templates")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(IReadOnlyList<CustomReportTemplate>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<CustomReportTemplate>>> GetCustomReportTemplates(CancellationToken cancellationToken) =>
+        Ok(await catalogue.TemplatesAsync(cancellationToken));
 
     /// <summary>The tenant's saved custom reports, by name.</summary>
     [HttpGet]

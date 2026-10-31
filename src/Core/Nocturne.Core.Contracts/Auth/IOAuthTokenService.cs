@@ -65,7 +65,6 @@ public interface IOAuthTokenService
     /// <param name="scopes">The approved scopes</param>
     /// <param name="codeChallenge">The PKCE code challenge</param>
     /// <param name="limitTo24Hours">When true, data requests should only return data from the last 24 hours</param>
-    /// <param name="resource">The RFC 8707 resource (an MCP endpoint) the tokens are for; null for the API.</param>
     Task<string> GenerateAuthorizationCodeAsync(
         Guid clientEntityId,
         Guid subjectId,
@@ -73,7 +72,6 @@ public interface IOAuthTokenService
         string redirectUri,
         string codeChallenge,
         bool limitTo24Hours = false,
-        string? resource = null,
         CancellationToken ct = default
     );
 }
