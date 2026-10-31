@@ -172,6 +172,7 @@ export function boundFields(panel: Pick<ReportPanel, "fields">, names: readonly 
 
 /** Minutes after midnight as a clock time in the locale's format; the date is arbitrary and not shown. */
 export function formatMinuteOfDay(minute: number, format: ChartFormat): string {
+  if (!Number.isFinite(minute)) return "";
   const m = ((Math.round(minute) % 1440) + 1440) % 1440;
   return new Intl.DateTimeFormat(format.locale, { hour: "numeric", minute: "2-digit", hour12: format.hour12, timeZone: "UTC" }).format(
     Date.UTC(2000, 0, 1, Math.floor(m / 60), m % 60),
@@ -180,6 +181,7 @@ export function formatMinuteOfDay(minute: number, format: ChartFormat): string {
 
 /** Minutes from an event, signed: "-30", "0", "+90". */
 export function formatOffset(minutes: number, format: ChartFormat): string {
+  if (!Number.isFinite(minutes)) return "";
   const text = new Intl.NumberFormat(format.locale, { maximumFractionDigits: 0 }).format(Math.abs(minutes));
   return minutes > 0 ? `+${text}` : minutes < 0 ? `-${text}` : text;
 }
