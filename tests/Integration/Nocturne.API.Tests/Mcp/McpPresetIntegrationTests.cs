@@ -120,7 +120,7 @@ public class McpPresetIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
         rows["insulinPerDay"].GetProperty("a").GetDouble().Should().BeGreaterThan(0);
         rows.Keys.Should().Contain(["gmi", "cv", "mean", "carbsPerDay"]);
         panel.GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("name").GetString() == "a").GetProperty("label").GetString()
-            .Should().Be($"Period A, {Day(7)} to {Day(4)}");
+            .Should().Be("Period A");
         panel.GetProperty("link").GetString().Should().Contain("/reports/comparison?preset=custom&aFrom=" + Day(7));
         text.Should().Contain($"Period comparison: A is Period A, {Day(7)} to {Day(4)} (4 days)").And.Contain("In range: ");
 

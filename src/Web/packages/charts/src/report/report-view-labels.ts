@@ -6,4 +6,6 @@ export interface ReportViewLabels {
   chart: ChartLabels;
   /** A table or tile panel with no rows. */
   noData: string;
+  /** Opens a panel's whole summary under its facts and sentence. */
+  fullSummary: string;
 }

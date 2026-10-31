@@ -46,7 +46,7 @@
     busy = false,
   }: Props = $props();
 
-  const labels: ReportViewLabels = { chart: chartLabels, noData: "No data in this range." };
+  const labels: ReportViewLabels = { chart: chartLabels, noData: "No data in this range.", fullSummary: "Full summary" };
 
   const report = $derived(result ? readReport(result.structuredContent) : null);
   const format = $derived({
@@ -90,7 +90,7 @@
   {@const panelCohorts = panel.dataset === "event_response" ? cohortsOf(originalSpec, panel.id) : []}
   {@const refinable = refine && panel.status === "ok" && panel.primitive !== "comparison"}
   {#if refinable || (openLink && panel.link)}
-    <div class="mt-1 flex flex-wrap items-center gap-2" data-testid="report-panel-controls">
+    <div class="flex flex-wrap items-center gap-2" data-testid="report-panel-controls">
       {#if refinable}
         <Button
           variant="outline"
@@ -132,7 +132,7 @@
   {/if}
 {/snippet}
 
-<main class="bg-background p-2 text-foreground">
+<main class="bg-background p-3 text-foreground">
   {#if !result}
     <p class="p-4 text-sm text-muted-foreground">Waiting for the report data.</p>
   {:else if !report}

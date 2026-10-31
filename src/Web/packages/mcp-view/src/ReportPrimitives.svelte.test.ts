@@ -235,7 +235,7 @@ describe("time_series markers", () => {
       bindings: { columns: ["metric", "group", "label", "a", "b", "delta", "changePercent", "unit", "verdict", "color"] },
       fields: [
         field("metric", "Figure key", "category", null), field("group", "Group", "category", null), field("label", "Figure", "category", null),
-        field("a", "Prior 14 days, 2026-10-02 to 2026-10-15", "number", null), field("b", "Last 14 days, 2026-10-16 to 2026-10-29", "number", null),
+        field("a", "Prior 14 days", "number", null), field("b", "Last 14 days", "number", null),
         field("delta", "Change", "number", null), field("changePercent", "Change (%)", "number", "%"), field("unit", "Unit", "category", null),
         field("verdict", "Verdict", "category", null), field("color", "Color", "category", null),
       ],
@@ -257,7 +257,7 @@ describe("time_series markers", () => {
     await expect.element(chart).toBeVisible();
     const sides = [...chart.element().querySelectorAll("[data-testid=comparison-side]")];
     expect(sides.map((s) => s.querySelector("p")?.textContent)).toEqual([
-      "Prior 14 days, 2026-10-02 to 2026-10-15", "Last 14 days, 2026-10-16 to 2026-10-29",
+      "Prior 14 days", "Last 14 days",
     ]);
     await expect.poll(() => sides[1].querySelectorAll("[data-testid=stacked-bar-segment]").length).toBe(5);
     expect(sides[1].textContent).toContain("70% In range");

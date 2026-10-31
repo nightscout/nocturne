@@ -277,6 +277,9 @@ internal sealed class EventResponseDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(report, labels, number, notes, useMmol),
+            Facts = FactsOf(report, labels, useMmol),
+            Sentence = NoTimeZone(report, "Meals & events") ?? WindowSentence(report.Definition),
+            Context = ContextLine(report, ReportFacts.Plural(report.Primary.Events.Count, "event")),
             Omitted = Omitted(report, fieldSeries),
             Window = Window(report),
             Cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
@@ -643,6 +646,34 @@ internal sealed class EventResponseDataset : IReportDataset
         }
         return string.Join('\n', lines);
     }
+
+    /// <summary>Each cohort's events, with its median peak rise (or drop) as the note.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(EventResponseReport report, IReadOnlyDictionary<int, string> labels, bool useMmol)
+    {
+        if (report.TimeZoneUnavailableReason is not null)
+            return [];
+        var unit = ReportFacts.GlucoseUnit(useMmol);
+        string G(double mgdl) => GlucoseSummary.Format(Math.Abs(mgdl), useMmol);
+        return
+        [
+            .. report.Definition.Cohorts.Select(cohort =>
+            {
+                var result = report.Primary.Cohorts.FirstOrDefault(c => c.Cohort == cohort.Cohort);
+                var events = result?.Events ?? 0;
+                string? note = null;
+                if (result is { Events: > 0 } && result.Response == EventResponseKind.Rise && result.Metrics.PeakRise is { } rise
+                    && result.Metrics.MinutesToPeak is { } toPeak)
+                    note = $"median rise {(rise.P50 >= 0 ? "+" : "-")}{G(rise.P50)} {unit} at {Number(toPeak.P50, "0")} min";
+                else if (result is { Events: > 0 } && result.Metrics.Drop is { } drop)
+                    note = $"median drop {G(drop.P50)} {unit}";
+                return new ReportFact(labels[cohort.Cohort], events.ToString(CultureInfo.InvariantCulture), events == 1 ? "event" : "events", note);
+            }),
+        ];
+    }
+
+    internal static string WindowSentence(EventResponseDefinition definition) =>
+        $"Each event from {definition.MinutesBefore} minutes before to {definition.MinutesAfter} minutes after it"
+        + (definition.IsolatedOnly ? ", isolated events only." : ".");
 
     private static string Plural(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
 }

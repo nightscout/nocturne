@@ -112,6 +112,15 @@ internal sealed record ReportPanelResult
     /// <summary>A glucose chart of event cohorts: single events' glucose, drawn faintly under each cohort's band.</summary>
     public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
 
+    /// <summary>At most six figures the view prints under the panel, label above value; empty where the panel has none.</summary>
+    public IReadOnlyList<ReportFact> Facts { get; init; } = [];
+
+    /// <summary>The one sentence the view prints under the facts; for a panel that was not drawn, why.</summary>
+    public string? Sentence { get; init; }
+
+    /// <summary>The panel's range and how much it read, as one line.</summary>
+    public string? Context { get; init; }
+
     /// <summary>The range is the longest the panel's dataset covers drawn so: no earlier data can be added to it.</summary>
     public bool AtRangeLimit { get; init; }
 

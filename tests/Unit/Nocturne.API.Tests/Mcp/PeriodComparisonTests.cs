@@ -143,8 +143,9 @@ public class PeriodComparisonTests
         panel.Summary.Should().Contain("Insulin and carb figures are not shown: they need the treatments.read scope, which this token does not hold.");
         panel.Summary.Should().StartWith(
             "Period comparison: A is Prior 7 days, 2026-10-16 to 2026-10-22 (7 days); B is Last 7 days, 2026-10-23 to 2026-10-29 (7 days), in the tenant's local days.");
-        panel.Fields.Single(f => f.Name == "a").Label.Should().Be("Prior 7 days, 2026-10-16 to 2026-10-22");
-        panel.Fields.Single(f => f.Name == "b").Label.Should().Be("Last 7 days, 2026-10-23 to 2026-10-29");
+        panel.Fields.Single(f => f.Name == "a").Label.Should().Be("Prior 7 days");
+        panel.Fields.Single(f => f.Name == "b").Label.Should().Be("Last 7 days");
+        panel.Context.Should().Be("Prior 7 days: 2026-10-16 to 2026-10-22. Last 7 days: 2026-10-23 to 2026-10-29. Local days.");
         panel.Window.Should().Be(new ReportWindow(
             new DateTimeOffset(2026, 10, 16, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             new DateTimeOffset(2026, 10, 30, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()));

@@ -22,8 +22,8 @@
     within: string;
     value: number;
     label: string;
-    /** The key's words after the value, where they differ from the tooltip's label. */
-    keyLabel?: string;
+    /** The key's line for the inset, where it differs from the value and the tooltip's label. */
+    keyText?: (value: number) => string;
     color: string;
     pattern?: GlucoseRange | null;
   }
@@ -194,7 +194,7 @@
         {#if inset.pattern}
           <TextureSwatch texture={inset.pattern} />
         {/if}
-        <span>{formatValue(inset.value)} {inset.keyLabel ?? inset.label}</span>
+        <span>{inset.keyText ? inset.keyText(inset.value) : `${formatValue(inset.value)} ${inset.label}`}</span>
       </li>
     {/if}
   {/each}

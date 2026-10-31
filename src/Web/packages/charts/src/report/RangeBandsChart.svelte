@@ -314,7 +314,8 @@
     </Chart>
   </div>
   <ul class="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground" aria-label="Series">
-    {#each groups as group (group.key)}
+    <!-- One series with no series field is the median itself, named once below. -->
+    {#each seriesName ? groups : [] as group (group.key)}
       <li class="flex items-center gap-1">
         <span class="inline-block size-2.5 rounded-full bg-(--swatch)" style:--swatch={group.colors.median}></span>
         {group.name}
@@ -326,6 +327,11 @@
         Comparison range
       </li>
     {/if}
-    <li>{median.label}{unit}</li>
+    <li class="flex items-center gap-1">
+      {#if !seriesName && !rangeColoured && groups[0]}
+        <span class="inline-block size-2.5 rounded-full bg-(--swatch)" style:--swatch={groups[0].colors.median}></span>
+      {/if}
+      {median.label}{unit}
+    </li>
   </ul>
 {/if}

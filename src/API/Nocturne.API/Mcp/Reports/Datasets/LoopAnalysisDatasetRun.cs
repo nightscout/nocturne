@@ -102,6 +102,15 @@ internal static class LoopAnalysisDatasetRun
             yield return $"Withheld, because the token does not hold the scope they need: {string.Join(", ", withheld)}.";
     }
 
+    /// <summary>The panel's range line: its local days, and what was counted in them.</summary>
+    public static string? ContextLine(LoopAnalysisResponse response, string counted)
+    {
+        if (response.TimeZoneUnavailableReason is not null || response.PrimaryRange is not { } primary || response.RangeOutsideHistory)
+            return null;
+        return string.Create(CultureInfo.InvariantCulture,
+            $"Local days {primary.StartDate:yyyy-MM-dd} to {primary.EndDate:yyyy-MM-dd}. {counted}.");
+    }
+
     /// <summary>What the history clamp did to the range: the window served, or that the range is older than the window.</summary>
     internal static string HistoryClampNote(LoopAnalysisResponse response)
     {

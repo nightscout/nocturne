@@ -86,6 +86,11 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(series, request.From, request.To, therapy, [.. omitted.Select(o => o.Field)]),
+            Facts = FactsOf(series, therapy),
+            Sentence = series.Count == 0 ? "No basal records in this period."
+                : "Changes by origin: " + string.Join(", ", series.GroupBy(p => p.Origin).OrderByDescending(g => g.Count())
+                    .Select(g => $"{g.Key} {g.Count()}")) + ".",
+            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(series.Count, "rate change")}.",
             Omitted = omitted,
             Resolution = new ReportResolution(1, interval, series.Count, rows.Count, rows.Count < series.Count),
         };
@@ -98,6 +103,27 @@ internal sealed class BasalDeliveryDataset : IReportDataset
             return [.. series];
         var slot = intervalMinutes * 60_000L;
         return [.. series.GroupBy(p => Math.Max(0, p.Timestamp - fromMills) / slot).Select(g => g.First())];
+    }
+
+    /// <summary>The delivered and scheduled rates' extremes, and the changes above and below the schedule.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<BasalPoint> series, bool therapy)
+    {
+        if (series.Count == 0)
+            return [];
+        static string N(double value) => ReportFacts.Number(value, "0.##");
+        var facts = new List<ReportFact>
+        {
+            new("Lowest delivered", N(series.Min(p => p.Rate)), "U/h"),
+            new("Highest delivered", N(series.Max(p => p.Rate)), "U/h"),
+        };
+        var scheduled = series.Where(p => p.ScheduledRate is not null).Select(p => p.ScheduledRate!.Value).ToList();
+        if (therapy && scheduled.Count > 0)
+        {
+            facts.Add(new ReportFact("Scheduled", scheduled.Min() == scheduled.Max() ? N(scheduled.Min()) : $"{N(scheduled.Min())}-{N(scheduled.Max())}", "U/h"));
+            facts.Add(ReportFacts.Count("Above schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate > s), "changes"));
+            facts.Add(ReportFacts.Count("Below schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate < s), "changes"));
+        }
+        return facts;
     }
 
     /// <summary>The rates' extremes and the changes by origin: counts of rows, not a time-weighted total.</summary>

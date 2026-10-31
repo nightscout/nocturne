@@ -120,6 +120,46 @@ describe("ReportView", () => {
     return [...series.element().querySelectorAll("linearGradient stop")].map((s) => s.getAttribute("stop-color") ?? "");
   }
 
+  it("writes the API's facts as a strip, its sentence under them, the range on one line and the summary folded", async () => {
+    const described = {
+      ...twoPanels,
+      warnings: ["Panel line: Limited to the last 24 hours: this token does not read older data."],
+      panels: [
+        {
+          ...twoPanels.panels[0],
+          context: "2026-10-29 06:00 to 2026-10-29 09:00 UTC. 36 readings.",
+          facts: [
+            { label: "In range", value: "72", unit: "%", note: "70-180 mg/dL" },
+            { label: "Mean", value: "151", unit: "mg/dL" },
+          ],
+          sentence: "1 episode below range and 0 above it.",
+        },
+        { ...twoPanels.panels[1], facts: [{ label: "In range", value: "72.4", unit: "%" }], sentence: "Standard deviation 50 mg/dL." },
+      ],
+    };
+    render(ReportView, { result: { structuredContent: described }, locale: "en-US" });
+
+    const panel = page.getByTestId("report-panel").first();
+    await expect.element(panel.getByTestId("report-context")).toHaveTextContent("2026-10-29 06:00 to 2026-10-29 09:00 UTC. 36 readings.");
+    const strip = panel.getByTestId("report-facts");
+    const terms = [...strip.element().querySelectorAll("dt")].map((dt) => dt.textContent);
+    expect(terms).toEqual(["In range", "Mean"]);
+    const value = strip.element().querySelector("dd")!;
+    expect(value.textContent?.replace(/\s+/g, " ").trim()).toBe("72%");
+    expect(value.querySelector("span")?.className).toContain("text-muted-foreground");
+    expect(getComputedStyle(value).fontVariantNumeric).toContain("tabular-nums");
+    await expect.element(strip).toHaveTextContent("70-180 mg/dL");
+    await expect.element(panel.getByTestId("report-sentence")).toHaveTextContent("1 episode below range and 0 above it.");
+    const summary = panel.getByTestId("report-summary");
+    await expect.element(summary).toHaveTextContent("Full summary");
+    expect(summary.element().hasAttribute("open")).toBe(false);
+    await expect.element(page.getByTestId("report-warning")).toHaveTextContent("Limited to the last 24 hours");
+
+    const tilesPanel = page.getByTestId("report-panel").nth(1);
+    expect(tilesPanel.getByTestId("report-facts").elements()).toHaveLength(0);
+    await expect.element(tilesPanel.getByTestId("report-sentence")).toHaveTextContent("Standard deviation 50 mg/dL.");
+  });
+
   it("colours a glucose line with the dashboard's spectrum by default", async () => {
     render(ReportView, { result: { structuredContent: twoPanels }, locale: "en-US" });
 

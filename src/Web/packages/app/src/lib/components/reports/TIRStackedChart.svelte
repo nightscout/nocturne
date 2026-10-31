@@ -67,7 +67,7 @@
     within: "target",
     value: percentages?.tightTarget ?? 0,
     label: "Tight range",
-    keyLabel: "in tight range",
+    keyText: (value: number) => `${Math.round(value)}% in tight range`,
     color: "var(--glucose-tight-range)",
     pattern: "tight-range" as const,
   });

@@ -147,9 +147,47 @@ internal sealed class DailyProfileDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(report, useMmol),
+            Facts = FactsOf(report, useMmol),
+            Sentence = NoTimeZone(report, "Daily profile") ?? SentenceOf(report),
+            Context = ContextLine(report, ReportFacts.Plural(readings, "reading")),
             Omitted = Omitted(report, FieldSeries),
             Window = Window(report),
         };
+    }
+
+    /// <summary>Days with data, the highest and lowest median and the widest spread by time of day, and the insulin figures served.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(DailyProfileResponse report, bool useMmol)
+    {
+        if (report.TimeZoneUnavailableReason is not null)
+            return [];
+        var range = report.Primary;
+        var facts = new List<ReportFact> { ReportFacts.Count("Days with data", range.Summary.DaysWithData) };
+        var withGlucose = range.Slots.Where(s => s.Glucose is not null).ToList();
+        if (withGlucose.Count > 0)
+        {
+            var highest = withGlucose.MaxBy(s => s.Glucose!.P50)!;
+            var lowest = withGlucose.MinBy(s => s.Glucose!.P50)!;
+            var widest = withGlucose.MaxBy(s => s.Glucose!.P90 - s.Glucose!.P10)!;
+            facts.Add(ReportFacts.Glucose("Highest median", highest.Glucose!.P50, useMmol, $"at {Clock(highest.MinuteOfDay)}"));
+            facts.Add(ReportFacts.Glucose("Lowest median", lowest.Glucose!.P50, useMmol, $"at {Clock(lowest.MinuteOfDay)}"));
+            facts.Add(new ReportFact("Widest P10 to P90",
+                $"{GlucoseSummary.Format(widest.Glucose!.P10, useMmol)}-{GlucoseSummary.Format(widest.Glucose!.P90, useMmol)}",
+                ReportFacts.GlucoseUnit(useMmol), $"at {Clock(widest.MinuteOfDay)}"));
+        }
+        if (range.Summary.Insulin is { } insulin)
+            facts.Add(new ReportFact("Insulin per day", Number(insulin.Total.P50, "0.#"), "U", $"median of {insulin.Total.N} days"));
+        if (range.Summary.NetLoopCorrectionPerDay is { } perDay)
+            facts.Add(new ReportFact("Net loop correction", Number(perDay, "0.##"), "U/day"));
+        return facts;
+    }
+
+    internal static string SentenceOf(DailyProfileResponse report)
+    {
+        if (!report.Primary.Slots.Any(s => s.Glucose is not null))
+            return "No glucose readings in the analyzed time.";
+        return report.Primary.Summary.DeliveredToScheduledRatio is { } ratio
+            ? $"Delivered basal was {Number(ratio, "0.##")} times the scheduled basal."
+            : "Glucose percentiles in each five-minute slot of the day, pooled across the days.";
     }
 
     internal static string Summarise(DailyProfileResponse report, bool useMmol)

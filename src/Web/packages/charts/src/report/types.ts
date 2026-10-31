@@ -100,6 +100,12 @@ export interface ReportPanel {
   link?: string | null;
   /** Treatment markers a time series panel draws on its line. */
   markers?: ReportMarker[];
+  /** At most six figures the API picked for the panel, label above value. */
+  facts?: ReportFact[];
+  /** The API's one sentence under the facts; for a panel that was not drawn, why. */
+  sentence?: string | null;
+  /** The panel's range and how much it read, as one line. */
+  context?: string | null;
   /** The range is the longest the dataset covers drawn so: no earlier data can be added. */
   atRangeLimit?: boolean;
   /** The API's sentence saying how long a range the panel covers, when it is at that limit. */
@@ -116,6 +122,14 @@ export interface ReportTrace {
   at: number;
   points: [number, number][];
   sentence: string;
+}
+
+/** One figure under a panel: its words, its value as the API wrote it, its unit and an optional note. */
+export interface ReportFact {
+  label: string;
+  value: string;
+  unit?: string | null;
+  note?: string | null;
 }
 
 /** An event cohort a panel asked for: its number (1 to 3) and the label that names its filter. */

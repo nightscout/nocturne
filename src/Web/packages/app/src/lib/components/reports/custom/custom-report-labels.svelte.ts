@@ -3,7 +3,7 @@ import { glucoseChartLabels } from "#lib/components/dashboard/glucose-chart/char
 
 /** A custom report's words in the viewer's language. Built per call so wuchale reads the current locale. */
 export function customReportLabels(): ReportViewLabels {
-  return { chart: glucoseChartLabels(), noData: "No data in this range." };
+  return { chart: glucoseChartLabels(), noData: "No data in this range.", fullSummary: "Full summary" };
 }
 
 /** The longest `?spec=` value the API reads; a longer link is refused before it is sent. */

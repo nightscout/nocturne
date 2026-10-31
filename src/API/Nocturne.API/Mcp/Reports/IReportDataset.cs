@@ -187,6 +187,15 @@ internal sealed record ReportDatasetOutput
     /// <summary>Single events' glucose aligned on their anchor, which a glucose chart of cohorts draws under the band.</summary>
     public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
 
+    /// <summary>At most <see cref="ReportFacts.Max"/> figures the view prints under the panel, label above value.</summary>
+    public IReadOnlyList<ReportFact> Facts { get; init; } = [];
+
+    /// <summary>The one sentence the view prints under the facts; the summary carries every detail.</summary>
+    public string? Sentence { get; init; }
+
+    /// <summary>The panel's range and how much it read, as one line: "2026-10-15 08:39 to 2026-10-29 08:39 UTC. 4025 readings."</summary>
+    public string? Context { get; init; }
+
     /// <summary>Labels that replace a field's catalogue label for this run: a comparison's period names, say.</summary>
     public IReadOnlyDictionary<string, string>? FieldLabels { get; init; }
 

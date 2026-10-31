@@ -207,6 +207,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Resolution = output.Resolution,
             Markers = panel.Primitive == ReportPrimitive.TimeSeries ? MarkersFor(fields, output.Markers) : [],
             Cohorts = output.Cohorts,
+            Facts = output.Facts.Count > ReportFacts.Max ? [.. output.Facts.Take(ReportFacts.Max)] : output.Facts,
+            Sentence = output.Sentence,
+            Context = output.Context,
             Traces = panel.Primitive == ReportPrimitive.GlucoseChart ? output.Traces : [],
             LinkQuery = output.LinkQuery,
         };
@@ -242,6 +245,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Status = status,
             Window = new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),
             Summary = summary,
+            Sentence = summary,
         };
 
     private static string JoinSummaries(ReportSpec spec, IReadOnlyList<ReportPanelResult> panels)

@@ -122,6 +122,9 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
         {
             Rows = [row],
             Summary = Summarise(row, request.From, request.To, useMmol, [.. omitted.Select(o => o.Field)]),
+            Facts = FactsOf(row, useMmol),
+            Sentence = SentenceOf(row, useMmol, treatments),
+            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(count, "reading")}.",
             Omitted = omitted,
         };
     }
@@ -149,6 +152,43 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
         return request.Services.GetRequiredService<IStatisticsService>().CalculateInsulinDeliveryStatistics(
             records.ManualBoluses, records.AlgorithmBoluses, records.TempBasals, records.Carbs,
             from, to, StatisticsService.UntilMills(to, now), records.BasalInjections);
+    }
+
+    /// <summary>Time in range, below, above, mean, GMI and CV, where the range has readings.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyDictionary<string, object?> row, bool useMmol)
+    {
+        if (row["readings"] is 0)
+            return [];
+        var glucose = useMmol ? "0.0" : "0";
+        string? F(string key, string format) => row.GetValueOrDefault(key) is double d ? ReportFacts.Number(d, format) : null;
+        var facts = new List<ReportFact>
+        {
+            new("In range", F("timeInRangePercent", "0.#") ?? "–", "%", $"{F("targetLow", glucose)}-{F("targetHigh", glucose)} {ReportFacts.GlucoseUnit(useMmol)}"),
+            new("Below range", F("timeBelow", "0.#") ?? "–", "%"),
+            new("Above range", F("timeAbove", "0.#") ?? "–", "%"),
+            new("Mean", F("mean", glucose) ?? "–", ReportFacts.GlucoseUnit(useMmol)),
+            new("GMI", F("gmi", "0.0") ?? "–", "%"),
+        };
+        if (F("cv", "0.#") is { } cv)
+            facts.Add(new ReportFact("CV", cv, "%"));
+        return facts;
+    }
+
+    /// <summary>The spread, and with treatments.read the insulin and carbs per day.</summary>
+    internal static string SentenceOf(IReadOnlyDictionary<string, object?> row, bool useMmol, bool treatments)
+    {
+        if (row["readings"] is 0)
+            return "No glucose readings in this period.";
+        var unit = ReportFacts.GlucoseUnit(useMmol);
+        var sd = row.GetValueOrDefault("sd") is double s ? ReportFacts.Number(s, useMmol ? "0.0" : "0") : "–";
+        var text = $"Standard deviation {sd} {unit}.";
+        if (treatments)
+            text += row.GetValueOrDefault("tdd") is double tdd
+                ? $" Insulin per day {ReportFacts.Number(tdd)} U"
+                    + (row.GetValueOrDefault("basalPercent") is double basal ? $", {ReportFacts.Number(basal, "0")}% of it basal" : "")
+                    + (row.GetValueOrDefault("carbsPerDay") is double carbs ? $"; carbs per day {ReportFacts.Number(carbs, "0")} g." : ".")
+                : " No insulin or carb records in this period.";
+        return text;
     }
 
     internal static string Summarise(

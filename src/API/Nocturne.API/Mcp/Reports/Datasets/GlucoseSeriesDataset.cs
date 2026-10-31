@@ -157,6 +157,7 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         if (parameters.Markers is { Count: > 0 } asked)
             summary += '\n' + MarkerNote(asked, markers, treatments);
 
+        var (facts, sentence, context) = GlucoseSummary.Facts(data, statistics, request.UseMmol, request.From, request.To, chart);
         var thresholds = GlucoseSummary.Thresholds(data.Thresholds);
         var sourceRows = data.GlucoseData.Count;
         var sampled = chart ? [] : Downsample(data.GlucoseData, request.From.ToUnixTimeMilliseconds(), interval);
@@ -170,6 +171,9 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         {
             Rows = chart ? [] : Rows(sampled, data, thresholds, request.UseMmol),
             Summary = summary,
+            Facts = facts,
+            Sentence = sentence,
+            Context = context,
             Omitted = omitted,
             OmittedScopes = GlucoseSummary.OmittedScopes(request.HasScope),
             Thresholds = ReportThresholds.Of(thresholds, request.UseMmol),

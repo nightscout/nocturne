@@ -15,6 +15,7 @@
   import RangeBandsChart from "./RangeBandsChart.svelte";
   import StatTiles from "./StatTiles.svelte";
   import TimeSeriesChart from "./TimeSeriesChart.svelte";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import { omittedToggles } from "./read.js";
   import type { ReportViewLabels } from "./report-view-labels.js";
   import type { ReportPanel, ReportResult, ReportRow } from "./types.js";
@@ -68,27 +69,63 @@
   const tableHeight = $derived(displayMode === "fullscreen" ? "max-h-[45vh]" : "max-h-[280px]");
   const colorMode = $derived(report.glucoseColorMode ?? "continuous");
   const reportHeading = $derived(`h${headingLevel}`);
+
+  function printsItsFigures(panel: ReportPanel): boolean {
+    return panel.primitive === "stat_tiles"
+      || (panel.primitive === "bar" && panel.bindings.stacked === true && panel.bindings.orientation === "horizontal" && panel.rows.length === 1);
+  }
   const panelHeading = $derived(`h${headingLevel + 1}`);
 </script>
 
-<div class="flex flex-col gap-4" data-testid="report-view">
+{#snippet facts(panel: ReportPanel)}
+  <dl class="grid grid-cols-2 gap-x-6 gap-y-3 @md:grid-cols-3 @3xl:grid-cols-6" data-testid="report-facts">
+    {#each panel.facts ?? [] as fact (fact.label)}
+      <div class="min-w-0">
+        <dt class="truncate text-xs text-muted-foreground">{fact.label}</dt>
+        <dd class="mt-0.5 text-base leading-tight font-semibold tabular-nums">
+          {fact.value}{#if fact.unit}<span class="ml-1 text-xs font-normal text-muted-foreground">{fact.unit}</span>{/if}
+        </dd>
+        {#if fact.note}
+          <dd class="mt-0.5 text-xs text-pretty text-muted-foreground">{fact.note}</dd>
+        {/if}
+      </div>
+    {/each}
+  </dl>
+{/snippet}
+
+<article class="@container flex flex-col gap-6" data-testid="report-view">
   {#if report.spec.title || (report.warnings ?? []).length > 0}
-    <div class="flex flex-col gap-2">
+    <header class="flex flex-col gap-1.5">
       {#if report.spec.title}
-        <svelte:element this={reportHeading} class="text-base font-semibold">{report.spec.title}</svelte:element>
+        <svelte:element this={reportHeading} class="text-lg leading-tight font-semibold tracking-tight text-balance">
+          {report.spec.title}
+        </svelte:element>
       {/if}
       {#each report.warnings ?? [] as warning (warning)}
-        <p class="text-sm text-warning" role="status">{warning}</p>
+        <p class="flex items-start gap-1.5 text-xs text-muted-foreground" role="status" data-testid="report-warning">
+          <TriangleAlert class="mt-px size-3.5 shrink-0 text-warning" aria-hidden="true" />
+          <span>{warning}</span>
+        </p>
       {/each}
-    </div>
+    </header>
   {/if}
-  {#each report.panels as panel (panel.id)}
-    <section aria-labelledby="panel-{panel.id}" data-testid="report-panel">
-      <svelte:element this={panelHeading} id="panel-{panel.id}" class="mb-1 text-sm font-medium">
-        {panel.title ?? panel.dataset}
-      </svelte:element>
+  {#each report.panels as panel, i (panel.id)}
+    {@const described = (panel.facts ?? []).length > 0 || !!panel.sentence}
+    <section
+      aria-labelledby="panel-{panel.id}"
+      class={["flex flex-col gap-3", i > 0 && "border-t border-border pt-6"]}
+      data-testid="report-panel"
+    >
+      <div class="flex flex-col gap-0.5">
+        <svelte:element this={panelHeading} id="panel-{panel.id}" class="text-sm leading-tight font-semibold">
+          {panel.title ?? panel.dataset}
+        </svelte:element>
+        {#if panel.context}
+          <p class="text-xs text-muted-foreground tabular-nums" data-testid="report-context">{panel.context}</p>
+        {/if}
+      </div>
       {#if panel.status !== "ok"}
-        <!-- The summary below says why. -->
+        <!-- The sentence below says why. -->
       {:else if panel.primitive === "time_series"}
         <TimeSeriesChart
           {panel}
@@ -144,7 +181,27 @@
         />
       {/if}
       {@render controls?.(panel)}
-      <p class="mt-1 whitespace-pre-line text-xs text-muted-foreground">{panel.summary}</p>
+      {#if described}
+        <!-- Stat tiles, and one stacked bar's key, print the panel's figures already. -->
+        {#if panel.status === "ok" && !printsItsFigures(panel) && (panel.facts ?? []).length > 0}
+          {@render facts(panel)}
+        {/if}
+        {#if panel.sentence}
+          <p class="max-w-[65ch] text-sm text-pretty" data-testid="report-sentence">{panel.sentence}</p>
+        {/if}
+        {#if panel.status === "ok" && panel.summary && panel.summary !== panel.sentence}
+          <details class="text-xs text-muted-foreground" data-testid="report-summary">
+            <summary
+              class="w-fit cursor-pointer rounded-sm select-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              {labels.fullSummary}
+            </summary>
+            <p class="mt-1.5 max-w-[80ch] whitespace-pre-line">{panel.summary}</p>
+          </details>
+        {/if}
+      {:else}
+        <p class="max-w-[80ch] text-xs whitespace-pre-line text-muted-foreground">{panel.summary}</p>
+      {/if}
     </section>
   {/each}
-</div>
+</article>

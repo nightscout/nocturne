@@ -118,7 +118,39 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(hours, request.From, request.To, clock.Zone is null, useMmol),
+            Facts = FactsOf(hours, useMmol),
+            Sentence = SentenceOf(hours, clock.Zone is null),
+            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(hours.Sum(h => h.Count), "reading")}.",
         };
+    }
+
+    /// <summary>The hours with the highest and lowest median, and the most time above and below range.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<AveragedStats> hours, bool useMmol)
+    {
+        var withData = hours.Where(h => h.Count > 0).ToList();
+        if (withData.Count == 0)
+            return [];
+        string From(int hour) => $"from {Clock(hour * 60)}";
+        var highest = withData.MaxBy(h => h.Percentiles.P50)!;
+        var lowest = withData.MinBy(h => h.Percentiles.P50)!;
+        var above = withData.MaxBy(h => h.TimeInRange.High + h.TimeInRange.VeryHigh)!;
+        var below = withData.MaxBy(h => h.TimeInRange.VeryLow + h.TimeInRange.Low)!;
+        return
+        [
+            ReportFacts.Glucose("Highest median", highest.Percentiles.P50, useMmol, From(highest.Hour)),
+            ReportFacts.Glucose("Lowest median", lowest.Percentiles.P50, useMmol, From(lowest.Hour)),
+            ReportFacts.Percent("Most above range", above.TimeInRange.High + above.TimeInRange.VeryHigh, From(above.Hour)),
+            ReportFacts.Percent("Most below range", below.TimeInRange.VeryLow + below.TimeInRange.Low,
+                below.TimeInRange.VeryLow + below.TimeInRange.Low > 0 ? From(below.Hour) : "in no hour"),
+        ];
+    }
+
+    internal static string SentenceOf(IReadOnlyList<AveragedStats> hours, bool utc)
+    {
+        var withData = hours.Count(h => h.Count > 0);
+        if (withData == 0)
+            return "No glucose readings in this period.";
+        return $"Readings in {withData} of 24 hours, " + (utc ? "in UTC hours: the tenant has no time zone set." : "in the tenant's local hours.");
     }
 
     /// <summary>"From 07:00 to 08:00: median 128 mg/dL, middle half 108 to 155 mg/dL, 168 readings on 14 days."</summary>

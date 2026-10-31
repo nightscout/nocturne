@@ -354,6 +354,45 @@ public class RecordDatasetTests
         result.Panels[1].RangeLimit.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Every_panel_carries_at_most_six_facts_one_sentence_and_its_range_line()
+    {
+        var (runner, context, _) = new Harness().Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
+
+        var result = await runner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 336 }, "panels": [
+              { "id": "stats", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles" },
+              { "id": "hours", "dataset": { "name": "glucose_distribution_by_hour" }, "primitive": "range_bands" },
+              { "id": "bands", "dataset": { "name": "glucose_distribution" }, "primitive": "bar" },
+              { "id": "days", "dataset": { "name": "daily_summary" }, "primitive": "table" },
+              { "id": "compare", "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "primitive": "comparison" } ] }
+            """), context, CancellationToken.None);
+
+        result.Panels.Should().OnlyContain(p => p.Facts.Count > 0 && p.Facts.Count <= ReportFacts.Max);
+        result.Panels.Should().OnlyContain(p => !string.IsNullOrEmpty(p.Sentence) && !p.Sentence!.Contains('\n'));
+        result.Panels.Should().OnlyContain(p => !string.IsNullOrEmpty(p.Context));
+        var stats = result.Panels[0];
+        stats.Facts.Select(f => f.Label).Should().Equal("In range", "Below range", "Above range", "Mean", "GMI", "CV");
+        stats.Facts[0].Unit.Should().Be("%");
+        stats.Facts[0].Note.Should().Be("70-180 mg/dL");
+        stats.Context.Should().Be("2026-10-15 12:00 to 2026-10-29 12:00 UTC. 4032 readings.");
+        result.Panels[2].Facts.Select(f => f.Label).Should().Equal("Very low", "Low", "In range", "High", "Very high");
+        result.Panels[4].Facts[0].Should().Match<ReportFact>(f => f.Label == "In range" && f.Value.Contains(" to ") && f.Unit == "%");
+    }
+
+    [Fact]
+    public async Task A_panel_that_was_not_read_says_why_in_its_sentence()
+    {
+        var (runner, context, _) = new Harness().Arrange(Scope.GlucoseRead);
+
+        var panel = (await runner.RunAsync(Spec("""
+            { "version": 1, "panels": [ { "dataset": { "name": "device_status" }, "primitive": "stat_tiles" } ] }
+            """), context, CancellationToken.None)).Panels.Single();
+
+        panel.Facts.Should().BeEmpty();
+        panel.Sentence.Should().Be(panel.Summary).And.Contain("devices.read");
+    }
+
     // ---- device_status ----
 
     [Fact]

@@ -108,6 +108,13 @@ internal sealed class TreatmentsDataset : IReportDataset
         {
             Rows = [.. latest.Select(Row)],
             Summary = summary,
+            Facts = FactsOf(kept, Kinds(parameters)),
+            Sentence = kept.Count == 0
+                ? "No treatment records of these kinds in this period."
+                : latest.Count < kept.Count
+                    ? $"The table holds the latest {latest.Count} of {kept.Count} records; the counts cover all of them."
+                    : $"The table holds every record, newest last.",
+            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(kept.Count, "record")}.",
             Resolution = new ReportResolution(0, 0, kept.Count, latest.Count, latest.Count < kept.Count),
             Markers = Markers(latest),
         };
@@ -198,6 +205,26 @@ internal sealed class TreatmentsDataset : IReportDataset
     private static string? Cut(string? text) =>
         string.IsNullOrWhiteSpace(text) ? null
         : text.Trim() is var t && t.Length > MaxDetailLength ? t[..MaxDetailLength] + "..." : text.Trim();
+
+    /// <summary>Each kind asked for, counted, with the insulin or carbs in all as the note.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<Record> records, IReadOnlySet<ReportTreatmentType> kinds)
+    {
+        var facts = new List<ReportFact>();
+        void Add(ReportTreatmentType type, string label, Func<IReadOnlyList<Record>, string?>? note = null)
+        {
+            if (!kinds.Contains(type))
+                return;
+            var of = records.Where(r => r.Type == type).ToList();
+            facts.Add(ReportFacts.Count(label, of.Count, null, of.Count > 0 ? note?.Invoke(of) : null));
+        }
+        Add(ReportTreatmentType.Bolus, "Boluses", of => $"{ReportFacts.Number(of.Sum(r => r.Insulin ?? 0), "0.##")} U in all");
+        Add(ReportTreatmentType.Carbs, "Carb entries", of => $"{ReportFacts.Number(of.Sum(r => r.Carbs ?? 0), "0")} g in all");
+        Add(ReportTreatmentType.TempBasal, "Temp basals");
+        Add(ReportTreatmentType.Override, "Overrides");
+        Add(ReportTreatmentType.Note, "Notes");
+        Add(ReportTreatmentType.BasalInjection, "Injections", of => $"{ReportFacts.Number(of.Sum(r => r.Insulin ?? 0), "0.##")} U in all");
+        return facts;
+    }
 
     /// <summary>
     /// Counts and totals per kind, the largest bolus and carb entry, the latest of each: never the rows

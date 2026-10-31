@@ -116,6 +116,11 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(report, rows, request.UseMmol),
+            Facts = FactsOf(rows),
+            Sentence = report.WithheldReason is not null || report.TimeZoneUnavailableReason is not null
+                ? Summarise(report, rows, request.UseMmol)
+                : "Values the data showed, next to the profile's values: observations from the range, not instructions.",
+            Context = ContextLine(report, ReportFacts.Plural(rows.Count, "figure")),
             Omitted = report.Primary is null && report.WithheldReason == SettingsEvidenceWithheldReason.ReadScopes
                 ? [.. Fields.Select(f => new ReportOmittedField(f.Name, ScopeOf(LoopAnalysisSeries.SettingsEvidence)))]
                 : [],
@@ -184,6 +189,17 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
     /// What the data showed beside the profile, figure by figure. Each line reads "observed X next to
     /// the profile's Y", as the calculator states its figures: an observation, never what to set.
     /// </summary>
+    /// <summary>For each setting, the blocks with an observed value out of all its blocks.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows) =>
+    [
+        .. rows.GroupBy(r => (string)r["setting"]!).Select(g =>
+        {
+            var observed = g.Key switch { "basal" => "basalObserved", "isf" => "isfObserved", _ => "carbRatioObserved" };
+            var name = g.Key switch { "basal" => "Basal", "isf" => "ISF", _ => "Carb ratio" };
+            return new ReportFact(name, $"{g.Count(r => r.GetValueOrDefault(observed) is double)} of {g.Count()}", "blocks", "with an observed value");
+        }),
+    ];
+
     internal static string Summarise(SettingsEvidenceReport report, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, bool useMmol)
     {
         const string what = "Settings evidence";

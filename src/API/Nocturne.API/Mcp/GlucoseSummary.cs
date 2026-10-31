@@ -115,6 +115,37 @@ internal static class GlucoseSummary
         return text.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// The figures a glucose panel prints (time in range, below, above, mean, lowest, highest), its
+    /// sentence (the episodes, and on a chart the treatments drawn) and its range line.
+    /// </summary>
+    public static (IReadOnlyList<Reports.ReportFact> Facts, string Sentence, string Context) Facts(
+        DashboardChartData data, IStatisticsService statistics, bool useMmol, DateTimeOffset from, DateTimeOffset to, bool chart)
+    {
+        var basic = statistics.CalculateBasicStats(data.GlucoseData.Select(r => r.Sgv));
+        var context = $"{Reports.ReportFacts.Window(from, to)}. {Reports.ReportFacts.Plural(basic.Count, "reading")}.";
+        if (basic.Count == 0)
+            return ([], "No glucose readings in this period.", context);
+
+        var thresholds = Thresholds(data.Thresholds);
+        var tir = statistics.CalculateTimeInRange(Readings(data), thresholds);
+        var range = $"{Format(thresholds.TargetBottom, useMmol)}-{Format(thresholds.TargetTop, useMmol)} {Reports.ReportFacts.GlucoseUnit(useMmol)}";
+        Reports.ReportFact[] facts =
+        [
+            Reports.ReportFacts.Percent("In range", Math.Round(tir.Percentages.Target), range),
+            Reports.ReportFacts.Percent("Below range", Math.Round(tir.Percentages.VeryLow + tir.Percentages.Low)),
+            Reports.ReportFacts.Percent("Above range", Math.Round(tir.Percentages.High + tir.Percentages.VeryHigh)),
+            Reports.ReportFacts.Glucose("Mean", basic.Mean, useMmol),
+            Reports.ReportFacts.Glucose("Lowest", basic.Min, useMmol),
+            Reports.ReportFacts.Glucose("Highest", basic.Max, useMmol),
+        ];
+        var sentence = $"{Reports.ReportFacts.Plural(tir.Episodes.BelowRange, "episode")} below range and {tir.Episodes.AboveRange} above it.";
+        if (chart)
+            sentence += $" {data.BolusMarkers.Count} {(data.BolusMarkers.Count == 1 ? "bolus" : "boluses")} and "
+                + $"{data.CarbMarkers.Count} {(data.CarbMarkers.Count == 1 ? "carb entry" : "carb entries")} on the chart.";
+        return (facts, sentence, context);
+    }
+
     /// <summary>The chart's readings as the calculators read them.</summary>
     internal static IEnumerable<SensorGlucose> Readings(DashboardChartData data) =>
         data.GlucoseData.Select(r => new SensorGlucose

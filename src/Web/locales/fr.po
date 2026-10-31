@@ -20044,7 +20044,7 @@ msgstr ""
 msgid "<0/> Loading the selected range"
 msgstr ""
 
-#. 0: Math.round(pct.tightTarget)
+#. 0: Math.round(value)
 #: src/lib/components/reports/TIRStackedChart.svelte
 msgid "{0}% in tight range"
 msgstr ""
@@ -38565,3 +38565,7 @@ msgid "The range that you selected ends before the last hour. You can see only t
 msgid_plural "The range that you selected ends before the last # hours. You can see only the last # hours, so this card has no data for this range."
 msgstr[0] ""
 msgstr[1] ""
+
+#: src/lib/components/reports/custom/custom-report-labels.svelte.ts
+msgid "Full summary"
+msgstr ""

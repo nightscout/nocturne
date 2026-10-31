@@ -151,9 +151,41 @@ internal sealed class DailySummaryDataset : IReportDataset
             Rows = rows,
             Summary = Summarise(rows, startDate, endDate, useMmol, [.. omitted.Select(o => o.Field)],
                 request.HistoryClamped ? request.From : null),
+            Facts = FactsOf(rows, useMmol, omitted.Count == 0),
+            Sentence = rows.Any(r => r["readings"] is int n && n > 0)
+                ? "One row per local day; no figure is averaged across days."
+                : "No glucose readings in this period.",
+            Context = string.Create(CultureInfo.InvariantCulture,
+                $"Local days {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}. {rows.Count(r => r["readings"] is int n && n > 0)} of {rows.Count} days with readings."),
             Omitted = omitted,
             Window = days.Count == 0 ? null : new ReportWindow(days[0].Timestamp, days[^1].EndTimestamp),
         };
+    }
+
+    /// <summary>The extremes across the days, each with its date as the note.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, bool useMmol, bool treatments)
+    {
+        var withData = rows.Where(r => r["readings"] is int n && n > 0).ToList();
+        var facts = new List<ReportFact>();
+        if (withData.Count > 0)
+        {
+            var best = withData.MaxBy(r => (double)r["timeInRange"]!)!;
+            var worst = withData.MinBy(r => (double)r["timeInRange"]!)!;
+            var mostBelow = withData.MaxBy(r => (double)r["timeBelow"]!)!;
+            var highest = withData.MaxBy(r => (double)r["mean"]!)!;
+            facts.Add(ReportFacts.Percent("Best day in range", (double)best["timeInRange"]!, (string?)best["date"]));
+            facts.Add(ReportFacts.Percent("Worst day in range", (double)worst["timeInRange"]!, (string?)worst["date"]));
+            facts.Add(ReportFacts.Percent("Most below range", (double)mostBelow["timeBelow"]!, (double)mostBelow["timeBelow"]! > 0 ? (string?)mostBelow["date"] : "on no day"));
+            facts.Add(new ReportFact("Highest mean", ReportFacts.Number((double)highest["mean"]!, useMmol ? "0.0" : "0"), ReportFacts.GlucoseUnit(useMmol), (string?)highest["date"]));
+        }
+        if (treatments && rows.Count > 0)
+        {
+            var most = rows.MaxBy(r => (double)r["totalInsulin"]!)!;
+            var carbs = rows.MaxBy(r => (double)r["totalCarbs"]!)!;
+            facts.Add(new ReportFact("Most insulin", ReportFacts.Number((double)most["totalInsulin"]!), "U", (string?)most["date"]));
+            facts.Add(new ReportFact("Most carbs", ReportFacts.Number((double)carbs["totalCarbs"]!, "0"), "g", (string?)carbs["date"]));
+        }
+        return facts;
     }
 
     /// <summary>The days the rows cover, and the extremes across them; no figure is averaged across days.</summary>

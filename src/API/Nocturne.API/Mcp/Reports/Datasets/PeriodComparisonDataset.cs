@@ -200,7 +200,9 @@ internal sealed class PeriodComparisonDataset : IReportDataset
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
         var (a, b) = Periods(parameters, today);
         var window = new ReportWindow(Start(a.From, zone).ToUnixTimeMilliseconds(), Start(b.To.AddDays(1), zone).ToUnixTimeMilliseconds());
-        var labels = new Dictionary<string, string> { ["a"] = a.Describe(), ["b"] = b.Describe() };
+        var labels = new Dictionary<string, string> { ["a"] = a.Label, ["b"] = b.Label };
+        var context = string.Create(CultureInfo.InvariantCulture,
+            $"{a.Label}: {a.From:yyyy-MM-dd} to {a.To:yyyy-MM-dd}. {b.Label}: {b.From:yyyy-MM-dd} to {b.To:yyyy-MM-dd}. Local days.");
 
         if (request.HistoryClamped)
             return new ReportDatasetOutput
@@ -209,6 +211,7 @@ internal sealed class PeriodComparisonDataset : IReportDataset
                 Summary = Head(a, b, clock.Zone is null) + "\nNot compared: this token reads only the last 24 hours, so it cannot read either period whole.",
                 Window = window,
                 FieldLabels = labels,
+                Context = context,
             };
 
         var treatments = request.HasScope(Scope.TreatmentsRead);
@@ -220,6 +223,10 @@ internal sealed class PeriodComparisonDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(a, b, rows, sideA.HasReadings, sideB.HasReadings, treatments, clock.Zone is null),
+            Facts = FactsOf(rows),
+            Sentence = $"A is {a.Describe()}; B is {b.Describe()}."
+                + (treatments ? "" : " Insulin and carb figures need the treatments.read scope, which this token does not hold."),
+            Context = context,
             Window = window,
             FieldLabels = labels,
             LinkQuery =
@@ -299,6 +306,24 @@ internal sealed class PeriodComparisonDataset : IReportDataset
         }
         return rows;
     }
+
+    /// <summary>The headline figures as "A to B", the change as the note.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows) =>
+    [
+        .. new[] { "inRange", "veryLow", "low", "gmi", "cv", "mean" }
+            .Select(key => rows.FirstOrDefault(r => (string?)r["metric"] == key))
+            .OfType<IReadOnlyDictionary<string, object?>>()
+            .Where(r => r["a"] is not null || r["b"] is not null)
+            .Select(r =>
+            {
+                string F(object? v) => v is double d ? ReportFacts.Number(d, "0.##") : "–";
+                var unit = (string?)r["unit"] is { Length: > 0 } u ? u : null;
+                var note = r["delta"] is double delta
+                    ? $"{(delta > 0 ? "+" : "")}{F(delta)}{(unit == "%" ? " points" : unit is null ? "" : " " + unit)}{(r["verdict"] is string v ? ", " + v : "")}"
+                    : null;
+                return new ReportFact((string)r["label"]!, $"{F(r["a"])} to {F(r["b"])}", unit, note);
+            }),
+    ];
 
     private static string Head(Period a, Period b, bool utc) =>
         $"Period comparison: A is {a.Describe()} ({a.Days} days); B is {b.Describe()} ({b.Days} days)"

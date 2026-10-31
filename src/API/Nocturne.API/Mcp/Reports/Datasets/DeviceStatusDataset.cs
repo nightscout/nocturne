@@ -142,6 +142,11 @@ internal sealed class DeviceStatusDataset : IReportDataset
             Rows = rows,
             Summary = Summarise(pump, uploader, sensor, request.From, request.To,
                 sensorAsked: request.Primitive == ReportPrimitive.StatTiles, clamped: request.HistoryClamped),
+            Facts = FactsOf(pump, uploader, sensor),
+            Sentence = pump.Count + uploader.Count == 0
+                ? "No pump or uploader reports in this period."
+                : "The latest report of each, and the lowest in the period as its note.",
+            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(pump.Count + uploader.Count, "report")}.",
             Resolution = new ReportResolution(1, interval, sourceRows, rows.Count, rows.Count < sourceRows),
         };
     }
@@ -151,6 +156,27 @@ internal sealed class DeviceStatusDataset : IReportDataset
     {
         var slot = intervalMinutes * 60_000L;
         return snapshots.GroupBy(s => Math.Max(0, mills(s) - fromMills) / slot).Select(g => g.First());
+    }
+
+    /// <summary>The latest reservoir and batteries, each with its lowest as the note, and the sensor age where read.</summary>
+    internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<PumpSnapshot> pump, IReadOnlyList<UploaderSnapshot> uploader, DeviceAgeInfo? sensor)
+    {
+        var facts = new List<ReportFact>();
+        var reservoir = pump.Where(p => p.Reservoir is not null).ToList();
+        if (reservoir.Count > 0)
+            facts.Add(new ReportFact("Reservoir", ReportFacts.Number(reservoir[^1].Reservoir!.Value), "U",
+                $"lowest {ReportFacts.Number(reservoir.Min(p => p.Reservoir!.Value))} U"));
+        var pumpBattery = pump.Where(p => p.BatteryPercent is not null).ToList();
+        if (pumpBattery.Count > 0)
+            facts.Add(new ReportFact("Pump battery", ReportFacts.Number(pumpBattery[^1].BatteryPercent!.Value, "0"), "%",
+                $"lowest {ReportFacts.Number(pumpBattery.Min(p => p.BatteryPercent!.Value), "0")}%"));
+        var uploaderBattery = uploader.Where(u => u.Battery is not null).ToList();
+        if (uploaderBattery.Count > 0)
+            facts.Add(new ReportFact("Uploader battery", ReportFacts.Number(uploaderBattery[^1].Battery!.Value, "0"), "%",
+                $"lowest {ReportFacts.Number(uploaderBattery.Min(u => u.Battery!.Value), "0")}%"));
+        if (sensor is not null)
+            facts.Add(new ReportFact("Sensor age", $"{sensor.Days}d {sensor.Hours}h", null, "now"));
+        return facts;
     }
 
     internal static string Summarise(
