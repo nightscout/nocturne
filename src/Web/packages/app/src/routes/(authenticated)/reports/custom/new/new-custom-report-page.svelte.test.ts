@@ -1,9 +1,10 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import type { CustomReportCatalogue, CustomReportRunResponse } from "#lib/api/generated/nocturne-api-client.js";
-import { catalogue as fixtureCatalogue, statisticsTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
+import { catalogue as fixtureCatalogue, resultFor, statisticsTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
 import { statTilesResult } from "../custom-report-fixtures.js";
 
 const calls = vi.hoisted(() => ({ runs: [] as unknown[], creates: [] as unknown[], gotos: [] as string[] }));
@@ -23,10 +24,10 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   getCustomReportCatalogue: () => remoteQuery(() => catalogue),
   getCustomReportTemplates: () => remoteQuery(() => [statisticsTemplate]),
   getCustomReports: () => remoteQuery(() => []),
-  runCustomReport: (arg: { spec: Record<string, unknown> }) => {
+  runCustomReport: remoteCommand((arg) => {
     calls.runs.push(arg);
-    return remoteQuery(() => respond(arg.spec));
-  },
+    return respond((arg as { spec: Record<string, unknown> }).spec);
+  }),
   createCustomReport: remoteCommand((arg) => {
     calls.creates.push(arg);
     return { id: "new-id", name: "Saved" };
@@ -50,7 +51,8 @@ describe("the report builder on a new report", () => {
     calls.creates.length = 0;
     calls.gotos.length = 0;
     catalogue = structuredClone(fixtureCatalogue);
-    respond = (spec) => ({ result: statTilesResult(), spec, errors: [] });
+    respond = (spec) => ({ result: resultFor(spec, statTilesResult()), spec, errors: [] });
+    pageState.data = {};
   });
 
   it("opens a template, previews it, and saves it under a name", async () => {
@@ -128,8 +130,8 @@ describe("the report builder on a new report", () => {
 
   it("tells a caller with glucose access only what its preview leaves out", async () => {
     respond = (spec) => {
-      const result = statTilesResult();
-      return { result: { ...result, panels: [{ ...result.panels[0], omitted: [{ field: "tdd", scope: "treatments.read" }] }] }, spec, errors: [] };
+      const result = resultFor(spec, statTilesResult());
+      return { result: { ...result, panels: result.panels.map((p) => ({ ...p, omitted: [{ field: "tdd", scope: "treatments.read" }] })) }, spec, errors: [] };
     };
     render(NewCustomReportPage, {});
     await page.getByRole("button", { name: /Statistics/ }).click();
@@ -139,5 +141,37 @@ describe("the report builder on a new report", () => {
     await page.getByLabelText("Data").click();
     await page.getByRole("option", { name: /Treatments/ }).click();
     await expect.element(page.getByText("Your access does not include this data, so this panel shows nothing.")).toBeVisible();
+  });
+
+  it("draws each panel's own result after a reorder, and no result of an older spec meanwhile", async () => {
+    respond = (spec) => {
+      const result = resultFor(spec, statTilesResult());
+      return {
+        result: { ...result, panels: result.panels.map((p) => ({ ...p, rows: [{ timeInRangePercent: p.id === "p1" ? 11.1 : 22.2 }] })) },
+        spec,
+        errors: [],
+      };
+    };
+    render(NewCustomReportPage, {});
+    await page.getByRole("button", { name: /Blank/ }).click();
+    await page.getByTestId("add-panel").click();
+    await page.getByTestId("add-panel").click();
+    const cards = page.getByTestId("panel-card");
+    await expect.element(cards.nth(0).getByText("11.1")).toBeVisible();
+    await expect.element(cards.nth(1).getByText("22.2")).toBeVisible();
+
+    await page.getByRole("button", { name: "Move panel 2 up" }).click();
+
+    expect(cards.nth(0).element().textContent).not.toContain("11.1");
+    await expect.element(cards.nth(0).getByText("22.2")).toBeVisible();
+    await expect.element(cards.nth(1).getByText("11.1")).toBeVisible();
+  });
+
+  it("tells a member limited to the last 24 hours that it cannot create reports", async () => {
+    pageState.data = { limitTo24Hours: true };
+    render(NewCustomReportPage, {});
+
+    await expect.element(page.getByTestId("clamped-note")).toHaveTextContent("Your access is limited to the last 24 hours. It cannot create reports.");
+    expect(page.getByTestId("report-starts").elements()).toHaveLength(0);
   });
 });

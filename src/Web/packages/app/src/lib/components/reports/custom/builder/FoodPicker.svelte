@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { getFood, getFoods } from "#lib/api/generated/foods.generated.remote.js";
+  import { isHttpError } from "@sveltejs/kit";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import Plus from "@lucide/svelte/icons/plus";
@@ -30,6 +31,7 @@
   }
 
   const results = $derived(find.length >= 2 ? getFoods({ find, count: 20 }) : null);
+  const searchError = $derived(results?.error);
   const found = $derived((results?.current ?? []).filter((f) => f._id && !value.includes(f._id)));
 </script>
 
@@ -39,7 +41,19 @@
       {#each value as foodId (foodId)}
         {@const food = getFood(foodId)}
         <li class="flex items-center gap-1 rounded-md border border-border bg-muted/40 py-0.5 pr-0.5 pl-2 text-xs">
-          <span>{food.current?.name ?? (food.error ? "A food you cannot read" : "…")}</span>
+          <span>
+            {#if food.current}
+              {food.current.name}
+            {:else if isHttpError(food.error) && food.error.status === 404}
+              A food that no longer exists
+            {:else if isHttpError(food.error) && food.error.status === 403}
+              A food you cannot read
+            {:else if food.error}
+              A food that Nocturne could not load
+            {:else}
+              …
+            {/if}
+          </span>
           <Button
             variant="ghost"
             size="icon-xs"
@@ -62,8 +76,10 @@
     disabled={disabled || value.length >= max}
     autocomplete="off"
   />
-  {#if results?.error}
+  {#if isHttpError(searchError) && searchError.status === 403}
     <p class="text-xs text-muted-foreground" role="status">Your access does not include food data, so you cannot pick foods.</p>
+  {:else if searchError}
+    <p class="text-xs text-destructive" role="alert">The food search did not work. Try again.</p>
   {:else if find.length >= 2 && results?.current && found.length === 0}
     <p class="text-xs text-muted-foreground" role="status">No food matches "{find}".</p>
   {:else if found.length > 0}

@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { runCustomReport } from "#lib/api/generated/customReports.generated.remote.js";
   import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
   import * as Card from "#lib/components/ui/card/index.js";
@@ -35,23 +35,34 @@
 
   // svelte-ignore state_referenced_locally
   const draft = new SpecDraft(catalogue, spec);
-  const runner = new PreviewRunner((s) => runCustomReport({ spec: s }));
+  const runner = new PreviewRunner((s) => runCustomReport({ spec: s, preview: true }));
   onDestroy(() => runner.dispose());
 
   let first = true;
   $effect(() => {
     const current = draft.toSpec();
     if (draft.panels.length === 0) return;
-    if (first) {
-      first = false;
-      runner.now(current);
-    } else {
-      runner.schedule(current);
-    }
+    untrack(() => {
+      if (first) {
+        first = false;
+        runner.now(current);
+      } else {
+        runner.schedule(current);
+      }
+    });
   });
 
-  const run = $derived(draft.panels.length > 0 ? runner.run : null);
+  /** The run of the spec as it is now; null while the preview is of an older spec, so no card shows another panel's result. */
+  const current = $derived(JSON.stringify(draft.toSpec()));
+  const run = $derived(draft.panels.length > 0 && runner.ran === current ? runner.run : null);
+  const stale = $derived(draft.panels.length > 0 && runner.ran !== current);
   const routed = $derived(routeSpecErrors(run?.errors));
+  /** Each panel's messages under its id: the validator names a panel by its place in the spec that ran. */
+  const messagesById = $derived.by(() => {
+    const ran: { panels?: { id?: string }[] } = runner.ran ? JSON.parse(runner.ran) : {};
+    const ids = (ran.panels ?? []).map((p) => p.id);
+    return new Map([...routed.panels].map(([i, m]) => [ids[i], m]));
+  });
   const valid = $derived(!!run && (run.errors ?? []).length === 0);
   const result: { warnings?: string[] } | undefined = $derived(run?.result);
   const warnings = $derived(result?.warnings ?? []);
@@ -106,9 +117,9 @@
     <PanelCard
       {draft}
       {index}
-      messages={routed.panels.get(index)}
+      messages={messagesById.get(panel.id)}
       {run}
-      running={runner.running}
+      running={runner.running || stale}
       maxTitleLength={draft.maxTitleLength}
       {disabled}
     />
@@ -118,7 +129,8 @@
     </p>
   {/each}
 
-  <div class="flex flex-wrap items-center gap-3">
+  <!-- Room under the last panel for the action bar, which stays over the bottom of the page. -->
+  <div class="flex flex-wrap items-center gap-3 pb-28">
     <Button variant="outline" onclick={() => draft.addPanel()} disabled={disabled || draft.atPanelLimit} data-testid="add-panel">
       <Plus aria-hidden="true" />
       Add a panel

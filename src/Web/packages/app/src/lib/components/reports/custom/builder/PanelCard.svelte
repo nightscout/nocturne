@@ -26,7 +26,7 @@
     draft: SpecDraft;
     index: number;
     messages: PanelMessages | undefined;
-    /** The latest preview run of the whole spec; this card draws its own panel of it. */
+    /** The preview run of the whole spec as it is now, or null; this card draws its own panel of it. */
     run: CustomReportRunResponse | null;
     running: boolean;
     maxTitleLength: number;
@@ -50,19 +50,22 @@
     ...(messages?.bindings ?? []).filter((m) => !slotKeys.has(m.path.split(/[.[]/)[0])).map((m) => m.message),
   ]);
 
+  /** This panel's part of the run, found by its id. */
   const ownResult = $derived.by(() => {
-    const result: { panels?: unknown[]; spec?: Record<string, unknown> } | undefined = run?.result;
-    if (!run || (run.errors ?? []).length > 0 || !result?.panels?.[index]) return null;
+    const result: { panels?: { id?: string; omitted?: { field?: string }[] }[]; spec?: Record<string, unknown> } | undefined =
+      run?.result;
+    const own = result?.panels?.find((p) => p.id === panel?.id);
+    if (!run || (run.errors ?? []).length > 0 || !own) return null;
     return {
       ...run,
-      result: { ...result, spec: { ...result.spec, title: null }, warnings: [], panels: [result.panels[index]] },
+      result: { ...result, spec: { ...result?.spec, title: null }, warnings: [], panels: [own] },
     } satisfies CustomReportRunResponse;
   });
 
   const omitted = $derived.by(() => {
-    const result: { omitted?: { field?: string }[] } | undefined = ownResult?.result.panels[0] ?? undefined;
-    const labels = new Map((dataset?.fields ?? []).map((f) => [f.name, f.label ?? f.name]));
-    return (result?.omitted ?? []).map((o) => labels.get(o.field) ?? o.field).filter((l): l is string => !!l);
+    const own = ownResult?.result.panels[0];
+    const labels = new Map((dataset?.fields ?? []).map((f) => [f.name, f.label]));
+    return (own?.omitted ?? []).map((o) => (o.field ? (labels.get(o.field) ?? o.field) : "")).filter((l) => l !== "");
   });
 </script>
 
@@ -170,7 +173,7 @@
             value={panel.range}
             onchange={(range) => draft.setPanelRange(index, range)}
             inheritLabel="Same as the report"
-            maxHours={primitive?.maxRangeHours ?? 24}
+            maxHours={primitive?.maxRangeHours ?? draft.maxRangeHours}
             invalid={(messages?.range.length ?? 0) > 0}
             {disabled}
           />

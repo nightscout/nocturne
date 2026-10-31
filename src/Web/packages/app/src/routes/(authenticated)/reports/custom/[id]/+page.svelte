@@ -34,6 +34,8 @@
   });
   const report = $derived(resource.current);
   const specErrors = $derived(report?.errors ?? []);
+  /** A member limited to the last 24 hours cannot change a report; the API refuses it. */
+  const clamped = $derived(page.data.limitTo24Hours === true);
 
   let renaming = $state(false);
   let name = $state("");
@@ -103,7 +105,7 @@
             <Link class="size-4" aria-hidden="true" />
             Copy link
           </Button>
-          {#if report.canEdit}
+          {#if report.canEdit && !clamped}
             <Button variant="outline" size="sm" href={resolve("/(authenticated)/reports/custom/[id]/edit", { id })}>
               <SquarePen class="size-4" aria-hidden="true" />
               Edit
@@ -112,6 +114,8 @@
               <Pencil class="size-4" aria-hidden="true" />
               Rename
             </Button>
+          {/if}
+          {#if report.canEdit}
             <Button variant="outline" size="sm" onclick={() => (confirmingDelete = true)}>
               <Trash2 class="size-4" aria-hidden="true" />
               Delete

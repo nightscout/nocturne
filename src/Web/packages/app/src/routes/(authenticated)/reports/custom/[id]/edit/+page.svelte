@@ -40,9 +40,11 @@
   let actionError = $state<string | null>(null);
   let confirmingDelete = $state(false);
 
-  const canEdit = $derived(report.current?.canEdit === true);
+  /** A member limited to the last 24 hours can neither change nor copy a report; the API refuses both. */
+  const clamped = $derived(page.data.limitTo24Hours === true);
+  const canEdit = $derived(report.current?.canEdit === true && !clamped);
   const name = $derived(typedName ?? report.current?.name ?? "");
-  const maxName = $derived(catalogue.current?.maxNameLength ?? 120);
+  const maxName = $derived(catalogue.current?.maxNameLength);
 
   function opened() {
     return goto(resolve("/(authenticated)/reports/custom/[id]", { id }));
@@ -93,7 +95,11 @@
 
 <div class="@container space-y-6">
   {#if report.current && catalogue.current}
-    {#if !canEdit}
+    {#if clamped}
+      <p class="rounded-lg border border-border bg-muted/30 p-4 text-sm" role="status" data-testid="clamped-note">
+        Your access is limited to the last 24 hours. It cannot change or copy reports.
+      </p>
+    {:else if !canEdit}
       <p class="rounded-lg border border-border bg-muted/30 p-4 text-sm" role="status" data-testid="read-only-note">
         Another member made this report, so you cannot change it. You can save a copy with Save as.
       </p>
@@ -123,10 +129,12 @@
                     Save
                   </Button>
                 {/if}
-                <Button variant="outline" onclick={() => (copying = !copying)} disabled={busy || empty}>
-                  <CopyPlus aria-hidden="true" />
-                  Save as
-                </Button>
+                {#if !clamped}
+                  <Button variant="outline" onclick={() => (copying = !copying)} disabled={busy || empty}>
+                    <CopyPlus aria-hidden="true" />
+                    Save as
+                  </Button>
+                {/if}
                 <Button variant="outline" onclick={opened} disabled={busy}>
                   <Undo2 aria-hidden="true" />
                   Cancel

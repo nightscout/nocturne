@@ -5,6 +5,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import {
     createCustomReport,
     getCustomReportCatalogue,
@@ -36,8 +37,8 @@
   let saving = $state(false);
   let saveError = $state<string | null>(null);
 
-  function titleOf(spec: Record<string, unknown>): string {
-    return typeof spec.title === "string" ? spec.title.slice(0, catalogue.current?.maxNameLength ?? 120) : "";
+  function titleOf(spec: Record<string, unknown>, maxName: number): string {
+    return typeof spec.title === "string" ? spec.title.slice(0, maxName) : "";
   }
 
   async function save(spec: Record<string, unknown>, name: string) {
@@ -56,7 +57,11 @@
 </script>
 
 <div class="@container space-y-6">
-  {#if catalogue.current && templates.current}
+  {#if page.data.limitTo24Hours === true}
+    <p class="text-sm text-muted-foreground" role="status" data-testid="clamped-note">
+      Your access is limited to the last 24 hours. It cannot create reports.
+    </p>
+  {:else if catalogue.current && templates.current}
     {#if start === null}
       <div class="space-y-1">
         <h2 class="text-xl font-semibold">Start a report</h2>
@@ -85,9 +90,10 @@
         {/each}
       </div>
     {:else}
+      {@const maxName = catalogue.current.maxNameLength}
       <ReportBuilder catalogue={catalogue.current} spec={start.spec} disabled={saving}>
         {#snippet actions({ spec, empty })}
-          {@const name = typed ?? titleOf(spec())}
+          {@const name = typed ?? titleOf(spec(), maxName)}
           <form
             class="flex flex-col gap-2 @lg:flex-row @lg:items-end"
             onsubmit={(event) => {
@@ -101,7 +107,7 @@
                 id="custom-report-name"
                 value={name}
                 oninput={(event) => (typed = event.currentTarget.value)}
-                maxlength={catalogue.current?.maxNameLength ?? 120}
+                maxlength={maxName}
                 required
                 autocomplete="off"
               />

@@ -86,6 +86,11 @@
   }
 
   const choices = $derived(choicesOf(schema));
+  /** A list item's title as words inside a sentence: "Event group" as "event group". */
+  const itemWords = $derived.by(() => {
+    const words = schema.items?.title ?? title;
+    return words.charAt(0).toLowerCase() + words.slice(1);
+  });
   const selected = $derived(value ?? schema.default);
   const selectedLabel = $derived(choices.find((c) => c.value === selected)?.label);
 </script>
@@ -147,7 +152,7 @@
     >
       <Select.Trigger {id} class="w-full max-w-sm" aria-invalid={errors.length > 0}>
         {#if value === undefined && selectedLabel === undefined}
-          Default
+          {#if required}Choose{:else}Default{/if}
         {:else}
           {selectedLabel}
         {/if}
@@ -163,14 +168,20 @@
     </Select.Root>
   {:else if control === "time"}
     {@render heading(id)}
+    {#if typeof schema.default === "number" && value === undefined}
+      <p class="text-xs text-muted-foreground">Default: {minuteToTime(schema.default)}</p>
+    {/if}
     <Input
       {id}
       type="time"
       class="w-32"
-      value={minuteToTime(typeof value === "number" ? value : typeof schema.default === "number" ? schema.default : 0)}
+      value={typeof value === "number" ? minuteToTime(value) : ""}
       oninput={(event) => {
-        const minutes = timeToMinute(event.currentTarget.value);
-        if (minutes !== null) onchange(minutes);
+        if (event.currentTarget.value === "") onchange(undefined);
+        else {
+          const minutes = timeToMinute(event.currentTarget.value);
+          if (minutes !== null) onchange(minutes);
+        }
       }}
       {disabled}
       aria-invalid={errors.length > 0}
@@ -234,11 +245,10 @@
     />
   {:else if control === "group"}
     <fieldset class="space-y-3 rounded-md border border-border p-3">
-      <legend class="px-1 text-xs font-medium">{title}</legend>
-      {#if schema.description}
-        <p class="text-xs text-muted-foreground">{schema.description}</p>
-      {/if}
-      {#if !required}
+      {#if required}
+        <legend class="px-1 text-xs font-medium">{title}</legend>
+      {:else}
+        <legend class="sr-only">{title}</legend>
         <div class="flex items-center gap-2">
           <Switch
             id="{id}-use"
@@ -246,8 +256,11 @@
             onCheckedChange={(on: boolean) => onchange(on ? fresh(schema) : undefined)}
             {disabled}
           />
-          <Label for="{id}-use" size="sm" variant="option">Use this filter</Label>
+          <Label for="{id}-use" size="sm">{title}</Label>
         </div>
+      {/if}
+      {#if schema.description}
+        <p class="text-xs text-muted-foreground">{schema.description}</p>
       {/if}
       {#if required || record !== undefined}
         <div class="flex flex-wrap gap-4">
@@ -284,6 +297,9 @@
               <X aria-hidden="true" />
             </Button>
           </div>
+          {#each messagesAt(messages, `${path}[${i}]`, false) as message, m (m)}
+            <p class="text-xs text-destructive" role="alert" data-testid="field-error">{message}</p>
+          {/each}
           <div class="flex flex-wrap gap-4">
             {#each Object.entries(item.properties ?? {}) as [key, child] (key)}
               <SchemaField
@@ -312,7 +328,7 @@
         disabled={disabled || list.length >= max}
       >
         <Plus aria-hidden="true" />
-        Add: {item.title ?? title}
+        Add {itemWords}
       </Button>
       {#if list.length >= max}
         <p class="text-xs text-muted-foreground">This list can have at most {max} items.</p>

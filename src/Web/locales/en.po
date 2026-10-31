@@ -1170,6 +1170,7 @@ msgstr "{0} minutes"
 msgid "{0} reading{1}"
 msgstr "{0} reading{1}"
 
+#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
@@ -38417,9 +38418,8 @@ msgstr "<0/> Open the matching report"
 msgid "The report data has a form that this page cannot show."
 msgstr "The report data has a form that this page cannot show."
 
-#: src/lib/components/reports/custom/CustomReportQuery.svelte
-msgid "Could not run the report"
-msgstr "Could not run the report"
+#~ msgid "Could not run the report"
+#~ msgstr "Could not run the report"
 
 #: src/lib/components/reports/custom/SpecErrorList.svelte
 msgid "Show the spec"
@@ -38810,9 +38810,8 @@ msgstr "From a date to a date"
 msgid "This data has no settings."
 msgstr "This data has no settings."
 
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-msgid "Use this filter"
-msgstr "Use this filter"
+#~ msgid "Use this filter"
+#~ msgstr "Use this filter"
 
 #. 0: item.title ?? title; 1: i + 1
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
@@ -38824,8 +38823,10 @@ msgstr "Remove {0} {1}"
 msgid "This list can have at most {0} items."
 msgstr "This list can have at most {0} items."
 
-#~ msgid "<0/> Add {0}"
-#~ msgstr "<0/> Add {0}"
+#. 0: itemWords
+#: src/lib/components/reports/custom/builder/SchemaField.svelte
+msgid "<0/> Add {0}"
+msgstr "<0/> Add {0}"
 
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
 msgid "This page cannot show this setting."
@@ -38868,14 +38869,11 @@ msgstr "A custom report shows the charts and figures of your data that you selec
 msgid "<0/> New report"
 msgstr "<0/> New report"
 
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "No custom reports. To make a report, select New report."
-msgstr "No custom reports. To make a report, select New report."
+#~ msgid "No custom reports. To make a report, select New report."
+#~ msgstr "No custom reports. To make a report, select New report."
 
-#. 0: item.title ?? title
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-msgid "<0/> Add: {0}"
-msgstr "<0/> Add: {0}"
+#~ msgid "<0/> Add: {0}"
+#~ msgstr "<0/> Add: {0}"
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Could not save the copy. Try again."
@@ -38904,3 +38902,53 @@ msgstr "Number of days"
 #: src/lib/components/reports/custom/builder/RangeControl.svelte
 msgid "Number of hours"
 msgstr "Number of hours"
+
+#: src/routes/(authenticated)/reports/custom/+page.svelte
+#: src/routes/(authenticated)/reports/custom/new/+page.svelte
+msgid "Your access is limited to the last 24 hours. It cannot create reports."
+msgstr "Your access is limited to the last 24 hours. It cannot create reports."
+
+#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
+msgid "Your access is limited to the last 24 hours. It cannot change or copy reports."
+msgstr "Your access is limited to the last 24 hours. It cannot change or copy reports."
+
+#: src/routes/(authenticated)/reports/custom/+page.svelte
+msgid "To make a report, select New report."
+msgstr "To make a report, select New report."
+
+#: src/routes/(authenticated)/reports/custom/+page.svelte
+msgid "No custom reports.<0/>"
+msgstr "No custom reports.<0/>"
+
+#: src/lib/components/reports/custom/CustomReportQuery.svelte
+msgid "Could not run the report. Try again."
+msgstr "Could not run the report. Try again."
+
+#: src/lib/components/reports/custom/CustomReportQuery.svelte
+msgid "<0/> Nocturne is running the report."
+msgstr "<0/> Nocturne is running the report."
+
+#: src/lib/components/reports/custom/builder/SchemaField.svelte
+msgid "Choose"
+msgstr "Choose"
+
+#. 0: minuteToTime(schema.default)
+#: src/lib/components/reports/custom/builder/SchemaField.svelte
+msgid "Default: {0}"
+msgstr "Default: {0}"
+
+#: src/lib/components/reports/custom/builder/FoodPicker.svelte
+msgid "A food that no longer exists"
+msgstr "A food that no longer exists"
+
+#: src/lib/components/reports/custom/builder/FoodPicker.svelte
+msgid "A food that Nocturne could not load"
+msgstr "A food that Nocturne could not load"
+
+#: src/lib/components/reports/custom/builder/FoodPicker.svelte
+msgid "The food search did not work. Try again."
+msgstr "The food search did not work. Try again."
+
+#: src/lib/components/reports/custom/builder/FoodCategoryInput.svelte
+msgid "Nocturne could not load the food categories. You can type a category."
+msgstr "Nocturne could not load the food categories. You can type a category."

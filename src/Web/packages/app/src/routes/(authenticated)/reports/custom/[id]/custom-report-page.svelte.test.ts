@@ -19,10 +19,10 @@ let runResult: () => unknown = statTilesResult;
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   getCustomReport: () => remoteQuery(() => saved),
-  runCustomReport: (arg: unknown) => {
+  runCustomReport: remoteCommand((arg) => {
     calls.runs.push(arg);
-    return remoteQuery(() => ({ result: runResult(), spec: normalisedSpec, errors: [] }));
-  },
+    return { result: runResult(), spec: normalisedSpec, errors: [] };
+  }),
   updateCustomReport: remoteCommand((arg) => {
     calls.updates.push(arg);
     return saved;

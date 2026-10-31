@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import type { CustomReport } from "#lib/api/generated/nocturne-api-client.js";
-import { catalogue, statisticsTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
+import { catalogue, resultFor, statisticsTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
 import { statTilesResult } from "../../custom-report-fixtures.js";
 
 const calls = vi.hoisted(() => ({ runs: [] as unknown[], updates: [] as unknown[], creates: [] as unknown[], gotos: [] as string[] }));
@@ -16,10 +16,11 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   getCustomReport: () => remoteQuery(() => saved),
   getCustomReportCatalogue: () => remoteQuery(() => catalogue),
   getCustomReports: () => remoteQuery(() => []),
-  runCustomReport: (arg: { spec: unknown }) => {
+  runCustomReport: remoteCommand((arg) => {
     calls.runs.push(arg);
-    return remoteQuery(() => ({ result: statTilesResult(), spec: arg.spec, errors: [] }));
-  },
+    const spec = (arg as { spec: Record<string, unknown> }).spec;
+    return { result: resultFor(spec, statTilesResult()), spec, errors: [] };
+  }),
   updateCustomReport: remoteCommand((arg) => {
     calls.updates.push(arg);
     return saved;

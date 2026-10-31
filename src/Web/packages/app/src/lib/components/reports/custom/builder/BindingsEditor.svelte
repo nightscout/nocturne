@@ -80,10 +80,10 @@
               <Label for={id} size="sm">{slot.label}</Label>
               <Select.Root type="single" value={String(current(key) ?? "")} onValueChange={(v: string) => onchange(key, v)} {disabled}>
                 <Select.Trigger {id} class="w-44" aria-invalid={problems.length > 0}>
-                  {slot.choices?.find((c) => c.value === current(key))?.label ?? slot.choices?.[0]?.label}
+                  {slot.choices.find((c) => c.value === current(key))?.label ?? "Default"}
                 </Select.Trigger>
                 <Select.Content>
-                  {#each slot.choices ?? [] as choice (choice.value)}
+                  {#each slot.choices as choice (choice.value)}
                     <Select.Item value={choice.value ?? ""} label={choice.label}>{choice.label}</Select.Item>
                   {/each}
                 </Select.Content>
@@ -103,14 +103,14 @@
                   {#if !slot.required}
                     <Select.Item value={DEFAULT_CHOICE} label="None">None</Select.Item>
                   {/if}
-                  {#each slot.fields ?? [] as name (name)}
+                  {#each slot.fields as name (name)}
                     <Select.Item value={name} label={labelOf.get(name)}>{labelOf.get(name)}</Select.Item>
                   {/each}
                 </Select.Content>
               </Select.Root>
             {:else if slot.input === "fields"}
               {@const picked = list(key)}
-              {@const left = (slot.fields ?? []).filter((n) => !picked.includes(n))}
+              {@const left = slot.fields.filter((n) => !picked.includes(n))}
               <span class="text-xs font-medium">{slot.label}</span>
               {#if picked.length > 0}
                 <ol class="flex flex-wrap gap-1.5" aria-label={slot.label}>

@@ -139,3 +139,12 @@ export const statisticsTemplate = {
     ],
   },
 };
+
+/** A run's result with one panel of `base`'s first panel for each panel the spec sent, under the spec's panel ids. */
+export function resultFor<T extends { panels: { id: string }[] }>(spec: Record<string, unknown>, base: T): T {
+  const panels = Array.isArray(spec.panels) ? spec.panels : [];
+  return {
+    ...base,
+    panels: panels.map((p: { id?: string }) => ({ ...base.panels[0], id: p.id ?? base.panels[0].id })),
+  };
+}

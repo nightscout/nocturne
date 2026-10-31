@@ -1,5 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import { Button } from "#lib/components/ui/button/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
@@ -20,6 +21,7 @@
   });
 
   const reports = $derived<CustomReportSummary[]>(resource.current ?? []);
+  const clamped = $derived(page.data.limitTo24Hours === true);
 
   let pendingDelete = $state<CustomReportSummary | null>(null);
   let deleting = $state(false);
@@ -52,11 +54,18 @@
         account sees the same list.
       </p>
     </div>
-    <Button class="@lg:ml-auto" href={resolve("/(authenticated)/reports/custom/new")}>
-      <Plus aria-hidden="true" />
-      New report
-    </Button>
+    {#if !clamped}
+      <Button class="@lg:ml-auto" href={resolve("/(authenticated)/reports/custom/new")}>
+        <Plus aria-hidden="true" />
+        New report
+      </Button>
+    {/if}
   </div>
+  {#if clamped}
+    <p class="text-sm text-muted-foreground" role="status" data-testid="clamped-note">
+      Your access is limited to the last 24 hours. It cannot create reports.
+    </p>
+  {/if}
 
   {#if deleteError}
     <p class="text-sm text-destructive" role="alert">{deleteError}</p>
@@ -65,7 +74,7 @@
   {#if resource.current}
     {#if reports.length === 0}
       <p class="text-sm text-muted-foreground">
-        No custom reports. To make a report, select New report.
+        No custom reports.{#if !clamped} To make a report, select New report.{/if}
       </p>
     {:else}
       <Table.Root>

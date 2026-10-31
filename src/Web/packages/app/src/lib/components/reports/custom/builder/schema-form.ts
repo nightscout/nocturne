@@ -45,13 +45,13 @@ export const FORM_SHAPES = [
 
 export type FormShape = (typeof FORM_SHAPES)[number];
 
-/** A node as the form tells it apart: its type, then enum, format and input kind. */
+/** A node as the form tells it apart: its type, then enum, any format, and input kind. */
 export function shapeOf(node: ParameterSchema): string {
   const type = node.type ?? "";
   if (type === "array") return `array<${shapeOf(node.items ?? {})}>` + (node["x-input"] ? `:${node["x-input"]}` : "");
   const parts = [type];
   if (node.enum) parts.push("enum");
-  if (node.format === "date" || node.format === "uuid") parts.push(node.format);
+  if (node.format) parts.push(node.format);
   if (node["x-input"]) parts.push(node["x-input"]);
   return parts.join(":");
 }

@@ -94,23 +94,23 @@ export class SpecDraft {
   }
 
   get maxPanels(): number {
-    return this.#catalogue.maxPanels ?? 6;
+    return this.#catalogue.maxPanels;
   }
 
   get maxTitleLength(): number {
-    return this.#catalogue.maxTitleLength ?? 200;
+    return this.#catalogue.maxTitleLength;
   }
 
   get maxRangeHours(): number {
-    return this.#catalogue.maxRangeHours ?? 24;
+    return this.#catalogue.maxRangeHours;
   }
 
   get maxNameLength(): number {
-    return this.#catalogue.maxNameLength ?? 120;
+    return this.#catalogue.maxNameLength;
   }
 
   get datasets(): CustomReportDataset[] {
-    return this.#catalogue.datasets ?? [];
+    return this.#catalogue.datasets;
   }
 
   get atPanelLimit(): boolean {
@@ -118,7 +118,7 @@ export class SpecDraft {
   }
 
   dataset(name: string): CustomReportDataset | undefined {
-    return this.#catalogue.datasets?.find((d) => d.name === name);
+    return this.#catalogue.datasets.find((d) => d.name === name);
   }
 
   primitive(panel: DraftPanel): CustomReportDatasetPrimitive | undefined {
@@ -170,7 +170,7 @@ export class SpecDraft {
   /** A panel of `datasetName`, or of the first dataset the caller may read, drawn its first way. */
   addPanel(datasetName?: string) {
     if (this.atPanelLimit) return;
-    const datasets = this.#catalogue.datasets ?? [];
+    const datasets = this.#catalogue.datasets;
     const dataset = datasets.find((d) => d.name === datasetName) ?? datasets.find((d) => d.permitted) ?? datasets[0];
     if (!dataset?.name) return;
     const primitive = dataset.primitives?.[0];

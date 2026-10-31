@@ -28,7 +28,11 @@
   const isMode = (m: string): m is Mode => m === "inherit" || m === "last" || m === "between";
   const isUnit = (u: string): u is Unit => u === "h" || u === "d";
 
-  const mode = $derived<Mode>(value === null ? "inherit" : "hours" in value ? "last" : "between");
+  /** The mode picked before its range is complete; the range changes only once it is. */
+  let modeChoice = $state<Mode | null>(null);
+  const mode = $derived<Mode>(modeChoice ?? (value === null ? "inherit" : "hours" in value ? "last" : "between"));
+  let fromText = $state("");
+  let toText = $state("");
   const hours = $derived(value !== null && "hours" in value ? value.hours : null);
   let unitChoice = $state<Unit | null>(null);
   const unit = $derived<Unit>(unitChoice ?? (hours !== null && hours >= 48 && hours % 24 === 0 ? "d" : "h"));
@@ -48,25 +52,37 @@
   }
 
   function setMode(next: Mode) {
-    if (next === "inherit") onchange(null);
-    else if (next === "last") onchange({ hours: 24 });
-    else {
-      const to = new Date();
-      const from = new Date(to.getTime() - 24 * 3600 * 1000);
-      onchange({ from: from.toISOString(), to: to.toISOString() });
+    if (next === "inherit") {
+      modeChoice = null;
+      onchange(null);
+      return;
     }
+    modeChoice = next;
+    fromText = value !== null && "from" in value ? local(value.from) : "";
+    toText = value !== null && "to" in value ? local(value.to) : "";
   }
 
   function setAmount(text: string, as: Unit) {
     const n = Number(text);
     if (text.trim() === "" || !Number.isFinite(n) || n <= 0) return;
+    modeChoice = null;
     onchange({ hours: Math.round(as === "d" ? n * 24 : n) });
   }
 
+  /** Sets one end; the range is sent once both ends are dates. */
   function setEnd(end: "from" | "to", text: string) {
-    if (value === null || !("from" in value)) return;
-    const at = iso(text);
-    if (at) onchange({ ...value, [end]: at });
+    if (modeChoice === null && value !== null && "from" in value) {
+      fromText = local(value.from);
+      toText = local(value.to);
+    }
+    if (end === "from") fromText = text;
+    else toText = text;
+    const from = iso(fromText);
+    const to = iso(toText);
+    if (from && to) {
+      modeChoice = null;
+      onchange({ from, to });
+    }
   }
 
   const modeLabel = $derived(mode === "inherit" ? inheritLabel : mode === "last" ? "The last" : "From a date to a date");
@@ -114,12 +130,12 @@
         <Select.Item value="d" label="days">days</Select.Item>
       </Select.Content>
     </Select.Root>
-  {:else if mode === "between" && value !== null && "from" in value}
+  {:else if mode === "between"}
     <Input
       id="{id}-from"
       type="datetime-local"
       class="w-56"
-      value={local(value.from)}
+      value={value !== null && "from" in value && modeChoice === null ? local(value.from) : fromText}
       oninput={(event) => setEnd("from", event.currentTarget.value)}
       aria-label="From"
       aria-invalid={invalid}
@@ -130,7 +146,7 @@
       id="{id}-to"
       type="datetime-local"
       class="w-56"
-      value={local(value.to)}
+      value={value !== null && "to" in value && modeChoice === null ? local(value.to) : toText}
       oninput={(event) => setEnd("to", event.currentTarget.value)}
       aria-label="To"
       aria-invalid={invalid}

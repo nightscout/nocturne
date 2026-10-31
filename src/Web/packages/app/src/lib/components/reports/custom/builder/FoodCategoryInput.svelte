@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { getFoods } from "#lib/api/generated/foods.generated.remote.js";
+  import { isHttpError } from "@sveltejs/kit";
   import { Input } from "#lib/components/ui/input/index.js";
 
   interface Props {
@@ -37,6 +38,8 @@
     <option value={category}></option>
   {/each}
 </datalist>
-{#if catalogue.error}
+{#if isHttpError(catalogue.error) && catalogue.error.status === 403}
   <p class="text-xs text-muted-foreground" role="status">Your access does not include food data, so no categories are offered.</p>
+{:else if catalogue.error}
+  <p class="text-xs text-muted-foreground" role="status">Nocturne could not load the food categories. You can type a category.</p>
 {/if}

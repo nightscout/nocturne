@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
@@ -14,18 +14,19 @@ import {
 import { routeSpecErrors } from "./spec-errors.js";
 import { everyShape } from "./schema-form.fixtures.js";
 
-/** The API's pinned list of the shapes its catalogue emits (`ReportCatalogueTests.FormShapes`). */
+/** The API test that pins the shapes its catalogue emits (`ReportCatalogueTests.FormShapes`); absent in a checkout of the web app alone. */
+const API_TEST = fileURLToPath(
+  new URL("../../../../../../../../../../tests/Unit/Nocturne.API.Tests/Reports/ReportCatalogueTests.cs", import.meta.url),
+);
+
 function apiShapes(): string[] {
-  const path = fileURLToPath(
-    new URL("../../../../../../../../../../tests/Unit/Nocturne.API.Tests/Reports/ReportCatalogueTests.cs", import.meta.url),
-  );
-  const source = readFileSync(path, "utf8");
-  const block = /FormShapes\s*=\s*\[([\s\S]*?)\];/.exec(source)?.[1] ?? "";
+  const block = /FormShapes\s*=\s*\[([\s\S]*?)\];/.exec(readFileSync(API_TEST, "utf8"))?.[1] ?? "";
   return [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
 }
 
 describe("the parameter form's shapes", () => {
-  it("are the shapes the API says its catalogue emits", () => {
+  it("are the shapes the API says its catalogue emits", (ctx) => {
+    if (!existsSync(API_TEST)) ctx.skip("The API tests are not in this checkout.");
     expect([...FORM_SHAPES].sort()).toEqual(apiShapes().sort());
   });
 
@@ -37,8 +38,9 @@ describe("the parameter form's shapes", () => {
     expect(Object.keys(everyShape).sort()).toEqual([...FORM_SHAPES].sort());
   });
 
-  it("finds no control for a shape it does not draw", () => {
-    expect(controlFor({ type: "string", format: "uri" } as ParameterSchema)).not.toBeNull();
+  it("finds no control for a shape it does not draw, a format included", () => {
+    expect(controlFor({ type: "string", format: "date-time" } as ParameterSchema)).toBeNull();
+    expect(controlFor({ type: "string", format: "time" })).toBeNull();
     expect(controlFor({ type: "array", items: { type: "integer" } })).toBeNull();
     expect(controlFor({ type: "string", "x-input": "colour" })).toBeNull();
   });
@@ -83,13 +85,16 @@ describe("the validator's messages", () => {
     expect(routed.panels.get(0)!.panel).toEqual(["Use only letters."]);
   });
 
-  it("show at a leaf field with its items, and at a group only when they name the group", () => {
+  it("show at a leaf field with its items, and at a group or a list item only when they name it", () => {
     const messages = [
-      { path: "cohorts[0].dayOfWeek[2]", message: "Send one of: Mon, Tue." },
-      { path: "cohorts[0]", message: "Check this group." },
+      { path: "cohorts[0].dayOfWeek[2]", message: "Pick weekdays from the list." },
+      { path: "cohorts[0].timeOfDay", message: "The window starts and ends at the same time." },
+      { path: "cohorts[1]", message: "Send an object." },
     ];
-    expect(messagesAt(messages, "cohorts[0].dayOfWeek", true)).toEqual(["Send one of: Mon, Tue."]);
-    expect(messagesAt(messages, "cohorts[0]", false)).toEqual(["Check this group."]);
+    expect(messagesAt(messages, "cohorts[0].dayOfWeek", true)).toEqual(["Pick weekdays from the list."]);
+    expect(messagesAt(messages, "cohorts[0].timeOfDay", false)).toEqual(["The window starts and ends at the same time."]);
+    expect(messagesAt(messages, "cohorts[0].timeOfDay.fromMinute", true)).toEqual([]);
+    expect(messagesAt(messages, "cohorts[1]", false)).toEqual(["Send an object."]);
     expect(messagesAt(messages, "cohorts", false)).toEqual([]);
   });
 });
