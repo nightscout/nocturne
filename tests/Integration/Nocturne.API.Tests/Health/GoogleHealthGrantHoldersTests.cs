@@ -134,7 +134,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
 
     private PostgresGoogleHealthGrantHolders Holders() =>
         new(provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<INocturneDbContextFactory>(),
-            NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
+            provider.GetRequiredService<ITenantRepository>(), NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
     private async Task StoreAsync(Guid tenant, GoogleHealthSessionStore sessions, string refreshToken, string account)
     {
