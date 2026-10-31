@@ -10,6 +10,8 @@
   import { scaleBand, scaleLinear } from "d3-scale";
   import type { ChartFormat } from "../format.js";
   import StackedBar from "./StackedBar.svelte";
+  import StaticBars from "./static/StaticBars.svelte";
+  import type { StaticRender } from "../theme/static-theme.js";
   import { bandScale, barLayout, valueScale, type BarSegment } from "./bar-layout.js";
   import { formatReportValue, type ReportField, type ReportPanel } from "./types.js";
 
@@ -17,9 +19,11 @@
     panel: ReportPanel;
     format: ChartFormat;
     heightClass?: string;
+    /** Drawn on a canvas in the theme's colours, with no tooltip, for an image. */
+    static?: StaticRender;
   }
 
-  let { panel, format, heightClass = "h-[280px]" }: Props = $props();
+  let { panel, format, heightClass = "h-[280px]", static: still }: Props = $props();
 
   const layout = $derived(barLayout(panel));
   const data = $derived(layout.categories.map((category) => ({ category })));
@@ -75,7 +79,9 @@
   </Tooltip.Root>
 {/snippet}
 
-{#if layout.segments.length === 0}
+{#if still}
+  <StaticBars {still} {layout} {single} {whole} {withUnit} title={panel.title ?? panel.dataset} context={panel.context} />
+{:else if layout.segments.length === 0}
   <p class="flex {heightClass} items-center justify-center text-sm text-muted-foreground">No data in this range.</p>
 {:else if single}
   <div class="w-full py-2" data-testid="report-bar" data-orientation="horizontal">

@@ -30,6 +30,11 @@
       "svelte": "./src/print/index.ts",
       "default": "./src/print/index.ts"
     },
+    "./server": {
+      "types": "./src/server.ts",
+      "svelte": "./src/server.ts",
+      "default": "./src/server.ts"
+    },
     "./themes/nocturne.css": "./src/themes/nocturne.css"
   },
   "scripts": {

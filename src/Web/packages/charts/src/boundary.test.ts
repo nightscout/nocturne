@@ -21,8 +21,16 @@ const FORBIDDEN: { pattern: RegExp; reason: string }[] = [
   { pattern: /(^|\/)stores\/|-store(\.|$)/, reason: "app store" },
 ];
 
-/** The only @nocturne/ui modules allowed: plain TS with no Svelte and nothing of the app. */
-const UI_ALLOWED = new Set(["@nocturne/ui/glucose", "@nocturne/ui/utils"]);
+/**
+ * The only @nocturne/ui modules allowed: plain TS with no Svelte and nothing of the app, and the
+ * stylesheets the static theme reads as text.
+ */
+const UI_ALLOWED = new Set([
+  "@nocturne/ui/glucose",
+  "@nocturne/ui/utils",
+  "@nocturne/ui/theme.css?raw",
+  "@nocturne/ui/styles/nocturne-theme.css?raw",
+]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

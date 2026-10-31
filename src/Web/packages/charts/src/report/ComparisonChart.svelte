@@ -10,6 +10,8 @@
   import type { ChartFormat } from "../format.js";
   import ComparisonRow from "./ComparisonRow.svelte";
   import StackedBar, { type StackedBarSegment } from "./StackedBar.svelte";
+  import StaticComparison from "./static/StaticComparison.svelte";
+  import type { StaticRender } from "../theme/static-theme.js";
   import { GLUCOSE_PATTERNS } from "./bar-layout.js";
   import { comparisonBar } from "./comparison.js";
   import type { ReportPanel, ReportRow } from "./types.js";
@@ -18,9 +20,11 @@
     panel: ReportPanel;
     format: ChartFormat;
     emptyText: string;
+    /** Drawn on a canvas in the theme's colours, for an image. */
+    static?: StaticRender;
   }
 
-  let { panel, format, emptyText }: Props = $props();
+  let { panel, format, emptyText, static: still }: Props = $props();
 
   const label = (name: string) => panel.fields.find((f) => f.name === name)?.label ?? name;
   const text = (row: ReportRow, name: string) => (typeof row[name] === "string" ? String(row[name]) : "");
@@ -75,7 +79,17 @@
   }
 </script>
 
-{#if panel.rows.length === 0}
+{#if still}
+  <StaticComparison
+    {still}
+    title={panel.title ?? panel.dataset}
+    context={panel.context}
+    {sides}
+    {groups}
+    rowOf={rowProps}
+    columns={{ label: label("label"), a: label("a"), b: label("b"), delta: label("delta") }}
+  />
+{:else if panel.rows.length === 0}
   <p class="py-6 text-center text-sm text-muted-foreground">{emptyText}</p>
 {:else}
   <div class="@container flex flex-col gap-4" data-testid="report-comparison">

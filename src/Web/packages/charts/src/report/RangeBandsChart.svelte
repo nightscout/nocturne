@@ -15,6 +15,8 @@
 <script lang="ts">
   import { Axis, Chart, LinearGradient, Rect, Rule, Spline, Svg, Tooltip } from "layerchart";
   import PercentileBands from "./PercentileBands.svelte";
+  import StaticRangeBands from "./static/StaticRangeBands.svelte";
+  import type { StaticRender } from "../theme/static-theme.js";
   import { cohortBands, GLUCOSE_BANDS, type BandColors, type PercentileAggregate } from "./percentile-bands.js";
   import { reportGlucoseStops } from "./glucose-scale.js";
   import type { LineColorMode } from "../view/glucose-gradient-stops.js";
@@ -41,9 +43,19 @@
     oncontext?: (text: string) => void;
     /** Single events drawn faintly under their cohort's bands. */
     traces?: ReportTrace[];
+    /** Drawn on a canvas in the theme's colours, with no tooltip, for an image. */
+    static?: StaticRender;
   }
 
-  let { panel, format, heightClass = "h-[280px]", lineColorMode = "continuous", oncontext, traces = [] }: Props = $props();
+  let {
+    panel,
+    format,
+    heightClass = "h-[280px]",
+    lineColorMode = "continuous",
+    oncontext,
+    traces = [],
+    static: still,
+  }: Props = $props();
 
   type Slot = { aggregate: PercentileAggregate | null; row: ReportRow | null };
   type Point = { slot: number; index: number };
@@ -171,7 +183,33 @@
   }
 </script>
 
-{#if xs.length === 0 || !median}
+{#if still && median}
+  <StaticRangeBands
+    {still}
+    title={panel.title ?? panel.dataset}
+    context={panel.context}
+    {lineColorMode}
+    comparisonLabel="Comparison range"
+    model={{
+      slotCount: xs.length,
+      groups,
+      median,
+      outer: edges.length === 4,
+      named: seriesName !== null,
+      hasComparison,
+      rangeColoured,
+      thresholds,
+      yDomain,
+      ticks,
+      tickLabel,
+      valueLabel: (v: number) => formatReportValue(v, median, format),
+      zeroSlot,
+      traces,
+      slotOf,
+      traceColor,
+    }}
+  />
+{:else if xs.length === 0 || !median}
   <p class="flex {heightClass} items-center justify-center text-sm text-muted-foreground">
     No data in this range.
   </p>

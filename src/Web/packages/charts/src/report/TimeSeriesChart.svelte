@@ -13,6 +13,8 @@
   import { formatClockTime, type ChartFormat, type GlucoseUnits } from "../format.js";
   import type { ChartLabels } from "../labels.js";
   import ReportMarkerLayer, { type PlacedMarker } from "./ReportMarkerLayer.svelte";
+  import StaticTimeSeries from "./static/StaticTimeSeries.svelte";
+  import type { StaticRender } from "../theme/static-theme.js";
   import type { LineColorMode } from "../view/glucose-gradient-stops.js";
   import { reportGlucoseStops } from "./glucose-scale.js";
   import {
@@ -33,6 +35,8 @@
     /** The chart's words, which the treatment markers write their amounts with; no markers are drawn without them. */
     labels?: ChartLabels;
     glucoseUnits?: GlucoseUnits;
+    /** Drawn on a canvas in the theme's colours, with no tooltip, for an image. */
+    static?: StaticRender;
   }
 
   let {
@@ -42,6 +46,7 @@
     lineColorMode = "continuous",
     labels,
     glucoseUnits = "mg/dl",
+    static: still,
   }: Props = $props();
 
   type Point = { time: Date; row: ReportRow };
@@ -140,7 +145,16 @@
   });
 </script>
 
-{#if points.length === 0}
+{#if still}
+  <StaticTimeSeries
+    {still}
+    title={panel.title ?? panel.dataset}
+    context={panel.context}
+    {lineColorMode}
+    {labels}
+    model={{ points, lines, band, bandPoints, thresholds, yMax, xDomain, formatTick: time, drawnFor, placeMarkers }}
+  />
+{:else if points.length === 0}
   <p class="flex {heightClass} items-center justify-center text-sm text-muted-foreground">
     No data in this range.
   </p>

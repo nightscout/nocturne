@@ -8,6 +8,8 @@
   import { createStaticChartView } from "./view/chart-data-view.svelte.js";
   import type { TransformedChartData } from "./transform.js";
   import type { PredictionData } from "./predictions.js";
+  import StaticGlucoseChart from "./static/StaticGlucoseChart.svelte";
+  import type { StaticRender } from "./theme/static-theme.js";
 
   type Props = Omit<ComponentProps<typeof GlucoseChartView>, "view"> & {
     data: TransformedChartData;
@@ -17,6 +19,8 @@
     now?: number;
     /** Forecast curves. They draw when `predictions.show` (the options) is also true. */
     predictionData?: PredictionData | null;
+    /** Drawn on a canvas in the theme's colours, with no tooltip or legend, for an image. */
+    static?: StaticRender;
   };
 
   let {
@@ -24,6 +28,7 @@
     xDomain,
     now,
     predictionData,
+    static: still,
     plotWidth = $bindable(0),
     plotHeight = $bindable(0),
     ...rest
@@ -45,4 +50,15 @@
   });
 </script>
 
-<GlucoseChartView {view} bind:plotWidth bind:plotHeight {...rest} />
+{#if still}
+  <StaticGlucoseChart
+    {still}
+    {view}
+    glucoseUnits={rest.glucoseUnits}
+    labels={rest.labels}
+    format={rest.format}
+    lineColorMode={rest.appearance?.lineColorMode ?? "continuous"}
+  />
+{:else}
+  <GlucoseChartView {view} bind:plotWidth bind:plotHeight {...rest} />
+{/if}

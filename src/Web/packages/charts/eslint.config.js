@@ -19,5 +19,11 @@ export default [
         { group: ["**/stores/*", "**/*-store", "**/*-store.*"], message: APP_ONLY }
       ]
     }
-  })
+  }),
+  {
+    // The static charts paint on a canvas with no stylesheet: layerchart's canvas marks take a
+    // label's font and a line's dashes only through `style`, and no class reaches them.
+    files: ["src/report/static/**/*.svelte", "src/static/**/*.svelte"],
+    rules: { "shadcn/no-inline-styles": "off" }
+  }
 ];
