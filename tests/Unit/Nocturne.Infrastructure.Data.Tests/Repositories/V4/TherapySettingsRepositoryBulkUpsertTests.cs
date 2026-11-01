@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -64,7 +65,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
             [Settings("p1:Default"), Settings("p1:Weekend")], WriteOrigin.Live);
 
         outcomes.Outcomes.Keys.Should().BeEquivalentTo(["p1:Default", "p1:Weekend"]);
-        outcomes.Outcomes.Values.Should().AllSatisfy(o => o.Created.Should().BeTrue());
+        outcomes.Outcomes.Values.Should().AllSatisfy(o => o.Outcome.Should().Be(UpsertOutcome.Created));
         _context.TherapySettings.Count().Should().Be(2);
         _broadcaster.Created.Should().HaveCount(2);
         _broadcaster.Updated.Should().BeEmpty();
@@ -79,7 +80,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
 
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync([changed], WriteOrigin.Live);
 
-        outcomes.Outcomes["p1:Default"].Created.Should().BeFalse();
+        outcomes.Outcomes["p1:Default"].Outcome.Should().Be(UpsertOutcome.Updated);
         outcomes.Outcomes["p1:Default"].Record.Id.Should().Be(storedId);
         changed.Id.Should().Be(storedId, "the update path hands the caller the stored identity");
         _context.TherapySettings.Count().Should().Be(1);
@@ -92,14 +93,14 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
     /// neither write nor broadcast, the same gate <c>UpdateAsync</c> applies per record.
     /// </summary>
     [Fact]
-    public async Task BulkUpsert_UnchangedReUpsert_IsReportedUpdatedButBroadcastsNothing()
+    public async Task BulkUpsert_UnchangedReUpsert_IsReportedUnchangedAndBroadcastsNothing()
     {
         await _repository.BulkUpsertByLegacyIdAsync([Settings("p1:Default")], WriteOrigin.Live);
         _broadcaster.Clear();
 
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync([Settings("p1:Default")], WriteOrigin.Live);
 
-        outcomes.Outcomes["p1:Default"].Created.Should().BeFalse();
+        outcomes.Outcomes["p1:Default"].Outcome.Should().Be(UpsertOutcome.Unchanged);
         _broadcaster.Created.Should().BeEmpty();
         _broadcaster.Updated.Should().BeEmpty();
     }
@@ -112,8 +113,8 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync(
             [Settings("p1:Default", dia: 5.0), Settings("p1:Weekend")], WriteOrigin.Live);
 
-        outcomes.Outcomes["p1:Default"].Created.Should().BeFalse();
-        outcomes.Outcomes["p1:Weekend"].Created.Should().BeTrue();
+        outcomes.Outcomes["p1:Default"].Outcome.Should().Be(UpsertOutcome.Updated);
+        outcomes.Outcomes["p1:Weekend"].Outcome.Should().Be(UpsertOutcome.Created);
         _context.TherapySettings.Count().Should().Be(2);
         _context.TherapySettings.Single(t => t.LegacyId == "p1:Default").Dia.Should().Be(5.0);
     }

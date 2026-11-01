@@ -3089,12 +3089,26 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// them every row again.
     /// </summary>
     private static bool HasNonTimestampModification(EntityEntry entry)
-        => entry.State == EntityState.Modified
-            && entry.Properties.Any(p =>
-                p.IsModified
-                && p.Metadata.Name != nameof(ISystemTimestamped.SysUpdatedAt)
-                && p.Metadata.Name != nameof(IEntityTimestamped.UpdatedAt)
-                && p.Metadata.Name != nameof(IUpstreamFingerprinted.UpstreamFingerprint));
+        => entry.State == EntityState.Modified && HasModificationBesideStamps(entry, countFingerprint: false);
+
+    /// <summary>
+    /// Whether a save would write nothing to the row of <paramref name="entry"/>, a tracked entity
+    /// just assigned to: no property is modified but the update stamps the save itself manages. The
+    /// fingerprint the open <see cref="UpstreamFingerprintScope"/> names is applied first, as the save
+    /// applies it, so a row whose fingerprint alone differs is still written.
+    /// </summary>
+    internal static bool WritesNothing(EntityEntry entry)
+    {
+        ApplyUpstreamFingerprint(entry);
+        return !HasModificationBesideStamps(entry, countFingerprint: true);
+    }
+
+    private static bool HasModificationBesideStamps(EntityEntry entry, bool countFingerprint)
+        => entry.Properties.Any(p =>
+            p.IsModified
+            && p.Metadata.Name != nameof(ISystemTimestamped.SysUpdatedAt)
+            && p.Metadata.Name != nameof(IEntityTimestamped.UpdatedAt)
+            && (countFingerprint || p.Metadata.Name != nameof(IUpstreamFingerprinted.UpstreamFingerprint)));
 
     /// <summary>
     /// Enforces tenant ownership on a tracked entity: stamps the resolved tenant on new

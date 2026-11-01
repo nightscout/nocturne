@@ -22,10 +22,28 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
     public int SkippedDeleted { get; } = skippedDeleted;
 
     /// <summary>
-    /// The written records that updated a stored row in place rather than inserting one; every other
-    /// written record was inserted. The same instances the collection enumerates.
+    /// The written records that updated a stored row in place rather than inserting one. The same
+    /// instances the collection enumerates.
     /// </summary>
     public IReadOnlyList<TRecord> Updated { get; init; } = [];
+
+    /// <summary>
+    /// The records whose stored row already held what they carry, so nothing was written for them.
+    /// Disjoint from <see cref="Updated"/>; the same instances the collection enumerates.
+    /// </summary>
+    public IReadOnlyList<TRecord> Unchanged { get; init; } = [];
+
+    /// <summary>The records that inserted a row: those neither <see cref="Updated"/> nor <see cref="Unchanged"/>.</summary>
+    public IReadOnlyList<TRecord> Created
+    {
+        get
+        {
+            if (Updated.Count == 0 && Unchanged.Count == 0)
+                return written;
+            var stored = new HashSet<object?>(Updated.Concat(Unchanged).Cast<object?>(), ReferenceEqualityComparer.Instance);
+            return written.Where(r => !stored.Contains(r)).ToList();
+        }
+    }
 
     /// <summary>
     /// Submitted records not written because writing them fails the same way every time, in

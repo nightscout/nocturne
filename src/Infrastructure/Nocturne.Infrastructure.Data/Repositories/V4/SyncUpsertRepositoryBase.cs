@@ -157,8 +157,8 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
     /// <summary>
     /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
-    /// rows in the DB by that key and update them in place. Persists the updates inside the transaction
-    /// before returning so the base's insert loop (which clears the tracker) doesn't lose them.
+    /// rows in the DB by that key and apply the write to them. Persists the updates inside the
+    /// transaction before returning so the base's insert loop (which clears the tracker) doesn't lose them.
     /// A key held by a row the user deleted drops the record from the batch, per
     /// <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>, and is counted in
     /// <see cref="V4RepositoryBase{TModel,TEntity}.UpsertSplit.SkippedDeleted"/>.
@@ -178,11 +178,8 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
             .ToList();
 
-        var updatedEntities = new List<TEntity>();
-        var materiallyChanged = new List<TEntity>();
-        var vacated = new List<TModel>();
         if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, vacated, entities, 0);
+            return UpsertSplit.Empty(entities);
 
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
@@ -201,6 +198,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             .ToDictionary(g => g.Key, g => g.GoverningRow()!);
 
         var toInsert = new List<TEntity>();
+        var split = UpsertSplit.Empty(toInsert);
         var skippedDeleted = 0;
         foreach (var entity in entities)
         {
@@ -216,13 +214,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
                 var before = ToDomain(existing);
                 ApplySyncUpsert(existing, ToDomain(entity));
-                updatedEntities.Add(existing);
-                // Capture material changes now, before SaveChanges clears the modified flags.
-                if (HasMaterialChange(ctx, existing))
-                {
-                    materiallyChanged.Add(existing);
-                    vacated.Add(before);
-                }
+                split.Classify(ctx, existing, before);
             }
             else
             {
@@ -230,12 +222,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             }
         }
 
-        if (updatedEntities.Count > 0)
-        {
-            // Persist updates before the insert-chunking loop clears the tracker.
-            await ctx.SaveChangesAsync(ct);
-        }
-
-        return new UpsertSplit(updatedEntities, materiallyChanged, vacated, toInsert, skippedDeleted);
+        await split.SaveAsync(ctx, ct);
+        return split with { SkippedDeleted = skippedDeleted };
     }
 }

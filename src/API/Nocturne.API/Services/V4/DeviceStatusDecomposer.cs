@@ -150,16 +150,16 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         if (ds.Override is { Active: not null })
         {
-            var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.IV4Record>();
-            await DecomposeOverrideAsync(ds, legacyId ?? GroupKey(written), result, ct);
+            var stored = result.StoredRecords.OfType<V4Models.IV4Record>();
+            await DecomposeOverrideAsync(ds, legacyId ?? GroupKey(stored), result, ct);
         }
 
         var snapshotAttempted = ds.Pump != null || apsAttempted || ds.Uploader != null || ds.UploaderBattery.HasValue;
-        var snapshotWritten = result.CreatedRecords.Concat(result.UpdatedRecords)
+        var snapshotStored = result.StoredRecords
             .Any(r => r is V4Models.ApsSnapshot or V4Models.PumpSnapshot or V4Models.UploaderSnapshot);
 
         // See the held-snapshot filter in DecomposeBatchAsync.
-        if (!snapshotAttempted || snapshotWritten)
+        if (!snapshotAttempted || snapshotStored)
             await DecomposeExtrasAsync(ds, result, origin, ct);
 
         return result;
@@ -202,7 +202,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
     private Task StampLoopAsync(V4Models.DecompositionResult result, CancellationToken ct) =>
         _closedLoop.AfterSnapshotsWrittenAsync(
-            result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.ApsSnapshot>(), ct);
+            result.StoredRecords.OfType<V4Models.ApsSnapshot>(), ct);
 
     #endregion
 
@@ -975,13 +975,13 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             // Extras carry no legacy id, so nothing holds them when a re-run's snapshots are all
             // withheld; written anyway they would join nothing. A stored group's extras row, already
             // live under the correlation id the group keeps, holds its own re-send off in BulkCreateAsync.
-            var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.IV4Record>()
+            var stored = result.StoredRecords.OfType<V4Models.IV4Record>()
                 .Select(r => r.CorrelationId)
                 .ToHashSet();
             var held = apsList.Select(a => a.CorrelationId)
                 .Concat(pumpList.Select(p => p.CorrelationId))
                 .Concat(uploaderList.Select(u => u.CorrelationId))
-                .Where(id => !written.Contains(id))
+                .Where(id => !stored.Contains(id))
                 .ToHashSet();
             extrasList.RemoveAll(e => held.Contains(e.CorrelationId));
 
@@ -990,19 +990,19 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         await StampLoopAsync(result, ct);
 
-        var writtenSnapshots = result.CreatedRecords.Concat(result.UpdatedRecords)
+        var storedSnapshots = result.StoredRecords
             .OfType<V4Models.IV4Record>()
             .ToLookup(r => r.CorrelationId);
         // Newest first: the batch's APS rows are already stored and would contradict older observations.
         foreach (var (ds, correlationId) in overrideStatuses.OrderByDescending(o => ResolveTimestamp(o.Status)))
         {
-            await DecomposeOverrideAsync(ds, ds.Id ?? GroupKey(writtenSnapshots[correlationId]), result, ct);
+            await DecomposeOverrideAsync(ds, ds.Id ?? GroupKey(storedSnapshots[correlationId]), result, ct);
         }
 
         // Post-insert pump suspension pass: sequential, order-dependent
         if (pumpList.Count > 0)
         {
-            var persistedPumps = result.CreatedRecords.Concat(result.UpdatedRecords)
+            var persistedPumps = result.StoredRecords
                 .OfType<V4Models.PumpSnapshot>()
                 .OrderBy(p => p.Timestamp)
                 .ToList();

@@ -1292,7 +1292,7 @@ internal class MigrationJob
         /// record, so a deleted record is a skipped document.
         /// </remarks>
         public DecompositionTally Add(DecompositionResult result, bool oneRecordPerDocument) => new(
-            RecordsStored + result.CreatedRecords.Count + result.UpdatedRecords.Count,
+            RecordsStored + result.StoredRecords.Count(),
             RecordsSkippedDeleted + result.SkippedDeleted,
             DocumentsSkippedDeleted + (oneRecordPerDocument ? result.SkippedDeleted : 0),
             DocumentsSkippedUnsupported + result.SkippedUnsupported);

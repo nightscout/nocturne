@@ -30,6 +30,15 @@ public class DecompositionResult
     public List<object> UpdatedRecords { get; } = [];
 
     /// <summary>
+    /// Records whose stored row already held what the decomposition produced, so nothing was
+    /// written for them.
+    /// </summary>
+    public List<object> UnchangedRecords { get; } = [];
+
+    /// <summary>Every record the decomposition leaves stored: created, updated or unchanged.</summary>
+    public IEnumerable<object> StoredRecords => CreatedRecords.Concat(UpdatedRecords).Concat(UnchangedRecords);
+
+    /// <summary>
     /// Records not written because the user had deleted them. A re-import never brings those back.
     /// </summary>
     public int SkippedDeleted { get; set; }
