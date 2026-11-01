@@ -106,7 +106,7 @@ test.describe("custom report builder", () => {
     await page.goto(`${tenant.webUrl}/reports/custom/${id}`);
     await expect(page.getByRole("heading", { name: "Glucose against insulin on board" })).toBeVisible();
     await expect(page.getByTestId("report-x-caption").first()).toHaveText("IOB (U)");
-    await expect(page.getByText("Correlation with glucose shifted later")).toBeVisible();
+    await expect(page.getByText("Correlation of IOB with glucose shifted earlier and later")).toBeVisible();
 
     const download = page.waitForEvent("download");
     await page.getByTestId("download-panel-png").first().click();

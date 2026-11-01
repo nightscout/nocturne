@@ -1,7 +1,8 @@
 <!--
   One source of a derived layer: the data it reads, that data's settings, and the field it uses. Only
-  data along an axis the op takes, and fields that fold onto a grid, are offered (the API's catalogue).
-  "Copy from layer" fills the source from a layer the chart already shows.
+  data along an axis the op takes, and fields of the data that fold onto a grid, are offered (the API's
+  catalogue). Data that comes in groups asks which group the source reads. "Copy from layer" fills the
+  source from a layer the chart already shows. A message no control here shows is listed at the top.
 -->
 <script lang="ts">
   import type { CustomReportOp } from "#lib/api/generated/nocturne-api-client.js";
@@ -36,10 +37,28 @@
   const schema: ParameterSchema = $derived(dataset?.parameters ?? {});
   const datasetMessages = $derived([...messagesUnder(messages, "dataset.name"), ...messagesUnder(messages, "dataset").filter((m) => m.path === "")]);
   const fieldMessages = $derived(messagesUnder(messages, "field"));
-  const other = $derived(messages.filter((m) => m.path === ""));
+  const seriesMessages = $derived(messagesUnder(messages, "series"));
+  const groups = $derived(draft.sourceGroups(source.dataset, source.parameters));
+  const parameterKeys = $derived(new Set(Object.keys(schema.properties ?? {})));
+  /** Every message no control here shows: all of them for a source worked out from other data, which shows none. */
+  const other = $derived(
+    source.derived
+      ? messages
+      : messages.filter((m) => {
+          if (m.path === "dataset" || m.path === "dataset.name" || m.path === "field" || m.path === "series") return false;
+          return !(m.path.startsWith("dataset.") && parameterKeys.has(m.path.slice("dataset.".length).split(/[.[]/)[0]));
+        }),
+  );
 
   function chooseDataset(name: string) {
-    onchange({ dataset: name, parameters: {}, derived: null, field: draft.sourceFields(name, op)[0] ?? "" });
+    const first = draft.sourceGroups(name, {}).length > 1 ? 1 : undefined;
+    onchange({ dataset: name, parameters: {}, derived: null, field: draft.sourceFields(name, op)[0] ?? "", series: first });
+  }
+
+  function setParameters(parameters: Record<string, unknown>) {
+    const count = draft.sourceGroups(source.dataset, parameters).length;
+    const series = count > 1 ? Math.min(source.series ?? 1, count) : undefined;
+    onchange({ ...source, parameters, series });
   }
 
   function layerName(layer: DraftLayer): string {
@@ -88,6 +107,29 @@
           <p class="text-xs text-destructive" role="alert" data-testid="field-error">{message.message}</p>
         {/each}
       </div>
+      {#if groups.length > 1 || seriesMessages.length > 0}
+        <div class="space-y-1.5">
+          <Label for="{idPrefix}-series" size="sm">Group</Label>
+          <Select.Root
+            type="single"
+            value={source.series === undefined ? "" : String(source.series)}
+            onValueChange={(value: string) => onchange({ ...source, series: Number(value) })}
+            {disabled}
+          >
+            <Select.Trigger id="{idPrefix}-series" class="w-full" aria-invalid={seriesMessages.length > 0} data-testid="source-series">
+              {source.series === undefined ? "Choose" : `Group ${source.series}`}
+            </Select.Trigger>
+            <Select.Content>
+              {#each groups as group (group)}
+                <Select.Item value={String(group)} label="Group {group}">Group {group}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+          {#each seriesMessages as message, i (i)}
+            <p class="text-xs text-destructive" role="alert" data-testid="field-error">{message.message}</p>
+          {/each}
+        </div>
+      {/if}
     </div>
     {#if layers.length > 0}
       <div class="space-y-1.5">
@@ -113,7 +155,7 @@
     <SchemaForm
       {schema}
       value={source.parameters}
-      onchange={(parameters) => onchange({ ...source, parameters })}
+      onchange={setParameters}
       idPrefix="{idPrefix}-parameter"
       messages={messagesUnder(messages, "dataset")}
       {disabled}

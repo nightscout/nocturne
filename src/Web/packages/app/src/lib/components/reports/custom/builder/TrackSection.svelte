@@ -22,6 +22,7 @@
     messages: TrackMessages | undefined;
     /** The last preview's word on each layer of the track, by layer id. */
     previews: Map<string, LayerPreview>;
+    /** The axis the chart lies along, as the layers or the last preview say. */
     xKind: string | null;
     maxTitleLength: number;
     disabled?: boolean;

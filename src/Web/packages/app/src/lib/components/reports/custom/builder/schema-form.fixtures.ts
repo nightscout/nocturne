@@ -72,9 +72,9 @@ function dataset(overrides: Partial<CustomReportDataset>): CustomReportDataset {
     permitted: true,
     parameters: { type: "object", additionalProperties: false },
     fields: [
-      { name: "timeInRangePercent", label: "Time in range", kind: "percent", unit: "%", description: "x", permitted: true },
-      { name: "mean", label: "Mean", kind: "number", unit: "mg/dL", description: "x", permitted: true },
-      { name: "tdd", label: "Insulin per day", kind: "number", unit: "U", description: "x", scope: "treatments.read", permitted: false },
+      { name: "timeInRangePercent", label: "Time in range", kind: "percent", unit: "%", description: "x", permitted: true, setting: false },
+      { name: "mean", label: "Mean", kind: "number", unit: "mg/dL", description: "x", permitted: true, setting: false },
+      { name: "tdd", label: "Insulin per day", kind: "number", unit: "U", description: "x", scope: "treatments.read", permitted: false, setting: false },
     ],
     xKinds: [],
     panelKinds: columnsKinds,
@@ -87,9 +87,9 @@ function dataset(overrides: Partial<CustomReportDataset>): CustomReportDataset {
   };
 }
 
-const time = { name: "time", label: "Time", kind: "time", description: "x", permitted: true };
-const glucose = { name: "glucose", label: "Glucose", kind: "number", unit: "mg/dL", description: "x", permitted: true, aggregate: "mean" };
-const iob = { name: "iob", label: "IOB", kind: "number", unit: "U", description: "x", permitted: true, aggregate: "mean", scope: "treatments.read" };
+const time = { name: "time", label: "Time", kind: "time", description: "x", permitted: true, setting: false };
+const glucose = { name: "glucose", label: "Glucose", kind: "number", unit: "mg/dL", description: "x", permitted: true, aggregate: "mean", setting: false };
+const iob = { name: "iob", label: "IOB", kind: "number", unit: "U", description: "x", permitted: true, aggregate: "mean", scope: "treatments.read", setting: false };
 
 const lineSlots = [
   { key: "x", label: "Horizontal axis", input: "field", fields: ["time"], counts: [], required: true, choices: [] },
@@ -126,6 +126,7 @@ export const catalogue: CustomReportCatalogue = {
       xRule: "The source's axis.",
       unitRule: "The source's unit.",
       sourceXKinds: ["time"],
+      outputXKinds: ["time"],
       sourceFieldKinds: ["number", "percent"],
       marks: [{ name: "line", defaultBindings: { x: "x", y: ["value"] } }],
     },
@@ -138,6 +139,7 @@ export const catalogue: CustomReportCatalogue = {
       xRule: "Values of source a.",
       unitRule: "Source b's unit up, source a's along the axis.",
       sourceXKinds: ["time"],
+      outputXKinds: ["value"],
       sourceFieldKinds: ["number", "percent"],
       marks: [{ name: "points", defaultBindings: { x: "a", y: ["b"], fit: "fit" } }],
     },

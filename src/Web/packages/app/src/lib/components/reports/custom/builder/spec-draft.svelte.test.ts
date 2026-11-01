@@ -72,16 +72,54 @@ describe("the builder's draft of a spec", () => {
 
     const derived = draft.panels[0].tracks[1].layers[0].derived!;
     expect(derived.a).toEqual({ dataset: "glucose_series", parameters: {}, derived: null, field: "glucose" });
-    expect(derived.b).toEqual(derived.a);
+    expect(derived.b, "a second source starts empty, for the member to choose").toEqual({ dataset: null, parameters: {}, derived: null, field: "" });
     expect(draft.panels[0].tracks[1].layers[0]).toMatchObject({ dataset: null, mark: "points", bindings: { x: "a", y: ["b"], fit: "fit" } });
 
-    const iobLayer = { ...draft.panels[0].tracks[0].layers[0], bindings: { x: "time", y: ["iob"] } };
+    const iobLayer = { ...draft.panels[0].tracks[0].layers[0], bindings: { x: "time", y: ["iob"] }, range: { hours: 12 } };
+    draft.copySource(0, 1, 0, "b", draft.panels[0].tracks[0].layers[0]);
     draft.copySource(0, 1, 0, "a", iobLayer);
     expect(draft.panels[0].tracks[1].layers[0].derived!.a.field).toBe("iob");
+    expect(draft.panels[0].tracks[1].layers[0].range, "the copied layer's range comes with it").toEqual({ hours: 12 });
 
     expect(draft.toSpec()).toMatchObject({
       panels: [{ tracks: [{}, { layers: [{ derived: { op: "scatter", a: { dataset: { name: "glucose_series" }, field: "iob" }, b: { field: "glucose" } } }] }] }],
     });
+  });
+
+  it("tells the axis a chart lies along from its layers, and offers only the ops whose layer lies along it", () => {
+    const draft = new SpecDraft(catalogue, chartTemplate.spec);
+    const panel = draft.panels[0];
+
+    expect(draft.panelXKind(panel)).toBe("time");
+    expect(draft.opsAlong("time").map((o) => o.name)).toEqual(["rolling_mean"]);
+    expect(draft.opsAlong(null).map((o) => o.name)).toEqual(["rolling_mean", "scatter"]);
+    draft.setLayerOp(0, 1, 0, "scatter");
+    expect(draft.layerXKind(panel.tracks[1].layers[0])).toBe("value");
+    expect(draft.panelXKind(panel, panel.tracks[0].layers[0])).toBe("value");
+  });
+
+  it("asks which group a source reads of data that comes in groups, one for each group its settings list", () => {
+    const grouped = {
+      ...catalogue,
+      datasets: catalogue.datasets.map((d) => (d.name === "glucose_series" ? { ...d, seriesField: "cohort", seriesParameter: "cohorts" } : d)),
+    };
+    const draft = new SpecDraft(grouped);
+
+    expect(draft.sourceGroups("glucose_series", {})).toEqual([1]);
+    expect(draft.sourceGroups("glucose_series", { cohorts: [{}, {}, {}] })).toEqual([1, 2, 3]);
+    expect(draft.sourceGroups("glucose_statistics", { cohorts: [{}, {}] })).toEqual([]);
+  });
+
+  it("never offers a profile setting as a source", () => {
+    const withSetting = {
+      ...catalogue,
+      datasets: catalogue.datasets.map((d) =>
+        d.name === "glucose_series" ? { ...d, fields: d.fields.map((f) => (f.name === "iob" ? { ...f, setting: true } : f)) } : d,
+      ),
+    };
+    const draft = new SpecDraft(withSetting);
+
+    expect(draft.sourceFields("glucose_series", withSetting.ops[0])).toEqual(["glucose"]);
   });
 
   it("turns a chart into figures of its dataset where that dataset can be shown so, and back", () => {

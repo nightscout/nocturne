@@ -18,6 +18,8 @@ export interface DraftSource {
   parameters: DatasetParameters;
   derived: DraftDerived | null;
   field: string;
+  /** The group it reads, from 1, of data that comes in groups; undefined for data in one group. */
+  series?: number;
 }
 
 /** A series the API derives: its op, its settings and its sources. */
@@ -64,6 +66,9 @@ export interface DraftPanel {
   parameters: DatasetParameters;
   columns?: string[];
 }
+
+/** The field kinds a chart's horizontal axis may be. */
+const AXIS_KINDS = new Set(["time", "offset", "time_of_day", "day", "category"]);
 
 /** The track heights the builder offers, as shares of the chart's height. */
 export const TRACK_HEIGHTS = { small: 0.5, normal: 1, large: 2 } as const;
@@ -118,7 +123,18 @@ function splitDataset(value: unknown): { name: string | null; parameters: Datase
 function readSource(value: unknown): DraftSource {
   const source = isObject(value) ? value : {};
   const { name, parameters } = splitDataset(source.dataset);
-  return { dataset: name, parameters, derived: isObject(source.derived) ? readDerived(source.derived) : null, field: text(source.field) ?? "" };
+  return {
+    dataset: name,
+    parameters,
+    derived: isObject(source.derived) ? readDerived(source.derived) : null,
+    field: text(source.field) ?? "",
+    series: typeof source.series === "number" ? source.series : undefined,
+  };
+}
+
+/** A source with nothing chosen yet. */
+function emptySource(): DraftSource {
+  return { dataset: null, parameters: {}, derived: null, field: "" };
 }
 
 function readDerived(value: Record<string, unknown>): DraftDerived {
@@ -129,7 +145,7 @@ function readDerived(value: Record<string, unknown>): DraftDerived {
 function sourceJson(source: DraftSource): Record<string, unknown> {
   return source.derived
     ? { derived: derivedJson(source.derived), field: source.field }
-    : { dataset: { name: source.dataset, ...source.parameters }, field: source.field };
+    : { dataset: { name: source.dataset, ...source.parameters }, field: source.field, series: source.series };
 }
 
 function derivedJson(derived: DraftDerived): Record<string, unknown> {
@@ -463,9 +479,9 @@ export class SpecDraft {
   }
 
   /**
-   * A layer derived by `op`: its sources start as the query of the panel's first dataset layer (or
-   * the first chart dataset) and its first field an op may use, so a member starts from data the
-   * chart already shows.
+   * A layer derived by `op`: its first source starts as the query of the panel's first dataset layer
+   * (or the first chart dataset) and its first field an op may use, so a member starts from data the
+   * chart already shows; a second source starts empty, for the member to choose.
    */
   setLayerOp(index: number, track: number, layer: number, op: string) {
     const panel = this.panels[index];
@@ -477,7 +493,7 @@ export class SpecDraft {
       op,
       parameters: l.derived?.op === op ? l.derived.parameters : {},
       a: l.derived?.a ?? start,
-      b: found.sources === 2 ? (l.derived?.b ?? { ...start, parameters: { ...start.parameters } }) : null,
+      b: found.sources === 2 ? (l.derived?.b ?? emptySource()) : null,
     };
     l.dataset = null;
     l.parameters = {};
@@ -499,11 +515,54 @@ export class SpecDraft {
     return this.chartDatasets.filter((d) => d.xKinds.some((k) => op.sourceXKinds.includes(k)));
   }
 
-  /** The fields of a dataset a source may use: numbers that fold onto a grid. */
+  /** The fields of a dataset a source may use: numbers of the data that fold onto a grid, never a profile setting. */
   sourceFields(datasetName: string | null, op: CustomReportOp): string[] {
     return (this.dataset(datasetName)?.fields ?? [])
-      .filter((f) => op.sourceFieldKinds.includes(f.kind) && f.aggregate)
+      .filter((f) => op.sourceFieldKinds.includes(f.kind) && f.aggregate && !f.setting)
       .map((f) => f.name);
+  }
+
+  /** The groups a source of `dataset` with `parameters` may read, 1 to the number of groups; empty for data in one group. */
+  sourceGroups(datasetName: string | null, parameters: DatasetParameters): number[] {
+    const dataset = this.dataset(datasetName);
+    if (!dataset?.seriesField || !dataset.seriesParameter) return [];
+    const listed = parameters[dataset.seriesParameter];
+    const count = Array.isArray(listed) && listed.length > 0 ? listed.length : 1;
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }
+
+  /**
+   * The axis a layer lies along as far as the builder can tell before a preview: its x field's kind
+   * for a dataset, or for a derived series the axis its op gives the axis of its first source.
+   */
+  layerXKind(layer: DraftLayer): string | null {
+    if (layer.derived) return this.#derivedXKind(layer.derived);
+    const dataset = this.dataset(layer.dataset);
+    const x = typeof layer.bindings.x === "string" ? layer.bindings.x : dataset?.marks.find((m) => m.name === layer.mark)?.defaultBindings.x;
+    const field = dataset?.fields.find((f) => f.name === x);
+    return field && AXIS_KINDS.has(field.kind) ? field.kind : null;
+  }
+
+  #derivedXKind(derived: DraftDerived): string | null {
+    const op = this.op(derived.op);
+    const source = derived.a.derived ? this.#derivedXKind(derived.a.derived) : (this.dataset(derived.a.dataset)?.xKinds.find((k) => op?.sourceXKinds.includes(k)) ?? null);
+    const at = source === null || !op ? -1 : op.sourceXKinds.indexOf(source);
+    return at < 0 || !op ? null : (op.outputXKinds[at] ?? null);
+  }
+
+  /** The axis a panel's chart lies along as far as the builder can tell: its first layer's that says, leaving out `except`. */
+  panelXKind(panel: DraftPanel, except?: DraftLayer): string | null {
+    for (const layer of panel.tracks.flatMap((t) => t.layers)) {
+      if (layer === except) continue;
+      const kind = this.layerXKind(layer);
+      if (kind) return kind;
+    }
+    return null;
+  }
+
+  /** The ops a layer of a chart along `xKind` may use: those whose layer lies along it; every op when the axis is not known. */
+  opsAlong(xKind: string | null): CustomReportOp[] {
+    return xKind === null ? this.catalogue.ops : this.catalogue.ops.filter((op) => op.outputXKinds.includes(xKind));
   }
 
   setSource(index: number, track: number, layer: number, which: "a" | "b", source: DraftSource) {
@@ -513,14 +572,25 @@ export class SpecDraft {
     else l.derived.b = source;
   }
 
-  /** A source that reads what another layer of the panel reads, with that layer's first drawn field where a source may use it. */
+  /**
+   * A source that reads what another layer of the panel reads, with that layer's first drawn field where
+   * a source may use it, and the layer's range, so the source covers what that layer shows.
+   */
   copySource(index: number, track: number, layer: number, which: "a" | "b", from: DraftLayer) {
     const l = this.layer(index, track, layer);
     const op = this.op(l?.derived?.op);
     if (!l?.derived || !op || !from.dataset) return;
     const usable = this.sourceFields(from.dataset, op);
     const drawn = strings(from.bindings.y)?.find((f) => usable.includes(f)) ?? usable[0] ?? "";
-    this.setSource(index, track, layer, which, { dataset: from.dataset, parameters: { ...from.parameters }, derived: null, field: drawn });
+    const groups = this.sourceGroups(from.dataset, from.parameters);
+    this.setSource(index, track, layer, which, {
+      dataset: from.dataset,
+      parameters: { ...from.parameters },
+      derived: null,
+      field: drawn,
+      series: groups.length > 1 ? 1 : undefined,
+    });
+    l.range = from.range ? { ...from.range } : null;
   }
 
   setOpParameters(index: number, track: number, layer: number, parameters: DatasetParameters) {

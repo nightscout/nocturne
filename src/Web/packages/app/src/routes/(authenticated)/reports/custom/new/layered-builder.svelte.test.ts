@@ -134,12 +134,11 @@ describe("the report builder on a chart of tracks of layers", () => {
 
     const row = track.getByTestId("layer-row").nth(1);
     await row.getByLabelText("Data").first().click();
-    await page.getByRole("option", { name: /Scatter/ }).click();
+    await page.getByRole("option", { name: /Rolling mean/ }).click();
 
-    await expect.element(row.getByText("First source")).toBeVisible();
-    await expect.element(row.getByText("Second source")).toBeVisible();
+    await expect.element(row.getByText("Source", { exact: true })).toBeVisible();
     await vi.waitFor(() => expect(lastSpec().panels[0].tracks[0].layers[1].derived).toMatchObject({
-      op: "scatter", a: { dataset: { name: "glucose_series" }, field: "glucose" }, b: { field: "glucose" },
+      op: "rolling_mean", a: { dataset: { name: "glucose_series" }, field: "glucose" },
     }), { timeout: 3000 });
 
     await row.getByTestId("copy-source").first().click();
@@ -147,6 +146,43 @@ describe("the report builder on a chart of tracks of layers", () => {
     await vi.waitFor(() => expect(lastSpec().panels[0].tracks[0].layers[1].derived).toMatchObject({ a: { field: "iob" } }), { timeout: 3000 });
 
     await expect.element(row.getByTestId("layer-status")).toHaveTextContent("needs the treatments permission");
+  });
+
+  it("offers on a chart over time only the ops whose layer lies along time", async () => {
+    catalogue.ops.push({ ...catalogue.ops[1], name: "lag_correlation", label: "Lag correlation", outputXKinds: ["lag"] });
+    await openTemplate();
+    const track = page.getByTestId("track-section").nth(0);
+    await track.getByTestId("add-layer").click();
+
+    await track.getByTestId("layer-row").nth(1).getByLabelText("Data").first().click();
+
+    await expect.element(page.getByRole("option", { name: /Rolling mean/ })).toBeVisible();
+    expect(page.getByRole("option", { name: /Lag correlation/ }).elements()).toHaveLength(0);
+    expect(page.getByRole("option", { name: /Scatter/ }).elements()).toHaveLength(0);
+  });
+
+  it("shows on the layer row every message whose path names no control of it", async () => {
+    const at = "panels[0].tracks[0].layers[1]";
+    const messages = [
+      { path: `${at}.bindings`, message: "Bindings as a whole." },
+      { path: `${at}.derived`, message: "The derived series as a whole." },
+      { path: `${at}.derived.op`, message: "The op is not known." },
+      { path: `${at}.derived.a.derived.op`, message: "The source's op is not known." },
+      { path: `${at}.derived.a.series`, message: "This data comes in 2 groups." },
+    ];
+    respond = (spec) => {
+      const derived = (spec as unknown as Spec).panels[0].tracks[0].layers[1]?.derived;
+      return derived ? { result: undefined, spec, errors: messages } : chartRun(spec);
+    };
+    await openTemplate();
+    const track = page.getByTestId("track-section").nth(0);
+    await track.getByTestId("add-layer").click();
+    const row = track.getByTestId("layer-row").nth(1);
+    await row.getByLabelText("Data").first().click();
+    await page.getByRole("option", { name: /Rolling mean/ }).click();
+
+    for (const { message } of messages)
+      await expect.element(row.getByTestId("field-error").filter({ hasText: message })).toBeVisible();
   });
 
   it("puts the validator's unit message on the layer row its path names", async () => {

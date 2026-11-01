@@ -2,7 +2,8 @@
   One layer of a chart track: its data (a dataset, or a series worked out from one or two sources),
   that data's settings, the mark that draws it, its bindings under Advanced, and on a chart that is
   not over time its own range. The axis it is drawn on and whether it was drawn are the last
-  preview's; every choice is the API's catalogue's and every message the API validator's.
+  preview's; every choice is the API's catalogue's and every message the API validator's. A message
+  no control of the row shows is listed at its top.
 -->
 <script lang="ts" module>
   /** What the last preview said of a layer. */
@@ -26,7 +27,7 @@
   import RangeControl from "./RangeControl.svelte";
   import SchemaForm from "./SchemaForm.svelte";
   import SourceEditor from "./SourceEditor.svelte";
-  import { messagesUnder, type LayerMessages } from "./spec-errors.js";
+  import { messagesUnder, unshown, type LayerMessages } from "./spec-errors.js";
   import type { SpecDraft } from "./spec-draft.svelte.js";
 
   interface Props {
@@ -36,7 +37,7 @@
     layer: number;
     messages: LayerMessages | undefined;
     preview: LayerPreview | null;
-    /** The axis the chart lies along in the last preview, which decides whether a layer may have its own range. */
+    /** The axis the chart lies along, as its layers or the last preview say: it decides whether a layer may have its own range. */
     xKind: string | null;
     maxTitleLength: number;
     disabled?: boolean;
@@ -57,6 +58,23 @@
   const others = $derived((panel?.tracks ?? []).flatMap((t) => t.layers).filter((l) => l.dataset && l.key !== item?.key));
   const opMessages = $derived((messages?.derived ?? []).filter((m) => !/^[ab](\.|$)/.test(m.path)));
   const ownRange = $derived(xKind === "time_of_day" || xKind === "offset" || xKind === "day");
+  /** The ops a layer along the axis the panel's other layers lie along may use, and this layer's own op. */
+  const ops = $derived.by(() => {
+    const along = panel ? draft.opsAlong(draft.panelXKind(panel, item)) : draft.catalogue.ops;
+    return op && !along.includes(op) ? [...along, op] : along;
+  });
+  const stray = $derived.by(() => {
+    if (!messages || !item) return [];
+    const keys = (schema: { properties?: Record<string, unknown> } | undefined) => new Set(Object.keys(schema?.properties ?? {}));
+    const slotKeys = new Set(item.derived ? [] : slots.map((s) => s.key));
+    return [
+      ...messages.layer,
+      ...unshown(messages.bindings, slotKeys),
+      ...(item.derived ? unshown(opMessages, keys(op?.parameters)) : unshown(messages.parameters, keys(dataset?.parameters))),
+      ...(item.derived ? [] : messages.derived.map((m) => m.message)),
+      ...(item.derived && !item.derived.b ? messages.derived.filter((m) => /^b(\.|$)/.test(m.path)).map((m) => m.message) : []),
+    ];
+  });
 
   function choose(value: string) {
     const [kind, name] = value.split(":");
@@ -101,7 +119,7 @@
       </div>
     </div>
 
-    {#each messages?.layer ?? [] as message, i (i)}
+    {#each stray as message, i (i)}
       <p class="text-sm text-destructive" role="alert" data-testid="field-error">{message}</p>
     {/each}
     {#if preview && preview.status !== "ok" && preview.sentence}
@@ -131,7 +149,7 @@
             </Select.Group>
             <Select.Group>
               <Select.Label>Worked out from other data</Select.Label>
-              {#each draft.catalogue.ops as option (option.name)}
+              {#each ops as option (option.name)}
                 <Select.Item value="op:{option.name}" label={option.label}>
                   <div class="flex flex-col gap-0.5 py-0.5">
                     <span>{option.label}</span>

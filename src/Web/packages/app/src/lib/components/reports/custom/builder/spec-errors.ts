@@ -122,6 +122,11 @@ export function routeSpecErrors(errors: CustomReportSpecError[] | undefined): Sp
   return routed;
 }
 
+/** The messages no control of `keys` shows: the first part of their path names none of them, or they have no path. */
+export function unshown(messages: FieldMessage[], keys: ReadonlySet<string>): string[] {
+  return messages.filter((m) => !keys.has(m.path.split(/[.[]/)[0])).map((m) => m.message);
+}
+
 /**
  * The messages under `prefix` (`a`, `b.dataset`) with the prefix taken off their paths, for a form
  * drawn over part of a derived layer.

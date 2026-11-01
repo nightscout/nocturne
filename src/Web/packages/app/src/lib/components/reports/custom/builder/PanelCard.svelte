@@ -84,6 +84,13 @@
     ),
   );
 
+  /** The axis the chart lies along: as the layers say before a preview, else as the last preview said. */
+  const xKind = $derived(panel && chart ? (draft.panelXKind(panel) ?? ownPanel?.xKind ?? null) : null);
+  /** A chart over days or categories has no grid; the picker stays while a grid is set, so it can be taken off. */
+  const showGrid = $derived(
+    !(xKind === "day" || xKind === "category") || (panel?.grid !== null && panel?.grid !== undefined) || (messages?.grid.length ?? 0) > 0,
+  );
+
   const omitted = $derived.by(() => {
     const labels = new Map((dataset?.fields ?? []).map((f) => [f.name, f.label]));
     return (ownPanel?.omitted ?? []).map((o) => (o.field ? (labels.get(o.field) ?? o.field) : "")).filter((l) => l !== "");
@@ -186,7 +193,8 @@
         </div>
 
         {#if chart}
-          <div class="space-y-1.5">
+          {#if showGrid}
+          <div class="space-y-1.5" data-testid="grid-control">
             <Label for="{prefix}-grid" size="sm">Grid</Label>
             <Select.Root
               type="single"
@@ -205,6 +213,7 @@
               <p class="text-xs text-destructive" role="alert" data-testid="field-error">{message}</p>
             {/each}
           </div>
+          {/if}
         {:else}
           <div class="space-y-1.5">
             <Label for="{prefix}-dataset" size="sm">Data</Label>
@@ -244,7 +253,7 @@
             track={t}
             messages={messages?.trackMessages.get(t)}
             {previews}
-            xKind={ownPanel?.xKind ?? null}
+            {xKind}
             {maxTitleLength}
             {disabled}
           />

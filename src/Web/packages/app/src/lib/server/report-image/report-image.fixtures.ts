@@ -139,7 +139,7 @@ export const scatterPanel = chart("scatter", "Glucose against insulin on board",
 ], { grid: 15 });
 
 /** A lag correlation: r at each lag. */
-export const lagPanel = chart("lag", "Correlation with glucose shifted later", "lag", [
+export const lagPanel = chart("lag", "Correlation of IOB with glucose shifted earlier and later", "lag", [
   {
     id: "t1", height: 1, layers: [
       layer("lag", "Lag correlation · IOB and Glucose", "line", "left", null, { x: "lag", y: ["r"] },
