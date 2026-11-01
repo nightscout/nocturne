@@ -587,6 +587,32 @@ public class GoogleHealthTests : IDisposable
         Assert.Equal("expired_signin", error.Message);
     }
 
+    [Theory]
+    [InlineData("replacement.apps.googleusercontent.com", null)]
+    [InlineData(null, "https://other.test/api/v4/google-health/oauth/callback")]
+    public async Task A_client_changed_during_consent_restarts_the_signin_without_calling_google(
+        string? clientId, string? redirectUri)
+    {
+        var store = new TestConnectorStore();
+        var tenant = Guid.NewGuid();
+        var subject = Guid.NewGuid();
+        var handler = new StubHandler(_ => throw new InvalidOperationException("No Google request expected"));
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
+        var first = Service(store, handler, tenant, coordinator);
+        await first.SaveAsync(Options(), subject, default);
+        var authorization = await first.StartAsync(subject, null, default);
+        var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
+
+        var changed = Platform(clientId ?? "synthetic.apps.googleusercontent.com");
+        if (redirectUri is not null) changed.RedirectUri = redirectUri;
+        var afterChange = Service(store, handler, tenant, coordinator, platform: changed);
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => afterChange.CompleteAsync(
+            new GoogleHealthCallback { State = state, Code = "code" }, subject, default));
+        Assert.Equal("expired_signin", error.Message);
+        Assert.False(store.Secrets.ContainsKey("oauthFlow"));
+        Assert.Contains("https://accounts.google.com/", (await afterChange.StartAsync(subject, null, default)).Url);
+    }
+
     [Fact]
     public async Task Purge_invalidates_a_pending_oauth_flow_and_allows_a_fresh_signin()
     {
@@ -1765,7 +1791,7 @@ public class GoogleHealthTests : IDisposable
         IGoogleHealthGrantHolders? holders = null,
         TimeProvider? time = null)
     {
-        var platformOptions = Microsoft.Extensions.Options.Options.Create(platform ?? Platform());
+        var platformOptions = new FixedGoogleHealthPlatformSettings(platform ?? Platform());
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(value => value.IsResolved).Returns(true);
         tenant.SetupGet(value => value.TenantId).Returns(tenantId);
@@ -1908,7 +1934,7 @@ public class GoogleHealthTests : IDisposable
                     Configurations,
                     NullLogger<ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>.Instance,
                     TimeProvider.System),
-                Microsoft.Extensions.Options.Options.Create(Platform()));
+                new FixedGoogleHealthPlatformSettings(Platform()));
         }
 
         public IConnectorConfigurationService Configurations { get; }
