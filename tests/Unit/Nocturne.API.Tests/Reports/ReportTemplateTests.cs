@@ -23,6 +23,19 @@ public class ReportTemplateTests
     }
 
     [Fact]
+    public void Every_normalised_template_validates_again_as_the_api_writes_it()
+    {
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        foreach (var (template, spec) in ReportTemplates.Normalised(Validator, useMmol: false))
+        {
+            var json = System.Text.Json.JsonSerializer.SerializeToElement(spec, options);
+            var again = Validator.Validate(json);
+            again.Errors.Should().BeEmpty(template.Id);
+            System.Text.Json.JsonSerializer.Serialize(again.Spec, options).Should().Be(json.GetRawText(), template.Id);
+        }
+    }
+
+    [Fact]
     public void The_glucose_template_is_the_dashboard_chart_as_four_tracks()
     {
         var spec = ReportTemplates.Normalise(Validator, ReportTemplates.GlucoseSpec(6), false);

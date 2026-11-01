@@ -156,6 +156,9 @@ internal sealed partial class ReportSpecValidator
         }, (path, message) =>
         {
             var key = path[(at.Length + 1)..];
+            // A normalised spec writes the other kind's keys as null.
+            if (panel.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Null && ChartPanelKeys.Union(DatasetPanelKeys).Contains(key))
+                return;
             Error(path, kind == ReportPanelKind.Chart && DatasetPanelKeys.Contains(key)
                 ? $"A chart panel names its data in its layers. Remove '{key}'."
                 : kind is not null and not ReportPanelKind.Chart && ChartPanelKeys.Contains(key)

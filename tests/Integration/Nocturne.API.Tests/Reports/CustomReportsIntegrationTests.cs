@@ -66,8 +66,13 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         title,
         panels = new object[]
         {
-            new { dataset = new { name = "glucose_series" }, primitive = "time_series", bindings = new { y = new[] { "glucose" } }, range = new { hours = 6 } },
-            new { id = "stats", dataset = new { name = "glucose_statistics" }, primitive = "stat_tiles", range = new { hours = 336 } },
+            new
+            {
+                kind = "chart",
+                range = new { hours = 6 },
+                tracks = new[] { new { layers = new[] { new { dataset = new { name = "glucose_series" }, mark = "line", bindings = new { y = new[] { "glucose" } } } } } },
+            },
+            new { id = "stats", kind = "stat_tiles", dataset = new { name = "glucose_statistics" }, range = new { hours = 336 } },
         },
     };
 
@@ -149,7 +154,7 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         var refused = await ReadAsync(await a.PostAsJsonAsync(Route, new
         {
             name = "Broken",
-            spec = new { version = 1, panels = new object[] { new { dataset = new { name = "insulin" }, primitive = "table" } } },
+            spec = new { version = 1, panels = new object[] { new { kind = "table", dataset = new { name = "insulin" } } } },
         }), HttpStatusCode.BadRequest);
 
         refused.GetProperty("errors").GetProperty("panels[0].dataset.name")[0].GetString().Should().Contain("'insulin' is not a dataset");
@@ -259,7 +264,7 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
             cmd.CommandText = """
                 SELECT set_config('app.current_tenant_id', @tenant, false);
                 INSERT INTO report_specs (id, tenant_id, name, spec, version, created_at, updated_at)
-                VALUES (@id, @tenantId, 'Old', '{"version":0,"panels":[{"dataset":{"name":"glucose_series"},"primitive":"time_series","bindings":{"y":["glucose"]}}]}'::jsonb, 0, now(), now());
+                VALUES (@id, @tenantId, 'Old', '{"version":0,"panels":[{"kind":"table","dataset":{"name":"glucose_series"}}]}'::jsonb, 0, now(), now());
                 """;
             cmd.Parameters.AddWithValue("tenant", _tenantAId.ToString());
             cmd.Parameters.AddWithValue("id", id);
@@ -297,8 +302,8 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
             panels = Enumerable.Range(0, 4).Select(i => new
             {
                 id = $"meals{i}",
+                kind = "table",
                 dataset = new { name = "event_response", cohorts = new[] { cohort, cohort, cohort } },
-                primitive = "table",
                 range = new { hours = 72 },
             }).ToArray(),
         };
@@ -392,7 +397,8 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
     {
         using var owner = Session(_slugA, _sessionA);
         var templates = await ReadAsync(await owner.GetAsync($"{Route}/templates"), HttpStatusCode.OK);
-        templates.EnumerateArray().Select(t => t.GetProperty("id").GetString()).Should().Equal("glucose", "agp", "treatments", "comparison");
+        templates.EnumerateArray().Select(t => t.GetProperty("id").GetString()).Should()
+            .Equal("glucose", "agp", "treatments", "comparison", "weekdays", "insulin-glucose");
         foreach (var template in templates.EnumerateArray())
         {
             var run = await ReadAsync(await owner.PostAsJsonAsync($"{Route}/run", new { spec = template.GetProperty("spec") }), HttpStatusCode.OK);
@@ -414,6 +420,124 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         var records = (await ReadAsync(await viewer.PostAsJsonAsync($"{Route}/run", new { spec = treatments.GetProperty("spec") }), HttpStatusCode.OK))
             .GetProperty("result").GetProperty("panels")[1];
         records.GetProperty("status").GetString().Should().Be("not_permitted", "the treatment records need treatments.read");
+    }
+
+    /// <summary>Glucose every five minutes over the last <paramref name="hours"/> hours, rising and falling, and a bolus every two hours.</summary>
+    private async Task SeedGlucoseAndBolusesAsync(int hours)
+    {
+        using var client = Session(_slugA, _sessionA);
+        var now = DateTimeOffset.UtcNow;
+        var entries = Enumerable.Range(1, hours * 12).Select(i =>
+        {
+            var at = now.AddMinutes(-5 * i);
+            var sgv = (int)(140 + 60 * Math.Sin(i / 8.0));
+            return new { type = "sgv", sgv, direction = "Flat", date = at.ToUnixTimeMilliseconds(), dateString = at.UtcDateTime.ToString("o") };
+        }).ToArray();
+        (await client.PostAsJsonAsync("/api/v1/entries", entries)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var boluses = Enumerable.Range(1, hours / 2).Select(i => new
+        {
+            eventType = "Correction Bolus",
+            insulin = 1.0 + i % 3,
+            created_at = now.AddHours(-2 * i + 1).UtcDateTime.ToString("o"),
+        }).ToArray();
+        var response = await client.PostAsJsonAsync("/api/v1/treatments", boluses);
+        response.IsSuccessStatusCode.Should().BeTrue(await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task The_four_track_glucose_chart_runs_for_the_owner_and_degrades_for_a_glucose_only_viewer()
+    {
+        await SeedGlucoseAndBolusesAsync(6);
+        using var owner = Session(_slugA, _sessionA);
+        var glucose = (await ReadAsync(await owner.GetAsync($"{Route}/templates"), HttpStatusCode.OK)).EnumerateArray()
+            .Single(t => t.GetProperty("id").GetString() == "glucose").GetProperty("spec");
+
+        var full = (await ReadAsync(await owner.PostAsJsonAsync($"{Route}/run", new { spec = glucose }), HttpStatusCode.OK))
+            .GetProperty("result").GetProperty("panels")[0];
+        full.GetProperty("tracks").GetArrayLength().Should().Be(4);
+        var ownerLayers = full.GetProperty("tracks").EnumerateArray().SelectMany(t => t.GetProperty("layers").EnumerateArray())
+            .ToDictionary(l => l.GetProperty("id").GetString()!);
+        ownerLayers.Values.Should().OnlyContain(l => l.GetProperty("status").GetString() == "ok");
+        ownerLayers["glucose"].GetProperty("rows").GetArrayLength().Should().BeGreaterThan(60);
+        ownerLayers["treatments"].GetProperty("markers").GetArrayLength().Should().BeGreaterThan(0);
+        ownerLayers["iob"].GetProperty("side").GetString().Should().Be("left");
+        ownerLayers["cob"].GetProperty("side").GetString().Should().Be("right");
+
+        var (_, viewerSession) = await SeedViewerAsync("Glucose Chart Viewer");
+        using var viewer = Session(_slugA, viewerSession);
+        var degraded = (await ReadAsync(await viewer.PostAsJsonAsync($"{Route}/run", new { spec = glucose }), HttpStatusCode.OK))
+            .GetProperty("result").GetProperty("panels")[0];
+        degraded.GetProperty("status").GetString().Should().Be("ok");
+        var layers = degraded.GetProperty("tracks").EnumerateArray().SelectMany(t => t.GetProperty("layers").EnumerateArray())
+            .ToDictionary(l => l.GetProperty("id").GetString()!, l => l);
+        layers["glucose"].GetProperty("status").GetString().Should().Be("ok");
+        layers["glucose"].GetProperty("rows").GetArrayLength().Should().BeGreaterThan(60);
+        layers["basal"].GetProperty("status").GetString().Should().Be("not_permitted");
+        layers["spans"].GetProperty("status").GetString().Should().Be("not_permitted");
+        layers["treatments"].GetProperty("status").GetString().Should().Be("not_permitted");
+        layers["basal"].GetProperty("rows").GetArrayLength().Should().Be(0);
+        degraded.GetProperty("sentence").GetString().Should().Contain("Not shown:").And.Contain("Basal");
+    }
+
+    [Fact]
+    public async Task A_scatter_and_a_lag_correlation_over_the_seeded_tenant_give_a_finite_r()
+    {
+        await SeedGlucoseAndBolusesAsync(8);
+        using var owner = Session(_slugA, _sessionA);
+        object Source(string field) => new { dataset = new { name = "glucose_series" }, field };
+        object Panel(string id, string op) => new
+        {
+            id,
+            kind = "chart",
+            grid = 15,
+            tracks = new[] { new { layers = new[] { new { derived = new { op, a = Source("iob"), b = Source("glucose") } } } } },
+        };
+        var spec = new { version = 1, range = new { hours = 8 }, panels = new[] { Panel("scatter", "scatter"), Panel("lag", "lag_correlation") } };
+
+        var run = await ReadAsync(await owner.PostAsJsonAsync($"{Route}/run", new { spec }), HttpStatusCode.OK);
+
+        run.GetProperty("errors").GetArrayLength().Should().Be(0);
+        var panels = run.GetProperty("result").GetProperty("panels");
+        var scatter = panels[0].GetProperty("tracks")[0].GetProperty("layers")[0];
+        scatter.GetProperty("status").GetString().Should().Be("ok");
+        scatter.GetProperty("xKind").GetString().Should().Be("value");
+        var r = scatter.GetProperty("facts").EnumerateArray().Single(f => f.GetProperty("label").GetString() == "r").GetProperty("value").GetString();
+        double.IsFinite(double.Parse(r!, System.Globalization.CultureInfo.InvariantCulture)).Should().BeTrue();
+        var lag = panels[1].GetProperty("tracks")[0].GetProperty("layers")[0];
+        lag.GetProperty("xKind").GetString().Should().Be("lag");
+        lag.GetProperty("rows").GetArrayLength().Should().Be(25, "every 15 minutes from -180 to +180");
+        var best = lag.GetProperty("facts").EnumerateArray().Single(f => f.GetProperty("label").GetString() == "Largest r").GetProperty("value").GetString();
+        double.IsFinite(double.Parse(best!, System.Globalization.CultureInfo.InvariantCulture)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_spec_of_more_than_sixteen_reads_is_refused_with_the_count()
+    {
+        using var owner = Session(_slugA, _sessionA);
+        var panels = Enumerable.Range(1, 6).Select(i => new
+        {
+            kind = "chart",
+            range = new { hours = i },
+            tracks = new[]
+            {
+                new
+                {
+                    layers = new object[]
+                    {
+                        new { dataset = new { name = "glucose_series" } },
+                        new { dataset = new { name = "treatments" } },
+                        new { dataset = new { name = "basal_delivery" } },
+                    },
+                },
+            },
+        }).ToArray();
+
+        var run = await ReadAsync(await owner.PostAsJsonAsync($"{Route}/run", new { spec = new { version = 1, panels } }), HttpStatusCode.OK);
+
+        run.GetProperty("result").ValueKind.Should().Be(JsonValueKind.Null);
+        var error = run.GetProperty("errors").EnumerateArray().Should().ContainSingle().Subject;
+        error.GetProperty("path").GetString().Should().Be("panels");
+        error.GetProperty("message").GetString().Should().StartWith("This report reads 18 datasets; a report reads at most 16.");
     }
 
     [Fact]
