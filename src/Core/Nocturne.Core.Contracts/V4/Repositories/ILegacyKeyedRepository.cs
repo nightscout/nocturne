@@ -114,6 +114,12 @@ public interface ILegacyKeyedRepository<TRecord>
     Task<TRecord?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
     /// <summary>
+    /// Every record stored under any of <paramref name="legacyIds"/>, in one query, under the same
+    /// soft-delete visibility as <see cref="GetByLegacyIdAsync"/>.
+    /// </summary>
+    Task<IEnumerable<TRecord>> GetByLegacyIdsAsync(IEnumerable<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
     /// The record whose UUID <see cref="IV4Record.LegacyId"/> <see cref="Nocturne.Core.Models.MongoObjectId.Coerce"/>
     /// turns into <paramref name="objectId"/>, its 24-hex prefix: the id a legacy create echoed
     /// before it returned the stored record's own, which clients such as Loop cache and send back

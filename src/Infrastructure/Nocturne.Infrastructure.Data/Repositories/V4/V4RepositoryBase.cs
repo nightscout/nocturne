@@ -355,6 +355,21 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return entity is null ? null : ToDomain(entity);
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdsAsync" />
+    public async Task<IEnumerable<TModel>> GetByLegacyIdsAsync(
+        IEnumerable<string> legacyIds, CancellationToken ct = default)
+    {
+        var ids = legacyIds.Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0) return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.Set<TEntity>()
+            .AsNoTracking()
+            .Where(e => e.LegacyId != null && ids.Contains(e.LegacyId))
+            .ToListAsync(ct);
+        return entities.Select(ToDomain).ToList();
+    }
+
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdUuidPrefixAsync" />
     /// <remarks>
     /// Each range spans one case of one form, so it is correct under any collation that orders

@@ -455,7 +455,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         await FoldOverridesAsync(batch, spans, result, result.SpanOwners, ct);
         await FoldPumpModesAsync(spans, result, result.SpanOwners, ct);
-        await WriteSpansAsync(spans, result, result.SpanOwners, ct);
+        await spans.WriteAsync(_stateSpanService, result, result.SpanOwners, ct);
         return result;
     }
 
@@ -617,37 +617,6 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     #region Span Folds
 
     /// <summary>
-    /// The override and pump-mode spans the folds read and write: those read before the batch and
-    /// those the folds open. A read span the folds change is written back by id; an opened one is
-    /// upserted by its original id, as a span written on its own would be.
-    /// </summary>
-    private sealed class SpanState(List<StateSpan> overrides, List<StateSpan> pumpModes)
-    {
-        public List<StateSpan> Overrides { get; } = overrides;
-        public List<StateSpan> PumpModes { get; } = pumpModes;
-        public List<StateSpan> Opened { get; } = [];
-        public List<StateSpan> Changed { get; } = [];
-
-        public void Change(StateSpan span)
-        {
-            if (!Opened.Contains(span) && !Changed.Contains(span))
-                Changed.Add(span);
-        }
-
-        /// <summary>
-        /// An opened span takes the place in memory of the span already keyed to its original id,
-        /// which the upsert overwrites in the store.
-        /// </summary>
-        public void Open(List<StateSpan> category, StateSpan span)
-        {
-            if (!string.IsNullOrEmpty(span.OriginalId))
-                category.RemoveAll(s => s.OriginalId == span.OriginalId);
-            category.Add(span);
-            Opened.Add(span);
-        }
-    }
-
-    /// <summary>
     /// The spans the folds read, one query per category the batch observes: every open span, every span
     /// overlapping the batch's observations, and the first <see cref="OverrideQueryLimit"/> override spans
     /// after them from each observing device, which is as far as the next span of an observation is read.
@@ -672,7 +641,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             ? []
             : await _stateSpanService.GetStateSpansAroundAsync(
                 StateSpanCategory.PumpMode, transitions.Min(), transitions.Max(), [], 0, ct);
-        return new SpanState([.. overrides], [.. pumpModes]);
+        return new SpanState([.. overrides, .. pumpModes]);
     }
 
     /// <summary>
@@ -730,7 +699,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                   && metadata.OverrideScaleFactor() == observed.OverrideScaleFactor());
 
         var covered = false;
-        var containing = spans.Overrides
+        var containing = spans[StateSpanCategory.Override]
             .Where(s => s.StartTimestamp <= at && (s.EndTimestamp == null || s.EndTimestamp >= at))
             .ToList();
         foreach (var span in containing)
@@ -753,7 +722,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         if (observed is null || covered)
             return touched;
 
-        var next = spans.Overrides
+        var next = spans[StateSpanCategory.Override]
             .Where(s => (string.IsNullOrEmpty(device) || s.Source == device) && s.StartTimestamp >= at)
             .OrderBy(s => s.StartTimestamp)
             .Take(OverrideQueryLimit)
@@ -783,7 +752,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         if (firstLater < (opened.EndTimestamp ?? DateTime.MaxValue))
             opened.EndTimestamp = firstLater;
 
-        spans.Open(spans.Overrides, opened);
+        spans.Open(opened);
         touched.Add(opened);
         return touched;
     }
@@ -845,7 +814,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         // Prefer the pump's own clock for the transition; fall back to the ingestion timestamp.
         var transitionAt = ParseTimestampToDateTime(snapshot.Clock) ?? snapshot.Timestamp;
         var suspended = PumpModeState.Suspended.ToString();
-        var open = spans.PumpModes.Where(s => s.State == suspended && s.EndTimestamp == null).ToList();
+        var open = spans[StateSpanCategory.PumpMode].Where(s => s.State == suspended && s.EndTimestamp == null).ToList();
 
         if (nowSuspended)
         {
@@ -859,17 +828,17 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             // A span already keyed to this snapshot was opened by it, and upserting it again would
             // reopen a suspension a later resume closed.
             var key = $"pump-suspended:{snapshot.Id}";
-            if (open.Count > 0 || spans.PumpModes.Any(s => s.OriginalId == key))
+            if (open.Count > 0 || spans[StateSpanCategory.PumpMode].Any(s => s.OriginalId == key))
                 return [];
 
             var span = PumpModeSpan(suspended, transitionAt, snapshot.Device, key);
-            spans.Open(spans.PumpModes, span);
+            spans.Open(span);
             return [span];
         }
 
         // A Suspended span already ending at this transition means this resume was folded before; a
         // span starting after it belongs to a later suspension, which an older resume must not end.
-        if (spans.PumpModes.Any(s => s.State == suspended && s.EndTimestamp == transitionAt))
+        if (spans[StateSpanCategory.PumpMode].Any(s => s.State == suspended && s.EndTimestamp == transitionAt))
             return [];
         var closable = open.Where(s => s.StartTimestamp <= transitionAt).ToList();
 
@@ -888,13 +857,13 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
             // A span keyed to the prior snapshot already records this suspension.
             var backfillKey = $"pump-suspended:{prior.Id}";
-            if (spans.PumpModes.Any(s => s.OriginalId == backfillKey))
+            if (spans[StateSpanCategory.PumpMode].Any(s => s.OriginalId == backfillKey))
                 return [];
 
             var backfilled = PumpModeSpan(
                 suspended, ParseTimestampToDateTime(prior.Clock) ?? prior.Timestamp, snapshot.Device, backfillKey);
             backfilled.EndTimestamp = transitionAt;
-            spans.Open(spans.PumpModes, backfilled);
+            spans.Open(backfilled);
             return [backfilled];
         }
 
@@ -939,7 +908,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         // A span starting after the transition stays open, so re-decomposing an older snapshot can't
         // invert a newer span's range.
-        var touched = spans.PumpModes
+        var touched = spans[StateSpanCategory.PumpMode]
             .Where(s => s.State == opposite && s.EndTimestamp == null && s.StartTimestamp <= transitionAt)
             .ToList();
         foreach (var span in touched)
@@ -950,11 +919,11 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         // A span already keyed to this snapshot was opened by it; upserting it again would reopen it.
         var key = $"pump-mode:{snapshot.Id}";
-        if (spans.PumpModes.Any(s => (s.State == mode.ToString() && s.EndTimestamp == null) || s.OriginalId == key))
+        if (spans[StateSpanCategory.PumpMode].Any(s => (s.State == mode.ToString() && s.EndTimestamp == null) || s.OriginalId == key))
             return touched;
 
         var opened = PumpModeSpan(mode.ToString(), transitionAt, snapshot.Device, key);
-        spans.Open(spans.PumpModes, opened);
+        spans.Open(opened);
         touched.Add(opened);
         return touched;
     }
@@ -968,75 +937,6 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         Source = source,
         OriginalId = originalId,
     };
-
-    /// <summary>
-    /// The read spans the folds changed, in one update by id, then the spans they opened, in one upsert
-    /// in the order they were opened. An opened span a user-deleted row blocks wrote nothing.
-    /// </summary>
-    private async Task WriteSpansAsync(
-        SpanState spans, V4Models.DecompositionResult result, Dictionary<StateSpan, Guid> owners, CancellationToken ct)
-    {
-        if (spans.Changed.Count > 0)
-        {
-            IReadOnlyList<StateSpan?> updated;
-            try
-            {
-                updated = await _stateSpanService.UpdateStateSpansAsync(spans.Changed, ct);
-            }
-            catch (Exception ex) when (CommittedWrite.TryGet<IReadOnlyList<StateSpan?>>(ex, out var committed))
-            {
-                FoldUpdated(committed);
-                throw;
-            }
-
-            FoldUpdated(updated);
-        }
-
-        if (spans.Opened.Count > 0)
-        {
-            IReadOnlyList<StateSpanUpsert> upserted;
-            try
-            {
-                upserted = await _stateSpanService.UpsertStateSpansAsync(spans.Opened, ct);
-            }
-            catch (Exception ex) when (CommittedWrite.TryGet<IReadOnlyList<StateSpanUpsert>>(ex, out var committed))
-            {
-                FoldUpserted(committed);
-                throw;
-            }
-
-            FoldUpserted(upserted);
-        }
-
-        void FoldUpdated(IReadOnlyList<StateSpan?> updated)
-        {
-            foreach (var (span, written) in spans.Changed.Zip(updated))
-            {
-                if (written is null)
-                    continue;
-                owners[written] = owners[span];
-                result.UpdatedRecords.Add(written);
-            }
-        }
-
-        void FoldUpserted(IReadOnlyList<StateSpanUpsert> upserted)
-        {
-            foreach (var (span, (written, outcome)) in spans.Opened.Zip(upserted))
-            {
-                var records = outcome switch
-                {
-                    UpsertOutcome.Created => result.CreatedRecords,
-                    UpsertOutcome.Updated => result.UpdatedRecords,
-                    UpsertOutcome.Unchanged => result.UnchangedRecords,
-                    _ => null,
-                };
-                if (records is null)
-                    continue;
-                owners[written] = owners[span];
-                records.Add(written);
-            }
-        }
-    }
 
     #endregion
 

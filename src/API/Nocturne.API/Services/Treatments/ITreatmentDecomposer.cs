@@ -27,15 +27,22 @@ internal interface ITreatmentDecomposer
     Task<DecompositionResult> DecomposeAsync(Treatment treatment, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
-    /// Decomposes a batch of legacy Treatments into v4 records using bulk-insert operations,
-    /// eliminating per-record DB round-trips. State span treatments (TempBasal, ProfileSwitch,
-    /// Override, TemporaryTarget) are upserted individually since they require idempotent semantics.
-    /// Bolus-to-BolusCalculation linking is performed in a post-insert pass.
+    /// Decomposes a batch of legacy Treatments into v4 records with a fixed number of queries whatever
+    /// the batch's size.
     /// </summary>
-    /// <param name="treatments">The batch of legacy Treatments to decompose.</param>
-    /// <returns>A single <see cref="DecompositionResult"/> containing all created v4 records.</returns>
-    Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default);
+    /// <param name="treatments">The batch of legacy Treatments to decompose, in the order they were sent.</param>
+    /// <param name="into">
+    /// The decomposition to fill as each write commits, so a caller still reads what committed when the
+    /// batch throws part-way.
+    /// </param>
+    /// <param name="edit">
+    /// Whether the batch is a person's edit of a stored treatment, whose writes keep the caller's
+    /// attribution as the audit trail of the edit; an upload's are system-attributed.
+    /// </param>
+    /// <returns>What the batch wrote, and what each treatment of it wrote.</returns>
+    Task<TreatmentDecomposition> DecomposeBatchAsync(
+        IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default,
+        TreatmentDecomposition? into = null, bool edit = false);
 
     /// <summary>
     /// Deletes all v4 records that were decomposed from a legacy Treatment with the given ID, and

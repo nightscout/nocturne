@@ -395,9 +395,10 @@ public class TreatmentServiceTests
     {
         var insulin = new PatientInsulin { Id = Guid.NewGuid(), Name = "Fiasp", Role = InsulinRole.Bolus, IsPrimary = true };
         _mockInsulinRepo.Setup(x => x.GetPrimaryBolusInsulinAsync(It.IsAny<CancellationToken>())).ReturnsAsync(insulin);
-        var stored = new DecompositionResult();
+        var stored = new TreatmentDecomposition();
         _mockDecomposer
-            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Treatment>>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>(), null, false))
             .ReturnsAsync(stored);
         var bolus = new Treatment { EventType = "Correction Bolus", Insulin = 1 };
 

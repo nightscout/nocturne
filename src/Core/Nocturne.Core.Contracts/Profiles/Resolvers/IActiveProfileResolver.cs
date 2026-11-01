@@ -54,6 +54,13 @@ public interface IActiveProfileResolver
     /// time was uploaded with, or null if it carried none (e.g., non-AAPS source).
     /// </summary>
     Task<TreatmentInsulinContext?> GetActiveInsulinContextAsync(long timeMills, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="GetActiveInsulinContextAsync"/> at each of <paramref name="timesMills"/>, in order, from
+    /// one read of the activations spanning them.
+    /// </summary>
+    Task<IReadOnlyList<TreatmentInsulinContext?>> GetActiveInsulinContextsAsync(
+        IReadOnlyList<long> timesMills, CancellationToken ct = default);
 }
 
 /// <summary>

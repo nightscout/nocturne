@@ -259,7 +259,7 @@ public abstract class DecomposerBase
     /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, or, when the row
     /// already held it, in <see cref="DecompositionResult.UnchangedRecords"/>.
     /// </summary>
-    protected static async Task BulkUpsertAsync<TRecord>(
+    protected static async Task<BulkWrite<TRecord>> BulkUpsertAsync<TRecord>(
         IBulkUpsertRepository<TRecord> repository,
         List<TRecord> records,
         DecompositionResult result,
@@ -268,7 +268,7 @@ public abstract class DecomposerBase
         where TRecord : class
     {
         if (records.Count == 0)
-            return;
+            return [];
 
         BulkWrite<TRecord> written;
         try
@@ -282,6 +282,7 @@ public abstract class DecomposerBase
         }
 
         Fold(written, result);
+        return written;
     }
 
     protected static async Task BulkCreateAsync<TRecord>(

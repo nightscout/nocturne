@@ -71,10 +71,6 @@ public interface ITempBasalRepository
     Task<int> StampScheduledRatesAsync(
         string source, Func<DateTime, double> scheduledRateAt, CancellationToken ct = default);
 
-    /// <summary>The live temp basals under these legacy ids.</summary>
-    Task<IReadOnlyList<TempBasal>> GetByLegacyIdsAsync(
-        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
-
     /// <summary>
     /// Idempotently reconciles a source's temp basals within a date range: soft-deletes only the
     /// rows this source no longer reports (their legacy id is absent from

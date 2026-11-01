@@ -104,4 +104,28 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
             ? (await _repository.GetByIdAsync(requestedId, ct))?.Snapshot?.Insulin
             : null;
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TreatmentInsulinContext?>> GetActiveInsulinContextsAsync(
+        IReadOnlyList<long> timesMills, CancellationToken ct = default)
+    {
+        if (timesMills.Count == 0)
+            return [];
+
+        var segments = await _activations.GetRangeAsync(timesMills.Min(), timesMills.Max() + 1, ct);
+        var active = timesMills
+            .Select(t => segments.FirstOrDefault(s => s.StartMills <= t && t < s.EndMills)?.Active.Activation)
+            .ToList();
+        var requestedIds = active
+            .Where(a => a is { Snapshot.Insulin: null, RequestedActivationId: not null })
+            .Select(a => a!.RequestedActivationId!.Value)
+            .Distinct()
+            .ToList();
+        var requested = requestedIds.Count == 0
+            ? new Dictionary<Guid, ProfileActivation>()
+            : (await _repository.GetByIdsAsync(requestedIds, ct)).ToDictionary(a => a.Id);
+
+        return [.. active.Select(a => a?.Snapshot?.Insulin
+            ?? (a?.RequestedActivationId is { } id ? requested.GetValueOrDefault(id)?.Snapshot?.Insulin : null))];
+    }
 }
