@@ -73,6 +73,8 @@ const expected: Record<string, string> = {
   scatter: "var(--muted-foreground)",
   lag: "var(--primary)",
   week: "var(--glucose-high)",
+  // The weekend's middle line, in the series hue the API gave its layer.
+  weekdays: "var(--chart-1)",
 };
 
 describe.each(["light", "dark"] as const)("a report panel drawn as a PNG (%s)", (theme) => {

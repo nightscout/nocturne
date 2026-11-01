@@ -107,6 +107,25 @@ export const bandsPanel = chart("profile", "Glucose pattern over the day", "time
   },
 ], { context: "Last 14 days, 4025 readings." });
 
+/** The weekday template: two daily profile bands over the day, the second in the series hue the API gave it. */
+const profileLayer = (id: string, title: string, shift: number, color: string | null) =>
+  layer(id, title, "band", "left", "mg/dL", { x: "minuteOfDay", y: ["glucoseP50"], edges: ["glucoseP25", "glucoseP75"] },
+    [
+      field("minuteOfDay", "Time of day", "time_of_day", "min"),
+      field("glucoseP50", "Glucose median", "number", "mg/dL", { color: "glucose-in-range", glucoseScale: true }),
+      field("glucoseP25", "Glucose P25", "number", "mg/dL"),
+      field("glucoseP75", "Glucose P75", "number", "mg/dL"),
+    ],
+    Array.from({ length: 96 }, (_, i) => {
+      const m = 130 + shift + 30 * Math.sin((i / 96) * 2 * Math.PI + shift / 20);
+      return { minuteOfDay: i * 15, glucoseP50: m, glucoseP25: m - 20, glucoseP75: m + 25 };
+    }),
+    { xKind: "time_of_day", color });
+
+export const weekdaysPanel = chart("weekdays", "Glucose over the day: median and middle half", "time_of_day", [
+  { id: "t1", height: 1, layers: [profileLayer("weekdays", "Monday to Friday", 0, null), profileLayer("weekend", "Saturday and Sunday", 25, "chart-1")] },
+]);
+
 /** A scatter of glucose against IOB: points and the least-squares line. */
 export const scatterPanel = chart("scatter", "Glucose against insulin on board", "value", [
   {
@@ -241,7 +260,7 @@ export const statTilesPanel = {
 
 /** A report holding every panel above: every mark, every axis and every kind of panel. */
 export const everyPanel = report(
-  [glucoseChartPanel, bandsPanel, stackedBarPanel, barPanel, comparisonPanel, scatterPanel, lagPanel, dayBarsPanel, statTilesPanel].map((p, i) => ({
+  [glucoseChartPanel, bandsPanel, stackedBarPanel, barPanel, comparisonPanel, scatterPanel, lagPanel, dayBarsPanel, weekdaysPanel, statTilesPanel].map((p, i) => ({
     ...p,
     id: `${p.id}-${i}`,
   })),
