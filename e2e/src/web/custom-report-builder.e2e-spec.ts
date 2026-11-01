@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { postEntries, sgvSeries } from "../helpers/data.ts";
+import { minutesAgo, postEntries, postTreatments, sgvSeries } from "../helpers/data.ts";
 import { expect, signIn, test } from "./fixtures.ts";
 
 interface CustomReport {
@@ -61,8 +61,8 @@ test.describe("custom report builder", () => {
       panels: Array.from({ length: 4 }, (_, i) => ({
         id: `meals${i}`,
         title: `Meals ${i + 1}`,
+        kind: "table",
         dataset: { name: "event_response", cohorts: [cohort(), cohort(), cohort()] },
-        primitive: "table",
         range: { hours: 72 },
       })),
     };
@@ -79,5 +79,43 @@ test.describe("custom report builder", () => {
     await expect(page.getByTestId("panel-card")).toHaveCount(4);
     await expect(page.getByTestId("panel-preview").first().getByText("Correct the problems")).toHaveCount(0);
     await expect(page.getByTestId("panel-preview").first().getByRole("heading", { name: "Meals 1" })).toBeVisible();
+  });
+
+  test("saves the Insulin and glucose template, opens it, and downloads a chart of it as a PNG", async ({ page, seed }) => {
+    const tenant = await seed();
+    // Eight hours of glucose that rises and falls, and a bolus every two hours, so IOB varies with it.
+    await postEntries(tenant.api, sgvSeries({ count: 96, end: Date.now(), valueAt: (i) => Math.round(140 + 60 * Math.sin(i / 8)) }));
+    await postTreatments(tenant.api, Array.from({ length: 4 }, (_, i) => ({
+      eventType: "Correction Bolus",
+      insulin: 1 + i,
+      created_at: minutesAgo(30 + i * 120),
+    })));
+
+    await signIn(page, tenant);
+    await page.goto(`${tenant.webUrl}/reports/custom/new`);
+    await page.getByRole("button", { name: /Insulin and glucose/ }).click();
+    await expect(page.getByTestId("panel-card")).toHaveCount(2);
+    await expect(page.getByTestId("layer-row").first().getByTestId("layer-source").first()).toBeVisible();
+    await expect(page.getByTestId("panel-preview").first().getByTestId("report-layered-chart")).toBeVisible();
+
+    await page.getByLabel("Name", { exact: true }).fill("Insulin and glucose e2e");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page).toHaveURL(ID);
+    const id = ID.exec(page.url())![1];
+
+    await page.goto(`${tenant.webUrl}/reports/custom/${id}`);
+    await expect(page.getByRole("heading", { name: "Glucose against insulin on board" })).toBeVisible();
+    await expect(page.getByTestId("report-x-caption").first()).toHaveText("IOB (U)");
+    await expect(page.getByText("Correlation with glucose shifted later")).toBeVisible();
+
+    const download = page.waitForEvent("download");
+    await page.getByTestId("download-panel-png").first().click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe("glucose-against-insulin-on-board.png");
+    const path = await file.path();
+    const { readFile } = await import("node:fs/promises");
+    const png = await readFile(path);
+    expect([...png.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(png.length).toBeGreaterThan(10_000);
   });
 });
