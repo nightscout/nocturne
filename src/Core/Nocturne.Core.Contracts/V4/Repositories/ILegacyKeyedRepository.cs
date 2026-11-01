@@ -38,8 +38,9 @@ public interface IBulkUpsertRepository<TRecord>
     /// an update whose record carries none.
     /// </summary>
     /// <returns>
-    /// The written records, with <see cref="BulkWrite{TRecord}.Updated"/> naming those that updated
-    /// a stored row, and how many were withheld because the user had deleted them.
+    /// The stored records, with <see cref="BulkWrite{TRecord}.Updated"/> naming those that updated
+    /// a stored row and <see cref="BulkWrite{TRecord}.Unchanged"/> those whose row already held them,
+    /// and how many were withheld because the user had deleted them.
     /// </returns>
     Task<BulkWrite<TRecord>> BulkUpsertAsync(
         IEnumerable<TRecord> records, WriteOrigin origin, CancellationToken ct = default);
@@ -47,10 +48,23 @@ public interface IBulkUpsertRepository<TRecord>
 
 /// <summary>
 /// One record's outcome from <see cref="ILegacyKeyedRepository{TRecord}.BulkUpsertByLegacyIdAsync"/>:
-/// the persisted record and whether it was inserted rather than updated in place.
+/// the persisted record and what the write did to its row.
 /// </summary>
 /// <typeparam name="TRecord">The V4 record type.</typeparam>
-public sealed record LegacyUpsert<TRecord>(TRecord Record, bool Created);
+public sealed record LegacyUpsert<TRecord>(TRecord Record, UpsertOutcome Outcome);
+
+/// <summary>What an upsert did to a record's row.</summary>
+public enum UpsertOutcome
+{
+    /// <summary>No stored row carried the record, so one was inserted.</summary>
+    Created,
+
+    /// <summary>The stored row was rewritten with what the record carries.</summary>
+    Updated,
+
+    /// <summary>The stored row already held what the record carries, so nothing was written.</summary>
+    Unchanged,
+}
 
 /// <summary>
 /// A stored row's legacy id and the correlation id it carries, from

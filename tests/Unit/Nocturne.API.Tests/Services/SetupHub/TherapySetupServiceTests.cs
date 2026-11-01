@@ -78,7 +78,7 @@ public class TherapySetupServiceTests : IDisposable
         new TargetRangeScheduleRepository(_factory, _audit, NullLogger<TargetRangeScheduleRepository>.Instance),
         TempBasalTestDeps.NoReresolution(),
         Moq.Mock.Of<ILoopClosedLoopStamper>(),
-        TimeProvider.System, NullLogger<ProfileDecomposer>.Instance);
+        NullLogger<ProfileDecomposer>.Instance);
 
     private static readonly DateTime ProfileMadeAt = new(2026, 3, 1, 8, 0, 0, DateTimeKind.Utc);
 

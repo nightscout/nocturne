@@ -161,15 +161,15 @@ internal sealed class LegacyTreatmentStore(
     /// The create response for a decomposed treatment. It carries the id every read serves for the
     /// treatment, so a client that keeps the response id (Loop's objectIdCache, AAPS's nightscoutId)
     /// can edit and delete by it later; the client's own id stays stored as the records' LegacyId.
-    /// A treatment that wrote none of the projected tables keeps the id it was sent with.
+    /// A treatment stored in none of the projected tables keeps the id it was sent with.
     /// </summary>
     internal async Task<StoredTreatment> ToCreatedAsync(Treatment treatment, DecompositionResult result, CancellationToken ct)
     {
-        var written = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
-        if (written.OfType<TempBasal>().FirstOrDefault() is { } tempBasal)
+        var records = result.StoredRecords.ToList();
+        if (records.OfType<TempBasal>().FirstOrDefault() is { } tempBasal)
             return new StoredTreatment.Served(TempBasalToTreatmentMapper.ToTreatment(tempBasal), tempBasal.Id);
 
-        if (written.OfType<StateSpan>().FirstOrDefault(LegacyTreatmentTables.ServesStateSpan) is { OriginalId: { } spanKey })
+        if (records.OfType<StateSpan>().FirstOrDefault(LegacyTreatmentTables.ServesStateSpan) is { OriginalId: { } spanKey })
         {
             if (await _projection.GetProjectedStateSpanTreatmentAsync(spanKey, ct) is not { Id: { } spanId } span)
                 return new StoredTreatment.Unnamed(treatment);
@@ -179,7 +179,7 @@ internal sealed class LegacyTreatmentStore(
         }
 
         var served = LegacyTreatmentTables.ByServedPrecedence
-            .Select(table => written.OfType<IV4Record>().FirstOrDefault(table.Model.IsInstanceOfType))
+            .Select(table => records.OfType<IV4Record>().FirstOrDefault(table.Model.IsInstanceOfType))
             .FirstOrDefault(record => record is not null);
         if (served is null)
             return new StoredTreatment.Unnamed(treatment);

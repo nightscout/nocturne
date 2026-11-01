@@ -25,13 +25,9 @@ public abstract class DecomposerBase
     /// <remarks>
     /// <paramref name="preserveStoredCorrelationId"/> treats the stored correlation id as belonging to
     /// the row rather than to the decomposition that last touched it. A decomposer mints a fresh id per
-    /// call, so re-upserting an otherwise unchanged row modifies <see cref="IV4Record.CorrelationId"/>
-    /// and makes EF emit an UPDATE — one carrying no material change, so it neither audits nor
-    /// broadcasts, but still writes a row version. The column is indexed, so that update cannot be HOT
-    /// and appends to every index on the table; Npgsql writes a <see cref="Guid"/> big-endian, so a
-    /// UUID v7 id is byte-monotonic in the btree and those appends rarely refill the pages the dead
-    /// entries freed — only vacuum returns an entirely empty one, and not before two cycles — which is
-    /// why density collapses rather than settling. An empty stored id is ignored, so it still
+    /// call, which would otherwise make a re-upsert of an unchanged row a write of
+    /// <see cref="IV4Record.CorrelationId"/> alone: an indexed column, so a write no reader asked for
+    /// still appends to its btree. An empty stored id is ignored, so it still
     /// self-heals on the next write rather than being frozen and stamped across the group; a non-empty
     /// one is preserved regardless of origin, since nothing distinguishes a client-supplied id from a
     /// decomposer-minted one.
@@ -126,10 +122,9 @@ public abstract class DecomposerBase
     /// taken from the first of <paramref name="tables"/> that holds one.
     /// </summary>
     /// <remarks>
-    /// A re-send keeps that id rather than minting a fresh one. A fresh id makes an otherwise
-    /// unchanged re-upsert an UPDATE of the indexed correlation column, the bloat described on
-    /// <see cref="UpsertByLegacyIdAsync"/>, and a group row that carries no legacy id of its own
-    /// is found only through the stored id. Stamping every sibling with the one id also converges
+    /// A re-send keeps that id rather than minting a fresh one, so an unchanged re-send stays
+    /// unchanged (<see cref="UpsertByLegacyIdAsync"/>), and a group row that carries no legacy id of
+    /// its own is found only through the stored id. Stamping every sibling with the one id also converges
     /// a group that has forked.
     /// </remarks>
     protected static async Task<Dictionary<string, Guid>> GetStoredCorrelationIdsAsync(
@@ -261,8 +256,8 @@ public abstract class DecomposerBase
 
     /// <summary>
     /// The batch twin of <see cref="UpsertByLegacyIdAsync"/>: a record whose legacy id is stored
-    /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, so a resend
-    /// through the batch path writes what the same resend through the single path writes.
+    /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, or, when the row
+    /// already held it, in <see cref="DecompositionResult.UnchangedRecords"/>.
     /// </summary>
     protected static async Task BulkUpsertAsync<TRecord>(
         IBulkUpsertRepository<TRecord> repository,
@@ -275,11 +270,7 @@ public abstract class DecomposerBase
         if (records.Count == 0)
             return;
 
-        var written = await repository.BulkUpsertAsync(records, origin, ct);
-        var updated = new HashSet<TRecord>(written.Updated, ReferenceEqualityComparer.Instance);
-        result.CreatedRecords.AddRange(written.Where(r => !updated.Contains(r)));
-        result.UpdatedRecords.AddRange(written.Updated);
-        result.SkippedDeleted += written.SkippedDeleted;
+        Fold(await repository.BulkUpsertAsync(records, origin, ct), result);
     }
 
     protected static async Task BulkCreateAsync<TRecord>(
@@ -293,8 +284,15 @@ public abstract class DecomposerBase
         if (records.Count == 0)
             return;
 
-        var written = await repository.BulkCreateAsync(records, origin, ct);
-        result.CreatedRecords.AddRange(written);
+        Fold(await repository.BulkCreateAsync(records, origin, ct), result);
+    }
+
+    private static void Fold<TRecord>(BulkWrite<TRecord> written, DecompositionResult result)
+        where TRecord : class
+    {
+        result.CreatedRecords.AddRange(written.Created);
+        result.UpdatedRecords.AddRange(written.Updated);
+        result.UnchangedRecords.AddRange(written.Unchanged);
         result.SkippedDeleted += written.SkippedDeleted;
     }
 }

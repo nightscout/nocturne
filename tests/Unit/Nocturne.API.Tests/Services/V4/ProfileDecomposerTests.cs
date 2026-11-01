@@ -36,6 +36,40 @@ public class ProfileDecomposerTests
         });
     }
 
+    [Fact]
+    public async Task UnchangedResend_ReresolvesNoTempBasalsAndRestampsNoLoopSnapshots()
+    {
+        var repos = new Repositories(outcome: UpsertOutcome.Unchanged);
+
+        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+
+        result.UnchangedRecords.Should().HaveCount(5);
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        repos.TempBasalRates.Verify(r => r.AfterSchedulesWrittenAsync(
+            It.Is<IReadOnlyCollection<(string, DateTime)>>(v => v.Count == 0), It.IsAny<CancellationToken>()));
+        repos.ClosedLoop.Verify(r => r.AfterLoopSettingsWrittenAsync(
+            It.Is<IReadOnlyCollection<DateTime>>(s => s.Count == 0), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task ChangedResend_ReresolvesTempBasalsAndRestampsLoopSnapshots()
+    {
+        var repos = new Repositories(outcome: UpsertOutcome.Updated);
+        var profile = BuildProfile();
+
+        var result = await repos.Decomposer.DecomposeAsync(profile, WriteOrigin.Live);
+
+        result.UpdatedRecords.Should().HaveCount(5);
+        var start = ProfileDecomposer.VersionStart(profile);
+        repos.TempBasalRates.Verify(r => r.AfterSchedulesWrittenAsync(
+            It.Is<IReadOnlyCollection<(string ProfileName, DateTime Start)>>(v =>
+                v.Count == 2 && v.All(x => x.ProfileName == "Default" && x.Start == start)),
+            It.IsAny<CancellationToken>()));
+        repos.ClosedLoop.Verify(r => r.AfterLoopSettingsWrittenAsync(
+            It.Is<IReadOnlyCollection<DateTime>>(s => s.SequenceEqual(new[] { start })), It.IsAny<CancellationToken>()));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -395,7 +429,7 @@ public class ProfileDecomposerTests
     }
 
     /// <summary>
-    /// Five mocked repositories whose bulk upsert answers every record as created, under the
+    /// Five mocked repositories whose bulk upsert answers every record with <c>outcome</c>, under the
     /// correlation id it was handed — except the therapy settings anchor, which answers with
     /// <paramref name="anchorCorrelationId"/> as its stored id when one is given, and drops any
     /// record whose legacy id is in <paramref name="refusedLegacyIds"/>.
@@ -407,13 +441,18 @@ public class ProfileDecomposerTests
         public Dictionary<Type, bool> PreserveFlags { get; } = [];
         public List<int> Calls { get; } = [];
         public List<Guid?> SetDefaultCalls { get; } = [];
+        public Mock<ITempBasalRateReresolver> TempBasalRates { get; } = new();
+        public Mock<ILoopClosedLoopStamper> ClosedLoop { get; } = new();
+        private readonly UpsertOutcome _outcome;
 
         public Repositories(
             Guid? anchorCorrelationId = null,
             IReadOnlyCollection<string>? refusedLegacyIds = null,
             Action? onUpsert = null,
-            IReadOnlyList<TherapySettings>? storedSettings = null)
+            IReadOnlyList<TherapySettings>? storedSettings = null,
+            UpsertOutcome outcome = UpsertOutcome.Created)
         {
+            _outcome = outcome;
             var refused = refusedLegacyIds ?? [];
             var stored = storedSettings ?? [];
 
@@ -438,9 +477,9 @@ public class ProfileDecomposerTests
                 Mock<ICarbRatioScheduleRepository, CarbRatioSchedule>(null, [], onUpsert),
                 Mock<ISensitivityScheduleRepository, SensitivitySchedule>(null, [], onUpsert),
                 Mock<ITargetRangeScheduleRepository, TargetRangeSchedule>(null, [], onUpsert),
-                TempBasalTestDeps.NoReresolution(),
-                Moq.Mock.Of<ILoopClosedLoopStamper>(),
-                TimeProvider.System, NullLogger<ProfileDecomposer>.Instance);
+                TempBasalRates.Object,
+                ClosedLoop.Object,
+                NullLogger<ProfileDecomposer>.Instance);
         }
 
         private TRepo Mock<TRepo, TRecord>(
@@ -472,7 +511,7 @@ public class ProfileDecomposerTests
                         if (record.Id == Guid.Empty)
                             record.Id = Guid.CreateVersion7();
                         Written.Add(record);
-                        outcomes[record.LegacyId!] = new LegacyUpsert<TRecord>(record, Created: true);
+                        outcomes[record.LegacyId!] = new LegacyUpsert<TRecord>(record, _outcome);
                     }
                     return new LegacyUpsertBatch<TRecord>(outcomes, skippedDeleted);
                 });

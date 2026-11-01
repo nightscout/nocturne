@@ -1926,7 +1926,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         // Post-insert linking: Bolus → BolusCalculation by matching LegacyId
         if (bolusCalcLinkTreatmentIds.Count > 0)
         {
-            var persisted = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
+            var persisted = result.StoredRecords.ToList();
             var persistedBoluses = persisted.OfType<V4Models.Bolus>()
                 .Where(b => b.LegacyId != null && bolusCalcLinkTreatmentIds.Contains(b.LegacyId))
                 .ToList();
