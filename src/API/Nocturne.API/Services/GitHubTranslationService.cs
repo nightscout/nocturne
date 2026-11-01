@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Translations;
 using Nocturne.Core.Models.Translations;
 
@@ -65,7 +66,7 @@ public class GitHubTranslationService(
             throw;
         }
 
-        var safeLocaleForLog = ContributionValidation.ForLog(request.Locale);
+        var safeLocaleForLog = LogText.Sanitize(request.Locale);
         logger.LogInformation(
             "Opened translation PR #{PrNumber} for {Locale}: {Applied} applied, {Unmatched} unmatched",
             prNumber, safeLocaleForLog, result.Applied, result.Unmatched.Count);

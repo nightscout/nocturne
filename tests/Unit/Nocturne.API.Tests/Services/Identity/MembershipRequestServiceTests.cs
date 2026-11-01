@@ -13,13 +13,14 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Identity;
 
 public class MembershipRequestServiceTests : IDisposable
 {
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
-    private readonly Mock<ITenantService> _tenantService;
     private readonly Mock<IInAppNotificationService> _notificationService;
     private readonly MembershipRequestService _service;
 
@@ -35,7 +36,6 @@ public class MembershipRequestServiceTests : IDisposable
         // The service always works for the request's own tenant.
         _dbContext = _db.CreateContext(_tenantId);
 
-        _tenantService = new Mock<ITenantService>();
         _notificationService = new Mock<IInAppNotificationService>();
 
         _notificationService
@@ -49,9 +49,11 @@ public class MembershipRequestServiceTests : IDisposable
             .ReturnsAsync(new InAppNotificationDto());
 
         _service = new MembershipRequestService(
+            new TenantRepository(_dbContext.AsFactory()),
+            new TenantMembershipRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
             _dbContext.AsFactory(),
-            _tenantService.Object,
-            new TenantRoleService(_dbContext.AsFactory(), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), TimeProvider.System),
             _notificationService.Object,
             TimeProvider.System,
             NullLogger<MembershipRequestService>.Instance);
@@ -270,11 +272,45 @@ public class MembershipRequestServiceTests : IDisposable
         request.DecidedAt.Should().NotBeNull();
         request.RoleIds.Should().BeEquivalentTo(roleIds);
 
-        // Verify AddMemberAsync was called
-        _tenantService.Verify(t => t.AddMemberAsync(
-            _tenantId, _subjectId, roleIds,
-            null, null, false, It.IsAny<CancellationToken>()), Times.Once);
+        var member = await _dbContext.TenantMembers
+            .Include(m => m.MemberRoles)
+            .SingleAsync(m => m.TenantId == _tenantId && m.SubjectId == _subjectId);
+        member.LimitTo24Hours.Should().BeFalse();
+        member.MemberRoles.Select(r => r.TenantRoleId).Should().BeEquivalentTo(roleIds);
+        ApprovalNotifications().Should().ContainSingle();
     }
+
+    [Fact]
+    public async Task ApproveRequestAsync_SubjectAlreadyAMember_FailsAndLeavesTheRequestPending()
+    {
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+        var request = await _dbContext.MembershipRequests.FirstAsync();
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = _subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.ApproveRequestAsync(
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().NotBeNullOrEmpty();
+        await _dbContext.Entry(request).ReloadAsync();
+        request.Status.Should().Be("pending");
+        request.DecidedBySubjectId.Should().BeNull();
+        request.DecidedAt.Should().BeNull();
+        (await _dbContext.TenantMembers.CountAsync(m => m.SubjectId == _subjectId)).Should().Be(1);
+        ApprovalNotifications().Should().BeEmpty();
+    }
+
+    private IReadOnlyList<IInvocation> ApprovalNotifications() =>
+        _notificationService.Invocations
+            .Where(i => i.Method.Name == nameof(IInAppNotificationService.CreateNotificationAsync)
+                && (string)i.Arguments[1] == "membership.approved")
+            .ToList();
 
     [Fact]
     public async Task ApproveRequestAsync_ByAClampedApprover_AddsAClampedMember()
@@ -287,9 +323,8 @@ public class MembershipRequestServiceTests : IDisposable
             request.Id, _tenantId, roleIds, _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
 
         result.Success.Should().BeTrue();
-        _tenantService.Verify(t => t.AddMemberAsync(
-            _tenantId, _subjectId, roleIds,
-            null, null, true, It.IsAny<CancellationToken>()), Times.Once);
+        (await _dbContext.TenantMembers.SingleAsync(m => m.TenantId == _tenantId && m.SubjectId == _subjectId))
+            .LimitTo24Hours.Should().BeTrue();
     }
 
     [Fact]
@@ -315,10 +350,7 @@ public class MembershipRequestServiceTests : IDisposable
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be(MemberScopeResolver.ExemptFromHistoryClampDetail);
-        _tenantService.Verify(t => t.AddMemberAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<List<Guid>>(),
-            It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == _subjectId)).Should().BeFalse();
         await _dbContext.Entry(request).ReloadAsync();
         request.Status.Should().Be("pending");
     }

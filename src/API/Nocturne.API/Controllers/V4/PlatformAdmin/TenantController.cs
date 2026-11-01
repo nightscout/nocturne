@@ -91,14 +91,16 @@ public class TenantController : ControllerBase
     [RemoteCommand(Invalidates = ["GetById"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddMember(
         Guid id, [FromBody] AddMemberRequest request, CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
-        await _tenantService.AddMemberAsync(id, request.SubjectId, request.RoleIds, request.DirectPermissions, ct: ct);
-        return NoContent();
+        return await _tenantService.AddMemberAsync(id, request.SubjectId, request.RoleIds, request.DirectPermissions, ct: ct)
+            ? NoContent()
+            : Problem(detail: "The subject is already a member.", statusCode: 409, title: "Conflict");
     }
 
     /// <inheritdoc cref="ITenantService.RemoveMemberAsync"/>

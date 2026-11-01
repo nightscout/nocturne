@@ -8,12 +8,14 @@ using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
 public sealed class ActiveTenantSnapshotTests : IDisposable
 {
-    private const int PollerCount = 13;
+    /// <summary>The two connector listeners and the five sweeps that read the snapshot.</summary>
+    private const int ReaderCount = 7;
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
@@ -28,17 +30,17 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(Guid.NewGuid(), "active", _gate)
             .SeedTenant(Guid.NewGuid(), "inactive", isActive: false);
 
-        _sut = new ActiveTenantSnapshot(_db.ContextFactory.AsNocturneFactory(), _time, _logger);
+        _sut = new ActiveTenantSnapshot(new TenantRepository(_db.ContextFactory.AsNocturneFactory()), _time, _logger);
     }
 
     public void Dispose() => _db.Dispose();
 
     [Fact]
-    public async Task EveryPollerReadingAtOnce_SharesOneQuery()
+    public async Task EveryListenerAndSweepReadingAtOnce_SharesOneQuery()
     {
         _gate.Hold();
 
-        var reads = Enumerable.Range(0, PollerCount)
+        var reads = Enumerable.Range(0, ReaderCount)
             .Select(_ => _sut.GetAsync(CancellationToken.None))
             .ToList();
 

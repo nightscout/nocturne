@@ -46,6 +46,41 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
             : null;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A read that returns <see cref="MaxActivationsPerRead"/> rows may have dropped the oldest, so its
+    /// times are split in two and each half read on its own, until each read is whole or spans one minute.
+    /// </remarks>
+    public async Task<IReadOnlyList<ResolvedProfileActivation?>> GetAtAsync(
+        IReadOnlyList<long> timesMills, CancellationToken ct = default)
+    {
+        var resolved = new ResolvedProfileActivation?[timesMills.Count];
+        var order = Enumerable.Range(0, timesMills.Count).OrderBy(i => timesMills[i]).ToArray();
+        if (order.Length > 0)
+            await ResolveSliceAsync(order);
+        return resolved;
+
+        async Task ResolveSliceAsync(ArraySegment<int> slice)
+        {
+            var (from, to) = (timesMills[slice[0]], timesMills[slice[^1]]);
+            var (eligible, whole) = await ReadEligibleAsync(from, to, ct);
+            if (!whole && MinuteOf(from) != MinuteOf(to))
+            {
+                var half = slice.Count / 2;
+                await ResolveSliceAsync(slice[..half]);
+                await ResolveSliceAsync(slice[half..]);
+                return;
+            }
+
+            foreach (var i in slice)
+            {
+                resolved[i] = ProfileActivationSelection.At(eligible, timesMills[i]) is { } active
+                    ? await ResolveAsync(active, timesMills[i], ct)
+                    : null;
+            }
+        }
+    }
+
     public async Task<IReadOnlyList<ResolvedProfileSegment>> GetRangeAsync(
         long fromMills, long toMills, CancellationToken ct = default)
     {
@@ -59,11 +94,16 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
         return segments;
     }
 
+    private async Task<List<ProfileActivation>> EligibleAsync(long fromMills, long toMills, CancellationToken ct) =>
+        (await ReadEligibleAsync(fromMills, toMills, ct)).Eligible;
+
     /// <remarks>
     /// The read covers whole minutes around [<paramref name="fromMills"/>, <paramref name="toMills"/>], so
     /// lookups and ranges that differ only within a minute share one cached read.
     /// </remarks>
-    private async Task<List<ProfileActivation>> EligibleAsync(long fromMills, long toMills, CancellationToken ct)
+    /// <returns>The eligible activations, and whether the read held every row, short of its cap.</returns>
+    private async Task<(List<ProfileActivation> Eligible, bool Whole)> ReadEligibleAsync(
+        long fromMills, long toMills, CancellationToken ct)
     {
         var readFrom = MinuteOf(fromMills);
         var readTo = MinuteOf(toMills) + MillisPerMinute;
@@ -80,8 +120,9 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
                 .ToArray(),
             Ttl, ct);
 
-        return ProfileActivationSelection.Eligible(
-            rows, effectiveSources.ToDictionary(s => s.Source, s => s.Mills, StringComparer.Ordinal));
+        return (ProfileActivationSelection.Eligible(
+            rows, effectiveSources.ToDictionary(s => s.Source, s => s.Mills, StringComparer.Ordinal)),
+            rows.Length < MaxActivationsPerRead);
     }
 
     /// <summary>When the activations of <paramref name="Source"/> first reported what its pump runs.</summary>

@@ -87,7 +87,9 @@ public interface IConnectorConfigurationService
 
     /// <summary>
     /// Saves or updates runtime configuration for a connector.
-    /// Only properties marked with [RuntimeConfigurable] are stored.
+    /// Only properties marked with [RuntimeConfigurable] are stored. A stored row keeps its enabled
+    /// flag whatever the document carries, and a row with none takes the document's
+    /// (<see cref="ConnectorEnabledKey"/>); <see cref="SetActiveAsync"/> is the way to change it.
     /// </summary>
     /// <param name="configuration">Runtime configuration values as JSON</param>
     /// <param name="modifiedBy">Who is making the change</param>

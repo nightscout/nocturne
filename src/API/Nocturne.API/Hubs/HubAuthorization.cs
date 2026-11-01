@@ -259,6 +259,13 @@ public static class HubAuthorizationState
         context.Items.TryGetValue(OverviewItemKey, out var value) ? value as OverviewGrant : null;
 
     /// <summary>
+    /// The credential recorded on the connection, or null. Unlike <see cref="Resolve"/> it never reads
+    /// the upgrade request.
+    /// </summary>
+    public static HubAuthorization? Granted(HubCallerContext context) =>
+        context.Items.TryGetValue(ItemKey, out var existing) ? existing as HubAuthorization : null;
+
+    /// <summary>
     /// The connection's proven credential, or null when it has none.
     /// </summary>
     /// <remarks>
@@ -270,7 +277,7 @@ public static class HubAuthorizationState
     /// </remarks>
     public static HubAuthorization? Resolve(HubCallerContext context)
     {
-        if (context.Items.TryGetValue(ItemKey, out var existing) && existing is HubAuthorization granted)
+        if (Granted(context) is { } granted)
             return granted;
 
         return context.GetHttpContext() is { } httpContext && FromRequest(httpContext) is { } authorization

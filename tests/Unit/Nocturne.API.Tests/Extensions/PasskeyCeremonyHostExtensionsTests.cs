@@ -12,6 +12,10 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Nocturne.API.Services.Identity;
+
 namespace Nocturne.API.Tests.Extensions;
 
 /// <summary>
@@ -41,8 +45,9 @@ public class PasskeyCeremonyHostExtensionsTests
             Origins = new HashSet<string> { $"https://{rpId}" },
         };
 
+        var contexts = TestDbContextFactory.CreateInMemoryContext().AsFactory();
         return new PasskeyService(
-            TestDbContextFactory.CreateInMemoryContext().AsFactory(),
+            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts), new TenantMemberService(new TenantMembershipRepository(contexts)),
             new Fido2(fido2Config),
             new EphemeralDataProtectionProvider(),
             Options.Create(fido2Config),

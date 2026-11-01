@@ -414,7 +414,7 @@ public class ActivityServiceTests
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns((IEnumerable<Activity> docs) => docs);
         _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<Activity>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
             .ThrowsAsync(failure);
 
         var act = () => _activityService.CreateActivitiesAsync(activities, CancellationToken.None);
@@ -487,9 +487,9 @@ public class ActivityServiceTests
         var decomposed = new List<Activity>();
         _mockActivityDecomposer.Setup(d => d.Classify(It.IsAny<Activity>())).Returns(ActivityDestination.HeartRate);
         _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<Activity>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
-            .Callback<Activity, WriteOrigin, CancellationToken>((a, _, _) => decomposed.Add(a))
-            .ReturnsAsync(new Nocturne.Core.Models.V4.DecompositionResult());
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<Activity>, WriteOrigin, CancellationToken>((a, _, _) => decomposed.AddRange(a))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) => Decomposed(batch));
         var service = new ActivityService(
             _mockStateSpanService.Object,
             _mockSleepService.Object,
@@ -1403,15 +1403,74 @@ public class ActivityServiceTests
             .Returns(new List<Activity> { skipped, written });
         _mockActivityDecomposer.Setup(d => d.Classify(It.IsAny<Activity>())).Returns(ActivityDestination.HeartRate);
         _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(skipped, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
-        _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(written, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) =>
+                Decomposed(batch, deletedByUser: skipped));
 
         var result = await _activityService.CreateActivitiesAsync([skipped, written], CancellationToken.None);
 
         result.Select(a => a.Id).Should().Equal(written.Id);
+    }
+
+    /// <summary>
+    /// xDrip re-sends its newest reading every sync cycle: the re-send is answered as stored, so the
+    /// uploader advances, but nothing changed, so nothing is announced.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateActivitiesAsync_AnUnchangedResend_IsReturnedButNotAnnounced()
+    {
+        var resent = new Activity { Type = "hr-bpm", Mills = 1234567890000, AdditionalProperties = new() { ["bpm"] = 70 } };
+        var events = new Mock<IDataEventSink<Activity>>();
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
+            .Returns(new List<Activity> { resent });
+        _mockActivityDecomposer.Setup(d => d.Classify(It.IsAny<Activity>())).Returns(ActivityDestination.HeartRate);
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) => Decomposed(batch, unchanged: resent));
+
+        var result = await ServiceWithEvents(events.Object).CreateActivitiesAsync([resent], CancellationToken.None);
+
+        result.Should().Equal(resent);
+        _mockSignalRBroadcastService.Verify(
+            x => x.BroadcastStorageCreateAsync(It.IsAny<string>(), It.IsAny<object>()), Times.Never);
+        events.Verify(e => e.OnCreatedAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private ActivityService ServiceWithEvents(IDataEventSink<Activity> events) => new(
+        _mockStateSpanService.Object,
+        _mockSleepService.Object,
+        _mockDocumentProcessingService.Object,
+        _mockSignalRBroadcastService.Object,
+        events,
+        _mockActivityDecomposer.Object,
+        _mockHeartRateService.Object,
+        _mockStepCountService.Object,
+        _mockLogger.Object);
+
+    /// <summary>
+    /// What the decomposer reports for <paramref name="batch"/>: each activity created, unless it is
+    /// <paramref name="unchanged"/> or <paramref name="deletedByUser"/>.
+    /// </summary>
+    private static ActivityDecomposition Decomposed(
+        IReadOnlyList<Activity> batch, Activity? unchanged = null, Activity? deletedByUser = null)
+    {
+        var decomposition = new ActivityDecomposition();
+        var groups = batch.Select(_ => Guid.CreateVersion7()).ToList();
+        decomposition.Begin(groups);
+        for (var i = 0; i < batch.Count; i++)
+        {
+            if (ReferenceEquals(batch[i], deletedByUser))
+            {
+                decomposition.DeletedByUser(i);
+                continue;
+            }
+            var record = new object();
+            decomposition.RecordOwners[record] = groups[i];
+            (ReferenceEquals(batch[i], unchanged) ? decomposition.UnchangedRecords : decomposition.CreatedRecords).Add(record);
+        }
+        return decomposition;
     }
 
     [Theory]
@@ -1595,8 +1654,8 @@ public class ActivityServiceTests
     {
         var body = RoutingBody(type, keys);
         _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<Activity>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) => Decomposed(batch));
         _mockSleepService
             .Setup(s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SleepSession s, CancellationToken _) => s);
@@ -1609,7 +1668,7 @@ public class ActivityServiceTests
         Classifier.Classify(body).Should().Be(expected);
         var sensor = expected is ActivityDestination.HeartRate or ActivityDestination.StepCount;
         _mockActivityDecomposer.Verify(
-            d => d.DecomposeAsync(body, WriteOrigin.Live, It.IsAny<CancellationToken>()),
+            d => d.DecomposeBatchAsync(It.Is<IReadOnlyList<Activity>>(batch => batch.Contains(body)), WriteOrigin.Live, It.IsAny<CancellationToken>()),
             sensor ? Times.Once() : Times.Never());
         _mockSleepService.Verify(
             s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()),
@@ -1649,7 +1708,7 @@ public class ActivityServiceTests
             s => s.UpdateActivityAsync(body.Id!, It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
             sleep ? Times.Never() : Times.Once());
         _mockActivityDecomposer.Verify(
-            d => d.DecomposeAsync(It.IsAny<Activity>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 }

@@ -19,6 +19,17 @@ public enum AlertRouting
     LeftForRecipient,
 }
 
+/// <summary>Where the starting points the Alerts item shows before the rules are saved came from.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AlertThresholdSource>))]
+public enum AlertThresholdSource
+{
+    /// <summary>Nocturne's own defaults, or the thresholds the person saved.</summary>
+    Defaults,
+
+    /// <summary>The alarm settings of the Nightscout site the person migrated from.</summary>
+    Nightscout,
+}
+
 /// <param name="RuleId">Null until the starter rules are first saved.</param>
 /// <param name="Threshold">In <see cref="AlertSetupStatus.GlucoseUnits"/>; null for <see cref="StarterAlertKind.NoReadings"/>.</param>
 public record StarterAlertRule(StarterAlertKind Kind, Guid? RuleId, bool IsEnabled, decimal? Threshold);
@@ -28,6 +39,7 @@ public record AlertSetupMember(Guid SubjectId, string Name, bool AlertedToUrgent
 
 /// <param name="GlucoseUnits">"mg/dl" or "mmol": the caller's units, which thresholds are read and written in.</param>
 /// <param name="Saved">Whether the starter rules exist yet. Until they do, <paramref name="Rules"/> holds the starting points.</param>
+/// <param name="ThresholdsFrom"><see cref="AlertThresholdSource.Nightscout"/> only while <paramref name="Rules"/> holds starting points read from a migration.</param>
 /// <param name="ToThisDevice">
 /// Whether alerts come to the caller's own account in Nocturne rather than to <paramref name="Channels"/>.
 /// Before the rules are saved, whether that is the suggested choice.
@@ -43,6 +55,7 @@ public record AlertSetupStatus(
     string GlucoseUnits,
     bool Saved,
     IReadOnlyList<StarterAlertRule> Rules,
+    AlertThresholdSource ThresholdsFrom,
     bool ToThisDevice,
     IReadOnlyList<AlertRuleChannelResponse> Channels,
     IReadOnlyList<ChannelType> ChannelTypesOffered,

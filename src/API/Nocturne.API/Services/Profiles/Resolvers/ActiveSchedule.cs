@@ -32,21 +32,45 @@ internal static class ActiveSchedule
         CancellationToken ct)
         where TRecord : class, IV4Record, IProfileScoped
     {
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
         var snapshot = specProfile is null ? await active.GetActiveSchedulesAsync(timeMills, ct) : null;
         var profileName = specProfile ?? await active.GetProfileNameAsync(timeMills, ct);
+        var adjustment = await active.GetCircadianAdjustmentAsync(timeMills, ct);
+        return await ResolveAsync(
+            timeMills, profileName, snapshot, adjustment, repo, versions, storedEntries, snapshotEntries, therapyRepo,
+            (await patientRecordRepo.GetAsync(ct))?.Timezone, ct);
+    }
 
+    /// <summary>
+    /// The schedule at <paramref name="timeMills"/> of an active profile already resolved: its
+    /// <paramref name="snapshot"/> when it carries one, else <paramref name="profileName"/>'s stored version then.
+    /// </summary>
+    /// <param name="adjustment">The activation's percentage and timeshift, if any.</param>
+    /// <param name="patientTimezone">The patient's own timezone, which takes precedence over the profile's.</param>
+    /// <returns>Null when no schedule exists for the profile at the time.</returns>
+    public static async Task<At<TEntry>?> ResolveAsync<TRecord, TEntry>(
+        long timeMills,
+        string profileName,
+        ProfileActivationSnapshot? snapshot,
+        CircadianAdjustment? adjustment,
+        IProfileScopedRepository<TRecord> repo,
+        ProfileVersionCache versions,
+        Func<TRecord, List<TEntry>> storedEntries,
+        Func<ProfileActivationSnapshot, List<TEntry>?> snapshotEntries,
+        ITherapySettingsRepository therapyRepo,
+        string? patientTimezone,
+        CancellationToken ct)
+        where TRecord : class, IV4Record, IProfileScoped
+    {
+        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
         var entries = snapshot is not null
             ? snapshotEntries(snapshot)
             : await versions.GetActiveAtAsync(repo, profileName, timestamp, ct) is { } stored ? storedEntries(stored) : null;
         if (entries is null)
             return null;
 
-        var adjustment = await active.GetCircadianAdjustmentAsync(timeMills, ct);
         var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
-
         var timezone = ScheduleTimeHelper.TimezoneOf(
-            (await patientRecordRepo.GetAsync(ct))?.Timezone,
+            patientTimezone,
             snapshot?.Timezone,
             (await versions.GetActiveAtAsync(therapyRepo, profileName, timestamp, ct))?.Timezone);
         var secondsFromMidnight = ScheduleEntryTime.SecondsOfDay(

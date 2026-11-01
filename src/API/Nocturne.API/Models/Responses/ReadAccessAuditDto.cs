@@ -9,8 +9,8 @@ public class ReadAccessAuditDto
     public int? RecordCount { get; set; }
     public int StatusCode { get; set; }
     public string? QueryParameters { get; set; }
-    public Guid? SubjectId { get; set; }
-    public string? SubjectName { get; set; }
+    public Guid? ActorSubjectId { get; set; }
+    public string? ActorName { get; set; }
     public string? AuthType { get; set; }
     public string? IpAddress { get; set; }
     public string? CredentialFingerprint { get; set; }

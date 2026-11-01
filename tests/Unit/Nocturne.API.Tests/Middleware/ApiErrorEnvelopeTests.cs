@@ -10,12 +10,12 @@ using Nocturne.API.Middleware;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Legacy;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Middleware;
 

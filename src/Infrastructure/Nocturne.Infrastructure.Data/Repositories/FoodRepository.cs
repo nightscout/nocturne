@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Infrastructure.Data.Entities;
@@ -17,16 +18,25 @@ public class FoodRepository : IFoodRepository
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<FoodRepository> _logger;
+    private readonly ILegacyReadCacheInvalidation? _legacyReads;
 
     /// <summary>
     /// Initializes a new instance of the FoodRepository class
     /// </summary>
     /// <param name="logger">The logger</param>
-    public FoodRepository(INocturneDbContextFactory contexts, ILogger<FoodRepository> logger)
+    public FoodRepository(
+        INocturneDbContextFactory contexts,
+        ILogger<FoodRepository> logger,
+        ILegacyReadCacheInvalidation? legacyReads = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
+        _legacyReads = legacyReads;
     }
+
+    /// <summary>Tells <see cref="ILegacyReadCacheInvalidation"/> foods were written, after every committed write.</summary>
+    private Task ReportWrittenAsync() =>
+        _legacyReads?.WrittenAsync([typeof(Food)]) ?? Task.CompletedTask;
 
     /// <summary>
     /// Get all food entries
@@ -242,6 +252,7 @@ public class FoodRepository : IFoodRepository
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
 
         return resultEntities.Select(FoodMapper.ToDomainModel);
     }
@@ -269,6 +280,7 @@ public class FoodRepository : IFoodRepository
 
         FoodMapper.UpdateEntity(entity, food);
         await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
 
         return FoodMapper.ToDomainModel(entity);
     }
@@ -293,6 +305,7 @@ public class FoodRepository : IFoodRepository
         }
 
         await SoftDeleteAsync(db, [entity], cancellationToken);
+        await ReportWrittenAsync();
 
         return true;
     }
@@ -315,6 +328,7 @@ public class FoodRepository : IFoodRepository
         if (entities.Count > 0)
         {
             await SoftDeleteAsync(db, entities, cancellationToken);
+            await ReportWrittenAsync();
         }
 
         return entities.Count;

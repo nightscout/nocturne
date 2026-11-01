@@ -101,8 +101,8 @@ public class ReadAccessAuditFilter : IAsyncResultFilter, IAsyncExceptionFilter
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantContext.TenantId,
-                SubjectId = _auditContext.SubjectId,
-                SubjectName = _auditContext.SubjectName,
+                ActorSubjectId = _auditContext.SubjectId,
+                ActorName = _auditContext.SubjectName,
                 AuthType = _auditContext.AuthType,
                 TokenId = _auditContext.TokenId,
                 CredentialFingerprint = httpContext.GetAuthContext()?.CredentialFingerprint,

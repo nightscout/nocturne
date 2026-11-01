@@ -28,6 +28,26 @@ public static class AdvisoryLockExtensions
     }
 
     /// <summary>
+    /// The lock on a text key, hashed to the second int key, for a row that may not exist yet.
+    /// Two keys whose hashes collide only wait for each other.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public static async Task LockForTransactionAsync(
+        this DbContext context,
+        int lockClass,
+        string key,
+        CancellationToken ct = default)
+    {
+        if (!context.Database.IsNpgsql())
+            return;
+        if (context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("An advisory lock is taken inside a transaction");
+
+        await context.Database.ExecuteSqlAsync(
+            $"SELECT pg_advisory_xact_lock({lockClass}, hashtext({key}))", ct);
+    }
+
+    /// <summary>
     /// Takes the lock only when no other transaction holds it. Other providers always get it.
     /// </summary>
     /// <returns>Whether this transaction now holds the lock.</returns>

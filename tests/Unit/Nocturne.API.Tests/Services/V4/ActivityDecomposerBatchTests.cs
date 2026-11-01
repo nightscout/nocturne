@@ -340,14 +340,14 @@ public class ActivityDecomposerBatchTests : IDisposable
     #region Resent xDrip steps
 
     [Fact]
-    public async Task DecomposeAsync_XDripStepsResentWithoutId_UpdatesTheStoredRow()
+    public async Task DecomposeBatchAsync_XDripStepsResentWithoutId_UpdatesTheStoredRow()
     {
         const long at = 1_780_000_000_123;
         const long nextAt = at + 300_000;
 
-        await _decomposer.DecomposeAsync(CreateXDripUpload(at, 400), WriteOrigin.Live);
-        var resent = await _decomposer.DecomposeAsync(CreateXDripUpload(at, 650), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(CreateXDripUpload(nextAt, 90), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripUpload(at, 400)], WriteOrigin.Live);
+        var resent = await _decomposer.DecomposeBatchAsync([CreateXDripUpload(at, 650)], WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripUpload(nextAt, 90)], WriteOrigin.Live);
 
         resent.CreatedRecords.Should().BeEmpty();
         resent.UpdatedRecords.Should().ContainSingle().Which.As<StepCount>().Metric.Should().Be(650);
@@ -377,7 +377,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     {
         const long at = 1_780_000_000_123;
         const long nextAt = at + 300_000;
-        await _decomposer.DecomposeAsync(CreateXDripUpload(at, 400), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripUpload(at, 400)], WriteOrigin.Live);
 
         var result = await _decomposer.DecomposeBatchAsync(
             [CreateXDripUpload(at, 650), CreateXDripUpload(nextAt, 10), CreateXDripUpload(nextAt, 90)],
@@ -458,17 +458,18 @@ public class ActivityDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_XDripHeartRateResentWithoutId_StoresEachSampleOnce()
+    public async Task DecomposeBatchAsync_XDripHeartRateResentWithoutId_StoresEachSampleOnce()
     {
         const long at = 1_780_000_000_123;
         const long nextAt = at + 300_000;
 
-        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
-        var resent = await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(nextAt, 88), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripHeartRateUpload(at, 70)], WriteOrigin.Live);
+        var resent = await _decomposer.DecomposeBatchAsync([CreateXDripHeartRateUpload(at, 70)], WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripHeartRateUpload(nextAt, 88)], WriteOrigin.Live);
 
         resent.CreatedRecords.Should().BeEmpty();
-        resent.UpdatedRecords.Should().ContainSingle().Which.As<HeartRate>().Bpm.Should().Be(70);
+        resent.UpdatedRecords.Should().BeEmpty();
+        resent.UnchangedRecords.Should().ContainSingle().Which.As<HeartRate>().Bpm.Should().Be(70);
         _context.HeartRates.OrderBy(h => h.Timestamp)
             .Select(h => new { h.Timestamp, h.Bpm, h.Type, h.DataSource, h.SyncIdentifier })
             .Should().Equal(
@@ -495,7 +496,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     {
         const long at = 1_780_000_000_123;
         const long nextAt = at + 300_000;
-        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripHeartRateUpload(at, 70)], WriteOrigin.Live);
 
         var result = await _decomposer.DecomposeBatchAsync(
             [CreateXDripHeartRateUpload(at, 71), CreateXDripHeartRateUpload(nextAt, 80), CreateXDripHeartRateUpload(nextAt, 88)],
@@ -692,6 +693,40 @@ public class ActivityDecomposerBatchTests : IDisposable
     }
 
     #endregion
+
+    /// <summary>
+    /// What each activity of a batch wrote, by batch index, as the activity service reads it to
+    /// decide what to announce: a new step count heads the batch, so a heart rate's batch index differs
+    /// from its place among the heart rates.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_ReportsWhatEachActivityWroteByBatchIndex()
+    {
+        await _decomposer.DecomposeBatchAsync(
+            [CreateHeartRateActivity("a0000000000000000000000a", 70), CreateHeartRateActivity("a0000000000000000000000b", 70),
+             CreateHeartRateActivity("a0000000000000000000000d", 70)],
+            WriteOrigin.Live);
+        var tombstone = _context.HeartRates.Single(h => h.OriginalId == "a0000000000000000000000d");
+        tombstone.DeletedAt = DateTime.UtcNow;
+        _context.Entry(tombstone).Property("DeletedByUser").CurrentValue = true;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var result = await _decomposer.DecomposeBatchAsync(
+        [
+            CreateStepCountActivity("a0000000000000000000000f", 300),
+            CreateHeartRateActivity("a0000000000000000000000a", 70),
+            CreateHeartRateActivity("a0000000000000000000000b", 75),
+            CreateHeartRateActivity("a0000000000000000000000c", 79),
+            CreateHeartRateActivity("a0000000000000000000000c", 80),
+            CreateHeartRateActivity("a0000000000000000000000d", 70),
+        ], WriteOrigin.Live);
+
+        result.Wrote.Should().Equal(
+            [true, false, true, false, true, false],
+            "a new or changed record wrote; an unchanged re-send, a superseded duplicate and a user tombstone did not");
+        Enumerable.Range(0, 6).Where(result.IsDeletedByUser).Should().Equal([5]);
+    }
 
     #region Helpers
 

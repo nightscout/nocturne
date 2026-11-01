@@ -18,6 +18,7 @@ using AuthRoleModel = Nocturne.Core.Models.Authorization.Role;
 using LegacySubject = Nocturne.Core.Models.Subject;
 using LegacyRole = Nocturne.Core.Models.Role;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -76,8 +77,9 @@ public class AuthorizationServiceCrudTests : IDisposable
             _mockSubjectService.Object,
             _mockRoleService.Object,
             _mockDirectGrantService.Object,
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             _mockJwtService.Object,
-            _dbContext.AsFactory(),
+            new SubjectRepository(_dbContext.AsFactory()),
             _categoryReadContext,
             TimeProvider.System
         );
@@ -212,7 +214,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         result.Should().BeFalse();
         _mockDirectGrantService.Verify(
             d => d.RevokeAsync(
-                It.IsAny<NocturneDbContext>(), otherMembersGrant, It.Is<Guid?>(id => id == null),
+                It.IsAny<Guid?>(), otherMembersGrant, It.Is<Guid?>(id => id == null),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
@@ -235,7 +237,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         await create.Should().ThrowAsync<ArgumentException>();
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
-                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()),
@@ -289,7 +291,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         _mockDirectGrantService
             .Setup(d => d.CreateAsync(
-                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()))
@@ -316,7 +318,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         // authenticate and then be dropped straight back to unauthenticated.
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
-                It.IsAny<NocturneDbContext>(),
+                It.IsAny<Guid?>(),
                 _deviceSubjectId,
                 "New Device Subject",
                 It.Is<IReadOnlyCollection<string>>(scopes => scopes.Contains(Scope.GlucoseRead)),
@@ -339,7 +341,7 @@ public class AuthorizationServiceCrudTests : IDisposable
             }]);
         _mockDirectGrantService
             .Setup(d => d.CreateAsync(
-                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()))
@@ -360,7 +362,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
-                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), true,
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()),
@@ -475,7 +477,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         _mockDirectGrantService
             .Setup(d => d.RevokeAsync(
-                It.IsAny<NocturneDbContext>(), grantId, _deviceSubjectId, null, null,
+                It.IsAny<Guid?>(), grantId, _deviceSubjectId, null, null,
                 It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
@@ -490,7 +492,7 @@ public class AuthorizationServiceCrudTests : IDisposable
     {
         _mockDirectGrantService
             .Setup(d => d.RevokeAsync(
-                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), _deviceSubjectId, null, null,
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), _deviceSubjectId, null, null,
                 It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 

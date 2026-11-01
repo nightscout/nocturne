@@ -5,6 +5,9 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Seeding;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -16,6 +19,9 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Models.V4;
 using Nocturne.Services.Demo.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -60,14 +66,9 @@ public class SampleDataSeederMixedZoneTests : IDisposable
                 return new BulkWrite<Entry>(written, 0);
             });
 
-        var treatments = new Mock<ITreatmentDecomposer>();
-        treatments
-            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
-
-        var statuses = new Mock<IDeviceStatusDecomposer>();
+        var statuses = new Mock<IDeviceStatusService>();
         statuses
-            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(d => d.ImportDeviceStatusesAsync(It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
         var sleep = new Mock<ISleepService>();
@@ -79,10 +80,13 @@ public class SampleDataSeederMixedZoneTests : IDisposable
                 return session;
             });
 
-        var deviceChanges = new Mock<ITreatmentService>();
-        deviceChanges
-            .Setup(t => t.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Treatment> batch, CancellationToken _) =>
+        var treatments = new Mock<ITreatmentService>();
+        treatments
+            .Setup(t => t.ImportTreatmentsAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult());
+        treatments
+            .Setup(t => t.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Treatment> batch, WriteOrigin _, CancellationToken _) =>
             {
                 var written = batch.ToList();
                 _deviceChanges.AddRange(written);
@@ -92,20 +96,29 @@ public class SampleDataSeederMixedZoneTests : IDisposable
         return new SampleDataSeeder(
             tenant.Object,
             _db.ContextFactory.AsNocturneFactory(),
+            new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
             entries.Object,
-            deviceChanges.Object,
+            treatments.Object,
             sleep.Object,
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             Mock.Of<ITrackerRepository>(),
+            new AlertRuleRepository(_db.ContextFactory.AsNocturneFactory()),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,
-            treatments.Object,
-            Mock.Of<ITreatmentCache>(),
             Mock.Of<ICompressionLowDetectionService>(),
             Mock.Of<ICompressionLowService>(),
             Mock.Of<ICompressionLowRepository>(),
+            new TreatmentFoodRepository(_db.ContextFactory.AsNocturneFactory()),
+            new StateSpanRepository(
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<IDeduplicationService>(), new SystemAuditContext(),
+                NullLogger<StateSpanRepository>.Instance),
+            new ProfileActivationRepository(
+                _db.ContextFactory.AsNocturneFactory(), new SystemAuditContext(), NullLogger<ProfileActivationRepository>.Instance),
+            new TempBasalRepository(
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<IDeduplicationService>(), new SystemAuditContext(),
+                NullLogger<TempBasalRepository>.Instance),
             _time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

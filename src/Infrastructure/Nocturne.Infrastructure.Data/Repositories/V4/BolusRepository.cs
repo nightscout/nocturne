@@ -33,8 +33,9 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<BolusRepository> logger,
-        IV4RecordBroadcaster<Bolus>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<Bolus>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
     {
         _deduplicationService = deduplicationService;
     }
@@ -118,9 +119,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
                     || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
         }
 
-        query = descending
-            ? query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
-            : query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id);
+        query = query.InObservationOrder(descending);
 
         if (!afterTimestamp.HasValue || !afterId.HasValue)
         {
@@ -137,6 +136,23 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     /// <param name="correlationId">The correlation identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of bolus records.</returns>
+    public async Task<IEnumerable<Bolus>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds,
+        CancellationToken ct = default
+    )
+    {
+        var ids = correlationIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .Boluses.AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+        return entities.Select(BolusMapper.ToDomainModel).ToList();
+    }
+
     public async Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default

@@ -31,8 +31,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// </para>
     /// <para>
     /// The percent temp basal rates resolved against the moved versions, and the tenant's cached
-    /// reads, are redone after startup by <c>TempBasalRateSweepService</c>, which takes the
-    /// <c>pending_tenant_jobs</c> row. A moved row is no longer selected, so running this again
+    /// reads, are redone by <c>ProfileVersionsMovedJob</c>, from the <c>pending_tenant_jobs</c> row that
+    /// <c>AddJobLedger</c> moves into <c>job_ledger</c>. A moved row is no longer selected, so running this again
     /// changes nothing. FORCE ROW LEVEL SECURITY binds the migrator, hence the per-tenant GUC.
     /// </para>
     /// </remarks>

@@ -2,444 +2,344 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
-using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
 /// <summary>
-/// Tests for the pump-suspension transition detection inside <see cref="DeviceStatusDecomposer"/>.
-/// Verifies <c>false → true</c> opens, <c>true → false</c> closes, equal-state no-ops, first-observation
-/// behaviour, idempotency under retry, pump-clock preference for transition timestamps, and the
-/// strict-`&lt;` ordering used when out-of-order uploads arrive.
+/// The pump-suspension fold inside <see cref="DeviceStatusDecomposer"/>: <c>false → true</c> opens,
+/// <c>true → false</c> closes, equal states and re-decompositions do nothing, a first observation
+/// anchors a span, the pump clock is preferred for the transition, and the prior snapshot is the
+/// newest stored strictly before the new one.
 /// </summary>
-public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
+public class DeviceStatusDecomposerPumpSuspensionTests
 {
-    private readonly NocturneDbContext _context;
+    private static readonly DateTime Noon = new(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
     private readonly Mock<IPumpSnapshotRepository> _pumpRepoMock = new();
-    private readonly Mock<IApsSnapshotRepository> _apsRepoMock = new();
-    private readonly Mock<IUploaderSnapshotRepository> _uploaderRepoMock = new();
-    private readonly Mock<IDeviceStatusExtrasRepository> _extrasRepoMock = new();
     private readonly Mock<IStateSpanService> _stateSpanServiceMock = new();
-    private readonly Mock<IDeviceService> _deviceServiceMock = new();
+    private readonly List<V4Models.PumpSnapshot> _stored = [];
+    private readonly List<StateSpan> _spans;
+    private readonly HashSet<string> _deleted = [];
     private readonly DeviceStatusDecomposer _decomposer;
 
     public DeviceStatusDecomposerPumpSuspensionTests()
     {
-        _context = TestDbContextFactory.CreateInMemoryContext();
-        _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-
-        // Default upsert returns the input span with a generated id (mimics service behaviour).
-        _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((StateSpan s, CancellationToken _) =>
-            {
-                s.Id ??= Guid.NewGuid().ToString();
-                return s;
-            });
-
-        // Default GetStateSpansAsync returns empty (no open span) unless the test overrides it.
-        _stateSpanServiceMock
-            .Setup(s => s.GetStateSpansAsync(
-                It.IsAny<StateSpanCategory?>(),
-                It.IsAny<string?>(),
-                It.IsAny<DateTime?>(),
-                It.IsAny<DateTime?>(),
-                It.IsAny<string?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<int>(),
-                It.IsAny<int>(),
-                It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<StateSpan>());
-
-        // CreateAsync echoes the model with an Id assigned, like a real repo.
+        _spans = _stateSpanServiceMock.BacksWith([], _deleted);
         _pumpRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
+            .Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.PumpSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.PumpSnapshot> records, WriteOrigin _, CancellationToken _) =>
             {
-                if (m.Id == Guid.Empty) m.Id = Guid.NewGuid();
-                return m;
+                var written = records.ToList();
+                foreach (var record in written)
+                {
+                    if (_stored.FirstOrDefault(s => s.LegacyId == record.LegacyId) is { } existing)
+                        record.Id = existing.Id;
+                    else if (record.Id == Guid.Empty)
+                        record.Id = Guid.NewGuid();
+                }
+
+                return [.. written];
             });
         _pumpRepoMock
-            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid id, V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
-            {
-                m.Id = id;
-                return m;
-            });
+            .Setup(r => r.GetTimelineAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => [.. _stored]);
 
         _decomposer = new DeviceStatusDecomposer(
-            _apsRepoMock.Object,
+            Mock.Of<IApsSnapshotRepository>(),
             _pumpRepoMock.Object,
-            _uploaderRepoMock.Object,
-            _extrasRepoMock.Object,
+            Mock.Of<IUploaderSnapshotRepository>(),
+            Mock.Of<IDeviceStatusExtrasRepository>(),
             _stateSpanServiceMock.Object,
-            _deviceServiceMock.Object,
+            new UnresolvedDevices(),
             Mock.Of<IAuditContext>(),
             Mock.Of<ILoopClosedLoopStamper>(),
             TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
     }
 
-    public void Dispose()
+    private static DeviceStatus MakeDeviceStatus(string id, DateTime at, bool suspended, string? clockIso = null) => new()
     {
-        _context.Dispose();
-        GC.SuppressFinalize(this);
+        Id = id,
+        Mills = new DateTimeOffset(at).ToUnixTimeMilliseconds(),
+        Device = "openaps://test",
+        Pump = new PumpStatus
+        {
+            Manufacturer = "Insulet",
+            Model = "Omnipod",
+            Status = new PumpStatusDetails { Suspended = suspended },
+            Clock = clockIso,
+        },
+    };
+
+    private void Stored(DateTime at, bool suspended) =>
+        _stored.Add(new V4Models.PumpSnapshot { Id = Guid.NewGuid(), Timestamp = at, Suspended = suspended });
+
+    private StateSpan OpenSuspension(string originalId, DateTime start)
+    {
+        var span = new StateSpan
+        {
+            Id = originalId,
+            OriginalId = originalId,
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = start,
+        };
+        _spans.Add(span);
+        return span;
     }
 
-    private static DeviceStatus MakeDeviceStatus(string id, long mills, bool suspended, string? clockIso = null)
-    {
-        return new DeviceStatus
-        {
-            Id = id,
-            Mills = mills,
-            Device = "openaps://test",
-            Pump = new PumpStatus
-            {
-                Manufacturer = "Insulet",
-                Model = "Omnipod",
-                Status = new PumpStatusDetails { Suspended = suspended },
-                Clock = clockIso,
-            },
-        };
-    }
+    private IEnumerable<StateSpan> Suspensions =>
+        _spans.Where(s => s.Category == StateSpanCategory.PumpMode && s.State == PumpModeState.Suspended.ToString());
 
     [Fact]
     public async Task FalseToTrue_OpensSpan()
     {
-        // Arrange
-        var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-1), suspended: false);
 
-        var ds = MakeDeviceStatus("legacy1", 1704110400000 /* 2024-01-01T12:00:00Z */, suspended: true);
+        await _decomposer.DecomposeBatchAsync([MakeDeviceStatus("legacy1", Noon, suspended: true)], null, WriteOrigin.Live);
 
-        // Act
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        // Assert
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
-            It.Is<StateSpan>(span =>
-                span.Category == StateSpanCategory.PumpMode &&
-                span.State == PumpModeState.Suspended.ToString() &&
-                span.EndTimestamp == null &&
-                span.OriginalId!.StartsWith("pump-suspended:")),
-            It.IsAny<CancellationToken>()),
-            Times.Once);
+        Suspensions.Should().ContainSingle(span =>
+            span.EndTimestamp == null && span.StartTimestamp == Noon && span.OriginalId!.StartsWith("pump-suspended:"));
     }
 
     /// <remarks>
-    /// The spans are derived from the snapshot that was just stored, so a refused write
-    /// (<see cref="RecreationBlockedException"/>: the user deleted the snapshot this legacy id
-    /// names) leaves nothing to transition from.
+    /// The spans are derived from the snapshots the batch stored, so a refused write (the user deleted
+    /// the snapshot this legacy id names) leaves nothing to transition from.
     /// </remarks>
     [Fact]
     public async Task WhenTheSnapshotWriteIsRefused_DerivesNoSpans()
     {
-        var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-1), suspended: false);
         _pumpRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new RecreationBlockedException(
-                nameof(V4Models.PumpSnapshot), "legacy id 'legacy-refused'"));
+            .Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.PumpSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BulkWrite<V4Models.PumpSnapshot>([], skippedDeleted: 1));
 
-        var ds = MakeDeviceStatus("legacy-refused", 1704110400000, suspended: true);
+        var result = await _decomposer.DecomposeBatchAsync(
+            [MakeDeviceStatus("legacy-refused", Noon, suspended: true)], null, WriteOrigin.Live);
 
-        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        result.CreatedRecords.Should().NotContain(r => r is V4Models.PumpSnapshot,
-            "the refused snapshot is not reported as created");
-        _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        result.CreatedRecords.Should().NotContain(r => r is V4Models.PumpSnapshot, "the refused snapshot is not reported as created");
+        result.SkippedDeleted.Should().Be(1);
+        _spans.Should().BeEmpty();
     }
 
     [Fact]
     public async Task TrueToFalse_ClosesOpenSpan()
     {
-        // Arrange
-        var prior = new V4Models.PumpSnapshot { Suspended = true, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-1), suspended: true);
+        var open = OpenSuspension("span-1", Noon.AddHours(-1));
 
-        var openSpan = new StateSpan
-        {
-            Id = "span-1",
-            Category = StateSpanCategory.PumpMode,
-            State = PumpModeState.Suspended.ToString(),
-            StartTimestamp = prior.Timestamp,
-            EndTimestamp = null,
-        };
-        _stateSpanServiceMock
-            .Setup(s => s.GetStateSpansAsync(
-                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
-                null, null, null, true,
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { openSpan });
+        await _decomposer.DecomposeBatchAsync([MakeDeviceStatus("legacy2", Noon, suspended: false)], null, WriteOrigin.Live);
 
-        var ds = MakeDeviceStatus("legacy2", 1704110400000, suspended: false);
-
-        // Act
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        // Assert: upsert called with EndTimestamp populated on the same span
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
-            It.Is<StateSpan>(span =>
-                span.Id == "span-1" &&
-                span.EndTimestamp != null),
-            It.IsAny<CancellationToken>()),
-            Times.Once);
+        Suspensions.Should().ContainSingle(span => span.Id == open.Id && span.EndTimestamp == Noon);
     }
 
     [Fact]
     public async Task TrueToTrue_NoOp()
     {
-        var prior = new V4Models.PumpSnapshot { Suspended = true, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-1), suspended: true);
 
-        var ds = MakeDeviceStatus("legacy3", 1704110400000, suspended: true);
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([MakeDeviceStatus("legacy3", Noon, suspended: true)], null, WriteOrigin.Live);
 
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        _spans.Should().BeEmpty();
     }
 
     [Fact]
     public async Task FalseToFalse_NoOp()
     {
-        var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-1), suspended: false);
 
-        var ds = MakeDeviceStatus("legacy4", 1704110400000, suspended: false);
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([MakeDeviceStatus("legacy4", Noon, suspended: false)], null, WriteOrigin.Live);
 
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        _spans.Should().BeEmpty();
     }
 
     [Fact]
     public async Task FirstObservationTrue_OpensSpan()
     {
-        // No prior snapshot exists.
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.PumpSnapshot?)null);
+        await _decomposer.DecomposeBatchAsync([MakeDeviceStatus("legacy5", Noon, suspended: true)], null, WriteOrigin.Live);
 
-        var ds = MakeDeviceStatus("legacy5", 1704110400000, suspended: true);
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
-            It.Is<StateSpan>(span =>
-                span.Category == StateSpanCategory.PumpMode &&
-                span.State == PumpModeState.Suspended.ToString() &&
-                span.EndTimestamp == null),
-            It.IsAny<CancellationToken>()),
-            Times.Once);
+        Suspensions.Should().ContainSingle(span => span.EndTimestamp == null && span.StartTimestamp == Noon);
     }
 
     [Fact]
     public async Task FirstObservationFalse_DoesNotOpenSpan()
     {
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.PumpSnapshot?)null);
+        await _decomposer.DecomposeBatchAsync([MakeDeviceStatus("legacy6", Noon, suspended: false)], null, WriteOrigin.Live);
 
-        var ds = MakeDeviceStatus("legacy6", 1704110400000, suspended: false);
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        _spans.Should().BeEmpty();
     }
 
     [Fact]
     public async Task PumpClockPreferred_OverIngestTimestamp()
     {
-        // Prior says "not suspended". New record has earlier ingest timestamp but pump clock matches a real wall-clock.
-        var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-1), suspended: false);
+        var pumpClock = new DateTime(2024, 1, 1, 11, 30, 0, DateTimeKind.Utc);
 
-        var pumpClock = "2024-01-01T11:30:00Z";
-        var expectedTransitionAt = DateTime.Parse("2024-01-01T11:30:00Z").ToUniversalTime();
+        await _decomposer.DecomposeBatchAsync(
+            [MakeDeviceStatus("legacy7", Noon, suspended: true, clockIso: "2024-01-01T11:30:00Z")], null, WriteOrigin.Live);
 
-        var ds = MakeDeviceStatus("legacy7", 1704110400000 /* 12:00 ingest */, suspended: true, clockIso: pumpClock);
-
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
-            It.Is<StateSpan>(span =>
-                span.StartTimestamp == expectedTransitionAt),
-            It.IsAny<CancellationToken>()),
-            Times.Once);
+        Suspensions.Should().ContainSingle(span => span.StartTimestamp == pumpClock);
     }
 
+    /// <summary>
+    /// A delayed upload between two stored snapshots (10:00 not suspended, 12:00 suspended with a span
+    /// open) compares against 10:00, the newest strictly before it, not 12:00: no transition, and the
+    /// open span stays open.
+    /// </summary>
     [Fact]
     public async Task OutOfOrderIngestion_UsesLatestPriorByTimestamp()
     {
-        // Scenario: a delayed upload arrives whose timestamp falls *between* two existing snapshots.
-        // The decomposer must compare against the latest snapshot strictly before the new one
-        // (T=10:00, suspended=false) — NOT against the most recent overall (T=12:00, suspended=true).
-        //
-        // Existing rows (conceptually):
-        //   T=10:00 suspended=false
-        //   T=12:00 suspended=true   [open span exists]
-        // New incoming snapshot:
-        //   T=11:00 suspended=false  (delayed upload)
-        //
-        // GetLatestBeforeAsync(11:00) returns the T=10:00 row. Prior=false, now=false → no-op.
-        // The pre-existing open span at T=12:00 must NOT be closed by this delayed arrival.
-        //
-        // This pins the strict-`<` filter behaviour. Out-of-order ingestion of this exact shape
-        // shouldn't happen in normal operation, but the test documents the assumption explicitly:
-        // the decomposer is keyed on the latest snapshot strictly before the new one's timestamp.
-        var ingestAt = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc);
-        var priorBefore = new V4Models.PumpSnapshot
-        {
-            Suspended = false,
-            Timestamp = new DateTime(2024, 1, 1, 10, 0, 0, DateTimeKind.Utc),
-        };
-        _pumpRepoMock
-            .Setup(r => r.GetLatestBeforeAsync(
-                It.Is<DateTime>(t => t == ingestAt),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(priorBefore);
+        Stored(Noon.AddHours(-2), suspended: false);
+        Stored(Noon, suspended: true);
+        OpenSuspension("open-at-noon", Noon);
 
-        // 2024-01-01T11:00:00Z = 1704106800000 mills
-        var ds = MakeDeviceStatus("legacy-ooo", 1704106800000, suspended: false);
+        await _decomposer.DecomposeBatchAsync(
+            [MakeDeviceStatus("legacy-ooo", Noon.AddHours(-1), suspended: false)], null, WriteOrigin.Live);
 
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        // Strict-`<` filter selected the T=10:00 row, both sides false → no transition, no upsert.
-        _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        Suspensions.Should().ContainSingle(span => span.EndTimestamp == null);
         _pumpRepoMock.Verify(
-            r => r.GetLatestBeforeAsync(ingestAt, It.IsAny<CancellationToken>()),
-            Times.Once);
+            r => r.GetTimelineAsync(Noon.AddHours(-1), Noon.AddHours(-1), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// A re-sent resume ends at the transition its first decomposition ended the span at, so it neither
+    /// backfills a second suspension nor ends a later one.
+    /// </summary>
     [Fact]
-    public async Task IdempotentOpen_SameOriginalId()
+    public async Task ResentResume_LeavesTheTimelineAsItWas()
     {
-        // Same legacyId/snapshot.Id processed twice should produce the same OriginalId on the upsert,
-        // which the StateSpan upsert layer dedupes on.
-        var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-2), suspended: true);
+        Stored(Noon.AddHours(-1), suspended: true);
+        OpenSuspension("first", Noon.AddHours(-2));
+        var resume = MakeDeviceStatus("legacy-resume", Noon, suspended: false);
+        await _decomposer.DecomposeBatchAsync([resume], null, WriteOrigin.Live);
+        Stored(Noon, suspended: false);
+        Stored(Noon.AddHours(1), suspended: true);
+        OpenSuspension("later", Noon.AddHours(1));
 
-        // Pin the snapshot id on the second call so OriginalId is deterministic across both invocations.
-        var pinnedId = Guid.NewGuid();
+        await _decomposer.DecomposeBatchAsync([resume], null, WriteOrigin.Live);
+
+        Suspensions.Select(s => (s.OriginalId, s.EndTimestamp)).Should().BeEquivalentTo(
+            [("first", (DateTime?)Noon), ("later", (DateTime?)null)]);
+    }
+
+    /// <summary>
+    /// A re-decomposed suspension already opened its span, so a second decomposition opens none, even
+    /// after a resume closed it.
+    /// </summary>
+    [Fact]
+    public async Task IdempotentOpen_ASecondDecompositionOpensNoSecondSpan()
+    {
+        Stored(Noon.AddHours(-1), suspended: false);
+        var ds = MakeDeviceStatus("legacy8", Noon, suspended: true);
+
+        var first = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+        _stored.Add(first.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single());
+        _spans.Single().EndTimestamp = Noon.AddHours(1);
+        await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        Suspensions.Should().ContainSingle().Which.EndTimestamp.Should().Be(Noon.AddHours(1));
+    }
+
+    /// <summary>
+    /// The snapshots and the spans commit separately, so a span write that fails leaves the snapshot
+    /// stored; its re-send reads it back unchanged and still folds it, writing the lost span.
+    /// </summary>
+    [Fact]
+    public async Task SpanWriteFails_AnUnchangedResendWritesTheLostSpan()
+    {
+        Stored(Noon.AddHours(-1), suspended: false);
+        var ds = MakeDeviceStatus("legacy-repair", Noon, suspended: true);
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpansAsync(It.IsAny<IReadOnlyList<StateSpan>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("span write"));
+
+        var failed = () => _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        await failed.Should().ThrowAsync<TimeoutException>();
+        _spans.Should().BeEmpty();
+
+        _stateSpanServiceMock.BacksWith(_spans, _deleted);
         _pumpRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
+            .Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.PumpSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.PumpSnapshot> records, WriteOrigin _, CancellationToken _) =>
             {
-                m.Id = pinnedId;
-                return m;
+                var unchanged = records.ToList();
+                return new BulkWrite<V4Models.PumpSnapshot>(unchanged, 0) { Unchanged = unchanged };
             });
 
-        var ds = MakeDeviceStatus("legacy8", 1704110400000, suspended: true);
+        var resend = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
 
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        var expectedOriginalId = $"pump-suspended:{pinnedId}";
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
-            It.Is<StateSpan>(span => span.OriginalId == expectedOriginalId),
-            It.IsAny<CancellationToken>()),
-            Times.Exactly(2));
+        resend.UnchangedRecords.Should().ContainSingle(r => r is V4Models.PumpSnapshot);
+        Suspensions.Should().ContainSingle(span => span.StartTimestamp == Noon && span.EndTimestamp == null);
     }
 
+    /// <summary>
+    /// A suspension span the user deleted holds its key, so a re-send of the status that opened it
+    /// writes nothing and is not reported as written, however often it is re-sent.
+    /// </summary>
+    [Fact]
+    public async Task ResendAfterTheUserDeletedItsSpan_WritesNothing()
+    {
+        Stored(Noon.AddHours(-1), suspended: false);
+        var ds = MakeDeviceStatus("legacy-deleted-span", Noon, suspended: true);
+        var first = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+        _stored.Add(first.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single());
+        var span = _spans.Single();
+        _spans.Remove(span);
+        _deleted.Add(span.OriginalId!);
+        _pumpRepoMock
+            .Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.PumpSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.PumpSnapshot> records, WriteOrigin _, CancellationToken _) =>
+            {
+                var unchanged = records.Select(r => { r.Id = _stored[^1].Id; return r; }).ToList();
+                return new BulkWrite<V4Models.PumpSnapshot>(unchanged, 0) { Unchanged = unchanged };
+            });
+
+        var resend = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        resend.Wrote.Should().Equal(false);
+        resend.CreatedRecords.Should().BeEmpty();
+        resend.UpdatedRecords.Should().BeEmpty();
+        _spans.Should().BeEmpty();
+    }
+
+
+    /// not a pump clock, so the second cannot see the first as prior and reads a false → true
+    /// transition. At most one Suspended span is open: a transition while one is open opens none.
+    /// </summary>
     [Fact]
     public async Task FalseToTrue_WhenSuspendedSpanAlreadyOpen_DoesNotOpenDuplicate()
     {
-        // Regression (Erik / Trio): the uploader emits two suspended=true device statuses for the
-        // same suspend event sharing the SAME ingest Timestamp but different pump clocks. Because
-        // GetLatestBeforeAsync uses a strict `<` on Timestamp, the second snapshot can't see its
-        // sibling as prior and reads prior=not-suspended — a false→true transition that would open
-        // a SECOND Suspended span. The lone resume then closes only one span, leaving the other
-        // open-ended forever, so the dashboard reports the pump "suspended the whole time".
-        // Invariant: at most one open Suspended span. A false→true transition while one is already
-        // open must be a no-op.
-        var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-1), suspended: false);
+        OpenSuspension("open-1", Noon.AddMinutes(-30));
 
-        var alreadyOpen = new StateSpan
-        {
-            Id = "open-1",
-            Category = StateSpanCategory.PumpMode,
-            State = PumpModeState.Suspended.ToString(),
-            StartTimestamp = new DateTime(2024, 1, 1, 11, 30, 0, DateTimeKind.Utc),
-            EndTimestamp = null,
-        };
-        _stateSpanServiceMock
-            .Setup(s => s.GetStateSpansAsync(
-                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
-                null, null, null, true,
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { alreadyOpen });
+        await _decomposer.DecomposeBatchAsync([MakeDeviceStatus("legacy-dup", Noon, suspended: true)], null, WriteOrigin.Live);
 
-        var ds = MakeDeviceStatus("legacy-dup", 1704110400000, suspended: true);
-
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        // A suspension is already active; no new span should be opened.
-        _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        Suspensions.Should().ContainSingle(span => span.Id == "open-1" && span.EndTimestamp == null);
     }
 
+    /// <summary>
+    /// Duplicate open Suspended spans left before the open guard are all closed by a resume, so no
+    /// leftover keeps the pump latched suspended.
+    /// </summary>
     [Fact]
     public async Task TrueToFalse_ClosesAllOpenSuspendedSpans()
     {
-        // Defense-in-depth: if duplicate open Suspended spans already exist (e.g. records created
-        // before the open-guard fix), a resume must close ALL of them — not just one — so the pump
-        // doesn't stay latched "suspended" on a leftover open span.
-        var prior = new V4Models.PumpSnapshot { Suspended = true, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
-        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(prior);
+        Stored(Noon.AddHours(-1), suspended: true);
+        OpenSuspension("open-1", Noon.AddHours(-1));
+        OpenSuspension("open-2", Noon.AddHours(-1).AddSeconds(2));
 
-        var open1 = new StateSpan
-        {
-            Id = "open-1",
-            Category = StateSpanCategory.PumpMode,
-            State = PumpModeState.Suspended.ToString(),
-            StartTimestamp = prior.Timestamp,
-            EndTimestamp = null,
-        };
-        var open2 = new StateSpan
-        {
-            Id = "open-2",
-            Category = StateSpanCategory.PumpMode,
-            State = PumpModeState.Suspended.ToString(),
-            StartTimestamp = prior.Timestamp.AddSeconds(2),
-            EndTimestamp = null,
-        };
-        _stateSpanServiceMock
-            .Setup(s => s.GetStateSpansAsync(
-                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
-                null, null, null, true,
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { open1, open2 });
+        await _decomposer.DecomposeBatchAsync([MakeDeviceStatus("legacy-close-all", Noon, suspended: false)], null, WriteOrigin.Live);
 
-        var ds = MakeDeviceStatus("legacy-close-all", 1704110400000, suspended: false);
-
-        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
-
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
-            It.Is<StateSpan>(span => span.Id == "open-1" && span.EndTimestamp != null),
-            It.IsAny<CancellationToken>()),
-            Times.Once);
-        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
-            It.Is<StateSpan>(span => span.Id == "open-2" && span.EndTimestamp != null),
-            It.IsAny<CancellationToken>()),
-            Times.Once);
+        Suspensions.Should().HaveCount(2).And.OnlyContain(span => span.EndTimestamp == Noon);
     }
 }

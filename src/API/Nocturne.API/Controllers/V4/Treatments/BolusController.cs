@@ -33,7 +33,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Route("api/v4/insulin/boluses")]
 [RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
+[ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class BolusController(
     IBolusRepository repo,
     IPatientInsulinRepository insulinRepo,

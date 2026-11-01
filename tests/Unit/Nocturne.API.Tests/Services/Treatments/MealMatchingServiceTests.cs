@@ -19,6 +19,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -100,7 +101,7 @@ public class MealMatchingServiceTests
             TenantId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
         };
         var settings = new MyFitnessPalMatchingSettingsService(
-            context.AsFactory(),
+            new SettingsRepository(context.AsFactory()),
             TimeProvider.System,
             NullLogger<MyFitnessPalMatchingSettingsService>.Instance);
         await context.DisposeAsync();

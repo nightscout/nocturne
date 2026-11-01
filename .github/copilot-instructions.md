@@ -26,8 +26,8 @@ src/
 All services are defined in `Core.Contracts` and registered as scoped:
 
 ```csharp
-// Interface: src/Core/Nocturne.Core.Contracts/IEntryService.cs
-// Implementation: src/API/Nocturne.API/Services/EntryService.cs
+// Interface: src/Core/Nocturne.Core.Contracts/Entries/IEntryService.cs
+// Implementation: src/API/Nocturne.API/Services/Entries/EntryService.cs
 builder.Services.AddScoped<IEntryService, EntryService>();
 ```
 
@@ -118,11 +118,11 @@ cd src/Web && pnpm dev
 
 ## Key Files to Reference
 
-| Concept           | Example File                                               |
-| ----------------- | ---------------------------------------------------------- |
-| API Controller    | `src/API/Nocturne.API/Controllers/V1/EntriesController.cs` |
-| Service Interface | `src/Core/Nocturne.Core.Contracts/IEntryService.cs`        |
-| Domain Model      | `src/Core/Nocturne.Core.Models/Entry.cs`                   |
-| Connector         | `src/Connectors/Nocturne.Connectors.Dexcom/`               |
-| Aspire Host       | `src/Aspire/Nocturne.Aspire.Host/Program.cs`               |
-| Unit Test         | `tests/Unit/Nocturne.API.Tests/`                           |
+| Concept           | Example File                                                 |
+| ----------------- | ------------------------------------------------------------ |
+| API Controller    | `src/API/Nocturne.API/Controllers/V1/EntriesController.cs`   |
+| Service Interface | `src/Core/Nocturne.Core.Contracts/Entries/IEntryService.cs`  |
+| Domain Model      | `src/Core/Nocturne.Core.Models/Entry.cs`                     |
+| Connector         | `src/Connectors/Nocturne.Connectors.Dexcom/`                 |
+| Aspire Host       | `src/Aspire/Nocturne.Aspire.Host/Program.cs`                 |
+| Unit Test         | `tests/Unit/Nocturne.API.Tests/`                             |

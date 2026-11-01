@@ -30,7 +30,7 @@ public class HistoryClampedWritesIntegrationTests : ApiIntegrationTestBase
 
         var response = await clamped.PostAsJsonAsync("/api/v4/lab-results/hba1c", new
         {
-            measuredAt = DateTime.UtcNow.AddDays(-90), valuePercent = 6.8,
+            measuredAt = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90)), valuePercent = 6.8,
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());

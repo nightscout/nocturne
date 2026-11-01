@@ -1,36 +1,44 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.API.Services.Jobs;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.Jobs;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
-/// Abstract base class for connector background services that poll external data sources
-/// on a per-tenant basis within the API process.
+/// Polls one connector for each tenant: the <see cref="IScheduledJob"/> <c>connector:&lt;id&gt;</c>,
+/// whose ledger row per tenant holds when that tenant is next due.
 /// </summary>
 /// <typeparam name="TConfig">
 /// The connector configuration type, which must extend <see cref="BaseConnectorConfiguration"/>.
 /// </typeparam>
 /// <remarks>
-/// The service polls every minute and only syncs a given tenant when its configured
-/// <c>SyncIntervalMinutes</c> has elapsed since the last sync, and looks at a tenant only when it is
-/// due (see <see cref="UnconfiguredRecheckInterval"/>). Per-tenant configuration
-/// is loaded fresh each cycle via <see cref="IConnectorConfigurationLoader{TConfig}"/>.
+/// <para>
+/// A run loads the tenant's configuration afresh through
+/// <see cref="IConnectorConfigurationLoader{TConfig}"/>, syncs it when it is enabled, and comes due
+/// again after <c>SyncIntervalMinutes</c>, or sooner when <see cref="GetAlignedSyncTimeAsync"/> says
+/// the source has new data then. A tenant with no usable configuration is parked for
+/// <see cref="UnconfiguredRecheckInterval"/>, and a configuration write reopens it a minute later
+/// (<see cref="RequestConfigurationRead"/>). A sync that throws or times out fails the run, and the
+/// ledger retries it after its backoff, capped at <see cref="ConnectorMaxBackoff"/>.
+/// </para>
+/// <para>
+/// A tenant's row is first due at its <see cref="JobPhase"/> within <see cref="Spread"/>, and every
+/// interval due time after that falls on a point of that phase (<see cref="OnPhase"/>), so the tenants
+/// of one connector and the connectors of one tenant do not come due together, and a restart (which
+/// reads the due times from the ledger) keeps them apart.
+/// </para>
 /// </remarks>
-public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
+public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
     where TConfig : BaseConnectorConfiguration
 {
-    protected readonly IServiceProvider ServiceProvider;
     protected readonly ILogger Logger;
 
     private static readonly ConnectorRegistrationAttribute Registration =
@@ -48,54 +56,28 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
             : null;
 
     /// <summary>
-    /// Tracks the last sync time per tenant so each tenant's configured
-    /// SyncIntervalMinutes is respected independently.
+    /// The longest a failing sync waits between attempts: shorter than the scheduler's default,
+    /// since no data arrives for the tenant while it waits.
     /// </summary>
-    private readonly ConcurrentDictionary<Guid, DateTime> _lastSyncByTenant = new();
+    public static readonly TimeSpan ConnectorMaxBackoff = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// Tracks the last time a nudge (immediate sync request) was accepted per tenant,
-    /// used to debounce rapid consecutive calls.
+    /// The last time a real-time listener's event was let through per tenant; see
+    /// <see cref="RequestImmediateSync"/>.
     /// </summary>
     private readonly ConcurrentDictionary<Guid, DateTime> _lastNudgeByTenant = new();
-
-    /// <summary>
-    /// When each tenant next needs a look: a tenant with no usable configuration for this connector
-    /// after <see cref="UnconfiguredRecheckInterval"/>, a configured one when its interval has
-    /// elapsed. A tenant not yet due takes no budget slot, opens no scope and reads nothing this tick.
-    /// Cleared by <see cref="RequestImmediateSync"/>, which <see cref="ConnectorPollerNudge"/> drives
-    /// from every configuration write, so a saved or enabled connector is looked at on the next tick.
-    /// </summary>
-    private readonly ConcurrentDictionary<Guid, DateTime> _nextCheckByTenant = new();
-
-    /// <summary>
-    /// When each tenant's source is next expected to have new data, as reported by
-    /// <see cref="GetAlignedSyncTimeAsync"/> after a successful sync. A tenant whose aligned time has
-    /// arrived syncs even inside its <c>SyncIntervalMinutes</c>: the interval stays the longest the
-    /// poller waits, the aligned time lets it go sooner. Consumed when the sync it scheduled starts,
-    /// and never set by a failed sync, so a failing source falls back to the plain interval.
-    /// </summary>
-    private readonly ConcurrentDictionary<Guid, DateTime> _alignedSyncByTenant = new();
 
     private static readonly TimeSpan NudgeDebounceWindow = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// Maximum number of tenants this connector syncs concurrently. Tenants sync in parallel so one
-    /// tenant's slow or failing sync never blocks another's. This is one connector's share of the
-    /// <see cref="ConnectorSyncBudget"/> every poller draws on, so a connector whose tenants are all
-    /// stuck cannot take every slot from the others; the budget is what bounds the total. Overridable
-    /// for tests.
-    /// </summary>
-    protected virtual int MaxConcurrentTenantSyncs => 8;
-
-    /// <summary>
     /// Maximum wall-clock time a single tenant's sync may run before it is cancelled. Bounds how long
     /// one stuck or failing tenant — e.g. a hung network call or an auth-retry storm against bad
-    /// credentials — can hold a concurrency slot. Overridable for tests.
+    /// credentials — can hold a scheduler slot and a budget slot. Overridable for tests.
     /// </summary>
     protected virtual TimeSpan PerTenantSyncTimeout => TimeSpan.FromMinutes(3);
 
     private readonly ConnectorSyncBudget _budget;
+    private readonly IJobLedger _ledger;
     private readonly TimeProvider _timeProvider;
     private readonly ConnectorSyncMetrics? _metrics;
 
@@ -107,24 +89,19 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
-    /// <summary>The active tenants, shared by every poller.</summary>
-    protected readonly ActiveTenantSnapshot ActiveTenants;
-
     /// <summary>
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
     /// </summary>
-    /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant sync.</param>
     /// <param name="budget">The process-wide budget.</param>
-    /// <param name="activeTenants">The active tenants every poller reads.</param>
+    /// <param name="ledger">The job ledger a configuration write or listener event makes a tenant due in.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="timeProvider">Clock the schedule is computed against.</param>
-    /// <param name="nudge">Delivers configuration writes for this connector; absent, a change is noticed on the tenant's next scheduled look.</param>
+    /// <param name="nudge">Delivers configuration writes for this connector; absent, a change is noticed on the tenant's next run.</param>
     /// <param name="metrics">Connector sync instruments; absent, the sync runs unmeasured.</param>
     /// <param name="runGuard">Refuses a sync for a key another run already holds; absent, no exclusion.</param>
     protected ConnectorBackgroundService(
-        IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
-        ActiveTenantSnapshot activeTenants,
+        IJobLedger ledger,
         ILogger logger,
         TimeProvider timeProvider,
         ConnectorPollerNudge? nudge = null,
@@ -132,42 +109,87 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         TenantRunGuard? runGuard = null
     )
     {
-        ServiceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _budget = budget ?? throw new ArgumentNullException(nameof(budget));
-        ActiveTenants = activeTenants ?? throw new ArgumentNullException(nameof(activeTenants));
+        _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _metrics = metrics;
         _runGuard = runGuard;
-        nudge?.Subscribe(ConnectorName, RequestImmediateSync);
+        nudge?.Subscribe(ConnectorName, RequestConfigurationRead);
     }
 
     /// <summary>
-    /// Requests an immediate sync for the specified tenant on the next poll cycle.
-    /// Removes the tenant's last-sync timestamp so the interval check passes immediately.
-    /// Calls within <see cref="NudgeDebounceWindow"/> of a previous nudge for the same
-    /// tenant are silently ignored to prevent event storms.
+    /// <c>connector:&lt;id&gt;</c>, the audit endpoint a manual sync of the connector is attributed under.
     /// </summary>
-    /// <param name="tenantId">The tenant to sync immediately.</param>
+    public string Name => AuditEndpoint;
+
+    public JobEnrolment Enrolment => JobEnrolment.PerTenant;
+
+    public TimeSpan MaxBackoff => ConnectorMaxBackoff;
+
+    /// <summary>A minute: the shortest interval a tenant can configure.</summary>
+    public TimeSpan Spread => TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Leaves slots to the other jobs while every connector's tenants are stuck against unreachable
+    /// upstreams, each run held to <see cref="PerTenantSyncTimeout"/>: the cap is shared by every
+    /// connector (<see cref="ConcurrencyGroup"/>), so the short jobs, the alert sweep among them, keep
+    /// the slots it leaves.
+    /// </summary>
+    public int MaxConcurrency => 8;
+
+    public string ConcurrencyGroup => ConnectorsGroup;
+
+    internal const string ConnectorsGroup = "connectors";
+
+    /// <summary>
+    /// How long after a configuration write the tenant is synced: a connect flow writes its
+    /// configuration several times (OAuth state, tokens, inventory, options), and the sync starts no
+    /// sooner than this after the last write.
+    /// </summary>
+    internal static readonly TimeSpan ConfigurationSettleDelay = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Makes the tenant due <see cref="ConfigurationSettleDelay"/> after a configuration write, which
+    /// <see cref="ConnectorPollerNudge"/> delivers, whenever it was due before. A request made while
+    /// the tenant's sync runs is kept, and the run that follows reads it.
+    /// </summary>
+    private void RequestConfigurationRead(Guid tenantId) => _ = RequestAsync(tenantId, ConfigurationSettleDelay);
+
+    /// <summary>
+    /// Makes the tenant due now for a real-time listener's event. Events within
+    /// <see cref="NudgeDebounceWindow"/> of the last one let through for the same tenant are dropped,
+    /// so a burst of upstream changes costs one sync rather than one each.
+    /// </summary>
+    /// <param name="tenantId">The tenant to sync.</param>
     protected void RequestImmediateSync(Guid tenantId)
     {
         var now = UtcNow;
-
-        // The schedule is cleared ahead of the debounce: the debounce protects the sync itself from
-        // an event storm, whereas a look costs one configuration read, and a tenant's enable flow
-        // writes configuration, secrets and the active flag in quick succession — the last of those
-        // is the one that must be seen.
-        _nextCheckByTenant.TryRemove(tenantId, out _);
-
         if (_lastNudgeByTenant.TryGetValue(tenantId, out var lastNudge) && now - lastNudge < NudgeDebounceWindow)
             return;
 
         _lastNudgeByTenant[tenantId] = now;
-        _lastSyncByTenant.TryRemove(tenantId, out _);
+        _ = RequestAsync(tenantId, TimeSpan.Zero);
+    }
 
-        Logger.LogDebug(
-            "Immediate sync requested for {ConnectorName} tenant {TenantId}",
-            ConnectorName, tenantId);
+    private async Task RequestAsync(Guid tenantId, TimeSpan after)
+    {
+        try
+        {
+            await (after == TimeSpan.Zero
+                ? _ledger.RequestAsync(Name, tenantId, CancellationToken.None)
+                : _ledger.RequestAsync(Name, tenantId, after, CancellationToken.None));
+            Logger.LogDebug(
+                "Sync requested for {ConnectorName} tenant {TenantId} in {After}",
+                ConnectorName, tenantId, after);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Could not request a {ConnectorName} sync for tenant {TenantId}; it syncs at its next due time",
+                ConnectorName, tenantId);
+        }
     }
 
     /// <summary>
@@ -178,55 +200,22 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     protected static string ConnectorName => Registration.ConnectorName;
 
     /// <summary>
-    /// The audit endpoint every job scope of this connector is attributed under, the one
+    /// The audit endpoint a real-time listener's scope is attributed under, the one
     /// <c>ConnectorSyncService</c> uses for a manual sync too.
     /// </summary>
     protected static string AuditEndpoint => $"connector:{Registration.ConnectorId}";
 
     /// <summary>
-    /// Called after the initial startup delay and again every <see cref="RealtimeSupervisionInterval"/>.
-    /// Override to start real-time listeners (e.g. webhooks, SSE, WebSocket connections).
-    /// Implementations must be idempotent — a tenant that already has a live listener must be left
-    /// untouched — and should use <see cref="ListenerNeedsStartAsync{TClient}"/> to enforce that.
-    /// The default implementation is a no-op.
+    /// How long a tenant with no usable configuration is parked: enablement can change without a
+    /// configuration write (platform options from the environment, a secret that decrypts again after
+    /// a key restore), and a write's request still reopens the row within a minute.
     /// </summary>
-    protected virtual Task StartRealtimeListenersAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    /// <summary>
-    /// How often the poll loop re-runs <see cref="StartRealtimeListenersAsync"/> to replace listeners
-    /// that have died. Deliberately coarser than the poll tick so a permanently unreachable upstream is
-    /// not reconnected every minute. Overridable for tests.
-    /// </summary>
-    protected virtual TimeSpan RealtimeSupervisionInterval => TimeSpan.FromMinutes(5);
-
-    /// <summary>
-    /// Delay before the first poll tick, letting the application fully start. The poller's phase
-    /// offset from <see cref="ConnectorSyncBudget.NextStartupOffset"/> is added on top. Overridable
-    /// for tests.
-    /// </summary>
-    protected virtual TimeSpan StartupDelay => TimeSpan.FromSeconds(5);
-
-    /// <summary>
-    /// Interval between poll ticks. Each tenant is still only synced when its own
-    /// SyncIntervalMinutes has elapsed since its last sync, or its aligned time has arrived. A
-    /// connector that declares a sensor cadence ticks every fifteen seconds so that time is met to
-    /// within seconds rather than a minute; a tenant that is not due costs nothing on a tick, since
-    /// the schedule is checked before any scope is opened. Overridable for tests.
-    /// </summary>
-    protected virtual TimeSpan PollInterval =>
-        SensorCadence is null ? TimeSpan.FromMinutes(1) : TimeSpan.FromSeconds(15);
-
-    /// <summary>
-    /// How long a tenant with no usable configuration for this connector is left alone before its
-    /// configuration is read again. Bounds the enable latency on an instance the configuration
-    /// write did not reach (<see cref="ConnectorPollerNudge"/> is in-process). Overridable for tests.
-    /// </summary>
-    protected virtual TimeSpan UnconfiguredRecheckInterval => TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan UnconfiguredRecheckInterval = TimeSpan.FromDays(1);
 
     /// <summary>
     /// The earliest an aligned sync may be scheduled after the sync that produced it. Guards the
     /// source against a <see cref="GetAlignedSyncTimeAsync"/> that answers "now" on every run, which
-    /// would otherwise sync the tenant on every tick. Overridable for tests.
+    /// would otherwise sync the tenant back to back. Overridable for tests.
     /// </summary>
     protected virtual TimeSpan MinimumAlignedSyncSpacing => TimeSpan.FromSeconds(30);
 
@@ -234,8 +223,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// Called after each successful sync to say when the tenant should next be synced, ahead of
     /// <c>SyncIntervalMinutes</c>, or <c>null</c> to leave the interval in charge. For a connector
     /// that declares a sensor cadence this is just after its next reading should reach the cloud (see
-    /// <see cref="SensorSyncAlignment"/>), worked out from the newest reading stored under the
-    /// connector's data source; every other connector answers <c>null</c>. Overridable for tests.
+    /// <see cref="SensorSyncAlignment"/>, whose own jitter spreads it), worked out from the newest
+    /// reading stored under the connector's data source; every other connector answers <c>null</c>.
+    /// Overridable for tests.
     /// </summary>
     /// <param name="scopeProvider">The tenant-scoped provider the sync ran in.</param>
     /// <param name="config">The tenant's connector configuration.</param>
@@ -267,29 +257,6 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         };
 
         return SensorSyncAlignment.NextSyncAt(reading, cadence, now, Random.Shared.NextDouble());
-    }
-
-    private DateTime _lastRealtimeSupervision = DateTime.MinValue;
-
-    private async Task SuperviseRealtimeListenersAsync(CancellationToken stoppingToken)
-    {
-        var now = UtcNow;
-        if (now - _lastRealtimeSupervision < RealtimeSupervisionInterval)
-            return;
-
-        _lastRealtimeSupervision = now;
-
-        try
-        {
-            await StartRealtimeListenersAsync(stoppingToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(
-                ex,
-                "Failed to start real-time listeners for {ConnectorName}, falling back to polling",
-                ConnectorName);
-        }
     }
 
     /// <summary>
@@ -354,13 +321,6 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     }
 
     /// <summary>
-    /// Called when the service is shutting down, after the poll loop exits.
-    /// Override to tear down any real-time listeners started in <see cref="StartRealtimeListenersAsync"/>.
-    /// The default implementation is a no-op.
-    /// </summary>
-    protected virtual Task StopRealtimeListenersAsync() => Task.CompletedTask;
-
-    /// <summary>
     /// Performs a single sync operation using the connector service.
     /// Services should be resolved from the provided <paramref name="scopeProvider"/>
     /// which has the tenant context already set.
@@ -414,105 +374,29 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         }
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task<JobOutcome> RunAsync(JobRun run, CancellationToken ct)
     {
-        var startupDelay = StartupDelay + _budget.NextStartupOffset(PollInterval);
-        if (startupDelay > TimeSpan.Zero)
-            await Task.Delay(startupDelay, stoppingToken);
+        var tenant = run.Tenant!;
+        if (!tenant.IsActive)
+            return JobOutcome.Resume(null, run.StartedAt + IScheduledJob.InactiveTenantRecheck);
 
-        Logger.LogInformation(
-            "{ConnectorName} connector background service started",
-            ConnectorName);
+        // Waiting for a slot is not the tenant's time, so the timeout starts once one is held.
+        using var slot = await AcquireSlotAsync(tenant.Slug, ct);
+
+        using var timeout = new CancellationTokenSource(PerTenantSyncTimeout, _timeProvider);
+        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
 
         try
         {
-            using var timer = new PeriodicTimer(PollInterval);
-
-            do
-            {
-                try
-                {
-                    await SuperviseRealtimeListenersAsync(stoppingToken);
-                    await SyncAllTenantsAsync(stoppingToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    Logger.LogError(ex, "Error during {ConnectorName} tenant sync cycle", ConnectorName);
-                }
-            } while (await timer.WaitForNextTickAsync(stoppingToken));
+            return await SyncAsync(run, ct, stopping.Token);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            Logger.LogInformation("{ConnectorName} connector background service stopping", ConnectorName);
+            Logger.LogWarning(
+                "{ConnectorName} sync for tenant {TenantSlug} exceeded {Timeout} and was cancelled",
+                ConnectorName, tenant.Slug, PerTenantSyncTimeout);
+            throw new TimeoutException($"The {ConnectorName} sync exceeded {PerTenantSyncTimeout}.");
         }
-        finally
-        {
-            try
-            {
-                await StopRealtimeListenersAsync();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(
-                    ex,
-                    "Failed to stop real-time listeners for {ConnectorName}",
-                    ConnectorName);
-            }
-
-            Logger.LogInformation(
-                "{ConnectorName} connector background service stopped",
-                ConnectorName);
-        }
-    }
-
-    private async Task SyncAllTenantsAsync(CancellationToken stoppingToken)
-    {
-        var activeTenants = await ActiveTenants.GetAsync(stoppingToken);
-        var now = UtcNow;
-        var tenants = activeTenants
-            .Where(t => !_nextCheckByTenant.TryGetValue(t.Id, out var nextCheck) || nextCheck <= now)
-            .ToList();
-
-        // Sync tenants concurrently so each tenant is independent: one tenant's slow or failing sync
-        // must never delay or block another's. Each tenant already runs in its own DI scope (own
-        // DbContext, own tenant context), so concurrent execution is isolated.
-        await Parallel.ForEachAsync(
-            tenants,
-            new ParallelOptions
-            {
-                MaxDegreeOfParallelism = MaxConcurrentTenantSyncs,
-                CancellationToken = stoppingToken
-            },
-            async (tenant, ct) =>
-            {
-                // Waiting for a slot is not the tenant's time, so the timeout starts once one is held.
-                using var lease = await AcquireSlotAsync(tenant.Slug, ct);
-
-                using var tenantCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                tenantCts.CancelAfter(PerTenantSyncTimeout);
-
-                try
-                {
-                    await SyncForTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, ct, tenantCts.Token);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    throw; // The service itself is shutting down — propagate to stop the loop.
-                }
-                catch (OperationCanceledException) when (tenantCts.IsCancellationRequested)
-                {
-                    // Per-tenant timeout fired. Abandon this tenant so it frees its slot for others.
-                    Logger.LogWarning(
-                        "{ConnectorName} sync for tenant {TenantSlug} exceeded {Timeout} and was cancelled",
-                        ConnectorName, tenant.Slug, PerTenantSyncTimeout);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex,
-                        "Error syncing {ConnectorName} for tenant {TenantSlug}",
-                        ConnectorName, tenant.Slug);
-                }
-            });
     }
 
     /// <summary>
@@ -546,85 +430,42 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         return held;
     }
 
-    private async Task SyncForTenantAsync(
-        Guid tenantId,
-        string tenantSlug,
-        string displayName,
-        CancellationToken shutdownToken,
-        CancellationToken stoppingToken)
+    private async Task<JobOutcome> SyncAsync(JobRun run, CancellationToken shutdownToken, CancellationToken stoppingToken)
     {
-        await using var scope = TenantJobScope.Open(
-            ServiceProvider,
-            new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false),
-            AuditEndpoint);
+        var tenantId = run.Tenant!.TenantId;
+        var tenantSlug = run.Tenant.Slug;
+        var config = await run.Services.GetRequiredService<IConnectorConfigurationLoader<TConfig>>()
+            .LoadForTenantAsync(stoppingToken);
 
-        // Load per-tenant config via the loader
-        var loader = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationLoader<TConfig>>();
-        TConfig config;
-        try
-        {
-            config = await loader.LoadForTenantAsync(stoppingToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            Logger.LogWarning(ex, "Failed to load config for {ConnectorName}/{TenantSlug}", ConnectorName, tenantSlug);
-            return;
-        }
-        catch (DbUpdateException ex)
-        {
-            Logger.LogWarning(ex, "Failed to load config for {ConnectorName}/{TenantSlug}", ConnectorName, tenantSlug);
-            return;
-        }
-
-        var now = UtcNow;
         if (!config.Enabled || config.SyncIntervalMinutes <= 0)
-        {
-            _nextCheckByTenant[tenantId] = now + UnconfiguredRecheckInterval;
-            return;
-        }
+            return JobOutcome.Resume(null, run.StartedAt + UnconfiguredRecheckInterval);
 
-        // Only sync when the tenant's configured interval has elapsed, or when the connector said
-        // new data is due (see GetAlignedSyncTimeAsync) and that time has arrived.
-        var interval = TimeSpan.FromMinutes(config.SyncIntervalMinutes);
-        var hasAligned = _alignedSyncByTenant.TryGetValue(tenantId, out var alignedAt);
-        if (!(hasAligned && alignedAt <= now)
-            && _lastSyncByTenant.TryGetValue(tenantId, out var lastSync)
-            && now - lastSync < interval)
-        {
-            var intervalDue = lastSync + interval;
-            _nextCheckByTenant[tenantId] = hasAligned && alignedAt < intervalDue ? alignedAt : intervalDue;
-            return;
-        }
-
-        Logger.LogDebug("Syncing {ConnectorName} for tenant {TenantSlug}", ConnectorName, tenantSlug);
+        var intervalDue = OnPhase(run.StartedAt, TimeSpan.FromMinutes(config.SyncIntervalMinutes), tenantId);
 
         // A manual sync of the same tenant and connector holds this key for its whole run. This
-        // poller never waits: the manual run is already fetching this tenant's data, so this cycle
-        // skips the tenant and the next tick re-checks it.
+        // poller never waits: the manual run is already fetching this tenant's data.
         using var lease = _runGuard?.TryAcquire(tenantId, Registration.ConnectorId);
         if (_runGuard is not null && lease is null)
         {
             Logger.LogInformation(
                 "{ConnectorName} sync for tenant {TenantSlug} skipped: a sync is already running",
                 ConnectorName, tenantSlug);
-            return;
+            return JobOutcome.Resume(null, intervalDue);
         }
 
-        _alignedSyncByTenant.TryRemove(tenantId, out _);
-        _lastSyncByTenant[tenantId] = now;
-        _nextCheckByTenant[tenantId] = now + interval;
+        Logger.LogDebug("Syncing {ConnectorName} for tenant {TenantSlug}", ConnectorName, tenantSlug);
 
         await UpdateHealthStateAsync(
-            scope.ServiceProvider,
-            lastSyncAttempt: now,
+            run.Services,
+            lastSyncAttempt: UtcNow,
             cancellationToken: stoppingToken);
 
         var started = Stopwatch.GetTimestamp();
-        var progressReporter = scope.ServiceProvider.GetService<ISyncProgressReporter>();
+        var progressReporter = run.Services.GetService<ISyncProgressReporter>();
         SyncResult result;
         try
         {
-            result = await PerformSyncAsync(scope.ServiceProvider, config, stoppingToken, progressReporter);
+            result = await PerformSyncAsync(run.Services, config, stoppingToken, progressReporter);
         }
         catch (OperationCanceledException)
         {
@@ -645,7 +486,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         // A run that never got a token has nothing to fetch, which several connectors report as a
         // successful sync that found no data. Reading the failure here rather than in each connector
         // is what makes a connector that cannot sign in visible for all of them.
-        var signInFailure = scope.ServiceProvider.GetRequiredService<IConnectorTokenCache>()
+        var signInFailure = run.Services.GetRequiredService<IConnectorTokenCache>()
             .GetSignInFailure(ConnectorName, tenantId);
 
         _metrics?.RecordSyncDuration(
@@ -660,48 +501,48 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
                 ConnectorName, tenantSlug);
 
             await UpdateHealthStateAsync(
-                scope.ServiceProvider,
+                run.Services,
                 lastSuccessfulSync: UtcNow,
                 isHealthy: true,
                 lastErrorMessage: string.Empty,
                 lastErrorAt: DateTime.MinValue,
                 cancellationToken: stoppingToken);
 
-            await ScheduleAlignedSyncAsync(scope.ServiceProvider, tenantId, tenantSlug, config, stoppingToken);
+            var aligned = await AlignedSyncAtAsync(run.Services, tenantSlug, config, stoppingToken);
+            return JobOutcome.Resume(null, aligned < intervalDue ? aligned.Value : intervalDue);
         }
-        else
-        {
-            // Distinct because the same message repeats per chunk; see
-            // ConnectorConfigurationEntity.LastErrorMessageMaxLength. A failed sign-in outranks
-            // whatever the run made of it, because it names the step that stopped the run.
-            var errorMessage = signInFailure
-                ?? (result.Errors.Count > 0
-                    ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
-                    : !string.IsNullOrWhiteSpace(result.Message)
-                        ? result.Message
-                        : "Sync failed");
 
-            Logger.LogWarning(
-                "{ConnectorName} sync failed for tenant {TenantSlug}: {ErrorMessage}",
-                ConnectorName, tenantSlug, errorMessage);
+        // Distinct because the same message repeats per chunk; see
+        // ConnectorConfigurationRecord.LastErrorMessageMaxLength. A failed sign-in outranks
+        // whatever the run made of it, because it names the step that stopped the run.
+        var errorMessage = signInFailure
+            ?? (result.Errors.Count > 0
+                ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
+                : !string.IsNullOrWhiteSpace(result.Message)
+                    ? result.Message
+                    : "Sync failed");
 
-            await UpdateHealthStateAsync(
-                scope.ServiceProvider,
-                isHealthy: false,
-                lastErrorMessage: errorMessage,
-                lastErrorAt: UtcNow,
-                cancellationToken: stoppingToken);
-        }
+        Logger.LogWarning(
+            "{ConnectorName} sync failed for tenant {TenantSlug}: {ErrorMessage}",
+            ConnectorName, tenantSlug, errorMessage);
+
+        await UpdateHealthStateAsync(
+            run.Services,
+            isHealthy: false,
+            lastErrorMessage: errorMessage,
+            lastErrorAt: UtcNow,
+            cancellationToken: stoppingToken);
+
+        return JobOutcome.Resume(null, intervalDue);
     }
 
     /// <summary>
-    /// Asks the connector when its source next expects new data and, when it names a time, brings
-    /// the tenant's next check forward to it. A failure here is logged and costs only the alignment:
-    /// the sync already succeeded, and the plain interval still stands.
+    /// When the connector says its source next has new data, no sooner than
+    /// <see cref="MinimumAlignedSyncSpacing"/> from now, or null. A failure here is logged and costs
+    /// only the alignment: the sync already succeeded, and the plain interval still stands.
     /// </summary>
-    private async Task ScheduleAlignedSyncAsync(
+    private async Task<DateTimeOffset?> AlignedSyncAtAsync(
         IServiceProvider scopeProvider,
-        Guid tenantId,
         string tenantSlug,
         TConfig config,
         CancellationToken cancellationToken)
@@ -717,32 +558,36 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
                 ex,
                 "Could not align the next {ConnectorName} sync for tenant {TenantSlug}; using the sync interval",
                 ConnectorName, tenantSlug);
-            return;
+            return null;
         }
 
         if (aligned is not { } at)
-            return;
+            return null;
 
         var earliest = UtcNow + MinimumAlignedSyncSpacing;
         if (at < earliest)
             at = earliest;
 
-        _alignedSyncByTenant[tenantId] = at;
-        if (!_nextCheckByTenant.TryGetValue(tenantId, out var next) || at < next)
-            _nextCheckByTenant[tenantId] = at;
-
         Logger.LogDebug(
             "{ConnectorName} next sync for tenant {TenantSlug} aligned to {AlignedAt:HH:mm:ss} UTC",
             ConnectorName, tenantSlug, at);
+
+        return new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc));
     }
 
-    public override async Task StopAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// The first point of the tenant's <see cref="JobPhase"/> at or after <paramref name="interval"/>
+    /// from <paramref name="startedAt"/>, less two <see cref="JobScheduler.PollInterval"/>s: a run the
+    /// scheduler started a poll or two late keeps its phase rather than skipping a whole step, and no
+    /// run comes due sooner than that after the last.
+    /// </summary>
+    private DateTimeOffset OnPhase(DateTimeOffset startedAt, TimeSpan interval, Guid tenantId)
     {
-        Logger.LogInformation(
-            "{ConnectorName} connector background service is stopping...",
-            ConnectorName
-        );
-        await base.StopAsync(cancellationToken);
+        var phase = JobPhase.Of(Name, tenantId, Spread);
+        var period = Spread.Ticks;
+        var earliest = (startedAt + interval - 2 * JobScheduler.PollInterval - phase).UtcTicks;
+        var point = (earliest + period - 1) / period * period;
+        return new DateTimeOffset(point, TimeSpan.Zero) + phase;
     }
 }
 
@@ -752,15 +597,14 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 /// subclass of its own, so a connector needs no scheduling code to be polled.
 /// </summary>
 public class ConnectorBackgroundService<TService, TConfig>(
-    IServiceProvider serviceProvider,
     ConnectorSyncBudget budget,
-    ActiveTenantSnapshot activeTenants,
+    IJobLedger ledger,
     ILogger<ConnectorBackgroundService<TService, TConfig>> logger,
     TimeProvider timeProvider,
     ConnectorPollerNudge? nudge = null,
     ConnectorSyncMetrics? metrics = null,
     TenantRunGuard? runGuard = null)
-    : ConnectorBackgroundService<TConfig>(serviceProvider, budget, activeTenants, logger, timeProvider, nudge, metrics, runGuard)
+    : ConnectorBackgroundService<TConfig>(budget, ledger, logger, timeProvider, nudge, metrics, runGuard)
     where TService : class, IConnectorService<TConfig>
     where TConfig : BaseConnectorConfiguration
 {

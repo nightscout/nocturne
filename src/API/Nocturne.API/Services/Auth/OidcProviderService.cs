@@ -2,13 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -19,7 +16,7 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="IOidcProviderService"/>
 public class OidcProviderService : IOidcProviderService
 {
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IOidcProviderRepository _providers;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OidcProviderService> _logger;
     private readonly IDataProtector _clientSecretProtector;
@@ -35,14 +32,14 @@ public class OidcProviderService : IOidcProviderService
     /// </param>
     /// <param name="oidcOptions">Config-file OIDC provider definitions for config-managed mode.</param>
     public OidcProviderService(
-        INocturneDbContextFactory contexts,
+        IOidcProviderRepository providers,
         IHttpClientFactory httpClientFactory,
         ILogger<OidcProviderService> logger,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> oidcOptions
     )
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _providers = providers ?? throw new ArgumentNullException(nameof(providers));
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _clientSecretProtector = dataProtectionProvider.CreateProtector(
@@ -67,68 +64,30 @@ public class OidcProviderService : IOidcProviderService
         if (options.Providers.Count == 0)
             return;
 
-        var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
-        await using var db = await factory.CreatePlatformAsync();
+        var providers = scope.ServiceProvider.GetRequiredService<IOidcProviderRepository>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<OidcProviderService>>();
 
-        var configuredIds = options.Providers.Select(p => CreateDeterministicGuid(p.IssuerUrl)).ToArray();
+        var configured = options.Providers.Select(config => new NewOidcProvider(
+            config.Name,
+            TypeToString(config.ProviderType),
+            config.IssuerUrl.TrimEnd('/'),
+            config.ClientId,
+            Id: CreateDeterministicGuid(config.IssuerUrl),
+            OAuth2SettingsJson: SerializeOAuth2(config.OAuth2),
+            Scopes: NormalizeScopes(config.ProviderType, config.Scopes),
+            DefaultRoles: config.DefaultRoles,
+            IsEnabled: config.IsEnabled,
+            DisplayOrder: config.DisplayOrder,
+            Icon: config.Icon,
+            ButtonColor: config.ButtonColor)).ToList();
 
-        foreach (var config in options.Providers)
-        {
-            var id = CreateDeterministicGuid(config.IssuerUrl);
-            var existing = await db.OidcProviders.FindAsync(id);
-            if (existing != null)
-            {
-                existing.Name = config.Name;
-                existing.ProviderType = TypeToString(config.ProviderType);
-                existing.OAuth2SettingsJson = SerializeOAuth2(config.OAuth2);
-                existing.IssuerUrl = config.IssuerUrl.TrimEnd('/');
-                existing.ClientId = config.ClientId;
-                existing.IsEnabled = config.IsEnabled;
-                existing.DisplayOrder = config.DisplayOrder;
-                existing.Scopes = NormalizeScopes(config.ProviderType, config.Scopes);
-                existing.DefaultRoles = config.DefaultRoles;
-                existing.Icon = config.Icon;
-                existing.ButtonColor = config.ButtonColor;
-                existing.UpdatedAt = DateTime.UtcNow;
-            }
-            else
-            {
-                db.OidcProviders.Add(new OidcProviderEntity
-                {
-                    Id = id,
-                    Name = config.Name,
-                    ProviderType = TypeToString(config.ProviderType),
-                    OAuth2SettingsJson = SerializeOAuth2(config.OAuth2),
-                    IssuerUrl = config.IssuerUrl.TrimEnd('/'),
-                    ClientId = config.ClientId,
-                    IsEnabled = config.IsEnabled,
-                    DisplayOrder = config.DisplayOrder,
-                    Scopes = NormalizeScopes(config.ProviderType, config.Scopes),
-                    DefaultRoles = config.DefaultRoles,
-                    Icon = config.Icon,
-                    ButtonColor = config.ButtonColor,
-                });
-            }
-        }
-
-        var stale = await db.OidcProviders
-            .Where(p => !configuredIds.Contains(p.Id) && p.IsEnabled)
-            .ToListAsync();
-        foreach (var provider in stale)
-        {
-            provider.IsEnabled = false;
-            provider.UpdatedAt = DateTime.UtcNow;
-        }
-
-        await db.SaveChangesAsync();
+        await providers.SyncConfiguredAsync(configured, DateTime.UtcNow, CancellationToken.None);
         logger.LogInformation("Synced {Count} config-managed OIDC providers to database", options.Providers.Count);
     }
 
     /// <inheritdoc />
     public async Task<List<OidcProvider>> GetEnabledProvidersAsync()
     {
-        await using var db = await _contexts.CreateAsync();
         if (IsConfigManaged)
             return _oidcOptions.Providers
                 .Where(p => p.IsEnabled)
@@ -137,19 +96,13 @@ public class OidcProviderService : IOidcProviderService
                 .Select(MapConfigToModel)
                 .ToList();
 
-        var entities = await db
-            .OidcProviders.Where(p => p.IsEnabled)
-            .OrderBy(p => p.DisplayOrder)
-            .ThenBy(p => p.Name)
-            .ToListAsync();
-
-        return entities.Select(MapToModel).ToList();
+        var records = await _providers.ListAsync(enabledOnly: true, CancellationToken.None);
+        return records.Select(MapToModel).ToList();
     }
 
     /// <inheritdoc />
     public async Task<List<OidcProvider>> GetAllProvidersAsync()
     {
-        await using var db = await _contexts.CreateAsync();
         if (IsConfigManaged)
             return _oidcOptions.Providers
                 .OrderBy(p => p.DisplayOrder)
@@ -157,141 +110,81 @@ public class OidcProviderService : IOidcProviderService
                 .Select(MapConfigToModel)
                 .ToList();
 
-        var entities = await db
-            .OidcProviders.OrderBy(p => p.DisplayOrder)
-            .ThenBy(p => p.Name)
-            .ToListAsync();
-
-        return entities.Select(MapToModel).ToList();
+        var records = await _providers.ListAsync(enabledOnly: false, CancellationToken.None);
+        return records.Select(MapToModel).ToList();
     }
 
     /// <inheritdoc />
     public async Task<OidcProvider?> GetProviderByIdAsync(Guid providerId)
     {
-        await using var db = await _contexts.CreateAsync();
         if (IsConfigManaged)
             return _oidcOptions.Providers
                 .Select(MapConfigToModel)
                 .FirstOrDefault(p => p.Id == providerId);
 
-        var entity = await db.OidcProviders.FindAsync(providerId);
-        return entity != null ? MapToModel(entity) : null;
+        var record = await _providers.GetAsync(providerId, CancellationToken.None);
+        return record != null ? MapToModel(record) : null;
     }
 
     /// <inheritdoc />
     public async Task<OidcProvider?> GetProviderByIssuerAsync(string issuerUrl)
     {
-        await using var db = await _contexts.CreateAsync();
-        // Normalize the issuer URL (remove trailing slash)
-        var normalizedIssuer = issuerUrl.TrimEnd('/');
-
-        var entity = await db.OidcProviders.FirstOrDefaultAsync(p =>
-            p.IssuerUrl == normalizedIssuer
-            || p.IssuerUrl == normalizedIssuer + "/"
-            || p.IssuerUrl.TrimEnd('/') == normalizedIssuer
-        );
-
-        return entity != null ? MapToModel(entity) : null;
+        var record = await _providers.FindByIssuerAsync(issuerUrl, CancellationToken.None);
+        return record != null ? MapToModel(record) : null;
     }
 
     /// <inheritdoc />
     public async Task<OidcProvider> CreateProviderAsync(OidcProvider provider)
     {
-        await using var db = await _contexts.CreateAsync();
-        var entity = new OidcProviderEntity
-        {
-            Name = provider.Name,
-            ProviderType = TypeToString(provider.ProviderType),
-            OAuth2SettingsJson = SerializeOAuth2(provider.OAuth2),
-            IssuerUrl = provider.IssuerUrl.TrimEnd('/'),
-            ClientId = provider.ClientId,
-            ClientSecretEncrypted = !string.IsNullOrEmpty(provider.ClientSecret)
-                ? EncryptSecret(provider.ClientSecret)
-                : null,
-            Scopes = NormalizeScopes(provider.ProviderType, provider.Scopes),
-            ClaimMappingsJson = JsonSerializer.Serialize(provider.ClaimMappings),
-            DefaultRoles = provider.DefaultRoles,
-            IsEnabled = provider.IsEnabled,
-            DisplayOrder = provider.DisplayOrder,
-        };
-
-        db.OidcProviders.Add(entity);
-        await db.SaveChangesAsync();
-
-        provider.Id = entity.Id;
+        provider.Id = await _providers.CreateAsync(
+            new NewOidcProvider(
+                provider.Name,
+                TypeToString(provider.ProviderType),
+                provider.IssuerUrl.TrimEnd('/'),
+                provider.ClientId,
+                OAuth2SettingsJson: SerializeOAuth2(provider.OAuth2),
+                ClientSecretEncrypted: !string.IsNullOrEmpty(provider.ClientSecret) ? EncryptSecret(provider.ClientSecret) : null,
+                Scopes: NormalizeScopes(provider.ProviderType, provider.Scopes),
+                ClaimMappingsJson: JsonSerializer.Serialize(provider.ClaimMappings),
+                DefaultRoles: provider.DefaultRoles,
+                IsEnabled: provider.IsEnabled,
+                DisplayOrder: provider.DisplayOrder),
+            CancellationToken.None);
         return provider;
     }
 
     /// <inheritdoc />
     public async Task<OidcProvider?> UpdateProviderAsync(OidcProvider provider)
     {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db.OidcProviders.FindAsync(provider.Id);
-        if (entity == null)
-            return null;
-
-        entity.Name = provider.Name;
-        entity.ProviderType = TypeToString(provider.ProviderType);
-        entity.OAuth2SettingsJson = SerializeOAuth2(provider.OAuth2);
-        entity.IssuerUrl = provider.IssuerUrl.TrimEnd('/');
-        entity.ClientId = provider.ClientId;
-
-        if (!string.IsNullOrEmpty(provider.ClientSecret))
-        {
-            entity.ClientSecretEncrypted = EncryptSecret(provider.ClientSecret);
-        }
-
-        entity.Scopes = NormalizeScopes(provider.ProviderType, provider.Scopes);
-        entity.ClaimMappingsJson = JsonSerializer.Serialize(provider.ClaimMappings);
-        entity.DefaultRoles = provider.DefaultRoles;
-        entity.IsEnabled = provider.IsEnabled;
-        entity.DisplayOrder = provider.DisplayOrder;
-        entity.UpdatedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync();
-        return MapToModel(entity);
+        var updated = await _providers.UpdateAsync(
+            provider.Id,
+            new OidcProviderEdit(
+                provider.Name,
+                TypeToString(provider.ProviderType),
+                SerializeOAuth2(provider.OAuth2),
+                provider.IssuerUrl.TrimEnd('/'),
+                provider.ClientId,
+                !string.IsNullOrEmpty(provider.ClientSecret) ? EncryptSecret(provider.ClientSecret) : null,
+                NormalizeScopes(provider.ProviderType, provider.Scopes),
+                JsonSerializer.Serialize(provider.ClaimMappings),
+                provider.DefaultRoles,
+                provider.IsEnabled,
+                provider.DisplayOrder),
+            CancellationToken.None);
+        return updated == null ? null : MapToModel(updated);
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteProviderAsync(Guid providerId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db.OidcProviders.FindAsync(providerId);
-        if (entity == null)
-            return false;
-
-        db.OidcProviders.Remove(entity);
-        await db.SaveChangesAsync();
-        return true;
-    }
+    public Task<bool> DeleteProviderAsync(Guid providerId) =>
+        _providers.DeleteAsync(providerId, CancellationToken.None);
 
     /// <inheritdoc />
-    public async Task<bool> EnableProviderAsync(Guid providerId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db.OidcProviders.FindAsync(providerId);
-        if (entity == null)
-            return false;
-
-        entity.IsEnabled = true;
-        entity.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-        return true;
-    }
+    public Task<bool> EnableProviderAsync(Guid providerId) =>
+        _providers.SetEnabledAsync(providerId, true, CancellationToken.None);
 
     /// <inheritdoc />
-    public async Task<bool> DisableProviderAsync(Guid providerId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db.OidcProviders.FindAsync(providerId);
-        if (entity == null)
-            return false;
-
-        entity.IsEnabled = false;
-        entity.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-        return true;
-    }
+    public Task<bool> DisableProviderAsync(Guid providerId) =>
+        _providers.SetEnabledAsync(providerId, false, CancellationToken.None);
 
     /// <inheritdoc />
     public async Task<OidcDiscoveryDocument?> GetDiscoveryDocumentAsync(
@@ -299,7 +192,6 @@ public class OidcProviderService : IOidcProviderService
         bool forceRefresh = false
     )
     {
-        await using var db = await _contexts.CreateAsync();
         if (IsConfigManaged)
         {
             var configProvider = _oidcOptions.Providers
@@ -315,26 +207,26 @@ public class OidcProviderService : IOidcProviderService
             return await FetchDiscoveryDocumentAsync(configProvider.IssuerUrl);
         }
 
-        var entity = await db.OidcProviders.FindAsync(providerId);
-        if (entity == null)
+        var record = await _providers.GetAsync(providerId, CancellationToken.None);
+        if (record == null)
             return null;
 
         // OAuth2 providers publish no discovery document; endpoints come from configuration.
-        if (ParseType(entity.ProviderType) == OidcProviderType.OAuth2)
-            return DiscoveryFromOAuth2Settings(DeserializeOAuth2(entity.OAuth2SettingsJson));
+        if (ParseType(record.ProviderType) == OidcProviderType.OAuth2)
+            return DiscoveryFromOAuth2Settings(DeserializeOAuth2(record.OAuth2SettingsJson));
 
         // Check if we have a cached document that's still valid (less than 24 hours old)
         if (
             !forceRefresh
-            && entity.DiscoveryDocumentJson != null
-            && entity.DiscoveryCachedAt.HasValue
-            && entity.DiscoveryCachedAt.Value > DateTime.UtcNow.AddHours(-24)
+            && record.DiscoveryDocumentJson != null
+            && record.DiscoveryCachedAt.HasValue
+            && record.DiscoveryCachedAt.Value > DateTime.UtcNow.AddHours(-24)
         )
         {
             try
             {
                 return JsonSerializer.Deserialize<OidcDiscoveryDocument>(
-                    entity.DiscoveryDocumentJson
+                    record.DiscoveryDocumentJson
                 );
             }
             catch
@@ -344,12 +236,11 @@ public class OidcProviderService : IOidcProviderService
         }
 
         // Fetch fresh discovery document
-        var document = await FetchDiscoveryDocumentAsync(entity.IssuerUrl);
+        var document = await FetchDiscoveryDocumentAsync(record.IssuerUrl);
         if (document != null)
         {
-            entity.DiscoveryDocumentJson = JsonSerializer.Serialize(document);
-            entity.DiscoveryCachedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
+            await _providers.CacheDiscoveryDocumentAsync(
+                providerId, JsonSerializer.Serialize(document), DateTime.UtcNow, CancellationToken.None);
         }
 
         return document;
@@ -358,7 +249,6 @@ public class OidcProviderService : IOidcProviderService
     /// <inheritdoc />
     public async Task<OidcProviderTestResult> TestProviderAsync(Guid providerId)
     {
-        await using var db = await _contexts.CreateAsync();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var result = new OidcProviderTestResult { Warnings = new List<string>() };
 
@@ -420,13 +310,8 @@ public class OidcProviderService : IOidcProviderService
             // Cache the document (DB providers only)
             if (!IsConfigManaged)
             {
-                var entity = await db.OidcProviders.FindAsync(providerId);
-                if (entity != null)
-                {
-                    entity.DiscoveryDocumentJson = JsonSerializer.Serialize(document);
-                    entity.DiscoveryCachedAt = DateTime.UtcNow;
-                    await db.SaveChangesAsync();
-                }
+                await _providers.CacheDiscoveryDocumentAsync(
+                    providerId, JsonSerializer.Serialize(document), DateTime.UtcNow, CancellationToken.None);
             }
         }
         catch (Exception ex)
@@ -580,10 +465,7 @@ public class OidcProviderService : IOidcProviderService
         ButtonColor = config.ButtonColor,
     };
 
-    /// <summary>
-    /// Map entity to domain model
-    /// </summary>
-    private OidcProvider MapToModel(OidcProviderEntity entity)
+    private OidcProvider MapToModel(OidcProviderRecord entity)
     {
         Dictionary<string, string>? claimMappings = null;
         if (!string.IsNullOrEmpty(entity.ClaimMappingsJson))
@@ -626,9 +508,9 @@ public class OidcProviderService : IOidcProviderService
                 entity.ClientSecretEncrypted != null
                     ? DecryptSecret(entity.ClientSecretEncrypted)
                     : null,
-            Scopes = entity.Scopes,
+            Scopes = [.. entity.Scopes],
             ClaimMappings = claimMappings ?? new Dictionary<string, string>(),
-            DefaultRoles = entity.DefaultRoles,
+            DefaultRoles = [.. entity.DefaultRoles],
             IsEnabled = entity.IsEnabled,
             DisplayOrder = entity.DisplayOrder,
             DiscoveryDocument = discoveryDoc,

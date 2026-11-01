@@ -197,7 +197,7 @@ public class TenantSettingsControllerTests
         var result = await controller.SetPatientRelationship(
             new SetPatientRelationshipRequest { Relationship = answer, PatientName = "  Sam " }, CancellationToken.None);
 
-        tenants.Verify(t => t.SetPatientRelationshipAsync(TenantId, answer, It.IsAny<CancellationToken>()), Times.Once);
+        tenants.Verify(t => t.SetPatientRelationshipAsync(TenantId, answer, OwnerId, It.IsAny<CancellationToken>()), Times.Once);
         records.Verify(r => r.UpdateAsync(
             It.Is<PatientRecord>(p => p.PreferredName == "Sam" && p.Pronouns == "they/them"),
             WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
@@ -218,7 +218,7 @@ public class TenantSettingsControllerTests
         await controller.SetPatientRelationship(
             new SetPatientRelationshipRequest { Relationship = answer, PatientName = name }, CancellationToken.None);
 
-        tenants.Verify(t => t.SetPatientRelationshipAsync(TenantId, answer, It.IsAny<CancellationToken>()), Times.Once);
+        tenants.Verify(t => t.SetPatientRelationshipAsync(TenantId, answer, OwnerId, It.IsAny<CancellationToken>()), Times.Once);
         records.Verify(r => r.GetOrCreateAsync(It.IsAny<CancellationToken>()), Times.Never);
         records.Verify(r => r.UpdateAsync(
             It.IsAny<PatientRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -277,7 +277,8 @@ public class TenantSettingsControllerTests
         PatientRelationship answer)
     {
         var built = BuildWithRecords(Scope.FullAccess);
-        built.Tenants.Setup(t => t.SetPatientRelationshipAsync(TenantId, answer, It.IsAny<CancellationToken>()))
+        built.Controller.HttpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = OwnerId };
+        built.Tenants.Setup(t => t.SetPatientRelationshipAsync(TenantId, answer, OwnerId, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         built.Tenants.Setup(t => t.GetPatientRelationshipAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(answer);

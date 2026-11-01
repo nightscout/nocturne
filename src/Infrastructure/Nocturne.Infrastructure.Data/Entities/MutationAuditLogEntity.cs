@@ -6,7 +6,8 @@ namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
 /// Audit log entry recording a mutation to a clinical entity.
-/// Append-only — no updates or deletes.
+/// Written once. Retention deletes it, and the actor's deletion clears its client address
+/// (<see cref="Nocturne.Core.Contracts.Auth.ISubjectRepository.DeleteAsync"/>).
 /// </summary>
 [Table("mutation_audit_log")]
 public class MutationAuditLogEntity : ITenantScoped
@@ -46,14 +47,14 @@ public class MutationAuditLogEntity : ITenantScoped
     [Column("changes", TypeName = "jsonb")]
     public string? ChangesJson { get; set; }
 
-    /// <summary>Authenticated user who performed the mutation, if known.</summary>
-    [Column("subject_id")]
-    public Guid? SubjectId { get; set; }
+    /// <summary>The caller who performed the mutation, if known. See <see cref="Nocturne.Core.Contracts.Auth.IAuthAuditService"/>.</summary>
+    [Column("actor_subject_id")]
+    public Guid? ActorSubjectId { get; set; }
 
-    /// <summary>Display name of the authenticated user, denormalized for historical retention.</summary>
-    [Column("subject_name")]
+    /// <summary>Display name of the caller, denormalized for historical retention.</summary>
+    [Column("actor_name")]
     [MaxLength(128)]
-    public string? SubjectName { get; set; }
+    public string? ActorName { get; set; }
 
     /// <summary>Authentication mechanism used (e.g. "Bearer", "ApiSecret", "Background").</summary>
     [Column("auth_type")]
@@ -99,8 +100,8 @@ public class MutationAuditLogEntity : ITenantScoped
         EntityId = entityId,
         Action = action,
         ChangesJson = changesJson,
-        SubjectId = auditContext?.SubjectId,
-        SubjectName = auditContext?.SubjectName,
+        ActorSubjectId = auditContext?.SubjectId,
+        ActorName = auditContext?.SubjectName,
         AuthType = auditContext?.AuthType,
         IpAddress = auditContext?.IpAddress,
         TokenId = auditContext?.TokenId,

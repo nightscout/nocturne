@@ -13,6 +13,10 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Nocturne.API.Services.Identity;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -452,7 +456,10 @@ public class PasskeyServiceTests
         var logger = NullLogger<PasskeyService>.Instance;
 
         var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == environmentName);
-        return new PasskeyService(_dbContext.AsFactory(), fido2, dataProtectionProvider, fido2Options, logger, environment);
+        var contexts = _dbContext.AsFactory();
+        return new PasskeyService(
+            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts), new TenantMemberService(new TenantMembershipRepository(contexts)),
+            fido2, dataProtectionProvider, fido2Options, logger, environment);
     }
 
     private static PasskeyCredentialEntity CreateCredentialEntity(

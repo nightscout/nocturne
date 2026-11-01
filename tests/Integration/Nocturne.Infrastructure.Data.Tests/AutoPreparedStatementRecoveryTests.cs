@@ -37,7 +37,7 @@ public class AutoPreparedStatementRecoveryTests(RlsCompletenessFixture fx) : IAs
         await using (var seeding = TenantReaderData.BuildProvider(fx.AppConnectionString))
         {
             _tenant = await TenantReaderData.SeedTenantAsync(fx, seeding);
-            await seeding.GetRequiredService<NpgsqlDataSource>().DisposeAsync();
+            await seeding.GetRequiredService<ContextDataSource>().Source.DisposeAsync();
         }
 
         _connectionString = new NpgsqlConnectionStringBuilder(fx.AppConnectionString)
@@ -54,7 +54,7 @@ public class AutoPreparedStatementRecoveryTests(RlsCompletenessFixture fx) : IAs
 
     public async Task DisposeAsync()
     {
-        await _provider.GetRequiredService<NpgsqlDataSource>().DisposeAsync();
+        await _provider.GetRequiredService<ContextDataSource>().Source.DisposeAsync();
         await _provider.DisposeAsync();
     }
 

@@ -22,7 +22,7 @@ namespace Nocturne.API.Services.Analytics;
 /// Fetches one window of everything Loop Analysis reads and hands it to the Core calculators.
 /// Each page's load and calculation is in its own part (<c>LoopAnalysisService.&lt;Page&gt;.cs</c>);
 /// this one holds what the pages share. Every collection is read uncapped, for the reason given on
-/// <c>StatisticsController.FetchInsulinRecordsAsync</c>.
+/// <see cref="InsulinDeliveryReader.ReadRecordsAsync"/>.
 /// </summary>
 internal sealed partial class LoopAnalysisService(
     ISensorGlucoseRepository glucoseRepository,

@@ -6,7 +6,6 @@ using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -31,16 +30,13 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 [AllowDuringSetup]
 public class TenantDirectGrantController : ControllerBase
 {
-    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly IDirectGrantService _directGrantService;
 
     public TenantDirectGrantController(
-        INocturneDbContextFactory dbContextFactory,
         ITenantMemberService tenantMemberService,
         IDirectGrantService directGrantService)
     {
-        _dbContextFactory = dbContextFactory;
         _tenantMemberService = tenantMemberService;
         _directGrantService = directGrantService;
     }
@@ -66,10 +62,8 @@ public class TenantDirectGrantController : ControllerBase
                 detail: "Subject is not a member of this tenant", statusCode: 400, title: "Bad Request");
         }
 
-        await using var dbContext = await _dbContextFactory.CreateForTenantAsync(tenantId, ct);
-
         var result = await _directGrantService.CreateAsync(
-            dbContext, request.SubjectId, request.Label, request.Scopes, request.ExpiresAt,
+            tenantId, request.SubjectId, request.Label, request.Scopes, request.ExpiresAt,
             request.LimitTo24Hours,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
@@ -96,9 +90,7 @@ public class TenantDirectGrantController : ControllerBase
     [ProducesResponseType(typeof(List<DirectGrantDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<DirectGrantDto>>> List(Guid tenantId, CancellationToken ct)
     {
-        await using var dbContext = await _dbContextFactory.CreateForTenantAsync(tenantId, ct);
-
-        var grants = await _directGrantService.ListAsync(dbContext, subjectId: null, ct);
+        var grants = await _directGrantService.ListAsync(tenantId, subjectId: null, ct);
         return Ok(grants);
     }
 
@@ -115,10 +107,8 @@ public class TenantDirectGrantController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Revoke(Guid tenantId, Guid grantId, CancellationToken ct)
     {
-        await using var dbContext = await _dbContextFactory.CreateForTenantAsync(tenantId, ct);
-
         var found = await _directGrantService.RevokeAsync(
-            dbContext, grantId, subjectId: null,
+            tenantId, grantId, subjectId: null,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             actor: Actor,

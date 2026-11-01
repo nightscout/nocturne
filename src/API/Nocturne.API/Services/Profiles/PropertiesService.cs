@@ -17,7 +17,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Battery;
 using Nocturne.Core.Models.V4;
 using Nocturne.API.Services.Glucose;
-using Nocturne.API.Services.Treatments;
+using Nocturne.API.Services.BolusWizard;
 
 namespace Nocturne.API.Services.Profiles;
 
@@ -94,7 +94,27 @@ public class PropertiesService : IPropertiesService
     {
         try
         {
-            var properties = await BuildSandboxPropertiesAsync(cancellationToken);
+            var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
+            var ddata = await _ddataService.GetDDataAsync(now, DDataCollections.All, cancellationToken);
+            return await GetAllPropertiesAsync(ddata, await ReadIobCobAsync(now), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all properties");
+            return new Dictionary<string, object>();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<string, object>> GetAllPropertiesAsync(
+        DData ddata,
+        IobCobReading? iobCob,
+        CancellationToken cancellationToken = default
+    )
+    {
+        try
+        {
+            var properties = await BuildSandboxPropertiesAsync(ddata, iobCob, cancellationToken);
             return ApplySecurityFiltering(properties);
         }
         catch (Exception ex)
@@ -113,7 +133,11 @@ public class PropertiesService : IPropertiesService
         try
         {
             var requested = propertyNames as IReadOnlyCollection<string> ?? propertyNames.ToList();
-            var allProperties = await BuildSandboxPropertiesAsync(cancellationToken, requested);
+            var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
+            var ddata = await _ddataService.GetDDataAsync(
+                now, PropertyDDataSources.For(requested), cancellationToken);
+            var allProperties = await BuildSandboxPropertiesAsync(
+                ddata, await ReadIobCobAsync(now), cancellationToken, requested);
             var filteredProperties = new Dictionary<string, object>();
 
             foreach (var propertyName in requested)
@@ -176,20 +200,20 @@ public class PropertiesService : IPropertiesService
     /// <remarks>
     /// When <paramref name="requested"/> is set, only those property names were asked for, and
     /// properties whose sources cost extra queries are skipped; null builds everything.
+    /// <paramref name="ddata"/> then holds only the collections <see cref="PropertyDDataSources"/> names
+    /// for them.
     /// </remarks>
     private async Task<Dictionary<string, object>> BuildSandboxPropertiesAsync(
+        DData ddata,
+        IobCobReading? iobCob,
         CancellationToken cancellationToken,
         IReadOnlyCollection<string>? requested = null
     )
     {
         var properties = new Dictionary<string, object>();
-        var timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
         try
         {
-            // Get DData which contains the current state
-            var ddata = await _ddataService.GetDDataAsync(timestamp, cancellationToken);
-
             // Build properties that would be set by plugins
 
             // BGNow properties (most recent glucose entry)
@@ -202,7 +226,6 @@ public class PropertiesService : IPropertiesService
             SetDirectionProperties(properties, ddata);
 
             var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
-            var iobCob = await ReadIobCobAsync(now);
             if (iobCob is not null)
             {
                 SetIobProperties(properties, iobCob.Iob, ddata, now);

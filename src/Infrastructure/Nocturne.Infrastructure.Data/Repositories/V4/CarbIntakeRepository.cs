@@ -34,8 +34,9 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<CarbIntakeRepository> logger,
-        IV4RecordBroadcaster<CarbIntake>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<CarbIntake>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
     {
         _deduplicationService = deduplicationService;
     }
@@ -115,9 +116,7 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
                     || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
         }
 
-        query = descending
-            ? query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
-            : query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id);
+        query = query.InObservationOrder(descending);
 
         if (!afterTimestamp.HasValue || !afterId.HasValue)
         {
@@ -145,6 +144,23 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(CarbIntakeMapper.ToDomainModel);
+    }
+
+    public async Task<IEnumerable<CarbIntake>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds,
+        CancellationToken ct = default
+    )
+    {
+        var ids = correlationIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .CarbIntakes.AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+        return entities.Select(CarbIntakeMapper.ToDomainModel).ToList();
     }
 
     /// <summary>

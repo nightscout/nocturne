@@ -28,6 +28,7 @@ namespace Nocturne.API.Services.Alerts;
 /// </remarks>
 internal sealed class AlertDeliveryService(
     INocturneDbContextFactory contextFactory,
+    ITenantMembershipRepository members,
     ITenantAccessor tenantAccessor,
     ISignalRBroadcastService broadcastService,
     IEngineAlarmRelay alarmRelay,
@@ -378,8 +379,8 @@ internal sealed class AlertDeliveryService(
             return "In-app channel names no recipient";
         }
 
-        await using var db = await contextFactory.CreateAsync(ct);
-        return await InAppRecipients.ResolveAsync(db, tenantAccessor.TenantId, destination, ct) is null
+        return await InAppRecipients.ResolveAsync(
+            members, tenantAccessor.TenantId, destination, ct) is null
             ? "In-app recipient is not a member of this site who holds any access"
             : null;
     }

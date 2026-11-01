@@ -6,6 +6,7 @@ import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 const state = vi.hoisted(() => ({
   relationship: {} as { relationship?: string; patientName?: string },
   hubState: "Open" as string | undefined,
+  handover: undefined as { callerIsHelper: boolean } | undefined,
   roles: [] as { id: string; slug: string; name: string; accessLevel?: string; canGrant: boolean }[],
 }));
 
@@ -48,6 +49,7 @@ vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
               totalCount: 1,
               revision: "r",
               showStrip: false,
+              handover: state.handover,
             },
       ),
       { refresh: commands.refreshHub },
@@ -89,6 +91,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.relationship = { relationship: "Caregiver", patientName: "Sam" };
   state.hubState = "Open";
+  state.handover = undefined;
   state.roles = SEEDED_ROLES;
   share = { enabled: false, scopes: [], shareableScopes: SHAREABLE, fullHistory: false };
 });
@@ -247,5 +250,55 @@ describe("sharing guided page", () => {
 
     await vi.waitFor(() => expect(commands.goto).toHaveBeenCalledWith("/setup"));
     expect(commands.setState).not.toHaveBeenCalled();
+  });
+
+  describe("for a helper", () => {
+    beforeEach(() => {
+      state.relationship = { relationship: "Helper", patientName: "Sam" };
+      state.handover = { callerIsHelper: true };
+    });
+
+    it("hands it over with a single-use owner invite and says what that gives away", async () => {
+      render(SharingPage);
+
+      const handover = page.getByTestId("sharing-handover");
+      await expect.element(handover.getByRole("heading", { name: "Hand it over" })).toBeVisible();
+      await expect
+        .element(handover.getByText("They can do everything you can do, including remove you."))
+        .toBeVisible();
+      await expect.element(handover.getByRole("radio", { name: /Owner/ })).toBeChecked();
+      expect(handover.getByRole("radio").elements()).toHaveLength(1);
+      expect(handover.getByText("Allow multiple uses").elements()).toHaveLength(0);
+      expect(handover.getByText("Only last 24 hours").elements()).toHaveLength(0);
+      expect(document.querySelector('[data-testid^="sharing-audience-"]')).toBeNull();
+    });
+
+    it("creates the invite, shows the link, and waits for them to accept", async () => {
+      commands.createInvite.mockResolvedValue({ inviteUrl: "https://example.test/invite/x" });
+      render(SharingPage);
+
+      const handover = page.getByTestId("sharing-handover");
+      await handover.getByRole("button", { name: "Create Link" }).click();
+
+      await vi.waitFor(() =>
+        expect(commands.createInvite).toHaveBeenCalledWith(
+          expect.objectContaining({ roleIds: ["role-owner"], maxUses: 1, limitTo24Hours: false }),
+        ),
+      );
+      await expect.element(handover.getByRole("textbox")).toHaveValue("https://example.test/invite/x");
+      await expect.element(page.getByTestId("sharing-handover-waiting")).toHaveTextContent("Waiting for them to accept.");
+      await vi.waitFor(() => expect(refreshHub).toHaveBeenCalled());
+    });
+
+    it("shows the person it was handed to the usual choices, not another owner invite", async () => {
+      state.handover = { callerIsHelper: false };
+      render(SharingPage);
+
+      await expect.element(card("family")).toBeVisible();
+      for (const id of ["temporary", "public", "just-me"])
+        await expect.element(card(id)).toHaveAttribute("aria-pressed", "false");
+      expect(page.getByTestId("sharing-handover").elements()).toHaveLength(0);
+      expect(page.getByTestId("create-invite-card").elements()).toHaveLength(0);
+    });
   });
 });

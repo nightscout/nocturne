@@ -3,7 +3,6 @@ using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Entries;
 using Nocturne.Infrastructure.Cache.Constants;
-using Nocturne.API.Services.Glucose;
 
 namespace Nocturne.API.Services.Entries;
 
@@ -14,18 +13,16 @@ namespace Nocturne.API.Services.Entries;
 /// </summary>
 /// <seealso cref="IEntryCache"/>
 /// <seealso cref="EntryService"/>
-public class EntryCacheAdapter : IEntryCache
+internal class EntryCacheAdapter : IEntryCache
 {
     /// <summary>The <see cref="ITenantCache"/> key family every entry read is cached under.</summary>
-    public const string CacheFamily = TenantCacheFamily.Entries;
+    private const string CacheFamily = TenantCacheFamily.Entries;
 
     private readonly ITenantCache _cache;
-    private readonly ILogger<EntryCacheAdapter> _logger;
 
-    public EntryCacheAdapter(ITenantCache cache, ILogger<EntryCacheAdapter> logger)
+    public EntryCacheAdapter(ITenantCache cache)
     {
         _cache = cache;
-        _logger = logger;
     }
 
     public async Task<IReadOnlyList<Entry>?> GetOrComputeAsync(
@@ -57,16 +54,4 @@ public class EntryCacheAdapter : IEntryCache
             compute,
             TimeSpan.FromSeconds(CacheConstants.Defaults.CurrentEntryExpirationSeconds),
             ct);
-
-    public async Task InvalidateAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            await _cache.RemoveFamilyAsync(CacheFamily, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to invalidate entry caches");
-        }
-    }
 }

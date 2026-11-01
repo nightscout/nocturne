@@ -8,6 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Middleware;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Utilities;
@@ -19,6 +20,8 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
 
@@ -62,7 +65,7 @@ public class ApiKeyHandlerTests : IDisposable
             .ReturnsAsync(() => _db.CreateContext(_testTenantId));
 
         var logger = new Mock<ILogger<ApiKeyHandler>>();
-        _handler = new ApiKeyHandler(_dbContextFactory.Object.AsNocturneFactory(), _clock, logger.Object);
+        _handler = new ApiKeyHandler(new OAuthGrantRepository(_dbContextFactory.Object.AsNocturneFactory()), _clock, new LastUsedClaims(_clock), logger.Object);
     }
 
     public void Dispose()
@@ -688,6 +691,7 @@ public class ApiKeyHandlerTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddScoped<ISubjectRepository>(_ => new SubjectRepository(_dbContextFactory.Object.AsNocturneFactory()));
         var owner = ownerSubjectId?.ToString();
         services.AddScoped(_ => Mock.Of<ITenantOwnerResolver>(r =>
             r.GetOwnerSubjectIdAsync(_testTenantId, It.IsAny<CancellationToken>()) == Task.FromResult(owner)));

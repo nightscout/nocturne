@@ -322,6 +322,53 @@ public class StatisticsServiceHourlyDeliveryTests
         result.Hours.Should().OnlyContain(h => h.ProfileBasalRate == 0);
     }
 
+    [Fact]
+    public void ManualBolusesPerDay_CountsBolusesInTheLocalHourOverDaysWithBolusData()
+    {
+        // At UTC-8, 03:10 UTC is 19:10 local on the day before. Local days with a bolus: Jan 1, 2, 3.
+        var tz = TimeZoneInfo.CreateCustomTimeZone("test-8", TimeSpan.FromHours(-8), "-8", "-8");
+        var boluses = new[]
+        {
+            MakeBolus(1.0, Utc(2024, 1, 2, 3, 10)),
+            MakeBolus(1.0, Utc(2024, 1, 2, 3, 40)),
+            MakeBolus(1.0, Utc(2024, 1, 3, 3, 5)),
+            MakeBolus(1.0, Utc(2024, 1, 3, 12, 0)),
+        };
+
+        var result = _sut.CalculateHourlyInsulinDelivery(
+            [], boluses, [], StartDate, EndDate, Mills(EndDate), tz);
+
+        result.Hours[19].ManualBolusesPerDay.Should().Be(1.0, "3 boluses over 3 local days");
+        result.Hours[4].ManualBolusesPerDay.Should().Be(0.33, "1 bolus over 3 local days");
+        result.Hours[3].ManualBolusesPerDay.Should().Be(0, "03:00 is the UTC hour, not the local one");
+        result.Hours[12].ManualBolusesPerDay.Should().Be(0);
+    }
+
+    [Fact]
+    public void ManualBolusesPerDay_DoesNotCountAlgorithmBoluses()
+    {
+        var boluses = new[] { MakeBolus(2.0, Utc(2024, 1, 1, 8, 15)) };
+        var algorithmBoluses = new[]
+        {
+            MakeBolus(0.4, Utc(2024, 1, 1, 8, 20)),
+            MakeBolus(0.4, Utc(2024, 1, 1, 8, 25)),
+        };
+
+        var result = _sut.CalculateHourlyInsulinDelivery(
+            [], boluses, algorithmBoluses, StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
+
+        result.Hours[8].ManualBolusesPerDay.Should().Be(1.0);
+    }
+
+    [Fact]
+    public void ManualBolusesPerDay_NoBoluses_IsZeroInEveryHour()
+    {
+        var result = _sut.CalculateHourlyInsulinDelivery(
+            [], [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
+
+        result.Hours.Should().OnlyContain(h => h.ManualBolusesPerDay == 0);
+    }
+
     private static long Mills(DateTime utc) => new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     private static DateTime Utc(int year, int month, int day, int hour, int minute) =>

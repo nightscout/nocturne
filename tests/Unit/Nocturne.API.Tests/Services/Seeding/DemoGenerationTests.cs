@@ -2,7 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
-using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Models;
@@ -82,11 +82,7 @@ public class DemoGenerationTests
         comparison.Sgv.Should().BeInRange(118, 122);
 
         var nadir = DemoCoverageSeeds.CompressionNadirMills(night, DemoTestClock.Host);
-        var detector = new CompressionLowDetectionService(
-            Mock.Of<IServiceProvider>(),
-            ActiveTenantSnapshotTestDoubles.Unread(),
-            TimeProvider.System,
-            NullLogger<CompressionLowDetectionService>.Instance);
+        var detector = new CompressionLowDetectionService(TimeProvider.System, NullLogger<CompressionLowDetectionService>.Instance);
         detector.DetectVShapeCandidates(readings.OrderBy(entry => entry.Mills).ToList())
             .Should().ContainSingle(candidate => candidate.LowestGlucose == DemoCoverageSeeds.CompressionNadirMgdl
                 && candidate.RecoveryMinutes == 10
@@ -112,11 +108,7 @@ public class DemoGenerationTests
             .SelectMany(step => DemoCoverageSeeds.CgmReadings(step))
             .OrderBy(entry => entry.Mills)
             .ToList();
-        var detector = new CompressionLowDetectionService(
-            Mock.Of<IServiceProvider>(),
-            ActiveTenantSnapshotTestDoubles.Unread(),
-            TimeProvider.System,
-            NullLogger<CompressionLowDetectionService>.Instance);
+        var detector = new CompressionLowDetectionService(TimeProvider.System, NullLogger<CompressionLowDetectionService>.Instance);
         var nights = Enumerable.Range(1, 10)
             .Select(daysAgo => DateOnly.FromDateTime(end).AddDays(-daysAgo))
             .Where(DemoCoverageSeeds.IsCompressionNight)

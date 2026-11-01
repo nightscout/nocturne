@@ -12,7 +12,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Glucose;
-using Nocturne.API.Services.Treatments;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -65,10 +65,10 @@ public class AlertReplayServicePagingTests
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
         _alertRepository
-            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
         _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
     }
 
@@ -211,7 +211,7 @@ public class AlertReplayServicePagingTests
     public async Task PageSize_DoesNotChangeReplayOutput_SparseSeries()
     {
         var ruleId = Guid.NewGuid();
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(ruleId, 70m) });
 
         // Readings two hours apart so most ticks carry a reading fetched on an earlier page.
@@ -264,7 +264,7 @@ public class AlertReplayServicePagingTests
         _devices.Add(rankedDevice);
 
         var ruleId = Guid.NewGuid();
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(ruleId, 70m) });
 
         // Bucket [04:00, 04:05): ranked device at 04:00 (200), a second unregistered stream at
@@ -309,7 +309,7 @@ public class AlertReplayServicePagingTests
     [NativeFact]
     public async Task GlucoseFetch_RequestsBoundedPages()
     {
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(Guid.NewGuid(), 70m) });
         SetupSeries([Reading(_dayStart.AddHours(4), 60)]);
 
@@ -335,7 +335,7 @@ public class AlertReplayServicePagingTests
     public async Task ABucketWiderThanAPage_IsFlushedRatherThanHeldBack()
     {
         var ruleId = Guid.NewGuid();
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(ruleId, 70m) });
 
         // Six readings inside the single bucket [04:00, 04:05), then one well clear of it.
@@ -376,7 +376,7 @@ public class AlertReplayServicePagingTests
     {
         using var spinGuard = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(Guid.NewGuid(), 70m) });
 
         // Deliberately cursor-blind: always the same two rows, which is a full page at pageSize 2.
@@ -412,7 +412,7 @@ public class AlertReplayServicePagingTests
         // unbounded-work hole the cap exists to close.
         shipped.Should().BeLessThanOrEqualTo(TimeSpan.FromHours(72));
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertRuleSnapshot>());
         SetupSeries([]);
         var sut = CreateSut(pageSize: 1000, maxWindow: shipped);
@@ -430,7 +430,7 @@ public class AlertReplayServicePagingTests
     [NativeFact]
     public async Task WindowExactlyAtTheMaximum_IsReplayed()
     {
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(Guid.NewGuid(), 70m) });
         SetupSeries([Reading(_dayStart.AddMinutes(30), 60)]);
 
@@ -472,7 +472,7 @@ public class AlertReplayServicePagingTests
             .Should().ThrowAsync<ReplayWindowTooLargeException>();
 
         _alertRepository.Verify(
-            r => r.GetEnabledRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+            r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Never);
         _glucoseRepository.Verify(
             r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),

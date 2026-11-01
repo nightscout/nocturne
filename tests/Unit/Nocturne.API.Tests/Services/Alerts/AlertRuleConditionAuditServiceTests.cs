@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
@@ -73,7 +74,8 @@ public class AlertRuleConditionAuditServiceTests
             .ReturnsAsync(() => new NocturneDbContext(_options));
         var services = new ServiceCollection()
             .AddSingleton(factory.Object.AsNocturneFactory())
-            .AddSingleton(alerts ?? new AlertRepository(factory.Object))
+            .AddTransient<ITenantRepository, TenantRepository>()
+            .AddSingleton(alerts ?? new AlertRepository(factory.Object.AsNocturneFactory()))
             .AddSingleton(_validator.Object)
             .BuildServiceProvider();
 

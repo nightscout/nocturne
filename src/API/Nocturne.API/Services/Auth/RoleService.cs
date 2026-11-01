@@ -1,19 +1,16 @@
-using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
 /// <summary>
-/// Manages authorisation roles and their permission assignments for tenants.
-/// Responsible for seeding default system roles on first run.
+/// Manages the global authorisation roles and their permissions, and seeds the default system
+/// roles on first run. A system role keeps its name and cannot be deleted.
 /// </summary>
 /// <seealso cref="IRoleService"/>
 public class RoleService : IRoleService
 {
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IRoleRepository _roles;
     private readonly ILogger<RoleService> _logger;
 
     /// <summary>
@@ -70,182 +67,106 @@ public class RoleService : IRoleService
         ["denied"] = ("No access", Array.Empty<string>()),
     };
 
-    public RoleService(INocturneDbContextFactory contexts, ILogger<RoleService> logger)
+    public RoleService(IRoleRepository roles, ILogger<RoleService> logger)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _roles = roles ?? throw new ArgumentNullException(nameof(roles));
         _logger = logger;
     }
 
-    public async Task<List<Role>> GetAllRolesAsync()
-    {
-        await using var db = await _contexts.CreateAsync();
-        var entities = await db.Roles.OrderBy(r => r.Name).ToListAsync();
+    public async Task<List<Role>> GetAllRolesAsync() => [.. await _roles.ListAsync(CancellationToken.None)];
 
-        return entities.Select(MapToModel).ToList();
-    }
-
-    public async Task<Role?> GetRoleByIdAsync(Guid roleId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db.Roles.FindAsync(roleId);
-        return entity != null ? MapToModel(entity) : null;
-    }
+    public Task<Role?> GetRoleByIdAsync(Guid roleId) => _roles.GetAsync(roleId, CancellationToken.None);
 
     public async Task<Role> CreateRoleAsync(Role role)
     {
-        await using var db = await _contexts.CreateAsync();
-        // Check for duplicate name
-        var existing = await db.Roles.FirstOrDefaultAsync(r => r.Name == role.Name);
-
-        if (existing != null)
+        if (await _roles.FindByNameAsync(role.Name, CancellationToken.None) is not null)
         {
             throw new InvalidOperationException($"Role with name '{role.Name}' already exists");
         }
 
-        var entity = new RoleEntity
-        {
-            Name = role.Name,
-            Description = role.Description,
-            Permissions = role.Permissions,
-            IsSystemRole = role.IsSystemRole,
-        };
-
-        db.Roles.Add(entity);
-        await db.SaveChangesAsync();
+        var created = await _roles.CreateAsync(
+            new NewRole(role.Name, role.Description, role.Permissions, role.IsSystemRole), CancellationToken.None);
 
         _logger.LogInformation("Created role: {RoleName}", role.Name);
 
-        return MapToModel(entity);
+        return created;
     }
 
     public async Task<Role?> UpdateRoleAsync(Role role)
     {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db.Roles.FindAsync(role.Id);
-        if (entity == null)
+        var existing = await _roles.GetAsync(role.Id, CancellationToken.None);
+        if (existing == null)
         {
             return null;
         }
 
-        // Check for name conflict if name is changing
-        if (entity.Name != role.Name)
+        if (existing.Name != role.Name)
         {
-            var existing = await db.Roles.FirstOrDefaultAsync(r =>
-                r.Name == role.Name && r.Id != role.Id
-            );
-
-            if (existing != null)
+            var sameName = await _roles.FindByNameAsync(role.Name, CancellationToken.None);
+            if (sameName is not null && sameName.Id != role.Id)
             {
                 throw new InvalidOperationException($"Role with name '{role.Name}' already exists");
             }
         }
 
         // System roles can have permissions updated but not be renamed or deleted
-        if (entity.IsSystemRole && entity.Name != role.Name)
+        if (existing.IsSystemRole && existing.Name != role.Name)
         {
             throw new InvalidOperationException("Cannot rename system roles");
         }
 
-        entity.Name = role.Name;
-        entity.Description = role.Description;
-        entity.Permissions = role.Permissions;
-        entity.UpdatedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync();
+        var updated = await _roles.UpdateAsync(
+            role.Id, role.Name, role.Description, role.Permissions, CancellationToken.None);
 
         _logger.LogInformation("Updated role: {RoleName}", role.Name);
 
-        return MapToModel(entity);
+        return updated;
     }
 
     public async Task<bool> DeleteRoleAsync(Guid roleId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db.Roles.FindAsync(roleId);
-        if (entity == null)
+        var existing = await _roles.GetAsync(roleId, CancellationToken.None);
+        if (existing == null)
         {
             return false;
         }
 
-        if (entity.IsSystemRole)
+        if (existing.IsSystemRole)
         {
-            _logger.LogWarning("Attempted to delete system role: {RoleName}", entity.Name);
+            _logger.LogWarning("Attempted to delete system role: {RoleName}", existing.Name);
             return false;
         }
 
-        // Remove all subject-role assignments first
-        var assignments = await db
-            .SubjectRoles.Where(sr => sr.RoleId == roleId)
-            .ToListAsync();
-
-        db.SubjectRoles.RemoveRange(assignments);
-        db.Roles.Remove(entity);
-        await db.SaveChangesAsync();
+        var assignments = await _roles.DeleteAsync(roleId, CancellationToken.None);
+        if (assignments is null)
+        {
+            return false;
+        }
 
         _logger.LogInformation(
             "Deleted role: {RoleName} and {Count} assignments",
-            entity.Name,
-            assignments.Count
-        );
+            existing.Name,
+            assignments);
 
         return true;
     }
 
     public async Task<int> InitializeDefaultRolesAsync()
     {
-        await using var db = await _contexts.CreateAsync();
         int created = 0;
 
         foreach (var (name, (description, permissions)) in DefaultRoles)
         {
-            var existing = await db.Roles.FirstOrDefaultAsync(r => r.Name == name);
+            var existing = await _roles.FindByNameAsync(name, CancellationToken.None);
 
             if (existing == null)
             {
-                var entity = new RoleEntity
-                {
-                    Name = name,
-                    Description = description,
-                    Permissions = permissions.ToList(),
-                    IsSystemRole = true,
-                };
-
-                db.Roles.Add(entity);
+                await _roles.CreateAsync(new NewRole(name, description, permissions, IsSystemRole: true), CancellationToken.None);
                 created++;
                 _logger.LogInformation("Created default role: {RoleName}", name);
             }
-            else if (existing.IsSystemRole)
-            {
-                // Update permissions for system roles if they've changed
-                if (!existing.Permissions.SequenceEqual(permissions))
-                {
-                    existing.Permissions = permissions.ToList();
-                    existing.Description = description;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    _logger.LogInformation("Updated permissions for system role: {RoleName}", name);
-                }
-            }
-        }
-
-        if (created > 0)
-        {
-            await db.SaveChangesAsync();
         }
 
         return created;
-    }
-
-    private static Role MapToModel(RoleEntity entity)
-    {
-        return new Role
-        {
-            Id = entity.Id,
-            Name = entity.Name,
-            Description = entity.Description,
-            Permissions = entity.Permissions,
-            IsSystemRole = entity.IsSystemRole,
-            CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt,
-        };
     }
 }

@@ -4,15 +4,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.API.Services.Devices;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.V4;
 using Xunit;
 using V1DeviceStatusController = Nocturne.API.Controllers.V1.DeviceStatusController;
 using V3DeviceStatusController = Nocturne.API.Controllers.V3.DeviceStatusController;
@@ -27,41 +23,26 @@ namespace Nocturne.API.Tests.Controllers;
 [Trait("Category", "Unit")]
 public class DeviceStatusCreateIdentityTests
 {
-    private readonly List<DeviceStatus> _decomposed = [];
-    private readonly Mock<IUploaderSnapshotRepository> _uploaderRepo = new();
-    private readonly Mock<IDeviceStatusDecomposer> _decomposer = new();
+    private readonly List<DeviceStatus> _created = [];
+    private readonly Mock<IDeviceStatusService> _deviceStatuses = new();
 
     public DeviceStatusCreateIdentityTests()
     {
-        _decomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<DeviceStatus, string?, WriteOrigin, CancellationToken>((ds, _, _, _) => _decomposed.Add(ds))
-            .ReturnsAsync(new DecompositionResult());
+        _deviceStatuses
+            .Setup(s => s.CreateDeviceStatusesAsync(
+                It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<DeviceStatus>, string?, WriteOrigin, CancellationToken>((statuses, _, _, _) => _created.AddRange(statuses))
+            .ReturnsAsync((IReadOnlyList<DeviceStatus> statuses, string? _, WriteOrigin _, CancellationToken _) =>
+                new BulkWrite<DeviceStatus>(statuses, 0));
     }
 
-    private DeviceStatusProjectionService Projection() => new(
-        Mock.Of<IDeviceStatusGroupRepository>(),
-        Mock.Of<IApsSnapshotRepository>(),
-        Mock.Of<IPumpSnapshotRepository>(),
-        _uploaderRepo.Object,
-        Mock.Of<IStateSpanRepository>(),
-        Mock.Of<IDeviceStatusExtrasRepository>(),
-        TimeProvider.System,
-        NullLogger<DeviceStatusProjectionService>.Instance);
-
     private V1DeviceStatusController V1() => WithContext(new V1DeviceStatusController(
-        Projection(),
-        _decomposer.Object,
-        Mock.Of<IWriteSideEffects>(),
-        Mock.Of<IDataEventSink<DeviceStatus>>(),
+        _deviceStatuses.Object,
         TimeProvider.System,
         NullLogger<V1DeviceStatusController>.Instance));
 
     private V3DeviceStatusController V3() => WithContext(new V3DeviceStatusController(
-        Projection(),
-        _decomposer.Object,
-        Mock.Of<IWriteSideEffects>(),
-        Mock.Of<IDataEventSink<DeviceStatus>>(),
+        _deviceStatuses.Object,
         Mock.Of<IDocumentProcessingService>(),
         NullLogger<V3DeviceStatusController>.Instance));
 
@@ -70,11 +51,11 @@ public class DeviceStatusCreateIdentityTests
     {
         var result = await V1().CreateDeviceStatus(Json("""[{"device":"loop://a"},{"device":"loop://b","_id":""}]"""));
 
-        _decomposed.Should().HaveCount(2);
-        _decomposed.Should().OnlyContain(ds => MongoObjectId.IsObjectId(ds.Id));
-        _decomposed[0].Id.Should().NotBe(_decomposed[1].Id);
+        _created.Should().HaveCount(2);
+        _created.Should().OnlyContain(ds => MongoObjectId.IsObjectId(ds.Id));
+        _created[0].Id.Should().NotBe(_created[1].Id);
         var returned = result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<DeviceStatus[]>().Subject;
-        returned.Select(ds => ds.Id).Should().Equal(_decomposed.Select(ds => ds.Id));
+        returned.Select(ds => ds.Id).Should().Equal(_created.Select(ds => ds.Id));
     }
 
     [Fact]
@@ -82,7 +63,7 @@ public class DeviceStatusCreateIdentityTests
     {
         await V1().CreateDeviceStatus(Json("""{"device":"loop://a","_id":"loop-status-7"}"""));
 
-        _decomposed.Should().ContainSingle().Which.Id.Should().Be("loop-status-7");
+        _created.Should().ContainSingle().Which.Id.Should().Be("loop-status-7");
     }
 
     [Fact]
@@ -90,7 +71,7 @@ public class DeviceStatusCreateIdentityTests
     {
         await V3().CreateDeviceStatus(Json("""{"device":"openaps://phone","app":"AAPS"}"""));
 
-        MongoObjectId.IsObjectId(_decomposed.Should().ContainSingle().Subject.Id).Should().BeTrue();
+        MongoObjectId.IsObjectId(_created.Should().ContainSingle().Subject.Id).Should().BeTrue();
     }
 
     /// <summary>
@@ -100,9 +81,12 @@ public class DeviceStatusCreateIdentityTests
     [Fact]
     public async Task V3_deduplicated_create_answers_with_the_wire_identifier()
     {
-        _uploaderRepo
-            .Setup(r => r.GetByLegacyIdAsync("loop-status-7", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new UploaderSnapshot { Id = Guid.CreateVersion7(), LegacyId = "loop-status-7", Timestamp = DateTime.UtcNow });
+        _deviceStatuses
+            .Setup(s => s.GetDeviceStatusByIdAsync("loop-status-7", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceStatus
+            {
+                Id = "loop-status-7", Device = "loop://a", SrvModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            });
 
         var result = await V3().CreateDeviceStatus(Json("""{"_id":"loop-status-7","device":"loop://a","app":"Loop"}"""));
 
@@ -112,7 +96,7 @@ public class DeviceStatusCreateIdentityTests
         body.GetProperty("identifier").GetString().Should().Be(wireId);
         body.GetProperty("status").GetInt32().Should().Be(200);
         body.TryGetProperty("lastModified", out _).Should().BeTrue();
-        _decomposed.Should().BeEmpty();
+        _created.Should().BeEmpty();
     }
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();

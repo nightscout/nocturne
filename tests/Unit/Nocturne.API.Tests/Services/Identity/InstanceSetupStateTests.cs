@@ -3,6 +3,8 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Identity;
 
 /// <summary>
@@ -19,7 +21,7 @@ public class InstanceSetupStateTests : IDisposable
     public InstanceSetupStateTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(_tenantId, "site");
-        _state = new InstanceSetupState(_db.ContextFactory.AsNocturneFactory());
+        _state = new InstanceSetupState(new TenantRepository(_db.ContextFactory.AsNocturneFactory()), new SubjectRepository(_db.ContextFactory.AsNocturneFactory()));
     }
 
     public void Dispose()

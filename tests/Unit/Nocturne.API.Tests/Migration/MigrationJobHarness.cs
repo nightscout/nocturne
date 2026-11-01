@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -8,7 +9,10 @@ using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -17,9 +21,9 @@ using Nocturne.Infrastructure.Data;
 namespace Nocturne.API.Tests.Migration;
 
 /// <summary>
-/// Runs a real <see cref="MigrationJob"/> in API mode against a stubbed Nightscout, with every
-/// decomposer mocked out — what the source answers is the input under test, not what the
-/// decomposers do with it.
+/// Runs a real <see cref="MigrationJob"/> in API mode against a stubbed Nightscout, with the entry
+/// import and every decomposer mocked out — what the source answers is the input under test, not
+/// what the writers do with it.
 /// </summary>
 internal static class MigrationJobHarness
 {
@@ -39,8 +43,8 @@ internal static class MigrationJobHarness
         public void SetTenant(TenantContext? tenant) => Context = tenant;
     }
 
-    /// <param name="entryOutcome">What the entry decomposer reports for each page; empty when omitted.</param>
-    /// <param name="treatmentOutcome">What the treatment decomposer reports for each page; empty when omitted.</param>
+    /// <param name="entryOutcome">What the entry import reports for each page; empty when omitted.</param>
+    /// <param name="treatmentOutcome">What the treatment import reports for each page; empty when omitted.</param>
     /// <param name="profileOutcome">What the profile decomposer reports for each profile; empty when omitted.</param>
     /// <param name="interceptor">Attached to every <see cref="NocturneDbContext"/> the provider creates.</param>
     public static ServiceProvider BuildProvider(
@@ -52,33 +56,33 @@ internal static class MigrationJobHarness
     {
         var database = $"migration-{Guid.NewGuid():N}";
 
-        var entries = new Mock<IEntryDecomposer>();
+        var entries = new Mock<IEntryService>();
         entries
-            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyList<Entry> page, WriteOrigin _, CancellationToken _) =>
+            .Setup(s => s.ImportEntriesAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Entry> page, CancellationToken _) =>
                 entryOutcome?.Invoke(page) ?? new DecompositionResult());
 
-        var treatments = new Mock<ITreatmentDecomposer>();
+        var treatments = new Mock<ITreatmentService>();
         treatments
-            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyList<Treatment> page, WriteOrigin _, CancellationToken _) =>
+            .Setup(s => s.ImportTreatmentsAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Treatment> page, CancellationToken _) =>
                 treatmentOutcome?.Invoke(page) ?? new DecompositionResult());
 
-        var deviceStatuses = new Mock<IDeviceStatusDecomposer>();
+        var deviceStatuses = new Mock<IDeviceStatusService>();
         deviceStatuses
-            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.ImportDeviceStatusesAsync(It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
         var profiles = new Mock<IProfileDecomposer>();
         profiles
-            .Setup(d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Profile profile, WriteOrigin _, CancellationToken _) =>
-                profileOutcome?.Invoke(profile) ?? new DecompositionResult());
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Profile>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Profile> batch, WriteOrigin _, CancellationToken _) =>
+                profileOutcome?.Invoke(batch.Single()) ?? new DecompositionResult());
 
         var activities = new Mock<IActivityDecomposer>();
         activities
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .ReturnsAsync(new ActivityDecomposition());
 
         return new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o =>

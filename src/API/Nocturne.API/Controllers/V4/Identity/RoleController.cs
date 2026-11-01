@@ -64,6 +64,7 @@ public class RoleController : ControllerBase
     [RemoteCommand(Invalidates = ["GetRoles"])]
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request, CancellationToken ct)
     {
         if (!HttpContext.HasScope(Scope.RolesManage))
@@ -74,9 +75,9 @@ public class RoleController : ControllerBase
         if (violation != null)
             return GrantProblem(violation);
 
-        var role = await _roleService.CreateRoleAsync(
+        var result = await _roleService.CreateRoleAsync(
             _tenantAccessor.TenantId, request.Name, request.Description, request.Permissions, grantedScopes, ct);
-        return StatusCode(StatusCodes.Status201Created, role);
+        return result.Role is null ? NameProblem(result) : StatusCode(StatusCodes.Status201Created, result.Role);
     }
 
     /// <summary>
@@ -88,6 +89,7 @@ public class RoleController : ControllerBase
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
     {
         if (!HttpContext.HasScope(Scope.RolesManage))
@@ -100,12 +102,12 @@ public class RoleController : ControllerBase
 
         try
         {
-            var role = await _roleService.UpdateRoleAsync(
+            var result = await _roleService.UpdateRoleAsync(
                 _tenantAccessor.TenantId, id, request.Name, request.Description, request.Permissions, grantedScopes, ct);
-            if (role == null)
+            if (result == null)
                 return NotFound();
 
-            return Ok(role);
+            return result.Role is null ? NameProblem(result) : Ok(result.Role);
         }
         catch (InvalidOperationException ex)
         {
@@ -133,6 +135,9 @@ public class RoleController : ControllerBase
 
         return NoContent();
     }
+
+    private ObjectResult NameProblem(SaveRoleResult result) =>
+        Problem(detail: result.ErrorDescription, statusCode: StatusCodes.Status409Conflict, title: result.ErrorCode);
 
     /// <summary>
     /// An unknown permission is malformed input; exceeding the ceiling is a refusal.

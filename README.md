@@ -219,8 +219,7 @@ Send the member `https://<tenant-host>/auth/recovery?code=<code>`. The code work
 If you have the .NET 10 SDK and Aspire CLI installed, you can generate the production bundle from source:
 
 ```bash
-dotnet run scripts/publish-release.cs              # outputs to ./release-output
-dotnet run scripts/publish-release.cs ./deploy     # or specify a directory
+dotnet run scripts/publish-release.cs              # regenerates deploy/ and docs/diagrams/; CI fails a PR whose bundle drifts
 ```
 
 ### PostgreSQL Roles

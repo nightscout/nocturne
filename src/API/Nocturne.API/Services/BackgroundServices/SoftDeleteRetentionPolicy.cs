@@ -2,7 +2,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
 /// Single source of truth for the effective soft-delete retention window a tenant is
-/// subject to. <see cref="SoftDeleteCleanupService"/> hard-deletes soft-deleted rows
+/// subject to. <see cref="SoftDeleteCleanupJob"/> hard-deletes soft-deleted rows
 /// once they pass this window; the audit-config validator
 /// (<c>AuditController.UpdateAuditConfig</c>) resolves the same window so mutation-audit
 /// retention can be kept at least as long. If audit rows aged out first, a user-delete's

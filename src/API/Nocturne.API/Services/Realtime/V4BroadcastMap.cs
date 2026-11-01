@@ -6,9 +6,9 @@ namespace Nocturne.API.Services.Realtime;
 /// Maps each V4 domain model type to its broadcast category and <c>recordType</c> discriminator.
 /// </summary>
 /// <remarks>
-/// The treatment family (Bolus, CarbIntake, BG check, calculations, basal, notes) rides the <c>care</c>
-/// category; the glucose family rides <c>glucose</c>; device snapshots and device events ride
-/// <c>device</c>. A type rides the category whose governing scope in
+/// The treatment family (Bolus, CarbIntake, calculations, basal, notes) rides the <c>care</c>
+/// category; the glucose family, including BG checks, rides <c>glucose</c>; device snapshots and
+/// device events ride <c>device</c>. A type rides the category whose governing scope in
 /// <see cref="RealtimeCategories.GoverningScopes"/> its HTTP read requires, because a broadcast reaches
 /// every subscriber of the category. The <c>therapy</c> category (schedules/therapy settings) is intentionally
 /// unmapped — defined and subscribable but dormant until wired — so those writes broadcast nothing.
@@ -23,7 +23,7 @@ internal static class V4BroadcastMap
 
         [typeof(Bolus)] = (RealtimeCategories.Care, "bolus"),
         [typeof(CarbIntake)] = (RealtimeCategories.Care, "carbIntake"),
-        [typeof(BGCheck)] = (RealtimeCategories.Care, "bgCheck"),
+        [typeof(BGCheck)] = (RealtimeCategories.Glucose, "bgCheck"),
         [typeof(BolusCalculation)] = (RealtimeCategories.Care, "bolusCalculation"),
         [typeof(BasalInjection)] = (RealtimeCategories.Care, "basalInjection"),
         [typeof(TempBasal)] = (RealtimeCategories.Care, "tempBasal"),

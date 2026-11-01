@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Caching;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -527,7 +528,7 @@ public class DataOverviewService : IDataOverviewService
         _logger.LogDebug(
             "Getting eHbA1c timeline for year {Year}, dataSources={DataSources}",
             year,
-            dataSources != null ? string.Join(",", dataSources.Select(SanitizeForLog)) : "(all)"
+            dataSources != null ? string.Join(",", dataSources.Select(LogText.Sanitize)) : "(all)"
         );
 
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
@@ -715,12 +716,6 @@ public class DataOverviewService : IDataOverviewService
 
         return points.ToArray();
     }
-
-    /// <summary>
-    /// Strips CR/LF from a caller-supplied value before it reaches a log message, so a crafted
-    /// data-source name cannot forge additional log lines (CWE-117 log injection).
-    /// </summary>
-    private static string SanitizeForLog(string value) => value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
     /// True for anything but the caller's own cancellation, which must propagate; a cancellation

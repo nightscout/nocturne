@@ -118,11 +118,7 @@ internal sealed class TempBasalRateReresolver(
                 changed += await ReresolveAsync(window, rates, tempBasals, ct);
 
             if (changed > 0)
-            {
-                var cache = services.GetRequiredService<ITenantCache>();
-                await cache.RemoveFamilyAsync(TenantCacheFamily.Treatments, ct);
-                await cache.RemoveFamilyAsync(TenantCacheFamily.Statistics, ct);
-            }
+                await services.GetRequiredService<ITenantCache>().RemoveFamilyAsync(TenantCacheFamily.Statistics, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -138,10 +134,9 @@ internal sealed class TempBasalRateReresolver(
         while (true)
         {
             var page = await tempBasals.GetScheduleDerivedAsync(window.From, window.To, after, PageSize, ct);
-            foreach (var tempBasal in page)
+            foreach (var (tempBasal, (rate, scheduled)) in page.Zip(await rates.RatesAtAsync(page, ct)))
             {
                 var percent = tempBasal.Percent!.Value;
-                var (rate, scheduled) = await rates.RateAtAsync(percent, tempBasal.StartMills, ct);
                 if (rate == tempBasal.Rate && scheduled == tempBasal.ScheduledRate)
                     continue;
 

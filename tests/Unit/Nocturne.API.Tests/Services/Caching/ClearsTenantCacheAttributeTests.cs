@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Devices;
 using Nocturne.API.Controllers.V4.Glucose;
 using Nocturne.API.Controllers.V4.Treatments;
@@ -42,7 +41,7 @@ public class ClearsTenantCacheAttributeTests
     }
 
     private Task RunAsync(string method, IActionResult? result, Exception? exception = null) =>
-        RunAsync(new ClearsTenantCacheAttribute(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics),
+        RunAsync(new ClearsTenantCacheAttribute(TenantCacheFamily.Statistics, TenantCacheFamily.DataOverview),
             method, result, exception);
 
     private IEnumerable<string> Cleared() =>
@@ -52,17 +51,13 @@ public class ClearsTenantCacheAttributeTests
 
     public static TheoryData<Type, string[]> FamiliesByController() => new()
     {
-        { typeof(SensorGlucoseController), [TenantCacheFamily.Entries, TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c] },
-        { typeof(MeterGlucoseController), [TenantCacheFamily.Entries, TenantCacheFamily.EHbA1c] },
-        { typeof(CalibrationController), [TenantCacheFamily.Entries] },
-        { typeof(BGCheckController), [TenantCacheFamily.Treatments] },
-        { typeof(DeviceEventController), [TenantCacheFamily.Treatments, TenantCacheFamily.Statistics] },
-        { typeof(BolusController), [TenantCacheFamily.Treatments, TenantCacheFamily.Statistics] },
-        { typeof(BolusCalculationController), [TenantCacheFamily.Treatments] },
+        { typeof(SensorGlucoseController), [TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c] },
+        { typeof(MeterGlucoseController), [TenantCacheFamily.EHbA1c] },
+        { typeof(DeviceEventController), [TenantCacheFamily.Statistics] },
+        { typeof(BolusController), [TenantCacheFamily.Statistics] },
         { typeof(BasalInjectionController), [TenantCacheFamily.Statistics] },
-        { typeof(NoteController), [TenantCacheFamily.Treatments] },
-        { typeof(NutritionController), [TenantCacheFamily.Treatments, TenantCacheFamily.Statistics] },
-        { typeof(TempBasalController), [TenantCacheFamily.Treatments, TenantCacheFamily.Statistics] },
+        { typeof(NutritionController), [TenantCacheFamily.Statistics] },
+        { typeof(TempBasalController), [TenantCacheFamily.Statistics] },
     };
 
     [Theory]
@@ -71,27 +66,22 @@ public class ClearsTenantCacheAttributeTests
         controller.GetCustomAttribute<ClearsTenantCacheAttribute>()!.Families
             .Should().BeEquivalentTo(families);
 
+    /// <summary>
+    /// The legacy read families are cleared by the repositories on every write
+    /// (<see cref="LegacyReadCacheInvalidation"/>), so a controller naming one would be a second,
+    /// partial source of the same rule.
+    /// </summary>
     [Fact]
-    public void Every_v4_crud_controller_declares_its_families()
+    public void No_controller_names_a_legacy_read_family()
     {
-        var crud = typeof(SensorGlucoseController).Assembly.GetTypes()
-            .Where(t => t is { IsAbstract: false, IsClass: true } && DerivesFromCrudBase(t))
+        var controllers = typeof(SensorGlucoseController).Assembly.GetTypes()
+            .Where(t => t.GetCustomAttribute<ClearsTenantCacheAttribute>() is not null)
             .ToList();
 
-        crud.Should().NotBeEmpty();
-        crud.Where(t => (t.GetCustomAttribute<ClearsTenantCacheAttribute>()?.Families.Count ?? 0) == 0)
+        controllers.Should().NotBeEmpty();
+        controllers.Where(t => t.GetCustomAttribute<ClearsTenantCacheAttribute>()!.Families
+                .Intersect([TenantCacheFamily.Entries, TenantCacheFamily.Treatments]).Any())
             .Should().BeEmpty();
-    }
-
-    private static bool DerivesFromCrudBase(Type type)
-    {
-        for (var t = type.BaseType; t is not null; t = t.BaseType)
-        {
-            if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(V4CrudControllerBase<,,,>))
-                return true;
-        }
-
-        return false;
     }
 
     [Fact]
@@ -99,7 +89,7 @@ public class ClearsTenantCacheAttributeTests
     {
         await RunAsync(HttpMethods.Post, new CreatedResult("/x", new object()));
 
-        Cleared().Should().BeEquivalentTo(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics);
+        Cleared().Should().BeEquivalentTo(TenantCacheFamily.Statistics, TenantCacheFamily.DataOverview);
         _cache.Verify(c => c.RemoveTenantAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -193,10 +183,10 @@ public class ClearsTenantCacheAttributeTests
     public async Task A_write_that_records_no_timestamps_clears_every_ehba1c_year()
     {
         await RunAsync(
-            new ClearsTenantCacheAttribute(TenantCacheFamily.Entries, TenantCacheFamily.EHbA1c),
+            new ClearsTenantCacheAttribute(TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c),
             HttpMethods.Delete, new NoContentResult());
 
-        Cleared().Should().BeEquivalentTo(TenantCacheFamily.Entries, TenantCacheFamily.EHbA1c);
+        Cleared().Should().BeEquivalentTo(TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c);
     }
 
     [Theory]

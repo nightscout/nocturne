@@ -1,6 +1,5 @@
 using Nocturne.API.Services.Connectors;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 
@@ -65,7 +64,6 @@ public class SupportDiagnosticsService(
     IUISettingsService uiSettings,
     ITherapySettingsResolver therapySettings,
     IAlertRepository alerts,
-    ITenantAccessor tenantAccessor,
     ILogger<SupportDiagnosticsService> logger
 ) : ISupportDiagnosticsService
 {
@@ -82,7 +80,7 @@ public class SupportDiagnosticsService(
 
         var statuses = await connectorHealth.GetConnectorStatusesAsync(ct);
 
-        var alertRuleCount = await alerts.CountRulesAsync(tenantAccessor.TenantId, ct);
+        var alertRuleCount = await alerts.CountRulesAsync(ct);
 
         // The timezone resolver reads the patient record and falls back to the legacy per-profile
         // value; a tenant that has set neither is not an error, so a failure here costs the field

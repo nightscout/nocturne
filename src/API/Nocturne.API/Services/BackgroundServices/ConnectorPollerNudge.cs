@@ -4,10 +4,10 @@ using Nocturne.Connectors.Core.Interfaces;
 namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
-/// Carries a tenant's connector-configuration change to the poller scheduling that connector, so a
-/// poller that skips tenants until they are due picks the change up on its next tick rather than at
-/// the end of the tenant's recheck interval. It is the cache-invalidation hook the configuration
-/// service already calls on every write, so the write paths need no second plumbing.
+/// Carries a tenant's connector-configuration change to that connector's poller, which makes the
+/// tenant's job ledger row due a minute after the write, so the change is read on that run rather
+/// than at the end of the tenant's interval or park. It is the cache-invalidation hook the configuration service already
+/// calls on every write, so the write paths need no second plumbing.
 /// </summary>
 public sealed class ConnectorPollerNudge : IConnectorCacheInvalidator
 {

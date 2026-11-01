@@ -5,7 +5,27 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Services.Analytics;
 
 /// <summary>The tenant's timezone, or no zone and why not.</summary>
-public readonly record struct TenantClock(TimeZoneInfo? Zone, TimeZoneUnavailableReason? Reason);
+public readonly record struct TenantClock(TimeZoneInfo? Zone, TimeZoneUnavailableReason? Reason)
+{
+    /// <remarks>
+    /// <paramref name="calendarDays"/> is the days of the window on the report's calendar, which
+    /// <see cref="DataSufficiencyAssessment.DaysWithData"/> counts readings on. The per-day figures
+    /// keep the window's duration.
+    /// </remarks>
+    public T Annotate<T>(T analytics, int? calendarDays = null) where T : GlucoseAnalytics
+    {
+        analytics.TimeZoneUnavailableReason = Reason;
+        if (analytics.GlycemicVariability is { } variability)
+            variability.TimeZoneUnavailableReason = Reason;
+        if (analytics is ExtendedGlucoseAnalytics extended)
+        {
+            extended.DataSufficiency.TimeZoneUnavailableReason = Reason;
+            if (calendarDays is { } days)
+                extended.DataSufficiency.TotalDays = days;
+        }
+        return analytics;
+    }
+}
 
 /// <summary>
 /// Resolves the tenant's timezone for the reports that place readings on its local clock: none is

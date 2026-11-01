@@ -1,10 +1,12 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.V4;
@@ -33,6 +35,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -90,7 +93,10 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         NocturneDbContext context,
         IEnumerable<IConnectorDataPurge> dataPurges,
         params IConnectorPurgeGuard[] purgeGuards) => new(
-        context.AsFactory(),
+        new SourceOwnedDataRepository(context.AsFactory(), _auditContext),
+        new SourceOwnedDataRepository(context.AsFactory(), _auditContext),
+        new DemoDataPurgeRepository(context.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+        new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
@@ -402,7 +408,10 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             var writer = new ProfileActivationWriter(
                 ProfileActivationTestDeps.Repository(ctx), TestTenantCache.Create(), reresolver.Object);
             var service = new DataSourceService(
-                ctx.AsFactory(), _sensorGlucose.Object, _meterGlucose.Object, _calibrations.Object, _auditContext,
+                new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
+                new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
+                new DemoDataPurgeRepository(ctx.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+                new ConnectorConfigurationRepository(ctx.AsFactory()), _sensorGlucose.Object, _meterGlucose.Object, _calibrations.Object, _auditContext,
                 _connectorConfig.Object, writer, [], [], TimeProvider.System, NullLogger<DataSourceService>.Instance);
             (await service.DeleteConnectorDataAsync(ConnectorId)).Success.Should().BeTrue();
         }

@@ -51,8 +51,11 @@ internal static class DuplicateGroupPrimaries
     };
 
     /// <summary>The record type rows of <typeparamref name="TEntity"/> are linked under, or null.</summary>
-    public static RecordType? RecordTypeOf<TEntity>() =>
-        RecordTypes.TryGetValue(typeof(TEntity), out var recordType) ? recordType : null;
+    public static RecordType? RecordTypeOf<TEntity>() => RecordTypeOf(typeof(TEntity));
+
+    /// <inheritdoc cref="RecordTypeOf{TEntity}"/>
+    public static RecordType? RecordTypeOf(Type entityType) =>
+        RecordTypes.TryGetValue(entityType, out var recordType) ? recordType : null;
 
     /// <summary>
     /// Moves the primary of every group one of <paramref name="deletedIds"/> is the primary of onto

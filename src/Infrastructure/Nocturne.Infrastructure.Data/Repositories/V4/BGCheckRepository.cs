@@ -33,8 +33,9 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<BGCheckRepository> logger,
-        IV4RecordBroadcaster<BGCheck>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<BGCheck>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
     {
         _deduplicationService = deduplicationService;
     }
@@ -88,7 +89,7 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
 
         query = ApplyReadVisibility(query, ctx);
 
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
+        query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(BGCheckMapper.ToDomainModel);
     }

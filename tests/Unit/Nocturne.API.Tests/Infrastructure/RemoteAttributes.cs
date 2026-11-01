@@ -13,12 +13,6 @@ internal static class RemoteAttributes
         ?? throw new InvalidOperationException(
             $"{controller.Name}.{action} has no [RemoteCommand] attribute.");
 
-    public static RemoteQueryAttribute? Query<TController>(string action) =>
-        Query(typeof(TController), action);
-
-    public static RemoteQueryAttribute? Query(Type controller, string action) =>
-        Query(Method(controller, action));
-
     public static RemoteQueryAttribute? Query(MethodInfo method) =>
         method.GetCustomAttribute<RemoteQueryAttribute>();
 

@@ -107,3 +107,11 @@ export function familyRoleChoices(roles: TenantRoleDto[]): InviteRoleChoice[] {
     return role?.id && role.accessLevel === level ? [{ roleId: role.id, label, description }] : [];
   });
 }
+
+/** The owner role, the one thing a helper's invite grants: the person they hand Nocturne over to. */
+export function handoverRoleChoices(roles: TenantRoleDto[]): InviteRoleChoice[] {
+  const owner = roles.find((r) => r.slug === "owner");
+  return owner?.id
+    ? [{ roleId: owner.id, label: "Owner", description: "They own Nocturne, the same as you." }]
+    : [];
+}

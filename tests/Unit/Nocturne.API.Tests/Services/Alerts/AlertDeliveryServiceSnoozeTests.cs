@@ -20,6 +20,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
@@ -79,6 +80,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
 
         return new AlertDeliveryService(
             _factory.AsNocturneFactory(),
+            new TenantMembershipRepository(_factory.AsNocturneFactory()),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             _broadcast.Object,
             _alarmRelay.Object,

@@ -30,7 +30,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Tags("Treatments")]
 [Route("api/v4/insulin/temp-basals")]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
+[ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class TempBasalController(
     ITempBasalRepository repo,
     IPatientDeviceStamper deviceStamper) : ControllerBase

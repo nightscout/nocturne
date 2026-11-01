@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Extensions;

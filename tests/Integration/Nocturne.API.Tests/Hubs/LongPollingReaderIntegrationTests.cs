@@ -144,7 +144,7 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT set_config('app.current_tenant_id', @tenant, false);
-            SELECT subject_id FROM mutation_audit_log WHERE entity_id = @excursion;
+            SELECT actor_subject_id FROM mutation_audit_log WHERE entity_id = @excursion;
             """;
         cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
         cmd.Parameters.AddWithValue("excursion", excursionId);

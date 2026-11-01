@@ -82,15 +82,29 @@ public class DeduplicateApsSnapshotCurvesFixture : IAsyncLifetime
         await context.GetService<IMigrator>().MigrateAsync(targetMigration);
     }
 
-    /// <summary>Both tenants, as the backfill runs them; a page of one walks every row's own page.</summary>
+    /// <summary>
+    /// Both tenants, as the job runs them: a page of one walks every row's own page, and each page is
+    /// a call of its own that resumes from the last one's <see cref="ApsSnapshotCurvesRewriter.Pass.Next"/>,
+    /// as a run after a restart does.
+    /// </summary>
     private async Task<int> RewriteAllAsync(int pageSize) =>
         await RewriteAsync(TenantA, TenantA, pageSize) + await RewriteAsync(TenantB, TenantB, pageSize);
 
     private async Task<int> RewriteAsync(Guid pinnedTo, Guid tenant, int pageSize)
     {
-        await using var db = new NocturneDbContext(Options()) { TenantId = pinnedTo };
-        return await ApsSnapshotCurvesRewriter.RewriteTenantAsync(
-            db, tenant, pageSize, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None);
+        var changed = 0;
+        (DateTime At, Guid Id)? after = null;
+        do
+        {
+            await using var db = new NocturneDbContext(Options()) { TenantId = pinnedTo };
+            var pass = await ApsSnapshotCurvesRewriter.RewriteTenantAsync(
+                db, tenant, after, maxPages: 1, pageSize, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None);
+            changed += pass.Changed;
+            after = pass.Next;
+        }
+        while (after is not null);
+
+        return changed;
     }
 
     private async Task ReadAsync(Dictionary<Guid, Row> rows)

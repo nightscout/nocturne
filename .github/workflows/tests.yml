@@ -32,6 +32,7 @@ jobs:
       migrations: ${{ steps.filter.outputs.migrations == 'true' || github.event_name != 'pull_request' }}
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
+      composeBundle: ${{ steps.filter.outputs.composeBundle == 'true' || github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -88,6 +89,15 @@ jobs:
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
+            composeBundle:
+              - *shared
+              - 'src/Aspire/**'
+              - 'src/Core/Nocturne.Core.Constants/**'
+              - 'scripts/publish-release.cs'
+              - 'scripts/Shared/**'
+              - 'deploy/**'
+              - 'docs/diagrams/**'
+              - 'docs/postgres/container-init/**'
 
   # Compiles every test project once and runs the API client codegen (NSwag, then the
   # Zod schemas and remote functions through pnpm) as the API build's post-build step. The test jobs
@@ -822,6 +832,66 @@ jobs:
           echo "::error::No coverage report was produced (see the Report step)."
           exit 1
 
+  # The committed deploy/ bundle is what the portal and the release notes link on main, so it
+  # stays tracked.
+  compose-bundle-drift:
+    needs: changes
+    if: needs.changes.outputs.composeBundle == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          nuget-cache-key: nuget-compose-bundle
+      # The CLI has to match the Aspire packages the AppHost is built with.
+      - name: Install the Aspire CLI
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/.*<PackageVersion Include="Aspire.Hosting" Version="\([^"]*\)".*/\1/p' Directory.Packages.props)
+          if [ -z "$version" ]; then
+            echo "::error::Directory.Packages.props has no Aspire.Hosting version."
+            exit 1
+          fi
+          curl -fsSL https://aspire.dev/install.sh | bash -s -- --version "$version"
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+      # The script publishes with --no-build, so the AppHost has to be built first.
+      - name: Build the AppHost
+        run: dotnet build src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj -p:GenerateNSwagClient=false
+      - name: Regenerate the bundle
+        run: dotnet run scripts/publish-release.cs
+      - name: The bundle matches the tree
+        run: |
+          set -euo pipefail
+          git add --intent-to-add -- deploy docs/diagrams
+          if git diff --quiet -- deploy docs/diagrams; then
+            exit 0
+          fi
+          {
+            echo '## The compose bundle is out of date'
+            echo
+            echo 'Run `dotnet run scripts/publish-release.cs` and commit the changes under `deploy/` and `docs/diagrams/`.'
+            echo
+            echo '```diff'
+            git diff -- deploy docs/diagrams | head -n 400 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat -- deploy docs/diagrams
+          echo "::error::The compose bundle is out of date. Run 'dotnet run scripts/publish-release.cs' and commit deploy/ and docs/diagrams/."
+          exit 1
+      - name: Postgres keeps its data volume
+        run: |
+          set -euo pipefail
+          service=$(awk '/^  nocturne-postgres-server:/{f=1;next} f&&/^  [^ ]/{exit} f' deploy/docker-compose/docker-compose.yaml)
+          if [ -z "$service" ]; then
+            echo "::error::deploy/docker-compose/docker-compose.yaml has no nocturne-postgres-server service."
+            exit 1
+          fi
+          if grep -Eq '^    volumes: \[\]' <<<"$service" || ! grep -q 'source: "nocturne-postgres-data"' <<<"$service"; then
+            echo "::error::The Postgres service has no nocturne-postgres-data volume, so its data would be lost on recreate."
+            exit 1
+          fi
+
   # The single check to require on the branch: green when every job it needs passed or was
   # skipped for want of relevant changes.
   tests-passed:
@@ -839,6 +909,7 @@ jobs:
       - images
       - e2e
       - migration-upgrade
+      - compose-bundle-drift
       - coverage
     if: always()
     runs-on: ubuntu-latest

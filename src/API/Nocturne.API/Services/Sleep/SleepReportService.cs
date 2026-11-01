@@ -1,9 +1,9 @@
 using System.Globalization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Sleep;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
@@ -12,7 +12,6 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.Sleep.Report;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Sleep;
 
@@ -33,7 +32,7 @@ public class SleepReportService : ISleepReportService
     private readonly ISensorGlucoseRepository _glucose;
     private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly IPatientRecordRepository _patientRecord;
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly ISubjectRepository _subjects;
     private readonly IAuditContext _caller;
     private readonly TimeProvider _time;
     private readonly ILogger<SleepReportService> _logger;
@@ -43,7 +42,7 @@ public class SleepReportService : ISleepReportService
         ISensorGlucoseRepository glucose,
         ICanonicalGlucoseService canonicalGlucose,
         IPatientRecordRepository patientRecord,
-        INocturneDbContextFactory contexts,
+        ISubjectRepository subjects,
         IAuditContext caller,
         TimeProvider timeProvider,
         ILogger<SleepReportService> logger)
@@ -52,7 +51,7 @@ public class SleepReportService : ISleepReportService
         _glucose  = glucose;
         _canonicalGlucose = canonicalGlucose;
         _patientRecord = patientRecord;
-        _contexts = contexts;
+        _subjects = subjects;
         _caller = caller;
         _time = timeProvider;
         _logger   = logger;
@@ -75,12 +74,7 @@ public class SleepReportService : ISleepReportService
         if (_caller.SubjectId is not { } subjectId)
             return DayOfWeek.Monday;
 
-        await using var db = await _contexts.CreateAsync(ct);
-        var subject = await db.Subjects
-            .AsNoTracking()
-            .Where(s => s.Id == subjectId)
-            .Select(s => new { s.Preferences, s.PreferredLanguage })
-            .FirstOrDefaultAsync(ct);
+        var subject = await _subjects.GetAsync(subjectId, ct);
         if (subject is null)
             return DayOfWeek.Monday;
 

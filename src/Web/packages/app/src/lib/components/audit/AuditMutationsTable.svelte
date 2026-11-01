@@ -197,15 +197,14 @@
         return a - b;
       },
     },
-    // Subject column
     {
-      id: "subject",
-      accessorFn: (row) => row.subjectName ?? row.subjectId ?? "system",
+      id: "changedBy",
+      accessorFn: (row) => row.actorName ?? row.actorSubjectId ?? "system",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet, { column, label: "Subject" }),
+        renderSnippet(sortableHeaderSnippet, { column, label: "Changed by" }),
       cell: ({ row }) => {
         const r = row.original;
-        return r.subjectName ?? truncateId(r.subjectId ?? "system");
+        return r.actorName ?? truncateId(r.actorSubjectId ?? "system");
       },
     },
     // Action column
@@ -309,8 +308,8 @@
 
       if (r.action) values.push(r.action);
       if (r.entityType) values.push(r.entityType);
-      if (r.subjectName) values.push(r.subjectName);
-      if (r.subjectId) values.push(r.subjectId);
+      if (r.actorName) values.push(r.actorName);
+      if (r.actorSubjectId) values.push(r.actorSubjectId);
       if (r.endpoint) values.push(r.endpoint);
       if (r.ipAddress) values.push(r.ipAddress);
       if (r.entityId) values.push(r.entityId);

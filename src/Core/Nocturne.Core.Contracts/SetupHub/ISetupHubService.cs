@@ -23,25 +23,28 @@ public interface ISetupHubItem
     Task<bool> WorksAsync(CancellationToken ct);
 }
 
-/// <summary>The current tenant's setup hub. Every read settles each item against current data.</summary>
+/// <summary>
+/// The current tenant's setup hub. Every read settles each item against current data. The caller
+/// decides only <see cref="SetupHubStatus.Handover"/>, which says whether they are the helper.
+/// </summary>
 public interface ISetupHubService
 {
-    Task<SetupHubStatus> GetAsync(CancellationToken ct);
+    Task<SetupHubStatus> GetAsync(Guid? callerId, CancellationToken ct);
 
     /// <summary>
     /// Marks a listed item <see cref="SetupHubItemState.NotForMe"/> or reopens it.
     /// </summary>
     /// <exception cref="KeyNotFoundException">The item is not listed for this tenant.</exception>
     /// <exception cref="InvalidOperationException">The item is done, which never reverts.</exception>
-    Task<SetupHubStatus> SetStateAsync(SetupHubItemKey key, SetupHubItemState state, CancellationToken ct);
+    Task<SetupHubStatus> SetStateAsync(Guid? callerId, SetupHubItemKey key, SetupHubItemState state, CancellationToken ct);
 
     /// <summary>
     /// Records that the owner saved the About step, so it is done even with every optional field
     /// left blank. Kept against the patient record's id, like a confirmed therapy profile.
     /// </summary>
     /// <exception cref="InvalidOperationException">There is no patient record to confirm.</exception>
-    Task<SetupHubStatus> ConfirmAboutAsync(CancellationToken ct);
+    Task<SetupHubStatus> ConfirmAboutAsync(Guid? callerId, CancellationToken ct);
 
     /// <summary>Hides the dashboard strip until the hub's revision moves on from <paramref name="revision"/>.</summary>
-    Task<SetupHubStatus> DismissStripAsync(string revision, CancellationToken ct);
+    Task<SetupHubStatus> DismissStripAsync(Guid? callerId, string revision, CancellationToken ct);
 }

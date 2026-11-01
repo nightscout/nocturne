@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -79,7 +80,7 @@ public class ConnectorCursorResetServiceTests
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero));
 
         var service = new ConnectorCursorResetService(
-            new TestNocturneDbContextFactory(db), syncService.Object, tenantAccessor.Object,
+            new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), syncService.Object, tenantAccessor.Object,
             time,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
@@ -108,7 +109,7 @@ public class ConnectorCursorResetServiceTests
         var db = CreateDb();
         var syncService = new Mock<IConnectorSyncService>();
         var service = new ConnectorCursorResetService(
-            new TestNocturneDbContextFactory(db), syncService.Object, ScopeOn(Guid.CreateVersion7()).Object,
+            new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), syncService.Object, ScopeOn(Guid.CreateVersion7()).Object,
             TimeProvider.System,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
@@ -136,7 +137,7 @@ public class ConnectorCursorResetServiceTests
         var db = CreateDb();
         var syncService = new Mock<IConnectorSyncService>();
         var service = new ConnectorCursorResetService(
-            new TestNocturneDbContextFactory(db), syncService.Object, Mock.Of<ITenantAccessor>(),
+            new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), syncService.Object, Mock.Of<ITenantAccessor>(),
             TimeProvider.System,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
@@ -162,7 +163,7 @@ public class ConnectorCursorResetServiceTests
             .ThrowsAsync(new InvalidOperationException("nope"));
 
         var service = new ConnectorCursorResetService(
-            new TestNocturneDbContextFactory(db), syncService.Object, ScopeOn(_targetTenantId).Object,
+            new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), syncService.Object, ScopeOn(_targetTenantId).Object,
             TimeProvider.System,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 

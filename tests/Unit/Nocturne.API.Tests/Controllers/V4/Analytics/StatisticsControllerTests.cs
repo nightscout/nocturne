@@ -9,10 +9,12 @@ using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Analytics;
@@ -50,6 +52,7 @@ public partial class StatisticsControllerTests
     private readonly Mock<IDeviceEventRepository> _deviceEventRepoMock = new();
     private readonly Mock<IAidMetricsService> _aidMetricsServiceMock = new();
     private readonly Mock<IStateSpanRepository> _stateSpanRepoMock = new();
+    private readonly Mock<ITenantGlucoseUnits> _glucoseUnitsMock = new();
     private readonly Mock<ILogger<StatisticsController>> _loggerMock = new();
     private readonly Mock<ILogger<TenantClockResolver>> _clockLoggerMock = new();
     private static readonly DateTimeOffset DefaultNow = new(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -83,46 +86,64 @@ public partial class StatisticsControllerTests
             .Setup(r => r.GetLoopCyclesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var controller = new StatisticsController(
-            statisticsService ?? _statsServiceMock.Object,
-            cache ?? TestTenantCache.Create(partition: null),
-            Mock.Of<IProfileProjectionService>(),
-            _stateSpanRepoMock.Object,
-            _basalSegmentsMock.Object,
+        var statistics = statisticsService ?? _statsServiceMock.Object;
+        var canonical = canonicalGlucose ?? TestDoubles.CanonicalGlucosePassThrough.Create();
+        var tenantClock = new TenantClockResolver(
             _therapySettingsResolverMock.Object,
-            _glucoseRepoMock.Object,
+            categoryReadContext ?? new CategoryReadContext(),
+            _clockLoggerMock.Object);
+        var clock = timeProvider ?? new FakeTimeProvider(DefaultNow);
+        var insulinDelivery = new InsulinDeliveryReader(
             _bolusRepoMock.Object,
             _carbIntakeRepoMock.Object,
             _tempBasalRepoMock.Object,
+            _basalInjectionRepoMock.Object,
+            _stateSpanRepoMock.Object,
+            _basalSegmentsMock.Object,
+            _therapySettingsResolverMock.Object,
+            statistics,
+            clock);
+
+        var controller = new StatisticsController(
+            statistics,
+            cache ?? TestTenantCache.Create(partition: null),
+            Mock.Of<IProfileProjectionService>(),
+            _stateSpanRepoMock.Object,
+            _glucoseRepoMock.Object,
+            _carbIntakeRepoMock.Object,
             new AidSystemMetricsReader(
                 _patientDeviceRepoMock.Object,
                 _apsSnapshotRepoMock.Object,
                 _tempBasalRepoMock.Object,
                 _deviceEventRepoMock.Object,
                 _glucoseRepoMock.Object,
-                canonicalGlucose ?? TestDoubles.CanonicalGlucosePassThrough.Create(),
+                canonical,
                 _targetRangeScheduleRepoMock.Object,
                 _activeProfileResolverMock.Object,
-                statisticsService ?? _statsServiceMock.Object,
+                statistics,
                 _aidMetricsServiceMock.Object,
                 new DeviceDateClockResolver(
                     TestDoubles.DeviceDateClockDoubles.Timelines([]),
-                    new TenantClockResolver(
-                        _therapySettingsResolverMock.Object,
-                        categoryReadContext ?? new CategoryReadContext(),
-                        _clockLoggerMock.Object)),
+                    tenantClock),
                 TimeProvider.System),
-            _patientDeviceRepoMock.Object,
+            new RangeAnalyticsReader(
+                _glucoseRepoMock.Object,
+                _bolusRepoMock.Object,
+                _carbIntakeRepoMock.Object,
+                _patientDeviceRepoMock.Object,
+                canonical,
+                statistics,
+                tenantClock,
+                _activeProfileResolverMock.Object,
+                _targetRangeScheduleRepoMock.Object,
+                insulinDelivery,
+                clock),
+            insulinDelivery,
             _deviceEventRepoMock.Object,
-            _targetRangeScheduleRepoMock.Object,
-            _basalInjectionRepoMock.Object,
-            _activeProfileResolverMock.Object,
-            canonicalGlucose ?? TestDoubles.CanonicalGlucosePassThrough.Create(),
-            new TenantClockResolver(
-                _therapySettingsResolverMock.Object,
-                categoryReadContext ?? new CategoryReadContext(),
-                _clockLoggerMock.Object),
-            timeProvider ?? new FakeTimeProvider(DefaultNow),
+            canonical,
+            tenantClock,
+            _glucoseUnitsMock.Object,
+            clock,
             _loggerMock.Object);
 
         var httpContext = new DefaultHttpContext();

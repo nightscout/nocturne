@@ -8,7 +8,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Profiles;
-using Nocturne.API.Services.Treatments;
+using Nocturne.API.Services.BolusWizard;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -77,7 +77,7 @@ public class PropertiesServiceTests
         // Arrange
         var testDData = CreateTestDData();
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         // Act
@@ -103,7 +103,7 @@ public class PropertiesServiceTests
         const long mib = 1024 * 1024;
         var service = ServiceWithBudget(maxMiB: 100);
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = percent * mib / 2, IndexSize = percent * mib / 2 } });
 
         var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
@@ -119,7 +119,7 @@ public class PropertiesServiceTests
     {
         var service = ServiceWithBudget(new DbSizeOptions());
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = 1024L * 1024 * 1024 } });
 
         var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
@@ -152,7 +152,7 @@ public class PropertiesServiceTests
         // Arrange
         var testDData = CreateTestDData();
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         var requestedProperties = new[] { "bgnow", "delta" };
@@ -183,7 +183,7 @@ public class PropertiesServiceTests
             },
         };
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetPropertiesAsync(new[] { "bgnow" }, CancellationToken.None);
@@ -215,7 +215,7 @@ public class PropertiesServiceTests
             },
         };
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetPropertiesAsync(new[] { "bgnow" }, CancellationToken.None);
@@ -319,7 +319,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DData { Sgvs = readings });
 
         var result = await _service.GetPropertiesAsync(new[] { "delta" }, CancellationToken.None);
@@ -404,7 +404,7 @@ public class PropertiesServiceTests
             Options.Create(new DbSizeOptions())
         );
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DData { Sgvs = readings });
 
         var result = await service.GetPropertiesAsync(new[] { "bgnow", "delta", "ar2" }, CancellationToken.None);
@@ -431,7 +431,7 @@ public class PropertiesServiceTests
             new() { Type = "sgv", Mills = now - 2 * 60 * 1000, Mgdl = 38 },
         };
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DData { Sgvs = readings });
 
         var result = await _service.GetPropertiesAsync(new[] { "bgnow" }, CancellationToken.None);
@@ -447,7 +447,7 @@ public class PropertiesServiceTests
     private async Task<JsonElement> GetDeltaAsync(List<Entry> sgvs)
     {
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DData { Sgvs = sgvs });
 
         var result = await _service.GetPropertiesAsync(new[] { "delta" }, CancellationToken.None);
@@ -462,7 +462,7 @@ public class PropertiesServiceTests
         // Legacy clients (LoopFollow, Trio) treat a missing `iob`/`cob` as "unsupported"
         // rather than "zero", so both must be present even with no insulin/carbs on board.
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -565,7 +565,7 @@ public class PropertiesServiceTests
             .Setup(r => r.ReadTotalAsync(It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IobCobReading(iob, cob, new IobCobInputs([], [], [])));
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
         var service = new PropertiesService(
             _mockDDataService.Object,
@@ -589,7 +589,7 @@ public class PropertiesServiceTests
     public async Task GetAllPropertiesAsync_EmitsDeviceAgeProperties()
     {
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -618,7 +618,7 @@ public class PropertiesServiceTests
             .Callback<DeviceAgePreferences, Guid?, CancellationToken>((prefs, _, _) => insulinPreferences = prefs)
             .ReturnsAsync(new DeviceAgeInfo { Found = true, Age = 50, Days = 2, Hours = 2, Display = "2d2h" });
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -639,7 +639,7 @@ public class PropertiesServiceTests
             .Setup(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceAgeInfo { Found = true, Age = 0, Days = 0, Hours = 0, TreatmentDate = 1000 });
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -659,7 +659,7 @@ public class PropertiesServiceTests
             .Setup(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceAgeInfo());
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -680,7 +680,7 @@ public class PropertiesServiceTests
             .Setup(x => x.GetSensorAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SensorAgeInfo());
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -706,7 +706,7 @@ public class PropertiesServiceTests
                 SensorStart = new DeviceAgeInfo { Found = true, Age = 120, Days = 5, Hours = 0, TreatmentDate = 1000, Display = "5d0h" },
             });
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -724,7 +724,7 @@ public class PropertiesServiceTests
     public async Task GetAllPropertiesAsync_AsksForSageWithDaysDisplay()
     {
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -833,7 +833,7 @@ public class PropertiesServiceTests
     {
         _therapySettings.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         await _service.GetPropertiesAsync(["iob"], CancellationToken.None);
@@ -855,7 +855,7 @@ public class PropertiesServiceTests
             },
         ];
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
         var openAps = new Mock<IOpenApsService>();
         var service = new PropertiesService(
@@ -932,7 +932,7 @@ public class PropertiesServiceTests
             ? [new Entry { Type = "sgv", Mgdl = mgdl, Mills = now.AddMinutes(-age).ToUnixTimeMilliseconds() }]
             : [];
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
         _therapySettings.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(hasProfile);
         _sensitivity
@@ -975,7 +975,7 @@ public class PropertiesServiceTests
         // Clients poll single properties (e.g. /api/v2/properties/iob); those requests
         // shouldn't pay for the device-age queries.
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDData());
 
         await _service.GetPropertiesAsync(new[] { "iob" }, CancellationToken.None);
@@ -1020,7 +1020,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1064,7 +1064,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1101,7 +1101,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1133,7 +1133,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1165,7 +1165,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1210,7 +1210,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1236,7 +1236,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1266,7 +1266,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1296,7 +1296,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1322,7 +1322,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1348,7 +1348,7 @@ public class PropertiesServiceTests
         };
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1384,7 +1384,7 @@ public class PropertiesServiceTests
         // Arrange
         var emptyDData = new DData();
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(emptyDData);
 
         // Act
@@ -1402,7 +1402,7 @@ public class PropertiesServiceTests
         // Arrange
         var testDData = CreateTestDDataWithBasalProfile();
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         // Act
@@ -1443,7 +1443,7 @@ public class PropertiesServiceTests
         async Task<double> CurrentBasal(List<TimeValue> schedule)
         {
             _mockDDataService
-                .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(CreateTestDDataWithBasalProfile(schedule));
             var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
             var basal = (Dictionary<string, object>)result["basal"];
@@ -1473,7 +1473,7 @@ public class PropertiesServiceTests
     private async Task<double> CurrentBasalAt(DateTimeOffset now, List<TimeValue> schedule)
     {
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDDataWithBasalProfile(schedule));
         var result = await ServiceAt(now).GetAllPropertiesAsync(CancellationToken.None);
         var basal = (Dictionary<string, object>)result["basal"];
@@ -1531,7 +1531,7 @@ public class PropertiesServiceTests
     public async Task GetPropertiesAsync_WithoutBasalRequested_DoesNotResolveTheTimezone()
     {
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDDataWithBasalProfile());
 
         await _service.GetPropertiesAsync(new[] { "iob" }, CancellationToken.None);
@@ -1547,7 +1547,7 @@ public class PropertiesServiceTests
         // Arrange
         var testDData = CreateTestDDataWithTempBasal();
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         // Act
@@ -1593,7 +1593,7 @@ public class PropertiesServiceTests
         // Arrange
         var testDData = CreateTestDDataWithComboBolus();
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         // Act
@@ -1621,7 +1621,7 @@ public class PropertiesServiceTests
         // Arrange
         var testDData = CreateTestDDataWithTempBasalAndComboBolus();
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         // Act
@@ -1653,7 +1653,7 @@ public class PropertiesServiceTests
     {
         var testDData = CreateTestDDataWithActiveTempBasal(new Treatment { Percent = percent });
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1668,7 +1668,7 @@ public class PropertiesServiceTests
     {
         var testDData = CreateTestDDataWithActiveTempBasal(new Treatment { Percent = -50, Absolute = 2.0 });
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
@@ -1683,7 +1683,7 @@ public class PropertiesServiceTests
         // Arrange
         var testDData = CreateTestDDataWithExpiredTempBasal();
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         // Act
@@ -1710,7 +1710,7 @@ public class PropertiesServiceTests
     {
         var rate = 9.0;
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestDDataWithBasalProfile([new() { Time = "00:00", Value = rate }]));
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);

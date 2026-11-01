@@ -1,6 +1,4 @@
-using System.Globalization;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -10,10 +8,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
-using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Legacy;
-using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
@@ -420,7 +415,7 @@ public class EntriesController : ControllerBase
             // Entries carrying no usable data are refused rather than written, but a refused entry
             // still occupies its position in the response: v1 uploaders require one response object
             // per submitted entry and treat a shorter array as a failed upload, which wedges the
-            // client on that batch forever (see PartitionStoredEntriesAsync).
+            // client on that batch forever (see IEntryService.UpsertUploadAsync).
             var acceptedIndices = new List<int>(entriesToCreate.Count);
             for (var i = 0; i < entriesToCreate.Count; i++)
             {
@@ -443,18 +438,15 @@ public class EntriesController : ControllerBase
             var processedEntries = _documentProcessingService.ProcessDocuments(validEntries);
             var processedArray = processedEntries.ToArray();
 
-            var partition = await PartitionStoredEntriesAsync(processedArray, cancellationToken);
-
-            var written = await _entryService.CreateEntriesAsync(
-                partition.ToWrite,
-                cancellationToken: cancellationToken
+            var upload = await _entryService.UpsertUploadAsync(
+                processedArray,
+                Request?.Headers.UserAgent.ToString(),
+                cancellationToken
             );
 
-            _logger.LogDebug("Wrote {Count} entries", written.Count);
+            await _alertEvaluator.EvaluateForEntriesAsync(upload.GlucoseMoved, cancellationToken);
 
-            await _alertEvaluator.EvaluateForEntriesAsync(partition.GlucoseMoved, cancellationToken);
-
-            var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, partition.Response);
+            var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, upload.Response);
 
             return Ok(echo.ToV1Responses());
         }
@@ -477,12 +469,12 @@ public class EntriesController : ControllerBase
     /// Rebuilds the response in submitted order: the processed entry for every entry that was
     /// accepted, and the submitted entry unchanged for every one that was refused. The result has
     /// exactly one element per submitted entry, which is the contract v1 uploaders depend on —
-    /// see <see cref="PartitionStoredEntriesAsync"/>.
+    /// see <see cref="IEntryService.UpsertUploadAsync"/>.
     /// </summary>
     private static Entry[] BuildSubmittedOrderEcho(
         List<Entry> submitted,
         List<int> acceptedIndices,
-        List<Entry> acceptedResponses
+        IReadOnlyList<Entry> acceptedResponses
     )
     {
         if (acceptedResponses.Count != acceptedIndices.Count)
@@ -491,7 +483,7 @@ public class EntriesController : ControllerBase
                 $"Echo has {acceptedResponses.Count} entries for {acceptedIndices.Count} accepted entries");
         }
 
-        // Refused entries are already in place; accepted ones are replaced by what the partition
+        // Refused entries are already in place; accepted ones are replaced by what the upload
         // echoes for them.
         var echo = submitted.ToArray();
         for (var i = 0; i < acceptedIndices.Count; i++)
@@ -517,169 +509,9 @@ public class EntriesController : ControllerBase
                 + "timestamp or non-sgv type; they are echoed but not stored. Client {UserAgent}",
             refused,
             submitted,
-            SanitizeForLog(Request?.Headers.UserAgent.ToString())
+            LogText.Sanitize(Request?.Headers.UserAgent.ToString())
         );
     }
-
-    /// <summary>
-    /// What a processed upload batch writes, echoes and alerts on.
-    /// </summary>
-    /// <param name="ToWrite">Every new entry, and every re-send of a stored reading merged onto it.</param>
-    /// <param name="Response">One element per accepted entry, in order.</param>
-    /// <param name="GlucoseMoved">The entries whose glucose value was not stored before.</param>
-    private sealed record StoredEntryPartition(List<Entry> ToWrite, List<Entry> Response, List<Entry> GlucoseMoved);
-
-    /// <summary>
-    /// Splits a processed upload batch into <see cref="StoredEntryPartition"/>, using one duplicate
-    /// query per entry type for the whole batch instead of one per entry.
-    /// </summary>
-    /// <remarks>
-    /// A re-send of a stored reading updates it, as Nightscout's upsert on <c>{sysTime, type}</c>
-    /// does: xDrip+ re-sends the reading paired with a calibration at its original time, with no
-    /// <c>_id</c> and the recalculated value. Like that upsert's <c>$set</c>, it changes only the
-    /// fields the re-send carries. It is written under the stored row's legacy id, so the legacy-id
-    /// upsert updates that row and its material-change gate keeps an identical re-send silent. A
-    /// stored row with no legacy id is out of that upsert's reach, so a re-send of it is echoed as
-    /// stored and not written.
-    /// Every re-send is echoed: v1 uploaders (Loop's NightscoutKit) treat a response shorter than the
-    /// upload as a failed upload and retry the batch forever.
-    /// </remarks>
-    private async Task<StoredEntryPartition> PartitionStoredEntriesAsync(
-        Entry[] processedArray,
-        CancellationToken cancellationToken
-    )
-    {
-        var probes = Array.ConvertAll(
-            processedArray,
-            entry => new EntryDuplicateProbe(entry.Device, entry.Type ?? "sgv", entry.Mills)
-        );
-
-        var duplicates = await _entryService.CheckForDuplicateEntriesAsync(probes, cancellationToken);
-
-        if (duplicates.Count != processedArray.Length)
-        {
-            throw new InvalidOperationException(
-                $"Duplicate check returned {duplicates.Count} results for {processedArray.Length} entries");
-        }
-
-        var partition = new StoredEntryPartition([], new List<Entry>(processedArray.Length), []);
-        var stored = 0;
-
-        for (var i = 0; i < processedArray.Length; i++)
-        {
-            var entry = processedArray[i];
-            var match = duplicates[i];
-
-            if (match is null)
-            {
-                partition.ToWrite.Add(entry);
-                partition.Response.Add(entry);
-                partition.GlucoseMoved.Add(entry);
-                continue;
-            }
-
-            stored++;
-
-            if (match.LegacyId is null)
-            {
-                partition.Response.Add(match.Entry);
-                continue;
-            }
-
-            var storedMgdl = EntryDecomposer.WrittenMgdl(match.Entry);
-            var merged = MergeOntoStored(match.Entry, entry);
-            merged.Id = match.LegacyId;
-            partition.ToWrite.Add(merged);
-            partition.Response.Add(merged);
-            if (EntryDecomposer.WrittenMgdl(merged) != storedMgdl)
-                partition.GlucoseMoved.Add(merged);
-        }
-
-        LogReuploadLoop(processedArray.Length, stored);
-
-        return partition;
-    }
-
-    /// <summary>
-    /// Overlays the fields <paramref name="resent"/> carries onto <paramref name="stored"/> in place.
-    /// A nullable field left null, and an <c>mgdl</c> of 0, is one the re-send did not carry.
-    /// Computed and non-nullable members are always carried.
-    /// </summary>
-    private static Entry MergeOntoStored(Entry stored, Entry resent)
-    {
-        var carried = JsonSerializer.SerializeToNode(resent, CarriedFields)!.AsObject();
-        if (resent.Mgdl == 0)
-            carried.Remove("mgdl");
-
-        JsonMergePatch.ApplyInPlace(stored, JsonSerializer.SerializeToElement(carried), EntryService.CarrySgvAndMgdl);
-        return stored;
-    }
-
-    private static readonly JsonSerializerOptions CarriedFields =
-        new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
-
-    /// <summary>
-    /// Records one line when a large upload is almost entirely already stored, which is what a
-    /// client re-sending its backlog every cycle looks like from the server. Names the uploader
-    /// (User-Agent) and the counts only — no entry values.
-    /// </summary>
-    private void LogReuploadLoop(int submitted, int duplicates)
-    {
-        if (submitted < ReuploadLoopMinimumBatch)
-            return;
-        if (duplicates < submitted * ReuploadLoopDuplicateRatio)
-            return;
-
-        var userAgent = SanitizeForLog(Request?.Headers.UserAgent.ToString());
-
-        _logger.LogInformation(
-            "Entries upload of {Submitted} entries was already stored ({Duplicates} duplicates); "
-                + "client {UserAgent} is re-sending stored readings",
-            submitted,
-            duplicates,
-            userAgent
-        );
-    }
-
-    /// <summary>Smallest upload that can be reported as a re-upload loop.</summary>
-    private const int ReuploadLoopMinimumBatch = 100;
-
-    /// <summary>Share of an upload that must already be stored to report a re-upload loop.</summary>
-    private const double ReuploadLoopDuplicateRatio = 0.95;
-
-    /// <summary>Cap on the logged User-Agent, which is attacker-controlled free text.</summary>
-    private const int MaxLoggedUserAgentLength = 200;
-
-    /// <summary>
-    /// Renders a caller-supplied header safe to log. Logs reach a line-oriented console exporter
-    /// and are shipped verbatim over OTLP, so a control, format or line-separator character in a
-    /// header value forges log lines or spoofs how they read.
-    /// </summary>
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return "(none)";
-
-        var capped = value.Length > MaxLoggedUserAgentLength
-            ? value[..MaxLoggedUserAgentLength]
-            : value;
-
-        return string.Create(capped.Length, capped, static (span, source) =>
-        {
-            for (var i = 0; i < source.Length; i++)
-                span[i] = IsUnsafeForLog(source[i]) ? ' ' : source[i];
-        });
-    }
-
-    /// <summary>
-    /// Control characters (which include ESC, so ANSI sequences are covered), Unicode format
-    /// characters such as the right-to-left override, and the line and paragraph separators.
-    /// </summary>
-    private static bool IsUnsafeForLog(char value) =>
-        char.IsControl(value)
-        || char.GetUnicodeCategory(value) is UnicodeCategory.Format
-            or UnicodeCategory.LineSeparator
-            or UnicodeCategory.ParagraphSeparator;
 
     /// <summary>
     /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/

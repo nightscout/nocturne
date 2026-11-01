@@ -1,0 +1,149 @@
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Treatments;
+
+namespace Nocturne.API.Services.Treatments;
+
+/// <summary>
+/// Driven port for treatment persistence backed by V4 granular tables.
+/// Reads are projected from V4 repositories into the legacy Treatment shape.
+/// Writes go through <see cref="ITreatmentDecomposer"/>.
+/// </summary>
+/// <seealso cref="ITreatmentCache"/>
+/// <seealso cref="TreatmentQuery"/>
+internal interface ITreatmentStore
+{
+    /// <summary>
+    /// Queries treatments using the specified <see cref="TreatmentQuery"/> parameters,
+    /// projecting V4 records into the legacy Treatment shape.
+    /// </summary>
+    /// <param name="query">The <see cref="TreatmentQuery"/> filter and pagination parameters.</param>
+    /// <returns>A read-only list of <see cref="Treatment"/> records matching the query.</returns>
+    Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default);
+
+    /// <inheritdoc cref="ITreatmentService.GetLatestTreatmentOfTypeAsync"/>
+    Task<Treatment?> GetLatestOfTypeAsync(string eventType, long fromMills, long toMills, CancellationToken ct = default);
+
+    /// <summary>
+    /// Whether <paramref name="id"/> names a treatment record the user deleted, under any key
+    /// <see cref="GetByIdAsync"/> resolves.
+    /// </summary>
+    /// <param name="id">The identifier as received from the client.</param>
+    Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default);
+
+    /// <param name="id">The treatment identifier (GUID or legacy MongoDB ObjectId).</param>
+    /// <returns>The <see cref="Treatment"/> if found, or <c>null</c>.</returns>
+    Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// The treatment stored under <paramref name="id"/>, re-keyed to the <c>LegacyId</c> the
+    /// decomposer upserts it on, so decomposing it again updates the stored record in place. A
+    /// record stored without a legacy id is first given the id the wire shows for it. A state span
+    /// decomposed from a treatment is keyed to the treatment id it was written under.
+    /// </summary>
+    /// <param name="id">The identifier as received from the client.</param>
+    /// <returns>The re-keyed <see cref="Treatment"/>, or <c>null</c> when nothing is stored under the id.</returns>
+    Task<Treatment?> GetForUpdateAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns treatments whose <see cref="Treatment.Mills"/> falls within
+    /// <c>[fromMills, toMills]</c>, for the current tenant. Stable window read used by
+    /// replay/point-in-time evaluation; not bounded by an arbitrary "newest N" page size.
+    /// </summary>
+    /// <param name="fromMills">Inclusive lower bound of the time window (Unix ms).</param>
+    /// <param name="toMills">Inclusive upper bound of the time window (Unix ms).</param>
+    Task<IReadOnlyList<Treatment>> GetByRangeAsync(long fromMills, long toMills, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns treatments modified after the given timestamp, for incremental sync (v3 API).
+    /// </summary>
+    /// <param name="lastModifiedMills">The Unix-millisecond cutoff; only treatments modified after this are returned.</param>
+    /// <param name="limit">Maximum number of records to return.</param>
+    /// <returns>A read-only list of recently modified <see cref="Treatment"/> records.</returns>
+    Task<IReadOnlyList<Treatment>> GetModifiedSinceAsync(long lastModifiedMills, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates one or more treatments in the V4 granular tables through <see cref="ITreatmentDecomposer"/>.
+    /// </summary>
+    /// <returns>
+    /// The created <see cref="Treatment"/> records, each under the id reads serve for it, carrying
+    /// how many of their records were not written because the user had deleted them.
+    /// </returns>
+    /// <exception cref="TreatmentBatchFailedException">
+    /// The batch could not be stored, or a stored treatment could not be read back.
+    /// </exception>
+    /// <param name="treatments">The treatments to write, in order.</param>
+    /// <param name="origin">Write classification of the decomposed records.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <param name="stored">
+    /// Receives each treatment that wrote a record, as it is stored, so a caller still knows what
+    /// landed when the batch ends in an exception it does not expect. A treatment that wrote nothing,
+    /// such as one the user had deleted, is not received.
+    /// </param>
+    Task<BulkWrite<Treatment>> CreateAsync(
+        IReadOnlyList<Treatment> treatments,
+        WriteOrigin origin,
+        CancellationToken ct = default,
+        ICollection<StoredTreatment>? stored = null);
+
+    /// <summary>
+    /// What <see cref="GetByIdAsync"/> serves for each of <paramref name="stored"/> once the batch is
+    /// written, in order. Every <see cref="StoredTreatment.Served"/> is found in one read of their
+    /// records, and every <see cref="StoredTreatment.Named"/> in one read of the instants they start
+    /// at, however many there are. A <see cref="StoredTreatment.Unnamed"/>, and a named one that read
+    /// does not serve under its id, is resolved by its id alone, as <see cref="GetByIdAsync"/> resolves it.
+    /// </summary>
+    /// <returns>An entry is <c>null</c> when reads serve nothing for that treatment.</returns>
+    Task<IReadOnlyList<Treatment?>> ReadBackAsync(
+        IReadOnlyList<StoredTreatment> stored, CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates an existing treatment by ID, propagating changes to V4 tables.
+    /// </summary>
+    /// <param name="treatment">The updated <see cref="Treatment"/> data.</param>
+    /// <returns>The updated <see cref="Treatment"/>, or <c>null</c> if not found.</returns>
+    Task<Treatment?> UpdateAsync(string id, Treatment treatment, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes a treatment by ID, removing corresponding V4 decomposed records.
+    /// </summary>
+    /// <returns>What was deleted, or <c>null</c> when nothing is stored under the id.</returns>
+    Task<TreatmentDeletion?> DeleteAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Counts treatments matching the optional find filter, summing across all V4 treatment repositories.
+    /// </summary>
+    /// <param name="find">Optional Nightscout-compatible find query for time range filtering.</param>
+    Task<long> CountAsync(string? find = null, CancellationToken ct = default);
+}
+
+/// <summary>
+/// A treatment <see cref="ITreatmentStore.CreateAsync"/> wrote, and what the create knows of how
+/// reads serve it.
+/// </summary>
+/// <param name="Created">The treatment as the create returned it.</param>
+internal abstract record StoredTreatment(Treatment Created)
+{
+    /// <summary>
+    /// A temp basal, mapped from the record <paramref name="RecordId"/> as written. A later write of
+    /// the batch can change that record: a re-send of it, or a Profile Switch that re-resolves its
+    /// rate from the schedule.
+    /// </summary>
+    internal sealed record Served(Treatment Created, Guid RecordId) : StoredTreatment(Created);
+
+    /// <summary>
+    /// <see cref="Treatment.Id"/> of <paramref name="Created"/> is the id reads serve the treatment
+    /// under, and it starts at <paramref name="Mills"/>.
+    /// </summary>
+    internal sealed record Named(Treatment Created, long Mills) : StoredTreatment(Created);
+
+    /// <summary><paramref name="Created"/> keeps the id it was sent with, which a read resolves.</summary>
+    internal sealed record Unnamed(Treatment Created) : StoredTreatment(Created);
+}
+
+/// <param name="Served">
+/// The treatment as reads served it before the delete, or <c>null</c> for a record reads do not
+/// serve.
+/// </param>
+internal sealed record TreatmentDeletion(Treatment? Served);

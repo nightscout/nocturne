@@ -1,19 +1,17 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
 /// <summary>
-/// Manages guest access links backed by <see cref="OAuthGrantEntity"/> rows
-/// with <c>grant_type = "guest"</c>. Codes are short alphanumeric strings
-/// (ABC-DEFG format) hashed with SHA-256 before storage.
+/// Manages guest access links backed by grants with <c>grant_type = "guest"</c>. Codes are short
+/// alphanumeric strings (ABC-DEFG format) hashed with SHA-256 before storage.
 /// </summary>
 public class GuestLinkService : IGuestLinkService
 {
@@ -49,17 +47,22 @@ public class GuestLinkService : IGuestLinkService
     }
 
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IOAuthGrantRepository _grants;
     private readonly GuestSessionCacheService _sessionCache;
     private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<GuestLinkService> _logger;
 
+    /// <param name="contexts">Opens the unit of work a revoke runs on.</param>
+    /// <param name="grants">The stored grants.</param>
     public GuestLinkService(
         INocturneDbContextFactory contexts,
+        IOAuthGrantRepository grants,
         GuestSessionCacheService sessionCache,
         GrantRevocationService grantRevocation,
         ILogger<GuestLinkService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
         _sessionCache = sessionCache;
         _grantRevocation = grantRevocation;
         _logger = logger;
@@ -76,7 +79,6 @@ public class GuestLinkService : IGuestLinkService
         bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var requestedScopes = ResolveScopes(scopes, creatorScopes);
 
         var scopeList = Scope.ValidateGrantScopes(requestedScopes, OAuthGrantTypes.Guest);
@@ -92,29 +94,29 @@ public class GuestLinkService : IGuestLinkService
         var hash = CredentialHash.GuestCode(code);
         var now = DateTime.UtcNow;
 
-        var entity = new OAuthGrantEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = dataOwnerSubjectId,
-            CreatedBySubjectId = createdBySubjectId,
-            GrantType = OAuthGrantTypes.Guest,
-            Scopes = scopeList,
-            Label = label,
-            TokenHash = hash,
-            ExpiresAt = now + LinkLifetime,
-            LimitTo24Hours = limitTo24Hours,
-        };
+        var grantId = await _grants.CreateAsync(
+            new NewOAuthGrant(
+                ClientEntityId: null,
+                dataOwnerSubjectId,
+                OAuthGrantTypes.Guest,
+                scopeList,
+                label,
+                TokenHash: hash,
+                LegacySecretHash: null,
+                ExpiresAt: now + LinkLifetime,
+                limitTo24Hours,
+                CreatedBySubjectId: createdBySubjectId),
+            ct);
+        var grant = await _grants.GetAsync(grantId, ct)
+            ?? throw new InvalidOperationException($"Guest link {grantId} is not readable after its save.");
 
-        db.OAuthGrants.Add(entity);
-        await db.SaveChangesAsync(ct);
-
-        var info = MapToInfo(entity);
+        var info = MapToInfo(grant);
         var formatted = FormatCode(code);
         var fullUrl = $"{baseUrl.TrimEnd('/')}/guest/{formatted}";
 
         _logger.LogInformation(
             "Guest link created for data owner {DataOwnerSubjectId} by {CreatedBySubjectId}, expires {ExpiresAt}",
-            dataOwnerSubjectId, createdBySubjectId, entity.ExpiresAt);
+            dataOwnerSubjectId, createdBySubjectId, grant.ExpiresAt);
 
         return new GuestLinkCreationResult(formatted, fullUrl, info);
     }
@@ -157,68 +159,33 @@ public class GuestLinkService : IGuestLinkService
         string? userAgent,
         CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var normalized = code.Replace("-", "").ToUpperInvariant();
         var hash = CredentialHash.GuestCode(normalized);
         var now = DateTime.UtcNow;
 
-        var grant = await db.OAuthGrants
-            .FirstOrDefaultAsync(g =>
-                g.TokenHash == hash
-                && g.GrantType == OAuthGrantTypes.Guest
-                && g.RevokedAt == null
-                && g.ActivatedAt == null
-                && g.ExpiresAt > now, ct);
+        var grant = await _grants.ActivateGuestAsync(hash, now, new GrantPresentation(ipAddress, userAgent), ct);
 
         if (grant is null)
         {
             return new GuestLinkActivationResult(false, null, "Invalid or expired code");
         }
 
-        grant.ActivatedAt = now;
-        grant.ActivatedIp = ipAddress;
-        grant.ActivatedUserAgent = userAgent;
-        await db.SaveChangesAsync(ct);
-
-        var session = new GuestSessionInfo(
-            grant.Id,
-            grant.TenantId,
-            grant.SubjectId,
-            grant.Scopes.AsReadOnly(),
-            grant.Label,
-            grant.ExpiresAt!.Value,
-            grant.LimitTo24Hours);
-
         _logger.LogInformation("Guest link {GrantId} activated from {IpAddress}", grant.Id, ipAddress);
 
-        return new GuestLinkActivationResult(true, session, null);
+        return new GuestLinkActivationResult(true, ToSession(grant), null);
     }
 
     /// <inheritdoc />
     public async Task<GuestSessionInfo?> ValidateSessionAsync(Guid grantId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var now = DateTime.UtcNow;
 
-        var grant = await db.OAuthGrants
-            .AsNoTracking()
-            .FirstOrDefaultAsync(g =>
-                g.Id == grantId
-                && g.GrantType == OAuthGrantTypes.Guest
-                && g.RevokedAt == null
-                && g.ExpiresAt > now
-                && g.ActivatedAt != null, ct);
+        var grant = await FindGuestAsync(_grants, grantId, ct);
 
-        if (grant is null) return null;
+        if (grant is null || grant.IsRevoked || !(grant.ExpiresAt > now) || grant.ActivatedAt is null)
+            return null;
 
-        return new GuestSessionInfo(
-            grant.Id,
-            grant.TenantId,
-            grant.SubjectId,
-            grant.Scopes.AsReadOnly(),
-            grant.Label,
-            grant.ExpiresAt!.Value,
-            grant.LimitTo24Hours);
+        return ToSession(grant);
     }
 
     /// <inheritdoc />
@@ -227,16 +194,7 @@ public class GuestLinkService : IGuestLinkService
         bool includeDismissed = false,
         CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var query = db.OAuthGrants
-            .Where(g => g.SubjectId == dataOwnerSubjectId && g.GrantType == OAuthGrantTypes.Guest);
-
-        if (!includeDismissed)
-            query = query.Where(g => g.DismissedAt == null);
-
-        var grants = await query
-            .OrderByDescending(g => g.CreatedAt)
-            .ToListAsync(ct);
+        var grants = await _grants.GetGuestLinksAsync(dataOwnerSubjectId, includeDismissed, ct);
 
         return grants.Select(MapToInfo).ToList().AsReadOnly();
     }
@@ -244,14 +202,10 @@ public class GuestLinkService : IGuestLinkService
     /// <inheritdoc />
     public async Task<bool> RevokeAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var grant = await db.OAuthGrants
-            .FirstOrDefaultAsync(g =>
-                g.Id == grantId
-                && g.GrantType == OAuthGrantTypes.Guest
-                && g.RevokedAt == null, ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var grant = await FindGuestAsync(new OAuthGrantRepository(unit), grantId, ct);
 
-        if (grant is null) return false;
+        if (grant is null || grant.IsRevoked) return false;
 
         if (grant.SubjectId != requestingSubjectId && grant.CreatedBySubjectId != requestingSubjectId)
         {
@@ -261,7 +215,9 @@ public class GuestLinkService : IGuestLinkService
             return false;
         }
 
-        await _grantRevocation.RevokeAsync(db, grant, ct);
+        await _grantRevocation.StageAsync(unit, grant, ct);
+        await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
+        _grantRevocation.EvictSessions([grant]);
 
         _logger.LogInformation(
             "Guest link {GrantId} revoked by {RequestingSubjectId}", grantId, requestingSubjectId);
@@ -271,16 +227,11 @@ public class GuestLinkService : IGuestLinkService
     /// <inheritdoc />
     public async Task<bool> DismissAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var now = DateTime.UtcNow;
 
-        var grant = await db.OAuthGrants
-            .FirstOrDefaultAsync(g =>
-                g.Id == grantId
-                && g.GrantType == OAuthGrantTypes.Guest
-                && g.DismissedAt == null, ct);
+        var grant = await FindGuestAsync(_grants, grantId, ct);
 
-        if (grant is null) return false;
+        if (grant is null || grant.DismissedAt is not null) return false;
 
         if (grant.SubjectId != requestingSubjectId && grant.CreatedBySubjectId != requestingSubjectId)
         {
@@ -299,8 +250,7 @@ public class GuestLinkService : IGuestLinkService
             return false;
         }
 
-        grant.DismissedAt = now;
-        await db.SaveChangesAsync(ct);
+        await _grants.DismissAsync(grant.Id, now, ct);
 
         _sessionCache.Evict(grant.TenantId, grant.Id);
 
@@ -309,31 +259,18 @@ public class GuestLinkService : IGuestLinkService
     }
 
     /// <inheritdoc />
-    public async Task<int> GetActiveCountAsync(Guid dataOwnerSubjectId, CancellationToken ct = default)
-    {
-        await using var db = await _contexts.CreateAsync(ct);
-        var now = DateTime.UtcNow;
-
-        return await db.OAuthGrants
-            .CountAsync(g =>
-                g.SubjectId == dataOwnerSubjectId
-                && g.GrantType == OAuthGrantTypes.Guest
-                && g.RevokedAt == null
-                && g.ExpiresAt > now, ct);
-    }
+    public Task<int> GetActiveCountAsync(Guid dataOwnerSubjectId, CancellationToken ct = default) =>
+        _grants.CountLiveGuestLinksAsync(dataOwnerSubjectId, DateTime.UtcNow, ct);
 
     /// <inheritdoc />
-    public async Task<bool> HasRedeemableCodeAsync(CancellationToken ct = default)
-    {
-        await using var db = await _contexts.CreateAsync(ct);
-        var now = DateTime.UtcNow;
+    public Task<bool> HasRedeemableCodeAsync(CancellationToken ct = default) =>
+        _grants.HasRedeemableGuestCodeAsync(DateTime.UtcNow, ct);
 
-        return await db.OAuthGrants
-            .AnyAsync(g =>
-                g.GrantType == OAuthGrantTypes.Guest
-                && g.RevokedAt == null
-                && g.ActivatedAt == null
-                && g.ExpiresAt > now, ct);
+    /// <summary>The grant <paramref name="grantId"/> if it is a guest link, in any state.</summary>
+    private static async Task<OAuthGrantRecord?> FindGuestAsync(IOAuthGrantRepository grants, Guid grantId, CancellationToken ct)
+    {
+        var grant = await grants.GetAsync(grantId, ct);
+        return grant is { GrantType: OAuthGrantTypes.Guest } ? grant : null;
     }
 
     private static string GenerateCode()
@@ -355,30 +292,40 @@ public class GuestLinkService : IGuestLinkService
         return $"{code[..3]}-{code[3..]}";
     }
 
-    private static GuestLinkInfo MapToInfo(OAuthGrantEntity entity)
+    private static GuestSessionInfo ToSession(OAuthGrantRecord grant) =>
+        new(
+            grant.Id,
+            grant.TenantId,
+            grant.SubjectId,
+            grant.Scopes,
+            grant.Label,
+            grant.ExpiresAt!.Value,
+            grant.LimitTo24Hours);
+
+    private static GuestLinkInfo MapToInfo(OAuthGrantRecord grant)
     {
         var now = DateTime.UtcNow;
-        var status = entity.RevokedAt.HasValue
+        var status = grant.RevokedAt.HasValue
             ? GuestLinkStatus.Revoked
-            : entity.ExpiresAt <= now
+            : grant.ExpiresAt <= now
                 ? GuestLinkStatus.Expired
-                : entity.ActivatedAt.HasValue
+                : grant.ActivatedAt.HasValue
                     ? GuestLinkStatus.Active
                     : GuestLinkStatus.Pending;
 
         return new GuestLinkInfo
         {
-            Id = entity.Id,
-            DataOwnerSubjectId = entity.SubjectId,
-            CreatedBySubjectId = entity.CreatedBySubjectId ?? entity.SubjectId,
-            Label = entity.Label ?? string.Empty,
-            Scopes = Scope.ForDisplay(entity.Scopes, entity.GrantType),
-            CreatedAt = entity.CreatedAt,
-            ExpiresAt = entity.ExpiresAt ?? entity.CreatedAt + LinkLifetime,
-            ActivatedAt = entity.ActivatedAt,
-            ActivatedIp = entity.ActivatedIp,
-            RevokedAt = entity.RevokedAt,
-            DismissedAt = entity.DismissedAt,
+            Id = grant.Id,
+            DataOwnerSubjectId = grant.SubjectId,
+            CreatedBySubjectId = grant.CreatedBySubjectId ?? grant.SubjectId,
+            Label = grant.Label ?? string.Empty,
+            Scopes = Scope.ForDisplay(grant.Scopes, grant.GrantType),
+            CreatedAt = grant.CreatedAt,
+            ExpiresAt = grant.ExpiresAt ?? grant.CreatedAt + LinkLifetime,
+            ActivatedAt = grant.ActivatedAt,
+            ActivatedIp = grant.ActivatedIp,
+            RevokedAt = grant.RevokedAt,
+            DismissedAt = grant.DismissedAt,
             Status = status,
         };
     }

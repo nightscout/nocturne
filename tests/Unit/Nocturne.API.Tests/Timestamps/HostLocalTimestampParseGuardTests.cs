@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -98,31 +99,16 @@ public class HostLocalTimestampParseGuardTests
 
     private static List<ParseSite> Scan()
     {
-        var root = RepositoryRoot();
         var sites = new List<ParseSite>();
 
-        foreach (var tree in ScannedTrees)
+        foreach (var source in ScannedTrees.SelectMany(RepoSources.Under))
         {
-            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, tree), "*.cs",
-                         SearchOption.AllDirectories))
+            if (!MayHold(source.Text))
             {
-                if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                    || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-                {
-                    continue;
-                }
-
-                var text = File.ReadAllText(path);
-                if (!MayHold(text))
-                {
-                    continue;
-                }
-
-                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-                var syntax = CSharpSyntaxTree.ParseText(text);
-
-                sites.AddRange(Detect(syntax, relative));
+                continue;
             }
+
+            sites.AddRange(Detect(source.Tree, source.Path));
         }
 
         return sites;
@@ -212,21 +198,6 @@ public class HostLocalTimestampParseGuardTests
         IdentifierNameSyntax name => name.Identifier.Text,
         _ => null,
     };
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-                return directory.FullName;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
-    }
 
     private sealed record ParseSite(string Path, int Line, string FirstArgument, string Reason)
     {

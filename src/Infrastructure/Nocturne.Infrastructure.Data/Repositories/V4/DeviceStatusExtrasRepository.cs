@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
@@ -108,6 +109,30 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         return await ctx.AuditedSoftDeleteAsync(
             ctx.DeviceStatusExtras.Where(e => e.CorrelationId == correlationId),
             _auditContext, $"correlation_id={correlationId}", ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceStatusExtras?>> FindStoredAsync(
+        IReadOnlyList<DeviceStatusExtras> candidates, CancellationToken ct = default)
+    {
+        if (candidates.Count == 0)
+            return [];
+
+        var timestamps = candidates.Select(c => c.Timestamp).Distinct().ToList();
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var stored = (await ctx.DeviceStatusExtras.AsNoTracking()
+                .Where(e => timestamps.Contains(e.Timestamp))
+                .ToListAsync(ct))
+            .ToLookup(e => e.Timestamp);
+
+        return [.. candidates.Select(candidate =>
+        {
+            var extras = Parse(DeviceStatusExtrasMapper.ToEntity(candidate).ExtrasJson);
+            return stored[candidate.Timestamp].FirstOrDefault(e => JsonNode.DeepEquals(Parse(e.ExtrasJson), extras))
+                is { } match ? DeviceStatusExtrasMapper.ToDomainModel(match) : null;
+        })];
+
+        static JsonNode? Parse(string? json) => json is null ? null : JsonNode.Parse(json);
     }
 
     /// <inheritdoc />

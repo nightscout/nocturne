@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -62,14 +63,15 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
             .Returns<Dictionary<string, string>>(d => d);
 
         _service = new ConnectorConfigurationService(
-            _dbContext.AsFactory(),
+            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),
             _auditContext.Object,
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
-            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

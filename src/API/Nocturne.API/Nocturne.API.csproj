@@ -35,6 +35,7 @@
     <InternalsVisibleTo Include="Nocturne.API.Tests" />
     <InternalsVisibleTo Include="Nocturne.API.Performance.Tests" />
     <InternalsVisibleTo Include="Nocturne.Alerts.Corpus" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
   <!-- Build provenance baked into the published container image. CI passes the source
        commit and build timestamp; the status endpoint surfaces them in the About panel. -->

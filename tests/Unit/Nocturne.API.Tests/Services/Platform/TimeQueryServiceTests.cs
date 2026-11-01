@@ -5,10 +5,8 @@ using Nocturne.Core.Contracts.Entries;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.API.Services.Devices;
-using Nocturne.Core.Contracts.Repositories;
-using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Queries;
@@ -24,6 +22,7 @@ public class TimeQueryServiceTests
 {
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<ITreatmentService> _mockTreatmentService;
+    private readonly Mock<IDeviceStatusService> _mockDeviceStatusService;
     private readonly Mock<IBraceExpansionService> _mockBraceExpansionService;
     private readonly Mock<ILogger<TimeQueryService>> _mockLogger;
     private readonly TimeQueryService _timeQueryService;
@@ -35,23 +34,17 @@ public class TimeQueryServiceTests
         _mockBraceExpansionService = new Mock<IBraceExpansionService>();
         _mockLogger = new Mock<ILogger<TimeQueryService>>();
 
-        var projectionService = new DeviceStatusProjectionService(
-            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
-                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
-                == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
-            new Mock<IApsSnapshotRepository>().Object,
-            new Mock<IPumpSnapshotRepository>().Object,
-            new Mock<IUploaderSnapshotRepository>().Object,
-            new Mock<IStateSpanRepository>().Object,
-            new Mock<IDeviceStatusExtrasRepository>().Object,
-            TimeProvider.System,
-            new Mock<ILogger<DeviceStatusProjectionService>>().Object);
+        _mockDeviceStatusService = new Mock<IDeviceStatusService>();
+        _mockDeviceStatusService
+            .Setup(x => x.GetDeviceStatusesAsync(
+                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<ReadSortField>()))
+            .ReturnsAsync([]);
 
         _timeQueryService = new TimeQueryService(
             _mockEntryService.Object,
             _mockTreatmentService.Object,
-            projectionService,
+            _mockDeviceStatusService.Object,
             _mockBraceExpansionService.Object,
             _mockLogger.Object
         );
@@ -173,7 +166,13 @@ public class TimeQueryServiceTests
                 );
                 break;
             case "devicestatus":
-                // DeviceStatusProjectionService is concrete, verified by returning empty results
+                _mockDeviceStatusService.Verify(
+                    x =>
+                        x.GetDeviceStatusesAsync(
+                            It.IsAny<FindQuery>(), 1000, 0, It.IsAny<CancellationToken>(),
+                            It.IsAny<bool>(), It.IsAny<ReadSortField>()),
+                    Times.Once
+                );
                 break;
         }
     }
@@ -425,7 +424,13 @@ public class TimeQueryServiceTests
                 );
                 break;
             case "devicestatus":
-                // DeviceStatusProjectionService is concrete, verified by returning empty results
+                _mockDeviceStatusService.Verify(
+                    x =>
+                        x.GetDeviceStatusesAsync(
+                            It.IsAny<FindQuery>(), 1000, 0, It.IsAny<CancellationToken>(),
+                            It.IsAny<bool>(), It.IsAny<ReadSortField>()),
+                    Times.Once
+                );
                 break;
         }
     }

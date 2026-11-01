@@ -8,8 +8,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.V4;
 
 /// <summary>
-/// The create-or-update-by-<c>LegacyId</c> body and the bulk-insert tail shared by the
-/// repository-backed decomposers.
+/// The bulk create-or-update-by-<c>LegacyId</c> writes, the write onto a row resolved by its id, and
+/// the correlation and attribution rules shared by the repository-backed decomposers.
 /// </summary>
 public abstract class DecomposerBase
 {
@@ -18,101 +18,39 @@ public abstract class DecomposerBase
     protected DecomposerBase(ILogger logger) => Logger = logger;
 
     /// <summary>
-    /// Create-or-update under <paramref name="legacyId"/>. <paramref name="beforeWrite"/> runs once the
-    /// stored record is known and before the write, so device-attributed types can settle their
-    /// attribution against it; see <see cref="StampAttributionAsync"/>.
+    /// Writes <paramref name="model"/> onto <paramref name="stored"/>, a row its caller resolved by its
+    /// own id rather than a legacy id, so it may carry none or another one for a bulk upsert to match
+    /// it by; or creates <paramref name="model"/> when nothing is stored, counting a create the
+    /// recreation guard refuses in <see cref="DecompositionResult.SkippedDeleted"/>. A model that
+    /// resolved no device keeps the stored one, as a bulk upsert does
+    /// (<see cref="IPatientDeviceLinked"/>).
     /// </summary>
-    /// <remarks>
-    /// <paramref name="preserveStoredCorrelationId"/> treats the stored correlation id as belonging to
-    /// the row rather than to the decomposition that last touched it. A decomposer mints a fresh id per
-    /// call, so re-upserting an otherwise unchanged row modifies <see cref="IV4Record.CorrelationId"/>
-    /// and makes EF emit an UPDATE — one carrying no material change, so it neither audits nor
-    /// broadcasts, but still writes a row version. The column is indexed, so that update cannot be HOT
-    /// and appends to every index on the table; Npgsql writes a <see cref="Guid"/> big-endian, so a
-    /// UUID v7 id is byte-monotonic in the btree and those appends rarely refill the pages the dead
-    /// entries freed — only vacuum returns an entirely empty one, and not before two cycles — which is
-    /// why density collapses rather than settling. An empty stored id is ignored, so it still
-    /// self-heals on the next write rather than being frozen and stamped across the group; a non-empty
-    /// one is preserved regardless of origin, since nothing distinguishes a client-supplied id from a
-    /// decomposer-minted one.
-    /// <para>
-    /// Only an anchor record may set this, and only where the caller then stamps the rest of the group
-    /// from what it reads back. Preserving per row instead lets a group fork permanently: siblings are
-    /// written in separate transactions, so one lost to a cancelled sync is recreated under a fresh id
-    /// while the survivors keep the old one, and a reader that loads siblings by correlation id then
-    /// silently returns nothing. A decomposer that resolves the group's id first
-    /// (<see cref="GetStoredCorrelationIdsAsync"/>) and stamps every sibling with it converges such a
-    /// group instead, and is the way to keep a stored id.
-    /// A group whose members are not all upserted under a shared legacy id has no anchor to converge
-    /// on and must not set this at all: <see cref="DeviceStatusDecomposer"/> creates its extras row
-    /// keyed by the freshly minted id and carrying no legacy id, so preserving on one of its snapshot
-    /// siblings orphans that row outright.
-    /// </para>
-    /// </remarks>
-    /// <param name="findStored">
-    /// Resolves the stored record in place of the lookup by <paramref name="legacyId"/>, for a caller
-    /// that already knows it, including a stored record with no legacy id at all.
-    /// </param>
-    /// <returns>
-    /// The persisted record and whether it was inserted rather than updated, or <see langword="null"/>
-    /// when the write was refused because the record's identity is already held
-    /// (<see cref="RecreationBlockedException"/>) — the outcome the batch path reaches by dropping
-    /// the record from its insert set. It is counted in <see cref="DecompositionResult.SkippedDeleted"/>.
-    /// </returns>
-    protected async Task<(TRecord Record, bool Created)?> UpsertByLegacyIdAsync<TRecord>(
-        ILegacyKeyedRepository<TRecord> repository,
-        string? legacyId,
+    protected static async Task WriteOntoStoredAsync<TRecord>(
+        IV4Repository<TRecord> repository,
+        TRecord? stored,
         TRecord model,
         DecompositionResult result,
         WriteOrigin origin,
-        CancellationToken ct,
-        Func<TRecord?, Task>? beforeWrite = null,
-        bool preserveStoredCorrelationId = false,
-        Func<Task<TRecord?>>? findStored = null)
+        CancellationToken ct)
         where TRecord : class, IV4Record
     {
-        var existing = findStored is not null
-            ? await findStored()
-            : legacyId is null ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
-
-        if (beforeWrite is not null)
-            await beforeWrite(existing);
-
-        var recordType = typeof(TRecord).Name;
-
-        if (existing is null)
+        if (stored is null)
         {
-            TRecord created;
             try
             {
-                created = await repository.CreateAsync(model, origin, ct);
+                result.CreatedRecords.Add(await repository.CreateAsync(model, origin, ct));
             }
             catch (RecreationBlockedException)
             {
-                // No live row carries the legacy id, so what holds it is the user's deletion.
                 result.SkippedDeleted++;
-                Logger.LogDebug("Skipped a {RecordType}: its identity is held by a deleted record", recordType);
-                return null;
             }
-
-            result.CreatedRecords.Add(created);
-            Logger.LogDebug("Created {RecordType} from legacy record {LegacyId}", recordType, legacyId);
-            return (created, true);
+            return;
         }
 
-        if (preserveStoredCorrelationId
-            && existing.CorrelationId is { } storedCorrelationId
-            && storedCorrelationId != Guid.Empty)
-        {
-            model.CorrelationId = storedCorrelationId;
-        }
-
-        model.Id = existing.Id;
-        var updated = await repository.UpdateAsync(existing.Id, model, origin, ct);
-        result.UpdatedRecords.Add(updated);
-        Logger.LogDebug(
-            "Updated existing {RecordType} {Id} from legacy record {LegacyId}", recordType, existing.Id, legacyId);
-        return (updated, false);
+        if (model is IPatientDeviceLinked { PatientDeviceId: null } linked && stored is IPatientDeviceLinked storedLink)
+            linked.PatientDeviceId = storedLink.PatientDeviceId;
+        model.Id = stored.Id;
+        result.UpdatedRecords.Add(await repository.UpdateAsync(stored.Id, model, origin, ct));
     }
 
     /// <summary>
@@ -126,10 +64,9 @@ public abstract class DecomposerBase
     /// taken from the first of <paramref name="tables"/> that holds one.
     /// </summary>
     /// <remarks>
-    /// A re-send keeps that id rather than minting a fresh one. A fresh id makes an otherwise
-    /// unchanged re-upsert an UPDATE of the indexed correlation column, the bloat described on
-    /// <see cref="UpsertByLegacyIdAsync"/>, and a group row that carries no legacy id of its own
-    /// is found only through the stored id. Stamping every sibling with the one id also converges
+    /// A re-send keeps that id rather than minting a fresh one, so an unchanged re-send stays
+    /// unchanged (<see cref="BulkUpsertAsync{TRecord}"/>), and a group row that carries no legacy id of
+    /// its own is found only through the stored id. Stamping every sibling with the one id also converges
     /// a group that has forked.
     /// </remarks>
     protected static async Task<Dictionary<string, Guid>> GetStoredCorrelationIdsAsync(
@@ -164,66 +101,23 @@ public abstract class DecomposerBase
     }
 
     /// <summary>
-    /// Carries the attribution stored under the same legacy id forward onto a rebuilt model, then
-    /// stamps whatever is still unattributed. A re-resolution that has since become ambiguous
-    /// therefore cannot displace a stored link.
-    /// </summary>
-    /// <remarks>
-    /// The source argument is the fallback for records carrying no
-    /// <see cref="IDeviceAttributed.DataSource"/> of their own, so passing the model's own source
-    /// here matches what a batch stamp resolves for the same record with no batch source at all.
-    /// </remarks>
-    protected static Task StampAttributionAsync(
-        IPatientDeviceStamper stamper,
-        IDeviceAttributed model,
-        IDeviceAttributed? existing,
-        IReadOnlyList<DeviceCategory> categories,
-        CancellationToken ct)
-    {
-        model.PatientDeviceId ??= existing?.PatientDeviceId;
-        return stamper.StampAsync([model], categories, model.DataSource, ct);
-    }
-
-    /// <summary>
     /// System-attributes the writes made inside the scope, keeping the mutation audit log a human
     /// mutation trail.
     /// </summary>
     /// <remarks>
-    /// Every legacy create reaches a decomposer's batch path — v1 and v3 normalize a lone record
-    /// into a one-element array — so that path carries uploader ingestion (Loop, AAPS, xDrip,
-    /// connectors, the demo seeder) at CGM sample rate. The audit interceptor drops
-    /// system-attributed saves, and provenance for those rows lives on their own
-    /// <see cref="IV4Record.DataSource"/>. The single-record path deliberately keeps caller
-    /// attribution: it is reached from a genuine per-record edit, and since a legacy record
-    /// persists only as its decomposed v4 rows, their audit rows are the whole trail of that edit.
-    /// Connector re-syncs of the single path are system-attributed by the sync scope's own audit
-    /// context rather than here. <see cref="ProfileDecomposer"/> takes no scope on either path: a
-    /// profile persists only as its decomposed rows, so their audit rows are the whole trail of a
-    /// user's profile edit, and an unchanged re-upsert writes nothing to audit.
+    /// The audit interceptor drops system-attributed saves, so a decomposer applies this only to writes
+    /// whose audit rows would not be a person's trail. Entries and device statuses arrive from uploaders
+    /// at CGM sample rate and keep their provenance on each row's <see cref="IV4Record.DataSource"/>, so
+    /// they are system-attributed, except a user's edit of one entry
+    /// (<see cref="Entries.IEntryDecomposer.DecomposeAsync"/>). A legacy treatment or profile persists only as its decomposed
+    /// rows, so their audit rows are the whole trail of a careportal entry or an edit: a live treatment
+    /// keeps the caller's attribution and only a backfill is system-attributed, except the removal of a
+    /// reclassified treatment's rows (<see cref="TreatmentDecomposer.DropAbsentAsync"/>), and
+    /// <see cref="ProfileDecomposer"/> takes no scope, since an unchanged re-upsert writes nothing to
+    /// audit. Connector syncs are system-attributed by the sync scope's own audit context.
     /// </remarks>
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext);
-
-    /// <summary>
-    /// Runs <paramref name="body"/> with last-seen writes held, then writes each device's once. A
-    /// throwing <paramref name="body"/> discards them instead, so its exception is the one that
-    /// surfaces rather than a flush failure replacing it.
-    /// </summary>
-    protected static async Task DeferLastSeenAsync(IDeviceService deviceService, Func<Task> body, CancellationToken ct)
-    {
-        await using var deferral = deviceService.DeferLastSeen(ct);
-        var completed = false;
-        try
-        {
-            await body();
-            completed = true;
-        }
-        finally
-        {
-            if (!completed)
-                deferral?.Discard();
-        }
-    }
 
     protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
     {
@@ -260,11 +154,11 @@ public abstract class DecomposerBase
     }
 
     /// <summary>
-    /// The batch twin of <see cref="UpsertByLegacyIdAsync"/>: a record whose legacy id is stored
-    /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, so a resend
-    /// through the batch path writes what the same resend through the single path writes.
+    /// Create-or-update by legacy id: a record whose legacy id is stored updates that row and lands in
+    /// <see cref="DecompositionResult.UpdatedRecords"/>, or, when the row already held it, in
+    /// <see cref="DecompositionResult.UnchangedRecords"/>.
     /// </summary>
-    protected static async Task BulkUpsertAsync<TRecord>(
+    protected static async Task<BulkWrite<TRecord>> BulkUpsertAsync<TRecord>(
         IBulkUpsertRepository<TRecord> repository,
         List<TRecord> records,
         DecompositionResult result,
@@ -273,13 +167,21 @@ public abstract class DecomposerBase
         where TRecord : class
     {
         if (records.Count == 0)
-            return;
+            return [];
 
-        var written = await repository.BulkUpsertAsync(records, origin, ct);
-        var updated = new HashSet<TRecord>(written.Updated, ReferenceEqualityComparer.Instance);
-        result.CreatedRecords.AddRange(written.Where(r => !updated.Contains(r)));
-        result.UpdatedRecords.AddRange(written.Updated);
-        result.SkippedDeleted += written.SkippedDeleted;
+        BulkWrite<TRecord> written;
+        try
+        {
+            written = await repository.BulkUpsertAsync(records, origin, ct);
+        }
+        catch (Exception ex) when (CommittedWrite.TryGet<BulkWrite<TRecord>>(ex, out var committed))
+        {
+            Fold(committed, result);
+            throw;
+        }
+
+        Fold(written, result);
+        return written;
     }
 
     protected static async Task BulkCreateAsync<TRecord>(
@@ -293,8 +195,26 @@ public abstract class DecomposerBase
         if (records.Count == 0)
             return;
 
-        var written = await repository.BulkCreateAsync(records, origin, ct);
-        result.CreatedRecords.AddRange(written);
+        BulkWrite<TRecord> written;
+        try
+        {
+            written = await repository.BulkCreateAsync(records, origin, ct);
+        }
+        catch (Exception ex) when (CommittedWrite.TryGet<BulkWrite<TRecord>>(ex, out var committed))
+        {
+            Fold(committed, result);
+            throw;
+        }
+
+        Fold(written, result);
+    }
+
+    private static void Fold<TRecord>(BulkWrite<TRecord> written, DecompositionResult result)
+        where TRecord : class
+    {
+        result.CreatedRecords.AddRange(written.Created);
+        result.UpdatedRecords.AddRange(written.Updated);
+        result.UnchangedRecords.AddRange(written.Unchanged);
         result.SkippedDeleted += written.SkippedDeleted;
     }
 }

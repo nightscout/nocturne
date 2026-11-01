@@ -90,6 +90,12 @@ public class TreatmentFoodService : ITreatmentFoodService
     }
 
     /// <inheritdoc />
+    public Task AddManyAsync(
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default
+    ) => _treatmentFoodRepository.CreateManyAsync(entries, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<TreatmentFood?> UpdateAsync(
         TreatmentFood entry,
         CancellationToken cancellationToken = default

@@ -39,7 +39,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [Route("api/v4/observations/device-events")]
 [RequireScope(Scope.DevicesRead)]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
+[ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class DeviceEventController(
     IDeviceEventRepository repo,
     IPatientDeviceRepository patientDevices,

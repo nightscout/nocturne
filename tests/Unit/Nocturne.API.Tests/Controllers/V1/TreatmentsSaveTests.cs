@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Xunit;
@@ -37,8 +38,8 @@ public class TreatmentsSaveTests
         };
 
         _service
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Treatment> t, CancellationToken _) =>
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Treatment> t, WriteOrigin _, CancellationToken _) =>
                 new BulkWrite<Treatment>(t.ToList(), 0));
     }
 
@@ -69,7 +70,7 @@ public class TreatmentsSaveTests
         saved.Id.Should().Be(LoopId);
         saved.Duration.Should().Be(30);
         _service.Verify(s => s.CreateTreatmentsAsync(
-            It.Is<IEnumerable<Treatment>>(t => t.Single().Id == LoopId), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<IEnumerable<Treatment>>(t => t.Single().Id == LoopId), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -150,8 +151,8 @@ public class TreatmentsSaveTests
     public async Task Put_WhenTheStoreRefusesTheTreatment_Answers200WithTheRefusalOnItsEcho()
     {
         _service
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Treatment> submitted, CancellationToken _) => new BulkWrite<Treatment>([], 0)
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Treatment> submitted, WriteOrigin _, CancellationToken _) => new BulkWrite<Treatment>([], 0)
             {
                 Rejected = [new BulkWriteRejection<Treatment>(0, submitted.Single(), "value too long")],
             });
@@ -238,7 +239,7 @@ public class TreatmentsSaveTests
         _service.Verify(s => s.UpdateTreatmentAsync(
             It.IsAny<string>(), It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
         _service.Verify(s => s.CreateTreatmentsAsync(
-            It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -292,8 +293,8 @@ public class TreatmentsSaveTests
     {
         UnknownIds();
         _service
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Treatment> t, CancellationToken _) => new BulkWrite<Treatment>(t.ToList(), 1));
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Treatment> t, WriteOrigin _, CancellationToken _) => new BulkWrite<Treatment>(t.ToList(), 1));
 
         var result = await _controller.SaveTreatments(Body(Override(duration: 30)));
 
@@ -330,7 +331,7 @@ public class TreatmentsSaveTests
         .ReturnsAsync((Treatment?)null);
 
     private void VerifyNothingCreated() => _service.Verify(s => s.CreateTreatmentsAsync(
-        It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()), Times.Never);
+        It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
 
     private static object Override(double duration) => new
     {

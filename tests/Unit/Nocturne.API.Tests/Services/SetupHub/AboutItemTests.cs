@@ -7,6 +7,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.SetupHub;
 
@@ -24,11 +25,11 @@ public class AboutItemTests
         _db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "own", DisplayName = "Own" });
         _db.SaveChanges();
         var factory = new TestNocturneDbContextFactory(_db);
-        _service = new SetupHubService(factory, [new AboutItem(factory)]);
+        _service = new SetupHubService(factory, new TenantRepository(factory), new TenantMembershipRepository(factory), [new AboutItem(factory)]);
     }
 
     private async Task<SetupHubItemState> StateAsync() =>
-        (await _service.GetAsync(CancellationToken.None)).Items.Single(i => i.Key == SetupHubItemKey.About).State;
+        (await _service.GetAsync(null, CancellationToken.None)).Items.Single(i => i.Key == SetupHubItemKey.About).State;
 
     [Fact]
     public async Task IsOpen_WhileTheRecordHoldsOnlyWhatTheCoreWrote()
@@ -87,7 +88,7 @@ public class AboutItemTests
         await _db.SaveChangesAsync();
         (await StateAsync()).Should().Be(SetupHubItemState.Open);
 
-        var status = await _service.ConfirmAboutAsync(CancellationToken.None);
+        var status = await _service.ConfirmAboutAsync(null, CancellationToken.None);
 
         status.Items.Single(i => i.Key == SetupHubItemKey.About).State.Should().Be(SetupHubItemState.Done);
         (await StateAsync()).Should().Be(SetupHubItemState.Done);
@@ -96,7 +97,7 @@ public class AboutItemTests
     [Fact]
     public async Task Confirming_WithNoPatientRecord_IsRefused()
     {
-        var act = () => _service.ConfirmAboutAsync(CancellationToken.None);
+        var act = () => _service.ConfirmAboutAsync(null, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -104,7 +105,7 @@ public class AboutItemTests
     [Fact]
     public async Task IsDone_EvenAfterBeingSetAside()
     {
-        await _service.SetStateAsync(SetupHubItemKey.About, SetupHubItemState.NotForMe, CancellationToken.None);
+        await _service.SetStateAsync(null, SetupHubItemKey.About, SetupHubItemState.NotForMe, CancellationToken.None);
         _db.PatientRecords.Add(new PatientRecordEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DiabetesType = "Type2" });
         await _db.SaveChangesAsync();
 

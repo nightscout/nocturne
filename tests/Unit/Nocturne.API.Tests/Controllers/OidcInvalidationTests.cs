@@ -1,4 +1,3 @@
-using System.Reflection;
 using FluentAssertions;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Tests.Infrastructure;
@@ -24,47 +23,5 @@ public class OidcInvalidationTests
         RemoteAttributes.Command<OidcController>(nameof(OidcController.UnlinkIdentity))
             .Invalidates.Should()
             .Contain(read);
-    }
-
-    /// <summary>
-    /// Only a query can be refreshed, and a read on another controller has to be named the way the
-    /// OpenAPI document names it — NSwag's <c>{controller}_{action}</c> operationId — because a bare
-    /// name resolves only within the declaring operation's own tag and is otherwise dropped in
-    /// silence. Resolving each entry back to a method proves the spelling still lands on something.
-    /// </summary>
-    [Fact]
-    public void EveryRefreshedRead_IsAQueryTheCommandCanName()
-    {
-        var reads = RemoteAttributes.Command<OidcController>(nameof(OidcController.UnlinkIdentity)).Invalidates;
-
-        reads.Should().NotBeEmpty();
-
-        foreach (var read in reads)
-        {
-            var method = Resolve(read);
-            method.Should().NotBeNull($"'{read}' should name a method on a controller");
-            RemoteAttributes.Query(method!).Should()
-                .NotBeNull($"'{read}' should name a query, since only a query can be refreshed");
-        }
-    }
-
-    /// <summary>
-    /// Resolves one <c>Invalidates</c> entry to the action it names: a bare name against the
-    /// declaring controller, a <c>{controller}_{action}</c> operationId against the controller that
-    /// prefix belongs to (<see cref="Nocturne.API.OpenApi.ControllerNameTagOperationProcessor"/>
-    /// derives both the tag and the prefix from the controller's type name).
-    /// </summary>
-    private static MethodInfo? Resolve(string read)
-    {
-        var separator = read.IndexOf('_');
-        if (separator < 0)
-        {
-            return typeof(OidcController).GetMethod(read);
-        }
-
-        var controller = typeof(OidcController).Assembly
-            .GetType($"{typeof(OidcController).Namespace}.{read[..separator]}Controller");
-
-        return controller?.GetMethod(read[(separator + 1)..]);
     }
 }

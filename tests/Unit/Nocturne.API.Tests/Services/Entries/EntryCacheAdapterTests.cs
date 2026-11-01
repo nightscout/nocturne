@@ -5,6 +5,7 @@ using Nocturne.API.Services.Entries;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Tests.Services.Entries;
 
@@ -18,7 +19,7 @@ public class EntryCacheAdapterTests
     private static readonly EntryQuery CacheableQuery = new() { Count = 10, Skip = 0 };
 
     private static EntryCacheAdapter Adapter(ITenantCache cache) =>
-        new(cache, NullLogger<EntryCacheAdapter>.Instance);
+        new(cache);
 
     [Fact]
     public async Task GetOrComputeAsync_CacheableQuery_ServesTheTenantCache()
@@ -88,12 +89,14 @@ public class EntryCacheAdapterTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task InvalidateAsync_ClearsTheCurrentEntry_InEitherDemoSegment(bool demo)
+    public async Task AGlucoseWrite_ClearsTheCurrentEntry_InEitherDemoSegment(bool demo)
     {
-        var adapter = Adapter(TestTenantCache.Create(demo: demo));
+        var cache = TestTenantCache.Create(demo: demo);
+        var adapter = Adapter(cache);
         await adapter.GetOrComputeCurrentAsync(() => Task.FromResult<Entry?>(new Entry { Id = "stale" }));
 
-        await adapter.InvalidateAsync();
+        await new LegacyReadCacheInvalidation(cache, NullLogger<LegacyReadCacheInvalidation>.Instance)
+            .WrittenAsync([typeof(SensorGlucose)]);
         var result = await adapter.GetOrComputeCurrentAsync(() => Task.FromResult<Entry?>(new Entry { Id = "fresh" }));
 
         result!.Id.Should().Be("fresh");

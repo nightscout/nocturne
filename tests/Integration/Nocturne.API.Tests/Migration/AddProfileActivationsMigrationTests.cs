@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Nocturne.API.Services.ProfileActivations;
+using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -468,6 +469,7 @@ public class AddProfileActivationsMigrationTests(AddProfileActivationsMigrationF
                 expected.LegacyId = actual.LegacyId;
                 expected.Id = actual.Id;
                 expected.EndTimestamp = actual.EndTimestamp;
+                expected.DataSource = actual.DataSource;
                 LegacyTreatmentTables.ProjectProfileActivation(actual).Should().BeEquivalentTo(
                     LegacyTreatmentTables.ProjectProfileActivation(expected),
                     options => options.Excluding(t => t.Duration).Excluding(t => t.DurationInMilliseconds),

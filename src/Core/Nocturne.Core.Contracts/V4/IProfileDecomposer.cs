@@ -9,25 +9,12 @@ namespace Nocturne.Core.Contracts.V4;
 /// Iterates through the profile's Store dictionary, producing one set of V4 records per named profile.
 /// Handles idempotent create-or-update based on composite LegacyId matching.
 /// </summary>
-/// <seealso cref="IDecompositionPipeline"/>
-/// <seealso cref="IEntryDecomposer"/>
-/// <seealso cref="ITreatmentDecomposer"/>
 public interface IProfileDecomposer
 {
     /// <summary>
-    /// Decomposes a legacy Profile into V4 records for each named profile in its Store.
-    /// </summary>
-    /// <param name="profile">The legacy Profile to decompose</param>
-    /// <returns>
-    /// A <see cref="DecompositionResult"/> containing all created or updated V4 records.
-    /// A single Profile with N named stores produces N sets of 5 records each.
-    /// </returns>
-    Task<DecompositionResult> DecomposeAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>
-    /// Decomposes a batch of legacy Profiles with one create-or-update round per V4 table, so a
-    /// connector re-publishing its profile set costs five table round trips rather than ten per named
-    /// profile. Same records, same idempotency, as <see cref="DecomposeAsync"/> per profile.
+    /// Decomposes a batch of legacy Profiles into V4 records for each named profile in each Store, with
+    /// one create-or-update round per V4 table whatever the batch's size. A single profile is a batch
+    /// of one.
     /// </summary>
     /// <param name="profiles">The legacy Profiles to decompose</param>
     /// <returns>

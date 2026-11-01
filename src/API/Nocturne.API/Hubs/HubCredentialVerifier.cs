@@ -4,7 +4,6 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Hubs;
@@ -56,58 +55,28 @@ public sealed record OverviewGrant(
 /// </remarks>
 public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvider timeProvider)
 {
-    private sealed record GrantState(DateTime? RevokedAt, DateTime? ExpiresAt, List<string> Scopes, bool LimitTo24Hours);
-
-    private sealed record SubjectState(bool IsActive, bool IsPlatformAdmin);
-
     private readonly ConcurrentDictionary<object, Lazy<Task<object?>>> _memo = new();
     private readonly DateTime _now = timeProvider.GetUtcNow().UtcDateTime;
 
     private async Task<T?> Memo<T>(object key, Func<Task<T?>> load) where T : class =>
         (T?)await _memo.GetOrAdd(key, _ => new Lazy<Task<object?>>(async () => await load())).Value;
 
-    private INocturneDbContextFactory Contexts => services.GetRequiredService<INocturneDbContextFactory>();
+    private Task<OAuthGrantState?> GrantAsync(Guid tenantId, Guid grantId) =>
+        Memo(("grant", tenantId, grantId), () =>
+            services.GetRequiredService<IOAuthGrantRepository>().GetStateAsync(tenantId, grantId, CancellationToken.None));
 
-    private Task<GrantState?> GrantAsync(Guid tenantId, Guid grantId) =>
-        Memo(("grant", tenantId, grantId), async () =>
-        {
-            await using var db = await Contexts.CreateForTenantAsync(tenantId);
-            return await db.OAuthGrants
-                .IgnoreQueryFilters()
-                .AsNoTracking()
-                .Where(g => g.Id == grantId && g.TenantId == tenantId)
-                .Select(g => new GrantState(g.RevokedAt, g.ExpiresAt, g.Scopes, g.LimitTo24Hours))
-                .FirstOrDefaultAsync();
-        });
-
-    private Task<SubjectState?> SubjectAsync(Guid subjectId) =>
-        Memo(("subject", subjectId), async () =>
-        {
-            await using var db = await Contexts.CreateForSubjectAsync(subjectId);
-            return await db.Subjects
-                .AsNoTracking()
-                .Where(s => s.Id == subjectId)
-                .Select(s => new SubjectState(s.IsActive, s.IsPlatformAdmin))
-                .FirstOrDefaultAsync();
-        });
+    private Task<SubjectSignInState?> SubjectAsync(Guid subjectId) =>
+        Memo(("subject", subjectId), () =>
+            services.GetRequiredService<ISubjectRepository>().GetSignInStateAsync(subjectId, CancellationToken.None));
 
     /// <summary>
-    /// Whether the session a login belongs to still has a live refresh token. A connection admitted
-    /// on an access token that names no session (<paramref name="sessionId"/> null, which only an
-    /// access token minted before every chain carried a session key can be) can only be matched to
-    /// the subject, so any live session of the subject keeps it for as long as the connection stays
-    /// open. A session id is matched by <see cref="RefreshTokenEntity.InSession"/>.
+    /// Whether the session a login belongs to still has a live refresh token, as
+    /// <see cref="IFirstPartyTokenRepository.HasLiveSessionAsync"/> judges it.
     /// </summary>
     private async Task<bool> HasSessionAsync(Guid subjectId, string? sessionId) =>
         await Memo<object>(("session", subjectId, sessionId), async () =>
-        {
-            await using var db = await Contexts.CreateForSubjectAsync(subjectId);
-            var live = db.RefreshTokens.Where(t =>
-                t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > _now);
-            if (sessionId != null)
-                live = live.Where(RefreshTokenEntity.InSession(sessionId));
-            return await live.AnyAsync();
-        }) is true;
+            await services.GetRequiredService<IFirstPartyTokenRepository>()
+                .HasLiveSessionAsync(subjectId, sessionId, _now, CancellationToken.None)) is true;
 
     private Task<TenantMemberAccess?> MembershipAsync(Guid subjectId, Guid tenantId) =>
         Memo(("member", subjectId, tenantId), () =>
@@ -127,12 +96,9 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
 
     private async Task<bool> IsTenantActiveAsync(Guid tenantId) =>
         await Memo<object>(("tenant", tenantId), async () =>
-        {
-            await using var db = await Contexts.CreatePlatformAsync();
-            return await db.Tenants.AnyAsync(t => t.Id == tenantId && t.IsActive);
-        }) is true;
+            await services.GetRequiredService<ITenantRepository>().IsActiveAsync(tenantId, CancellationToken.None)) is true;
 
-    private bool IsLive(GrantState? grant) =>
+    private bool IsLive(OAuthGrantState? grant) =>
         grant is { RevokedAt: null } && (grant.ExpiresAt is null || grant.ExpiresAt > _now);
 
     /// <summary>
