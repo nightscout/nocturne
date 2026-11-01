@@ -17,7 +17,7 @@ namespace Nocturne.API.Services.Alerts;
 /// those repeats to one pass per reading per
 /// <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>. Hysteresis closure, snooze expiry,
 /// auto-resolve and wall-clock rules (<see cref="Engines.RuleTrees.ReferencesWallClock"/>) are also driven by
-/// the timer in <see cref="AlertSweepService"/>.
+/// the timer in <see cref="AlertSweepJob"/>.
 /// </remarks>
 internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 {

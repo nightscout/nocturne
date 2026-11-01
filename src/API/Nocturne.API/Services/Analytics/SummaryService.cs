@@ -75,7 +75,11 @@ public class SummaryService : ISummaryService
         try
         {
             var currentTime = _time.GetUtcNow().ToUnixTimeMilliseconds();
-            var ddata = await _ddataService.GetDDataAsync(currentTime, cancellationToken);
+            var ddata = await _ddataService.GetDDataAsync(
+                currentTime,
+                DDataCollections.All,
+                cancellationToken
+            );
             var sgvs = ProcessSgvs(ddata.Sgvs, hours);
             var profileName = await _activeProfileResolver.GetProfileNameAsync(
                 currentTime,
@@ -83,7 +87,11 @@ public class SummaryService : ISummaryService
             );
             var profile = await ResolveActiveProfileAsync(profileName, cancellationToken);
             var treatments = ProcessTreatments(ddata.Treatments, profile, hours);
-            var state = await ConstructStateAsync(cancellationToken);
+            var state = await ConstructStateAsync(
+                ddata,
+                await ReadIobCobAsync(cancellationToken),
+                cancellationToken
+            );
 
             return new SummaryResponse
             {
@@ -313,18 +321,22 @@ public class SummaryService : ISummaryService
     private static bool HasTreatments(IobCobInputs inputs) =>
         inputs.Boluses.Count > 0 || inputs.TempBasals.Count > 0 || inputs.CarbIntakes.Count > 0;
 
-    /// <inheritdoc />
-    public async Task<SummaryState> ConstructStateAsync(
-        CancellationToken cancellationToken = default
+    private async Task<SummaryState> ConstructStateAsync(
+        DData ddata,
+        IobCobReading? reading,
+        CancellationToken cancellationToken
     )
     {
         try
         {
-            var properties = await _propertiesService.GetAllPropertiesAsync(cancellationToken);
+            var properties = await _propertiesService.GetAllPropertiesAsync(
+                ddata,
+                reading,
+                cancellationToken
+            );
 
             var state = new SummaryState();
 
-            var reading = await ReadIobCobAsync(cancellationToken);
             // Nightscout's summary uses Math.round, not the display's toFixed: 0.015 is 0.02 here and "0.01" there.
             if (reading?.HasIob == true)
                 state.Iob = Math.Floor(reading.Iob.Iob * 100 + 0.5) / 100;

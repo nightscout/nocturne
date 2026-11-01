@@ -41,7 +41,7 @@ public class V4ListSortIndexPlanTests(RlsCompletenessFixture fx)
             });
 
     [Fact]
-    public Task PumpSnapshots_LatestBeforeWalksTheSortIndex() =>
+    public Task PumpSnapshots_TimelineWalksTheSortIndex() =>
         AssertIndexWalkAsync(
             "pump_snapshots",
             "(id, tenant_id, timestamp, data_source, sys_created_at, sys_updated_at)",
@@ -51,7 +51,7 @@ public class V4ListSortIndexPlanTests(RlsCompletenessFixture fx)
             {
                 var repository = new PumpSnapshotRepository(
                     factory, new Mock<IAuditContext>().Object, NullLogger<PumpSnapshotRepository>.Instance);
-                (await repository.GetLatestBeforeAsync(now)).Should().NotBeNull();
+                (await repository.GetTimelineAsync(now, now)).Should().NotBeEmpty();
             },
             otherTenantsValues: "gen_random_uuid(), @tid, now() - make_interval(mins => g), 'aaps', now(), now()");
 

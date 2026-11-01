@@ -18,7 +18,7 @@ public class LabHbA1cResultEntity : ITenantScoped, ISoftDeletable
     [Key]
     public Guid Id { get; set; }
 
-    /// <summary>Local calendar date the blood was drawn, stored at UTC midnight.</summary>
+    /// <summary>Calendar date the blood was drawn, stored at UTC midnight.</summary>
     [Column("measured_at")]
     public DateTime MeasuredAt { get; set; }
 

@@ -34,6 +34,7 @@
     formatA1cNumber,
   } from "#lib/utils/a1c-formatting.js";
   import { bg, bgLabel, formatLongDate } from "#lib/utils/formatting.js";
+  import { startOfDay } from "#lib/utils/date-range.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { setReportPrintMeta } from "#lib/components/reports/print/report-print.svelte.js";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
@@ -82,9 +83,9 @@
   let labResultError = $state<string | null>(null);
   let pendingDeleteLabResult = $state<LabHbA1cResult | null>(null);
 
-  /** Normalizes a lab result's measuredAt (Date instance or ISO string) to a Date. */
-  function toDate(value: Date | string | undefined): Date {
-    return value instanceof Date ? value : new Date(value ?? 0);
+  /** Local midnight of a lab result's calendar day, where the estimate points sit. */
+  function labDay(measuredAt: string | undefined): Date {
+    return startOfDay(measuredAt ?? "");
   }
 
   function dateKey(date: Date): string {
@@ -237,7 +238,7 @@
   const labChartPoints = $derived(
     labResults.map((r) => ({
       id: r.id,
-      date: toDate(r.measuredAt),
+      date: labDay(r.measuredAt),
       valuePercent: r.valuePercent ?? 0,
       a1cDisplay: r.a1cDisplay,
       displayValue: a1cDisplayValue(r.a1cDisplay) ?? 0,
@@ -301,7 +302,7 @@
     labResultError = null;
     try {
       await labResultsApi.create({
-        measuredAt: new Date(`${newLabDate}T00:00:00.000Z`).toISOString(),
+        measuredAt: newLabDate,
         value,
         unit: a1cUnits.current,
         note: newLabNote || undefined,
@@ -504,7 +505,7 @@
         <EmptyState art={labResultArtwork} size="compact" title="No lab results added yet" />
       {:else}
         <ul class="divide-border divide-y">
-          {#each [...labResults].sort((a, b) => toDate(b.measuredAt).getTime() - toDate(a.measuredAt).getTime()) as result (result.id)}
+          {#each [...labResults].sort((a, b) => (b.measuredAt ?? "").localeCompare(a.measuredAt ?? "")) as result (result.id)}
             <li class="flex items-center justify-between gap-3 py-2">
               <div>
                 <div class="text-sm font-medium">
@@ -512,7 +513,7 @@
                   {#if result.note}<span class="text-muted-foreground font-normal"> — {result.note}</span>{/if}
                 </div>
                 <div class="text-xs text-muted-foreground">
-                  {formatLongDate(toDate(result.measuredAt))}
+                  {formatLongDate(labDay(result.measuredAt))}
                 </div>
               </div>
               <Button
@@ -597,7 +598,7 @@
   {#snippet description()}
     {#if pendingDeleteLabResult}
       Delete the {formatA1c(pendingDeleteLabResult.a1cDisplay)} lab result from
-      {formatLongDate(toDate(pendingDeleteLabResult.measuredAt))}.
+      {formatLongDate(labDay(pendingDeleteLabResult.measuredAt))}.
     {/if}
   {/snippet}
 </ConfirmDialog>

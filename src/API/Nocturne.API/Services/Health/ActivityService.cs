@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -301,12 +302,15 @@ public class ActivityService : IActivityService
 
             // Only a user tombstone is skipped here. Any other failure of the sensor and sleep writes
             // reaches the outer handler, which logs and rethrows it, so the uploader gets an error and
-            // does not advance its sync marker past a record never stored.
-            foreach (var sensorActivity in sensorDataActivities)
+            // does not advance its sync marker past a record never stored. A re-send that changed
+            // nothing is answered as stored but not announced.
+            var announced = new List<Activity>();
+            if (sensorDataActivities.Count > 0)
             {
-                var decomposed = await _activityDecomposer.DecomposeAsync(sensorActivity, WriteOrigin.Live, cancellationToken);
-                if (decomposed.SkippedDeleted == 0)
-                    results.Add(sensorActivity);
+                var decomposed = await _activityDecomposer.DecomposeBatchAsync(sensorDataActivities, WriteOrigin.Live, cancellationToken);
+                var wrote = decomposed.Wrote;
+                results.AddRange(sensorDataActivities.Where((_, index) => !decomposed.IsDeletedByUser(index)));
+                announced.AddRange(sensorDataActivities.Where((_, index) => wrote[index]));
             }
 
             foreach (var sleepActivity in sleepActivities)
@@ -314,8 +318,10 @@ public class ActivityService : IActivityService
                 try
                 {
                     var session = ActivityStateSpanMapper.ToSleepSession(sleepActivity);
-                    var created = await _sleepService.UpsertSessionAsync(session, cancellationToken);
-                    results.Add(ActivityStateSpanMapper.SleepSessionToActivity(created));
+                    var created = ActivityStateSpanMapper.SleepSessionToActivity(
+                        await _sleepService.UpsertSessionAsync(session, cancellationToken));
+                    results.Add(created);
+                    announced.Add(created);
                 }
                 catch (RecreationBlockedException)
                 {
@@ -331,17 +337,17 @@ public class ActivityService : IActivityService
                     cancellationToken
                 );
                 results.AddRange(createdActivities);
+                announced.AddRange(createdActivities);
             }
 
-            // Broadcast WebSocket event for all created activities
-            if (results.Count > 0)
+            if (announced.Count > 0)
             {
                 await _signalRBroadcastService.BroadcastStorageCreateAsync(
                     "activity",
-                    new { collection = "activity", data = results, count = results.Count }
+                    new { collection = "activity", data = announced, count = announced.Count }
                 );
 
-                await _events.OnCreatedAsync(results, cancellationToken);
+                await _events.OnCreatedAsync(announced, cancellationToken);
             }
 
             _logger.LogDebug(
@@ -574,12 +580,10 @@ public class ActivityService : IActivityService
     {
         try
         {
-            var sanitizedFindForLog = find?.Replace("\r", string.Empty).Replace("\n", string.Empty);
-
             _logger.LogDebug(
                 "Counting activity records in {Categories} with find: {Find}",
                 string.Join(",", categories),
-                sanitizedFindForLog);
+                LogText.Sanitize(find));
 
             var query = FindQuery.Parse(find);
             var structured = !query.IsEmpty;

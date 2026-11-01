@@ -38,6 +38,14 @@ public static class StateSpanMetadataExtensions
     public const string ProfileNameKey = "profileName";
 
     /// <summary>
+    /// Metadata key for the <c>duration</c> in minutes an override, temporary target or profile switch
+    /// was uploaded with, served verbatim as Nightscout does: an open-ended Loop override is uploaded
+    /// with no duration and must be served with none, since NightscoutKit reads any numeric duration
+    /// as a finite override.
+    /// </summary>
+    public const string UploadedDurationKey = "duration";
+
+    /// <summary>
     /// Reads <paramref name="key"/> as a <see cref="decimal"/>; returns <see langword="null"/>
     /// if missing, non-finite, or unparseable. Numeric strings are parsed with
     /// <see cref="CultureInfo.InvariantCulture"/>.

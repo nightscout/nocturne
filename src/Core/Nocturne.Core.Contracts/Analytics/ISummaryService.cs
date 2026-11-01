@@ -1,5 +1,5 @@
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.Core.Contracts.Analytics;
 
@@ -43,11 +43,6 @@ public interface ISummaryService
         List<Treatment> tempBasals,
         long dataCap
     );
-
-    /// <summary>
-    /// Port of legacy <c>constructState()</c>, built from the sandbox properties.
-    /// </summary>
-    Task<SummaryState> ConstructStateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Merges consecutive temp basals with the same absolute rate; port of legacy

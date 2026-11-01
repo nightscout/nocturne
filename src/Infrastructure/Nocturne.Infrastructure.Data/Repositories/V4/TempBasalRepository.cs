@@ -32,13 +32,15 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
     public TempBasalRepository(
         INocturneDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<TempBasalRepository> logger,
-        IV4RecordBroadcaster<TempBasal>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<TempBasal>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
     {
         _deduplicationService = deduplicationService;
     }
@@ -77,7 +79,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
 
         query = ApplyReadVisibility(query, ctx);
 
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
+        query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(TempBasalMapper.ToDomainModel);
     }
@@ -151,9 +153,12 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
         // The global query filter already restricts to active (DeletedAt == null) rows for this
         // tenant. Soft-delete only the window's rows whose legacy id the source no longer reports;
         // a row with no legacy id can't be matched against the incoming set, so treat it as absent.
-        return await ctx.AuditedSoftDeleteAsync(
+        var deleted = await ctx.AuditedSoftDeleteAsync(
             AbsentFromSource(ctx, source, from, to, keepLegacyIds),
             AuditContext, $"data_source={source}", ct);
+        if (deleted > 0)
+            await ReportWrittenAsync();
+        return deleted;
     }
 
     /// <summary>
@@ -213,21 +218,30 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
                 .SetProperty(t => t.RateFromSchedule, fromSchedule)
                 .SetProperty(t => t.OriginEvidence, t => t.OriginEvidence == Uncorroborated ? Pending : t.OriginEvidence) // judged without a rate, judged again with one
                 .SetProperty(t => t.SysUpdatedAt, stamp), ct);
-        return updated > 0;
+        if (updated == 0)
+            return false;
+
+        await ReportWrittenAsync();
+        return true;
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<TempBasal>> GetByLegacyIdsAsync(
-        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    public async Task<int> StampScheduledRatesAsync(
+        string source, Func<DateTime, double> scheduledRateAt, CancellationToken ct = default)
     {
-        if (legacyIds.Count == 0)
-            return [];
-
+        var scheduled = nameof(TempBasalOrigin.Scheduled);
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.TempBasals.AsNoTracking()
-            .Where(t => t.LegacyId != null && legacyIds.Contains(t.LegacyId))
+        var temps = await ctx.TempBasals
+            .Where(t => t.DataSource == source && t.ScheduledRate == null && t.Origin != scheduled)
             .ToListAsync(ct);
-        return entities.Select(TempBasalMapper.ToDomainModel).ToList();
+        if (temps.Count == 0)
+            return 0;
+
+        foreach (var temp in temps)
+            temp.ScheduledRate = scheduledRateAt(temp.Timestamp);
+        await ctx.SaveChangesAsync(ct);
+        await ReportWrittenAsync();
+        return temps.Count;
     }
 
     /// <inheritdoc />

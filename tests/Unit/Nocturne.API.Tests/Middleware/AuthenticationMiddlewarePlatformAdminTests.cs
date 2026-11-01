@@ -19,6 +19,10 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Nocturne.Core.Contracts.Auth;
+
 namespace Nocturne.API.Tests.Middleware;
 
 /// <summary>
@@ -58,6 +62,8 @@ public class AuthenticationMiddlewarePlatformAdminTests
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<ISubjectRepository, SubjectRepository>();
         var provider = services.BuildServiceProvider();
 
         using (var seedScope = provider.CreateScope())

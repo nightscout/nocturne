@@ -10,13 +10,28 @@ namespace Nocturne.Infrastructure.Data.Configuration;
 internal static class PostgresRuntimeOptions
 {
     /// <summary>
-    /// Builds the runtime app <see cref="NpgsqlDataSource"/> — the singleton that owns the
-    /// connection pool — with the pool bounds, idle lifetime, statement preparation and
-    /// statement timeout from <paramref name="config"/> applied.
+    /// Builds the runtime app <see cref="NpgsqlDataSource"/> that every <see cref="NocturneDbContext"/>
+    /// opens, with the pool bounds, idle lifetime, statement preparation and statement timeout from
+    /// <paramref name="config"/> applied. It skips Npgsql's session reset on pool return, which is safe
+    /// only for a connection opened through <see cref="Interceptors.TenantConnectionInterceptor"/>, so
+    /// nothing else may open it: raw ADO.NET uses <see cref="BuildRawDataSource"/>.
     /// </summary>
-    /// <param name="config">Runtime PostgreSQL configuration.</param>
-    /// <returns>A data source configured for the runtime app pool.</returns>
     internal static NpgsqlDataSource BuildRuntimeDataSource(PostgreSqlConfiguration config)
+        => Build(config, pool => pool.NoResetOnClose = true);
+
+    /// <summary>
+    /// Builds the runtime role's pool for raw ADO.NET, which no interceptor sees. It keeps Npgsql's
+    /// session reset on pool return and holds no idle connections, and is otherwise tuned like
+    /// <see cref="BuildRuntimeDataSource"/>.
+    /// </summary>
+    internal static NpgsqlDataSource BuildRawDataSource(PostgreSqlConfiguration config)
+        => Build(config, pool =>
+        {
+            pool.NoResetOnClose = false;
+            pool.MinPoolSize = 0;
+        });
+
+    private static NpgsqlDataSource Build(PostgreSqlConfiguration config, Action<NpgsqlConnectionStringBuilder> reset)
     {
         if (config.MinPoolSize < 0)
         {
@@ -42,6 +57,7 @@ internal static class PostgresRuntimeOptions
         if (!Names(named, "Max Auto Prepare", "MaxAutoPrepare"))
             pool.MaxAutoPrepare = Math.Max(0, config.MaxAutoPrepare);
         ValidatePool(pool);
+        reset(pool);
         ApplyStatementTimeout(pool, config.StatementTimeoutSeconds);
         ApplyIdleInTransactionTimeout(pool, config.IdleInTransactionTimeoutSeconds);
         return builder.Build();
@@ -49,6 +65,14 @@ internal static class PostgresRuntimeOptions
 
     private static void ValidatePool(NpgsqlConnectionStringBuilder pool)
     {
+        if (pool.Multiplexing)
+        {
+            throw new InvalidOperationException(
+                "The runtime PostgreSQL connection string has Multiplexing = true. A multiplexed "
+                + "command runs on whichever connection is free, not on the one its context opened "
+                + "and set the RLS session variables on. Remove 'Multiplexing=true'.");
+        }
+
         if (pool.MinPoolSize > pool.MaxPoolSize)
         {
             throw new InvalidOperationException(

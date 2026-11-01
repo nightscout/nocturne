@@ -1,9 +1,11 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.JsonConverters;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
@@ -63,13 +65,13 @@ public class LabHbA1cController : ControllerBase
             : request.Value!.Value);
         if (!double.IsFinite(valuePercent) || valuePercent is < 3.0 or > 20.0)
             return Problem(detail: "Lab value must be equivalent to 3.0–20.0% (NGSP)", statusCode: 400, title: "Bad Request");
-        if (request.MeasuredAt.Date > DateTime.UtcNow.Date.AddDays(1))
+        if (request.MeasuredAt > DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1))
             return Problem(detail: "MeasuredAt cannot be in the future", statusCode: 400, title: "Bad Request");
 
         var created = await _repository.CreateAsync(
             new LabHbA1cResult
             {
-                MeasuredAt = request.MeasuredAt.Date,
+                MeasuredAt = request.MeasuredAt,
                 ValuePercent = valuePercent,
                 Note = request.Note,
             },
@@ -94,8 +96,9 @@ public class LabHbA1cController : ControllerBase
 /// <summary>Request body for recording a lab HbA1c result.</summary>
 public class CreateLabHbA1cResultRequest
 {
-    /// <summary>The date the blood was drawn.</summary>
-    public DateTime MeasuredAt { get; set; }
+    /// <summary>The calendar date the blood was drawn, as <c>YYYY-MM-DD</c> or an ISO 8601 instant whose UTC date is the day.</summary>
+    [JsonConverter(typeof(DayOrInstantDateOnlyConverter))]
+    public DateOnly MeasuredAt { get; set; }
 
     /// <summary>Lab-reported HbA1c in DCCT/NGSP percent (3.0-20.0).</summary>
     public double? ValuePercent { get; set; }

@@ -22,7 +22,6 @@ internal readonly record struct AlertRuleConditions(
     /// <remarks>
     /// A snapshot carries no enabled flag: every snapshot an engine evaluates is loaded from the
     /// enabled rules only (<see cref="AlertRepository.GetEnabledRulesAsync"/>,
-    /// <see cref="AlertRepository.GetAllEnabledRulesAsync"/>,
     /// <see cref="AlertRepository.GetAutoResolveExcursionsAsync"/>), so it reads as enabled.
     /// </remarks>
     public static AlertRuleConditions Of(AlertRuleSnapshot rule) =>

@@ -9,12 +9,14 @@ using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
 
@@ -70,7 +72,8 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 == Task.FromResult(new List<string>())),
             _tenantMemberService.Object,
             tenantAccessor.Object,
-            _dbContext.AsFactory())
+            new TenantMembershipRepository(_dbContext.AsFactory()),
+            Mock.Of<IAuthAuditService>())
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

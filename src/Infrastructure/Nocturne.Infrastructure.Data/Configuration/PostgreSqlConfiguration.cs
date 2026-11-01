@@ -87,15 +87,10 @@ public class PostgreSqlConfiguration
     /// Each kept statement holds a plan in its backend's memory. Zero turns preparation off.
     /// </summary>
     /// <remarks>
-    /// With statements prepared, Npgsql resets a returned connection with <c>RESET ALL</c> rather
-    /// than <c>DISCARD ALL</c>, which clears the RLS GUCs just the same;
-    /// <c>PoolReturnDiscardsRlsGucsIntegrationTests</c> covers both resets.
-    /// <para>
     /// A <c>Max Auto Prepare</c> in the connection string wins over this. Behind a pooler in
     /// transaction mode that does not track prepared statements (PgBouncer before 1.21, or without
     /// <c>max_prepared_statements</c>), set either to zero: a prepared statement does not follow the
     /// client to the next server connection.
-    /// </para>
     /// </remarks>
     public int MaxAutoPrepare { get; set; } = 50;
 

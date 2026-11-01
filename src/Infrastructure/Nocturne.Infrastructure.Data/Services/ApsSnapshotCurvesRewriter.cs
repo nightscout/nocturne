@@ -80,42 +80,53 @@ public static class ApsSnapshotCurvesRewriter
         FROM (SELECT sys_updated_at, id FROM page ORDER BY sys_updated_at DESC, id DESC LIMIT 1) last
         """;
 
+    /// <summary>How far a <see cref="RewriteTenantAsync"/> call got.</summary>
+    /// <param name="Changed">Snapshots rewritten.</param>
+    /// <param name="Next">The last row walked, to resume after; null once a page came back empty.</param>
+    public readonly record struct Pass(int Changed, (DateTime At, Guid Id)? Next);
+
     /// <summary>
-    /// Rewrites every snapshot of the tenant <paramref name="db"/> is pinned to, a page at a time,
-    /// and answers how many changed. Each page commits on its own, retried on a transient failure.
+    /// Rewrites the snapshots of the tenant <paramref name="db"/> is pinned to, a page at a time from
+    /// after <paramref name="after"/> (the start when null), for up to <paramref name="maxPages"/>
+    /// pages. Each page commits on its own, retried on a transient failure.
     /// </summary>
     /// <param name="db">A context pinned to <paramref name="tenantId"/>.</param>
     /// <param name="tenantId">The tenant whose snapshots to rewrite.</param>
+    /// <param name="after">A <see cref="Pass.Next"/> to resume after.</param>
+    /// <param name="maxPages">Pages to walk before returning.</param>
     /// <param name="pageSize">Rows read per page.</param>
     /// <param name="pauseAfterWrite">The pause after a page that wrote; see <see cref="TenantSweepPaging.PauseAfterWrite"/>.</param>
     /// <param name="pauseAfterRead">The pause after a page that wrote nothing; see <see cref="TenantSweepPaging.PauseAfterRead"/>.</param>
     /// <param name="ct">Cancellation token.</param>
-    public static async Task<int> RewriteTenantAsync(
+    public static async Task<Pass> RewriteTenantAsync(
         NocturneDbContext db,
         Guid tenantId,
+        (DateTime At, Guid Id)? after,
+        int maxPages,
         int pageSize,
         TimeSpan pauseAfterWrite,
         TimeSpan pauseAfterRead,
         CancellationToken ct)
     {
-        var afterAt = DateTime.UnixEpoch;
-        var afterId = Guid.Empty;
+        var (afterAt, afterId) = after ?? (DateTime.UnixEpoch, Guid.Empty);
         var changed = 0;
 
-        while (true)
+        for (var pages = 0; pages < maxPages; pages++)
         {
             var page = await db.ExecuteInTransactionAsync(
                 attemptCt => RewritePageAsync(db, tenantId, afterAt, afterId, pageSize, attemptCt),
                 ct: ct);
             if (page is not { } read)
             {
-                return changed;
+                return new Pass(changed, null);
             }
 
             (afterAt, afterId) = (read.LastAt, read.LastId);
             changed += read.Changed;
             await Task.Delay(read.Changed > 0 ? pauseAfterWrite : pauseAfterRead, ct);
         }
+
+        return new Pass(changed, (afterAt, afterId));
     }
 
     private static async Task<(int Changed, DateTime LastAt, Guid LastId)?> RewritePageAsync(

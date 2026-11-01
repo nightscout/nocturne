@@ -492,7 +492,7 @@ public class TreatmentsController : ControllerBase
                 return NothingSaved(key);
         }
 
-        var created = await _treatmentService.CreateTreatmentsAsync([prepared], cancellationToken);
+        var created = await _treatmentService.CreateTreatmentsAsync([prepared], cancellationToken: cancellationToken);
         if (created.SkippedDeleted > 0)
             return NothingSaved(prepared.Id);
 
@@ -525,7 +525,7 @@ public class TreatmentsController : ControllerBase
                 return;
 
             results.AddRange(TreatmentEcho.InSubmittedOrder(
-                await _treatmentService.CreateV1TreatmentsAsync(withIdentity, cancellationToken)));
+                await _treatmentService.CreateV1TreatmentsAsync(withIdentity, cancellationToken: cancellationToken)));
             withIdentity.Clear();
         }
 
@@ -547,7 +547,7 @@ public class TreatmentsController : ControllerBase
             }
 
             results.AddRange(TreatmentEcho.InSubmittedOrder(
-                await _treatmentService.CreateV1TreatmentsAsync([treatment], cancellationToken)));
+                await _treatmentService.CreateV1TreatmentsAsync([treatment], cancellationToken: cancellationToken)));
         }
 
         await FlushAsync();

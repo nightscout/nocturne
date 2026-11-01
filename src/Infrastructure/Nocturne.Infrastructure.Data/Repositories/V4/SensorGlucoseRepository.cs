@@ -39,9 +39,10 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         ILogger<SensorGlucoseRepository> logger,
         IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
         IDataEventSink<Entry>? entrySink = null,
-        IGlucoseReadingBroadcaster? readingBroadcaster = null
+        IGlucoseReadingBroadcaster? readingBroadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null
     )
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads)
     {
         _deduplicationService = deduplicationService;
         _readingBroadcaster = readingBroadcaster;

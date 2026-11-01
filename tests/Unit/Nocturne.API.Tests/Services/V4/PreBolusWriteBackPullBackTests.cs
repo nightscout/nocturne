@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
@@ -83,7 +84,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     {
         var decomposer = Treatments();
         var treatment = Treatment("Meal Bolus", insulin: 2, carbs: 30, preBolus: 15);
-        await decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         await WriteBackAsync(treatment, edited);
         await PullBackAsync(decomposer);
@@ -98,14 +99,14 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     public async Task An_edit_of_a_treatment_an_earlier_write_back_split_comes_back_as_its_one_carb_intake()
     {
         var decomposer = Treatments();
-        await decomposer.DecomposeAsync(Treatment("Meal Bolus", insulin: 2, carbs: 30, preBolus: 15), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(Treatment("Meal Bolus", insulin: 2, carbs: 30, preBolus: 15), WriteOrigin.Live);
         _upstream.Post(JsonNode.Parse($$"""
             [{"_id":"{{Key}}","identifier":"{{Key}}","eventType":"Meal Bolus","created_at":"{{BolusTime}}","carbs":30,"insulin":2,"preBolus":15}]
             """)!.AsArray());
         _upstream.Documents.Should().HaveCount(2, "the earlier write-back was split");
 
         var edited = Treatment("Meal Bolus", insulin: 2, carbs: 35, preBolus: 15);
-        await decomposer.DecomposeAsync(edited, WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(edited, WriteOrigin.Live);
         await WriteBackAsync(edited, edited: true);
         await PullBackAsync(decomposer);
 
@@ -119,7 +120,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     {
         var decomposer = Treatments();
         var treatment = Treatment("Bolus Wizard", insulin: 3, carbs: 45, preBolus: 20);
-        await decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
         (await _context.BolusCalculations.AsNoTracking().SingleAsync()).PreBolus.Should().Be(20);
 
         await WriteBackAsync(treatment, edited: true);
@@ -183,9 +184,9 @@ public class PreBolusWriteBackPullBackTests : IDisposable
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             foods.Object,
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             _audit,

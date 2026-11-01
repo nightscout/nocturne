@@ -49,6 +49,7 @@ public class DeviceSetupServiceTests
         var factory = new TestNocturneDbContextFactory(_db);
         _service = new DeviceSetupService(
             factory,
+            new ConnectorConfigurationRepository(factory),
             new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
             _reattribution.Object,

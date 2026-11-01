@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
@@ -65,20 +67,34 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </summary>
     private readonly IDataEventSink<Entry>? _entrySink;
 
-    /// <summary>Initializes the base with the tenant-scoped context factory, audit context, logger, (optional) broadcaster, and (optional) legacy entry sink.</summary>
+    private readonly ILegacyReadCacheInvalidation? _legacyReads;
+
+    /// <summary>
+    /// Initializes the base with the tenant-scoped context factory, audit context, logger, (optional)
+    /// broadcaster, (optional) legacy entry sink, and (optional) legacy read cache invalidation.
+    /// </summary>
     protected V4RepositoryBase(
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
         IV4RecordBroadcaster<TModel>? broadcaster = null,
-        IDataEventSink<Entry>? entrySink = null)
+        IDataEventSink<Entry>? entrySink = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
     {
         ContextFactory = contextFactory;
         AuditContext = auditContext;
         Logger = logger;
         _broadcaster = broadcaster;
         _entrySink = entrySink;
+        _legacyReads = legacyReads;
     }
+
+    /// <summary>
+    /// Tells <see cref="ILegacyReadCacheInvalidation"/> this type was written. <see cref="RaiseBroadcastAsync"/>
+    /// does for every write that reaches it; a write that does not calls this itself.
+    /// </summary>
+    protected Task ReportWrittenAsync() =>
+        _legacyReads?.WrittenAsync([typeof(TModel)]) ?? Task.CompletedTask;
 
     /// <summary>
     /// Projects a domain model to the legacy <see cref="Entry"/> shape, or null when the type has no
@@ -100,8 +116,11 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <summary>
     /// Raises the events for a just-committed write. The native V4 broadcast and the legacy entry
     /// projection fire only for <see cref="WriteOrigin.Live"/> writes (backfill imports stay silent so
-    /// clients aren't flooded); <see cref="RaiseEntriesWrittenAsync"/> fires for every origin. Every
-    /// mutating method routes through here, so the origin rule lives in exactly one place.
+    /// clients aren't flooded); <see cref="ReportWrittenAsync"/> and <see cref="RaiseEntriesWrittenAsync"/>
+    /// fire for every origin, the first ahead of every broadcast so no client re-reads a stale cache. Every
+    /// write that broadcasts routes through here, so the origin rule lives in exactly one place; a write
+    /// that does not (an update the material gate does not count, a collapsed bulk delete, or a subclass's
+    /// own bulk statement) calls <see cref="ReportWrittenAsync"/> itself.
     /// <c>vacated</c> holds the stored state of updated records before the write, read only by
     /// <see cref="RaiseEntriesWrittenAsync"/>: it is not a record any more, so the V4 broadcast and the
     /// legacy projection never see it.
@@ -114,6 +133,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         CancellationToken ct,
         IReadOnlyList<TModel>? vacated = null)
     {
+        await ReportWrittenAsync();
         await V4RecordBroadcast.RaiseAsync(
             _broadcaster, created, updated, deleted.Select(m => m.Id).ToList(), origin, ct);
         await RaiseEntriesWrittenAsync(created, updated, deleted, vacated ?? [], ct);
@@ -156,7 +176,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <summary>
     /// The coarse substitute for per-record delete events when a delete matched more rows than
     /// <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/>: the legacy entries sink's
-    /// collection-level bulk-delete signal (cache invalidation plus a count-only storage-delete
+    /// collection-level bulk-delete signal (the eHbA1c cache clear plus a count-only storage-delete
     /// broadcast). The native V4 port has no coarse form — <see cref="IV4RecordBroadcaster{TModel}"/>
     /// carries record ids only — so V4 subscribers see no delete event and converge on their next read.
     /// </summary>
@@ -275,7 +295,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = InWindow(ctx.Set<TEntity>().AsNoTracking(), from, to, device);
         if (source != null) query = query.Where(e => e.DataSource == source);
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
+        query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(ToDomain);
     }
@@ -322,6 +342,13 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return entity is null ? null : ToDomain(entity);
     }
 
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetByIdsAsync" />
+    public async Task<IReadOnlyList<TModel>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await LoadAsync(ctx, ids, ct);
+    }
+
     /// <summary>Returns a single record by its legacy (MongoDB ObjectId) identifier, or null.</summary>
     public async Task<TModel?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
@@ -330,10 +357,25 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return entity is null ? null : ToDomain(entity);
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdsAsync" />
+    public async Task<IEnumerable<TModel>> GetByLegacyIdsAsync(
+        IEnumerable<string> legacyIds, CancellationToken ct = default)
+    {
+        var ids = legacyIds.Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0) return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.Set<TEntity>()
+            .AsNoTracking()
+            .Where(e => e.LegacyId != null && ids.Contains(e.LegacyId))
+            .ToListAsync(ct);
+        return entities.Select(ToDomain).ToList();
+    }
+
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdUuidPrefixAsync" />
     /// <remarks>
     /// Each range spans one case of one form, so it is correct under any collation that orders
-    /// same-case hex digits in hex order (C, libc and ICU all do). The ILIKE only re-checks the
+    /// same-case hex digits in hex order (C, libc and ICU all do). The prefix match only re-checks the
     /// rows a range admitted.
     /// </remarks>
     public async Task<TModel?> GetByLegacyIdUuidPrefixAsync(string objectId, CancellationToken ct = default)
@@ -341,26 +383,79 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         if (!MongoObjectId.IsObjectId(objectId))
             return null;
 
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await UuidPrefixed(ctx, objectId).OrderBy(e => e.Id).FirstOrDefaultAsync(ct);
+        return entity is null ? null : ToDomain(entity);
+    }
+
+    /// <summary>The rows whose UUID legacy id has <paramref name="objectId"/> as its 24-hex prefix.</summary>
+    private static IQueryable<TEntity> UuidPrefixed(NocturneDbContext ctx, string objectId) =>
+        UuidPrefixRanges(objectId)
+            .Select(range => ctx.Set<TEntity>().Where(range))
+            .Aggregate(Queryable.Concat);
+
+    /// <summary>
+    /// One range per form a UUID legacy id with <paramref name="objectId"/> as its 24-hex prefix is stored
+    /// in: dashed and dashless, each in lower and upper case.
+    /// </summary>
+    private static IEnumerable<Expression<Func<TEntity, bool>>> UuidPrefixRanges(string objectId)
+    {
         var dashed = string.Join('-', objectId[..8], objectId[8..12], objectId[12..16], objectId[16..20], objectId[20..]);
 
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        IQueryable<TEntity> InRange(string prefix, string lowSuffix, string highSuffix, int length)
+        Expression<Func<TEntity, bool>> InRange(string prefix, string lowSuffix, string highSuffix, int length)
         {
-            var (low, high, pattern) = (prefix + lowSuffix, prefix + highSuffix, prefix + "%");
-            return ctx.Set<TEntity>().Where(e => e.LegacyId != null
+            var (low, high) = (prefix + lowSuffix, prefix + highSuffix);
+            return e => e.LegacyId != null
                 && string.Compare(e.LegacyId, low) >= 0
                 && string.Compare(e.LegacyId, high) <= 0
                 && e.LegacyId.Length == length
-                && EF.Functions.ILike(e.LegacyId, pattern));
+                && e.LegacyId.StartsWith(prefix);
         }
 
-        var entity = await InRange(dashed, "00000000", "ffffffff", 36)
-            .Concat(InRange(dashed.ToUpperInvariant(), "00000000", "FFFFFFFF", 36))
-            .Concat(InRange(objectId, "00000000", "ffffffff", 32))
-            .Concat(InRange(objectId.ToUpperInvariant(), "00000000", "FFFFFFFF", 32))
-            .OrderBy(e => e.Id)
-            .FirstOrDefaultAsync(ct);
-        return entity is null ? null : ToDomain(entity);
+        yield return InRange(dashed, "00000000", "ffffffff", 36);
+        yield return InRange(dashed.ToUpperInvariant(), "00000000", "FFFFFFFF", 36);
+        yield return InRange(objectId, "00000000", "ffffffff", 32);
+        yield return InRange(objectId.ToUpperInvariant(), "00000000", "FFFFFFFF", 32);
+    }
+
+    /// <summary>
+    /// Served ids <see cref="GetByServedIdsAsync"/> reads in one statement; a statement for fewer repeats
+    /// the last, so every read has one shape.
+    /// </summary>
+    internal const int ServedIdsPerStatement = 50;
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByServedIdsAsync" />
+    public async Task<IReadOnlyList<TModel>> GetByServedIdsAsync(
+        IReadOnlyCollection<string> objectIds, CancellationToken ct = default)
+    {
+        var ids = objectIds.Where(MongoObjectId.IsObjectId).Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var found = new List<TEntity>();
+        foreach (var chunk in ids.Chunk(ServedIdsPerStatement))
+        {
+            Expression<Func<TEntity, bool>> byLegacyId = e => e.LegacyId != null && chunk.Contains(e.LegacyId);
+            var row = byLegacyId.Parameters[0];
+            var matches = byLegacyId.Body;
+            void Or(Expression<Func<TEntity, bool>> predicate) =>
+                matches = Expression.OrElse(matches, ReplacingExpressionVisitor.Replace(predicate.Parameters[0], row, predicate.Body));
+
+            foreach (var id in chunk.Concat(Enumerable.Repeat(chunk[^1], ServedIdsPerStatement - chunk.Length)))
+            {
+                if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+                    Or(e => e.Id >= low && e.Id <= high);
+                foreach (var range in UuidPrefixRanges(id))
+                    Or(range);
+            }
+
+            found.AddRange(await ctx.Set<TEntity>().AsNoTracking()
+                .Where(Expression.Lambda<Func<TEntity, bool>>(matches, row))
+                .ToListAsync(ct));
+        }
+
+        return [.. found.DistinctBy(e => e.Id).Select(ToDomain)];
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdHashAsync" />
@@ -491,7 +586,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
         ctx.Set<TEntity>().Add(entity);
         await ctx.SaveChangesAsync(ct);
-        await PostCommitDedupAsync(ctx, [entity], origin, ct);
+        await DedupCommittedAsync(ctx, [entity], origin, ct);
         var created = ToDomain(entity);
         await RaiseBroadcastAsync([created], [], [], origin, ct);
         return created;
@@ -519,6 +614,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         var updated = ToDomain(entity);
         if (materiallyChanged)
             await RaiseBroadcastAsync([], [updated], [], origin, ct, vacated: [before]);
+        else
+            await ReportWrittenAsync();
         return updated;
     }
 
@@ -527,10 +624,9 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// The batch twin of <see cref="GetByLegacyIdAsync"/> followed by <see cref="CreateAsync"/> or
     /// <see cref="UpdateAsync"/> per record, with the same soft-delete visibility (the stored-row query
     /// runs under the context's filters), the same recreation guard, and the same
-    /// <see cref="HasMaterialChange"/> gate on the update broadcast. The gate decides the broadcast
-    /// only: the save always runs, because a change the gate does not count — a correlation id
-    /// converging onto its anchor's — still has to reach the row. Change detection runs once over the
-    /// batch and stays off through the save, the contract
+    /// <see cref="HasMaterialChange"/> gate on the update broadcast. A matched row is sorted by
+    /// <see cref="UpsertSplit.Classify"/>. Change detection runs once over the batch and stays off
+    /// through the save, the contract
     /// <see cref="NocturneDbContext.SaveChangesAsync(CancellationToken)"/> honours for a caller that
     /// has already detected. Inserted rows go through <see cref="PostCommitDedupAsync"/> as
     /// <see cref="BulkCreateAsync"/>'s do, so the dedup participants keyed by legacy id alone link
@@ -564,8 +660,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             storedByLegacyId.TryAdd(entity.LegacyId!, entity);
 
         var inserted = new List<(string LegacyId, TEntity Entity)>();
-        var updated = new List<(string LegacyId, TEntity Entity)>();
-        var before = new Dictionary<Guid, TModel>();
+        var matched = new List<(string LegacyId, TEntity Entity, TModel Before)>();
         foreach (var (legacyId, model) in byLegacyId)
         {
             if (storedByLegacyId.TryGetValue(legacyId, out var entity))
@@ -578,9 +673,9 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 }
 
                 model.Id = entity.Id;
-                before[entity.Id] = ToDomain(entity);
+                var before = ToDomain(entity);
                 ApplyUpdate(entity, model);
-                updated.Add((legacyId, entity));
+                matched.Add((legacyId, entity, before));
             }
             else
             {
@@ -597,35 +692,42 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             ctx.Set<TEntity>().AddRange(inserted.Select(i => i.Entity));
         }
 
-        var materiallyChanged = new List<TEntity>();
+        var split = UpsertSplit.Empty([]);
         var autoDetect = ctx.ChangeTracker.AutoDetectChangesEnabled;
         ctx.ChangeTracker.DetectChanges();
         ctx.ChangeTracker.AutoDetectChangesEnabled = false;
         try
         {
-            materiallyChanged.AddRange(updated.Select(u => u.Entity).Where(e => HasMaterialChange(ctx, e)));
-            await ctx.SaveChangesAsync(ct);
+            foreach (var (_, entity, before) in matched)
+                split.Classify(ctx, entity, before);
+            if (inserted.Count > 0 || split.UpdatedInPlace.Count > 0)
+                await ctx.SaveChangesAsync(ct);
         }
         finally
         {
             ctx.ChangeTracker.AutoDetectChangesEnabled = autoDetect;
         }
 
-        await PostCommitDedupAsync(ctx, inserted.Select(i => i.Entity).ToList(), origin, ct);
-
+        var unchanged = split.Unchanged.ToHashSet(ReferenceEqualityComparer.Instance);
         foreach (var (legacyId, entity) in inserted)
-            outcomes[legacyId] = new LegacyUpsert<TModel>(ToDomain(entity), Created: true);
-        foreach (var (legacyId, entity) in updated)
-            outcomes[legacyId] = new LegacyUpsert<TModel>(ToDomain(entity), Created: false);
+            outcomes[legacyId] = new LegacyUpsert<TModel>(ToDomain(entity), UpsertOutcome.Created);
+        foreach (var (legacyId, entity, _) in matched)
+            outcomes[legacyId] = new LegacyUpsert<TModel>(
+                ToDomain(entity), unchanged.Contains(entity) ? UpsertOutcome.Unchanged : UpsertOutcome.Updated);
 
-        await RaiseBroadcastAsync(
-            inserted.Select(i => outcomes[i.LegacyId].Record).ToList(),
-            materiallyChanged.Select(ToDomain).ToList(),
-            [],
-            origin, ct,
-            vacated: materiallyChanged.Select(e => before[e.Id]).ToList());
+        if (inserted.Count > 0 || split.UpdatedInPlace.Count > 0)
+        {
+            await DedupCommittedAsync(ctx, inserted.Select(i => i.Entity).ToList(), origin, ct);
+            await RaiseBroadcastAsync(
+                inserted.Select(i => outcomes[i.LegacyId].Record).ToList(),
+                split.MateriallyChanged.Select(ToDomain).ToList(),
+                [],
+                origin, ct,
+                vacated: split.Vacated);
+        }
 
         Logger.LogSkippedDeleted(typeof(TModel).Name, skippedDeleted);
+        Logger.LogUnchanged(typeof(TModel).Name, split.Unchanged.Count);
         return new LegacyUpsertBatch<TModel>(outcomes, skippedDeleted);
     }
 
@@ -710,9 +812,9 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </summary>
     protected internal virtual RecordType? DedupRecordType => null;
 
-    /// <summary>The live records of <paramref name="ids"/>, for a broadcast.</summary>
+    /// <summary>The live records of <paramref name="ids"/>.</summary>
     private async Task<IReadOnlyList<TModel>> LoadAsync(
-        NocturneDbContext ctx, IReadOnlyList<Guid> ids, CancellationToken ct) =>
+        NocturneDbContext ctx, IReadOnlyCollection<Guid> ids, CancellationToken ct) =>
         ids.Count == 0
             ? []
             : (await ctx.Set<TEntity>().AsNoTracking().Where(e => ids.Contains(e.Id)).ToListAsync(ct))
@@ -765,7 +867,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         var result = await ctx.AuditedSoftDeleteWithEntitiesAsync(rows, AuditContext, scope, ct, duplicates);
 
         if (result.Collapsed)
+        {
+            await ReportWrittenAsync();
             await RaiseBulkDeleteBroadcastAsync(result.Count, origin, ct);
+        }
         else
             await RaiseBroadcastAsync(
                 [], await LoadAsync(ctx, result.Promoted, ct), result.Entities.Select(ToDomain).ToList(), origin, ct);
@@ -819,25 +924,71 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>
-    /// The result of <see cref="SplitUpsertsAsync"/>: rows upserted in place (returned to the caller),
-    /// the subset of those that changed materially (broadcast as <c>update</c>), and the rows still to
-    /// insert. <see cref="MateriallyChanged"/> must be a subset of <see cref="UpdatedInPlace"/>.
-    /// <see cref="Vacated"/> holds the state each of <see cref="MateriallyChanged"/> had before the
-    /// update, read ahead of it.
+    /// The result of <see cref="SplitUpsertsAsync"/>: the matched rows sorted by <see cref="Classify"/>,
+    /// and the rows still to insert. <see cref="MateriallyChanged"/> is a subset of
+    /// <see cref="UpdatedInPlace"/>, and <see cref="Vacated"/> holds the state each of them had before
+    /// the update. <see cref="Unchanged"/> is disjoint from <see cref="UpdatedInPlace"/>.
     /// </summary>
     protected readonly record struct UpsertSplit(
         List<TEntity> UpdatedInPlace,
         List<TEntity> MateriallyChanged,
         List<TModel> Vacated,
+        List<TEntity> Unchanged,
         List<TEntity> ToInsert,
-        int SkippedDeleted);
+        int SkippedDeleted)
+    {
+        public static UpsertSplit Empty(List<TEntity> toInsert, int skippedDeleted = 0) =>
+            new([], [], [], [], toInsert, skippedDeleted);
 
-    /// <summary>Upsert participants override: match existing rows by their key, update them in place, and
-    /// return the upserted rows, those that changed materially, and the rows still to insert.
+        /// <summary>
+        /// Sorts a matched row the write has just been applied to, <paramref name="before"/> being its
+        /// stored state. A row the save would write nothing to (<see cref="NocturneDbContext.WritesNothing"/>)
+        /// is unchanged: it is not saved, not reported as written and not broadcast. Any other row is
+        /// updated in place, and broadcast only when it changed materially
+        /// (<see cref="V4MaterialChange.HasMaterialChange"/>), so a correlation id converging onto its
+        /// anchor's or a fingerprint-only write is saved silently.
+        /// </summary>
+        public void Classify(NocturneDbContext ctx, TEntity entity, TModel before)
+        {
+            var entry = ctx.Entry(entity);
+            if (NocturneDbContext.WritesNothing(entry))
+            {
+                Unchanged.Add(entity);
+                return;
+            }
+
+            UpdatedInPlace.Add(entity);
+            if (V4MaterialChange.HasMaterialChange(entry))
+            {
+                MateriallyChanged.Add(entity);
+                Vacated.Add(before);
+            }
+        }
+
+        /// <summary>Saves the rows updated in place, before the insert path clears the tracker.</summary>
+        public Task SaveAsync(NocturneDbContext ctx, CancellationToken ct) =>
+            UpdatedInPlace.Count > 0 ? ctx.SaveChangesAsync(ct) : Task.CompletedTask;
+    }
+
+    /// <summary>Upsert participants override: match existing rows by their key, apply the write to
+    /// them, <see cref="UpsertSplit.Classify"/> and save them, and return the rows still to insert.
     /// Default: nothing upserted.</summary>
     protected virtual Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<TEntity> entities, CancellationToken ct)
-        => Task.FromResult(new UpsertSplit([], [], [], entities, 0));
+        => Task.FromResult(UpsertSplit.Empty(entities));
+
+    /// <summary>
+    /// Reports the committed write, then runs <see cref="PostCommitDedupAsync"/>, whose overrides swallow
+    /// every failure but cancellation, so a cancellation after the commit cannot leave a legacy read cache
+    /// serving the rows as they were. The write reports again in <see cref="RaiseBroadcastAsync"/>, which
+    /// the paths without dedup reach straight from their commit.
+    /// </summary>
+    private async Task DedupCommittedAsync(
+        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, WriteOrigin origin, CancellationToken ct)
+    {
+        await ReportWrittenAsync();
+        await PostCommitDedupAsync(ctx, inserted, origin, ct);
+    }
 
     /// <summary>DeduplicationService participants override: link the just-inserted rows into canonical groups
     /// (runs AFTER commit). Default: no-op.</summary>
@@ -883,7 +1034,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             {
                 var legacy = updateByLegacyId
                     ? await SplitLegacyIdUpdatesAsync(ctx, records, token)
-                    : new UpsertSplit([], [], [], records.Select(ToEntity).ToList(), 0);
+                    : UpsertSplit.Empty(records.Select(ToEntity).ToList());
 
                 var split = await SplitUpsertsAsync(ctx, legacy.ToInsert, token);
 
@@ -899,47 +1050,60 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                     [.. legacy.UpdatedInPlace, .. split.UpdatedInPlace],
                     [.. legacy.MateriallyChanged, .. split.MateriallyChanged],
                     [.. legacy.Vacated, .. split.Vacated],
+                    [.. legacy.Unchanged, .. split.Unchanged],
                     toInsert,
                     split.SkippedDeleted + blockedSkipped);
                 return (upserts, toInsert);
             },
-            (attempt, token) => attempt.toInsert.Count > 0
-                ? ctx.AnyLandedAsync(attempt.toInsert, token)
-                : ctx.AnyUpdateLandedAsync(attempt.upserts.MateriallyChanged, token),
+            (attempt, token) =>
+                attempt.toInsert.Count > 0 ? ctx.AnyLandedAsync(attempt.toInsert, token)
+                : attempt.upserts.UpdatedInPlace.Count > 0 ? ctx.AnyUpdateLandedAsync(attempt.upserts.MateriallyChanged, token)
+                : Task.FromResult(true),
             ct: ct);
 
         var (upserts, inserted) = written;
-        if (inserted.Count > 0 || upserts.UpdatedInPlace.Count > 0)
+        var updated = upserts.UpdatedInPlace.Select(ToDomain).ToList();
+        var unchanged = upserts.Unchanged.Select(ToDomain).ToList();
+        var committed = new BulkWrite<TModel>([.. updated, .. unchanged, .. inserted.Select(ToDomain)], upserts.SkippedDeleted)
         {
-            await PostCommitDedupAsync(ctx, inserted, origin, ct);
-            // Inserts broadcast as create; upserts broadcast as update only when materially changed
-            // (a connector re-poll of byte-identical rows changes nothing, so it stays silent).
-            await RaiseBroadcastAsync(
-                inserted.Select(ToDomain).ToList(),
-                upserts.MateriallyChanged.Select(ToDomain).ToList(),
-                [],
-                origin, ct,
-                vacated: upserts.Vacated);
+            Updated = updated,
+            Unchanged = unchanged,
+        };
+
+        try
+        {
+            if (inserted.Count > 0 || upserts.UpdatedInPlace.Count > 0)
+            {
+                await DedupCommittedAsync(ctx, inserted, origin, ct);
+                await RaiseBroadcastAsync(
+                    inserted.Select(ToDomain).ToList(),
+                    upserts.MateriallyChanged.Select(ToDomain).ToList(),
+                    [],
+                    origin, ct,
+                    vacated: upserts.Vacated);
+            }
+        }
+        catch (Exception ex)
+        {
+            CommittedWrite.Attach(ex, committed);
+            throw;
         }
 
         Logger.LogSkippedDeleted(typeof(TModel).Name, upserts.SkippedDeleted);
-        var updated = upserts.UpdatedInPlace.Select(ToDomain).ToList();
-        return new BulkWrite<TModel>([.. updated, .. inserted.Select(ToDomain)], upserts.SkippedDeleted)
-        {
-            Updated = updated,
-        };
+        Logger.LogUnchanged(typeof(TModel).Name, upserts.Unchanged.Count);
+        return committed;
     }
 
     /// <summary>
-    /// Updates in place the live rows carrying a record's legacy id, the last record winning for a
+    /// Applies each record to the live row carrying its legacy id, the last record winning for a
     /// legacy id repeated in the batch, and returns the rest for the insert path. Persists the
     /// updates before returning, as <see cref="SplitUpsertsAsync"/> does, so the insert loop cannot
     /// lose them.
     /// </summary>
     /// <remarks>
-    /// A stored <see cref="IDeviceAttributed.PatientDeviceId"/> is carried onto a record that
+    /// A stored <see cref="IPatientDeviceLinked.PatientDeviceId"/> is carried onto a record that
     /// resolved none, so a re-send whose attribution has since become ambiguous cannot unattribute
-    /// the row; the single path does the same through <c>DecomposerBase.StampAttributionAsync</c>.
+    /// the row.
     /// </remarks>
     private async Task<UpsertSplit> SplitLegacyIdUpdatesAsync(
         NocturneDbContext ctx, List<TModel> records, CancellationToken ct)
@@ -959,10 +1123,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 storedByLegacyId.TryAdd(entity.LegacyId!, entity);
         }
 
-        var updated = new List<TEntity>();
-        var materiallyChanged = new List<TEntity>();
-        var vacated = new List<TModel>();
         var toInsert = new List<TEntity>();
+        var split = UpsertSplit.Empty(toInsert);
         foreach (var record in records)
         {
             if (string.IsNullOrEmpty(record.LegacyId))
@@ -980,8 +1142,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 continue;
             }
 
-            if (record is IDeviceAttributed { PatientDeviceId: null } attributed
-                && ToDomain(entity) is IDeviceAttributed storedAttribution)
+            if (record is IPatientDeviceLinked { PatientDeviceId: null } attributed
+                && ToDomain(entity) is IPatientDeviceLinked storedAttribution)
             {
                 attributed.PatientDeviceId = storedAttribution.PatientDeviceId;
             }
@@ -989,17 +1151,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             record.Id = entity.Id;
             var before = ToDomain(entity);
             ApplyUpdate(entity, record);
-            updated.Add(entity);
-            if (HasMaterialChange(ctx, entity))
-            {
-                materiallyChanged.Add(entity);
-                vacated.Add(before);
-            }
+            split.Classify(ctx, entity, before);
         }
 
-        if (updated.Count > 0)
-            await ctx.SaveChangesAsync(ct);
-
-        return new UpsertSplit(updated, materiallyChanged, vacated, toInsert, 0);
+        await split.SaveAsync(ctx, ct);
+        return split;
     }
 }

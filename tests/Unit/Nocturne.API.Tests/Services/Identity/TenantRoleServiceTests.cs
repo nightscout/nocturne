@@ -1,10 +1,15 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using Npgsql;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -50,7 +55,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(factory.AsNocturneFactory(), TimeProvider.System);
+        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory()), TimeProvider.System);
     }
 
     [Fact]
@@ -136,13 +141,198 @@ public class TenantRoleServiceTests : IDisposable
     [Fact]
     public async Task CreateRoleAsync_CreatesCustomRole()
     {
-        var result = await _service.CreateRoleAsync(_tenantId, "School Nurse", "Read-only for school staff", ["glucose.read", "reports.read"], [Scope.FullAccess]);
+        var result = (await _service.CreateRoleAsync(_tenantId, "School Nurse", "Read-only for school staff", ["glucose.read", "reports.read"], [Scope.FullAccess])).Role!;
         result.Name.Should().Be("School Nurse");
         result.Slug.Should().Be("school-nurse");
         result.Description.Should().Be("Read-only for school staff");
         result.Permissions.Should().BeEquivalentTo(["glucose.read", "reports.read"]);
         result.IsSystem.Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData("Owner")]
+    [InlineData("caretaker")]
+    [InlineData("  VIEWER ")]
+    [InlineData("Admin!")]
+    public async Task CreateRoleAsync_NamedAfterASeedRole_IsRefusedAsReserved(string name)
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+
+        var result = await _service.CreateRoleAsync(_tenantId, name, null, ["glucose.read"], [Scope.FullAccess]);
+
+        result.Role.Should().BeNull();
+        result.ErrorCode.Should().Be(SaveRoleResult.NameReserved);
+        (await _context.TenantRoles.CountAsync(r => r.TenantId == _tenantId)).Should().Be(6);
+    }
+
+    [Fact]
+    public async Task CreateRoleAsync_NamedAfterADeletedSeedRole_IsStillReserved()
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+        var caretaker = await _context.TenantRoles.FirstAsync(r => r.TenantId == _tenantId && r.Slug == RoleSeeds.Caretaker);
+        (await _service.DeleteRoleAsync(_tenantId, caretaker.Id)).Success.Should().BeTrue();
+
+        var result = await _service.CreateRoleAsync(_tenantId, "Caretaker", null, ["glucose.read"], [Scope.FullAccess]);
+
+        result.ErrorCode.Should().Be(SaveRoleResult.NameReserved);
+    }
+
+    [Theory]
+    [InlineData("School Nurse")]
+    [InlineData("school nurse")]
+    [InlineData("SCHOOL   NURSE")]
+    [InlineData("school-nurse")]
+    public async Task CreateRoleAsync_WhoseSlugAnotherCustomRoleHolds_IsRefusedAsTaken(string name)
+    {
+        await _service.CreateRoleAsync(_tenantId, "School Nurse", null, ["glucose.read"], [Scope.FullAccess]);
+
+        var result = await _service.CreateRoleAsync(_tenantId, name, null, ["glucose.read"], [Scope.FullAccess]);
+
+        result.Role.Should().BeNull();
+        result.ErrorCode.Should().Be(SaveRoleResult.NameTaken);
+        (await _context.TenantRoles.CountAsync(r => r.TenantId == _tenantId && r.Slug == "school-nurse")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CreateRoleAsync_WhoseSlugAnotherTenantHolds_Succeeds()
+    {
+        var otherTenantId = Guid.CreateVersion7();
+        _context.Tenants.Add(new TenantEntity { Id = otherTenantId, Slug = "other", DisplayName = "Other Tenant" });
+        _context.TenantRoles.Add(new TenantRoleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = otherTenantId,
+            Name = "Night Shift",
+            Slug = "night-shift",
+            Permissions = [Scope.GlucoseRead],
+        });
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var result = await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
+
+        result.Role.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CreateRoleAsync_LosingARaceOnTheSlugIndex_IsRefusedAsTaken()
+    {
+        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
+        repository
+            .Setup(r => r.CreateRoleAsync(It.IsAny<NewTenantRole>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(UniqueViolation());
+        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+
+        var result = await service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
+
+        result.Role.Should().BeNull();
+        result.ErrorCode.Should().Be(SaveRoleResult.NameTaken);
+    }
+
+    [Fact]
+    public async Task CreateRoleAsync_FailingOnSomethingOtherThanTheSlugIndex_Throws()
+    {
+        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
+        repository
+            .Setup(r => r.CreateRoleAsync(It.IsAny<NewTenantRole>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException(
+                "foreign key",
+                new PostgresException("foreign key", "ERROR", "ERROR", PostgresErrorCodes.ForeignKeyViolation)));
+        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+
+        var act = () => service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_RenamedToAnotherCustomRolesSlug_IsRefusedAsTaken()
+    {
+        var first = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
+        await _service.CreateRoleAsync(_tenantId, "Day Shift", null, ["glucose.read"], [Scope.FullAccess]);
+
+        var result = await _service.UpdateRoleAsync(
+            _tenantId, first.Id, "day  SHIFT", "changed", ["reports.read"], [Scope.FullAccess]);
+
+        result!.Role.Should().BeNull();
+        result.ErrorCode.Should().Be(SaveRoleResult.NameTaken);
+        var untouched = await _context.TenantRoles.AsNoTracking().FirstAsync(r => r.Id == first.Id);
+        untouched.Name.Should().Be("Night Shift");
+        untouched.Slug.Should().Be("night-shift");
+        untouched.Permissions.Should().BeEquivalentTo(["glucose.read"]);
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_RenamedToASeedRolesSlug_IsRefusedAsReserved()
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+        var custom = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
+
+        var result = await _service.UpdateRoleAsync(
+            _tenantId, custom.Id, "Owner", null, ["glucose.read"], [Scope.FullAccess]);
+
+        result!.ErrorCode.Should().Be(SaveRoleResult.NameReserved);
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_RenamedToItsOwnSlug_Succeeds()
+    {
+        var custom = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
+
+        var result = await _service.UpdateRoleAsync(
+            _tenantId, custom.Id, "NIGHT shift", null, ["glucose.read"], [Scope.FullAccess]);
+
+        result!.Role!.Name.Should().Be("NIGHT shift");
+        result.Role.Slug.Should().Be("night-shift");
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_OfASeedRoleKeepingItsName_Succeeds()
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+        var viewer = await _context.TenantRoles.FirstAsync(r => r.TenantId == _tenantId && r.Slug == RoleSeeds.Viewer);
+
+        var result = await _service.UpdateRoleAsync(
+            _tenantId, viewer.Id, "Viewer", "edited", ["glucose.read"], [Scope.FullAccess]);
+
+        result!.Role!.Description.Should().Be("edited");
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_OfASeedRoleRenamedAwayAndBack_KeepsItsSlugAndSucceeds()
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+        var viewer = await _context.TenantRoles.FirstAsync(r => r.TenantId == _tenantId && r.Slug == RoleSeeds.Viewer);
+
+        var away = await _service.UpdateRoleAsync(
+            _tenantId, viewer.Id, "Readers", null, ["glucose.read"], [Scope.FullAccess]);
+        var back = await _service.UpdateRoleAsync(
+            _tenantId, viewer.Id, "Viewer", null, ["glucose.read"], [Scope.FullAccess]);
+
+        away!.Role!.Slug.Should().Be(RoleSeeds.Viewer);
+        back!.Role!.Name.Should().Be("Viewer");
+        back.Role.Slug.Should().Be(RoleSeeds.Viewer);
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_LosingARaceOnTheSlugIndex_IsRefusedAsTaken()
+    {
+        var custom = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
+        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
+        repository
+            .Setup(r => r.UpdateRoleAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<TenantRoleEdit>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(UniqueViolation());
+        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+
+        var result = await service.UpdateRoleAsync(
+            _tenantId, custom.Id, "Day Shift", null, ["glucose.read"], [Scope.FullAccess]);
+
+        result!.ErrorCode.Should().Be(SaveRoleResult.NameTaken);
+    }
+
+    private static DbUpdateException UniqueViolation() =>
+        new("duplicate key", new PostgresException("duplicate key", "ERROR", "ERROR", PostgresErrorCodes.UniqueViolation));
 
     [Fact]
     public async Task DeleteRoleAsync_BlocksOwnerDeletion()
@@ -161,7 +351,9 @@ public class TenantRoleServiceTests : IDisposable
         var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
         var caretakerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "caretaker" && r.TenantId == _tenantId);
 
-        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = Guid.CreateVersion7() };
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Member" };
+        _context.Subjects.Add(subject);
+        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = subject.Id };
         _context.TenantMembers.Add(member);
         _context.TenantMemberRoles.AddRange(
             new TenantMemberRoleEntity { Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = followerRole.Id },
@@ -183,7 +375,9 @@ public class TenantRoleServiceTests : IDisposable
         await _service.SeedRolesForTenantAsync(_tenantId);
         var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
 
-        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = Guid.CreateVersion7() };
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Member" };
+        _context.Subjects.Add(subject);
+        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = subject.Id };
         _context.TenantMembers.Add(member);
         _context.TenantMemberRoles.Add(new TenantMemberRoleEntity { Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = followerRole.Id });
         await _context.SaveChangesAsync();
@@ -199,11 +393,13 @@ public class TenantRoleServiceTests : IDisposable
         await _service.SeedRolesForTenantAsync(_tenantId);
         var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
 
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Member" };
+        _context.Subjects.Add(subject);
         var member = new TenantMemberEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
-            SubjectId = Guid.CreateVersion7(),
+            SubjectId = subject.Id,
             DirectPermissions = ["treatments.read"],
         };
         _context.TenantMembers.Add(member);

@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
@@ -191,7 +192,7 @@ public class GuestSessionHandlerTests
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _tenantId })
         {
             var service = new GuestLinkService(
-                ctx.AsFactory(), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
+                ctx.AsFactory(), new OAuthGrantRepository(ctx.AsFactory()), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
             (await service.RevokeAsync(grantId, _dataOwnerId)).Should().BeTrue();
         }
 
@@ -223,7 +224,7 @@ public class GuestSessionHandlerTests
     {
         await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = tenantId };
         var service = new GuestLinkService(
-            ctx.AsFactory(), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
+            ctx.AsFactory(), new OAuthGrantRepository(ctx.AsFactory()), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
 
         var created = await service.CreateGuestLinkAsync(
             _dataOwnerId, _dataOwnerId, "Caregiver", "https://acme.example.test",

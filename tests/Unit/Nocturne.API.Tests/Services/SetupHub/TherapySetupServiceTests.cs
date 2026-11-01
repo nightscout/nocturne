@@ -22,6 +22,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.SetupHub;
 
@@ -67,7 +68,7 @@ public class TherapySetupServiceTests : IDisposable
             TimeProvider.System);
     }
 
-    private SetupHubService Hub() => new(_factory, [new TherapyItem(_factory)]);
+    private SetupHubService Hub() => new(_factory, new TenantRepository(_factory), new TenantMembershipRepository(_factory), [new TherapyItem(_factory)]);
 
     private ProfileDecomposer Decomposer() => new(
         SettingsRepo,
@@ -77,7 +78,7 @@ public class TherapySetupServiceTests : IDisposable
         new TargetRangeScheduleRepository(_factory, _audit, NullLogger<TargetRangeScheduleRepository>.Instance),
         TempBasalTestDeps.NoReresolution(),
         Moq.Mock.Of<ILoopClosedLoopStamper>(),
-        TimeProvider.System, NullLogger<ProfileDecomposer>.Instance);
+        NullLogger<ProfileDecomposer>.Instance);
 
     private static readonly DateTime ProfileMadeAt = new(2026, 3, 1, 8, 0, 0, DateTimeKind.Utc);
 
@@ -135,7 +136,7 @@ public class TherapySetupServiceTests : IDisposable
     [Fact]
     public async Task AProfileAnAppUploaded_IsSyncedFromThatApp_AndReadsFromTheV4Store()
     {
-        await Decomposer().DecomposeAsync(UploadedProfile("5f0000000000000000000001", units: "mmol"), WriteOrigin.Live);
+        await Decomposer().DecomposeBatchAsync([UploadedProfile("5f0000000000000000000001", units: "mmol")], WriteOrigin.Live);
 
         var review = await Service().GetReviewAsync(CancellationToken.None);
 
@@ -153,7 +154,7 @@ public class TherapySetupServiceTests : IDisposable
     public async Task AProfileWrittenWhileANightscoutImportRan_IsImported()
     {
         await MigrationRunning(DateTime.UtcNow.AddMinutes(-5));
-        await Decomposer().DecomposeAsync(UploadedProfile("5f0000000000000000000001"), WriteOrigin.Backfill);
+        await Decomposer().DecomposeBatchAsync([UploadedProfile("5f0000000000000000000001")], WriteOrigin.Backfill);
 
         var review = await Service().GetReviewAsync(CancellationToken.None);
 
@@ -166,7 +167,7 @@ public class TherapySetupServiceTests : IDisposable
     public async Task AProfileAnAppSentAfterTheImportFinished_IsSynced()
     {
         await MigrationRunning(DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(-1));
-        await Decomposer().DecomposeAsync(UploadedProfile("5f0000000000000000000002", enteredBy: "Trio"), WriteOrigin.Live);
+        await Decomposer().DecomposeBatchAsync([UploadedProfile("5f0000000000000000000002", enteredBy: "Trio")], WriteOrigin.Live);
 
         var review = await Service().GetReviewAsync(CancellationToken.None);
 
@@ -180,7 +181,7 @@ public class TherapySetupServiceTests : IDisposable
         await MigrationRunning(DateTime.UtcNow.AddMinutes(-5));
         var profile = UploadedProfile("5f0000000000000000000003", enteredBy: "Glooko");
         profile.IsExternallyManaged = true;
-        await Decomposer().DecomposeAsync(profile, WriteOrigin.Live);
+        await Decomposer().DecomposeBatchAsync([profile], WriteOrigin.Live);
 
         (await Service().GetReviewAsync(CancellationToken.None)).Source.Should().Be(TherapySource.Synced);
     }
@@ -188,22 +189,22 @@ public class TherapySetupServiceTests : IDisposable
     [Fact]
     public async Task ASyncedProfile_LeavesTheItemOpen_UntilTheOwnerConfirmsIt()
     {
-        await Decomposer().DecomposeAsync(UploadedProfile("5f0000000000000000000001"), WriteOrigin.Live);
+        await Decomposer().DecomposeBatchAsync([UploadedProfile("5f0000000000000000000001")], WriteOrigin.Live);
 
-        (await Hub().GetAsync(CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Open,
+        (await Hub().GetAsync(null, CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Open,
             "a profile arriving is not the owner having checked it");
 
         var confirmed = await Service().ConfirmAsync(CancellationToken.None);
 
         confirmed.Confirmed.Should().BeTrue();
         (await Service().GetReviewAsync(CancellationToken.None)).Confirmed.Should().BeTrue();
-        (await Hub().GetAsync(CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Done);
+        (await Hub().GetAsync(null, CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Done);
     }
 
     [Fact]
     public async Task ConfirmingTwice_RecordsOneConfirmation()
     {
-        await Decomposer().DecomposeAsync(UploadedProfile("5f0000000000000000000001"), WriteOrigin.Live);
+        await Decomposer().DecomposeBatchAsync([UploadedProfile("5f0000000000000000000001")], WriteOrigin.Live);
 
         await Service().ConfirmAsync(CancellationToken.None);
         await Service().ConfirmAsync(CancellationToken.None);
@@ -215,17 +216,17 @@ public class TherapySetupServiceTests : IDisposable
     [Fact]
     public async Task AConfirmation_HoldsForTheConfirmedProfileOnly()
     {
-        await Decomposer().DecomposeAsync(UploadedProfile("5f0000000000000000000001"), WriteOrigin.Live);
+        await Decomposer().DecomposeBatchAsync([UploadedProfile("5f0000000000000000000001")], WriteOrigin.Live);
         await Service().ConfirmAsync(CancellationToken.None);
 
-        await Decomposer().DecomposeAsync(
-            UploadedProfile("5f0000000000000000000002", enteredBy: "Trio", madeAt: ProfileMadeAt.AddDays(1)),
+        await Decomposer().DecomposeBatchAsync([
+            UploadedProfile("5f0000000000000000000002", enteredBy: "Trio", madeAt: ProfileMadeAt.AddDays(1))],
             WriteOrigin.Live);
 
         var review = await Service().GetReviewAsync(CancellationToken.None);
         review.SourceName.Should().Be("Trio");
         review.Confirmed.Should().BeFalse("the owner confirmed Loop's profile, not this one");
-        (await Hub().GetAsync(CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Done,
+        (await Hub().GetAsync(null, CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Done,
             "done never reverts");
     }
 
@@ -253,7 +254,7 @@ public class TherapySetupServiceTests : IDisposable
         review.TargetRange!.Entries.Single().Low.Should().Be(99);
         review.TargetRange.Entries.Single().High.Should().Be(126);
 
-        (await Hub().GetAsync(CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Done);
+        (await Hub().GetAsync(null, CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Done);
     }
 
     [Fact]
@@ -295,7 +296,7 @@ public class TherapySetupServiceTests : IDisposable
     [Fact]
     public async Task Entering_OverAnExistingProfile_IsRefused()
     {
-        await Decomposer().DecomposeAsync(UploadedProfile("5f0000000000000000000001"), WriteOrigin.Live);
+        await Decomposer().DecomposeBatchAsync([UploadedProfile("5f0000000000000000000001")], WriteOrigin.Live);
 
         var enter = () => Service().EnterAsync("mg/dl", One(0.8), [], [], [], CancellationToken.None);
 
@@ -305,9 +306,9 @@ public class TherapySetupServiceTests : IDisposable
     [Fact]
     public async Task NotForMe_ResolvesTheItemWithoutAProfile()
     {
-        await Hub().GetAsync(CancellationToken.None);
+        await Hub().GetAsync(null, CancellationToken.None);
 
-        var hub = await Hub().SetStateAsync(SetupHubItemKey.Therapy, SetupHubItemState.NotForMe, CancellationToken.None);
+        var hub = await Hub().SetStateAsync(null, SetupHubItemKey.Therapy, SetupHubItemState.NotForMe, CancellationToken.None);
 
         hub.Items.Single().State.Should().Be(SetupHubItemState.NotForMe);
         hub.ResolvedCount.Should().Be(1);

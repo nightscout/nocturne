@@ -81,6 +81,7 @@ public class ResponseCachePolicyTests
     [InlineData(typeof(DataOverviewController), nameof(DataOverviewController.GetGriTimeline), 300)]
     [InlineData(typeof(DataOverviewController), nameof(DataOverviewController.GetEHbA1cTimeline), 300)]
     [InlineData(typeof(StatisticsController), nameof(StatisticsController.GetRangeAnalytics), 60)]
+    [InlineData(typeof(StatisticsController), nameof(StatisticsController.GetPeriodComparison), 60)]
     [InlineData(typeof(StatisticsController), nameof(StatisticsController.GetWeekdayAverages), 60)]
     [InlineData(typeof(SensorIntegrityController), nameof(SensorIntegrityController.Analyze), 60)]
     [InlineData(typeof(CgmComparisonController), nameof(CgmComparisonController.Compare), 60)]

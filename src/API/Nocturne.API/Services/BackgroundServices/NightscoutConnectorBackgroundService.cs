@@ -2,6 +2,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
 using SocketIOClient;
@@ -10,14 +11,17 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
-/// Background service that periodically syncs data from a legacy Nightscout instance via
-/// <see cref="NightscoutConnectorService"/>, enabling migration or mirroring workflows.
-/// Optionally connects to each tenant's Nightscout Socket.IO endpoint to trigger
-/// immediate syncs when upstream data changes.
+/// Polls a legacy Nightscout instance through <see cref="NightscoutConnectorService"/>, enabling
+/// migration or mirroring workflows, and connects to each tenant's Nightscout Socket.IO endpoint to
+/// sync at once when upstream data changes.
 /// </summary>
 public class NightscoutConnectorBackgroundService
-    : ConnectorBackgroundService<NightscoutConnectorService, NightscoutConnectorConfiguration>
+    : ConnectorBackgroundService<NightscoutConnectorService, NightscoutConnectorConfiguration>,
+        IConnectorRealtimeListeners
 {
+    private readonly IServiceProvider _serviceProvider;
+    private readonly ActiveTenantSnapshot _activeTenants;
+
     private readonly ConcurrentDictionary<Guid, SocketIO> _socketClients = new();
 
     /// <summary>
@@ -38,11 +42,15 @@ public class NightscoutConnectorBackgroundService
     /// concurrently and a failure falls back to polling, so this only bounds how long service
     /// startup waits on unreachable Nightscout instances.
     /// </summary>
-    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
+    internal TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
-    /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
+    /// <summary>How many tenants' listeners connect at once.</summary>
+    private const int ConcurrentConnects = 8;
+
+    /// <param name="serviceProvider">Root provider each listener's configuration scope is opened from.</param>
     /// <param name="budget">The process-wide budget.</param>
-    /// <param name="activeTenants">The active tenants every poller reads.</param>
+    /// <param name="ledger">The job ledger.</param>
+    /// <param name="activeTenants">The active tenants a listener is started for.</param>
     /// <param name="logger">Logger instance for this background service.</param>
     /// <param name="timeProvider">Clock the schedule is computed against.</param>
     /// <param name="nudge">Delivers configuration writes for this connector.</param>
@@ -51,6 +59,7 @@ public class NightscoutConnectorBackgroundService
     public NightscoutConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
+        IJobLedger ledger,
         ActiveTenantSnapshot activeTenants,
         ILogger<NightscoutConnectorBackgroundService> logger,
         TimeProvider timeProvider,
@@ -58,21 +67,24 @@ public class NightscoutConnectorBackgroundService
         ConnectorSyncMetrics? metrics = null,
         TenantRunGuard? runGuard = null
     )
-        : base(serviceProvider, budget, activeTenants, logger, timeProvider, nudge, metrics, runGuard) { }
+        : base(budget, ledger, logger, timeProvider, nudge, metrics, runGuard)
+    {
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _activeTenants = activeTenants ?? throw new ArgumentNullException(nameof(activeTenants));
+    }
 
     /// <inheritdoc />
-    protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
+    public async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
     {
-        var tenants = await ActiveTenants.GetAsync(cancellationToken);
+        var tenants = await _activeTenants.GetAsync(cancellationToken);
 
-        // Connect tenants concurrently: each tenant waits up to ConnectTimeout, and the poll cycle
-        // does not continue until this returns, so connecting them in sequence would delay the first
-        // sync of every tenant by the sum of all unreachable instances' timeouts.
+        // Connect tenants concurrently: each tenant waits up to ConnectTimeout, so connecting them in
+        // sequence would hold the supervision pass for the sum of every unreachable instance's timeout.
         await Parallel.ForEachAsync(
             tenants,
             new ParallelOptions
             {
-                MaxDegreeOfParallelism = MaxConcurrentTenantSyncs,
+                MaxDegreeOfParallelism = ConcurrentConnects,
                 CancellationToken = cancellationToken
             },
             async (tenant, ct) =>
@@ -102,7 +114,7 @@ public class NightscoutConnectorBackgroundService
             return;
 
         await using var tenantScope = TenantJobScope.Open(
-            ServiceProvider,
+            _serviceProvider,
             new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false),
             AuditEndpoint);
 
@@ -189,7 +201,7 @@ public class NightscoutConnectorBackgroundService
     }
 
     /// <inheritdoc />
-    protected override async Task StopRealtimeListenersAsync()
+    public async Task StopRealtimeListenersAsync()
     {
         foreach (var (tenantId, client) in _socketClients)
         {

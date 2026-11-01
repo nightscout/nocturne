@@ -16,6 +16,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -66,14 +67,15 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
         var logger = NullLogger<ConnectorConfigurationService>.Instance;
 
         _service = new ConnectorConfigurationService(
-            _dbContext.AsFactory(),
+            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             _encryptionService.Object,
             broadcastService,
             _auditContext.Object,
             configuration,
             environment,
             Enumerable.Empty<IConnectorCacheInvalidator>(),
-            TimeProvider.System,
             logger);
     }
 

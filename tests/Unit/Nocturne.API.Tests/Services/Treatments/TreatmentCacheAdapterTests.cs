@@ -5,6 +5,7 @@ using Nocturne.API.Services.Treatments;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Services.Treatments;
@@ -19,7 +20,7 @@ public class TreatmentCacheAdapterTests
     private static readonly TreatmentQuery CacheableQuery = new() { Count = 10, Skip = 0 };
 
     private static TreatmentCacheAdapter Adapter(ITenantCache cache) =>
-        new(cache, NullLogger<TreatmentCacheAdapter>.Instance);
+        new(cache);
 
     [Fact]
     public async Task GetOrComputeAsync_CacheableQuery_ServesTheTenantCache()
@@ -39,15 +40,17 @@ public class TreatmentCacheAdapterTests
     }
 
     [Fact]
-    public async Task InvalidateAsync_DropsTheCachedRead()
+    public async Task ARegistryTableWrite_DropsTheCachedRead()
     {
-        var adapter = Adapter(TestTenantCache.Create());
+        var cache = TestTenantCache.Create();
+        var adapter = Adapter(cache);
         await adapter.GetOrComputeAsync(
             CacheableQuery,
             () => Task.FromResult<IReadOnlyList<Treatment>>([new Treatment { Id = "stale" }]),
             CancellationToken.None);
 
-        await adapter.InvalidateAsync(CancellationToken.None);
+        await new LegacyReadCacheInvalidation(cache, NullLogger<LegacyReadCacheInvalidation>.Instance)
+            .WrittenAsync([typeof(Bolus)]);
         var result = await adapter.GetOrComputeAsync(
             CacheableQuery,
             () => Task.FromResult<IReadOnlyList<Treatment>>([new Treatment { Id = "fresh" }]),

@@ -16,6 +16,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -58,6 +59,7 @@ public class AuthenticationMiddlewareDatabaseFailureTests
 
         var provider = new ServiceCollection()
             .AddSingleton(contexts.Object)
+            .AddTransient<ITenantMembershipRepository, TenantMembershipRepository>()
             .BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

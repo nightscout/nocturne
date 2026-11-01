@@ -3,14 +3,19 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
+using Nocturne.API.Services.Identity;
+using Nocturne.API.Services.Migration;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
 
@@ -19,7 +24,7 @@ namespace Nocturne.API.Services.SetupHub;
 /// <summary>
 /// The setup hub's Alerts item: four starter alert rules sent to one place, and a test alert whose
 /// arrival the owner confirms. The rules are ordinary alert rules, evaluated and edited like any
-/// other; <see cref="AlertRuleEntity.StarterKind"/> only lets this find them again.
+/// other; their <see cref="StarterAlertKind"/> only lets this find them again.
 /// </summary>
 /// <remarks>
 /// "This device" is an <c>in_app</c> channel addressed to the caller: it is the one channel routed
@@ -31,6 +36,11 @@ namespace Nocturne.API.Services.SetupHub;
 /// </remarks>
 public class AlertSetupService(
     INocturneDbContextFactory contexts,
+    ITenantRepository tenants,
+    ITenantGlucoseUnits tenantUnits,
+    ITenantMembershipRepository members,
+    ISubjectRepository subjects,
+    IAlertRuleRepository rules,
     IRuleScopeClassifier scopeClassifier,
     ISecretEncryptionService encryption,
     IAlertDeliveryService delivery,
@@ -62,17 +72,22 @@ public class AlertSetupService(
     {
         await using var db = await contexts.CreateAsync(ct);
         var routing = await RoutingAsync(db, ct);
-        var units = await UnitsAsync(db, callerId, ct);
-        var starters = await StartersAsync(db, tracking: false, ct);
+        var units = await UnitsAsync(callerId, ct);
+        var starters = await rules.GetStarterRulesAsync(ct);
 
-        var rules = Enum.GetValues<StarterAlertKind>().Select(kind =>
+        var startingPoints = StartingPoints(starters.Count == 0 ? await MigratedAlarmSettingsAsync(db, ct) : null);
+        var starterRules = Enum.GetValues<StarterAlertKind>().Select(kind =>
         {
             var rule = starters.GetValueOrDefault(kind);
-            var mgdl = rule is null ? Starters[kind].DefaultMgdl : ThresholdOf(rule);
+            var start = startingPoints[kind];
+            var mgdl = rule is null ? start.Mgdl : ThresholdOf(kind, rule);
             return new StarterAlertRule(
-                kind, rule?.Id, rule?.IsEnabled ?? true,
+                kind, rule?.Rule.Id, rule?.IsEnabled ?? start.IsEnabled,
                 Starters[kind].Direction is null ? null : Display(mgdl, units));
         }).ToList();
+        var thresholdsFrom = startingPoints.Values.Any(p => p.FromNightscout)
+            ? AlertThresholdSource.Nightscout
+            : AlertThresholdSource.Defaults;
 
         var primary = starters.Values.FirstOrDefault() is { } first
             ? PrimaryChannels(first, callerId).ToList()
@@ -86,12 +101,12 @@ public class AlertSetupService(
             : [];
 
         return new AlertSetupStatus(
-            routing, units, starters.Count > 0, rules, toThisDevice,
+            routing, units, starters.Count > 0, starterRules, thresholdsFrom, toThisDevice,
             toThisDevice ? [] : primary.Select(ToResponse).ToList(),
             ChannelTypesOffered,
             primary.Any(c => AlertDeliveryCheck.DeliversWhileClosed(c.ChannelType)),
             routing == AlertRouting.ToYouAsCaregiver,
-            await AlertDeliveryCheck.VerifiedAsync(db, ct),
+            await AlertDeliveryCheck.VerifiedAsync(db, tenants, rules, ct),
             members);
     }
 
@@ -140,13 +155,14 @@ public class AlertSetupService(
 
         var channelRequests = ChannelsFor(callerId, request.Channels);
         if (await _channels.ResolveAndValidateAsync(
-            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, callerId, ct) is { } badChannel)
+            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, members, callerId, ct) is { } badChannel)
             throw new ArgumentException(badChannel);
 
-        var units = await UnitsAsync(db, callerId, ct);
-        var starters = await StartersAsync(db, tracking: true, ct);
+        var units = await UnitsAsync(callerId, ct);
+        var writer = new AlertRuleRepository(unit, time);
+        var starters = await writer.GetStarterRulesAsync(ct);
         var tenantId = db.TenantId;
-        var now = time.GetUtcNow().UtcDateTime;
+        var channelWrites = _channels.ToWrites(channelRequests);
         var rearmed = new List<Guid>();
         var retired = new List<Guid>();
 
@@ -157,7 +173,7 @@ public class AlertSetupService(
             var rule = starters.GetValueOrDefault(kind);
 
             var enabled = asked?.IsEnabled ?? rule?.IsEnabled ?? true;
-            var stored = rule is null ? defaultMgdl : ThresholdOf(rule);
+            var stored = rule is null ? defaultMgdl : ThresholdOf(kind, rule);
             var mgdl = direction is null || asked is null || (asked.Threshold is null && !enabled)
                 ? stored
                 : ToMgdl(kind, asked.Threshold, stored, units);
@@ -166,41 +182,35 @@ public class AlertSetupService(
                 ? JsonSerializer.Serialize(new { timeout_minutes = NoReadingsMinutes })
                 : JsonSerializer.Serialize(new { direction, value = mgdl });
 
+            var throughDnd = kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver;
             if (rule is null)
             {
-                rule = new AlertRuleEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    Name = name,
-                    ConditionType = conditionType,
-                    ConditionParams = conditionParams,
-                    ScopeClass = scopeClassifier.Classify(conditionType, conditionParams),
-                    Severity = severity,
-                    IsEnabled = enabled,
-                    SortOrder = (int)kind,
-                    StarterKind = kind,
-                    CreatedAt = now,
-                    UpdatedAt = now,
-                };
-                db.AlertRules.Add(rule);
+                await writer.CreateAsync(
+                    new NewAlertRule(
+                        new AlertRuleWrite(
+                            name, null, conditionType, conditionParams,
+                            scopeClassifier.Classify(conditionType, conditionParams), severity,
+                            IsEnabled: enabled, SortOrder: (int)kind, AllowThroughDnd: throughDnd,
+                            AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
+                        channelWrites,
+                        StarterKind: kind),
+                    ct);
+                continue;
             }
-            else
+
+            var ruleId = rule.Rule.Id;
+            if (rule.IsEnabled != enabled || !ConditionTreeEquality.Same(rule.Rule.ConditionParams, conditionParams))
+                rearmed.Add(ruleId);
+            if (rule.IsEnabled && !enabled)
+                retired.Add(ruleId);
+            await writer.UpdateAsync(ruleId, AlertRuleWrite.Of(rule) with
             {
-                if (rule.IsEnabled != enabled || !ConditionTreeEquality.Same(rule.ConditionParams, conditionParams))
-                    rearmed.Add(rule.Id);
-                if (rule.IsEnabled && !enabled)
-                    retired.Add(rule.Id);
-                rule.ConditionParams = conditionParams;
-                rule.ScopeClass = scopeClassifier.Classify(rule.ConditionType, conditionParams);
-                rule.IsEnabled = enabled;
-                rule.UpdatedAt = now;
-            }
-
-            if (kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver)
-                rule.AllowThroughDnd = true;
-
-            ReplacePrimaryChannels(db, rule, callerId, channelRequests);
+                ConditionParams = conditionParams,
+                ScopeClass = scopeClassifier.Classify(rule.Rule.ConditionType, conditionParams),
+                IsEnabled = enabled,
+                AllowThroughDnd = rule.Rule.AllowThroughDnd || throughDnd,
+            }, ct);
+            await writer.ReplaceChannelsAsync(ruleId, channelWrites, kept: c => IsMemberChannel(c, callerId), ct);
         }
 
         if (rearmed.Count > 0)
@@ -222,20 +232,13 @@ public class AlertSetupService(
         if (await RoutingAsync(db, ct) == AlertRouting.LeftForRecipient)
             throw new InvalidOperationException("The person this is handed over to chooses where alerts go.");
 
-        var starters = await StartersAsync(db, tracking: false, ct);
+        var starters = await rules.GetStarterRulesAsync(ct);
         var rule = starters.Values.FirstOrDefault(r => r.IsEnabled)
             ?? throw new InvalidOperationException("No starter alert is switched on.");
 
-        var channels = PrimaryChannels(rule, callerId)
-            .Select(c => new AlertRuleChannelSnapshot(
-                c.Id, c.AlertRuleId, c.ChannelType, c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata, c.Secret))
-            .ToList();
-        var snapshot = new AlertRuleSnapshot(
-            rule.Id, rule.TenantId, rule.Name, rule.ConditionType,
-            rule.ConditionParams, rule.Severity, rule.ClientConfiguration, rule.SortOrder,
-            rule.AutoResolveEnabled, rule.AutoResolveParams, rule.AllowThroughDnd, rule.ScopeClass);
+        var channels = PrimaryChannels(rule, callerId).ToList();
         var instanceId = await delivery.TestFireAsync(
-            rule.Id, channels, AlertRulesController.BuildTestPayload(snapshot, db.TenantId), ct);
+            rule.Rule.Id, channels, AlertRulesController.BuildTestPayload(rule.Rule, db.TenantId), ct);
 
         return await GetTestAsync(instanceId, ct);
     }
@@ -282,11 +285,10 @@ public class AlertSetupService(
             ?? throw new KeyNotFoundException();
 
         var sent = await AlertDeliveryCheck.SentToAsync(db, instanceId, ct);
-        var current = await db.AlertRuleChannels.AsNoTracking()
-            .Where(c => c.AlertRuleId == instance.AlertExcursion!.AlertRuleId)
-            .ToListAsync(ct);
+        var ruleId = instance.AlertExcursion!.AlertRuleId;
+        var current = (await rules.GetChannelsAsync([ruleId], ct)).GetValueOrDefault(ruleId) ?? [];
         if (!AlertDeliveryCheck.Matches(sent, current)
-            || !(await AlertDeliveryCheck.EnabledStarterChannelsAsync(db, ct)).All(rule => AlertDeliveryCheck.Matches(sent, rule)))
+            || !(await AlertDeliveryCheck.EnabledStarterChannelsAsync(rules, ct)).All(rule => AlertDeliveryCheck.Matches(sent, rule)))
             throw new InvalidOperationException("This test did not reach every place alerts now go. Send another.");
 
         var whileClosed = sent.Any(s => AlertDeliveryCheck.DeliversWhileClosed(s.Type));
@@ -312,31 +314,17 @@ public class AlertSetupService(
         if (!(await MembersAsync(db, callerId, null, ct)).Any(m => m.SubjectId == memberId))
             throw new KeyNotFoundException();
 
-        var starters = await StartersAsync(db, tracking: true, ct);
+        var starters = await rules.GetStarterRulesAsync(ct);
         var urgentLow = starters.GetValueOrDefault(StarterAlertKind.UrgentLow)
             ?? throw new InvalidOperationException("The starter rules are not saved yet.");
 
         var destination = memberId.ToString();
         var existing = urgentLow.Channels.FirstOrDefault(c => c.ChannelType == ChannelType.InApp && c.Destination == destination);
         if (alerted && existing is null)
-        {
-            urgentLow.Channels.Add(new AlertRuleChannelEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = db.TenantId,
-                AlertRuleId = urgentLow.Id,
-                ChannelType = ChannelType.InApp,
-                Destination = destination,
-                SortOrder = urgentLow.Channels.Count,
-                CreatedAt = time.GetUtcNow().UtcDateTime,
-            });
-        }
+            await rules.AddChannelAsync(urgentLow.Rule.Id, new AlertRuleChannelWrite(ChannelType.InApp, destination), ct);
         else if (!alerted && existing is not null)
-        {
-            db.AlertRuleChannels.Remove(existing);
-        }
+            await rules.RemoveChannelAsync(urgentLow.Rule.Id, existing.Id, ct);
 
-        await db.SaveChangesAsync(ct);
         return await GetAsync(callerId, ct);
     }
 
@@ -371,58 +359,78 @@ public class AlertSetupService(
     private static IQueryable<AlertInstanceEntity> StarterTests(NocturneDbContext db) =>
         db.AlertInstances.AsNoTracking().Where(i => i.IsTest && i.AlertExcursion!.AlertRule!.StarterKind != null);
 
-    private static async Task<Dictionary<StarterAlertKind, AlertRuleEntity>> StartersAsync(
-        NocturneDbContext db, bool tracking, CancellationToken ct)
+    /// <summary>
+    /// The alarm settings of the tenant's newest completed migration that read any. Only the run
+    /// reads the source, so a setup page never waits on the site it came from.
+    /// </summary>
+    private static async Task<NightscoutAlarmSettings?> MigratedAlarmSettingsAsync(NocturneDbContext db, CancellationToken ct)
     {
-        var query = db.AlertRules.Include(r => r.Channels).Where(r => r.StarterKind != null);
-        var rules = await (tracking ? query : query.AsNoTracking()).ToListAsync(ct);
-        return rules
-            .GroupBy(r => r.StarterKind!.Value)
-            .OrderBy(g => g.Key)
-            .ToDictionary(g => g.Key, g => g.OrderBy(r => r.CreatedAt).First());
+        var json = await db.MigrationRuns.AsNoTracking()
+            .Where(r => r.TenantId == db.TenantId
+                        && r.State == nameof(MigrationJobState.Completed)
+                        && r.SourceAlarmSettings != null)
+            .OrderByDescending(r => r.StartedAt)
+            .ThenByDescending(r => r.Id)
+            .Select(r => r.SourceAlarmSettings)
+            .FirstOrDefaultAsync(ct);
+        return json is null ? null : NightscoutAlarmSettings.FromJson(json);
     }
 
-    private static async Task<AlertRouting> RoutingAsync(NocturneDbContext db, CancellationToken ct) =>
-        await db.Tenants.AsNoTracking()
-                .Where(t => t.Id == db.TenantId)
-                .Select(t => t.PatientRelationship)
-                .FirstOrDefaultAsync(ct) switch
+    /// <param name="Mgdl">The threshold; 0 for a kind with none.</param>
+    /// <param name="FromNightscout">Whether the threshold or the switch was read from the settings.</param>
+    internal record StartingPoint(decimal Mgdl, bool IsEnabled, bool FromNightscout);
+
+    /// <summary>
+    /// What each starter rule shows before it is saved: the settings' threshold and switch when it
+    /// states them, else the rule's default. A threshold outside what a rule accepts is not used.
+    /// </summary>
+    internal static IReadOnlyDictionary<StarterAlertKind, StartingPoint> StartingPoints(NightscoutAlarmSettings? settings)
+    {
+        StartingPoint Of(StarterAlertKind kind, decimal? threshold, bool? enabled)
+        {
+            var inRange = threshold is >= MinThresholdMgdl and <= MaxThresholdMgdl;
+            return new StartingPoint(
+                inRange ? threshold!.Value : Starters[kind].DefaultMgdl,
+                enabled ?? true,
+                inRange || enabled is not null);
+        }
+
+        return new Dictionary<StarterAlertKind, StartingPoint>
+        {
+            [StarterAlertKind.UrgentLow] = Of(StarterAlertKind.UrgentLow, settings?.BgLow, settings?.AlarmUrgentLow),
+            [StarterAlertKind.Low] = Of(StarterAlertKind.Low, settings?.BgTargetBottom, settings?.AlarmLow),
+            [StarterAlertKind.High] = Of(StarterAlertKind.High, settings?.BgTargetTop, settings?.AlarmHigh),
+            [StarterAlertKind.NoReadings] = Of(StarterAlertKind.NoReadings, null, settings?.AlarmTimeagoWarn),
+        };
+    }
+
+    private async Task<AlertRouting> RoutingAsync(NocturneDbContext db, CancellationToken ct) =>
+        (await tenants.GetAsync(db.TenantId, ct))?.PatientRelationship switch
             {
                 PatientRelationship.Helper => AlertRouting.LeftForRecipient,
                 PatientRelationship.Caregiver => AlertRouting.ToYouAsCaregiver,
                 _ => AlertRouting.ToYou,
             };
 
-    private static async Task<string> UnitsAsync(NocturneDbContext db, Guid callerId, CancellationToken ct)
+    private async Task<string> UnitsAsync(Guid callerId, CancellationToken ct)
     {
-        var preferences = await db.Subjects.AsNoTracking()
-            .Where(s => s.Id == callerId)
-            .Select(s => s.Preferences)
-            .FirstOrDefaultAsync(ct);
-        var tenantUnits = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == db.TenantId)
-            .Select(t => t.DefaultGlucoseUnits)
-            .FirstOrDefaultAsync(ct);
-        return UserDisplayPreferences.Deserialize(preferences).GlucoseUnits ?? tenantUnits ?? GlucoseUnitDefaults.MgDl;
+        var preferences = (await subjects.GetAsync(callerId, ct))?.Preferences;
+        return UserDisplayPreferences.Deserialize(preferences).GlucoseUnits ?? await tenantUnits.ResolveAsync(ct);
     }
 
-    private static async Task<List<AlertSetupMember>> MembersAsync(
-        NocturneDbContext db, Guid callerId, AlertRuleEntity? urgentLow, CancellationToken ct)
+    private async Task<List<AlertSetupMember>> MembersAsync(
+        NocturneDbContext db, Guid callerId, AlertRuleRecord? urgentLow, CancellationToken ct)
     {
         var alerted = urgentLow?.Channels
             .Where(c => c.ChannelType == ChannelType.InApp)
             .Select(c => c.Destination)
             .ToHashSet() ?? [];
 
-        var members = await db.TenantMembers.AsNoTracking()
-            .Where(m => m.TenantId == db.TenantId && m.SubjectId != callerId
-                        && !m.Subject!.IsSystemSubject && m.Subject.IsActive)
-            .OrderBy(m => m.SysCreatedAt)
-            .Select(m => new { m.SubjectId, Name = m.Label ?? m.Subject!.Name })
-            .ToListAsync(ct);
+        var people = await members.ListPeopleAsync(db.TenantId, ct);
 
-        return members
-            .Select(m => new AlertSetupMember(m.SubjectId, m.Name, alerted.Contains(m.SubjectId.ToString())))
+        return people
+            .Where(m => m.SubjectId != callerId)
+            .Select(m => new AlertSetupMember(m.SubjectId, m.Label ?? m.SubjectName ?? string.Empty, alerted.Contains(m.SubjectId.ToString())))
             .ToList();
     }
 
@@ -430,40 +438,22 @@ public class AlertSetupService(
     /// The rule's channels other than a member added for urgent lows: every channel but an
     /// <c>in_app</c> one addressed to someone other than the caller.
     /// </summary>
-    private static IEnumerable<AlertRuleChannelEntity> PrimaryChannels(AlertRuleEntity rule, Guid callerId) =>
+    private static IEnumerable<AlertRuleChannelSnapshot> PrimaryChannels(AlertRuleRecord rule, Guid callerId) =>
         rule.Channels
             .Where(c => !IsMemberChannel(c, callerId))
             .OrderBy(c => c.SortOrder);
 
-    private static bool IsMemberChannel(AlertRuleChannelEntity channel, Guid callerId) =>
+    private static bool IsMemberChannel(AlertRuleChannelSnapshot channel, Guid callerId) =>
         channel.ChannelType == ChannelType.InApp
         && Guid.TryParse(channel.Destination, out var subjectId)
         && subjectId != callerId;
 
-    private void ReplacePrimaryChannels(
-        NocturneDbContext db, AlertRuleEntity rule, Guid callerId, List<CreateAlertRuleChannelRequest> requests)
+    private static decimal ThresholdOf(StarterAlertKind kind, AlertRuleRecord rule)
     {
-        var retained = AlertRuleChannelWriter.CollectRetainedSecrets(rule.Channels);
-        var members = rule.Channels.Where(c => IsMemberChannel(c, callerId)).ToList();
-        foreach (var channel in rule.Channels.Except(members).ToList())
-        {
-            rule.Channels.Remove(channel);
-            db.AlertRuleChannels.Remove(channel);
-        }
-
-        var sortOrder = 0;
-        foreach (var request in requests)
-            rule.Channels.Add(_channels.Build(request, rule.Id, rule.TenantId, sortOrder++, retained));
-        foreach (var member in members)
-            member.SortOrder = sortOrder++;
-    }
-
-    private static decimal ThresholdOf(AlertRuleEntity rule)
-    {
-        using var json = JsonDocument.Parse(rule.ConditionParams);
+        using var json = JsonDocument.Parse(rule.Rule.ConditionParams);
         return json.RootElement.TryGetProperty("value", out var value) && value.TryGetDecimal(out var mgdl)
             ? mgdl
-            : Starters[rule.StarterKind!.Value].DefaultMgdl;
+            : Starters[kind].DefaultMgdl;
     }
 
     private static decimal Display(decimal mgdl, string units) =>
@@ -488,7 +478,7 @@ public class AlertSetupService(
                 + $"{Display(MinThresholdMgdl, units)} and {Display(MaxThresholdMgdl, units)}.");
     }
 
-    private static AlertRuleChannelResponse ToResponse(AlertRuleChannelEntity c) => new()
+    private static AlertRuleChannelResponse ToResponse(AlertRuleChannelSnapshot c) => new()
     {
         Id = c.Id,
         ChannelType = c.ChannelType,

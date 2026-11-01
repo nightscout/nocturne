@@ -507,18 +507,16 @@ public class NightscoutWriteBackSinkTests
     }
 
     /// <summary>
-    /// Neither delete hook is overridden, so both fall through to the interface's
-    /// no-op defaults. Reached through the interface because that is how the
-    /// composite sink invokes them.
+    /// The bulk-delete hook is not overridden, so it falls through to the interface's no-op default.
+    /// Reached through the interface because that is how the composite sink invokes it.
     /// </summary>
     [Fact]
-    public async Task BulkAndPreDeleteHooks_SendNothing()
+    public async Task BulkDeleteHook_SendsNothing()
     {
         var handler = new RecordingHttpMessageHandler();
         IDataEventSink<Entry> sut = CreateSink(handler);
 
         await sut.OnBulkDeletedAsync(42);
-        await sut.BeforeDeleteAsync("1");
 
         handler.RequestCount.Should().Be(0);
     }

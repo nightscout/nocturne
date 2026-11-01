@@ -9,12 +9,22 @@ public static class DemoCoverageSeeds
 
     public const double CompressionNadirMgdl = 58;
 
+    private const double CompressionRecoveryMinutes = 10;
+
     public static bool IsCompressionNight(DateOnly night) =>
         night.DayOfWeek is DayOfWeek.Sunday or DayOfWeek.Tuesday or DayOfWeek.Thursday;
 
     /// <summary>The planted nadir after <paramref name="night"/>, at the demo's local wall clock.</summary>
     public static long CompressionNadirMills(DateOnly night, DemoClock clock) =>
         clock.ToUtc(CompressionNadirLocal(night)).ToMills();
+
+    /// <summary>
+    /// Whether <paramref name="night"/> carries a planted compression artifact whose last reading
+    /// lies at or before <paramref name="utc"/>.
+    /// </summary>
+    public static bool CompressionArtifactEndedBy(DateOnly night, DemoClock clock, DateTime utc) =>
+        IsCompressionNight(night)
+        && clock.ToUtc(CompressionNadirLocal(night).AddMinutes(CompressionRecoveryMinutes)) <= utc;
 
     private static DateTime CompressionNadirLocal(DateOnly night) =>
         night.AddDays(1).ToDateTime(new TimeOnly(4, 10));
@@ -60,7 +70,7 @@ public static class DemoCoverageSeeds
             -5 => 90,
             0 => CompressionNadirMgdl,
             5 => 82,
-            10 => 108,
+            CompressionRecoveryMinutes => 108,
             _ => null,
         };
     }

@@ -1,10 +1,13 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -37,16 +40,12 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
     private readonly TestNocturneDbContextFactory _factory;
     private readonly AuditContext _audit = new();
     private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
-    private readonly Mock<IStateSpanService> _stateSpans = new();
 
     public TreatmentDecomposerRetiredSpanTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
         _factory = new TestNocturneDbContextFactory(_context);
-        _stateSpans
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((StateSpan span, CancellationToken _) => span);
     }
 
     public void Dispose()
@@ -69,16 +68,14 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
     {
         await SeedUserDeletedSpanAsync(category);
 
-        var result = await Decomposer().DecomposeAsync(new Treatment
+        var result = await Decomposer().DecomposeOneAsync(new Treatment
         {
             Id = Id, EventType = "Temporary Target", Mills = At, Duration = 60,
             TargetTop = 80, TargetBottom = 80, Units = "mg/dl", EnteredBy = "AAPS",
         }, WriteOrigin.Live);
 
         result.SkippedDeleted.Should().Be(blocks ? 1 : 0);
-        _stateSpans.Verify(
-            s => s.UpsertStateSpanAsync(It.Is<StateSpan>(span => span.OriginalId == Id), It.IsAny<CancellationToken>()),
-            blocks ? Times.Never : Times.Once);
+        (await _context.StateSpans.AsNoTracking().CountAsync(s => s.OriginalId == Id)).Should().Be(blocks ? 0 : 1);
     }
 
     [Theory]
@@ -127,13 +124,15 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
             new NoteRepository(_factory, _dedup, _audit, NullLogger<NoteRepository>.Instance),
             new DeviceEventRepository(_factory, _dedup, _audit, NullLogger<DeviceEventRepository>.Instance),
             new BolusCalculationRepository(_factory, _dedup, _audit, NullLogger<BolusCalculationRepository>.Instance),
-            _stateSpans.Object,
+            new StateSpanService(
+                new StateSpanRepository(_factory, _dedup, _audit, NullLogger<StateSpanRepository>.Instance),
+                NullLogger<StateSpanService>.Instance),
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             foods.Object,
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             _audit,

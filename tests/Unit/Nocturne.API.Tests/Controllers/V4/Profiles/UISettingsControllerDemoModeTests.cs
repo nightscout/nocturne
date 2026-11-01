@@ -32,21 +32,34 @@ public class UISettingsControllerDemoModeTests
     }
 
     [Fact]
-    public async Task SaveNotificationSettings_inDemoMode_persistsNothing()
+    public async Task PatchNotificationSettings_inDemoMode_persistsNothing()
     {
-        await PersistsNothing(c => c.SaveNotificationSettings(new NotificationSettings()));
+        await PersistsNothing(c => c.PatchNotifications("""{"alarmConfiguration":{"globalVolume":10}}"""));
     }
 
     [Fact]
-    public async Task SaveFeatureSettings_inDemoMode_persistsNothing()
+    public async Task PatchFeatureSettings_inDemoMode_persistsNothing()
     {
-        await PersistsNothing(c => c.SaveFeatureSettings(new FeatureSettings()));
+        await PersistsNothing(c => c.PatchFeatures("""{"display":{"focusHours":6}}"""));
     }
 
     [Fact]
-    public async Task SaveDataQualitySettings_inDemoMode_persistsNothing()
+    public async Task PatchDataQualitySettings_inDemoMode_persistsNothing()
     {
-        await PersistsNothing(c => c.SaveDataQualitySettings(new DataQualitySettings()));
+        await PersistsNothing(c => c.PatchDataQuality("""{"sleepSchedule":{"bedtimeHour":1}}"""));
+    }
+
+    [Fact]
+    public async Task PatchFeatureSettings_inDemoMode_returnsTheDemoSectionMergedWithThePatch()
+    {
+        var controller = NewController(demoMode: true);
+
+        var merged = OkValue<FeatureSettings>(
+            (await controller.PatchFeatures("""{"display":{"focusHours":6}}""")).Result
+        );
+
+        merged.Display.FocusHours.Should().Be(6);
+        merged.Plugins.Should().NotBeEmpty();
     }
 
     [Fact]

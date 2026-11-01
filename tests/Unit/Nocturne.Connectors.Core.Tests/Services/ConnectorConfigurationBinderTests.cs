@@ -37,6 +37,31 @@ public class ConnectorConfigurationBinderTests
             "binder should resolve key name from [ConnectorProperty(ConnectorPropertyKey.AccessToken)] attribute");
     }
 
+    [Theory]
+    [InlineData("""{"enabled":false}""")]
+    [InlineData("""{"Enabled":false}""")]
+    [InlineData("""{"ENABLED":false}""")]
+    public void ApplyJsonToConfig_ReadsTheEnabledFlagInAnyCasing(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+
+        var config = new DifferingNameConfig();
+        ConnectorConfigurationBinder.ApplyJsonToConfig(doc, config);
+
+        config.Enabled.Should().BeFalse("the stored flag is the same key whatever its casing");
+    }
+
+    [Fact]
+    public void ApplyJsonToConfig_LeavesEnabledAloneWhenTheDocumentHasNoFlag()
+    {
+        using var doc = JsonDocument.Parse("""{"url":"https://example.com"}""");
+
+        var config = new DifferingNameConfig();
+        ConnectorConfigurationBinder.ApplyJsonToConfig(doc, config);
+
+        config.Enabled.Should().BeTrue();
+    }
+
     [Fact]
     public void ApplyJsonToConfig_BindsViaAttributeKeyName()
     {

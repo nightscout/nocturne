@@ -17,7 +17,7 @@ namespace Nocturne.API.Tests.Services.Devices;
 
 /// <summary>
 /// A device's dates are local calendar dates, so the two ingest paths that match a record to a
-/// device, <see cref="DeviceService.ResolvePatientDeviceAsync"/> and
+/// device, <see cref="DeviceService.GetPatientDeviceLinksAsync"/> and
 /// <see cref="PatientDeviceStamper"/>, and the device windows of <see cref="AidSystemMetricsReader"/>
 /// must place a record in the hours where the wearer's date is already the next one on the same
 /// device.
@@ -37,7 +37,7 @@ public class PatientDeviceLocalDateTests
         _outgoing = Cgm(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 10));
         _incoming = Cgm(new DateOnly(2026, 6, 11), null);
         _patientDevices
-            .Setup(r => r.GetByDeviceIdAsync(_deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(_deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync([_outgoing, _incoming]);
         _patientDevices
             .Setup(r => r.GetByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -108,7 +108,7 @@ public class PatientDeviceLocalDateTests
         var beforeTheTrip = Cgm(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 10));
         var afterTheTrip = Cgm(new DateOnly(2026, 5, 11), null);
         _patientDevices
-            .Setup(r => r.GetByDeviceIdAsync(_deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(_deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync([beforeTheTrip, afterTheTrip]);
         _patientDevices
             .Setup(r => r.GetByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -132,9 +132,10 @@ public class PatientDeviceLocalDateTests
         matched.Should().Be(afterTheTrip.Id, "the wearer's 11 May began at 15:00Z");
     }
 
-    private Task<Guid?> ResolveAsync(DeviceDateClockResolver deviceDates, DateTime reading) =>
-        new DeviceService(Mock.Of<IDeviceRepository>(), _patientDevices.Object, MockTenantAccessor.Create().Object, deviceDates)
-            .ResolvePatientDeviceAsync(_deviceId, new DateTimeOffset(reading).ToUnixTimeMilliseconds());
+    private async Task<Guid?> ResolveAsync(DeviceDateClockResolver deviceDates, DateTime reading) =>
+        (await new DeviceService(Mock.Of<IDeviceRepository>(), _patientDevices.Object, MockTenantAccessor.Create().Object, deviceDates)
+            .GetPatientDeviceLinksAsync([_deviceId]))
+            .Resolve(_deviceId, new DateTimeOffset(reading).ToUnixTimeMilliseconds());
 
     private async Task<Guid?> StampAsync(DeviceDateClockResolver deviceDates, DateTime reading)
     {

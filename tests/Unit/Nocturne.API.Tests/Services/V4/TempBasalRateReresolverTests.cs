@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -80,9 +81,7 @@ public class TempBasalRateReresolverTests
         _tempBasals
             .Setup(r => r.GetScheduleDerivedAsync(VersionStart, NextVersionStart, null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([stale, unknown, current]);
-        _basalRates
-            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1.0);
+        _basalRates.AnswersBasalRates(_ => 1.0);
         _tempBasals
             .Setup(r => r.SetScheduleDerivedRateAsync(It.IsAny<Guid>(), -50, It.IsAny<double?>(), 0.5, 1.0, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -93,7 +92,6 @@ public class TempBasalRateReresolverTests
         _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(unknown.Id, -50, null, 0.5, 1.0, It.IsAny<CancellationToken>()), Times.Once);
         _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(current.Id, It.IsAny<double>(), It.IsAny<double?>(),
             It.IsAny<double?>(), It.IsAny<double?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _cache.Verify(c => c.RemoveFamilyAsync(TenantCacheFamily.Treatments, It.IsAny<CancellationToken>()), Times.Once);
         _cache.Verify(c => c.RemoveFamilyAsync(TenantCacheFamily.Statistics, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -143,9 +141,7 @@ public class TempBasalRateReresolverTests
         _tempBasals
             .Setup(r => r.GetScheduleDerivedAsync(permanentStart, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([tempAfter]);
-        _basalRates
-            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1.5);
+        _basalRates.AnswersBasalRates(_ => 1.5);
         _tempBasals
             .Setup(r => r.SetScheduleDerivedRateAsync(tempAfter.Id, -50, 0.4, 0.75, 1.5, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);

@@ -341,7 +341,7 @@ public class RefreshTokenService : IRefreshTokenService
     /// <summary>
     /// The session a token's chain belongs to: its OIDC session id, or for a legacy token issued
     /// before sessions were tagged, the token's own id. The key
-    /// <see cref="Nocturne.Infrastructure.Data.Entities.RefreshTokenEntity.InSession"/> matches.
+    /// <see cref="IFirstPartyTokenRepository.RevokeSessionForSubjectAsync"/> matches.
     /// </summary>
     private static string SessionKeyOf(RefreshTokenRecord record) =>
         record.OidcSessionId ?? record.Id.ToString();

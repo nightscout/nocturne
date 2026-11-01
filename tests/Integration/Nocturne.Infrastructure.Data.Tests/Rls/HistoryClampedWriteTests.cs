@@ -38,7 +38,7 @@ public class HistoryClampedWriteTests(RlsCompletenessFixture fx) : IAsyncLifetim
 
         var created = await repository.CreateAsync(new LabHbA1cResult
         {
-            MeasuredAt = DateTime.UtcNow.AddDays(-90), ValuePercent = 6.8,
+            MeasuredAt = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90)), ValuePercent = 6.8,
         });
 
         (await repository.GetAllAsync()).Should().NotContain(r => r.Id == created.Id);

@@ -2,7 +2,6 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
-using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
@@ -20,7 +19,7 @@ namespace Nocturne.API.Services.Treatments;
 /// V4-only <see cref="ITreatmentStore"/> that reads all treatments from V4 repositories
 /// via the projection service and routes writes through the decomposer.
 /// </summary>
-public class TreatmentReadService : ITreatmentStore
+internal class TreatmentReadService : ITreatmentStore
 {
     private readonly IV4ToLegacyProjectionService _projection;
     private readonly ITreatmentDecomposer _decomposer;
@@ -30,7 +29,6 @@ public class TreatmentReadService : ITreatmentStore
     public TreatmentReadService(
         IV4ToLegacyProjectionService projection,
         ITreatmentDecomposer decomposer,
-        IDecompositionPipeline pipeline,
         ITempBasalRepository tempBasalRepo,
         IBolusRepository bolusRepo,
         ICarbIntakeRepository carbIntakeRepo,
@@ -50,7 +48,6 @@ public class TreatmentReadService : ITreatmentStore
                 activationRepo),
             projection,
             decomposer,
-            pipeline,
             stateSpans);
         _logger = logger;
     }
@@ -190,65 +187,156 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The batch is decomposed in one call (<see cref="ITreatmentDecomposer.DecomposeBatchAsync"/>); a
+    /// treatment refused for its data is answered as refused and the rest are written.
+    /// </remarks>
     public async Task<BulkWrite<Treatment>> CreateAsync(
-        IReadOnlyList<Treatment> treatments, CancellationToken ct = default, ICollection<Treatment>? stored = null)
+        IReadOnlyList<Treatment> treatments,
+        WriteOrigin origin,
+        CancellationToken ct = default,
+        ICollection<StoredTreatment>? stored = null)
     {
-        var results = new List<Treatment>();
-        var rejected = new List<BulkWriteRejection<Treatment>>();
-        var skippedDeleted = 0;
+        var decomposition = new TreatmentDecomposition();
+        try
+        {
+            await _store.KeyToServedAsync(treatments, ct);
+            await _decomposer.DecomposeBatchAsync(treatments, origin, ct, decomposition);
+        }
+        catch (Exception ex) when (Stops(ex))
+        {
+            throw Stopped(ex, decomposition);
+        }
+        catch (Exception) when (stored is not null)
+        {
+            await ReportCommittedAsync(treatments, decomposition, stored);
+            throw;
+        }
 
+        var results = new List<Treatment>(treatments.Count);
+        var rejected = Rejections(treatments, decomposition);
         for (var i = 0; i < treatments.Count; i++)
         {
             var treatment = treatments[i];
-            DecompositionResult? result = null;
+            if (decomposition.Rejected.ContainsKey(i))
+                continue;
+
+            var of = decomposition.Of(i);
+            StoredTreatment created;
             try
             {
-                await _store.KeyToServedAsync(treatment, ct);
-                result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-                skippedDeleted += result.SkippedDeleted;
-                var created = await _store.ToCreatedAsync(treatment, result, ct);
-                results.Add(created);
-                stored?.Add(created);
+                created = await _store.ToCreatedAsync(treatment, of, ct);
             }
-            catch (DbUpdateException ex) when (result is null && StoreRefusal.ReasonFor(ex) is { } reason)
+            catch (Exception ex) when (Stops(ex))
             {
-                rejected.Add(Reject(i, treatment, ex, reason));
+                _logger.LogError(ex, "Failed to read back treatment {Id}; ending the batch", treatment.Id);
+                _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
+                List<Treatment> unread = [treatment];
+                if (Wrote(of))
+                    stored?.Add(new StoredTreatment.Unnamed(treatment));
+                for (var j = i + 1; j < treatments.Count; j++)
+                {
+                    var later = decomposition.Of(j);
+                    if (later.StoredRecords.Any())
+                        unread.Add(treatments[j]);
+                    if (Wrote(later))
+                        stored?.Add(new StoredTreatment.Unnamed(treatments[j]));
+                }
+                throw new TreatmentBatchFailedException(
+                    new BulkWrite<Treatment>([.. results, .. unread], decomposition.SkippedDeleted) { Rejected = rejected },
+                    i, treatments.Count, failedOneStored: true, ex);
             }
-            catch (TreatmentMappingException ex)
-            {
-                rejected.Add(Reject(i, treatment, ex, ex.Message));
-            }
-            catch (DbUpdateException ex) { throw Stopped(ex); }
-            catch (DbException ex) { throw Stopped(ex); }
-            catch (TimeoutException ex) { throw Stopped(ex); }
-            catch (InvalidOperationException ex) { throw Stopped(ex); }
-            catch (OperationCanceledException ex) { throw Stopped(ex); }
 
-            TreatmentBatchFailedException Stopped(Exception ex)
-            {
-                _logger.LogError(ex, "Failed to store treatment {Id}; ending the batch", treatment.Id);
-                _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-                var written = result is null ? results : [.. results, treatment];
-                if (result is not null)
-                    stored?.Add(treatment);
-                return new TreatmentBatchFailedException(
-                    new BulkWrite<Treatment>(written, skippedDeleted) { Rejected = rejected },
-                    i, treatments.Count, failedOneStored: result is not null, ex);
-            }
+            results.Add(created.Created);
+            if (Wrote(of))
+                stored?.Add(created);
         }
 
-        _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(results, skippedDeleted) { Rejected = rejected };
+        _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
+        return new BulkWrite<Treatment>(results, decomposition.SkippedDeleted) { Rejected = rejected };
+
+        TreatmentBatchFailedException Stopped(Exception ex, TreatmentDecomposition committed)
+        {
+            _logger.LogError(ex, "Failed to store a batch of {Count} treatments", treatments.Count);
+            var written = new List<Treatment>();
+            int? failedIndex = null;
+            for (var i = 0; i < treatments.Count; i++)
+            {
+                var of = committed.Of(i);
+                if (of.StoredRecords.Any())
+                {
+                    written.Add(treatments[i]);
+                    if (Wrote(of))
+                        stored?.Add(new StoredTreatment.Unnamed(treatments[i]));
+                }
+                else if (failedIndex is null && !committed.StoresNothing(i))
+                {
+                    failedIndex = i;
+                }
+            }
+
+            var skippedDeleted = committed.SkippedDeleted;
+            _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
+            return new TreatmentBatchFailedException(
+                new BulkWrite<Treatment>(written, skippedDeleted) { Rejected = Rejections(treatments, committed) },
+                failedIndex, treatments.Count, failedOneStored: false, ex);
+        }
     }
+
+    /// <summary>
+    /// Reports each treatment that wrote a record before a failure the batch does not expect, as the
+    /// create would have answered it, or under the id it was sent with when that read fails too.
+    /// </summary>
+    private async Task ReportCommittedAsync(
+        IReadOnlyList<Treatment> treatments, TreatmentDecomposition decomposition, ICollection<StoredTreatment> stored)
+    {
+        for (var i = 0; i < Math.Min(treatments.Count, decomposition.Groups.Count); i++)
+        {
+            var of = decomposition.Of(i);
+            if (!Wrote(of))
+                continue;
+            var treatment = treatments[i];
+            try
+            {
+                stored.Add(await _store.ToCreatedAsync(treatment, of, CancellationToken.None));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Stored treatment {Id} could not be read back", treatment.Id);
+                stored.Add(new StoredTreatment.Unnamed(treatment));
+            }
+        }
+    }
+
+    /// <summary>A failure that ends the batch, rather than one treatment's refusal.</summary>
+    private static bool Stops(Exception ex) =>
+        ex is DbUpdateException or DbException or TimeoutException or InvalidOperationException or OperationCanceledException;
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Treatment?>> ReadBackAsync(
+        IReadOnlyList<StoredTreatment> stored, CancellationToken ct = default) =>
+        _store.ReadBackAsync(stored, ct);
+
+    /// <summary>
+    /// A treatment stored only as rows that already held what it carries is served in the response
+    /// but not announced.
+    /// </summary>
+    private static bool Wrote(DecompositionResult result) =>
+        result.CreatedRecords.Count > 0 || result.UpdatedRecords.Count > 0;
+
+    private List<BulkWriteRejection<Treatment>> Rejections(
+        IReadOnlyList<Treatment> treatments, TreatmentDecomposition decomposition) =>
+        [.. decomposition.Rejected.OrderBy(r => r.Key).Select(r => Reject(r.Key, treatments[r.Key], r.Value))];
 
     /// <summary>
     /// A treatment whose write fails the same way on every attempt is answered as refused and the
     /// batch goes on, so neither a client resending the batch nor a connector re-reading the page
     /// is held on it forever. The records written for it before the refusal stay written.
     /// </summary>
-    private BulkWriteRejection<Treatment> Reject(int index, Treatment treatment, Exception ex, string reason)
+    private BulkWriteRejection<Treatment> Reject(int index, Treatment treatment, Exception refusal)
     {
-        _logger.LogRefused(nameof(Treatment), reason, treatment.DataSource ?? "api", ex);
+        var reason = refusal is DbUpdateException db && StoreRefusal.ReasonFor(db) is { } stored ? stored : refusal.Message;
+        _logger.LogRefused(nameof(Treatment), reason, treatment.DataSource ?? "api", refusal);
         return new BulkWriteRejection<Treatment>(
             index, treatment, $"{reason}; parts of the treatment may be stored");
     }

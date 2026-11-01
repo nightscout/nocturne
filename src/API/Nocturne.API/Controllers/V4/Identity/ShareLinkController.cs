@@ -1,12 +1,12 @@
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.Core.Models.Identity;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 
@@ -54,7 +54,7 @@ public class ShareLinkController : ControllerBase
     /// Show the live link in the clear. A command rather than a query so the secret travels only
     /// when the owner asks for it, instead of on every read of the sharing settings. Succeeds
     /// with a null URL and <c>canReveal</c> false in the cases
-    /// <see cref="TenantEntity.ShareTokenEncrypted"/> lists.
+    /// <see cref="TenantRecord.ShareTokenEncrypted"/> lists.
     /// </summary>
     [HttpPost("reveal")]
     [RequireInteractiveSession]

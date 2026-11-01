@@ -34,7 +34,7 @@ public sealed record NativeProfileSwitchResult(NativeProfileSwitchOutcome Outcom
 /// as an AAPS profile switch does.
 /// </summary>
 /// <remarks>
-/// Record-only: they carry no legacy id, so <see cref="LegacyProfileActivationTable"/> never serves them
+/// Record-only: they carry no legacy id, so <see cref="Treatments.LegacyProfileActivationTable"/> never serves them
 /// on the v1 or v3 treatments feed, and no follower or uploader ever reads them. AAPS imports every
 /// Profile Switch it reads there, an invalid one included (<c>SyncNsProfileSwitchTransaction</c> inserts
 /// an unknown one whatever its <c>isValid</c>, and overwrites the <c>isValid</c> of a local switch at the

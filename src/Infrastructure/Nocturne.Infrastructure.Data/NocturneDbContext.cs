@@ -108,8 +108,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// The subject whose own rows a subject-scoped cross-tenant read may reach (the tenant switcher,
     /// the caregiver overview, membership enumeration), carried to the <c>app.current_subject_id</c>
-    /// GUC. <see cref="Guid.Empty"/> leaves the GUC unset, and the <c>subject_pin</c> policy then
-    /// admits every row.
+    /// GUC. <see cref="Guid.Empty"/> writes it empty, which the <c>subject_pin</c> policy reads as unset,
+    /// admitting every row.
     /// </summary>
     public Guid SubjectId { get; internal set; }
 
@@ -225,7 +225,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<ConnectorResetJobEntity> ConnectorResetJobs { get; set; }
 
-    public DbSet<PendingTenantJobEntity> PendingTenantJobs { get; set; }
+    public DbSet<JobLedgerEntity> JobLedger { get; set; }
 
     public DbSet<LinkedRecordEntity> LinkedRecords { get; set; }
 
@@ -422,8 +422,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TenantAuditConfigEntity> TenantAuditConfig { get; set; }
 
-    public DbSet<BackfillCompletionEntity> BackfillCompletions { get; set; }
-
     public DbSet<TenantDataRetentionConfigEntity> TenantDataRetentionConfig { get; set; }
 
     public DbSet<TenantDemoConfigEntity> TenantDemoConfigs => Set<TenantDemoConfigEntity>();
@@ -538,6 +536,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     ];
 
     /// <summary>
+    /// The tables a connector watermarks on their newest timestamp, adding the span-shaped
+    /// <see cref="TempBasalEntity"/>, whose <see cref="IObservationTimestamped.Timestamp"/> is the
+    /// span start.
+    /// </summary>
+    internal static readonly Type[] V4WatermarkedEntities =
+        [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity)];
+
+    /// <summary>
     /// V4 record tables whose lists read one tenant newest-first by timestamp, then id on the tables
     /// that tie-break on it.
     /// </summary>
@@ -573,7 +579,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     /// <summary>
     /// Tables a v3 history endpoint pages through <see cref="HistoryPage"/> on <c>sys_updated_at</c>:
-    /// the V4 record tables of the treatment projection's <c>LegacyTreatmentTables.All</c> (its state
+    /// the V4 record tables the legacy treatment projection reads (its state
     /// spans page on <c>ix_state_spans_tenant_category_updated_at</c>), the four tables a device
     /// status is decomposed into, the three glucose types the entry projection reads and the five
     /// profile-decomposition tables.
@@ -767,7 +773,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         // tenant whose newest row for that source is old reads most of the table to return one
         // value. The deleted_at filter keeps the scan index-only: soft-deleted rows left in the
         // index have to be skipped a heap fetch at a time, which is why it is not a size saving.
-        foreach (var entity in V4TimeSeriesRecordEntities.Select(t => modelBuilder.Entity(t)))
+        foreach (var entity in V4WatermarkedEntities.Select(t => modelBuilder.Entity(t)))
         {
             entity.HasIndex(
                     nameof(ITenantScoped.TenantId),
@@ -781,7 +787,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         // A V4 list reads one tenant newest-first by timestamp, then id on the tables that tie-break
         // on it. With no index leading (tenant_id, timestamp), a LIMIT read reads every live row and
         // sorts; the three tables that keep such an index for the dedup read still gain the id
-        // tie-break and the live-rows predicate here. GetLatestAsync and GetLatestBeforeAsync on a
+        // tie-break and the live-rows predicate here. GetLatestAsync and the pump GetTimelineAsync on a
         // snapshot table walk the same index.
         foreach (var entity in V4SortedListEntities.Select(t => modelBuilder.Entity(t)))
         {
@@ -1244,8 +1250,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<AuthAuditLogEntity>()
-            .HasIndex(a => a.SubjectId)
-            .HasDatabaseName("ix_auth_audit_log_subject_id");
+            .HasIndex(a => a.TargetSubjectId)
+            .HasDatabaseName("ix_auth_audit_log_target_subject_id");
 
         modelBuilder
             .Entity<AuthAuditLogEntity>()
@@ -1265,8 +1271,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<AuthAuditLogEntity>()
-            .HasIndex(a => new { a.SubjectId, a.CreatedAt })
-            .HasDatabaseName("ix_auth_audit_log_subject_created")
+            .HasIndex(a => new { a.TargetSubjectId, a.CreatedAt })
+            .HasDatabaseName("ix_auth_audit_log_target_subject_created")
             .IsDescending(false, true);
 
         modelBuilder
@@ -1566,23 +1572,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(j => j.State)
             .HasDatabaseName("ix_connector_reset_jobs_state");
 
+        // NULLS NOT DISTINCT, so a platform job's row (no tenant) is one row too.
         modelBuilder
-            .Entity<BackfillCompletionEntity>()
-            .HasKey(c => new { c.Backfill, c.TenantId });
+            .Entity<JobLedgerEntity>()
+            .HasIndex(j => new { j.Job, j.TenantId })
+            .IsUnique()
+            .AreNullsDistinct(false)
+            .HasDatabaseName("ux_job_ledger_job_tenant");
 
         modelBuilder
-            .Entity<BackfillCompletionEntity>()
-            .HasOne<TenantEntity>()
-            .WithMany()
-            .HasForeignKey(c => c.TenantId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .Entity<JobLedgerEntity>()
+            .HasIndex(j => j.NextDueAt)
+            .HasFilter("next_due_at IS NOT NULL")
+            .HasDatabaseName("ix_job_ledger_due");
 
         modelBuilder
-            .Entity<PendingTenantJobEntity>()
-            .HasKey(j => new { j.TenantId, j.Job });
-
-        modelBuilder
-            .Entity<PendingTenantJobEntity>()
+            .Entity<JobLedgerEntity>()
             .HasOne<TenantEntity>()
             .WithMany()
             .HasForeignKey(j => j.TenantId)
@@ -1930,7 +1935,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasFilter("deleted_at IS NULL");
 
         // Devices unique index (scoped to live records, per tenant).
-        // TenantId must be part of the key: devices are tenant-owned (FindByCategoryTypeAndSerialAsync
+        // TenantId must be part of the key: devices are tenant-owned (FindByIdentitiesAsync
         // is RLS-scoped to the current tenant) and the type/serial often carry shared, non-unique
         // values — e.g. a pump's manufacturer/model ("Insulet"/"Omnipod 5") or the generic Loop
         // uploader identity ("iPhone"/"unknown"). Without TenantId the constraint is global, so the
@@ -2431,8 +2436,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => new { e.TenantId, e.EntityType, e.EntityId })
                 .HasDatabaseName("ix_mutation_audit_log_entity");
 
-            entity.HasIndex(e => new { e.TenantId, e.SubjectId, e.CreatedAt })
-                .HasDatabaseName("ix_mutation_audit_log_subject");
+            entity.HasIndex(e => new { e.TenantId, e.ActorSubjectId, e.CreatedAt })
+                .HasDatabaseName("ix_mutation_audit_log_actor_subject");
 
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_created");
@@ -2440,8 +2445,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<ReadAccessLogEntity>(entity =>
         {
-            entity.HasIndex(e => new { e.TenantId, e.SubjectId, e.CreatedAt })
-                .HasDatabaseName("ix_read_access_log_subject");
+            entity.HasIndex(e => new { e.TenantId, e.ActorSubjectId, e.CreatedAt })
+                .HasDatabaseName("ix_read_access_log_actor_subject");
 
             entity.HasIndex(e => new { e.TenantId, e.EntityType, e.CreatedAt })
                 .HasDatabaseName("ix_read_access_log_entity_type");
@@ -3084,12 +3089,26 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// them every row again.
     /// </summary>
     private static bool HasNonTimestampModification(EntityEntry entry)
-        => entry.State == EntityState.Modified
-            && entry.Properties.Any(p =>
-                p.IsModified
-                && p.Metadata.Name != nameof(ISystemTimestamped.SysUpdatedAt)
-                && p.Metadata.Name != nameof(IEntityTimestamped.UpdatedAt)
-                && p.Metadata.Name != nameof(IUpstreamFingerprinted.UpstreamFingerprint));
+        => entry.State == EntityState.Modified && HasModificationBesideStamps(entry, countFingerprint: false);
+
+    /// <summary>
+    /// Whether a save would write nothing to the row of <paramref name="entry"/>, a tracked entity
+    /// just assigned to: no property is modified but the update stamps the save itself manages. The
+    /// fingerprint the open <see cref="UpstreamFingerprintScope"/> names is applied first, as the save
+    /// applies it, so a row whose fingerprint alone differs is still written.
+    /// </summary>
+    internal static bool WritesNothing(EntityEntry entry)
+    {
+        ApplyUpstreamFingerprint(entry);
+        return !HasModificationBesideStamps(entry, countFingerprint: true);
+    }
+
+    private static bool HasModificationBesideStamps(EntityEntry entry, bool countFingerprint)
+        => entry.Properties.Any(p =>
+            p.IsModified
+            && p.Metadata.Name != nameof(ISystemTimestamped.SysUpdatedAt)
+            && p.Metadata.Name != nameof(IEntityTimestamped.UpdatedAt)
+            && (countFingerprint || p.Metadata.Name != nameof(IUpstreamFingerprinted.UpstreamFingerprint)));
 
     /// <summary>
     /// Enforces tenant ownership on a tracked entity: stamps the resolved tenant on new

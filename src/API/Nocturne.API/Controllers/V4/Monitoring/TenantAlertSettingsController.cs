@@ -24,7 +24,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// The request/response shape is unchanged, but manual DND is now backed by a
 /// <c>scope=all</c> row in <c>dnd_windows</c> (ADR 0004 D5) rather than columns on this row:
 /// the toggle creates/clears that window and <c>dndManual*</c> is computed from it. Scheduled
-/// DND stays here. The per-rule <see cref="AlertRuleEntity.AllowThroughDnd"/> bypass and the
+/// DND stays here. The per-rule <see cref="AlertRuleSnapshot.AllowThroughDnd"/> bypass and the
 /// <c>do_not_disturb</c> condition apply to both paths; critical rules implicitly bypass DND.
 /// </remarks>
 [ApiController]

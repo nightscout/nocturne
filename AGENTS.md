@@ -79,8 +79,8 @@ tests/
 Services are defined in `Core.Contracts` and registered as scoped:
 
 ```csharp
-// Interface: src/Core/Nocturne.Core.Contracts/IEntryService.cs
-// Implementation: src/API/Nocturne.API/Services/EntryService.cs
+// Interface: src/Core/Nocturne.Core.Contracts/Entries/IEntryService.cs
+// Implementation: src/API/Nocturne.API/Services/Entries/EntryService.cs
 builder.Services.AddScoped<IEntryService, EntryService>();
 ```
 

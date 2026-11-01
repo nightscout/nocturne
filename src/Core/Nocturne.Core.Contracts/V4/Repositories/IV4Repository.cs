@@ -38,6 +38,9 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// <returns>The record, or <c>null</c> if not found.</returns>
     Task<T?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>The records <see cref="GetByIdAsync"/> finds for each of <paramref name="ids"/>, in one read.</summary>
+    Task<IReadOnlyList<T>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     /// <summary>
     /// Retrieve the first record whose UUID falls within <c>[low, high]</c>. Used to resolve a
     /// 24-hex Mongo ObjectId (the first 24 hex of a UUID, emitted on the legacy API) back to its

@@ -14,6 +14,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Profiles;
 
@@ -121,7 +122,7 @@ public class ClockFaceAlertsGateTests
         tenant.Setup(t => t.TenantId).Returns(_tenant);
 
         return new ClockFaceAlertsController(
-            _faces.Object, contexts, new AlertReceiptService(contexts, TimeProvider.System), members.Object, tenant.Object)
+            _faces.Object, contexts, new AlertReceiptService(contexts, new OAuthGrantRepository(contexts), TimeProvider.System), members.Object, tenant.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

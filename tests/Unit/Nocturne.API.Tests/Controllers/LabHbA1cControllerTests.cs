@@ -26,11 +26,42 @@ public class LabHbA1cControllerTests
             Value = legacy ? null : value,
             ValuePercent = legacy ? value : null,
             Unit = unit,
-            MeasuredAt = new DateTime(2025, 1, 1),
+            MeasuredAt = new DateOnly(2025, 1, 1),
         });
         response.Result.Should().BeOfType<OkObjectResult>();
         saved!.ValuePercent.Should().BeApproximately(7, 0.000001);
         saved.A1cDisplay.MmolMol.Should().BeApproximately(53.00565, 0.000001);
+        saved.MeasuredAt.Should().Be(new DateOnly(2025, 1, 1));
+    }
+
+    [Fact]
+    public async Task Create_accepts_the_day_after_the_current_utc_day()
+    {
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        LabHbA1cResult? saved = null;
+        var repository = new Mock<ILabHbA1cResultRepository>();
+        repository.Setup(r => r.CreateAsync(It.IsAny<LabHbA1cResult>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LabHbA1cResult result, CancellationToken _) => { saved = result; return result; });
+
+        var response = await new LabHbA1cController(repository.Object).Create(new CreateLabHbA1cResultRequest
+        {
+            Value = 7.0, MeasuredAt = tomorrow,
+        });
+
+        response.Result.Should().BeOfType<OkObjectResult>();
+        saved!.MeasuredAt.Should().Be(tomorrow);
+    }
+
+    [Fact]
+    public async Task Create_rejects_a_day_after_tomorrow()
+    {
+        var repository = new Mock<ILabHbA1cResultRepository>();
+        var response = await new LabHbA1cController(repository.Object).Create(new CreateLabHbA1cResultRequest
+        {
+            Value = 7.0, MeasuredAt = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(2),
+        });
+        response.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        repository.Verify(r => r.CreateAsync(It.IsAny<LabHbA1cResult>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -47,7 +78,7 @@ public class LabHbA1cControllerTests
         var repository = new Mock<ILabHbA1cResultRepository>();
         var response = await new LabHbA1cController(repository.Object).Create(new CreateLabHbA1cResultRequest
         {
-            Value = value, ValuePercent = legacy, Unit = unit, MeasuredAt = new DateTime(2025, 1, 1),
+            Value = value, ValuePercent = legacy, Unit = unit, MeasuredAt = new DateOnly(2025, 1, 1),
         });
         response.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
         repository.Verify(r => r.CreateAsync(It.IsAny<LabHbA1cResult>(), It.IsAny<CancellationToken>()), Times.Never);

@@ -2,10 +2,9 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Nocturne.API.Extensions;
-using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
@@ -25,12 +24,11 @@ public class AlexaService : IAlexaService
     private static readonly long RecentPumpWindowMills =
         new PumpPreferences().UrgentClock * 2 * 60 * 1000L;
 
-    private readonly IEntryStore _store;
+    private readonly IEntryService _entries;
     private readonly IPropertiesService _properties;
     private readonly IDDataService _ddata;
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ITenantAppearanceReader _appearanceReader;
-    private readonly ITenantAccessor _tenantAccessor;
+    private readonly ITenantGlucoseUnits _glucoseUnits;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AlexaService> _logger;
     private readonly Dictionary<string, MetricAnswer> _metricAnswers;
@@ -106,22 +104,20 @@ public class AlexaService : IAlexaService
     };
 
     public AlexaService(
-        IEntryStore store,
+        IEntryService entries,
         IPropertiesService properties,
         IDDataService ddata,
         IHttpContextAccessor httpContextAccessor,
-        ITenantAppearanceReader appearanceReader,
-        ITenantAccessor tenantAccessor,
+        ITenantGlucoseUnits glucoseUnits,
         TimeProvider timeProvider,
         ILogger<AlexaService> logger
     )
     {
-        _store = store;
+        _entries = entries;
         _properties = properties;
         _ddata = ddata;
         _httpContextAccessor = httpContextAccessor;
-        _appearanceReader = appearanceReader;
-        _tenantAccessor = tenantAccessor;
+        _glucoseUnits = glucoseUnits;
         _timeProvider = timeProvider;
         _logger = logger;
         _metricAnswers = BuildMetricAnswers();
@@ -487,7 +483,7 @@ public class AlexaService : IAlexaService
 
     private async Task<string?> SpeakBgAsync(SpeechRequest request)
     {
-        var entries = await _store.QueryAsync(
+        var entries = await _entries.QueryEntriesAsync(
             new EntryQuery { Type = "sgv", Count = 1 },
             request.CancellationToken
         );
@@ -502,11 +498,7 @@ public class AlexaService : IAlexaService
             request.Locale,
             GlucoseUnits.Scale(
                 latest.GlucoseMgdl(),
-                await GlucoseUnits.UsesMmolAsync(
-                    _appearanceReader,
-                    _tenantAccessor,
-                    request.CancellationToken
-                )
+                await _glucoseUnits.UsesMmolAsync(request.CancellationToken)
             ),
             Translate(latest.Direction ?? "NONE", request.Locale),
             MomentRelativeTime.From(
@@ -776,11 +768,7 @@ public class AlexaService : IAlexaService
         }
 
         var mgdl = Convert.ToDouble(delta["mgdl"], CultureInfo.InvariantCulture);
-        var useMmol = await GlucoseUnits.UsesMmolAsync(
-            _appearanceReader,
-            _tenantAccessor,
-            request.CancellationToken
-        );
+        var useMmol = await _glucoseUnits.UsesMmolAsync(request.CancellationToken);
         var display = useMmol
             ? $"{(mgdl >= 0 ? "+" : string.Empty)}{GlucoseUnits.Scale(mgdl, true).ToString("F1", CultureInfo.InvariantCulture)}"
             : (string)delta["display"];

@@ -28,9 +28,9 @@ public class ExcursionResolutionHandlerTests
 
     public ExcursionResolutionHandlerTests()
     {
-        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<string>());
-        _repository.Setup(r => r.GetExcursionRuleAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetExcursionRuleAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ExcursionRuleSnapshot(_ruleId, "Urgent Low"));
 
         _sut = new ExcursionResolutionHandler(
@@ -48,7 +48,7 @@ public class ExcursionResolutionHandlerTests
         var instanceId = Guid.NewGuid();
         var instance = new AlertInstanceSnapshot(instanceId, _tenantId, _excursionId,
             "escalating", DateTime.UtcNow, SnoozedUntil: null, SnoozeCount: 0);
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { instance });
 
         var transition = new ExcursionTransition(
@@ -57,9 +57,8 @@ public class ExcursionResolutionHandlerTests
         await _sut.HandleClosedAsync(transition, _tenantId, CancellationToken.None);
 
         _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
-            _tenantId, _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+            _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
         _repository.Verify(r => r.ExpirePendingDeliveriesAsync(
-            _tenantId,
             It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(instanceId)),
             It.IsAny<CancellationToken>()), Times.Once);
         _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Once);
@@ -73,7 +72,7 @@ public class ExcursionResolutionHandlerTests
     [Fact]
     public async Task HandleClosed_BroadcastCarriesTheExcursionRuleAndReason()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
         AlertResolvedEvent? sent = null;
         _broadcast.Setup(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()))
@@ -99,9 +98,9 @@ public class ExcursionResolutionHandlerTests
     [Fact]
     public async Task HandleClosed_ExcursionWithoutRule_ResolvesWithoutBroadcasting()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
-        _repository.Setup(r => r.GetExcursionRuleAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetExcursionRuleAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((ExcursionRuleSnapshot?)null);
 
         await _sut.HandleClosedAsync(
@@ -110,16 +109,16 @@ public class ExcursionResolutionHandlerTests
             CancellationToken.None);
 
         _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
-            _tenantId, _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+            _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
         _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Never);
     }
 
     [Fact]
     public async Task HandleClosed_RuleLookupFailure_StillResolvesAndClears()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
-        _repository.Setup(r => r.GetExcursionRuleAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetExcursionRuleAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("db down"));
 
         var act = async () => await _sut.HandleClosedAsync(
@@ -129,8 +128,8 @@ public class ExcursionResolutionHandlerTests
 
         await act.Should().NotThrowAsync();
         _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
-            _tenantId, _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
-        _repository.Verify(r => r.DeleteExcursionMutesAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()), Times.Once);
+            _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.DeleteExcursionMutesAsync(_excursionId, It.IsAny<CancellationToken>()), Times.Once);
         _alarmRelay.Verify(
             r => r.ClearIfQuietAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()), Times.Once);
         _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Never);
@@ -139,7 +138,7 @@ public class ExcursionResolutionHandlerTests
     [Fact]
     public async Task HandleClosed_DeletesEveryMembersMuteOfTheExcursion()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
 
         await _sut.HandleClosedAsync(
@@ -147,13 +146,13 @@ public class ExcursionResolutionHandlerTests
             _tenantId,
             CancellationToken.None);
 
-        _repository.Verify(r => r.DeleteExcursionMutesAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.DeleteExcursionMutesAsync(_excursionId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task HandleClosed_HysteresisReason_MapsToHysteresisWireString()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
 
         var transition = new ExcursionTransition(
@@ -162,13 +161,13 @@ public class ExcursionResolutionHandlerTests
         await _sut.HandleClosedAsync(transition, _tenantId, CancellationToken.None);
 
         _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
-            _tenantId, _excursionId, It.IsAny<DateTime>(), "hysteresis", It.IsAny<CancellationToken>()), Times.Once);
+            _excursionId, It.IsAny<DateTime>(), "hysteresis", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task HandleClosed_NullCloseReason_PassesNullThrough()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
 
         var transition = new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId);
@@ -176,13 +175,13 @@ public class ExcursionResolutionHandlerTests
         await _sut.HandleClosedAsync(transition, _tenantId, CancellationToken.None);
 
         _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
-            _tenantId, _excursionId, It.IsAny<DateTime>(), (string?)null, It.IsAny<CancellationToken>()), Times.Once);
+            _excursionId, It.IsAny<DateTime>(), (string?)null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task HandleClosed_NoInstances_SkipsExpireDeliveries()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
 
         var transition = new ExcursionTransition(
@@ -191,7 +190,7 @@ public class ExcursionResolutionHandlerTests
         await _sut.HandleClosedAsync(transition, _tenantId, CancellationToken.None);
 
         _repository.Verify(r => r.ExpirePendingDeliveriesAsync(
-            _tenantId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -208,9 +207,9 @@ public class ExcursionResolutionHandlerTests
     [Fact]
     public async Task HandleClosed_AutoArchivesInAppNotificationsForEachRecipient()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
-        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { "user-a", "user-b" });
 
         var transition = new ExcursionTransition(
@@ -235,7 +234,7 @@ public class ExcursionResolutionHandlerTests
     [Fact]
     public async Task HandleClosed_NoInAppRecipients_SkipsArchive()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
 
         var transition = new ExcursionTransition(
@@ -249,7 +248,7 @@ public class ExcursionResolutionHandlerTests
     [Fact]
     public async Task HandleClosed_BroadcastFailure_DoesNotPropagate()
     {
-        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
         _broadcast.Setup(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()))
             .ThrowsAsync(new InvalidOperationException("hub down"));
@@ -261,6 +260,6 @@ public class ExcursionResolutionHandlerTests
 
         await act.Should().NotThrowAsync();
         _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
-            _tenantId, _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+            _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
     }
 }

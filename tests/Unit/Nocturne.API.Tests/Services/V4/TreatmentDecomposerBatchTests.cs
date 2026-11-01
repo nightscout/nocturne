@@ -5,7 +5,10 @@ using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.TestDoubles;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -17,6 +20,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
+using Npgsql;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -38,7 +42,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
     private readonly Mock<IDeviceService> _deviceServiceMock;
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock;
     private readonly Mock<IPatientInsulinRepository> _insulinRepoMock;
-    private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
+    private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new Mock<IBasalRateResolver>().AnswersBasalRates(_ => null);
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerBatchTests()
@@ -52,11 +56,11 @@ public class TreatmentDecomposerBatchTests : IDisposable
         _noteRepoMock = new Mock<INoteRepository>();
         _bolusCalcRepoMock = new Mock<IBolusCalculationRepository>();
         _deviceEventRepoMock = new Mock<IDeviceEventRepository>();
-        _tempBasalRepoMock = new Mock<ITempBasalRepository>();
-        _stateSpanServiceMock = new Mock<IStateSpanService>();
+        _tempBasalRepoMock = new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord();
+        _stateSpanServiceMock = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
         _treatmentFoodServiceMock = new Mock<ITreatmentFoodService>();
-        _deviceServiceMock = new Mock<IDeviceService>();
-        _activeProfileResolverMock = new Mock<IActiveProfileResolver>();
+        _deviceServiceMock = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
+        _activeProfileResolverMock = new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null);
         _insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
         // BulkUpsertAsync returns the input records
@@ -228,9 +232,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
     [Fact]
     public async Task DecomposeBatchAsync_PercentTempBasals_ResolveEachAtItsOwnStart()
     {
-        _basalRateResolverMock
-            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((long mills, CancellationToken _) => mills < 1700001000000 ? 0.8 : 1.2);
+        _basalRateResolverMock.AnswersBasalRates(mills => mills < 1700001000000 ? 0.8 : 1.2);
 
         var treatments = new List<Treatment>
         {
@@ -262,9 +264,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
     [Fact]
     public async Task DecomposeBatchAsync_PercentTempBeforeSwitchInTheSameBatch_SeesTheSwitch()
     {
-        _basalRateResolverMock
-            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => _context.ProfileActivations.Any() ? 1.5 : 1.0);
+        _basalRateResolverMock.AnswersBasalRates(_ => _context.ProfileActivations.Any() ? 1.5 : 1.0);
 
         var treatments = new List<Treatment>
         {
@@ -367,10 +367,10 @@ public class TreatmentDecomposerBatchTests : IDisposable
                 It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
-        // Linking pass: UpdateAsync called to set BolusCalculationId on the bolus
+        // The calculation id travels with the bolus's own upsert, so no second write links it.
         _bolusRepoMock.Verify(
             x => x.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+            Times.Never);
 
         // Verify the bolus in CreatedRecords has a linked BolusCalculationId
         var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
@@ -463,15 +463,15 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         // Assert — one line, on the meal's carb intake, carrying the legacy food type
         _treatmentFoodServiceMock.Verify(
-            x => x.AddAsync(
-                It.Is<TreatmentFood>(f =>
-                    f.CarbIntakeId == mealCarbIntakeId && f.Note == "Sandwich" && f.Carbs == 45m),
+            x => x.AddManyAsync(
+                It.Is<IReadOnlyCollection<TreatmentFood>>(lines => lines.Count(f =>
+                    f.CarbIntakeId == mealCarbIntakeId && f.Note == "Sandwich" && f.Carbs == 45m) == 1),
                 It.IsAny<CancellationToken>()),
             Times.Once);
 
         // The carb correction names no food, so it gets no line
         _treatmentFoodServiceMock.Verify(
-            x => x.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            x => x.AddManyAsync(It.Is<IReadOnlyCollection<TreatmentFood>>(lines => lines.Count == 1), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -516,7 +516,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         // Assert
         _treatmentFoodServiceMock.Verify(
-            x => x.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            x => x.AddManyAsync(It.IsAny<IReadOnlyCollection<TreatmentFood>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -550,12 +550,12 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         // Assert
         _treatmentFoodServiceMock.Verify(
-            x => x.AddAsync(
-                It.Is<TreatmentFood>(f => f.CarbIntakeId == carbIntakeId && f.Note == "Pizza"),
+            x => x.AddManyAsync(
+                It.Is<IReadOnlyCollection<TreatmentFood>>(lines => lines.Count(f => f.CarbIntakeId == carbIntakeId && f.Note == "Pizza") == 1),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         _treatmentFoodServiceMock.Verify(
-            x => x.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            x => x.AddManyAsync(It.Is<IReadOnlyCollection<TreatmentFood>>(lines => lines.Count == 1), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -588,8 +588,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
         var pumpId = Guid.NewGuid();
         var deviceRepo = new Mock<IDeviceRepository>();
         deviceRepo
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new V4Models.Device
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(new V4Models.Device
             {
                 Id = pumpId,
                 Category = V4Models.DeviceCategory.InsulinPump,
@@ -597,7 +597,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
                 Serial = "SN-1",
                 FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
                 LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
-            });
+            }));
         var decomposer = CreateDecomposer(CreateDeviceService(deviceRepo));
 
         var treatments = Enumerable.Range(1, 5)
@@ -629,8 +629,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
     {
         var deviceRepo = new Mock<IDeviceRepository>();
         deviceRepo
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new V4Models.Device
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(new V4Models.Device
             {
                 Id = Guid.NewGuid(),
                 Category = V4Models.DeviceCategory.InsulinPump,
@@ -638,9 +638,9 @@ public class TreatmentDecomposerBatchTests : IDisposable
                 Serial = "SN-1",
                 FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
                 LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
-            });
+            }));
         deviceRepo
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-2", It.IsAny<CancellationToken>()))
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-2"), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("batch failure"));
         deviceRepo
             .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -722,11 +722,124 @@ public class TreatmentDecomposerBatchTests : IDisposable
         tempBasal.OriginEvidence.Should().Be(echoed);
     }
 
+    /// <summary>
+    /// Once the bolus of a wizard is refused, nothing more of the wizard is written; the other
+    /// treatment the bolus table held is written by the rerun.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_ARefusedBolus_WritesNothingMoreOfItsTreatment()
+    {
+        RefuseWhere<V4Models.Bolus>(_bolusRepoMock, b => b.LegacyId == "wizard");
+        var decomposition = new TreatmentDecomposition();
+
+        await _decomposer.DecomposeBatchAsync(
+        [
+            new Treatment { Id = "wizard", EventType = "Bolus Wizard", Insulin = 4, Carbs = 40, FoodType = "toast", Mills = 1_790_000_000_000 },
+            new Treatment { Id = "other", EventType = "Meal Bolus", Insulin = 2, Carbs = 20, Mills = 1_790_000_300_000 },
+        ], WriteOrigin.Live, default, decomposition);
+
+        decomposition.Rejected.Keys.Should().Equal(0);
+        decomposition.StoredRecords.OfType<V4Models.CarbIntake>().Select(c => c.LegacyId).Should().Equal("other");
+        decomposition.StoredRecords.OfType<V4Models.Bolus>().Select(b => b.LegacyId).Should().Equal("other");
+        _treatmentFoodServiceMock.Verify(
+            s => s.AddManyAsync(It.IsAny<IReadOnlyCollection<TreatmentFood>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_ARefusedPumpSuspend_OpensNoSuspension()
+    {
+        RefuseWhere<V4Models.DeviceEvent>(_deviceEventRepoMock, e => e.LegacyId == "suspend");
+        var decomposition = new TreatmentDecomposition();
+
+        await _decomposer.DecomposeBatchAsync(
+        [
+            new Treatment { Id = "suspend", EventType = "Pump Suspend", Mills = 1_790_000_000_000 },
+            new Treatment { Id = "site", EventType = "Site Change", Mills = 1_790_000_300_000 },
+        ], WriteOrigin.Live, default, decomposition);
+
+        decomposition.Rejected.Keys.Should().Equal(0);
+        decomposition.StoredRecords.OfType<V4Models.DeviceEvent>().Select(e => e.LegacyId).Should().Equal("site");
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// A meal's bolus and its carbs sent under a legacy id of their own share a group; refusing the
+    /// bolus rejects the bolus's treatment, not the last of its group.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_ARefusedMealBolus_RejectsItsOwnTreatmentAndNotItsSeparatelyKeyedCarbs()
+    {
+        var group = Guid.CreateVersion7();
+        _bolusRepoMock
+            .Setup(r => r.GetByLegacyIdsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new V4Models.Bolus { Id = Guid.CreateVersion7(), LegacyId = "meal-insulin", CorrelationId = group, Insulin = 3 }]);
+        _carbRepoMock
+            .Setup(r => r.GetByLegacyIdsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new V4Models.CarbIntake { Id = Guid.CreateVersion7(), LegacyId = "meal-carbs", CorrelationId = group, Carbs = 30 }]);
+        RefuseWhere<V4Models.Bolus>(_bolusRepoMock, b => b.LegacyId == "meal-insulin");
+        var decomposition = new TreatmentDecomposition();
+
+        await _decomposer.DecomposeBatchAsync(
+        [
+            new Treatment { Id = "meal-insulin", EventType = "Meal Bolus", Insulin = 3, Mills = 1_790_000_000_000 },
+            new Treatment { Id = "meal-carbs", EventType = "Meal Bolus", Carbs = 30, Mills = 1_790_000_000_000 },
+        ], WriteOrigin.Live, default, decomposition);
+
+        decomposition.Groups.Should().Equal(group, group);
+        decomposition.Rejected.Keys.Should().Equal(0);
+        decomposition.StoredRecords.OfType<V4Models.CarbIntake>().Select(c => c.LegacyId).Should().Equal("meal-carbs");
+    }
+
+    /// <summary>
+    /// A span refused in the bulk write sends the spans one at a time; a failure that ends the batch
+    /// part way through them keeps the spans written before it, so the batch stops at the treatment
+    /// whose span failed.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_AFailureWhileWritingSpansOneAtATime_KeepsTheSpansWrittenBeforeIt()
+    {
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpansAsync(It.IsAny<IReadOnlyList<StateSpan>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<StateSpan> spans, CancellationToken _) => spans switch
+            {
+                [{ OriginalId: "target-1" } span] => (IReadOnlyList<StateSpanUpsert>)[new StateSpanUpsert(span, UpsertOutcome.Created)],
+                [{ OriginalId: "target-2" }] => throw new TimeoutException(),
+                _ => throw Refusal(),
+            });
+        var decomposition = new TreatmentDecomposition();
+
+        var act = () => _decomposer.DecomposeBatchAsync(
+            [.. Enumerable.Range(0, 3).Select(i => new Treatment
+            {
+                Id = $"target-{i}", EventType = "Temporary Target", Duration = 30, TargetTop = 120, TargetBottom = 100,
+                Mills = 1_790_000_000_000 + i * 3_600_000L,
+            })], WriteOrigin.Live, default, decomposition);
+
+        await act.Should().ThrowAsync<TimeoutException>();
+        decomposition.Rejected.Keys.Should().Equal(0);
+        decomposition.Of(1).StoredRecords.OfType<StateSpan>().Select(s => s.OriginalId).Should().Equal("target-1");
+        decomposition.Wrote.Should().Equal(false, true, false);
+        decomposition.Of(2).StoredRecords.Should().BeEmpty();
+        decomposition.StoresNothing(2).Should().BeFalse();
+    }
+
+    /// <summary>Makes <paramref name="repository"/> refuse, for its data, any write holding a record that matches <paramref name="refused"/>.</summary>
+    private static void RefuseWhere<TRecord>(Mock repository, Func<TRecord, bool> refused)
+        where TRecord : class =>
+        repository.As<IBulkUpsertRepository<TRecord>>()
+            .Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<TRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<TRecord> records, WriteOrigin _, CancellationToken _) =>
+                records.Any(refused) ? throw Refusal() : (BulkWrite<TRecord>)[.. records]);
+
+    private static DbUpdateException Refusal() =>
+        new("refused", new PostgresException("value too long for type character varying(255)", "ERROR", "ERROR", "22001"));
+
     private static DeviceService CreateDeviceService(Mock<IDeviceRepository> deviceRepo)
     {
         var patientDevices = new Mock<IPatientDeviceRepository>();
         patientDevices
-            .Setup(r => r.GetByDeviceIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         return new DeviceService(deviceRepo.Object, patientDevices.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc());
     }

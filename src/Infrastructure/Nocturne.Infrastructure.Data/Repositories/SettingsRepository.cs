@@ -11,11 +11,15 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
 /// PostgreSQL repository for the Nightscout v3 settings collection. The rows Nocturne owns share the
-/// table but are not in the collection (<see cref="SettingsKeys"/>): no method reads, replaces or
+/// table but are not in the collection (<see cref="SettingsKeys"/>): no collection method reads, replaces or
 /// deletes one, and writing a document under a reserved key or onto a reserved row is refused.
+/// Only <see cref="GetConnectorSettingAsync"/> and <see cref="SetConnectorSettingAsync"/> read or write the
+/// <see cref="SettingsKeys.ConnectorsPrefix"/> rows.
 /// </summary>
 public class SettingsRepository : ISettingsRepository
 {
+    private const string ConnectorSettingsApp = "nocturne-api";
+
     private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
@@ -283,6 +287,67 @@ public class SettingsRepository : ISettingsRepository
         await db.SaveChangesAsync(cancellationToken);
 
         return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetConnectorSettingAsync(
+        string key,
+        CancellationToken cancellationToken = default
+    )
+    {
+        RequireConnectorKey(key);
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.Settings.AsNoTracking()
+            .Where(s => s.Key == key && s.IsActive)
+            .Select(s => s.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task SetConnectorSettingAsync(
+        string key,
+        string value,
+        string notes,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default
+    )
+    {
+        RequireConnectorKey(key);
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.Settings.FirstOrDefaultAsync(s => s.Key == key, cancellationToken);
+
+        if (entity == null)
+        {
+            db.Settings.Add(new SettingsEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Key = key,
+                Value = value,
+                Mills = now.ToUnixTimeMilliseconds(),
+                SrvCreated = now,
+                SrvModified = now,
+                IsActive = true,
+                Notes = notes,
+                App = ConnectorSettingsApp,
+            });
+        }
+        else
+        {
+            entity.Value = value;
+            entity.SrvModified = now;
+            entity.Mills = now.ToUnixTimeMilliseconds();
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void RequireConnectorKey(string key)
+    {
+        if (!key.StartsWith(SettingsKeys.ConnectorsPrefix, StringComparison.Ordinal))
+            throw new ArgumentException(
+                $"Settings key '{key}' is not under '{SettingsKeys.ConnectorsPrefix}'.", nameof(key));
     }
 
     /// <summary>

@@ -78,7 +78,7 @@ internal sealed class AlertReplayService(
             return new AlertReplayResult(now, now, []);
         }
 
-        var stored = await alertRepository.GetEnabledRulesAsync(tenantId, ct);
+        var stored = await alertRepository.GetEnabledRulesAsync(ct);
         var rules = ApplyOverride(stored, ruleOverride, tenantId);
         if (rules.Count == 0)
         {
@@ -97,7 +97,7 @@ internal sealed class AlertReplayService(
         // do_not_disturb leaf's ActiveDoNotDisturb snapshot re-source from these windows per
         // tick. Scheduled DND is not reconstructible historically (the schedule row keeps no
         // change history), so — as before D5 — replay considers windows only.
-        var dndWindows = await alertRepository.GetDndWindowsAsOfAsync(tenantId, windowEnd, ct);
+        var dndWindows = await alertRepository.GetDndWindowsAsOfAsync(windowEnd, ct);
 
         // Per-tick fact snapshots (site age, IOB, temp basal rate, etc.). Keyed by snake_case
         // fact name; same compression as the leaf log — emit baseline + on rounded-value flip.
@@ -137,7 +137,7 @@ internal sealed class AlertReplayService(
             // a recurring schedule's past state is not reconstructible from the settings row.
             var tickDnd = DndWindowResolver.Resolve(dndWindows, tickUtc, receiptGated: true);
             var enrichedBase = (await enricher.EnrichAsOfAsync(
-                baseContext, rules, tenantId, tickUtc, ct))
+                baseContext, rules, tickUtc, ct))
                 with
             {
                 ActiveDndScopes = tickDnd.Scopes,

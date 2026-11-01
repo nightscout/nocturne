@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -62,7 +61,8 @@ public class MemberInviteEntity : ITenantScoped
     public string? Label { get; set; }
 
     /// <summary>
-    /// Whether the invite validity should be limited to 24 hours
+    /// Whether the membership the invite creates reads only the last 24 hours of every time-series
+    /// category.
     /// </summary>
     [Column("limit_to_24_hours")]
     public bool LimitTo24Hours { get; set; } = false;
@@ -96,40 +96,6 @@ public class MemberInviteEntity : ITenantScoped
     /// </summary>
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    /// <summary>
-    /// Whether the invite is currently expired
-    /// </summary>
-    [NotMapped]
-    public bool IsExpired => IsExpiredAt(DateTime.UtcNow);
-
-    /// <summary>
-    /// Whether the invite is expired at <paramref name="now"/>; the expiry instant itself is expired.
-    /// </summary>
-    public bool IsExpiredAt(DateTime now) => now >= ExpiresAt;
-
-    /// <summary>
-    /// Whether the invite has been revoked
-    /// </summary>
-    [NotMapped]
-    public bool IsRevoked => RevokedAt.HasValue;
-
-    /// <summary>
-    /// Whether the invite has reached its maximum usage limit
-    /// </summary>
-    [NotMapped]
-    public bool IsExhausted => MaxUses.HasValue && UseCount >= MaxUses.Value;
-
-    /// <summary>
-    /// Whether the invite is currently valid for use
-    /// </summary>
-    [NotMapped]
-    public bool IsValid => IsValidAt(DateTime.UtcNow);
-
-    /// <summary>
-    /// Whether the invite is valid for use at <paramref name="now"/>.
-    /// </summary>
-    public bool IsValidAt(DateTime now) => !IsExpiredAt(now) && !IsRevoked && !IsExhausted;
 
     /// <summary>
     /// Navigation property to the tenant the invite is for

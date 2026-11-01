@@ -1,4 +1,3 @@
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Nocturne.API.Tests.Infrastructure;
@@ -44,21 +43,15 @@ public class HistoryClampLiftAllowlistTests
 
     private static List<string> Scan()
     {
-        var root = RepositoryRoot();
         var callers = new List<string>();
 
-        foreach (var path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        foreach (var source in RepoSources.Src)
         {
-            if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            if (!source.Text.Contains(Method, StringComparison.Ordinal))
                 continue;
 
-            var text = File.ReadAllText(path);
-            if (!text.Contains(Method, StringComparison.Ordinal))
-                continue;
-
-            var file = Path.GetRelativePath(root, path).Replace('\\', '/');
-            callers.AddRange(CSharpSyntaxTree.ParseText(text).GetRoot()
+            var file = source.Path;
+            callers.AddRange(source.Tree.GetRoot()
                 .DescendantNodes()
                 .Where(node => node switch
                 {
@@ -74,20 +67,5 @@ public class HistoryClampLiftAllowlistTests
         }
 
         return callers;
-    }
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-                return directory.FullName;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
     }
 }

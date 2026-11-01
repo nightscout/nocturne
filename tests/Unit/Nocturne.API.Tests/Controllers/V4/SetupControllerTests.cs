@@ -23,6 +23,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Controllers.V4;
 
 /// <summary>
@@ -84,7 +86,9 @@ public class SetupControllerTests : IDisposable
         // behaviour under test, and BootstrapAsync is not virtual.
         _platformOptions = new PlatformOptions();
         _platformAdminBootstrap = new PlatformAdminBootstrapService(
-            _dbFactory.Object.AsNocturneFactory(),
+            new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory()),
+            new SubjectRepository(_dbFactory.Object.AsNocturneFactory()),
             Options.Create(_platformOptions),
             NullLogger<PlatformAdminBootstrapService>.Instance);
 
@@ -104,13 +108,15 @@ public class SetupControllerTests : IDisposable
             _recoveryCodeService.Object,
             _sessionService.Object,
             _subjectService.Object,
-            _dbFactory.Object.AsNocturneFactory(),
+            new SubjectRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory()),
             _oidcOptions,
             _oidcAuthService.Object,
             Options.Create(operatorConfig),
             httpClientFactory,
             _platformAdminBootstrap,
-            new InstanceSetupState(_dbFactory.Object.AsNocturneFactory()),
+            new InstanceSetupState(new TenantRepository(_dbFactory.Object.AsNocturneFactory()), new SubjectRepository(_dbFactory.Object.AsNocturneFactory())),
             logger)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

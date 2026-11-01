@@ -9,8 +9,8 @@ public class LabHbA1cResult
     /// <summary>Primary key.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Local calendar date the blood was drawn.</summary>
-    public DateTime MeasuredAt { get; set; }
+    /// <summary>Calendar date the blood was drawn.</summary>
+    public DateOnly MeasuredAt { get; set; }
 
     /// <summary>Lab-reported HbA1c in DCCT/NGSP percent.</summary>
     public double ValuePercent { get; set; }

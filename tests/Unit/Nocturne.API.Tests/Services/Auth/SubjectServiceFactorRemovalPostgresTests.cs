@@ -9,6 +9,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -45,7 +47,7 @@ public class SubjectServiceFactorRemovalPostgresTests(SubjectServiceFactorRemova
     }
 
     private static SubjectService CreateService(NocturneDbContext db) =>
-        new(db.AsFactory(), Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
+        new(new SubjectRepository(db.AsFactory()), Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
 
     private async Task<Guid> SeedSubjectAsync()
     {

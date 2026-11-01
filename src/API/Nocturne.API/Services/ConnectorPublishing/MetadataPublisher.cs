@@ -1,12 +1,7 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Connectors;
@@ -20,7 +15,6 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -42,7 +36,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     private readonly IStepCountService _stepCountService;
     private readonly IHeartRateService _heartRateService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IActivityDedupRepository _activityDedup;
+    private readonly IConnectorConfigurationRepository _configurations;
     private readonly IProfileActivationRepository _profileActivations;
     private readonly ProfileActivationWriter _profileActivationWriter;
 
@@ -59,7 +54,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         IHeartRateService heartRateService,
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
-        INocturneDbContextFactory contexts,
+        IActivityDedupRepository activityDedup,
+        IConnectorConfigurationRepository configurations,
         IProfileActivationRepository profileActivations,
         ProfileActivationWriter profileActivationWriter,
         IAuditContext auditContext,
@@ -80,7 +76,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         _stepCountService = stepCountService ?? throw new ArgumentNullException(nameof(stepCountService));
         _heartRateService = heartRateService ?? throw new ArgumentNullException(nameof(heartRateService));
         _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _activityDedup = activityDedup ?? throw new ArgumentNullException(nameof(activityDedup));
+        _configurations = configurations ?? throw new ArgumentNullException(nameof(configurations));
     }
 
     /// <summary>
@@ -229,10 +226,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// An activity is stored as a state span, heart rate, step count or sleep session, each carrying
-    /// the activity's id as its <c>OriginalId</c>.
-    /// </remarks>
+    /// <remarks>Held ids are read as <see cref="IActivityDedupRepository"/> describes.</remarks>
     public Task<int?> PublishRecentActivityAsync(
         IEnumerable<Activity> activities,
         string source,
@@ -241,18 +235,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             activities, a => a.Id,
             unheld => WriteActivityAsync(unheld, source, cancellationToken),
             source,
-            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, cancellationToken), cancellationToken),
-            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<HeartRateEntity>(ids, cancellationToken), cancellationToken),
-            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<StepCountEntity>(ids, cancellationToken), cancellationToken),
-            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<SleepSessionEntity>(
-                ids, s => s.Source == ActivityStateSpanMapper.StoredSleepSessionSource, cancellationToken), cancellationToken));
-
-    private async Task<IReadOnlySet<string>> HeldAsync(
-        Func<NocturneDbContext, Task<IReadOnlySet<string>>> held, CancellationToken ct)
-    {
-        await using var db = await _contexts.CreateAsync(ct);
-        return await held(db);
-    }
+            ids => _activityDedup.GetHeldIdsAsync(ids, cancellationToken));
 
     /// <remarks>
     /// A Profile span, as an instance before profile activations replays it, is published as the
@@ -446,30 +429,18 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         => _stateSpanService.GetLatestNonActivityTimestampAsync(source, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<DateTime?> GetBackfillLowWaterMarkAsync(
+    public Task<DateTime?> GetBackfillLowWaterMarkAsync(
         string source,
         string collection,
         CancellationToken cancellationToken = default)
-    {
-        await using var db = await _contexts.CreateAsync(cancellationToken);
-        var config = await FindConnectorConfigurationAsync(db, source, cancellationToken);
-        if (config?.BackfillLowWaterMarks is null)
-            return null;
-
-        var marks = JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks);
-        return marks is not null && marks.TryGetValue(collection, out var mark)
-            ? DateTime.SpecifyKind(mark, DateTimeKind.Utc)
-            : null;
-    }
+        => _configurations.GetBackfillLowWaterMarkAsync(source, collection, cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>
-    /// The update is a single jsonb-path statement on PostgreSQL so concurrent writers to
-    /// DIFFERENT collections on the same row (a manual sync or cursor-reset job racing the
-    /// background sync) can't clobber each other's keys — a read-modify-write of the whole map
-    /// could drop a mark, and a dropped mark is stranded history, the exact failure marks exist
-    /// to prevent. Same-key races stay last-writer-wins: any surviving mark is a valid resume
-    /// point because the resume crawl is unbounded below it.
+    /// Same-key races (a manual sync or cursor-reset job racing the background sync) stay
+    /// last-writer-wins: any surviving mark is a valid resume point because the resume crawl is
+    /// unbounded below it. Different keys on the same row keep each other; see
+    /// <see cref="Infrastructure.Data.Repositories.ConnectorConfigurationRepository"/>.
     /// </remarks>
     public async Task SetBackfillLowWaterMarkAsync(
         string source,
@@ -477,85 +448,11 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         DateTime? lowWaterMark,
         CancellationToken cancellationToken = default)
     {
-        await using var db = await _contexts.CreateAsync(cancellationToken);
-        var config = await FindConnectorConfigurationAsync(db, source, cancellationToken);
-        if (config is null)
+        if (!await _configurations.SetBackfillLowWaterMarkAsync(source, collection, lowWaterMark, cancellationToken))
         {
             Logger.LogWarning(
                 "No connector configuration found for {Source}; cannot persist backfill low-water mark",
                 source);
-            return;
         }
-
-        if (db.Database.IsNpgsql())
-        {
-            if (lowWaterMark is null)
-            {
-                await db.Database.ExecuteSqlAsync(
-                    $"""
-                     UPDATE connector_configurations
-                     SET backfill_low_water_marks =
-                         NULLIF(coalesce(backfill_low_water_marks, jsonb_build_object()) - {collection}, jsonb_build_object())
-                     WHERE id = {config.Id}
-                     """,
-                    cancellationToken);
-            }
-            else
-            {
-                // Serialized as an ISO-8601 UTC string ("...Z"), matching what
-                // System.Text.Json writes so Get round-trips without a timezone shift.
-                var value = lowWaterMark.Value.ToString("O");
-                await db.Database.ExecuteSqlAsync(
-                    $"""
-                     UPDATE connector_configurations
-                     SET backfill_low_water_marks =
-                         jsonb_set(coalesce(backfill_low_water_marks, jsonb_build_object()), ARRAY[{collection}], to_jsonb({value}::text))
-                     WHERE id = {config.Id}
-                     """,
-                    cancellationToken);
-            }
-            return;
-        }
-
-        // Non-relational providers (tests): plain read-modify-write on the tracked entity.
-        var marks = config.BackfillLowWaterMarks is null
-            ? []
-            : JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks) ?? new Dictionary<string, DateTime>();
-
-        if (lowWaterMark is null)
-            marks.Remove(collection);
-        else
-            marks[collection] = lowWaterMark.Value;
-
-        config.BackfillLowWaterMarks = marks.Count == 0 ? null : JsonSerializer.Serialize(marks);
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Resolves the connector configuration row for a connector data source. Sources follow the
-    /// <c>{connector-name}-connector</c> convention (<c>nightscout-connector</c>) while
-    /// configuration rows carry the bare connector name, so the suffix is stripped for the
-    /// lookup, with an exact match as fallback. Reads without tracking — marks are written via
-    /// jsonb-path updates, and a stale tracked snapshot must never flow back into the row.
-    /// </summary>
-    private async Task<ConnectorConfigurationEntity?> FindConnectorConfigurationAsync(
-        NocturneDbContext db,
-        string source,
-        CancellationToken cancellationToken)
-    {
-        const string suffix = "-connector";
-        var canonicalSource = ConnectorNames.Canonical(source);
-        var canonicalName = canonicalSource.EndsWith(suffix, StringComparison.Ordinal)
-            ? canonicalSource[..^suffix.Length]
-            : canonicalSource;
-
-        var query = db.Database.IsNpgsql()
-            ? db.ConnectorConfigurations.AsNoTracking()
-            : db.ConnectorConfigurations;
-
-        return await query
-            .FirstOrDefaultAsync(
-                c => c.ConnectorName == canonicalName || c.ConnectorName == canonicalSource,
-                cancellationToken);
     }
 }

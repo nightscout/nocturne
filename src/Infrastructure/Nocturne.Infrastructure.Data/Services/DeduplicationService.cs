@@ -2131,10 +2131,22 @@ public class DeduplicationService : IDeduplicationService
         [.. TypePhases.Select(static p => p.RecordType)];
 
     /// <summary>
+    /// The <see cref="RecordTypeKeys"/> key the rows of <paramref name="entityType"/> are linked
+    /// under, or null for a type deduplication does not cover. A hard delete of such rows deletes
+    /// their links with them (<see cref="RetentionPurgeExtensions.PurgeOlderThanAsync"/>,
+    /// <see cref="PurgeExtensions.PurgeAsync{TEntity}"/>).
+    /// </summary>
+    public static string? LinkedRecordTypeKeyOf(Type entityType) =>
+        DuplicateGroupPrimaries.RecordTypeOf(entityType) is { } recordType ? RecordTypeKeys.Key(recordType) : null;
+
+    /// <summary>
     /// Deletes the links of <paramref name="context"/>'s tenant that have nothing left to point at:
     /// a record id no longer in its type's table, and a record type no <see cref="RecordType"/>
     /// member names, which no caller can read back — <see cref="GetLinkedRecordsAsync"/> drops a row
-    /// whose key does not parse. A soft-deleted record is not an orphan.
+    /// whose key does not parse. A soft-deleted record is not an orphan. Every hard-delete path
+    /// deletes a row's links with it (<see cref="LinkedRecordTypeKeyOf"/>), so this reads every link
+    /// the tenant owns to find what those paths cannot have left; <see cref="DeduplicateAllAsync"/>
+    /// runs it, and nothing runs it on a schedule.
     /// </summary>
     /// <returns>The number of links deleted.</returns>
     public static async Task<int> DeleteOrphanedLinksAsync(
@@ -2180,6 +2192,10 @@ public class DeduplicationService : IDeduplicationService
 
         try
         {
+            var orphans = await DeleteOrphanedLinksAsync(db, cancellationToken);
+            if (orphans > 0)
+                _logger.LogInformation("Deleted {Orphans} orphaned links before deduplicating", orphans);
+
             var totalRecords = 0;
             foreach (var phase in TypePhases)
             {

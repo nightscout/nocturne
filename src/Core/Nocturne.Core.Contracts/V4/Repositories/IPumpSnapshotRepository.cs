@@ -39,16 +39,11 @@ public interface IPumpSnapshotRepository : ILegacyKeyedRepository<PumpSnapshot>
     Task<IReadOnlyList<PumpIobPoint>> GetIobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the most recent <see cref="PumpSnapshot"/> with <c>Timestamp &lt; <paramref name="timestamp"/></c>,
-    /// or <c>null</c> if none exists.
+    /// The snapshots from <paramref name="from"/> through <paramref name="through"/>, with the newest
+    /// before <paramref name="from"/>, in one query: the newest snapshot strictly before any instant
+    /// in the window is among them.
     /// </summary>
-    /// <remarks>
-    /// Strict less-than comparison so callers can pass a freshly upserted snapshot's timestamp
-    /// without retrieving the snapshot they just wrote.
-    /// Use <see cref="GetLatestAsync"/> for inclusive freshness reads.
-    /// </remarks>
-    /// <param name="timestamp">Exclusive upper bound on Timestamp.</param>
-    Task<PumpSnapshot?> GetLatestBeforeAsync(DateTime timestamp, CancellationToken ct = default);
+    Task<IReadOnlyList<PumpSnapshot>> GetTimelineAsync(DateTime from, DateTime through, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the latest <see cref="PumpSnapshot"/> for the current tenant, or <c>null</c>
@@ -56,7 +51,7 @@ public interface IPumpSnapshotRepository : ILegacyKeyedRepository<PumpSnapshot>
     /// </summary>
     /// <remarks>
     /// Uses inclusive <c>&lt;=</c> comparison so callers can pin replay to a specific timestamp.
-    /// Use <see cref="GetLatestBeforeAsync"/> for strict-prior transition detection.
+    /// Use <see cref="GetTimelineAsync"/> for strict-prior transition detection.
     /// </remarks>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
     /// when <c>null</c>, returns the absolute latest.</param>

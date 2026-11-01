@@ -225,15 +225,6 @@ export function useDateParams(defaultDays = 7) {
     return resolveDayRange(memoizedInput, defaultDays);
   }
 
-  /**
-   * The current range as instants: local midnight opening the first day through
-   * the last millisecond of the last day, so the range is inclusive.
-   */
-  function getDateRange(): { start: Date; end: Date } {
-    const { from, to } = resolvedRange();
-    return { start: startOfDay(from), end: endOfDay(to) };
-  }
-
   return {
     // Reactive properties from runed
     get days() {
@@ -275,12 +266,6 @@ export function useDateParams(defaultDays = 7) {
       return endOfDay(resolvedRange().to);
     },
 
-    /** The inclusive range as Unix milliseconds. */
-    get dateRangeMillis(): { from: number; to: number } {
-      const { from, to } = resolvedRange();
-      return { from: startOfDay(from).getTime(), to: endOfDay(to).getTime() };
-    },
-
     /** Calendar days the range covers, counting both end days. */
     get dayCount(): number {
       const { from, to } = resolvedRange();
@@ -291,7 +276,6 @@ export function useDateParams(defaultDays = 7) {
     setDayRange,
     setCustomRange,
     reset,
-    getDateRange,
     /** What the setter of the same name writes, for {@link withRange}. */
     dayRangeWrite,
     customRangeWrite,

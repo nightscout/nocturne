@@ -1,9 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -27,23 +25,27 @@ namespace Nocturne.API.Services.Auth;
 /// </remarks>
 public class PlatformAdminBootstrapService
 {
-    private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
+    private readonly ISubjectRepository _subjects;
     private readonly PlatformOptions _options;
     private readonly ILogger<PlatformAdminBootstrapService> _logger;
 
-    /// <summary>
-    /// Initialises a new <see cref="PlatformAdminBootstrapService"/>.
-    /// </summary>
-    /// <param name="dbFactory">Factory for subject and tenant member queries. A dedicated
-    /// context keeps the bootstrap independent of any tenant pinned on a request-scoped one.</param>
+    /// <param name="tenants">The tenants walked oldest-first for an owner.</param>
+    /// <param name="members">The memberships read under each tenant's own pin, so the bootstrap is
+    /// independent of any tenant pinned on a request-scoped context.</param>
+    /// <param name="subjects">The subjects the flag is read from and granted on, on a platform context.</param>
     /// <param name="options">Platform configuration options, including <c>AdminSubjectIds</c>.</param>
-    /// <param name="logger">Logger for the resulting grant.</param>
     public PlatformAdminBootstrapService(
-        INocturneDbContextFactory dbFactory,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
+        ISubjectRepository subjects,
         IOptions<PlatformOptions> options,
         ILogger<PlatformAdminBootstrapService> logger)
     {
-        _dbFactory = dbFactory;
+        _tenants = tenants;
+        _members = members;
+        _subjects = subjects;
         _options = options.Value;
         _logger = logger;
     }
@@ -51,17 +53,12 @@ public class PlatformAdminBootstrapService
     /// <summary>
     /// Grants platform admin status according to the configured priority rules.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task BootstrapAsync(CancellationToken cancellationToken)
     {
-        await using var db = await _dbFactory.CreatePlatformAsync(cancellationToken);
-
         // Option 1: explicit config takes precedence
         if (_options.AdminSubjectIds.Count > 0)
         {
-            var configGrants = await db.Subjects
-                .Where(s => _options.AdminSubjectIds.Contains(s.Id))
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPlatformAdmin, true), cancellationToken);
+            var configGrants = await _subjects.GrantPlatformAdminAsync(_options.AdminSubjectIds, cancellationToken);
 
             // Config wins outright, so a set of IDs that matches nothing leaves the
             // instance with no platform admin and no way into the admin UI.
@@ -75,13 +72,13 @@ public class PlatformAdminBootstrapService
         }
 
         // No-op if a platform admin already exists
-        if (await db.Subjects.AnyAsync(s => s.IsPlatformAdmin, cancellationToken))
+        if (await _subjects.AnyPlatformAdminAsync(cancellationToken))
             return;
 
         // Option 2: grant to the owner of the oldest tenant that has one. Resolved by walking
         // tenants oldest-first and looking the owner up under each tenant's own pin, because a
         // single query over every tenant's memberships has no tenant to be pinned to.
-        var firstOwnerSubjectId = await FindOldestTenantOwnerAsync(db, cancellationToken);
+        var firstOwnerSubjectId = await FindOldestTenantOwnerAsync(cancellationToken);
 
         if (firstOwnerSubjectId is null)
         {
@@ -91,7 +88,7 @@ public class PlatformAdminBootstrapService
             return;
         }
 
-        await GrantAsync(db, firstOwnerSubjectId.Value, cancellationToken);
+        await _subjects.GrantPlatformAdminAsync([firstOwnerSubjectId.Value], cancellationToken);
 
         _logger.LogInformation(
             "Granted platform admin to subject {SubjectId}, the owner of the oldest tenant",
@@ -101,25 +98,12 @@ public class PlatformAdminBootstrapService
     /// <summary>
     /// The owner of the oldest tenant that has one, or <see langword="null"/> when no tenant does.
     /// </summary>
-    private static async Task<Guid?> FindOldestTenantOwnerAsync(
-        NocturneDbContext db, CancellationToken cancellationToken)
+    private async Task<Guid?> FindOldestTenantOwnerAsync(CancellationToken cancellationToken)
     {
-        // tenants is not tenant-scoped, so the ordering can be resolved unpinned.
-        var tenantIds = await db.Tenants
-            .OrderBy(t => t.SysCreatedAt)
-            .Select(t => t.Id)
-            .ToListAsync(cancellationToken);
-
-        foreach (var tenantId in tenantIds)
+        foreach (var tenantId in await _tenants.ListIdsAsync(activeOnly: false, cancellationToken))
         {
-            await db.PinTenantAsync(tenantId, cancellationToken);
-
-            var ownerSubjectId = await db.TenantMembers
-                .OwnersOf(tenantId)
-                .Select(tm => tm.SubjectId)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (ownerSubjectId != default) return ownerSubjectId;
+            var owners = await _members.GetOwnerSubjectIdsAsync(tenantId, cancellationToken);
+            if (owners.Count > 0) return owners[0];
         }
 
         return null;
@@ -156,24 +140,18 @@ public class PlatformAdminBootstrapService
         if (_options.AdminSubjectIds.Count > 0)
             return false;
 
-        await using var db = await _dbFactory.CreatePlatformAsync(cancellationToken);
-
-        if (await db.Subjects.AnyAsync(s => s.IsPlatformAdmin, cancellationToken))
+        if (await _subjects.AnyPlatformAdminAsync(cancellationToken))
             return false;
 
         // More than one tenant means this is not a fresh install, whatever the caller thinks.
-        var tenantIds = await db.Tenants.ExcludeDemo().Select(t => t.Id).Take(2).ToListAsync(cancellationToken);
-        if (tenantIds.Count != 1)
+        var tenants = await _tenants.ListNonDemoAsync(2, cancellationToken);
+        if (tenants.Count != 1)
             return false;
 
         // The membership read runs under the sole tenant's pin: tenant_members is slated for
         // RLS policies keyed on the tenant GUC, and an unpinned read would then see no rows
         // and silently decline the grant — reintroducing the fresh-install lockout.
-        await db.PinTenantAsync(tenantIds[0], cancellationToken);
-
-        var isTenantOwner = await db.TenantMembers
-            .OwnersOf(tenantIds[0])
-            .AnyAsync(tm => tm.SubjectId == subjectId, cancellationToken);
+        var isTenantOwner = (await _members.GetOwnerSubjectIdsAsync(tenants[0].Id, cancellationToken)).Contains(subjectId);
 
         if (!isTenantOwner)
         {
@@ -183,7 +161,7 @@ public class PlatformAdminBootstrapService
             return false;
         }
 
-        var granted = await GrantAsync(db, subjectId, cancellationToken) > 0;
+        var granted = await _subjects.GrantPlatformAdminAsync([subjectId], cancellationToken) > 0;
 
         if (granted)
             _logger.LogInformation(
@@ -191,10 +169,4 @@ public class PlatformAdminBootstrapService
 
         return granted;
     }
-
-    private static Task<int> GrantAsync(
-        NocturneDbContext db, Guid subjectId, CancellationToken cancellationToken) =>
-        db.Subjects
-            .Where(s => s.Id == subjectId)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPlatformAdmin, true), cancellationToken);
 }

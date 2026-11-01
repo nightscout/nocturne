@@ -10,7 +10,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Glucose;
-using Nocturne.API.Services.Treatments;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -56,10 +56,10 @@ public class AlertReplayServiceTests
         // The repo never returns null; default the DND-window fetches to empty (no DND).
         // Tests that exercise scoped suppression override GetDndWindowsAsOfAsync.
         _alertRepository
-            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
         _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(
@@ -127,7 +127,7 @@ public class AlertReplayServiceTests
     [NativeFact]
     public async Task NoRules_ReturnsEmptyEventsButValidWindow()
     {
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertRuleSnapshot>());
 
         var result = await _sut.ReplayAsync(
@@ -146,7 +146,7 @@ public class AlertReplayServiceTests
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
 
         // Single low reading at 04:00, then a clear at 04:30, then another low at 05:00.
@@ -176,7 +176,7 @@ public class AlertReplayServiceTests
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
 
         // Continuous low for an hour — should produce ONE event at the first low tick.
@@ -204,11 +204,11 @@ public class AlertReplayServiceTests
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
 
         // A lows window received before the fire tick (created_at <= tick) and active across it.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.Lows, StartedAt: dayStart, EndsAt: null, ClearedAt: null, CreatedAt: dayStart),
@@ -238,12 +238,12 @@ public class AlertReplayServiceTests
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
 
         // The window's intent (StartedAt) covers the fire, but it was *received* an hour after
         // the fire tick — receipt gating (created_at <= tick) must NOT retroactively suppress.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.Lows, StartedAt: dayStart, EndsAt: null, ClearedAt: null,
@@ -276,12 +276,12 @@ public class AlertReplayServiceTests
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
 
         // A scope=all window active (and received) 02:00-03:00; replay must reconstruct
         // ActiveDoNotDisturb from it so the leaf evaluates true across exactly that span.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.All, StartedAt: dayStart.AddHours(2),
@@ -321,7 +321,7 @@ public class AlertReplayServiceTests
 
         // Insertion order is B then A (deliberately reversed) — topo-sort must put A first
         // so B sees A's "firing" snapshot in the same tick.
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ruleB, ruleA });
 
         _glucoseRepository.Setup(r => r.GetAsync(
@@ -360,7 +360,7 @@ public class AlertReplayServiceTests
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
         // First reading at 03:00 satisfies both predicates (open + immediate resolve);
         // second reading at 03:05 is well above both so subsequent ticks stay quiet and the
@@ -387,7 +387,7 @@ public class AlertReplayServiceTests
     [NativeFact]
     public async Task RollingWindow_When_Date_IsNull()
     {
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertRuleSnapshot>());
 
         var result = await _sut.ReplayAsync(null, null, null, null, CancellationToken.None);
@@ -411,7 +411,7 @@ public class AlertReplayServiceTests
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
         var lastCycle = dayStart.AddHours(2);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
@@ -449,7 +449,7 @@ public class AlertReplayServiceTests
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
         var spanStart = dayStart.AddHours(3);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
@@ -494,7 +494,7 @@ public class AlertReplayServiceTests
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
 
         // Three distinct values at 04:00/04:30/05:00 — expect ≥ 3 emitted points
@@ -531,7 +531,7 @@ public class AlertReplayServiceTests
             AutoResolveEnabled: false, AutoResolveParams: null);
         var date = new DateOnly(2026, 4, 28);
 
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
@@ -556,7 +556,7 @@ public class AlertReplayServiceTests
     {
         var ruleId = Guid.NewGuid();
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
-        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdRule(ruleId, "below", 70m) });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,

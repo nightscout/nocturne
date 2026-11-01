@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -39,16 +40,16 @@ public class TreatmentDecomposerNotesTests : IDisposable
         var noteRepo = new NoteRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<NoteRepository>.Instance);
         var deviceEventRepo = new DeviceEventRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusCalculationRepository>.Instance);
-        var stateSpanServiceMock = new Mock<IStateSpanService>();
+        var stateSpanServiceMock = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
         var treatmentFoodServiceMock = new Mock<ITreatmentFoodService>();
-        var tempBasalRepoMock = new Mock<ITempBasalRepository>();
-        var deviceServiceMock = new Mock<IDeviceService>();
+        var tempBasalRepoMock = new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord();
+        var deviceServiceMock = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
 
         deviceServiceMock
             .Setup(s => s.ResolveAsync(It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        var activeProfileResolverMock = new Mock<IActiveProfileResolver>();
+        var activeProfileResolverMock = new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null);
         var insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
         _decomposer = new TreatmentDecomposer(
@@ -89,7 +90,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         // Assert — should produce Bolus + CarbIntake + Note
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -114,7 +115,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = "high after lunch"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
         result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
@@ -136,7 +137,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = "before dinner"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.BGCheck>().Should().HaveCount(1);
         result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
@@ -157,7 +158,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = "regular note text"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
     }
@@ -175,7 +176,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = ""
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
         result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
@@ -195,7 +196,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = "   "
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Note>().Should().BeEmpty();
     }

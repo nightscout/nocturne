@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
-using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -254,8 +254,8 @@ public class LoopClosedLoopIntegrationTests : ApiIntegrationTestBase
         var statuses = days
             .Select(d => JsonSerializer.Deserialize<DeviceStatus>(JsonSerializer.Serialize(LoopDeviceStatus(Now.AddDays(d))))!)
             .ToList();
-        await WithTenantScopeAsync(sp => sp.GetRequiredService<IDeviceStatusDecomposer>()
-            .DecomposeBatchAsync(statuses, source: null, WriteOrigin.Backfill));
+        await WithTenantScopeAsync(sp => sp.GetRequiredService<IDeviceStatusService>()
+            .ImportDeviceStatusesAsync(statuses, source: null));
 
         (await CyclesAsync(open, Now)).Select(c => c.ClosedLoop)
             .Should().Equal(new bool?[] { false, false, false, true, true });

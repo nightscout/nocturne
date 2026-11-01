@@ -39,8 +39,13 @@ public interface ITenantService
 
     Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Records the onboarder's relationship to the patient, replacing any earlier answer.</summary>
-    Task SetPatientRelationshipAsync(Guid id, PatientRelationship relationship, CancellationToken ct = default);
+    /// <summary>
+    /// Records who the tenant is for, replacing any earlier answer. A caller other than the helper
+    /// replacing <see cref="PatientRelationship.Helper"/> is the recipient answering, which marks
+    /// the tenant handed over.
+    /// </summary>
+    Task SetPatientRelationshipAsync(
+        Guid id, PatientRelationship relationship, Guid? callerId, CancellationToken ct = default);
 
     /// <summary>The glucose units the owner chose for the tenant, or null when none was chosen.</summary>
     Task<string?> GetDefaultGlucoseUnitsAsync(Guid id, CancellationToken ct = default);
@@ -51,7 +56,12 @@ public interface ITenantService
     /// <summary>Permanently deletes a tenant and all associated data.</summary>
     Task DeleteAsync(Guid id, CancellationToken ct = default);
 
-    Task AddMemberAsync(Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null, string? label = null, bool limitTo24Hours = false, CancellationToken ct = default);
+    /// <summary>
+    /// Adds <paramref name="subjectId"/> to the tenant with its roles in one save. False when the
+    /// subject is already a member, including when another request made it one in the meantime;
+    /// any other failure throws.
+    /// </summary>
+    Task<bool> AddMemberAsync(Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null, string? label = null, bool limitTo24Hours = false, CancellationToken ct = default);
 
     /// <summary>
     /// Removes a subject's membership from the specified tenant. Refuses to remove a system

@@ -12,18 +12,10 @@
   import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import { setReportPrintMeta } from "#lib/components/reports/print/report-print.svelte.js";
-  import {
-    getReportsAnalysis,
-    getReportsInsulinDelivery,
-    type DateRangeInput,
-  } from "#lib/api/reports.remote.js";
-  import {
-    bg,
-    bgDelta,
-    bgLabel,
-    formatInsulinToCarbRatio,
-    formatShortDate,
-  } from "#lib/utils/formatting.js";
+  import { getReportsComparison, type DateRangeInput } from "#lib/api/reports.remote.js";
+  import { GlucoseUnit, PeriodComparisonMetric, type MetricComparison } from "#lib/api/index.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { bgLabel, formatInsulinToCarbRatio, formatShortDate } from "#lib/utils/formatting.js";
   import { formatMinutesDuration } from "#lib/utils/duration.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { parseDate } from "@internationalized/date";
@@ -205,301 +197,239 @@
     draft.b.to !== committed.b.to
   );
 
-  // Both periods register with the layout's ResourceContext, which merges them:
-  // either side's failure surfaces and Retry refetches both.
-  const queryA = contextResource(() => getReportsAnalysis(inputA), {
-    errorTitle: "Error loading comparison",
-  });
-  const queryB = contextResource(() => getReportsAnalysis(inputB), {
-    errorTitle: "Error loading comparison",
-  });
-  const insulinQueryA = contextResource(() => getReportsInsulinDelivery(inputA), {
-    errorTitle: "Error loading comparison",
-  });
-  const insulinQueryB = contextResource(() => getReportsInsulinDelivery(inputB), {
-    errorTitle: "Error loading comparison",
-  });
-
-  const timeZoneUnavailableReason = $derived(
-    queryA.current?.timeZoneUnavailableReason ?? queryB.current?.timeZoneUnavailableReason
+  // The comparison is one request, so a failure surfaces once and Retry refetches both periods.
+  const comparisonQuery = contextResource(
+    () =>
+      getReportsComparison({
+        a: inputA,
+        b: inputB,
+        units: glucoseUnits.current === "mmol" ? GlucoseUnit.Mmol : GlucoseUnit.MgDl,
+      }),
+    { errorTitle: "Error loading comparison" }
   );
 
-  type Response = NonNullable<typeof queryA.current>;
-  type Analysis = NonNullable<Response["analysis"]>;
-  type Insulin = NonNullable<typeof insulinQueryA.current>;
-  type Period = {
-    analysis: Analysis;
-    personalRange: Response["personalRange"];
-    insulin: Insulin | undefined;
+  const comparison = $derived(comparisonQuery.current);
+  const timeZoneUnavailableReason = $derived(comparison?.timeZoneUnavailableReason);
+  const unitLabel = $derived(bgLabel(comparison?.units === GlucoseUnit.Mmol ? "mmol" : "mg/dl"));
+
+  type MetricFormat = {
+    value: (v: number, decimals: number) => string;
+    delta: (d: number, decimals: number) => string;
   };
 
-  type MetricDef = {
-    label: string;
-    get: (p: Period) => number | null | undefined;
-    format: (v: number) => string;
-    formatDelta: (delta: number) => string;
-    flatBelow: number;
-    omitWhenAbsent?: boolean;
-  };
-
-  function signed(
-    value: number,
-    digits = 1,
-    flatBelow = digits === 0 ? 0.5 : 0.05
-  ): string {
-    if (Math.abs(value) < flatBelow) return "±0";
-    const sign = value > 0 ? "+" : "−";
-    return `${sign}${Math.abs(value).toFixed(digits)}`;
+  function signed(value: number, decimals: number): string {
+    if (value === 0) return "±0";
+    return `${value > 0 ? "+" : "−"}${Math.abs(value).toFixed(decimals)}`;
   }
 
   function signedDuration(minutes: number): string {
-    if (Math.abs(minutes) < 0.5) return "±0m";
+    if (minutes === 0) return "±0m";
     return `${minutes > 0 ? "+" : "−"}${formatMinutesDuration(Math.abs(minutes))}`;
   }
 
-  const percent = (label: string, get: MetricDef["get"]): MetricDef => ({
-    label,
-    get,
-    format: (v) => `${v.toFixed(1)}%`,
-    formatDelta: (d) => `${signed(d)} pp`,
-    flatBelow: 0.05,
-  });
-
-  const glucose = (label: string, get: MetricDef["get"]): MetricDef => ({
-    label,
-    get,
-    format: (v) => `${bg(v)} ${bgLabel()}`,
-    formatDelta: (d) => `${bgDelta(d)} ${bgLabel()}`,
-    flatBelow: 0.05,
-  });
-
-  const figure = (
-    label: string,
-    get: MetricDef["get"],
-    digits: number,
-    unit = ""
-  ): MetricDef => ({
-    label,
-    get,
-    format: (v) => `${v.toFixed(digits)}${unit}`,
-    formatDelta: (d) => `${signed(d, digits, 10 ** -digits / 2)}${unit}`,
-    flatBelow: 10 ** -digits / 2,
-  });
-
-  const minutes = (label: string, get: MetricDef["get"]): MetricDef => ({
-    label,
-    get,
-    format: formatMinutesDuration,
-    formatDelta: signedDuration,
-    flatBelow: 0.5,
-  });
-
-  // A period with no insulin records, or no carb entries, has nothing to average per day.
-  const insulinFigure =
-    (pick: (i: Insulin) => number | undefined): MetricDef["get"] =>
-    (p) =>
-      p.insulin?.insulinEventCount ? pick(p.insulin) : null;
-
-  const carbFigure =
-    (pick: (i: Insulin) => number | undefined): MetricDef["get"] =>
-    (p) =>
-      p.insulin?.carbCount ? pick(p.insulin) : null;
-
-  const metricDefs = {
-    tirTarget: percent("Time in range", (p) => p.analysis.timeInRange?.percentages?.target),
-    gmi: {
-      label: "GMI",
-      get: (p) => p.analysis.gmi?.value,
-      format: (v) => `${v.toFixed(1)}%`,
-      formatDelta: (d) => `${signed(d, 2)} pp`,
-      flatBelow: 0.05,
-    } satisfies MetricDef,
-    cv: percent("Variability (CV)", (p) => p.analysis.glycemicVariability?.coefficientOfVariation),
-    gri: figure("Glycemic risk index", (p) => p.analysis.gri?.score, 0),
-    mean: glucose("Mean glucose", (p) => p.analysis.basicStats?.mean),
-    hyperMinutesPerDay: minutes(
-      "Hyper time / day",
-      (p) => p.analysis.timeInRange?.averageDailyMinutes?.high
-    ),
-    hyperEventsPerDay: figure(
-      "Hyper events / day",
-      (p) => p.analysis.timeInRange?.averageDailyEpisodes?.aboveRange,
-      2
-    ),
-    hypoMinutesPerDay: minutes(
-      "Hypo time / day",
-      (p) => p.analysis.timeInRange?.averageDailyMinutes?.low
-    ),
-    hypoEventsPerDay: figure(
-      "Hypo events / day",
-      (p) => p.analysis.timeInRange?.averageDailyEpisodes?.belowRange,
-      2
-    ),
-
-    veryLowPercent: percent("Time Very Low (%)", (p) => p.analysis.timeInRange?.percentages?.veryLow),
-    lowPercent: percent("Time Low (%)", (p) => p.analysis.timeInRange?.percentages?.low),
-    highPercent: percent("Time High (%)", (p) => p.analysis.timeInRange?.percentages?.high),
-    veryHighPercent: percent("Time Very High (%)", (p) => p.analysis.timeInRange?.percentages?.veryHigh),
-    personalRangePercent: {
-      ...percent("Time in personal range", (p) => p.personalRange?.inRangePercent),
-      omitWhenAbsent: true,
-    },
-
-    sd: glucose("Standard deviation", (p) => p.analysis.glycemicVariability?.standardDeviation),
-    median: glucose("Median glucose", (p) => p.analysis.basicStats?.median),
-    lbgi: figure("LBGI", (p) => p.analysis.glycemicVariability?.lowBloodGlucoseIndex, 1),
-    hbgi: figure("HBGI", (p) => p.analysis.glycemicVariability?.highBloodGlucoseIndex, 1),
-    mage: glucose("MAGE", (p) => p.analysis.glycemicVariability?.meanAmplitudeGlycemicExcursions),
-    conga: glucose(
-      "CONGA",
-      (p) => p.analysis.glycemicVariability?.continuousOverlappingNetGlycemicAction
-    ),
-    adrr: figure("ADRR", (p) => p.analysis.glycemicVariability?.averageDailyRiskRange, 1),
-
-    insulinPerDay: figure("Total insulin / day", insulinFigure((i) => i.tdd), 1, " U"),
-    basalPerDay: figure("Basal / day", insulinFigure((i) => i.totalBasalPerDay), 1, " U"),
-    basalPercent: percent("Basal share of insulin", insulinFigure((i) => i.basalPercent)),
-    bolusesPerDay: figure("Manual boluses / day", insulinFigure((i) => i.bolusesPerDay), 1),
-    carbsPerDay: figure("Carbs / day", carbFigure((i) => i.carbsPerDay), 0, " g"),
-    icr: {
-      ...figure("ICR", (p) => p.insulin?.icRatio ?? null, 1),
-      format: formatInsulinToCarbRatio,
-    },
-
-    cgmActivePercent: percent("CGM active time", (p) => p.analysis.dataQuality?.cgmActivePercent),
-    daysWithData: figure("Days with data", (p) => p.analysis.dataSufficiency?.daysWithData, 0),
-    readingsPerDay: figure(
-      "Readings / day",
-      (p) => p.analysis.dataSufficiency?.averageReadingsPerDay,
-      0
-    ),
+  const percent: MetricFormat = {
+    value: (v, d) => `${v.toFixed(d)}%`,
+    delta: (v, d) => `${signed(v, d)} pp`,
   };
 
-  type MetricKey = keyof typeof metricDefs;
+  const figure = (unit = ""): MetricFormat => ({
+    value: (v, d) => `${v.toFixed(d)}${unit}`,
+    delta: (v, d) => `${signed(v, d)}${unit}`,
+  });
 
-  const metricGroups: { title: string; keys: MetricKey[] }[] = [
+  const minutes: MetricFormat = {
+    value: (v) => formatMinutesDuration(v),
+    delta: (v) => signedDuration(v),
+  };
+
+  const glucose = (unit: string): MetricFormat => ({
+    value: (v, d) => `${v.toFixed(d)} ${unit}`,
+    delta: (v, d) => `${signed(v, d)} ${unit}`,
+  });
+
+  const labels: Record<PeriodComparisonMetric, string> = {
+    [PeriodComparisonMetric.TirTarget]: "Time in range",
+    [PeriodComparisonMetric.Gmi]: "GMI",
+    [PeriodComparisonMetric.Cv]: "Variability (CV)",
+    [PeriodComparisonMetric.Gri]: "Glycemic risk index",
+    [PeriodComparisonMetric.Mean]: "Mean glucose",
+    [PeriodComparisonMetric.HyperMinutesPerDay]: "Hyper time / day",
+    [PeriodComparisonMetric.HyperEventsPerDay]: "Hyper events / day",
+    [PeriodComparisonMetric.HypoMinutesPerDay]: "Hypo time / day",
+    [PeriodComparisonMetric.HypoEventsPerDay]: "Hypo events / day",
+    [PeriodComparisonMetric.VeryLowPercent]: "Time Very Low (%)",
+    [PeriodComparisonMetric.LowPercent]: "Time Low (%)",
+    [PeriodComparisonMetric.HighPercent]: "Time High (%)",
+    [PeriodComparisonMetric.VeryHighPercent]: "Time Very High (%)",
+    [PeriodComparisonMetric.PersonalRangePercent]: "Time in personal range",
+    [PeriodComparisonMetric.Sd]: "Standard deviation",
+    [PeriodComparisonMetric.Median]: "Median glucose",
+    [PeriodComparisonMetric.Lbgi]: "LBGI",
+    [PeriodComparisonMetric.Hbgi]: "HBGI",
+    [PeriodComparisonMetric.Mage]: "MAGE",
+    [PeriodComparisonMetric.Conga]: "CONGA",
+    [PeriodComparisonMetric.Adrr]: "ADRR",
+    [PeriodComparisonMetric.InsulinPerDay]: "Total insulin / day",
+    [PeriodComparisonMetric.BasalPerDay]: "Basal / day",
+    [PeriodComparisonMetric.BasalPercent]: "Basal share of insulin",
+    [PeriodComparisonMetric.BolusesPerDay]: "Manual boluses / day",
+    [PeriodComparisonMetric.CarbsPerDay]: "Carbs / day",
+    [PeriodComparisonMetric.Icr]: "ICR",
+    [PeriodComparisonMetric.CgmActivePercent]: "CGM active time",
+    [PeriodComparisonMetric.DaysWithData]: "Days with data",
+    [PeriodComparisonMetric.ReadingsPerDay]: "Readings / day",
+  };
+
+  const formats = $derived<Record<PeriodComparisonMetric, MetricFormat>>({
+    [PeriodComparisonMetric.TirTarget]: percent,
+    [PeriodComparisonMetric.Gmi]: percent,
+    [PeriodComparisonMetric.Cv]: percent,
+    [PeriodComparisonMetric.Gri]: figure(),
+    [PeriodComparisonMetric.Mean]: glucose(unitLabel),
+    [PeriodComparisonMetric.HyperMinutesPerDay]: minutes,
+    [PeriodComparisonMetric.HyperEventsPerDay]: figure(),
+    [PeriodComparisonMetric.HypoMinutesPerDay]: minutes,
+    [PeriodComparisonMetric.HypoEventsPerDay]: figure(),
+    [PeriodComparisonMetric.VeryLowPercent]: percent,
+    [PeriodComparisonMetric.LowPercent]: percent,
+    [PeriodComparisonMetric.HighPercent]: percent,
+    [PeriodComparisonMetric.VeryHighPercent]: percent,
+    [PeriodComparisonMetric.PersonalRangePercent]: percent,
+    [PeriodComparisonMetric.Sd]: glucose(unitLabel),
+    [PeriodComparisonMetric.Median]: glucose(unitLabel),
+    [PeriodComparisonMetric.Lbgi]: figure(),
+    [PeriodComparisonMetric.Hbgi]: figure(),
+    [PeriodComparisonMetric.Mage]: glucose(unitLabel),
+    [PeriodComparisonMetric.Conga]: glucose(unitLabel),
+    [PeriodComparisonMetric.Adrr]: figure(),
+    [PeriodComparisonMetric.InsulinPerDay]: figure(" U"),
+    [PeriodComparisonMetric.BasalPerDay]: figure(" U"),
+    [PeriodComparisonMetric.BasalPercent]: percent,
+    [PeriodComparisonMetric.BolusesPerDay]: figure(),
+    [PeriodComparisonMetric.CarbsPerDay]: figure(" g"),
+    [PeriodComparisonMetric.Icr]: { ...figure(), value: (v) => formatInsulinToCarbRatio(v) },
+    [PeriodComparisonMetric.CgmActivePercent]: percent,
+    [PeriodComparisonMetric.DaysWithData]: figure(),
+    [PeriodComparisonMetric.ReadingsPerDay]: figure(),
+  });
+
+  const metricGroups: { title: string; keys: PeriodComparisonMetric[] }[] = [
     {
       title: "Overview",
       keys: [
-        "tirTarget",
-        "gmi",
-        "cv",
-        "gri",
-        "mean",
-        "hyperMinutesPerDay",
-        "hyperEventsPerDay",
-        "hypoMinutesPerDay",
-        "hypoEventsPerDay",
+        PeriodComparisonMetric.TirTarget,
+        PeriodComparisonMetric.Gmi,
+        PeriodComparisonMetric.Cv,
+        PeriodComparisonMetric.Gri,
+        PeriodComparisonMetric.Mean,
+        PeriodComparisonMetric.HyperMinutesPerDay,
+        PeriodComparisonMetric.HyperEventsPerDay,
+        PeriodComparisonMetric.HypoMinutesPerDay,
+        PeriodComparisonMetric.HypoEventsPerDay,
       ],
     },
     {
       title: "Range detail",
       keys: [
-        "veryLowPercent",
-        "lowPercent",
-        "highPercent",
-        "veryHighPercent",
-        "personalRangePercent",
+        PeriodComparisonMetric.VeryLowPercent,
+        PeriodComparisonMetric.LowPercent,
+        PeriodComparisonMetric.HighPercent,
+        PeriodComparisonMetric.VeryHighPercent,
+        PeriodComparisonMetric.PersonalRangePercent,
       ],
     },
     {
       title: "Variability and risk",
-      keys: ["sd", "median", "lbgi", "hbgi", "mage", "conga", "adrr"],
+      keys: [
+        PeriodComparisonMetric.Sd,
+        PeriodComparisonMetric.Median,
+        PeriodComparisonMetric.Lbgi,
+        PeriodComparisonMetric.Hbgi,
+        PeriodComparisonMetric.Mage,
+        PeriodComparisonMetric.Conga,
+        PeriodComparisonMetric.Adrr,
+      ],
     },
     {
       title: "Insulin and carbs",
       keys: [
-        "insulinPerDay",
-        "basalPerDay",
-        "basalPercent",
-        "bolusesPerDay",
-        "carbsPerDay",
-        "icr",
+        PeriodComparisonMetric.InsulinPerDay,
+        PeriodComparisonMetric.BasalPerDay,
+        PeriodComparisonMetric.BasalPercent,
+        PeriodComparisonMetric.BolusesPerDay,
+        PeriodComparisonMetric.CarbsPerDay,
+        PeriodComparisonMetric.Icr,
       ],
     },
     {
       title: "Data quality",
-      keys: ["cgmActivePercent", "daysWithData", "readingsPerDay"],
+      keys: [
+        PeriodComparisonMetric.CgmActivePercent,
+        PeriodComparisonMetric.DaysWithData,
+        PeriodComparisonMetric.ReadingsPerDay,
+      ],
     },
   ];
-
-  // A period with no readings still comes back as an analysis of zeros; read it as absent so
-  // its figures show "No data" instead of 0 %, 0 mg/dL and a delta measured against them.
-  function withReadings(r: Response | undefined, insulin: Insulin | undefined): Period | undefined {
-    const analysis = r?.analysis;
-    if (!r || !analysis || analysis.basicStats?.count === 0) return undefined;
-    return { analysis, personalRange: r.personalRange, insulin };
-  }
-  const periodA = $derived(withReadings(queryA.current, insulinQueryA.current));
-  const periodB = $derived(withReadings(queryB.current, insulinQueryB.current));
 
   // Cap percent change at ±60 % so outliers don't blow out the bar.
   const BAR_CAP_PCT = 60;
 
-  // Signed percent change from the first period to the second. A zero baseline admits no
-  // proportional change, so any move off it saturates the bar in the move's direction
-  // rather than drawing a flat bar beside a non-zero delta.
-  function percentChange(from: number, to: number): number {
-    const delta = to - from;
-    if (from === 0) return delta === 0 ? 0 : Math.sign(delta) * 100;
-    return (delta / Math.abs(from)) * 100;
-  }
-
   type DiffRow = {
-    key: MetricKey;
+    key: PeriodComparisonMetric;
     label: string;
-    av: number | null;
-    bv: number | null;
+    av: string;
+    bv: string;
     bar: "flat" | "up" | "down";
     barWidth: number;
     deltaText: string;
   };
 
-  function diffRow(key: MetricKey, a: Period | undefined, b: Period | undefined): DiffRow {
-    const def: MetricDef = metricDefs[key];
-    const av = (a && def.get(a)) ?? null;
-    const bv = (b && def.get(b)) ?? null;
+  function valueText(
+    key: PeriodComparisonMetric,
+    metric: MetricComparison,
+    value: number | null | undefined
+  ): string {
+    if (value == null) return "No data";
+    return formats[key].value(value, metric.valueDecimals ?? 0);
+  }
 
-    if (av == null || bv == null) {
-      return { key, label: def.label, av, bv, bar: "flat", barWidth: 0, deltaText: "—" };
-    }
-
-    const delta = bv - av;
-    const flat = Math.abs(delta) < def.flatBelow;
-    const magnitude = Math.min(BAR_CAP_PCT, Math.abs(percentChange(av, bv)));
-
-    // The bar carries the sign of the change: it grows right when the second
-    // period is higher and left when it is lower.
-    return {
+  // The bar carries the sign of the change: it grows right when the second period is higher and
+  // left when it is lower. A change off a zero baseline has no percent and fills its half of the bar.
+  function diffRow(key: PeriodComparisonMetric, metric: MetricComparison): DiffRow {
+    const row = {
       key,
-      label: def.label,
-      av,
-      bv,
-      bar: flat ? "flat" : delta > 0 ? "up" : "down",
+      label: labels[key],
+      av: valueText(key, metric, metric.valueA),
+      bv: valueText(key, metric, metric.valueB),
+    };
+    const { delta, percentChange } = metric;
+    if (delta == null) return { ...row, bar: "flat", barWidth: 0, deltaText: "—" };
+
+    const deltaText = formats[key].delta(delta, metric.deltaDecimals ?? 0);
+    if (delta === 0) return { ...row, bar: "flat", barWidth: 0, deltaText };
+
+    const magnitude =
+      percentChange == null ? BAR_CAP_PCT : Math.min(BAR_CAP_PCT, Math.abs(percentChange));
+    return {
+      ...row,
+      bar: delta > 0 ? "up" : "down",
       barWidth: (magnitude / BAR_CAP_PCT) * 50,
-      deltaText: def.formatDelta(delta),
+      deltaText,
     };
   }
 
   const diffGroups = $derived(
     metricGroups.map(({ title, keys }) => ({
       title,
-      rows: keys
-        .map((key) => diffRow(key, periodA, periodB))
-        .filter((row) => {
-          const def: MetricDef = metricDefs[row.key];
-          return !def.omitWhenAbsent || row.av != null || row.bv != null;
-        }),
+      rows: keys.flatMap((key) => {
+        const metric = comparison?.metrics?.find((m) => m.metric === key);
+        return metric ? [diffRow(key, metric)] : [];
+      }),
     }))
   );
 
-  function valueText(key: MetricKey, v: number | null): string {
-    if (v == null) return "No data";
-    return metricDefs[key].format(v);
-  }
-
-  const tirA = $derived(periodA?.analysis.timeInRange?.percentages);
-  const tirB = $derived(periodB?.analysis.timeInRange?.percentages);
+  const tirA = $derived(comparison?.periodA?.timeInRange);
+  const tirB = $derived(comparison?.periodB?.timeInRange);
   const presetLabel = $derived(
     presetOptions.find((p) => p.value === preset)?.label ?? "Custom"
   );
@@ -677,10 +607,10 @@
             >
               <div class="w-full text-sm font-medium @2xl:w-auto">{row.label}</div>
               <div class="text-sm tabular-nums text-muted-foreground @2xl:text-right">
-                {valueText(row.key, row.av)}
+                {row.av}
               </div>
               <div class="text-sm font-semibold tabular-nums @2xl:text-right">
-                {valueText(row.key, row.bv)}
+                {row.bv}
               </div>
               <div class="relative order-last h-2 w-full overflow-hidden rounded-full bg-muted @2xl:order-none @2xl:w-auto">
                 <div class="absolute top-0 bottom-0 left-1/2 w-px bg-border"></div>

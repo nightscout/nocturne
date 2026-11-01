@@ -1,5 +1,5 @@
 using Nocturne.Core.Models.Widget;
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.Core.Contracts.Analytics;
 

@@ -13,7 +13,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Not tenant-scoped (identity-level, like <see cref="TotpCredentialEntity"/> and
 /// <see cref="RecoveryCodeEntity"/>), so no RLS applies. Instead the row records the host the primary
 /// factor completed on (<see cref="BoundTenantId"/>), and the token is redeemable only there. Expired
-/// rows are pruned by <c>OAuthCodeCleanupService</c>.
+/// rows are pruned by <c>OAuthStepUpTokenCleanupJob</c>.
 /// </remarks>
 [Table("totp_step_up_tokens")]
 public class TotpStepUpTokenEntity

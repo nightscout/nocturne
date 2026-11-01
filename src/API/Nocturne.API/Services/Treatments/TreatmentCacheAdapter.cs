@@ -13,18 +13,16 @@ namespace Nocturne.API.Services.Treatments;
 /// </summary>
 /// <seealso cref="ITreatmentCache"/>
 /// <seealso cref="TreatmentService"/>
-public class TreatmentCacheAdapter : ITreatmentCache
+internal class TreatmentCacheAdapter : ITreatmentCache
 {
     /// <summary>The <see cref="ITenantCache"/> key family every treatment read is cached under.</summary>
-    public const string CacheFamily = TenantCacheFamily.Treatments;
+    private const string CacheFamily = TenantCacheFamily.Treatments;
 
     private readonly ITenantCache _cache;
-    private readonly ILogger<TreatmentCacheAdapter> _logger;
 
-    public TreatmentCacheAdapter(ITenantCache cache, ILogger<TreatmentCacheAdapter> logger)
+    public TreatmentCacheAdapter(ITenantCache cache)
     {
         _cache = cache;
-        _logger = logger;
     }
 
     public async Task<IReadOnlyList<Treatment>?> GetOrComputeAsync(
@@ -43,18 +41,6 @@ public class TreatmentCacheAdapter : ITreatmentCache
             async () => (await compute()).ToList(),
             ttl,
             ct);
-    }
-
-    public async Task InvalidateAsync(CancellationToken ct)
-    {
-        try
-        {
-            await _cache.RemoveFamilyAsync(CacheFamily, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to invalidate treatment caches");
-        }
     }
 
     private static bool IsCommonCount(int count) => count is 10 or 50 or 100;

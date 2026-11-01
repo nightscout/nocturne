@@ -2,7 +2,6 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Audit;
@@ -16,6 +15,7 @@ using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.API.Services.Entries;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -509,7 +509,7 @@ public class EntryDecomposerTests : IDisposable
         // Assert
         result.CreatedRecords.Should().BeEmpty();
         result.UpdatedRecords.Should().BeEmpty();
-        result.CorrelationId.Should().NotBeNull("a correlation ID is always generated");
+        result.CorrelationId.Should().BeNull("nothing was written under one");
         result.SkippedUnsupported.Should().Be(1);
     }
 

@@ -2,14 +2,14 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Configuration;
-using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
@@ -25,10 +25,10 @@ namespace Nocturne.API.Tests.Services.Legacy;
 [Parity("ddata.test.js")]
 public class DDataServiceTests
 {
-    private readonly Mock<IEntryStore> _mockEntryStore;
+    private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<ITreatmentService> _mockTreatmentService;
     private readonly Mock<IProfileProjectionService> _mockProfileProjectionService;
-    private readonly Mock<IDeviceStatusGroupRepository> _mockGroupRepo;
+    private readonly Mock<IDeviceStatusService> _mockDeviceStatusService;
     private readonly Mock<IFoodRepository> _mockFoodRepository;
     private readonly Mock<IActivityService> _mockActivityService;
     private readonly Mock<IStoreSizeReader> _mockStoreSize;
@@ -37,7 +37,7 @@ public class DDataServiceTests
 
     public DDataServiceTests()
     {
-        _mockEntryStore = new Mock<IEntryStore>();
+        _mockEntryService = new Mock<IEntryService>();
         _mockTreatmentService = new Mock<ITreatmentService>();
         _mockProfileProjectionService = new Mock<IProfileProjectionService>();
         _mockFoodRepository = new Mock<IFoodRepository>();
@@ -46,28 +46,18 @@ public class DDataServiceTests
         _mockStoreSize.Setup(x => x.ReadAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new DbStats());
         _mockLogger = new Mock<ILogger<DDataService>>();
 
-        // Build a DeviceStatusProjectionService backed by empty mocked repositories
-        _mockGroupRepo = new Mock<IDeviceStatusGroupRepository>();
-        _mockGroupRepo.Setup(x => x.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
-
-        var projectionService = new DeviceStatusProjectionService(
-            _mockGroupRepo.Object,
-            new Mock<IApsSnapshotRepository>().Object,
-            new Mock<IPumpSnapshotRepository>().Object,
-            new Mock<IUploaderSnapshotRepository>().Object,
-            new Mock<IStateSpanRepository>().Object,
-            new Mock<IDeviceStatusExtrasRepository>().Object,
-            TimeProvider.System,
-            new Mock<ILogger<DeviceStatusProjectionService>>().Object);
+        _mockDeviceStatusService = new Mock<IDeviceStatusService>();
+        _mockDeviceStatusService
+            .Setup(x => x.GetDeviceStatusesAsync(
+                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<ReadSortField>()))
+            .ReturnsAsync([]);
 
         _ddataService = new DDataService(
-            _mockEntryStore.Object,
+            _mockEntryService.Object,
             _mockTreatmentService.Object,
             _mockProfileProjectionService.Object,
-            projectionService,
+            _mockDeviceStatusService.Object,
             _mockFoodRepository.Object,
             _mockActivityService.Object,
             _mockStoreSize.Object,
@@ -90,9 +80,9 @@ public class DDataServiceTests
     [Fact]
     public async Task GetCurrentDDataAsync_ShouldReturnDDataStructure()
     { // Arrange
-        _mockEntryStore
+        _mockEntryService
             .Setup(x =>
-                x.QueryAsync(
+                x.QueryEntriesAsync(
                     It.IsAny<EntryQuery>(),
                     It.IsAny<CancellationToken>()
                 )
@@ -150,16 +140,16 @@ public class DDataServiceTests
 
         await _ddataService.GetDDataAsync(at.ToUnixTimeMilliseconds(), CancellationToken.None);
 
-        _mockGroupRepo.Verify(x => x.GetAsync(
-            at.UtcDateTime.AddDays(-1), at.UtcDateTime.AddTicks(TimeSpan.TicksPerMillisecond - TimeSpan.TicksPerMicrosecond), It.IsAny<string?>(),
-            It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()));
+        _mockDeviceStatusService.Verify(x => x.GetDeviceStatusesAsync(
+            It.Is<FindQuery>(q => q.FromMills == at.AddDays(-1).ToUnixTimeMilliseconds() && q.ToMills == at.ToUnixTimeMilliseconds()),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(), true, It.IsAny<ReadSortField>()));
     }
 
     [Fact]
     public async Task GetDDataFrameAsync_ServesSgvsOldestFirstWhereGetDDataAsyncKeepsTheStoreOrder()
     {
-        _mockEntryStore
-            .Setup(x => x.QueryAsync(It.Is<EntryQuery>(q => q.Type == "sgv"), It.IsAny<CancellationToken>()))
+        _mockEntryService
+            .Setup(x => x.QueryEntriesAsync(It.Is<EntryQuery>(q => q.Type == "sgv"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Entry>
             {
                 new() { Type = "sgv", Mills = 3000 },
@@ -206,8 +196,8 @@ public class DDataServiceTests
 
     private void SeedStores(string type, IReadOnlyList<long> mills)
     {
-        _mockEntryStore
-            .Setup(x => x.QueryAsync(It.Is<EntryQuery>(q => q.Type == type), It.IsAny<CancellationToken>()))
+        _mockEntryService
+            .Setup(x => x.QueryEntriesAsync(It.Is<EntryQuery>(q => q.Type == type), It.IsAny<CancellationToken>()))
             .ReturnsAsync((EntryQuery q, CancellationToken _) => mills
                 .Where(m => m >= (q.FromMills ?? long.MinValue) && m <= (q.ToMills ?? long.MaxValue))
                 .OrderByDescending(m => m)

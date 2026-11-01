@@ -38,6 +38,8 @@ public class HistoryClampLiftPremiseTests
         // inserts do nothing on conflict.
         "src/API/Nocturne.API/Services/Notifications/OwnerNoticeLedger.cs",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyCheck.cs",
+        // job_ledger is a platform table no policy covers, and its upserts run as plain commands.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/JobLedgerRepository.cs",
     ];
 
     [Fact]

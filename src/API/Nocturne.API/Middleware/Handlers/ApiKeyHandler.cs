@@ -1,15 +1,13 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -26,17 +24,22 @@ public class ApiKeyHandler : IAuthHandler
 
     public string Name => "ApiKeyHandler";
 
-    private readonly INocturneDbContextFactory _dbContextFactory;
+    private readonly IOAuthGrantRepository _grants;
     private readonly TimeProvider _timeProvider;
+    private readonly LastUsedClaims _lastUsedClaims;
     private readonly ILogger<ApiKeyHandler> _logger;
 
+    /// <param name="grants">The stored grants, pinned per read to the request's tenant.</param>
+    /// <param name="lastUsedClaims">Decides which concurrent request stamps the grant.</param>
     public ApiKeyHandler(
-        INocturneDbContextFactory dbContextFactory,
+        IOAuthGrantRepository grants,
         TimeProvider timeProvider,
+        LastUsedClaims lastUsedClaims,
         ILogger<ApiKeyHandler> logger)
     {
-        _dbContextFactory = dbContextFactory;
+        _grants = grants;
         _timeProvider = timeProvider;
+        _lastUsedClaims = lastUsedClaims;
         _logger = logger;
     }
 
@@ -67,53 +70,33 @@ public class ApiKeyHandler : IAuthHandler
         }
 
         // 4. Determine hash strategy based on prefix
-        string? tokenHash = null;
-        string? legacySecretHash = null;
-
-        if (apiKey.StartsWith("noc_", StringComparison.Ordinal))
-        {
-            tokenHash = HashUtils.Sha256Hex(apiKey);
-        }
-        else
-        {
+        DirectGrantLookup lookup = apiKey.StartsWith("noc_", StringComparison.Ordinal)
+            ? new DirectGrantLookup.ByTokenHash([HashUtils.Sha256Hex(apiKey)])
             // Legacy path: the value sent in the header is already a SHA-1 hex hash
             // (Nightscout clients pre-hash secrets before sending). Normalize to lowercase
             // to match the canonical stored form (HashUtils.Sha1Hex is lowercase) — some
             // clients (e.g. Android) emit uppercase hex, which the case-sensitive column
             // comparison would otherwise miss.
-            legacySecretHash = apiKey.ToLowerInvariant();
-        }
+            : new DirectGrantLookup.ByLegacySecretHash(apiKey.ToLowerInvariant());
 
         // 5. Query for matching grant
-        await using var dbContext = await _dbContextFactory.CreateForTenantAsync(tenantCtx.TenantId);
-
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var activeGrants = DirectGrantTokenHandler.ActiveDirectGrants(
-            dbContext.OAuthGrants.AsNoTracking(), tenantCtx.TenantId, now);
+        var found = await _grants.FindLiveDirectGrantAsync(tenantCtx.TenantId, lookup, now, CancellationToken.None);
 
-        var row = await RequestMembership.WithMembership(
-                tokenHash != null
-                    ? activeGrants.Where(g => g.TokenHash == tokenHash)
-                    : activeGrants.Where(g => g.LegacySecretHash == legacySecretHash),
-                g => g.SubjectId,
-                dbContext,
-                tenantCtx.TenantId)
-            .FirstOrDefaultAsync();
-
-        if (row == null)
+        if (found == null)
         {
             _logger.LogDebug("No matching API key grant found");
             return AuthResult.Failure("Invalid API key");
         }
 
-        var grant = row.Outer;
-        new RequestMembership(grant.SubjectId, tenantCtx.TenantId, row.Member.ToFacts()).StoreOn(context);
+        var grant = found.Grant;
+        new RequestMembership(grant.SubjectId, tenantCtx.TenantId, MembershipFacts.From(found.Membership)).StoreOn(context);
 
         // 6. Fire-and-forget last-used stamp
-        if (LastUsedStamp.IsDue(grant.LastUsedAt, now))
+        if (_lastUsedClaims.TryClaim(grant.Id, grant.LastUsedAt))
         {
             _ = DirectGrantTokenHandler.RecordLastUsedAsync(
-                _dbContextFactory, _logger, grant.Id, tenantCtx.TenantId,
+                _grants, _logger, grant.Id, tenantCtx.TenantId,
                 context.Connection.RemoteIpAddress?.ToString(),
                 context.Request.Headers.UserAgent.FirstOrDefault());
         }
@@ -138,7 +121,7 @@ public class ApiKeyHandler : IAuthHandler
             IsAuthenticated = true,
             AuthType = AuthType.ApiKey,
             SubjectId = grant.SubjectId,
-            Scopes = grant.Scopes,
+            Scopes = [.. grant.Scopes],
             LimitTo24Hours = grant.LimitTo24Hours,
             TokenId = grant.Id,
             CredentialFingerprint = AuditFingerprint.Of(
@@ -153,7 +136,7 @@ public class ApiKeyHandler : IAuthHandler
     /// the tenant's owner.
     /// </remarks>
     private async Task SendRotationNudgeAsync(
-        IServiceScopeFactory scopeFactory, TenantContext tenant, OAuthGrantEntity grant)
+        IServiceScopeFactory scopeFactory, TenantContext tenant, DirectGrantCredential grant)
     {
         try
         {
@@ -161,13 +144,11 @@ public class ApiKeyHandler : IAuthHandler
             var notificationService = scope.ServiceProvider.GetRequiredService<IInAppNotificationService>();
 
             string? recipient = grant.SubjectId.ToString();
-            await using (var db = await _dbContextFactory.CreateForTenantAsync(tenant.TenantId))
+            if (await scope.ServiceProvider.GetRequiredService<ISubjectRepository>()
+                    .FindDeviceSubjectAsync(CancellationToken.None) == grant.SubjectId)
             {
-                if (await db.FindDeviceSubjectOf(tenant.TenantId) == grant.SubjectId)
-                {
-                    recipient = await scope.ServiceProvider.GetRequiredService<ITenantOwnerResolver>()
-                        .GetOwnerSubjectIdAsync(tenant.TenantId);
-                }
+                recipient = await scope.ServiceProvider.GetRequiredService<ITenantOwnerResolver>()
+                    .GetOwnerSubjectIdAsync(tenant.TenantId);
             }
 
             if (recipient is null)
