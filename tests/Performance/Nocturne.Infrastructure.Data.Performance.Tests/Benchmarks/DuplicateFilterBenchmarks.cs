@@ -1,13 +1,15 @@
 using BenchmarkDotNet.Attributes;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Performance.Tests.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Performance.Tests.Benchmarks;
 
 [MemoryDiagnoser]
 [RankColumn]
-public class LinkedRecordsFilterBenchmarks
+public class DuplicateFilterBenchmarks
 {
     private PostgresFixture _fixture = null!;
     private Guid _tenantId;
@@ -36,7 +38,7 @@ public class LinkedRecordsFilterBenchmarks
             if (ids.Count != RowCount)
                 throw new InvalidOperationException($"Expected {RowCount} sensor glucose rows, found {ids.Count}.");
             await DataSeeder.SeedLinkedRecordsAsync(
-                ctx, _tenantId, "sensorglucose", ids, DuplicatePercent);
+                ctx, _tenantId, RecordType.SensorGlucose, ids, DuplicatePercent);
             var linkedCount = await ctx.LinkedRecords.CountAsync(lr => lr.RecordType == "sensorglucose");
             var expectedLinkedCount = 2 * (int)(RowCount * DuplicatePercent);
             if (linkedCount != expectedLinkedCount)
@@ -50,7 +52,7 @@ public class LinkedRecordsFilterBenchmarks
         await _fixture.DisposeAsync();
     }
 
-    [Benchmark(Description = "WithLinkedRecordsFilter")]
+    [Benchmark(Description = "WithDuplicateFilter")]
     public async Task<List<SensorGlucoseEntity>> WithFilter()
     {
         if (!_fixture.IsInitialized) return [];
@@ -61,14 +63,13 @@ public class LinkedRecordsFilterBenchmarks
         return await ctx.SensorGlucose.AsNoTracking()
             .Where(e => e.TenantId == _tenantId)
             .Where(e => e.Timestamp >= from && e.Timestamp <= now)
-            .Where(e => !ctx.LinkedRecords
-                .Any(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary && lr.RecordId == e.Id))
+            .ExcludeDuplicates()
             .OrderByDescending(e => e.Timestamp)
             .Take(100)
             .ToListAsync();
     }
 
-    [Benchmark(Baseline = true, Description = "WithoutLinkedRecordsFilter")]
+    [Benchmark(Baseline = true, Description = "WithoutDuplicateFilter")]
     public async Task<List<SensorGlucoseEntity>> WithoutFilter()
     {
         if (!_fixture.IsInitialized) return [];

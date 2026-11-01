@@ -545,19 +545,31 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     /// <summary>
     /// V4 record tables whose lists read one tenant newest-first by timestamp, then id on the tables
-    /// that tie-break on it.
+    /// that tie-break on it. The tables deduplication links are listed apart, in
+    /// <see cref="V4VisibleSortedListEntities"/>.
     /// </summary>
     internal static readonly Type[] V4SortedListEntities =
     [
-        typeof(SensorGlucoseEntity),
         typeof(MeterGlucoseEntity),
         typeof(CalibrationEntity),
+        .. V4SnapshotEntities,
+    ];
+
+    /// <summary>
+    /// The <see cref="IDuplicateFlagged"/> V4 record tables, whose lists read the same order as
+    /// <see cref="V4SortedListEntities"/> over the rows <see cref="Extensions.ReadVisibilityFilter"/>
+    /// shows. <see cref="TempBasalEntity"/>'s timestamp is its span start.
+    /// </summary>
+    internal static readonly Type[] V4VisibleSortedListEntities =
+    [
+        typeof(SensorGlucoseEntity),
         typeof(BolusEntity),
         typeof(CarbIntakeEntity),
         typeof(BGCheckEntity),
         typeof(NoteEntity),
         typeof(DeviceEventEntity),
-        .. V4SnapshotEntities,
+        typeof(BolusCalculationEntity),
+        typeof(TempBasalEntity),
     ];
 
     /// <summary>
@@ -786,9 +798,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         // A V4 list reads one tenant newest-first by timestamp, then id on the tables that tie-break
         // on it. With no index leading (tenant_id, timestamp), a LIMIT read reads every live row and
-        // sorts; the three tables that keep such an index for the dedup read still gain the id
-        // tie-break and the live-rows predicate here. GetLatestAsync and the pump GetTimelineAsync on a
-        // snapshot table walk the same index.
+        // sorts. GetLatestAsync and the pump GetTimelineAsync on a snapshot table walk the same index.
         foreach (var entity in V4SortedListEntities.Select(t => modelBuilder.Entity(t)))
         {
             entity.HasIndex(
@@ -798,6 +808,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_timestamp_id")
                 .IsDescending(false, true, true)
                 .HasFilter("deleted_at IS NULL");
+        }
+
+        // On a deduplicated table the index holds only the rows reads show, so an unbounded count is
+        // an index-only scan and a range read never visits a duplicate's heap tuple. A read that skips
+        // ReadVisibilityFilter cannot use it: it falls back to the (tenant_id, timestamp) index the
+        // dedup read keeps on the larger tables, or to the global timestamp index.
+        foreach (var entity in V4VisibleSortedListEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.Timestamp),
+                    nameof(IIdentified.Id))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_visible_timestamp_id")
+                .IsDescending(false, true, true)
+                .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
         }
 
         // The closed-loop stamp bounds its range by the newest snapshot of one algorithm for one
@@ -811,9 +836,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<StateSpanEntity>()
             .HasIndex(nameof(ITenantScoped.TenantId), nameof(StateSpanEntity.StartTimestamp), nameof(IIdentified.Id))
-            .HasDatabaseName("ix_state_spans_tenant_start_id")
+            .HasDatabaseName("ix_state_spans_tenant_visible_start_id")
             .IsDescending(false, true, true)
-            .HasFilter("deleted_at IS NULL");
+            .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
 
         // The device status list walks extras newest-first beside the snapshots; see
         // DeviceStatusGroupRepository.GetAsync.
@@ -1624,8 +1649,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(l => new { l.TenantId, l.RecordType, l.SourceTimestamp })
             .HasDatabaseName("ix_linked_records_tenant_type_timestamp");
 
-        // The NOT EXISTS anti-join of ReadVisibilityFilter reads ix_linked_records_tenant_type_not_primary,
-        // which AddCompositePerformanceIndexes creates in raw SQL and so the model does not carry.
+        // ix_linked_records_tenant_type_not_primary, the keyset of a type's non-primary links, is
+        // created in raw SQL by AddCompositePerformanceIndexes and so the model does not carry it.
 
         modelBuilder
             .Entity<ConnectorConfigurationEntity>()

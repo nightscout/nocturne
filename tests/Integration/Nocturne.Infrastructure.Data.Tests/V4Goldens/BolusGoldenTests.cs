@@ -80,7 +80,7 @@ public class BolusGoldenTests
     public async Task GetAsync_SevenArg_ViaGenericInterface_ExcludesNonPrimaryDuplicates()
     {
         // Pins the migration's highest-risk path: the base's plain 7-arg GetAsync is overridden to
-        // route through the bolus query's non-primary LinkedRecords filter, so a deduped non-primary
+        // route through the bolus query's duplicate filter, so a deduped non-primary
         // row is excluded even when GetAsync is invoked via the generic IV4Repository<Bolus> (the old
         // default-interface bridge). If the override regressed, this returns 2 instead of 1.
         var tenant = Guid.NewGuid();

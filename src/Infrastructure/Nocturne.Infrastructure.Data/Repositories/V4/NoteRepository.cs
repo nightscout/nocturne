@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <summary>
 /// Repository for managing note records in the database. A DeduplicationService participant on top of
 /// the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the
-/// extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
+/// extended <c>GetAsync</c> (duplicate filter), the read-visibility filter behind
 /// <c>CountAsync</c>, and the post-commit dedup linking.
 /// </summary>
 public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteRepository
@@ -87,7 +87,7 @@ public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteR
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);

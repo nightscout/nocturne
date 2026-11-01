@@ -65,28 +65,12 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         return id;
     }
 
-    private void LinkNonPrimary(Guid recordId, DateTime timestamp)
-    {
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.NewGuid(),
-            TenantId = TestTenantId,
-            CanonicalId = Guid.NewGuid(),
-            RecordType = "sensorglucose",
-            RecordId = recordId,
-            SourceTimestamp = new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            DataSource = "unknown",
-            IsPrimary = false,
-        });
-        _context.SaveChanges();
-    }
-
     [Fact]
     public async Task FindStoredDuplicateAsync_NonPrimaryLinkedCopy_IsStillFound()
     {
         var now = DateTime.UtcNow;
         var hiddenId = SeedReading(now, 134, "Dexcom G7 DXCMRf");
-        LinkNonPrimary(hiddenId, now);
+        await DuplicateGroups.LinkAsync(_context, RecordType.SensorGlucose, primary: null, hiddenId);
 
         // Sanity: the read path hides the non-primary copy…
         var visible = (await _repo.GetAsync(
@@ -120,7 +104,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
     [Fact]
     public async Task FindStoredDuplicateAsync_SoftDeletedRow_ReturnsNull()
     {
-        // Guardrail: the probe skips the LinkedRecords visibility exclusion, but must keep the
+        // Guardrail: the probe skips the duplicate filter, but must keep the
         // global query filters — a soft-deleted reading is not a stored duplicate, and widening
         // the probe with IgnoreQueryFilters would also breach tenant isolation.
         var now = DateTime.UtcNow;
@@ -259,7 +243,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         // stored, soft-deleted rows do not.
         var now = DateTime.UtcNow;
         var hiddenId = SeedReading(now, 134, "Dexcom G7 DXCMRf");
-        LinkNonPrimary(hiddenId, now);
+        await DuplicateGroups.LinkAsync(_context, RecordType.SensorGlucose, primary: null, hiddenId);
         var deletedId = SeedReading(now.AddMinutes(-1), 133, "Dexcom G7 DXCMRf");
         var deleted = _context.SensorGlucose.IgnoreQueryFilters().Single(e => e.Id == deletedId);
         deleted.DeletedAt = now;

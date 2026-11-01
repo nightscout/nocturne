@@ -27,7 +27,7 @@ public enum DuplicateDelete
 
 /// <summary>
 /// Keeps a duplicate group readable once its primary is soft-deleted. Reads show a group through
-/// its primary (<see cref="ReadVisibilityFilter.ExcludeNonPrimary{TEntity}"/>), so a deleted
+/// its primary (<see cref="ReadVisibilityFilter.ExcludeDuplicates{TEntity}"/>), so a deleted
 /// primary hides every other source's copy with it; and the promoted copy's own row did not
 /// change, so a v3 history client would never be sent it. Every primary move, here or in
 /// <see cref="DeduplicationService"/>, is written by <see cref="SetPrimariesAsync"/>.

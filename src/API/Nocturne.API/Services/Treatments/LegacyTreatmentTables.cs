@@ -266,14 +266,13 @@ internal sealed class LegacyKeyedRecords<TRecord>(
 internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     Func<LegacyTreatmentRepositories, ILegacyKeyedRepository<TRecord>> repository,
     Func<NocturneDbContext, IQueryable<TEntity>> table,
-    Nocturne.Core.Models.RecordType dedupType,
     Func<TEntity, TRecord> toRecord,
     Func<TRecord, CarbFoodIndex, Treatment> project,
     Func<NocturneDbContext, DateTime?, DateTime?, CancellationToken, Task<long>>? count = null,
     Func<LegacyTreatmentRepositories, IReadOnlyCollection<Guid>, CancellationToken, Task<IEnumerable<TRecord>>>? correlated = null
 ) : ILegacyKeyedTreatmentTable
     where TRecord : class, IV4Record
-    where TEntity : class, ISystemTimestamped, IIdentified, ISoftDeletable, IObservationTimestamped
+    where TEntity : class, ISystemTimestamped, IDuplicateFlagged, ISoftDeletable, IObservationTimestamped
 {
     /// <inheritdoc />
     public string RecordType { get; } = typeof(TRecord).Name;
@@ -338,7 +337,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         var at = instants.ToList();
         return table(context)
             .AsNoTracking()
-            .ExcludeNonPrimary(context, dedupType)
+            .ExcludeDuplicates()
             .Where(e => at.Contains(e.Timestamp))
             .InObservationOrder(descending: true);
     }
@@ -357,7 +356,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     {
         var entities = await HistoryPage.GetAsync(
             context,
-            table(context).IncludingDeleted().AsNoTracking().ExcludeNonPrimaryKeepingDeleted(context, dedupType),
+            table(context).IncludingDeleted().AsNoTracking().ExcludeDuplicatesKeepingDeleted(),
             e => e.SysUpdatedAt,
             e => e.Id,
             cursorMills,
@@ -402,7 +401,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     {
         var entities = await table(context)
             .AsNoTracking()
-            .ExcludeNonPrimary(context, dedupType)
+            .ExcludeDuplicates()
             .Where(filter)
             .ToListAsync(ct);
 
@@ -441,10 +440,19 @@ internal sealed class LegacyStateSpanTable(
     /// <inheritdoc />
     public Task<long> CountAsync(
         LegacyTreatmentRepositories repositories, NocturneDbContext context, DateTime? from, DateTime? to,
-        ILogger logger, CancellationToken ct) => LegacyTreatmentTables.GuardedAsync(this, logger, () => InWindow(context, from, to).LongCountAsync(ct), 0L);
+        ILogger logger, CancellationToken ct) =>
+        LegacyTreatmentTables.GuardedAsync(
+            this, logger, () => Window(Visible(context), from, to).LongCountAsync(ct), 0L);
 
+    /// <summary>
+    /// Every served span of this category, duplicate copies included: the id lookups and the bulk
+    /// writes reach each copy, as the record tables' do.
+    /// </summary>
     internal IQueryable<StateSpanEntity> Rows(NocturneDbContext context) =>
         Served(context.StateSpans.AsNoTracking());
+
+    /// <summary>The served spans a read shows, by <see cref="ReadVisibilityFilter"/>.</summary>
+    private IQueryable<StateSpanEntity> Visible(NocturneDbContext context) => Rows(context).ExcludeDuplicates();
 
     /// <inheritdoc />
     public IQueryable<string> TreatmentKeys(NocturneDbContext context) => Rows(context).Select(s => s.OriginalId!);
@@ -456,10 +464,12 @@ internal sealed class LegacyStateSpanTable(
     internal IQueryable<StateSpanEntity> UserTombstones(NocturneDbContext context) =>
         context.StateSpans.UserTombstones(context).Where(s => s.Category == _category).Where(fromTreatment);
 
-    /// <summary>Spans starting inside the window, bounds inclusive.</summary>
-    internal IQueryable<StateSpanEntity> InWindow(NocturneDbContext context, DateTime? from, DateTime? to)
+    /// <summary>Served spans starting inside the window, bounds inclusive, duplicate copies included.</summary>
+    internal IQueryable<StateSpanEntity> InWindow(NocturneDbContext context, DateTime? from, DateTime? to) =>
+        Window(Rows(context), from, to);
+
+    private static IQueryable<StateSpanEntity> Window(IQueryable<StateSpanEntity> rows, DateTime? from, DateTime? to)
     {
-        var rows = Rows(context);
         if (from is { } lower)
             rows = rows.Where(s => s.StartTimestamp >= lower);
         if (to is { } upper)
@@ -478,7 +488,7 @@ internal sealed class LegacyStateSpanTable(
         CancellationToken ct
     )
     {
-        var spans = await InStartOrder(InWindow(context, range.From, range.To), range.Descending)
+        var spans = await InStartOrder(Window(Visible(context), range.From, range.To), range.Descending)
             .Take(range.Limit)
             .ToListAsync(ct);
 
@@ -505,7 +515,7 @@ internal sealed class LegacyStateSpanTable(
     private IQueryable<StateSpanEntity> At(NocturneDbContext context, IReadOnlyCollection<DateTime> instants)
     {
         var at = instants.ToList();
-        return InStartOrder(Rows(context).Where(s => at.Contains(s.StartTimestamp)), descending: true);
+        return InStartOrder(Visible(context).Where(s => at.Contains(s.StartTimestamp)), descending: true);
     }
 
     private static IOrderedQueryable<StateSpanEntity> InStartOrder(IQueryable<StateSpanEntity> spans, bool descending) =>
@@ -523,7 +533,7 @@ internal sealed class LegacyStateSpanTable(
     {
         var spans = await HistoryPage.GetAsync(
             context,
-            Served(context.StateSpans.IncludingDeleted().AsNoTracking()),
+            Served(context.StateSpans.IncludingDeleted().AsNoTracking()).ExcludeDuplicatesKeepingDeleted(),
             s => s.UpdatedAt, s => s.Id, cursorMills, limit, logger, RecordType, ct);
 
         return spans.Select(span => Fetched(span) with { Deleted = span.DeletedAt is not null }).ToList();
@@ -545,7 +555,7 @@ internal sealed class LegacyStateSpanTable(
     )
     {
         var keys = treatmentKeys.ToList();
-        var spans = await Rows(context).Where(s => keys.Contains(s.OriginalId!)).ToListAsync(ct);
+        var spans = await Visible(context).Where(s => keys.Contains(s.OriginalId!)).ToListAsync(ct);
         return spans.Select(Fetched).ToList();
     }
 
@@ -889,39 +899,39 @@ internal static class LegacyTreatmentTables
 
     private static readonly LegacyTreatmentTable<DeviceEvent, DeviceEventEntity> DeviceEventTable = new(
         repositories => repositories.DeviceEvents,
-        c => c.DeviceEvents, RecordType.DeviceEvent, DeviceEventMapper.ToDomainModel,
+        c => c.DeviceEvents, DeviceEventMapper.ToDomainModel,
         (r, _) => ProjectDeviceEvent(r));
 
     internal static readonly IReadOnlyList<ILegacyTreatmentTable> All =
     [
         new LegacyTreatmentTable<Bolus, BolusEntity>(
             repositories => repositories.Boluses,
-            c => c.Boluses, RecordType.Bolus, BolusMapper.ToDomainModel,
+            c => c.Boluses, BolusMapper.ToDomainModel,
             (r, _) => ProjectCorrectionBolus(r),
             correlated: (repositories, ids, ct) => repositories.Boluses.GetByCorrelationIdsAsync(ids, ct)),
         new LegacyTreatmentTable<CarbIntake, CarbIntakeEntity>(
             repositories => repositories.CarbIntakes,
-            c => c.CarbIntakes, RecordType.CarbIntake, CarbIntakeMapper.ToDomainModel,
+            c => c.CarbIntakes, CarbIntakeMapper.ToDomainModel,
             (r, foods) => ProjectCarbCorrection(r, foods.For(r.Id)),
             CountCarbIntakesServedApartAsync,
             (repositories, ids, ct) => repositories.CarbIntakes.GetByCorrelationIdsAsync(ids, ct)),
         new LegacyTreatmentTable<BGCheck, BGCheckEntity>(
             repositories => repositories.BGChecks,
-            c => c.BGChecks, RecordType.BGCheck, BGCheckMapper.ToDomainModel,
+            c => c.BGChecks, BGCheckMapper.ToDomainModel,
             (r, _) => ProjectBgCheck(r)),
         new LegacyTreatmentTable<Note, NoteEntity>(
             repositories => repositories.Notes,
-            c => c.Notes, RecordType.Note, NoteMapper.ToDomainModel,
+            c => c.Notes, NoteMapper.ToDomainModel,
             (r, _) => ProjectNote(r),
             CountNotesServedApartAsync),
         DeviceEventTable,
         new LegacyTreatmentTable<TempBasal, TempBasalEntity>(
             repositories => repositories.TempBasals,
-            c => c.TempBasals, RecordType.TempBasal, TempBasalMapper.ToDomainModel,
+            c => c.TempBasals, TempBasalMapper.ToDomainModel,
             (r, _) => TempBasalToTreatmentMapper.ToTreatment(r)),
         new LegacyTreatmentTable<BolusCalculation, BolusCalculationEntity>(
             repositories => repositories.BolusCalculations,
-            c => c.BolusCalculations, RecordType.BolusCalculation, BolusCalculationMapper.ToDomainModel,
+            c => c.BolusCalculations, BolusCalculationMapper.ToDomainModel,
             (r, _) => ProjectBolusCalculation(r)),
         .. StateSpanTables,
         ProfileActivationTable,
@@ -951,8 +961,8 @@ internal static class LegacyTreatmentTables
     /// </summary>
     private static async Task<long> CountNotesServedApartAsync(
         NocturneDbContext context, DateTime? from, DateTime? to, CancellationToken ct) =>
-        await InWindow(context, context.Notes, RecordType.Note, from, to).LongCountAsync(ct)
-        - await InWindow(context, NotesServedWithAnotherRecord(context), RecordType.Note, from, to).LongCountAsync(ct);
+        await InWindow(context.Notes, from, to).LongCountAsync(ct)
+        - await InWindow(NotesServedWithAnotherRecord(context), from, to).LongCountAsync(ct);
 
     /// <summary>
     /// The carb intakes served as treatments of their own in the window, bounds inclusive: every
@@ -964,8 +974,8 @@ internal static class LegacyTreatmentTables
     private static async Task<long> CountCarbIntakesServedApartAsync(
         NocturneDbContext context, DateTime? from, DateTime? to, CancellationToken ct)
     {
-        var carbs = InWindow(context, context.CarbIntakes, RecordType.CarbIntake, from, to);
-        var boluses = InWindow(context, context.Boluses, RecordType.Bolus, from, to);
+        var carbs = InWindow(context.CarbIntakes, from, to);
+        var boluses = InWindow(context.Boluses, from, to);
         var pairedMeals = carbs
             .Where(c => c.CorrelationId != null && boluses.Any(b => b.CorrelationId == c.CorrelationId))
             .Select(c => c.CorrelationId)
@@ -974,11 +984,10 @@ internal static class LegacyTreatmentTables
         return await carbs.LongCountAsync(ct) - await pairedMeals.LongCountAsync(ct);
     }
 
-    private static IQueryable<TEntity> InWindow<TEntity>(
-        NocturneDbContext context, IQueryable<TEntity> rows, RecordType recordType, DateTime? from, DateTime? to)
-        where TEntity : V4TimeSeriesEntityBase
+    private static IQueryable<TEntity> InWindow<TEntity>(IQueryable<TEntity> rows, DateTime? from, DateTime? to)
+        where TEntity : V4TimeSeriesEntityBase, IDuplicateFlagged
     {
-        rows = rows.AsNoTracking().ExcludeNonPrimary(context, recordType);
+        rows = rows.AsNoTracking().ExcludeDuplicates();
         if (from is { } lower)
             rows = rows.Where(r => r.Timestamp >= lower);
         if (to is { } upper)
