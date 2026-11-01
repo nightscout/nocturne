@@ -18,6 +18,7 @@
     fieldColor,
     isTimeAxis,
     legend,
+    rowMatch,
     rowsAt,
     slots,
     toDomain,
@@ -51,6 +52,7 @@
     for (let i = 1; i < points.length; i++) gap = Math.max(gap, points[i].raw - points[i - 1].raw);
     return gap || 1;
   });
+  const match = $derived(rowMatch(panel, tolerance));
   const entries = $derived(legend(panel));
   const xField = $derived.by((): ReportField | undefined => {
     const first = panel.tracks.flatMap((t) => drawnLayers(t))[0];
@@ -72,7 +74,7 @@
   function itemsAt(raw: number): TipItem[] {
     return panel.tracks.flatMap((track) =>
       drawnLayers(track).flatMap((layer): TipItem[] => {
-        const rows = rowsAt(layer, raw, tolerance).slice(0, 4);
+        const rows = rowsAt(layer, raw, match).slice(0, 4);
         if (layer.mark === "spans") {
           const name = layer.fields.find((f) => f.colorField)?.name ?? layer.bindings.category ?? "";
           return rows.map((row, i) => ({ key: `${layer.id}-${i}`, label: layer.title, value: String(row[name] ?? ""), color: null }));
@@ -94,7 +96,7 @@
 
   function sentencesAt(raw: number): string[] {
     return panel.tracks.flatMap((track) =>
-      drawnLayers(track).flatMap((layer) => rowsAt(layer, raw, tolerance).map(rowSentence).filter((s): s is string => s !== null)),
+      drawnLayers(track).flatMap((layer) => rowsAt(layer, raw, match).map(rowSentence).filter((s): s is string => s !== null)),
     );
   }
 </script>
@@ -168,7 +170,7 @@
   {#if (kind === "value" || kind === "lag") && xField}
     <p class="text-center text-xs text-muted-foreground" data-testid="report-x-caption">{xField.label}{xField.unit ? ` (${xField.unit})` : ""}</p>
   {/if}
-  {#if entries.length > 1}
+  {#if entries.length > 1 || entries.some((e) => e.context)}
     <ul class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" data-testid="report-legend">
       {#each entries as entry (entry.id)}
         <li class="flex items-center gap-1.5">
@@ -176,6 +178,9 @@
             <span class="inline-block h-0.5 w-3 bg-(--swatch)" style:--swatch={entry.color}></span>
           {/if}
           {entry.title}{entry.unit ? ` (${entry.unit})` : ""}
+          {#if entry.context}
+            <span class="text-muted-foreground/80" data-testid="report-legend-context">· {entry.context}</span>
+          {/if}
         </li>
       {/each}
     </ul>

@@ -276,6 +276,7 @@ export function barRects(layer: ReportLayer, x: XPixel, y: YPixel, plotWidth: nu
   const each = stacked ? width : width / Math.max(1, fields.length);
   const zero = y(0);
   const rects: BarRect[] = [];
+  const centre = (at: number) => x(layer.xKind === "day" ? at + DAY / 2 : at);
   for (const row of layer.rows) {
     const at = num(row, xName);
     if (at === null) continue;
@@ -290,7 +291,7 @@ export function barRects(layer: ReportLayer, x: XPixel, y: YPixel, plotWidth: nu
       const bottom = stacked ? y(Math.min(from, to)) : zero;
       rects.push({
         key: `${at}-${field.name}`,
-        x: x(at) - width / 2 + (stacked ? 0 : i * each),
+        x: centre(at) - width / 2 + (stacked ? 0 : i * each),
         y: Math.min(top, bottom),
         width: each,
         height: Math.abs(bottom - top),
@@ -409,11 +410,33 @@ function nearestBy<T>(items: readonly T[], at: (item: T) => number, target: numb
   return items[lo];
 }
 
+/** How the tooltip finds a layer's row under the pointer. */
+export interface RowMatch {
+  /** How far a row may be from the pointer's slot and still be that slot's: the widest gap between slots. */
+  tolerance: number;
+  /** The same for a treatment marker, which is a single moment: a few pixels' width of the axis. */
+  markerTolerance: number;
+  /** The panel folds its layers onto a grid: a row is the slot's only when it lies on that slot. */
+  gridded: boolean;
+}
+
+/** The match a panel's tooltip uses: a marker's tolerance is 1% of the axis. */
+export function rowMatch(panel: Pick<ReportPanel, "tracks" | "window" | "xKind" | "grid">, tolerance: number): RowMatch {
+  const [min, max] = xExtent(panel);
+  const kind = panel.xKind ?? "time";
+  return {
+    tolerance,
+    markerTolerance: (max - min) / 100,
+    gridded: (panel.grid ?? 0) > 0 && (kind === "time" || kind === "offset" || kind === "time_of_day"),
+  };
+}
+
 /**
- * A layer's rows at the x nearest `raw`: every series' row at that slot, or the spans that cover it.
- * Empty when the layer has no row within `tolerance` of it.
+ * A layer's rows under the pointer at `raw`: the spans that cover it; for a line or area of step fields
+ * the last row of each series at or before it, which is the value the step draws there; on a gridded
+ * panel the rows on that slot; else every series' row at the nearest x, within the match's tolerance.
  */
-export function rowsAt(layer: ReportLayer, raw: number, tolerance: number): ReportRow[] {
+export function rowsAt(layer: ReportLayer, raw: number, match: RowMatch): ReportRow[] {
   if (layer.mark === "spans") {
     const { start, end } = layer.bindings;
     return layer.rows.filter((r) => (num(r, start) ?? Infinity) <= raw && raw <= (num(r, end) ?? -Infinity));
@@ -421,6 +444,15 @@ export function rowsAt(layer: ReportLayer, raw: number, tolerance: number): Repo
   const xName = layer.bindings.x ?? "";
   const placed = layer.rows.filter((r) => num(r, xName) !== null);
   if (placed.length === 0) return [];
+  const values = valueFields(layer);
+  if ((layer.mark === "line" || layer.mark === "area") && values.length > 0 && values.every((f) => f.step)) {
+    const series = layer.bindings.series;
+    const last = new Map<unknown, ReportRow>();
+    for (const row of sortedBy(placed, xName)) if (num(row, xName)! <= raw) last.set(series ? row[series] : null, row);
+    return [...last.values()];
+  }
+  if (match.gridded) return placed.filter((r) => num(r, xName) === raw);
+  const tolerance = layer.mark === "markers" ? match.markerTolerance : match.tolerance;
   const nearest = num(nearestBy(sortedBy(placed, xName), (r) => num(r, xName)!, raw), xName)!;
   if (Math.abs(nearest - raw) > tolerance) return [];
   return placed.filter((r) => num(r, xName) === nearest);
@@ -447,6 +479,8 @@ export interface LegendEntry {
   unit: string | null;
   color: string | null;
   mark: ReportLayer["mark"];
+  /** How the layer was folded onto the grid, or null. */
+  context: string | null;
 }
 
 export function legend(panel: Pick<ReportPanel, "tracks">): LegendEntry[] {
@@ -459,6 +493,7 @@ export function legend(panel: Pick<ReportPanel, "tracks">): LegendEntry[] {
         unit: layer.unit ?? null,
         color: layer.mark === "markers" || layer.mark === "spans" || (lead && glucoseColoured(layer, lead) && layer.mark === "line") ? null : layerColor(layer),
         mark: layer.mark,
+        context: layer.context ?? null,
       };
     }),
   );

@@ -1,7 +1,7 @@
 <!--
   LayeredChart's static mode: the same tracks, axes and marks (LayeredPlot, one geometry for both),
   painted on a canvas in the theme's colours under the panel's title and range line, with the layers
-  in a key. Over categories it is the first bars layer, drawn as CategoryBars draws it.
+  in a key. Over categories it is every bars layer side by side, drawn as CategoryBars draws it.
 -->
 <script lang="ts">
   import { Canvas, Chart } from "layerchart";
@@ -15,6 +15,7 @@
   import { formatAxisValue } from "../layered/axis-format.js";
   import { drawnLayers, isTimeAxis, legend, slots, toDomain, xExtent } from "../layered/layered-layout.js";
   import type { ReportPanel } from "../types.js";
+  import { mergedBars } from "./static-panel.js";
   import StaticFrame, { staticPadding, type StaticKeyItem } from "./StaticFrame.svelte";
 
   interface Props {
@@ -35,16 +36,16 @@
   const points = $derived(slots(panel).map((raw) => ({ raw, x: toDomain(kind, raw) })));
   const hasRight = $derived(panel.tracks.some((t) => t.layers.some((l) => l.side === "right")));
   const key = $derived<StaticKeyItem[]>(
-    legend(panel).length > 1
+    legend(panel).length > 1 || legend(panel).some((e) => e.context)
       ? legend(panel).map((entry) => ({
-          label: `${entry.title}${entry.unit ? ` (${entry.unit})` : ""}`,
+          label: `${entry.title}${entry.unit ? ` (${entry.unit})` : ""}${entry.context ? ` · ${entry.context}` : ""}`,
           color: entry.color ? paint(theme, entry.color) : null,
           shape: "line",
         }))
       : [],
   );
   const padding = $derived(staticPadding({ key: key.length > 0, left: 60, right: hasRight ? 56 : 20 }));
-  const bars = $derived(panel.tracks.flatMap((t) => drawnLayers(t)).find((l) => l.mark === "bars"));
+  const bars = $derived(mergedBars(panel.tracks.flatMap((t) => drawnLayers(t)).filter((l) => l.mark === "bars")));
   /** The axis a scatter or a lag lies along, named where the panel has no range line: values and lags are not times. */
   const caption = $derived.by(() => {
     if (kind !== "value" && kind !== "lag") return null;

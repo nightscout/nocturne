@@ -69,7 +69,10 @@ describe("@nocturne/charts imports", () => {
   });
 
   it("draw a report's charts with layerchart's marks only, no raw SVG", () => {
-    const raw = /<(svg|g|path|rect|circle|ellipse|line|text|polygon|polyline|defs|linearGradient)[\s>]/;
+    const raw =
+      /<(svg|g|path|rect|circle|ellipse|line|text|tspan|polygon|polyline|defs|linearGradient|radialGradient|stop|clipPath|mask|pattern|use|image|foreignObject)(?=[\s/>])/;
+    for (const tag of ["<rect/>", "<stop offset=\"0\" />", "<clipPath id=\"c\">", "<use href=\"#a\"/>", "<g>"]) expect(raw.test(tag), tag).toBe(true);
+    for (const tag of ["<Rect x={0} />", "<Line />", "<Spline />"]) expect(raw.test(tag), tag).toBe(false);
     const found = files
       .filter((file) => file.endsWith(".svelte") && relative(root, file).split(/[\\/]/)[0] === "report")
       .filter((file) => raw.test(readFileSync(file, "utf8")))

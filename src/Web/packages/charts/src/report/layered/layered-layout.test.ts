@@ -6,6 +6,7 @@ import {
   legend,
   MINUTE_ORIGIN,
   placeGlyphs,
+  rowMatch,
   rowsAt,
   sideScales,
   slots,
@@ -102,9 +103,40 @@ describe("a layered chart's layout", () => {
       ],
     });
 
-    expect(rowsAt(bands, 1, 5).map((r) => r.series)).toEqual(["A", "B"]);
-    expect(rowsAt(bands, 4, 5).map((r) => r.p50)).toEqual([3]);
-    expect(rowsAt(bands, 40, 5)).toEqual([]);
+    const match = { tolerance: 5, markerTolerance: 1, gridded: false };
+    expect(rowsAt(bands, 1, match).map((r) => r.series)).toEqual(["A", "B"]);
+    expect(rowsAt(bands, 4, match).map((r) => r.p50)).toEqual([3]);
+    expect(rowsAt(bands, 40, match)).toEqual([]);
+  });
+
+  it("gives a step line's tooltip the last row at or before the pointer, the value the step draws there", () => {
+    const rate = { name: "rate", label: "Basal rate", kind: "number" as const, unit: "U/h", step: true };
+    const basal = layer({ bindings: { x: "time", y: ["rate"] }, fields: [time, rate], rows: [{ time: 0, rate: 0.8 }, { time: 100, rate: 1.2 }] });
+    const match = { tolerance: 10, markerTolerance: 1, gridded: false };
+
+    expect(rowsAt(basal, 90, match).map((r) => r.rate)).toEqual([0.8]);
+    expect(rowsAt(basal, 400, match).map((r) => r.rate)).toEqual([1.2]);
+    expect(rowsAt(basal, -1, match)).toEqual([]);
+  });
+
+  it("matches a gridded panel's slot exactly, never a neighbouring slot", () => {
+    const folded = layer({ rows: [{ time: 0, glucose: 100 }, { time: 900_000, glucose: 120 }] });
+    const match = { tolerance: 1_800_000, markerTolerance: 1, gridded: true };
+
+    expect(rowsAt(folded, 900_000, match).map((r) => r.glucose)).toEqual([120]);
+    expect(rowsAt(folded, 1_800_000, match)).toEqual([]);
+  });
+
+  it("gives a treatment marker its own narrow tolerance, so a marker far from the pointer is not listed", () => {
+    const markers = layer({ mark: "markers", bindings: { x: "time", y: ["iob"] }, fields: [time, iob], rows: [{ time: 3_600_000, iob: 2 }] });
+    const panel = { tracks: [track([markers])], window: { from: 0, to: 86_400_000 }, xKind: "time" as const, grid: null };
+    const match = rowMatch(panel, 7_200_000);
+
+    expect(match.markerTolerance).toBe(864_000);
+    expect(rowsAt(markers, 3_600_000 + 600_000, match)).toHaveLength(1);
+    expect(rowsAt(markers, 3_600_000 + 3_000_000, match)).toEqual([]);
+    expect(rowMatch({ ...panel, grid: 15 }, 1).gridded).toBe(true);
+    expect(rowMatch({ ...panel, xKind: "day", grid: 15 }, 1).gridded).toBe(false);
   });
 
   it("lists the slots every drawn layer has a row at, once each, in order", () => {
@@ -158,6 +190,20 @@ describe("a layered chart's layout", () => {
     ]);
   });
 
+  it("centres a day's bar on the middle of the day, inside the axis that runs to the end of the last day", () => {
+    const day = { name: "day", label: "Day", kind: "day" as const };
+    const bars = layer({
+      mark: "bars",
+      xKind: "day",
+      bindings: { x: "day", y: ["iob"] },
+      fields: [day, iob],
+      rows: [{ day: 0, iob: 1 }, { day: 86_400_000, iob: 2 }],
+    });
+    const rects = barRects(bars, (x) => x / 864_000, (v) => 100 - v, 200);
+
+    expect(rects.map((r) => r.x + r.width / 2)).toEqual([50, 150]);
+  });
+
   it("puts each span in its category's lane, in the row's own colour", () => {
     const spans = layer({
       mark: "spans",
@@ -202,7 +248,7 @@ describe("a layered chart's layout", () => {
     const entries = legend({
       tracks: [track([
         layer({ id: "g", title: "Glucose" }),
-        layer({ id: "h", title: "Glucose again", color: "chart-1" }),
+        layer({ id: "h", title: "Glucose again", color: "chart-1", context: "Glucose, mean per 15 minutes" }),
         layer({ id: "s", title: "Modes", mark: "spans", side: "none" }),
         layer({ id: "x", title: "Hidden", status: "not_permitted" }),
       ])],
@@ -213,5 +259,6 @@ describe("a layered chart's layout", () => {
       ["Glucose again", "var(--chart-1)"],
       ["Modes", null],
     ]);
+    expect(entries.map((e) => e.context)).toEqual([null, "Glucose, mean per 15 minutes", null]);
   });
 });

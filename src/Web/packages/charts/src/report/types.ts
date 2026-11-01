@@ -125,6 +125,8 @@ export interface ReportLayer {
   color?: ChartColor | null;
   facts?: ReportFact[];
   sentence?: string | null;
+  /** How the API folded the layer onto the panel's grid ("Basal rate, last value per 1 day"); null when drawn as read. */
+  context?: string | null;
   summary?: string;
   /** A band's spans, inner first. */
   spans?: ReportBandSpan[];
