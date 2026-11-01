@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +12,7 @@ using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 
@@ -105,6 +108,32 @@ internal static class UISettingsControllerHarness
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
+    }
+
+    internal static Task<ActionResult<FeatureSettings>> PatchFeatures(
+        this UISettingsController controller,
+        string body
+    ) => controller.PatchFeatureSettings(Bound<FeatureSettings>(controller, body));
+
+    internal static Task<ActionResult<DataQualitySettings>> PatchDataQuality(
+        this UISettingsController controller,
+        string body
+    ) => controller.PatchDataQualitySettings(Bound<DataQualitySettings>(controller, body));
+
+    internal static Task<ActionResult<NotificationSettings>> PatchNotifications(
+        this UISettingsController controller,
+        string body
+    ) => controller.PatchNotificationSettings(Bound<NotificationSettings>(controller, body));
+
+    /// <summary>
+    /// What the MVC pipeline hands a PATCH action: the body bound to the section type, and the
+    /// raw body left readable on the request.
+    /// </summary>
+    private static T Bound<T>(UISettingsController controller, string body)
+    {
+        controller.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body));
+        controller.Request.ContentType = "application/json";
+        return JsonSerializer.Deserialize<T>(body)!;
     }
 
     /// <summary>

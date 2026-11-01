@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
@@ -16,16 +17,20 @@ namespace Nocturne.API.Services.ClientDevices;
 public class ClientDeviceService : IClientDeviceService
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IOAuthGrantRepository _grants;
     private readonly TimeProvider _time;
     private readonly ILogger<ClientDeviceService> _logger;
 
     /// <summary>Initializes a new instance of the <see cref="ClientDeviceService"/> class.</summary>
+    /// <param name="grants">The grants devices registered under, for the app name a device is shown with.</param>
     public ClientDeviceService(
         INocturneDbContextFactory contexts,
+        IOAuthGrantRepository grants,
         TimeProvider timeProvider,
         ILogger<ClientDeviceService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
         _time = timeProvider;
         _logger = logger;
     }
@@ -134,20 +139,19 @@ public class ClientDeviceService : IClientDeviceService
         CancellationToken cancellationToken = default)
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var rows = await db.ClientDevices
+        var devices = await db.ClientDevices
+            .AsNoTracking()
             .Where(d => d.SubjectId == subjectId)
             .OrderByDescending(d => d.LastSeenAt)
-            .Select(d => new
-            {
-                Device = d,
-                AppName = db.OAuthGrants
-                    .Where(g => g.Id == d.GrantId)
-                    .Select(g => g.Client!.DisplayName)
-                    .FirstOrDefault(),
-            })
             .ToListAsync(cancellationToken);
 
-        return rows.Select(r => ToDto(r.Device, r.AppName)).ToList();
+        var appNames = await _grants.GetClientDisplayNamesAsync(
+            devices.Where(d => d.GrantId is not null).Select(d => d.GrantId!.Value).Distinct().ToList(),
+            cancellationToken);
+
+        return devices
+            .Select(d => ToDto(d, d.GrantId is { } grantId ? appNames.GetValueOrDefault(grantId) : null))
+            .ToList();
     }
 
     /// <inheritdoc />

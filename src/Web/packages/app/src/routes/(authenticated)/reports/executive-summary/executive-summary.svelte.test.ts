@@ -12,11 +12,12 @@ const report = vi.hoisted(() => ({
   thresholds: { veryLow: 54, low: 63, targetBottom: 63, targetTop: 140, high: 140, veryHigh: 250 },
 }));
 
-vi.mock("#lib/api/reports.remote.js", () => ({ getReportsData: vi.fn() }));
+vi.mock("#lib/api/reports.remote.js", () => ({ getReadingCount: vi.fn(), getReportsAnalysis: vi.fn() }));
 vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({ dateRangeInput: {} }),
 }));
 vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
+  useResourceContext: () => {},
   contextResource: () => ({
     date: { dayCount: 14 },
     current: {

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Health;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
@@ -20,8 +21,7 @@ namespace Nocturne.API.Services.V4;
 /// create-or-update via <c>OriginalId</c> matching.
 /// </summary>
 /// <seealso cref="IActivityDecomposer"/>
-/// <seealso cref="IDecomposer{T}"/>
-public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
+public class ActivityDecomposer : IActivityDecomposer
 {
     private const string XDripHeartRateType = "hr-bpm";
 
@@ -30,6 +30,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     private readonly TimeProvider _time;
     private readonly ILogger<ActivityDecomposer> _logger;
 
+    /// <param name="contexts">Opens the context heart rates and step counts are read and written through.</param>
     /// <param name="stateSpanRepository">Repository for bulk-creating regular activities as StateSpans.</param>
     /// <param name="timeProvider">Clock that stamps soft deletes.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
@@ -117,92 +118,71 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     }
 
     /// <inheritdoc/>
-    public async Task<DecompositionResult> DecomposeAsync(
-        Activity activity,
-        WriteOrigin origin, CancellationToken ct = default
-    )
-    {
-        await using var db = await _contexts.CreateAsync(ct);
-        var result = new DecompositionResult { CorrelationId = Guid.CreateVersion7() };
-        NormalizeMills(activity);
-
-        switch (Classify(activity))
-        {
-            case ActivityDestination.HeartRate:
-                await UpsertByOriginalIdAsync(
-                    db,
-                    db.HeartRates, MapToHeartRate(activity), HeartRateMapper.ToEntity,
-                    HeartRateMapper.UpdateEntity, HeartRateMapper.ToDomainModel, result, ct);
-                break;
-            case ActivityDestination.StepCount:
-                await UpsertByOriginalIdAsync(
-                    db,
-                    db.StepCounts, MapToStepCount(activity), StepCountMapper.ToEntity,
-                    StepCountMapper.UpdateEntity, StepCountMapper.ToDomainModel, result, ct);
-                break;
-            default:
-                _logger.LogDebug(
-                    "Activity {Id} is a regular activity, skipping decomposition",
-                    activity.Id
-                );
-                break;
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public async Task<DecompositionResult> DecomposeBatchAsync(
+    /// <remarks>
+    /// Four phases, each one round trip per table whatever the batch's size: the activities are
+    /// classified and mapped; the rows their ids and sync keys name are read
+    /// (<see cref="ResolveAsync{TModel,TEntity}"/>); each record is planned onto its row in memory
+    /// (<see cref="Plan{TModel,TEntity}"/>); and both tables are saved together, then the regular
+    /// activities written as state spans.
+    /// <para>
+    /// <paramref name="origin"/> is unused, since none of the writes made here takes one; it stays for
+    /// the shape every decomposer's batch shares.
+    /// </para>
+    /// </remarks>
+    public async Task<ActivityDecomposition> DecomposeBatchAsync(
         IReadOnlyList<Activity> activities, WriteOrigin origin, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
+        var result = new ActivityDecomposition();
         if (activities.Count == 0)
-            return new DecompositionResult();
+            return result;
 
-        var result = new DecompositionResult { CorrelationId = Guid.CreateVersion7() };
+        var groups = activities.Select(_ => Guid.CreateVersion7()).ToList();
+        result.Begin(groups);
+        result.CorrelationId = groups[0];
 
-        var heartRateList = new List<HeartRate>();
-        var stepCountList = new List<StepCount>();
-        var regularActivities = new List<Activity>();
-
-        foreach (var activity in activities)
+        var heartRates = new List<(int Index, HeartRate Model)>();
+        var stepCounts = new List<(int Index, StepCount Model)>();
+        var regular = new List<Activity>();
+        for (var i = 0; i < activities.Count; i++)
         {
+            var activity = activities[i];
             NormalizeMills(activity);
-
             switch (Classify(activity))
             {
                 case ActivityDestination.HeartRate:
-                    heartRateList.Add(MapToHeartRate(activity));
+                    heartRates.Add((i, MapToHeartRate(activity)));
                     break;
                 case ActivityDestination.StepCount:
-                    stepCountList.Add(MapToStepCount(activity));
+                    stepCounts.Add((i, MapToStepCount(activity)));
                     break;
                 default:
-                    regularActivities.Add(activity);
+                    regular.Add(activity);
                     break;
             }
         }
 
-        await BulkUpsertByOriginalIdAsync(
-            db,
-            db.HeartRates, heartRateList, HeartRateMapper.ToEntity,
-            HeartRateMapper.UpdateEntity, HeartRateMapper.ToDomainModel, result, ct);
+        await using var db = await _contexts.CreateAsync(ct);
+        var heartRateRows = await ResolveAsync(db, db.HeartRates, heartRates, HeartRateMapper.ToEntity, ct);
+        var stepCountRows = await ResolveAsync(db, db.StepCounts, stepCounts, StepCountMapper.ToEntity, ct);
 
-        await BulkUpsertByOriginalIdAsync(
-            db,
-            db.StepCounts, stepCountList, StepCountMapper.ToEntity,
-            StepCountMapper.UpdateEntity, StepCountMapper.ToDomainModel, result, ct);
+        var heartRatePlan = Plan(db, db.HeartRates, heartRateRows, HeartRateMapper.UpdateEntity, result);
+        var stepCountPlan = Plan(db, db.StepCounts, stepCountRows, StepCountMapper.UpdateEntity, result);
 
-        if (regularActivities.Count > 0)
+        if (heartRatePlan.Writes || stepCountPlan.Writes)
+            await db.SaveChangesAsync(ct);
+        heartRatePlan.Report(result, groups, HeartRateMapper.ToDomainModel);
+        stepCountPlan.Report(result, groups, StepCountMapper.ToDomainModel);
+
+        if (regular.Count > 0)
         {
-            var stateSpans = regularActivities.Select(ActivityStateSpanMapper.ToStateSpan).ToList();
+            var stateSpans = regular.Select(ActivityStateSpanMapper.ToStateSpan).ToList();
             var created = await _stateSpanRepository.CreateActivitiesAsStateSpansAsync(stateSpans, ct);
             result.CreatedRecords.AddRange(created.Select(s => ActivityStateSpanMapper.ToActivity(s)!));
         }
 
         _logger.LogDebug(
             "Batch-decomposed {Count} activities ({HeartRate} HR, {StepCount} steps, {Regular} regular)",
-            activities.Count, heartRateList.Count, stepCountList.Count, regularActivities.Count);
+            activities.Count, heartRates.Count, stepCounts.Count, regular.Count);
 
         return result;
     }
@@ -333,75 +313,131 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
     // --- Private decomposition methods ---
 
+    /// <summary>A table's mapped records, by batch index, with the stored rows their ids and sync keys name.</summary>
+    private sealed record Resolved<TModel, TEntity>(
+        List<(int Index, TModel Model, TEntity Entity)> Records,
+        Dictionary<string, TEntity> ById,
+        HashSet<string> UserDeletedIds,
+        Dictionary<(string? DataSource, string SyncIdentifier), TEntity> ByKey,
+        HashSet<(string? DataSource, string SyncIdentifier)> UserDeletedKeys)
+        where TEntity : class;
+
     /// <summary>
-    /// Create-or-update keyed on the legacy <c>OriginalId</c>, or, for a record with no id, on its
-    /// sync key when <see cref="MapToHeartRate"/> or <see cref="MapToStepCount"/> gave it one. Heart rates and step counts have no
-    /// V4 repository, so unlike its <see cref="DecomposerBase.UpsertByLegacyIdAsync"/> siblings this
-    /// writes the entity through the context. The <c>OriginalId</c> resolves as
-    /// <see cref="ResolveByOriginalIdAsync{TEntity}"/> describes, the sync key as
-    /// <see cref="ResolveBySyncKeyAsync{TEntity}"/> does.
+    /// Maps a table's records and reads, in one query each, the rows their <c>OriginalId</c>s name
+    /// (<see cref="ResolveByOriginalIdAsync{TEntity}"/>) and the rows the sync keys of those with no id
+    /// name (<see cref="ResolveBySyncKeyAsync{TEntity}"/>). Only a record with no id is given a sync
+    /// key (<see cref="MapToHeartRate"/>, <see cref="MapToStepCount"/>).
     /// </summary>
-    private async Task UpsertByOriginalIdAsync<TModel, TEntity>(
-        NocturneDbContext db,
-        DbSet<TEntity> set,
-        TModel model,
-        Func<TModel, TEntity> toEntity,
-        Action<TEntity, TModel> applyUpdate,
-        Func<TEntity, object> toDomain,
-        DecompositionResult result,
-        CancellationToken ct)
+    private static async Task<Resolved<TModel, TEntity>> ResolveAsync<TModel, TEntity>(
+        NocturneDbContext db, DbSet<TEntity> set, List<(int Index, TModel Model)> models,
+        Func<TModel, TEntity> toEntity, CancellationToken ct)
         where TModel : ProcessableDocumentBase
         where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified, ISyncDedupable
     {
-        var recordType = typeof(TModel).Name;
-        var entity = toEntity(model);
-        TEntity? existing;
-        if (model.Id != null)
+        var records = models.Select(m => (m.Index, m.Model, Entity: toEntity(m.Model))).ToList();
+        var (byId, userDeletedIds) = await ResolveByOriginalIdAsync(
+            db, set, [.. records.Select(r => r.Model.Id).OfType<string>().Distinct(StringComparer.Ordinal)], ct);
+        var (byKey, userDeletedKeys) = await ResolveBySyncKeyAsync(
+            db, set,
+            [.. records.Where(r => r.Model.Id == null).Select(r => r.Entity.SyncIdentifier).OfType<string>().Distinct(StringComparer.Ordinal)],
+            ct);
+        return new(records, byId, userDeletedIds, byKey, userDeletedKeys);
+    }
+
+    /// <summary>
+    /// The rows a table's records write. A record whose id or sync key only a user tombstone holds is
+    /// not written; of several with one id or one sync key the last wins; a record whose row is stored
+    /// updates it, reviving a system-swept tombstone in place, and is unchanged when that changes
+    /// nothing; the rest are inserted.
+    /// </summary>
+    private static TablePlan<TEntity> Plan<TModel, TEntity>(
+        NocturneDbContext db, DbSet<TEntity> set, Resolved<TModel, TEntity> resolved,
+        Action<TEntity, TModel> applyUpdate, ActivityDecomposition result)
+        where TModel : ProcessableDocumentBase
+        where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified, ISyncDedupable
+    {
+        var plan = new TablePlan<TEntity>();
+        var last = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var p = 0; p < resolved.Records.Count; p++)
         {
-            var (rows, userDeleted) = await ResolveByOriginalIdAsync(db, set, [model.Id], ct);
-            if (userDeleted.Count > 0)
+            if (KeyOf(resolved.Records[p].Model, resolved.Records[p].Entity) is { } key)
+                last[key] = p;
+        }
+
+        for (var p = 0; p < resolved.Records.Count; p++)
+        {
+            var (index, model, entity) = resolved.Records[p];
+            TEntity? stored = null;
+            if (model.Id is { } id)
             {
-                result.SkippedDeleted++;
-                _logger.LogDebug("Skipped {RecordType} from legacy activity {LegacyId}: the user deleted it", recordType, model.Id);
-                return;
+                if (resolved.UserDeletedIds.Contains(id))
+                {
+                    result.DeletedByUser(index);
+                    continue;
+                }
+                resolved.ById.TryGetValue(id, out stored);
+            }
+            else if (entity.SyncIdentifier is { } syncIdentifier)
+            {
+                if (resolved.UserDeletedKeys.Contains((entity.DataSource, syncIdentifier)))
+                {
+                    result.DeletedByUser(index);
+                    continue;
+                }
+                resolved.ByKey.TryGetValue((entity.DataSource, syncIdentifier), out stored);
             }
 
-            existing = rows.GetValueOrDefault(model.Id);
-        }
-        else if (entity.SyncIdentifier != null)
-        {
-            var key = (entity.DataSource, entity.SyncIdentifier);
-            var (rows, userDeleted) = await ResolveBySyncKeyAsync(db, set, [entity.SyncIdentifier], ct);
-            if (userDeleted.Contains(key))
+            if (KeyOf(model, entity) is { } recordKey && last[recordKey] != p)
+                continue;
+
+            if (stored is null)
             {
-                result.SkippedDeleted++;
-                _logger.LogDebug("Skipped {RecordType} with sync key {SyncIdentifier}: the user deleted it", recordType, entity.SyncIdentifier);
-                return;
+                plan.Inserted.Add((index, entity));
+                continue;
             }
 
-            existing = rows.GetValueOrDefault(key);
-        }
-        else
-        {
-            existing = null;
+            applyUpdate(stored, model);
+            stored.DeletedAt = null;
+            (db.Entry(stored).State == EntityState.Unchanged ? plan.Unchanged : plan.Updated).Add((index, stored));
         }
 
-        if (existing != null)
-        {
-            applyUpdate(existing, model);
-            existing.DeletedAt = null;
-            await db.SaveChangesAsync(ct);
-            result.UpdatedRecords.Add(toDomain(existing));
-            _logger.LogDebug(
-                "Updated existing {RecordType} {Id} from legacy activity {LegacyId}",
-                recordType, existing.Id, model.Id);
-            return;
-        }
+        set.AddRange(plan.Inserted.Select(i => i.Entity));
+        return plan;
+    }
 
-        await set.AddAsync(entity, ct);
-        await db.SaveChangesAsync(ct);
-        result.CreatedRecords.Add(toDomain(entity));
-        _logger.LogDebug("Created {RecordType} from legacy activity {LegacyId}", recordType, model.Id);
+    private static string? KeyOf<TModel, TEntity>(TModel model, TEntity entity)
+        where TModel : ProcessableDocumentBase
+        where TEntity : ISyncDedupable
+        => model.Id is { } id ? $"id|{id}"
+            : entity.SyncIdentifier is { } syncIdentifier ? $"sync|{entity.DataSource}|{syncIdentifier}"
+            : null;
+
+    /// <summary>What <see cref="Plan{TModel,TEntity}"/> leaves a table's save to write, by batch index.</summary>
+    private sealed class TablePlan<TEntity>
+    {
+        public List<(int Index, TEntity Entity)> Inserted { get; } = [];
+        public List<(int Index, TEntity Entity)> Updated { get; } = [];
+        public List<(int Index, TEntity Entity)> Unchanged { get; } = [];
+
+        public bool Writes => Inserted.Count > 0 || Updated.Count > 0;
+
+        /// <summary>Folds the committed rows into <paramref name="result"/>, each owned by the activity that wrote it.</summary>
+        public void Report(ActivityDecomposition result, IReadOnlyList<Guid> groups, Func<TEntity, object> toDomain)
+        {
+            Fold(Inserted, result.CreatedRecords);
+            Fold(Updated, result.UpdatedRecords);
+            Fold(Unchanged, result.UnchangedRecords);
+
+            void Fold(List<(int Index, TEntity Entity)> rows, List<object> into)
+            {
+                foreach (var (index, entity) in rows)
+                {
+                    var record = toDomain(entity);
+                    result.RecordOwners[record] = groups[index];
+                    into.Add(record);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -411,7 +447,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// collide with it within the tenant. An id only a user tombstone holds is returned in <c>UserDeleted</c> and must
     /// not be written (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
     /// </summary>
-    private async Task<(Dictionary<string, TEntity> Rows, HashSet<string> UserDeleted)> ResolveByOriginalIdAsync<TEntity>(
+    private static async Task<(Dictionary<string, TEntity> Rows, HashSet<string> UserDeleted)> ResolveByOriginalIdAsync<TEntity>(
         NocturneDbContext db,
         DbSet<TEntity> set, IReadOnlyCollection<string> originalIds, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified
@@ -446,7 +482,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// system sweep holds is in neither: the record inserts beside the tombstone, since the primary
     /// key of a record with no id is fresh and the sync-key unique index counts live rows only.
     /// </summary>
-    private async Task<(Dictionary<(string? DataSource, string SyncIdentifier), TEntity> Rows,
+    private static async Task<(Dictionary<(string? DataSource, string SyncIdentifier), TEntity> Rows,
         HashSet<(string? DataSource, string SyncIdentifier)> UserDeleted)> ResolveBySyncKeyAsync<TEntity>(
         NocturneDbContext db, DbSet<TEntity> set, IReadOnlyCollection<string> syncIdentifiers, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable, ISyncDedupable
@@ -472,90 +508,6 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         }
 
         return (rows, userDeleted);
-    }
-
-    /// <summary>
-    /// The batch twin of <see cref="UpsertByOriginalIdAsync{TModel,TEntity}"/>: a record whose
-    /// <c>OriginalId</c> resolves to a row (<see cref="ResolveByOriginalIdAsync{TEntity}"/>) updates
-    /// it, one only a user tombstone holds is skipped, and the rest are inserted. A record with
-    /// a sync key instead resolves by that key (<see cref="ResolveBySyncKeyAsync{TEntity}"/>) the
-    /// same way. Of several in the batch with one
-    /// key, either kind, the last wins.
-    /// </summary>
-    private async Task BulkUpsertByOriginalIdAsync<TModel, TEntity>(
-        NocturneDbContext db,
-        DbSet<TEntity> set,
-        List<TModel> models,
-        Func<TModel, TEntity> toEntity,
-        Action<TEntity, TModel> applyUpdate,
-        Func<TEntity, object> toDomain,
-        DecompositionResult result,
-        CancellationToken ct)
-        where TModel : ProcessableDocumentBase
-        where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified, ISyncDedupable
-    {
-        if (models.Count == 0)
-            return;
-
-        var originalIds = models.Where(m => m.Id != null).Select(m => m.Id!).ToHashSet();
-        var (stored, userDeleted) = await ResolveByOriginalIdAsync(db, set, originalIds, ct);
-        result.SkippedDeleted += models.Count(m => m.Id != null && userDeleted.Contains(m.Id));
-        models = models.Where(m => m.Id == null || !userDeleted.Contains(m.Id)).ToList();
-
-        var updated = new List<TEntity>();
-        foreach (var model in models
-                     .Where(m => m.Id != null && stored.ContainsKey(m.Id))
-                     .GroupBy(m => m.Id!)
-                     .Select(g => g.Last()))
-        {
-            var existing = stored[model.Id!];
-            applyUpdate(existing, model);
-            existing.DeletedAt = null;
-            updated.Add(existing);
-        }
-
-        var fresh = models
-            .Where(m => m.Id == null || !stored.ContainsKey(m.Id))
-            .Select(m => (Model: m, Entity: toEntity(m)))
-            .ToList();
-        var toInsert = fresh.Where(p => p.Entity.SyncIdentifier == null).Select(p => p.Entity).ToList();
-        var keyed = fresh
-            .Where(p => p.Entity.SyncIdentifier != null)
-            .GroupBy(p => (p.Entity.DataSource, p.Entity.SyncIdentifier))
-            .Select(g => g.Last())
-            .ToList();
-
-        if (keyed.Count > 0)
-        {
-            var syncIds = keyed.Select(p => p.Entity.SyncIdentifier!).ToHashSet(StringComparer.Ordinal);
-            var (storedByKey, userDeletedKeys) = await ResolveBySyncKeyAsync(db, set, syncIds, ct);
-
-            foreach (var (model, entity) in keyed)
-            {
-                var key = (entity.DataSource, entity.SyncIdentifier!);
-                if (userDeletedKeys.Contains(key))
-                {
-                    result.SkippedDeleted++;
-                }
-                else if (storedByKey.TryGetValue(key, out var existing))
-                {
-                    applyUpdate(existing, model);
-                    updated.Add(existing);
-                }
-                else
-                {
-                    toInsert.Add(entity);
-                }
-            }
-        }
-
-        if (toInsert.Count > 0 || updated.Count > 0)
-        {
-            await set.AddRangeAsync(toInsert, ct);
-            await db.SaveChangesAsync(ct);
-            result.CreatedRecords.AddRange(toInsert.Select(toDomain));
-            result.UpdatedRecords.AddRange(updated.Select(toDomain));
-        }
     }
 
     // --- Mapping helpers ---

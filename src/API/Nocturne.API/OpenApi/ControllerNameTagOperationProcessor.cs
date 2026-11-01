@@ -16,19 +16,22 @@ namespace Nocturne.API.OpenApi;
 /// </summary>
 public sealed partial class ControllerNameTagOperationProcessor : IOperationProcessor
 {
-    public bool Process(OperationProcessorContext context)
+    public static string TagFor(Type controller)
     {
-        var controllerName = context.ControllerType.Name;
+        var controllerName = controller.Name;
 
         if (controllerName.EndsWith("Controller", StringComparison.Ordinal))
             controllerName = controllerName[..^"Controller".Length];
 
         // Split PascalCase into space-separated words for remote-codegen compatibility.
         // "PatientRecord" → "Patient Record", "BGCheck" → "BG Check"
-        var tag = PascalCaseBoundary().Replace(controllerName, " ");
+        return PascalCaseBoundary().Replace(controllerName, " ");
+    }
 
+    public bool Process(OperationProcessorContext context)
+    {
         context.OperationDescription.Operation.Tags.Clear();
-        context.OperationDescription.Operation.Tags.Add(tag);
+        context.OperationDescription.Operation.Tags.Add(TagFor(context.ControllerType));
 
         return true;
     }

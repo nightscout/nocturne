@@ -13,6 +13,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -66,11 +67,11 @@ public class GuestLinkGrantListingTests : IDisposable
         var revocation = new GrantRevocationService(sessionCache);
 
         var guestLinks = await new GuestLinkService(
-                _dbContext.AsFactory(), sessionCache, revocation, NullLogger<GuestLinkService>.Instance)
+                _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()), sessionCache, revocation, NullLogger<GuestLinkService>.Instance)
             .GetGuestLinksAsync(_dataOwnerId);
 
         var grantService = new OAuthGrantService(
-            _dbContext.AsFactory(),
+            _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()),
             Mock.Of<IOAuthClientService>(),
             sessionCache,
             revocation,

@@ -1,22 +1,19 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Helpers;
-using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Queries;
@@ -159,16 +156,16 @@ public class TreatmentFindDateWindowTests
     }
 
     [Fact]
-    public async Task CountTreatments_PassesWindowedFindToStore()
+    public async Task CountTreatments_PassesWindowedFindToService()
     {
         string? observed = null;
-        var store = new Mock<ITreatmentStore>();
-        store
-            .Setup(s => s.CountAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        var service = new Mock<ITreatmentService>();
+        service
+            .Setup(s => s.CountTreatmentsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback((string? find, CancellationToken _) => observed = find)
             .ReturnsAsync(0);
 
-        await NewCountController(store.Object, "").CountTreatments("{\"eventType\":\"Note\"}");
+        await NewCountController(service.Object, "").CountTreatments("{\"eventType\":\"Note\"}");
 
         FindQuery.Parse(observed).FromMills.Should().Be(WindowStartMills);
     }
@@ -179,13 +176,13 @@ public class TreatmentFindDateWindowTests
     public async Task CountTreatments_QueryStringFind_IsFilteredAndWindowed(string queryString)
     {
         string? observed = null;
-        var store = new Mock<ITreatmentStore>();
-        store
-            .Setup(s => s.CountAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        var service = new Mock<ITreatmentService>();
+        service
+            .Setup(s => s.CountTreatmentsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback((string? find, CancellationToken _) => observed = find)
             .ReturnsAsync(0);
 
-        await NewCountController(store.Object, queryString).CountTreatments(find: null);
+        await NewCountController(service.Object, queryString).CountTreatments(find: null);
 
         var parsed = FindQuery.Parse(observed);
         parsed.HasFieldFilters.Should().BeTrue();
@@ -196,12 +193,12 @@ public class TreatmentFindDateWindowTests
     public async Task CountGenericTreatments_QueryStringFind_IsFilteredAndWindowed()
     {
         string? observed = null;
-        var store = new Mock<ITreatmentStore>();
-        store
-            .Setup(s => s.CountAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        var service = new Mock<ITreatmentService>();
+        service
+            .Setup(s => s.CountTreatmentsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback((string? find, CancellationToken _) => observed = find)
             .ReturnsAsync(0);
-        var controller = NewCountController(store.Object, "?find[eventType]=Note");
+        var controller = NewCountController(service.Object, "?find[eventType]=Note");
         controller.HttpContext.Items["GrantedScopes"] = Scope.Normalize([Scope.TreatmentsRead]);
 
         await controller.CountGeneric("treatments", find: null);
@@ -222,50 +219,6 @@ public class TreatmentFindDateWindowTests
         FindQuery.Parse(windowed).FromMills.Should().Be(WindowStartMills);
     }
 
-    [Fact]
-    public async Task ReadService_PushesWindowDownToProjection()
-    {
-        var projection = new Mock<IV4ToLegacyProjectionService>();
-        projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<Treatment>());
-
-        await NewReadService(projection.Object, NullLogger<TreatmentReadService>.Instance).QueryAsync(
-            new TreatmentQuery
-            {
-                Find = LegacyFindDateWindow.Apply("find[id][$eq]=abc", Now),
-                Count = int.MaxValue,
-            });
-
-        projection.Verify(p => p.GetProjectedTreatmentsAsync(
-            WindowStartMills, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()));
-    }
-
-    [Fact]
-    public async Task FilteredCount_LogsWhenItHitsTheFetchCap()
-    {
-        const int maxFilterFetch = 3;
-        var projected = Enumerable.Range(0, maxFilterFetch)
-            .Select(i => new Treatment { EventType = "Note", Mills = i })
-            .ToList();
-        var projection = new Mock<IV4ToLegacyProjectionService>();
-        projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), maxFilterFetch, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(projected);
-        var logger = new Mock<ILogger<TreatmentReadService>>();
-
-        var service = NewReadService(projection.Object, logger.Object);
-        service.MaxFilterFetch = maxFilterFetch;
-
-        await service.CountAsync("{\"eventType\":\"Temp Basal\"}");
-
-        logger.Verify(l => l.Log(
-            LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
-            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
-    }
-
     private static TreatmentsController NewTreatmentsController(ITreatmentService service, string queryString)
     {
         var httpContext = new DefaultHttpContext();
@@ -278,24 +231,17 @@ public class TreatmentFindDateWindowTests
         };
     }
 
-    private static CountController NewCountController(ITreatmentStore store, string queryString)
+    private static CountController NewCountController(ITreatmentService service, string queryString)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.QueryString = new QueryString(queryString);
         return new CountController(
-            Mock.Of<IEntryStore>(), store,
-            CountControllerTests.DeviceStatusProjection(new Mock<IDeviceStatusGroupRepository>()),
+            Mock.Of<IEntryService>(), service,
+            Mock.Of<IDeviceStatusService>(),
             Mock.Of<IProfileProjectionService>(), Mock.Of<IFoodRepository>(),
             Mock.Of<IActivityService>(), new FakeTimeProvider(Now), NullLogger<CountController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
-
-    private static TreatmentReadService NewReadService(
-        IV4ToLegacyProjectionService projection, ILogger<TreatmentReadService> logger) =>
-        new(projection, Mock.Of<ITreatmentDecomposer>(), Mock.Of<IDecompositionPipeline>(),
-            Mock.Of<ITempBasalRepository>(), Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(),
-            Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IProfileActivationRepository>(), Mock.Of<IStateSpanService>(), logger);
 }

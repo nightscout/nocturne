@@ -1,7 +1,8 @@
 // scripts/publish-release.cs
 //
-// Generates the production Docker Compose bundle and commits the results to
-// deploy/ and docs/diagrams/ before tagging a release.
+// Generates the production Docker Compose bundle into deploy/ and docs/diagrams/. The
+// compose-bundle-drift job in .github/workflows/tests.yml regenerates it and fails a pull
+// request whose committed copy differs.
 //
 // Usage:
 //   dotnet run scripts/publish-release.cs
@@ -100,22 +101,26 @@ try
     // PortainerComposePublisher), so no separate init/ or caddy/ directories are
     // shipped; the bundle is just compose + .env.
     var deployDockerComposeDir = Path.Combine(repoRoot, "deploy", "docker-compose");
+    var dockerComposeWritten = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     Directory.CreateDirectory(deployDockerComposeDir);
-    File.Copy(composePath, Path.Combine(deployDockerComposeDir, "docker-compose.yaml"), overwrite: true);
+    File.Copy(composePath, Owned(deployDockerComposeDir, "docker-compose.yaml", dockerComposeWritten), overwrite: true);
     // Bring-your-own-proxy override (generated alongside the compose by the
     // byo-proxy publish step; absent when Caddy is disabled).
     if (File.Exists(byoProxyComposePath))
-        File.Copy(byoProxyComposePath, Path.Combine(deployDockerComposeDir, "docker-compose.byo-proxy.yaml"), overwrite: true);
-    File.Copy(postgresDataComposePath, Path.Combine(deployDockerComposeDir, "docker-compose.bind-data.yaml"), overwrite: true);
-    File.WriteAllText(Path.Combine(deployDockerComposeDir, ".env.example"), envExample);
+        File.Copy(byoProxyComposePath, Owned(deployDockerComposeDir, "docker-compose.byo-proxy.yaml", dockerComposeWritten), overwrite: true);
+    File.Copy(postgresDataComposePath, Owned(deployDockerComposeDir, "docker-compose.bind-data.yaml", dockerComposeWritten), overwrite: true);
+    File.WriteAllText(Owned(deployDockerComposeDir, ".env.example", dockerComposeWritten), envExample);
+    PruneUnwritten(repoRoot, deployDockerComposeDir, dockerComposeWritten);
     Console.WriteLine("[publish-release] Updated deploy/docker-compose/");
 
     // deploy/portainer/ — self-contained compose with inlined init script.
     var deployPortainerDir = Path.Combine(repoRoot, "deploy", "portainer");
+    var portainerWritten = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     Directory.CreateDirectory(deployPortainerDir);
-    File.Copy(portainerComposePath, Path.Combine(deployPortainerDir, "docker-compose.yaml"), overwrite: true);
-    File.WriteAllText(Path.Combine(deployPortainerDir, ".env.example"), envExample);
-    File.WriteAllText(Path.Combine(deployPortainerDir, "templates.json"), GeneratePortainerTemplate(groups, envMetadata));
+    File.Copy(portainerComposePath, Owned(deployPortainerDir, "docker-compose.yaml", portainerWritten), overwrite: true);
+    File.WriteAllText(Owned(deployPortainerDir, ".env.example", portainerWritten), envExample);
+    File.WriteAllText(Owned(deployPortainerDir, "templates.json", portainerWritten), GeneratePortainerTemplate(groups, envMetadata));
+    PruneUnwritten(repoRoot, deployPortainerDir, portainerWritten);
     Console.WriteLine("[publish-release] Updated deploy/portainer/");
 
     // docs/diagrams/ — Mermaid architecture diagrams produced by MermaidDiagramPublisher.
@@ -126,7 +131,7 @@ try
     Console.WriteLine("[publish-release] Updated docs/diagrams/");
 
     Console.WriteLine();
-    Console.WriteLine("[publish-release] Done! Commit deploy/ and docs/diagrams/ before tagging.");
+    Console.WriteLine("[publish-release] Done! Commit deploy/ and docs/diagrams/. The compose-bundle-drift job checks them.");
 
     return 0;
 }
@@ -134,6 +139,26 @@ finally
 {
     if (Directory.Exists(tempDir))
         Directory.Delete(tempDir, recursive: true);
+}
+
+// ── output ownership ──────────────────────────────────────────────────────────
+
+static string Owned(string dir, string name, HashSet<string> written)
+{
+    var path = Path.Combine(dir, name);
+    written.Add(path);
+    return path;
+}
+
+static void PruneUnwritten(string repoRoot, string dir, HashSet<string> written)
+{
+    foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+    {
+        if (written.Contains(file))
+            continue;
+        File.Delete(file);
+        Console.WriteLine($"[publish-release] Deleted {Path.GetRelativePath(repoRoot, file).Replace('\\', '/')}");
+    }
 }
 
 // ── env parsing ───────────────────────────────────────────────────────────────

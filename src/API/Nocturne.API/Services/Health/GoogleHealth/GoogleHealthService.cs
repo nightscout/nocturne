@@ -73,7 +73,6 @@ public sealed class GoogleHealthService(
         var stored = await connectorConfigurations.GetConfigurationAsync(GoogleHealthConnectorService.ConnectorName, ct);
         var configuration = stored?.Configuration.RootElement.Deserialize<JsonObject>(Json) ?? new JsonObject();
         configuration.Remove("callbackUrl");
-        configuration.Remove("enabled");
         configuration["lookbackDays"] = options.HistoryDays;
         configuration["importFrom"] = options.ImportFrom?.ToString("O", CultureInfo.InvariantCulture);
         configuration["previewOnly"] = options.PreviewOnly;
@@ -84,6 +83,8 @@ public sealed class GoogleHealthService(
         using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
         await connectorConfigurations.SaveConfigurationAsync(
             GoogleHealthConnectorService.ConnectorName, document, subject.ToString(), ct);
+        await connectorConfigurations.SetActiveAsync(
+            GoogleHealthConnectorService.ConnectorName, true, subject.ToString(), ct);
     }
 
     public async Task<GoogleHealthStatus> StatusAsync(CancellationToken ct)
@@ -261,7 +262,7 @@ public sealed class GoogleHealthService(
                 // tenant still relies on, and unrevoked it would stay live at Google.
                 if (!stored) await DiscardUnstoredGrantAsync(token.RefreshToken, account);
             }
-            await ActivateAsync(token, ct);
+            await ActivateAsync(token, subject, ct);
         }
         catch (Exception ex) when (ex is GoogleHealthException or HttpRequestException or JsonException or TaskCanceledException)
         {
@@ -285,10 +286,12 @@ public sealed class GoogleHealthService(
     /// The work after the grant is stored. The tenant already syncs on the grant alone, so a
     /// failure here is a warning and never a reason to revoke it.
     /// </summary>
-    private async Task ActivateAsync(GoogleHealthTokenSession token, CancellationToken ct)
+    private async Task ActivateAsync(GoogleHealthTokenSession token, Guid subject, CancellationToken ct)
     {
         try
         {
+            await connectorConfigurations.SetActiveAsync(
+                GoogleHealthConnectorService.ConnectorName, true, subject.ToString(), ct);
             await sessions.CacheAsync(token);
             await ForgetInventoryAsync(ct);
             await connectorConfigurations.UpdateHealthStateAsync(

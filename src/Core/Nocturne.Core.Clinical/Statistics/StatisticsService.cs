@@ -2202,10 +2202,16 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             BolusPercent = totalBolus > 0 ? 100 : 0,
             Tdd = Math.Round(totalBolus / dayCount * 10) / 10,
             ManualBolusPerDay = Math.Round(manualBolus / dayCount * 100) / 100,
+            TotalBolusPerDay = Math.Round(totalBolus / dayCount * 100) / 100,
             AutomaticBolusPerDay = Math.Round(automaticBolus / dayCount * 100) / 100,
             AvgBolus = manualCount > 0 ? Math.Round(manualBolus / manualCount * 100) / 100 : 0,
             MealBoluses = mealBoluses,
             CorrectionBoluses = correctionBoluses,
+            MealBolusesPerDay = Math.Round((double)mealBoluses / dayCount * 10) / 10,
+            CorrectionBolusesPerDay = Math.Round((double)correctionBoluses / dayCount * 10) / 10,
+            MealBolusPercent = manualCount > 0 ? Math.Round(mealBoluses * 100.0 / manualCount * 10) / 10 : 0,
+            CorrectionBolusPercent =
+                manualCount > 0 ? Math.Round(correctionBoluses * 100.0 / manualCount * 10) / 10 : 0,
             IcRatio = pairing.Ratio,
             UnpairedCarbs = Math.Round(pairing.UnpairedCarbs * 10) / 10,
             BolusesPerDay = Math.Round(bolusesPerDay * 10) / 10,
@@ -2551,6 +2557,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         stats.TotalInsulin = Math.Round(totalInsulin * 100) / 100;
         stats.Tdd = Math.Round(totalInsulin / stats.WindowDays * 10) / 10;
         stats.TotalBasalPerDay = Math.Round(totalBasal / stats.WindowDays * 100) / 100;
+        stats.ScheduledBasalPerDay = Math.Round(scheduledBasalInsulin / stats.WindowDays * 100) / 100;
         stats.BasalPercent =
             totalInsulin > 0 ? Math.Round(totalBasal / totalInsulin * 100 * 10) / 10 : 0;
         stats.BolusPercent =
@@ -2766,6 +2773,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             MinRate = allRates.Count > 0 ? Math.Round(allRates.Min() * 100) / 100 : 0,
             MaxRate = allRates.Count > 0 ? Math.Round(allRates.Max() * 100) / 100 : 0,
             TotalDelivered = Math.Round(totalDelivered * 100) / 100,
+            TotalDeliveredPerDay = Math.Round(totalDelivered / dayCount * 100) / 100,
         };
 
         var tempBasalInfo = new TempBasalInfo
@@ -2830,6 +2838,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         var manualBolus = new double[24];
         var automaticBolus = new double[24];
         var counts = new int[24];
+        var manualBolusCounts = new int[24];
 
         // Basal and bolus averages get separate denominators: profile-derived
         // scheduled segments can tile the whole requested window, and dividing
@@ -2857,6 +2866,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         {
             var hour = LocalHourOfDay(b.Mills, tz);
             manualBolus[hour] += b.Insulin;
+            manualBolusCounts[hour]++;
             counts[hour]++;
             bolusDays.Add(LocalSlotBinning.LocalDay(b.Mills, tz));
         }
@@ -2922,6 +2932,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 TempBasal = avgTemp,
                 Basal = Math.Round((avgScheduled + avgTemp) * 100) / 100,
                 ManualBolus = avgManual,
+                ManualBolusesPerDay = Math.Round((double)manualBolusCounts[hour] / bolusDayCount * 100) / 100,
                 AutomaticBolus = avgAutomatic,
                 Total = Math.Round((avgScheduled + avgTemp + avgManual + avgAutomatic) * 100) / 100,
                 Count = counts[hour],

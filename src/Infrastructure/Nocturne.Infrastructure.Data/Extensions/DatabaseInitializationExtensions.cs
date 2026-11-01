@@ -9,6 +9,7 @@ using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.Internal;
 
 using Nocturne.Infrastructure.Data.Services;
 
@@ -433,26 +434,29 @@ public static class DatabaseInitializationExtensions
     /// <summary>
     /// Validates runtime database configuration after migrations have run and
     /// the app DbContext is registered. Runs the RLS self-check under the app
-    /// role and asserts the runtime connection string leaves Npgsql's reset on
-    /// pool return in place, so app.current_tenant_id cannot outlive a lessee
-    /// (<see cref="VerifyPoolResetOnClose(string?)"/>).
+    /// role and checks that only <see cref="NocturneDbContext"/>, through
+    /// <see cref="TenantConnectionInterceptor"/>, opens the context pool
+    /// (<see cref="VerifyContextPoolIsolation"/>, <see cref="VerifyContextInterceptor"/>).
     /// </summary>
     public static async Task ValidateDatabaseConfigurationAsync(
         this IServiceProvider serviceProvider,
         CancellationToken cancellationToken = default)
     {
+        var contexts = serviceProvider.GetRequiredService<ContextDataSource>().Source;
+        VerifyContextPoolIsolation(contexts, serviceProvider.GetRequiredService<NpgsqlDataSource>());
+
         await using var context = await serviceProvider
             .GetRequiredService<INocturneDbContextFactory>()
             .CreatePlatformAsync(cancellationToken);
+        VerifyContextInterceptor(context.GetService<IDbContextOptions>(), contexts);
         var logger = serviceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
 
+        await context.Database.OpenConnectionAsync(cancellationToken);
         await VerifyRlsAsync(
             context.Database.GetDbConnection(),
             ShareRlsPolicy.TenantScopedTableNames(context.Model),
             logger,
             cancellationToken);
-
-        VerifyPoolResetOnClose(context, logger);
     }
 
     /// <summary>
@@ -686,48 +690,54 @@ public static class DatabaseInitializationExtensions
     }
 
     /// <summary>
-    /// Verifies that the runtime connection string leaves Npgsql's reset-on-pool-return in
-    /// place. <c>NpgsqlConnector</c> sends it only when pooling is on, multiplexing is off and
-    /// NoResetOnClose is off; with the reset skipped, a stale app.current_tenant_id leaks to the
-    /// next lessee of the physical connection.
-    ///
-    /// <c>TenantConnectionInterceptor</c> sets the RLS GUCs on open and clears nothing on close,
-    /// so this check is what keeps that safe. It guards the two settings a connection string can
-    /// turn on; it does not observe the reset happening, which
-    /// <c>PoolReturnDiscardsRlsGucsIntegrationTests</c> does against a real backend.
+    /// Verifies that the context pool is opened only through <see cref="TenantConnectionInterceptor"/>:
+    /// the <see cref="NpgsqlDataSource"/> that raw ADO.NET resolves is a different pool, and it keeps
+    /// Npgsql's session reset on pool return. A raw open of the context pool would read a previous
+    /// lessee's RLS session state, and leave its own for the next.
     /// </summary>
-    /// <param name="connectionString">The runtime connection string. A null or empty value is not checked.</param>
-    public static void VerifyPoolResetOnClose(string? connectionString)
+    internal static void VerifyContextPoolIsolation(NpgsqlDataSource contexts, NpgsqlDataSource raw)
     {
-        if (string.IsNullOrEmpty(connectionString))
-        {
-            return;
-        }
-
-        var csb = new NpgsqlConnectionStringBuilder(connectionString);
-
-        if (csb.NoResetOnClose)
+        if (ReferenceEquals(contexts, raw))
         {
             throw new InvalidOperationException(
-                "The runtime PostgreSQL connection string has NoResetOnClose = true. " +
-                "This prevents DISCARD ALL from running when connections return to the pool, " +
-                "which allows stale app.current_tenant_id values to leak across tenants. " +
-                "Remove 'No Reset On Close=true' from the connection string.");
+                "The NpgsqlDataSource registered for raw ADO.NET is the pool NocturneDbContext opens. " +
+                "That pool skips the session reset on pool return, so a raw open would read another " +
+                "lessee's RLS session state.");
         }
 
-        if (csb.Multiplexing)
+        var csb = new NpgsqlConnectionStringBuilder(raw.ConnectionString);
+        if (csb.NoResetOnClose || csb.Multiplexing)
         {
             throw new InvalidOperationException(
-                "The runtime PostgreSQL connection string has Multiplexing = true. " +
-                "Npgsql sends no reset when a multiplexed connection is returned, " +
-                "which allows stale app.current_tenant_id values to leak across tenants. " +
-                "Remove 'Multiplexing=true' from the connection string.");
+                "The NpgsqlDataSource registered for raw ADO.NET does not reset a connection on pool " +
+                $"return (NoResetOnClose={csb.NoResetOnClose}, Multiplexing={csb.Multiplexing}), so a " +
+                "raw open would read another lessee's RLS session state.");
         }
     }
 
-    private static void VerifyPoolResetOnClose(NocturneDbContext context, ILogger logger)
+    /// <summary>
+    /// Verifies that the options <see cref="NocturneDbContext"/> is built with open the context pool
+    /// and carry <see cref="TenantConnectionInterceptor"/>. That pool skips the session reset, so a
+    /// context opening it without the interceptor would read the previous lessee's RLS session state.
+    /// </summary>
+    internal static void VerifyContextInterceptor(IDbContextOptions options, NpgsqlDataSource contexts)
     {
-        VerifyPoolResetOnClose(context.Database.GetConnectionString());
-        logger.LogDebug("Pool reset-on-close check passed for runtime connection string");
+#pragma warning disable EF1001 // The data source a context opens is exposed only on the internal options extension.
+        var dataSource = options.FindExtension<NpgsqlOptionsExtension>()?.DataSource;
+#pragma warning restore EF1001
+        if (!ReferenceEquals(dataSource, contexts))
+        {
+            throw new InvalidOperationException(
+                "NocturneDbContext does not open the registered context pool, so the startup checks on " +
+                "that pool do not cover the connections it opens.");
+        }
+
+        if (options.FindExtension<CoreOptionsExtension>()?.Interceptors?.OfType<TenantConnectionInterceptor>().Any() != true)
+        {
+            throw new InvalidOperationException(
+                "NocturneDbContext opens the context pool without TenantConnectionInterceptor. That pool " +
+                "skips the session reset on pool return, so a context would read another lessee's RLS " +
+                "session state.");
+        }
     }
 }

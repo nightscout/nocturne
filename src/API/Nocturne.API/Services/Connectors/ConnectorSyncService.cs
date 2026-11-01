@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.API.Helpers;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -79,7 +80,7 @@ public class ConnectorSyncService : IConnectorSyncService
         CancellationToken ct
     )
     {
-        var loggedConnectorId = SanitizeForLog(connectorId);
+        var loggedConnectorId = LogText.Sanitize(connectorId);
 
         if (request.WindowError() is { } windowError)
         {
@@ -109,7 +110,7 @@ public class ConnectorSyncService : IConnectorSyncService
 
         try
         {
-            // Attributed as ConnectorBackgroundService attributes a scheduled sync.
+            // A manual sync is attributed as connector:<id>; a scheduled one runs as job:connector:<id>.
             await using var scope = TenantJobScope.Open(
                 _serviceProvider, _tenantAccessor.Context, $"connector:{ConnectorNames.Canonical(connectorId)}");
 
@@ -170,11 +171,4 @@ public class ConnectorSyncService : IConnectorSyncService
 
     private long ElapsedMs(long started) =>
         (long)_timeProvider.GetElapsedTime(started).TotalMilliseconds;
-
-    /// <summary>
-    /// The connector id arrives from the <c>{id}</c> route segment; stripping CR/LF keeps it
-    /// from forging log lines.
-    /// </summary>
-    private static string SanitizeForLog(string value) =>
-        value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

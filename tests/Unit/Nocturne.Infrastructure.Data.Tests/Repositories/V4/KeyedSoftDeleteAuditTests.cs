@@ -73,7 +73,7 @@ public abstract class KeyedSoftDeleteAuditTests<TEntity> : AuditedSoftDeleteTest
 
         var log = (await ReadAuditLogAsync()).Should().ContainSingle().Subject;
         log.EntityType.Should().Be(AuditEntityType);
-        log.SubjectName.Should().Be("tester");
+        log.ActorName.Should().Be("tester");
         AssertUserDeleteAuditRow(log, match);
     }
 

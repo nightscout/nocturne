@@ -9,7 +9,6 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
 

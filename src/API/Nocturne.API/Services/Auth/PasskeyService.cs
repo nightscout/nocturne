@@ -3,12 +3,10 @@ using Fido2NetLib;
 using Fido2NetLib.Objects;
 using Fido2NetLib.Serialization;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Nocturne.API.Multitenancy;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -30,30 +28,32 @@ public class PasskeyService : IPasskeyService
     private const int MaxCredentialsPerSubject = 20;
     private static readonly TimeSpan ChallengeExpiry = TimeSpan.FromMinutes(5);
 
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IPasskeyCredentialRepository _passkeys;
+    private readonly ISubjectRepository _subjects;
+    private readonly ITenantMemberService _members;
     private readonly IFido2 _fido2;
     private readonly IDataProtector _protector;
     private readonly Fido2Configuration _fido2Config;
     private readonly ILogger<PasskeyService> _logger;
     private readonly IHostEnvironment _environment;
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="PasskeyService"/>.
-    /// </summary>
     /// <param name="fido2">The Fido2NetLib instance for ceremony execution.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting challenge tokens.</param>
     /// <param name="fido2Options">FIDO2 configuration options (rpId, rpName, allowed origins, attestation preference).</param>
-    /// <param name="logger">The logger instance.</param>
     /// <param name="environment">The hosting environment used to adjust origin validation in development.</param>
     public PasskeyService(
-        INocturneDbContextFactory contexts,
+        IPasskeyCredentialRepository passkeys,
+        ISubjectRepository subjects,
+        ITenantMemberService members,
         IFido2 fido2,
         IDataProtectionProvider dataProtectionProvider,
         Microsoft.Extensions.Options.IOptions<Fido2Configuration> fido2Options,
         ILogger<PasskeyService> logger,
         IHostEnvironment environment)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _passkeys = passkeys ?? throw new ArgumentNullException(nameof(passkeys));
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
+        _members = members ?? throw new ArgumentNullException(nameof(members));
         _fido2 = fido2;
         _protector = dataProtectionProvider.CreateProtector("Nocturne.Passkey.Challenge");
         _fido2Config = fido2Options.Value;
@@ -131,11 +131,9 @@ public class PasskeyService : IPasskeyService
     public async Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(
         Guid subjectId, string username)
     {
-        await using var db = await _contexts.CreateAsync();
-        var existingCredentials = await db.PasskeyCredentials
-            .Where(c => c.SubjectId == subjectId)
-            .Select(c => new PublicKeyCredentialDescriptor(c.CredentialId))
-            .ToListAsync();
+        var existingCredentials = (await _passkeys.GetCredentialIdsAsync(subjectId, CancellationToken.None))
+            .Select(id => new PublicKeyCredentialDescriptor(id))
+            .ToList();
 
         var user = new Fido2User
         {
@@ -166,7 +164,6 @@ public class PasskeyService : IPasskeyService
         string attestationResponseJson, string challengeToken, Guid tenantId, Guid expectedSubjectId,
         string? label = null)
     {
-        await using var db = await _contexts.CreateAsync();
         var cookie = ReadChallengeToken(challengeToken, ChallengePurpose.Registration);
 
         // Checked before the ceremony so a challenge for the wrong subject is rejected outright.
@@ -192,17 +189,12 @@ public class PasskeyService : IPasskeyService
         {
             AttestationResponse = attestationResponse,
             OriginalOptions = originalOptions,
-            IsCredentialIdUniqueToUserCallback = async (args, _) =>
-            {
-                var exists = await db.PasskeyCredentials
-                    .AnyAsync(c => c.CredentialId == args.CredentialId);
-                return !exists;
-            },
+            IsCredentialIdUniqueToUserCallback = async (args, ct) =>
+                !await _passkeys.ExistsAsync(args.CredentialId, ct),
         });
 
         // Enforce 20 credential cap
-        var existingCount = await db.PasskeyCredentials
-            .CountAsync(c => c.SubjectId == subjectId);
+        var existingCount = await _passkeys.CountAsync(subjectId, CancellationToken.None);
 
         if (existingCount >= MaxCredentialsPerSubject)
         {
@@ -210,27 +202,24 @@ public class PasskeyService : IPasskeyService
                 $"Maximum of {MaxCredentialsPerSubject} passkey credentials per user has been reached.");
         }
 
-        var entity = new PasskeyCredentialEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = subjectId,
-            CredentialId = credential.Id,
-            PublicKey = credential.PublicKey,
-            SignCount = credential.SignCount,
-            Transports = credential.Transports?.Select(t => t.ToString()).ToList() ?? [],
-            Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
-            // AaGuid is not directly exposed by Fido2NetLib v4 RegisteredPublicKeyCredential
-            CreatedAt = DateTime.UtcNow,
-        };
-
-        db.PasskeyCredentials.Add(entity);
-        await db.SaveChangesAsync();
+        var credentialId = await _passkeys.CreateAsync(
+            new NewPasskeyCredential(
+                subjectId,
+                credential.Id,
+                credential.PublicKey,
+                credential.SignCount,
+                credential.Transports?.Select(t => t.ToString()).ToList() ?? [],
+                string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
+                // AaGuid is not directly exposed by Fido2NetLib v4 RegisteredPublicKeyCredential
+                AaGuid: null,
+                DateTime.UtcNow),
+            CancellationToken.None);
 
         _logger.LogInformation(
             "Passkey credential {CredentialId} registered for subject {SubjectId} in tenant {TenantId}",
-            entity.Id, subjectId, tenantId);
+            credentialId, subjectId, tenantId);
 
-        return new PasskeyCredentialResult(entity.Id, subjectId);
+        return new PasskeyCredentialResult(credentialId, subjectId);
     }
 
     public Task<PasskeyAssertionOptions> GenerateDiscoverableAssertionOptionsAsync(Guid tenantId)
@@ -249,19 +238,12 @@ public class PasskeyService : IPasskeyService
 
     public async Task<PasskeyAssertionOptions> GenerateAssertionOptionsAsync(string username, Guid tenantId)
     {
-        await using var db = await _contexts.CreateAsync();
-        // Look up subject by username through tenant membership
-        var subject = await db.TenantMembers
-            .Where(tm => tm.TenantId == tenantId)
-            .Select(tm => tm.Subject!)
-            .Where(s => s.Username == username && s.IsActive)
-            .FirstOrDefaultAsync()
+        var subject = await _subjects.FindMemberByUsernameAsync(tenantId, username, activeOnly: true, CancellationToken.None)
             ?? throw new InvalidOperationException($"No active subject found with username '{username}' in this tenant.");
 
-        var credentials = await db.PasskeyCredentials
-            .Where(c => c.SubjectId == subject.Id)
-            .Select(c => new PublicKeyCredentialDescriptor(c.CredentialId))
-            .ToListAsync();
+        var credentials = (await _passkeys.GetCredentialIdsAsync(subject.Id, CancellationToken.None))
+            .Select(id => new PublicKeyCredentialDescriptor(id))
+            .ToList();
 
         var options = _fido2.GetAssertionOptions(new GetAssertionOptionsParams
         {
@@ -278,7 +260,6 @@ public class PasskeyService : IPasskeyService
     public async Task<PasskeyAssertionResult> CompleteAssertionAsync(
         string assertionResponseJson, string challengeToken, Guid tenantId)
     {
-        await using var db = await _contexts.CreateAsync();
         var cookie = ReadChallengeToken(challengeToken, ChallengePurpose.Assertion);
 
         var originalOptions = JsonSerializer.Deserialize(
@@ -290,17 +271,12 @@ public class PasskeyService : IPasskeyService
             ?? throw new InvalidOperationException("Failed to deserialize assertion response.");
 
         // Find the credential in the database by raw credential ID bytes
-        var rawId = assertionResponse.RawId;
-        var storedCredential = await db.PasskeyCredentials
-            .Include(c => c.Subject)
-            .FirstOrDefaultAsync(c => c.CredentialId == rawId)
+        var stored = await _passkeys.FindByCredentialIdAsync(assertionResponse.RawId, CancellationToken.None)
             ?? throw new InvalidOperationException("Credential not found.");
 
         // Verify the credential's subject is a member of the current tenant
-        // (the global query filter on TenantMemberEntity already excludes revoked memberships).
-        var isMember = await db.TenantMembers
-            .AnyAsync(tm => tm.TenantId == tenantId && tm.SubjectId == storedCredential.SubjectId);
-        if (!isMember)
+        // (the membership read excludes revoked memberships).
+        if (!await _members.IsMemberAsync(stored.Credential.SubjectId, tenantId))
             throw new InvalidOperationException("Credential owner is not a member of this tenant.");
 
         AllowOriginFromClientData(assertionResponse.Response.ClientDataJson);
@@ -308,22 +284,15 @@ public class PasskeyService : IPasskeyService
         {
             AssertionResponse = assertionResponse,
             OriginalOptions = originalOptions,
-            StoredPublicKey = storedCredential.PublicKey,
-            StoredSignatureCounter = storedCredential.SignCount,
-            IsUserHandleOwnerOfCredentialIdCallback = async (args, _) =>
-            {
-                return await db.PasskeyCredentials
-                    .AnyAsync(c => c.CredentialId == args.CredentialId);
-            },
+            StoredPublicKey = stored.Credential.PublicKey,
+            StoredSignatureCounter = stored.Credential.SignCount,
+            IsUserHandleOwnerOfCredentialIdCallback = async (args, ct) =>
+                await _passkeys.ExistsAsync(args.CredentialId, ct),
         });
 
-        // Update sign count and last used
-        storedCredential.SignCount = result.SignCount;
-        storedCredential.LastUsedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        await _passkeys.RecordUseAsync(stored.Credential.Id, result.SignCount, DateTime.UtcNow, CancellationToken.None);
 
-        var subject = storedCredential.Subject
-            ?? throw new InvalidOperationException("Subject navigation not loaded.");
+        var subject = stored.Holder;
 
         _logger.LogInformation(
             "Passkey assertion completed for subject {SubjectId} in tenant {TenantId}",
@@ -334,35 +303,24 @@ public class PasskeyService : IPasskeyService
 
     public async Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId)
     {
-        await using var db = await _contexts.CreateAsync();
-        return await db.PasskeyCredentials
-            .Where(c => c.SubjectId == subjectId)
-            .OrderByDescending(c => c.CreatedAt)
+        var credentials = await _passkeys.ListAsync(subjectId, CancellationToken.None);
+        return credentials
             .Select(c => new PasskeyCredentialInfo(c.Id, c.Label, c.CreatedAt, c.LastUsedAt, c.AaGuid))
-            .ToListAsync();
+            .ToList();
     }
 
     public async Task RemoveCredentialAsync(Guid credentialId, Guid subjectId, Guid tenantId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var credential = await db.PasskeyCredentials
-            .FirstOrDefaultAsync(c => c.Id == credentialId && c.SubjectId == subjectId)
-            ?? throw new InvalidOperationException("Credential not found.");
-
-        db.PasskeyCredentials.Remove(credential);
-        await db.SaveChangesAsync();
+        if (!await _passkeys.RemoveAsync(credentialId, subjectId, CancellationToken.None))
+            throw new InvalidOperationException("Credential not found.");
 
         _logger.LogInformation(
             "Passkey credential {CredentialId} removed for subject {SubjectId} in tenant {TenantId}",
             credentialId, subjectId, tenantId);
     }
 
-    public async Task<int> GetCredentialCountAsync(Guid subjectId, Guid tenantId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        return await db.PasskeyCredentials
-            .CountAsync(c => c.SubjectId == subjectId);
-    }
+    public Task<int> GetCredentialCountAsync(Guid subjectId, Guid tenantId) =>
+        _passkeys.CountAsync(subjectId, CancellationToken.None);
 
     private string CreateChallengeToken(string optionsJson, Guid? subjectId, string purpose)
     {

@@ -4,10 +4,11 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Jobs;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
@@ -61,10 +62,14 @@ public class TrackerLegacyFallbackIntegrationTests(ApiIntegrationTestFixture fix
             .GetProperty("id").GetString()!;
     }
 
-    /// <summary>Runs the alert sweep's wall-clock pass once, as its 30-second timer does.</summary>
-    private Task SweepAsync() =>
-        Fixture.Services.GetServices<IHostedService>().OfType<AlertSweepService>().Single()
-            .EvaluateWallClockRulesAsync(CancellationToken.None);
+    /// <summary>Runs the tenant's alert sweep once, as the job scheduler does every 30 seconds.</summary>
+    private async Task SweepAsync()
+    {
+        var tenant = new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false);
+        await using var scope = TenantJobScope.Open(Fixture.Services, tenant, $"job:{AlertSweepJob.JobName}");
+        await Fixture.Services.GetServices<IScheduledJob>().OfType<AlertSweepJob>().Single()
+            .RunAsync(new JobRun(tenant, null, 0, scope.ServiceProvider, DateTimeOffset.UtcNow), CancellationToken.None);
+    }
 
     /// <summary>The names of the rules of the definition that have fired, oldest first.</summary>
     private Task<List<string>> FiredRulesForAsync(string definitionId) =>

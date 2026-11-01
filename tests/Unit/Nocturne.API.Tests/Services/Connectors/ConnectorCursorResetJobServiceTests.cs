@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -67,7 +68,8 @@ public class ConnectorCursorResetJobServiceTests
 
         var service = new ConnectorCursorResetJobService(
             TimeProvider.System,
-            NullLogger<ConnectorCursorResetJobService>.Instance, provider);
+            NullLogger<ConnectorCursorResetJobService>.Instance, provider,
+            provider.GetRequiredService<IConnectorResetJobRepository>());
         return (service, provider);
     }
 

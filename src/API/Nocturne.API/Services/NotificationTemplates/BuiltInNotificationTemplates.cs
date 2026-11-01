@@ -125,21 +125,21 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = ReleaseNoticeService.UpdateAvailableType,
+            Type = ReleaseNoticeJob.UpdateAvailableType,
             Category = NotificationCategory.Informational,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "refresh-cw",
-            Source = ReleaseNoticeService.Source,
+            Source = ReleaseNoticeJob.Source,
             DefaultActions = [ReleaseNotesAction()]
         });
 
         registry.Register(new NotificationTemplate
         {
-            Type = ReleaseNoticeService.ReleaseInstalledType,
+            Type = ReleaseNoticeJob.ReleaseInstalledType,
             Category = NotificationCategory.Informational,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "gift",
-            Source = ReleaseNoticeService.Source,
+            Source = ReleaseNoticeJob.Source,
             DefaultActions = [ReleaseNotesAction()]
         });
 
@@ -176,7 +176,7 @@ public static class BuiltInNotificationTemplates
 
     private static NotificationActionDto ReleaseNotesAction() => new()
     {
-        ActionId = ReleaseNoticeService.ReleaseNotesActionId,
+        ActionId = ReleaseNoticeJob.ReleaseNotesActionId,
         Label = "release_notes",
         Icon = "info",
         Variant = "default"

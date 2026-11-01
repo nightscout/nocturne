@@ -72,21 +72,19 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     public Task<SensorContext> EnrichAsync(
         SensorContext baseContext,
         IEnumerable<AlertRuleSnapshot> rules,
-        Guid tenantId,
         CancellationToken ct)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        return EnrichInternalAsync(baseContext, rules, tenantId, now, isReplay: false, ct);
+        return EnrichInternalAsync(baseContext, rules, now, isReplay: false, ct);
     }
 
     /// <inheritdoc/>
     public Task<SensorContext> EnrichAsOfAsync(
         SensorContext baseContext,
         IEnumerable<AlertRuleSnapshot> rules,
-        Guid tenantId,
         DateTime asOf,
         CancellationToken ct)
-        => EnrichInternalAsync(baseContext, rules, tenantId, asOf, isReplay: true, ct);
+        => EnrichInternalAsync(baseContext, rules, asOf, isReplay: true, ct);
 
     /// <summary>
     /// Single dispatch path used by both <see cref="EnrichAsync"/> and <see cref="EnrichAsOfAsync"/>.
@@ -97,7 +95,6 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     private async Task<SensorContext> EnrichInternalAsync(
         SensorContext baseContext,
         IEnumerable<AlertRuleSnapshot> rules,
-        Guid tenantId,
         DateTime now,
         bool isReplay,
         CancellationToken ct)
@@ -167,7 +164,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             // baseContext.ActiveAlerts before each tick — preserve that as-is.
             if (!isReplay)
             {
-                var activeAlerts = await _deps.Alerts.GetActiveAlertSnapshotsAsync(tenantId, ct);
+                var activeAlerts = await _deps.Alerts.GetActiveAlertSnapshotsAsync(ct);
                 enriched = enriched with { ActiveAlerts = activeAlerts };
             }
         }
@@ -202,7 +199,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 }
             }
 
-            var settings = await _deps.Alerts.GetTenantAlertSettingsAsync(tenantId, ct);
+            var settings = await _deps.Alerts.GetTenantAlertSettingsAsync(ct);
             // No row yet means DND has never been configured for this tenant — treat as off.
             // Scheduled DND is tenant-wide, i.e. == scope=all (manual DND is a scope=all window,
             // resolved below); this projects the active scheduled window if any (ADR 0004 D5).
@@ -214,7 +211,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             // The read is bounded by expiry: a window that merely runs out is never cleared, so
             // filtering on cleared_at alone would return every timed mute the tenant has ever set,
             // on a path that runs once per reading.
-            var windows = await _deps.Alerts.GetUnexpiredDndWindowsAsync(tenantId, now, ct);
+            var windows = await _deps.Alerts.GetUnexpiredDndWindowsAsync(now, ct);
             var dnd = DndWindowResolver.Resolve(windows, now, receiptGated: false, scheduled);
 
             enriched = enriched with

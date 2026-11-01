@@ -54,11 +54,11 @@ public class ActivityDecomposerTombstoneTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_DoesNotRecreateAHeartRateTheUserDeleted()
+    public async Task DecomposeBatchAsync_DoesNotRecreateAHeartRateTheUserDeleted()
     {
         await SeedTombstoneAsync("a0000000000000000000000a", byUser: true);
 
-        var result = await _decomposer.DecomposeAsync(HeartRate("a0000000000000000000000a"), WriteOrigin.Live);
+        var result = await _decomposer.DecomposeBatchAsync([HeartRate("a0000000000000000000000a")], WriteOrigin.Live);
 
         result.SkippedDeleted.Should().Be(1);
         result.CreatedRecords.Should().BeEmpty();
@@ -69,11 +69,11 @@ public class ActivityDecomposerTombstoneTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_RevivesAHeartRateTheSystemSweptInPlace()
+    public async Task DecomposeBatchAsync_RevivesAHeartRateTheSystemSweptInPlace()
     {
         await SeedTombstoneAsync("a0000000000000000000000a", byUser: false);
 
-        await _decomposer.DecomposeAsync(HeartRate("a0000000000000000000000a"), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([HeartRate("a0000000000000000000000a")], WriteOrigin.Live);
 
         _context.ChangeTracker.Clear();
         _context.HeartRates.Should().ContainSingle().Which.OriginalId.Should().Be("a0000000000000000000000a");
@@ -105,36 +105,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_DoesNotRecreateAnXDripStepCountTheUserDeleted()
-    {
-        await SeedXDripStepsTombstoneAsync(byUser: true);
-
-        var result = await _decomposer.DecomposeAsync(XDripSteps(), WriteOrigin.Live);
-
-        result.SkippedDeleted.Should().Be(1);
-        result.CreatedRecords.Should().BeEmpty();
-        result.UpdatedRecords.Should().BeEmpty();
-        _context.ChangeTracker.Clear();
-        _context.StepCounts.Should().BeEmpty();
-        _context.StepCounts.IgnoreQueryFilters().Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task DecomposeAsync_WritesAnXDripStepCountBesideASystemSweep()
-    {
-        await SeedXDripStepsTombstoneAsync(byUser: false);
-
-        var result = await _decomposer.DecomposeAsync(XDripSteps(), WriteOrigin.Live);
-
-        result.SkippedDeleted.Should().Be(0);
-        result.CreatedRecords.Should().ContainSingle();
-        _context.ChangeTracker.Clear();
-        _context.StepCounts.Should().ContainSingle().Which.SyncIdentifier.Should().Be(XDripSyncKey);
-        _context.StepCounts.IgnoreQueryFilters().Should().HaveCount(2);
-    }
-
-    [Fact]
-    public async Task DecomposeBatchAsync_SkipsAnXDripStepCountTheUserDeleted()
+    public async Task DecomposeBatchAsync_DoesNotRecreateAnXDripStepCountTheUserDeleted()
     {
         await SeedXDripStepsTombstoneAsync(byUser: true);
 
@@ -145,6 +116,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
         result.UpdatedRecords.Should().BeEmpty();
         _context.ChangeTracker.Clear();
         _context.StepCounts.Should().BeEmpty();
+        _context.StepCounts.IgnoreQueryFilters().Should().ContainSingle();
     }
 
     [Fact]
@@ -157,41 +129,12 @@ public class ActivityDecomposerTombstoneTests : IDisposable
         result.SkippedDeleted.Should().Be(0);
         result.CreatedRecords.Should().ContainSingle();
         _context.ChangeTracker.Clear();
-        _context.StepCounts.Should().ContainSingle();
+        _context.StepCounts.Should().ContainSingle().Which.SyncIdentifier.Should().Be(XDripSyncKey);
         _context.StepCounts.IgnoreQueryFilters().Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task DecomposeAsync_DoesNotRecreateAnXDripHeartRateTheUserDeleted()
-    {
-        await SeedXDripHeartRateTombstoneAsync(byUser: true);
-
-        var result = await _decomposer.DecomposeAsync(XDripHeartRate(), WriteOrigin.Live);
-
-        result.SkippedDeleted.Should().Be(1);
-        result.CreatedRecords.Should().BeEmpty();
-        result.UpdatedRecords.Should().BeEmpty();
-        _context.ChangeTracker.Clear();
-        _context.HeartRates.Should().BeEmpty();
-        _context.HeartRates.IgnoreQueryFilters().Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task DecomposeAsync_WritesAnXDripHeartRateBesideASystemSweep()
-    {
-        await SeedXDripHeartRateTombstoneAsync(byUser: false);
-
-        var result = await _decomposer.DecomposeAsync(XDripHeartRate(), WriteOrigin.Live);
-
-        result.SkippedDeleted.Should().Be(0);
-        result.CreatedRecords.Should().ContainSingle();
-        _context.ChangeTracker.Clear();
-        _context.HeartRates.Should().ContainSingle().Which.SyncIdentifier.Should().Be(XDripHeartRateSyncKey);
-        _context.HeartRates.IgnoreQueryFilters().Should().HaveCount(2);
-    }
-
-    [Fact]
-    public async Task DecomposeBatchAsync_SkipsAnXDripHeartRateTheUserDeleted()
+    public async Task DecomposeBatchAsync_DoesNotRecreateAnXDripHeartRateTheUserDeleted()
     {
         await SeedXDripHeartRateTombstoneAsync(byUser: true);
 
@@ -202,6 +145,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
         result.UpdatedRecords.Should().BeEmpty();
         _context.ChangeTracker.Clear();
         _context.HeartRates.Should().BeEmpty();
+        _context.HeartRates.IgnoreQueryFilters().Should().ContainSingle();
     }
 
     [Fact]
@@ -214,7 +158,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
         result.SkippedDeleted.Should().Be(0);
         result.CreatedRecords.Should().ContainSingle();
         _context.ChangeTracker.Clear();
-        _context.HeartRates.Should().ContainSingle();
+        _context.HeartRates.Should().ContainSingle().Which.SyncIdentifier.Should().Be(XDripHeartRateSyncKey);
         _context.HeartRates.IgnoreQueryFilters().Should().HaveCount(2);
     }
 
@@ -224,7 +168,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
 
     private async Task SeedXDripHeartRateTombstoneAsync(bool byUser)
     {
-        await _decomposer.DecomposeAsync(XDripHeartRate(), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([XDripHeartRate()], WriteOrigin.Live);
         var row = _context.HeartRates.Single(h => h.SyncIdentifier == XDripHeartRateSyncKey);
         row.DeletedAt = DateTime.UtcNow;
         _context.Entry(row).Property("DeletedByUser").CurrentValue = byUser;
@@ -241,7 +185,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
 
     private async Task SeedXDripStepsTombstoneAsync(bool byUser)
     {
-        await _decomposer.DecomposeAsync(XDripSteps(), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([XDripSteps()], WriteOrigin.Live);
         var row = _context.StepCounts.Single(s => s.SyncIdentifier == XDripSyncKey);
         row.DeletedAt = DateTime.UtcNow;
         _context.Entry(row).Property("DeletedByUser").CurrentValue = byUser;
@@ -259,7 +203,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
     /// <summary>Stores the heart rate through the decomposer, so it carries the primary key a re-upload derives, then soft-deletes it.</summary>
     private async Task SeedTombstoneAsync(string originalId, bool byUser)
     {
-        await _decomposer.DecomposeAsync(HeartRate(originalId), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([HeartRate(originalId)], WriteOrigin.Live);
         var row = _context.HeartRates.Single(h => h.OriginalId == originalId);
         row.DeletedAt = DateTime.UtcNow;
         _context.Entry(row).Property("DeletedByUser").CurrentValue = byUser;

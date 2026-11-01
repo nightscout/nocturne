@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Services.ProfileActivations;
+using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;

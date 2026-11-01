@@ -33,11 +33,9 @@ public interface ISensorContextEnricher
     /// <see cref="SensorContext.LastReadingAt"/>.</param>
     /// <param name="rules">Enabled rules being evaluated this pass; their condition trees are walked
     /// to determine which optional fields to populate.</param>
-    /// <param name="tenantId">Tenant identifier for tenant-scoped fetches (e.g. active alert snapshots).</param>
     Task<SensorContext> EnrichAsync(
         SensorContext baseContext,
         IEnumerable<AlertRuleSnapshot> rules,
-        Guid tenantId,
         CancellationToken ct);
 
     /// <summary>
@@ -63,15 +61,11 @@ public interface ISensorContextEnricher
     /// <param name="baseContext">Per-tick base context. <see cref="SensorContext.ActiveAlerts"/>,
     /// when set, is preserved through to the returned context.</param>
     /// <param name="rules">Rules being evaluated this tick.</param>
-    /// <param name="tenantId">Tenant identifier (currently unused on the replay path because
-    /// <c>ActiveAlerts</c> comes from <paramref name="baseContext"/>; reserved for future
-    /// tenant-scoped fetches).</param>
     /// <param name="asOf">Replay timestamp; every fact in the returned context reflects state
     /// at this instant. UTC.</param>
     Task<SensorContext> EnrichAsOfAsync(
         SensorContext baseContext,
         IEnumerable<AlertRuleSnapshot> rules,
-        Guid tenantId,
         DateTime asOf,
         CancellationToken ct);
 }

@@ -4,7 +4,7 @@ namespace Nocturne.API.Services.Audit;
 
 /// <summary>
 /// Mutates a scoped <see cref="IAuditContext"/> into system-attribution mode for
-/// the duration of the scope. Actor fields (subject_id, subject_name, auth_type,
+/// the duration of the scope. Actor fields (actor_subject_id, actor_name, auth_type,
 /// token_id, ip_address) are nulled; trace fields (correlation_id, endpoint) are
 /// preserved so the resulting audit rows remain tied to the originating request.
 /// Restores the original field values on dispose. Use around connector-pipeline

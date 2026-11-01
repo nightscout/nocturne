@@ -21,6 +21,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -55,7 +56,8 @@ public sealed class MetadataPublisherProfileActivationTests : IDisposable
             Mock.Of<IHeartRateService>(),
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
-            _context.AsFactory(),
+            new ActivityDedupRepository(_context.AsFactory()),
+            new ConnectorConfigurationRepository(_context.AsFactory()),
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             Mock.Of<IAuditContext>(),

@@ -50,11 +50,23 @@ public interface IActiveProfileResolver
         long fromMs, long toMs, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the insulin pharmacokinetic configuration the profile activation active at the given
-    /// time was uploaded with, or null if it carried none (e.g., non-AAPS source).
+    /// The store profile and the activation in force at each of <paramref name="timesMills"/>, in
+    /// order, from one read of the activations spanning them.
     /// </summary>
-    Task<TreatmentInsulinContext?> GetActiveInsulinContextAsync(long timeMills, CancellationToken ct = default);
+    Task<IReadOnlyList<ActiveProfileAt>> GetActiveAtAsync(IReadOnlyList<long> timesMills, CancellationToken ct = default);
+
+    /// <summary>
+    /// The insulin pharmacokinetic configuration the activation in force at each of
+    /// <paramref name="timesMills"/> was uploaded with, in order, or null where it carried none (e.g. a
+    /// non-AAPS source), from one read of the activations spanning them.
+    /// </summary>
+    Task<IReadOnlyList<TreatmentInsulinContext?>> GetActiveInsulinContextsAsync(
+        IReadOnlyList<long> timesMills, CancellationToken ct = default);
 }
+
+/// <summary>The profile in force at a time: its store profile, and the activation that selects it, if any.</summary>
+/// <param name="ProfileName">The store profile, the activation's or else the default one.</param>
+public sealed record ActiveProfileAt(string ProfileName, ResolvedProfileActivation? Active);
 
 /// <summary>
 /// A percentage and timeshift to apply to a profile's schedules.

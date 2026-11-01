@@ -50,15 +50,6 @@ public class CompositeDataEventSinkTests
     }
 
     [Fact]
-    public async Task BeforeDeleteAsync_FansOutToAllSinks()
-    {
-        await _sut.BeforeDeleteAsync("abc");
-
-        _sink1.Verify(s => s.BeforeDeleteAsync("abc", It.IsAny<CancellationToken>()), Times.Once);
-        _sink2.Verify(s => s.BeforeDeleteAsync("abc", It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
     public async Task OnDeletedAsync_FansOutToAllSinks()
     {
         var entry = new Entry { Id = "1" };

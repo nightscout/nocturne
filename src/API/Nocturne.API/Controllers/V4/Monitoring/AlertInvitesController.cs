@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -30,18 +31,22 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 public class AlertInvitesController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contextFactory;
+    private readonly IAlertRuleRepository _alertRules;
     private readonly ILogger<AlertInvitesController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertInvitesController"/>.
     /// </summary>
     /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
+    /// <param name="alertRules">Reads the rule channels an invite attaches to.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertInvitesController(
         INocturneDbContextFactory contextFactory,
+        IAlertRuleRepository alertRules,
         ILogger<AlertInvitesController> logger)
     {
         _contextFactory = contextFactory;
+        _alertRules = alertRules;
         _logger = logger;
     }
 
@@ -57,18 +62,14 @@ public class AlertInvitesController : ControllerBase
     public async Task<ActionResult<AlertInviteResponse>> CreateInvite(
         [FromBody] CreateAlertInviteRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
-
-        // Verify the rule channel exists within this tenant
-        var stepExists = await db.AlertRuleChannels
-            .AnyAsync(s => s.Id == request.AlertRuleChannelId, ct);
-
-        if (!stepExists)
+        if (!await _alertRules.ChannelExistsAsync(request.AlertRuleChannelId, ct))
             return Problem(detail: "Channel not found", statusCode: 400, title: "Bad Request");
 
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId is null)
             return Unauthorized();
+
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var tokenBytes = RandomNumberGenerator.GetBytes(32);
         var token = Convert.ToBase64String(tokenBytes)

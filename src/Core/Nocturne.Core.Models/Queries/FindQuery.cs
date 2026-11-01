@@ -50,6 +50,13 @@ public sealed class FindQuery
         new[] { "eventType", "notes", "enteredBy" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
+    /// The time fields a projected device status carries for its anchor's time, the one the store
+    /// filters by.
+    /// </summary>
+    private static readonly IReadOnlySet<string> DeviceStatusTimeFields =
+        new[] { "created_at", "date", "mills" }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
     /// Synthetic operator for a find[...] key, operator, empty operand object or <c>$and</c>/<c>$or</c>
     /// value the parser couldn't interpret. It never matches, so an unsupported filter narrows results
     /// to nothing (fail closed) instead of being dropped. MongoDB matches nothing for an empty operand
@@ -311,6 +318,13 @@ public sealed class FindQuery
     /// <see cref="Empty"/> (no filtering), matching the legacy server's lenient behavior.
     /// </summary>
     public static FindQuery Parse(string? find) => Parse(find, bareRegexFields: null);
+
+    /// <summary>
+    /// Parses a device status find, in either wire form. Only a bound on a time field the store
+    /// filters by becomes <see cref="FromMills"/>/<see cref="ToMills"/>.
+    /// </summary>
+    public static FindQuery ParseDeviceStatus(string? find) =>
+        Parse(find, bareRegexFields: null, DeviceStatusTimeFields);
 
     /// <summary>
     /// Parses a find query, additionally reading a bare querystring operand of the form

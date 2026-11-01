@@ -43,6 +43,54 @@ public class ActogramReportData
 
     /// <summary>Sleep spans within the requested window.</summary>
     public List<ActogramSleepSpan> SleepSpans { get; set; } = new();
+
+    /// <summary>
+    /// <see cref="HeartRates"/> summarised over the summary range; null when the range holds none.
+    /// </summary>
+    public ActogramHeartRateSummary? HeartRateSummary { get; set; }
+
+    /// <summary>
+    /// <see cref="StepCounts"/> summarised over the summary range; null when the caller may not read
+    /// step counts.
+    /// </summary>
+    public ActogramStepSummary? StepSummary { get; set; }
+}
+
+/// <summary>
+/// The heart rates of an actogram's summary range, the selected range without the padding the
+/// rows scroll back through. Each reading is a minute average.
+/// </summary>
+public class ActogramHeartRateSummary
+{
+    /// <summary>Mean of the readings, rounded to whole beats per minute.</summary>
+    public int AverageBpm { get; set; }
+
+    /// <summary>
+    /// Resting rate estimate: the 10th percentile of the readings, by nearest rank (the reading at
+    /// index floor(count / 10) in ascending order).
+    /// </summary>
+    public int RestingBpm { get; set; }
+
+    public int MinBpm { get; set; }
+
+    public int MaxBpm { get; set; }
+
+    public int ReadingCount { get; set; }
+}
+
+/// <summary>The step counts of an actogram's summary range.</summary>
+public class ActogramStepSummary
+{
+    public int TotalSteps { get; set; }
+
+    /// <summary>
+    /// Whole days in the summary range, rounded to nearest, at least one. Not the local days it
+    /// touches: a caller may align the range to midnights in a zone other than the patient's.
+    /// </summary>
+    public int DayCount { get; set; }
+
+    /// <summary><see cref="TotalSteps"/> over <see cref="DayCount"/>, rounded to whole steps.</summary>
+    public int DailyAverage { get; set; }
 }
 
 /// <summary>

@@ -12,7 +12,7 @@ namespace Nocturne.Core.Contracts.Events;
 /// <see cref="Nocturne.Core.Contracts.V4.WriteOrigin"/>, so a migration or replay import never
 /// retroactively advances trackers.
 /// Sitting at the repository rather than at a controller is the point — connector ingest reaches
-/// device events through <c>ITreatmentDecomposer</c> and never touches the V4 REST surface, so a
+/// device events through the legacy treatment write path and never touches the V4 REST surface, so a
 /// controller-level hook would fire for hand-entered events only. The decomposer's own deletes of a
 /// legacy treatment's rows bypass the chokepoint and call <see cref="OnDeletedAsync"/> themselves;
 /// its range sweeps (a find-query bulk delete, a data source wipe) materialise no rows and run no

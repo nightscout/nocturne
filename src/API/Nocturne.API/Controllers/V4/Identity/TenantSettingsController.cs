@@ -118,7 +118,7 @@ public class TenantSettingsController : ControllerBase
     /// </summary>
     [DenyDemoSubject]
     [HttpPut("patient-relationship")]
-    [RemoteCommand(Invalidates = ["GetPatientRelationship", "PatientRecord_GetPatientRecord"])]
+    [RemoteCommand(Invalidates = ["GetPatientRelationship", "PatientRecord_GetPatientRecord", "SetupHub_GetSetupHub"])]
     [ProducesResponseType(typeof(PatientRelationshipDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -129,7 +129,7 @@ public class TenantSettingsController : ControllerBase
             return Forbid();
 
         await _tenantService.SetPatientRelationshipAsync(
-            _tenantAccessor.TenantId, request.Relationship, ct);
+            _tenantAccessor.TenantId, request.Relationship, HttpContext.GetSubjectId(), ct);
 
         var name = request.PatientName?.Trim();
         if (request.Relationship != PatientRelationship.Self && !string.IsNullOrEmpty(name))

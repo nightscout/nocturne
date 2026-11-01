@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Devices;
 using Nocturne.API.Models.Requests.V4;
-using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -151,27 +150,6 @@ public class ApsSnapshotCurvesNormalizeTests
         posted.LoopJson.Should().NotContain("values");
         posted.PredictedDefaultJson.Should().Be(decomposed.PredictedDefaultJson);
         posted.PredictedStartTimestamp.Should().Be(decomposed.PredictedStartTimestamp).And.NotBeNull();
-    }
-
-    [Fact]
-    public void Normalize_CurvesAlreadySplitAndCommandsWithoutTheKey_StillReadBackWithTheirCurves()
-    {
-        var uploaded = new V4Models.ApsSnapshot
-        {
-            Timestamp = new DateTime(2023, 11, 14, 12, 0, 0, DateTimeKind.Utc),
-            PredictedIobJson = "[120,115,110]",
-            PredictedZtJson = "[120,118]",
-            SuggestedJson = """{"bg":120,"timestamp":"2023-11-14T12:00:00Z"}""",
-            EnactedJson = """{"bg":120,"timestamp":"2023-11-14T12:00:00Z","rate":0.8,"received":true}""",
-        };
-
-        ApsSnapshotCurves.Normalize(uploaded);
-
-        uploaded.SuggestedJson.Should().NotContain("predBGs");
-        uploaded.EnactedJson.Should().NotContain("predBGs");
-        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(uploaded, null, null, null, null);
-        projected.OpenAps!.Suggested!.PredBGs!.IOB.Should().Equal(120, 115, 110);
-        projected.OpenAps.Enacted!.PredBGs!.ZT.Should().Equal(120, 118);
     }
 
     [Fact]

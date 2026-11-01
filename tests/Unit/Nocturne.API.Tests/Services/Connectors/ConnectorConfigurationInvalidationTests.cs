@@ -11,14 +11,16 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
 /// <summary>
 /// Every write to a connector's stored configuration must reach the tenant-keyed caches: the auth
-/// token caches so the next sync uses the new credentials, and the pollers' schedules so a connector
-/// the tenant just saved, enabled or removed is looked at on the next tick rather than after its
-/// recheck interval. Saving secrets and toggling active are writes too, not only the full save.
+/// token caches so the next sync uses the new credentials, and the pollers, which make the tenant's
+/// job ledger row due a minute after the write, so a connector the tenant just saved, enabled or
+/// removed is read then rather than at the end of its interval or park. Saving secrets and toggling
+/// active are writes too, not only the full save.
 /// </summary>
 public class ConnectorConfigurationInvalidationTests : IDisposable
 {
@@ -53,14 +55,15 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
             .Returns<Dictionary<string, string>>(d => d);
 
         _service = new ConnectorConfigurationService(
-            _dbContext.AsFactory(),
+            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IAuditContext>(),
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [new RecordingInvalidator(_invalidated)],
-            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

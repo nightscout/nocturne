@@ -1,4 +1,5 @@
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -49,6 +50,16 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         "find[created_at][$gte]=2023-01-01T00:00:00.000Z&find[created_at][$lte]=2023-01-02T00:00:00.000Z";
 
     private readonly SqliteTestDatabase _db;
+    private readonly RecordingLegacyReads _legacyReads = new();
+
+    /// <summary>Every table a legacy treatment decomposes into, which a delete here sweeps around the repositories.</summary>
+    private static readonly Type[] DecomposedModels =
+    [
+        typeof(Nocturne.Core.Models.V4.Bolus), typeof(Nocturne.Core.Models.V4.TempBasal),
+        typeof(Nocturne.Core.Models.V4.CarbIntake), typeof(Nocturne.Core.Models.V4.BGCheck),
+        typeof(Nocturne.Core.Models.V4.Note), typeof(Nocturne.Core.Models.V4.DeviceEvent),
+        typeof(Nocturne.Core.Models.V4.BolusCalculation), typeof(Nocturne.Core.Models.V4.ProfileActivation),
+    ];
 
     private readonly AuditContext _userAuditContext = new()
     {
@@ -87,13 +98,14 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         ProfileActivationTestDeps.Repository(context),
         ProfileActivationTestDeps.Writer(context),
         Mock.Of<ITreatmentFoodService>(),
-        Mock.Of<IDeviceService>(),
+        new UnresolvedDevices(),
         Mock.Of<IPatientDeviceStamper>(),
-        Mock.Of<IActiveProfileResolver>(),
+        new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
         Mock.Of<IPatientInsulinRepository>(),
         TempBasalTestDeps.Unscheduled(),
         auditContext,
-        logger ?? NullLogger<TreatmentDecomposer>.Instance);
+        logger ?? NullLogger<TreatmentDecomposer>.Instance,
+        legacyReads: _legacyReads);
 
     /// <summary>One record of every type the sweep covers, plus a bolus outside the window.</summary>
     /// <param name="legacyIdFor">
@@ -360,8 +372,8 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         await using (var ctx = NewContext())
         {
             var decomposer = CreateDecomposer(ctx, _userAuditContext);
-            await decomposer.DecomposeAsync(ProfileSwitch("weekday", Inside, "Weekday"), WriteOrigin.Live);
-            await decomposer.DecomposeAsync(ProfileSwitch("weekend", Inside.AddHours(1), "Weekend"), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("weekday", Inside, "Weekday"), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("weekend", Inside.AddHours(1), "Weekend"), WriteOrigin.Live);
         }
         (await ActivationAsync("weekday")).EndTimestamp.Should().Be(Inside.AddHours(1));
 
@@ -377,8 +389,8 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         await using (var ctx = NewContext())
         {
             var decomposer = CreateDecomposer(ctx, _userAuditContext);
-            await decomposer.DecomposeAsync(ProfileSwitch("sick", Inside, "Sick", minutes: 120), WriteOrigin.Live);
-            await decomposer.DecomposeAsync(ProfileSwitch("exercise", Inside.AddHours(1), "Exercise", minutes: 30), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("sick", Inside, "Sick", minutes: 120), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("exercise", Inside.AddHours(1), "Exercise", minutes: 30), WriteOrigin.Live);
         }
         (await ActivationAsync("sick")).EndTimestamp.Should().Be(Inside.AddHours(1));
 
@@ -394,8 +406,8 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         await using (var ctx = NewContext())
         {
             var decomposer = CreateDecomposer(ctx, _userAuditContext);
-            await decomposer.DecomposeAsync(ProfileSwitch("weekday", Inside.AddDays(-1), "Weekday"), WriteOrigin.Live);
-            await decomposer.DecomposeAsync(ProfileSwitch("weekend", Inside, "Weekend"), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("weekday", Inside.AddDays(-1), "Weekday"), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("weekend", Inside, "Weekend"), WriteOrigin.Live);
         }
 
         await BulkDeleteAsync(_userAuditContext);
@@ -481,6 +493,38 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         (await assertCtx.GetBlockingLegacyIdsAsync<DeviceEventEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
         (await assertCtx.GetBlockingLegacyIdsAsync<BolusCalculationEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
         (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
+    }
+
+    [Fact]
+    public async Task BulkDelete_ReportsEveryTableItSweptAndTheServedSpans()
+    {
+        SeedOneOfEachType();
+
+        await BulkDeleteAsync(_userAuditContext);
+
+        _legacyReads.Models.Should().Contain([.. DecomposedModels, typeof(StateSpan)]);
+    }
+
+    [Fact]
+    public async Task DeleteByLegacyId_ReportsEveryTableItSwept()
+    {
+        SeedOneOfEachType(_ => LegacyTreatmentId);
+
+        await DeleteByLegacyIdAsync(_userAuditContext);
+
+        _legacyReads.Models.Should().Contain(DecomposedModels);
+    }
+
+    [Fact]
+    public async Task DeleteFromSource_ReportsEveryTableItSweptAndTheServedSpans()
+    {
+        SeedActivation("ps-1", "aaps", Inside);
+
+        await using var ctx = NewContext();
+        await CreateDecomposer(ctx, SystemAuditContext.ForService("connector:aaps"))
+            .DeleteFromSourceAsync("aaps", new HashSet<string> { "ps-1" });
+
+        _legacyReads.Models.Should().Contain([.. DecomposedModels, typeof(StateSpan)]);
     }
 
     [Fact]

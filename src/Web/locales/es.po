@@ -857,6 +857,7 @@ msgstr "Crear"
 #: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
+#: src/routes/(unauthenticated)/setup/hub/HubRecipientQuestion.svelte
 msgid "Save"
 msgstr "Guardar"
 
@@ -1376,10 +1377,8 @@ msgstr "Restaurar"
 msgid "Time"
 msgstr "Hora"
 
-#: src/lib/components/audit/AuditMutationsTable.svelte
-#: src/lib/components/audit/AuditReadsTable.svelte
-msgid "Subject"
-msgstr "Sujeto"
+#~ msgid "Subject"
+#~ msgstr "Sujeto"
 
 #: src/lib/components/audit/AuditMutationsTable.svelte
 msgid "Entity ID"
@@ -2852,6 +2851,7 @@ msgstr "No se pudo iniciar la eliminación de duplicados"
 msgid "Completed"
 msgstr "Completado"
 
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/(authenticated)/notifications/+page.svelte
@@ -2976,6 +2976,7 @@ msgstr "Conectores que se ejecutan en el servidor para obtener datos de servicio
 
 #: ../portal/src/routes/changelog/+page.svelte
 #: ../portal/src/routes/roadmap/+page.svelte
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
@@ -6525,6 +6526,7 @@ msgstr "Hacer parpadear el título y el favicon durante niveles urgentes de gluc
 #~ msgid "Step Count"
 #~ msgstr "Número de pasos"
 
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/settings-navigation.svelte.ts
 msgid "Platform"
@@ -7692,6 +7694,7 @@ msgstr "{0} importantes"
 msgid "{0} minor"
 msgstr "{0} menores"
 
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -7769,7 +7772,6 @@ msgstr "NC: {0}"
 #: src/routes/(authenticated)/+layout.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
 #: src/routes/(authenticated)/compatibility/test/+page.svelte
-#: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 msgid "An error occurred"
 msgstr "Se produjo un error"
@@ -9196,10 +9198,12 @@ msgstr "<0/> {0} ({1}% CV)"
 #. 0: basic.count
 #. 0: formatNumber(totalReadings)
 #. 0: formatNumber(readingCount)
+#. 0: formatNumber(readingCount)
 #. 0: readings.length
 #. 0: formatNumber(readingCount)
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
@@ -10961,8 +10965,8 @@ msgstr "Durante {0} días"
 #~ msgid "Meal Boluses"
 #~ msgstr "Bolos de comida"
 
-#. 0: (insulinStats.manualBolusCount ?? 0) > 0 ? ( ((insulinStats.mealBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) * 100 ).toFixed(0) \\: 0
-#. 0: (insulinStats.manualBolusCount ?? 0) > 0 ? ( ((insulinStats.correctionBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) * 100 ).toFixed(0) \\: 0
+#. 0: (insulinStats.mealBolusPercent ?? 0).toFixed(0)
+#. 0: (insulinStats.correctionBolusPercent ?? 0).toFixed(0)
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 msgid "{0}% of boluses"
@@ -11057,8 +11061,8 @@ msgstr "Desglose diario de la administración de insulina"
 #~ msgid "Avg Total Daily Dose"
 #~ msgstr "Dosis diaria total media"
 
-#. 0: avgBasal?.toFixed(1) ?? "--"
-#. 0: avgScheduled?.toFixed(1) ?? "--"
+#. 0: insulinStats?.totalBasalPerDay?.toFixed(1) ?? "--"
+#. 0: insulinStats?.scheduledBasalPerDay?.toFixed(1) ?? "--"
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "{0} U/day"
@@ -16580,10 +16584,8 @@ msgstr "Ventanas en las que las lecturas oscilan de una forma poco probable desd
 #~ msgid "Error Loading Comparison"
 #~ msgstr "Error al cargar la comparación"
 
-#. 0: signed(d)
-#. 0: signed(d, 2)
+#. 0: signed(v, d)
 #. 0: signedNumber(priorWeek.tirDelta)
-#: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 msgid "{0} pp"
@@ -16621,7 +16623,7 @@ msgstr "Tu patrón típico de administración basal durante 24 horas (como un AG
 #~ msgid "<0/> zero or suspend temp basals were recorded. This often indicates low glucose prevention or manual suspensions."
 #~ msgstr ""
 
-#. 0.0: (basalStats.totalDelivered / dateInfo.dayCount).toFixed(1); 0: dateInfo.dayCount
+#. 0.0: basalStats.totalDeliveredPerDay.toFixed(1); 0: analysisQuery.current?.windowDays ?? dateInfo.dayCount
 #: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
 msgid "Average of <0>{0} units</0> of basal insulin delivered per day over this {0}-day period."
 msgstr "Promedio de <0>{0} unidades</0> de insulina basal administradas al día durante este periodo de {0} días."
@@ -16773,9 +16775,8 @@ msgstr "¿Denegar la solicitud de acceso de {0}? No se le concederá acceso a tu
 msgid "There is no data to display yet. Connect a data source in your settings to get started."
 msgstr "Todavía no hay datos que mostrar. Conecta una fuente de datos en tus ajustes para empezar."
 
-#: src/routes/(authenticated)/settings/admin/+page.svelte
-msgid "Manage identity providers and integrations"
-msgstr "Gestionar proveedores de identidad e integraciones"
+#~ msgid "Manage identity providers and integrations"
+#~ msgstr "Gestionar proveedores de identidad e integraciones"
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Account linked successfully."
@@ -17496,6 +17497,7 @@ msgstr "<0/> Cargando inquilinos..."
 msgid "Select a tenant"
 msgstr "Selecciona un inquilino"
 
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
 msgid "Tenant"
 msgstr "Inquilino"
@@ -21302,7 +21304,7 @@ msgstr "Resultado de laboratorio: {0} ({1}){2}"
 msgid "Delete this lab result?"
 msgstr "¿Eliminar este resultado de laboratorio?"
 
-#. 0: formatA1c(pendingDeleteLabResult.a1cDisplay); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
+#. 0: formatA1c(pendingDeleteLabResult.a1cDisplay); 1: formatLongDate(labDay(pendingDeleteLabResult.measuredAt))
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete the {0} lab result from {1}."
 msgstr "Eliminar el resultado de laboratorio de {0} del {1}."
@@ -22087,12 +22089,12 @@ msgstr "Mostrado en mmol/mol (IFCC)"
 msgid "Heart rate"
 msgstr "Frecuencia cardiaca"
 
-#. 0: avgBasal?.toFixed(1) ?? "--"; 1: basalPct.toFixed(0)
+#. 0: insulinStats?.totalBasalPerDay?.toFixed(1) ?? "--"; 1: basalPct.toFixed(0)
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "<0/> Basal: {0} U/day ({1}%)"
 msgstr "<0/> Basal: {0} U/día ({1}%)"
 
-#. 0: avgBolus?.toFixed(1) ?? "--"; 1: bolusPct.toFixed(0)
+#. 0: insulinStats?.totalBolusPerDay?.toFixed(1) ?? "--"; 1: bolusPct.toFixed(0)
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "<0/> Bolus: {0} U/day ({1}%)"
 msgstr "<0/> Bolo: {0} U/día ({1}%)"
@@ -22404,10 +22406,8 @@ msgstr "TIR después"
 #~ msgid "{0} meals · {1}g/day · {2}g avg/meal"
 #~ msgstr "{0} comidas · {1} g/día · {2} g de media/comida"
 
-#. 0: formatNumber(readingCount)
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "· {0} readings"
-msgstr "· {0} lecturas"
+#~ msgid "· {0} readings"
+#~ msgstr "· {0} lecturas"
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "Consensus target: at least 70% of time in range."
@@ -28853,9 +28853,8 @@ msgstr ""
 msgid "Could not load the complete report. Try again before printing."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "Could not load reports"
-msgstr ""
+#~ msgid "Could not load reports"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "There are not enough glucose readings between these dates to summarize. Choose a longer date range."
@@ -30783,6 +30782,7 @@ msgid "Connect Nightscout"
 msgstr ""
 
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
+#: src/routes/(unauthenticated)/setup/hub/HubRecipientQuestion.svelte
 msgid "We could not save your answer."
 msgstr ""
 
@@ -31064,6 +31064,7 @@ msgstr ""
 msgid "Someone you are setting it up for"
 msgstr ""
 
+#: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
 msgid "Not answered yet"
 msgstr ""
@@ -32566,9 +32567,8 @@ msgstr ""
 msgid "Meal attribution"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "Error loading reports"
-msgstr ""
+#~ msgid "Error loading reports"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "<0/> Executive summary"
@@ -34562,9 +34562,6 @@ msgid "This month vs last month"
 msgstr ""
 
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
-#: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
-#: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
-#: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 msgid "Error loading comparison"
 msgstr ""
@@ -36682,9 +36679,8 @@ msgstr ""
 msgid "The average daily risk range (ADRR) is not shown for either period, and days with data are counted on UTC days."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
-msgid "The hourly figures place each reading at the local time its device reported. Days of data are counted on UTC days."
-msgstr ""
+#~ msgid "The hourly figures place each reading at the local time its device reported. Days of data are counted on UTC days."
+#~ msgstr ""
 
 #~ msgid "Days in range, the weekly breakdown and the composition chart use UTC days."
 #~ msgstr ""
@@ -38345,6 +38341,175 @@ msgstr ""
 
 #: src/routes/(authenticated)/StickyBarProbe.test.svelte
 msgid "bar"
+msgstr ""
+
+#: src/lib/components/audit/AuditMutationsTable.svelte
+msgid "Changed by"
+msgstr ""
+
+#: src/lib/components/audit/AuditReadsTable.svelte
+msgid "Read by"
+msgstr ""
+
+#. 0: voice.name
+#: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
+msgid "These are the thresholds from {0}'s Nightscout site. Check that they are still right."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
+msgid "These are the thresholds from the Nightscout site. Check that they are still right."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
+msgid "These are the thresholds from your Nightscout site. Check that they are still right."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Loading the range analysis"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Could not load the reading count."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Loading the reading count"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "We could not change your role."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Step down to a supporter role"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "They own Nocturne now. You can stay as a member who helps, with this access:"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Caretaker"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Step down"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Step down?"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "You will not own Nocturne after this. Only an owner can give you more access again."
+msgstr ""
+
+#. 0: handover?.helperName
+#: src/routes/(unauthenticated)/setup/hub/SetupHub.svelte
+msgid "{0} set up <0>Nocturne</0> for you."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/SetupHub.svelte
+msgid "A few things only you can decide."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "Hand it over"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "Make a link for the person who will own Nocturne. When they accept the link, Nocturne is theirs. Then they can choose who it is for and where alerts go."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "They can do everything you can do, including remove you."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "Waiting for them to accept."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
+msgid "Owner"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
+msgid "They own Nocturne, the same as you."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/idp/+page.svelte
+msgid "The hourly glucose figures place each reading at the local time its device reported. Days of data are counted on UTC days."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/idp/+page.svelte
+msgid "This chart cannot show boluses by hour of day."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Try again to load the reading count"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Try again to load the analysis"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/readings/+page.svelte
+msgid "Error Loading Readings"
+msgstr ""
+
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Background jobs"
+msgstr ""
+
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Each job and tenant has one row. Rows with a failed last run show first."
+msgstr ""
+
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "No jobs are scheduled."
+msgstr ""
+
+#. 0: jobs.length
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "This list shows the first {0} rows only."
+msgstr ""
+
+#. 0: jobs.length
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "This list shows all {0} rows."
+msgstr ""
+
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Job"
+msgstr ""
+
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Next run"
+msgstr ""
+
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Last completed"
+msgstr ""
+
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Attempts"
+msgstr ""
+
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Last error"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/admin/+page.svelte
+msgid "Failed to load the background jobs."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/admin/+page.svelte
+msgid "Manage identity providers, integrations, and background jobs"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/admin/+page.svelte
+msgid "<0/> Jobs"
 msgstr ""
 
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte

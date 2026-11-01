@@ -206,7 +206,7 @@ internal static class ProfileActivationLegacyFields
     private static long? RequestedDurationOf(
         IDictionary<string, object> metadata, ProfileSpanMetadata span, DateTime start, DateTime? end, bool superseded)
     {
-        if (metadata.TryReadDecimal(Services.V4.LegacyTreatmentTables.UploadedDurationKey) is { } minutes)
+        if (metadata.TryReadDecimal(StateSpanMetadataExtensions.UploadedDurationKey) is { } minutes)
             return minutes > 0 ? (long)Math.Round(minutes * 60_000) : null;
         if (span.DurationInMilliseconds is { } durationMs)
             return durationMs > 0 ? durationMs : null;

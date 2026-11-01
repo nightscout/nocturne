@@ -102,12 +102,16 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PatientDevice>> GetByDeviceIdAsync(Guid deviceId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<PatientDevice>> GetByDeviceIdsAsync(IReadOnlyCollection<Guid> deviceIds, CancellationToken ct = default)
     {
+        if (deviceIds.Count == 0)
+            return [];
+
+        var ids = deviceIds.ToList();
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entities = await ctx.PatientDevices
             .AsNoTracking()
-            .Where(e => e.DeviceId == deviceId)
+            .Where(e => e.DeviceId != null && ids.Contains(e.DeviceId.Value))
             .OrderByDescending(e => e.StartDate)
             .ToListAsync(ct);
 

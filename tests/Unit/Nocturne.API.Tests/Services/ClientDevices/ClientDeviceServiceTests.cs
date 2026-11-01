@@ -9,6 +9,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.ClientDevices;
 
@@ -19,7 +20,7 @@ public class ClientDeviceServiceTests
         new HashSet<string> { Scope.DeviceNotify, Scope.DeviceActuate };
 
     private static ClientDeviceService CreateService(NocturneDbContext ctx)
-        => new(ctx.AsFactory(), TimeProvider.System, NullLogger<ClientDeviceService>.Instance);
+        => new(ctx.AsFactory(), new OAuthGrantRepository(ctx.AsFactory()), TimeProvider.System, NullLogger<ClientDeviceService>.Instance);
 
     private static NocturneDbContext CreateContext()
     {

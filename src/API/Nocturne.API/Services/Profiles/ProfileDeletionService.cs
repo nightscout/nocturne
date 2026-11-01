@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Profiles;
@@ -98,16 +99,10 @@ public class ProfileDeletionService : IProfileDeletionService
 
         _logger.LogInformation(
             "Deleted therapy profile {ProfileName}: {Count} records across five tables",
-            SanitizeForLog(profileName),
+            LogText.Sanitize(profileName),
             deleted
         );
 
         return new ProfileDeletionResult(ProfileDeletionRefusal.None, deleted);
     }
-
-    /// <summary>
-    /// The profile name arrives from the route; stripping CR/LF keeps it from forging log lines.
-    /// </summary>
-    private static string SanitizeForLog(string value) =>
-        value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

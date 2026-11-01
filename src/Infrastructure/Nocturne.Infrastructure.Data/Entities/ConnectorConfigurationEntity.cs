@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models.Connectors;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -101,14 +102,8 @@ public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
     [Column("last_successful_sync")]
     public DateTime? LastSuccessfulSync { get; set; }
 
-    /// <summary>
-    /// Maximum stored length of <see cref="LastErrorMessage"/>. Writers must fit the message to it,
-    /// and must not cut inside a surrogate pair: a connector reports one error per failing type per
-    /// chunk, so a long backfill against a persistently failing publisher joins a multi-KB string,
-    /// and either an over-length value or a lone surrogate fails the very write that was recording
-    /// the failure.
-    /// </summary>
-    public const int LastErrorMessageMaxLength = 1000;
+    /// <summary>Maximum stored length of <see cref="LastErrorMessage"/>; see <see cref="ConnectorConfigurationRecord.LastErrorMessageMaxLength"/>.</summary>
+    public const int LastErrorMessageMaxLength = ConnectorConfigurationRecord.LastErrorMessageMaxLength;
 
     /// <summary>
     /// The error message from the most recent failure

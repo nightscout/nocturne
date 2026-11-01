@@ -4,16 +4,14 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.API.Controllers.V1;
-using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Queries;
@@ -326,19 +324,10 @@ public class TimeQueryFindTests
                 return Treatments.Where(parsed.Matches).ToList().AsEnumerable();
             });
 
-        var deviceStatuses = new DeviceStatusProjectionService(
-            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
-                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
-                == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.DeviceStatusGroup>>(
-                    Array.Empty<Nocturne.Core.Models.V4.DeviceStatusGroup>())),
-            new Mock<IApsSnapshotRepository>().Object,
-            new Mock<IPumpSnapshotRepository>().Object,
-            new Mock<IUploaderSnapshotRepository>().Object,
-            new Mock<IStateSpanRepository>().Object,
-            new Mock<IDeviceStatusExtrasRepository>().Object,
-            TimeProvider.System,
-            NullLogger<DeviceStatusProjectionService>.Instance);
+        var deviceStatuses = Mock.Of<IDeviceStatusService>(s => s.GetDeviceStatusesAsync(
+                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<ReadSortField>())
+            == Task.FromResult<IReadOnlyList<DeviceStatus>>(Array.Empty<DeviceStatus>()));
 
         var service = new TimeQueryService(
             entries,

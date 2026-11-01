@@ -1,14 +1,14 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Multitenancy;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -51,7 +51,7 @@ public interface IShareLinkService : ITenantAppearanceReader
     /// <summary>
     /// Returns the live link's URL, decrypted from the stored ciphertext, leaving the URL null and
     /// <see cref="ShareLinkDto.CanReveal"/> false in the cases
-    /// <see cref="TenantEntity.ShareTokenEncrypted"/> lists. Callers audit this; it hands out a
+    /// <see cref="TenantRecord.ShareTokenEncrypted"/> lists. Callers audit this; it hands out a
     /// credential.
     /// </summary>
     Task<ShareLinkDto> RevealAsync(Guid tenantId, CancellationToken ct = default);
@@ -74,12 +74,18 @@ public interface IShareLinkService : ITenantAppearanceReader
 }
 
 /// <inheritdoc />
+/// <remarks>
+/// Each write edits the tenant's token columns and the Public membership together, on one
+/// <see cref="DbUnitOfWork"/>, so a rotate or disable cannot leave a link resolving onto grants
+/// it should not have, or the other way round.
+/// </remarks>
 public sealed class ShareLinkService : IShareLinkService
 {
-    private const string PublicSubjectName = "Public";
     private const int MaxTokenAttempts = 5;
 
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
     private readonly IShareTokenGenerator _tokenGenerator;
     private readonly ShareTokenCacheService _shareTokenCache;
     private readonly PublicAccessCacheService _publicAccessCache;
@@ -89,6 +95,8 @@ public sealed class ShareLinkService : IShareLinkService
 
     public ShareLinkService(
         INocturneDbContextFactory contexts,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
         IShareTokenGenerator tokenGenerator,
         ShareTokenCacheService shareTokenCache,
         PublicAccessCacheService publicAccessCache,
@@ -97,6 +105,8 @@ public sealed class ShareLinkService : IShareLinkService
         IOptions<BaseDomainOptions> baseDomain)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
+        _members = members ?? throw new ArgumentNullException(nameof(members));
         _tokenGenerator = tokenGenerator;
         _shareTokenCache = shareTokenCache;
         _publicAccessCache = publicAccessCache;
@@ -107,179 +117,155 @@ public sealed class ShareLinkService : IShareLinkService
 
     public async Task<ShareLinkDto> GetAsync(Guid tenantId, CancellationToken ct = default)
     {
-        var (tenant, member) = await ReadAsync(tenantId, ct);
+        var (tenant, member) = await ReadAsync(_tenants, _members, tenantId, ct);
         return ToDto(tenant, member);
     }
 
     public async Task<ShareLinkDto> RevealAsync(Guid tenantId, CancellationToken ct = default)
     {
-        var (tenant, member) = await ReadAsync(tenantId, ct);
+        var (tenant, member) = await ReadAsync(_tenants, _members, tenantId, ct);
         return ToDto(tenant, member, DecryptToken(tenant), attemptedDecrypt: true);
     }
 
-    /// <summary>The tenant and its Public membership, read-only, for the reporting paths.</summary>
-    private async Task<(TenantEntity Tenant, TenantMemberEntity? Member)> ReadAsync(
-        Guid tenantId, CancellationToken ct)
+    /// <summary>The tenant and its Public membership.</summary>
+    private static async Task<(TenantRecord Tenant, TenantMemberRecord? Member)> ReadAsync(
+        ITenantRepository tenants, ITenantMembershipRepository members, Guid tenantId, CancellationToken ct)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct)
+        var tenant = await tenants.GetAsync(tenantId, ct)
             ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
-
-        var member = await db.TenantMembers.AsNoTracking()
-            .Include(m => m.MemberRoles)
-                .ThenInclude(mr => mr.TenantRole)
-            .Include(m => m.Subject)
-            .FirstOrDefaultAsync(m => m.TenantId == tenantId
-                && m.Subject!.IsSystemSubject && m.Subject.Name == PublicSubjectName, ct);
-
+        var member = await members.FindPublicMemberAsync(tenantId, ct);
         return (tenant, member);
     }
 
     public async Task<ShareLinkDto> RotateAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct)
-            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
-        var member = await GetPublicMemberAsync(db, tenantId, ct)
-            ?? throw new InvalidOperationException("Public subject membership not found");
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var tenants = new TenantRepository(unit);
+        var members = new TenantMembershipRepository(unit);
+        var (tenant, member) = await ReadAsync(tenants, members, tenantId, ct);
+        if (member is null)
+            throw new InvalidOperationException("Public subject membership not found");
 
-        var oldTokenHash = tenant.ShareToken;
+        var oldTokenHash = tenant.ShareTokenHash;
         var wasEnabled = oldTokenHash != null;
-        var newToken = await GenerateUniqueTokenAsync(db, ct);
+        var newToken = await GenerateUniqueTokenAsync(tenants, ct);
         var now = DateTime.UtcNow;
 
         // On first enable, seed the default public scopes (glucose reads alone) as direct
         // permissions on the Public subject, and default to a 24-hour window. Re-rotation only
         // swaps the token — the owner's chosen scopes and window are preserved.
-        if (!wasEnabled)
+        var permissions = wasEnabled ? member.DirectPermissions : [.. Scope.DefaultPublicShareScopes];
+        var limitTo24Hours = wasEnabled ? member.LimitTo24Hours : true;
+        var token = new ShareTokenState(CredentialHash.ShareToken(newToken), EncryptToken(newToken), now);
+
+        await unit.CommitAsync(async t =>
         {
-            member.DirectPermissions = [.. Scope.DefaultPublicShareScopes];
-            member.LimitTo24Hours = true;
-        }
-
-        tenant.ShareToken = CredentialHash.ShareToken(newToken);
-        tenant.ShareTokenEncrypted = EncryptToken(newToken);
-        tenant.ShareTokenSetAt = now;
-        member.SysUpdatedAt = now;
-
-        await db.SaveChangesAsync(ct);
+            await tenants.SetShareTokenAsync(tenantId, token, t);
+            await members.SetDirectPermissionsAsync(tenantId, member.Id, permissions, now, t);
+            await members.SetLimitTo24HoursAsync(tenantId, member.Id, limitTo24Hours, now, t);
+            await unit.Context.SaveChangesAsync(t);
+        }, ct);
 
         if (oldTokenHash != null)
             _shareTokenCache.EvictByHash(oldTokenHash);
         _publicAccessCache.Evict(tenantId);
 
-        return ToDto(tenant, member, newToken);
+        return ToDto(
+            tenant with { ShareTokenHash = token.Hash, ShareTokenEncrypted = token.Encrypted, ShareTokenSetAt = now },
+            member with { DirectPermissions = permissions, LimitTo24Hours = limitTo24Hours },
+            newToken);
     }
 
     public async Task<ShareLinkDto> DisableAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct)
-            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
-        var member = await GetPublicMemberAsync(db, tenantId, ct);
-        var oldTokenHash = tenant.ShareToken;
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var tenants = new TenantRepository(unit);
+        var members = new TenantMembershipRepository(unit);
+        var (tenant, member) = await ReadAsync(tenants, members, tenantId, ct);
+        var oldTokenHash = tenant.ShareTokenHash;
+        var now = DateTime.UtcNow;
 
-        tenant.ShareToken = null;
-        tenant.ShareTokenEncrypted = null;
-        tenant.ShareTokenSetAt = null;
-
-        if (member != null)
+        await unit.CommitAsync(async t =>
         {
-            // Remove the Public subject's roles and scopes so anonymous read no longer resolves.
-            db.TenantMemberRoles.RemoveRange(member.MemberRoles);
-            member.MemberRoles.Clear();
-            member.DirectPermissions = null;
-            member.SysUpdatedAt = DateTime.UtcNow;
-        }
-
-        await db.SaveChangesAsync(ct);
+            await tenants.SetShareTokenAsync(tenantId, ShareTokenState.Off, t);
+            if (member != null)
+            {
+                // Remove the Public subject's roles and scopes so anonymous read no longer resolves.
+                await members.ReplaceRolesAsync(tenantId, member.Id, member.Roles.Select(r => r.RoleId).ToList(), [], now, t);
+                await members.SetDirectPermissionsAsync(tenantId, member.Id, null, now, t);
+            }
+            await unit.Context.SaveChangesAsync(t);
+        }, ct);
 
         if (oldTokenHash != null)
             _shareTokenCache.EvictByHash(oldTokenHash);
         _publicAccessCache.Evict(tenantId);
 
-        return ToDto(tenant, member);
+        return ToDto(
+            tenant with { ShareTokenHash = null, ShareTokenEncrypted = null, ShareTokenSetAt = null },
+            member is null ? null : member with { Roles = [], DirectPermissions = null });
     }
 
     public async Task<ShareLinkDto> SetFullHistoryAsync(Guid tenantId, bool fullHistory, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct)
-            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
-        var member = await GetPublicMemberAsync(db, tenantId, ct)
-            ?? throw new InvalidOperationException("Public subject membership not found");
+        var (tenant, member) = await ReadAsync(_tenants, _members, tenantId, ct);
+        if (member is null)
+            throw new InvalidOperationException("Public subject membership not found");
 
-        member.LimitTo24Hours = !fullHistory;
-        member.SysUpdatedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync(ct);
+        await _members.SetLimitTo24HoursAsync(tenantId, member.Id, !fullHistory, DateTime.UtcNow, ct);
         _publicAccessCache.Evict(tenantId);
 
-        return ToDto(tenant, member);
+        return ToDto(tenant, member with { LimitTo24Hours = !fullHistory });
     }
 
     public async Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var invalid = scopes.Where(s => !Scope.PublicShareScopes.Contains(s)).ToList();
         if (invalid.Count > 0)
             throw new ArgumentException($"Invalid public share scopes: {string.Join(", ", invalid)}", nameof(scopes));
 
-        var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, ct)
-            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
-        var member = await GetPublicMemberAsync(db, tenantId, ct)
-            ?? throw new InvalidOperationException("Public subject membership not found");
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var tenants = new TenantRepository(unit);
+        var members = new TenantMembershipRepository(unit);
+        var (tenant, member) = await ReadAsync(tenants, members, tenantId, ct);
+        if (member is null)
+            throw new InvalidOperationException("Public subject membership not found");
 
-        // Drop any role grant so the chosen scopes are authoritative. This also migrates legacy
-        // links (which carried the Viewer role) onto the direct-permission model on first edit.
-        if (member.MemberRoles.Count > 0)
+        var permissions = scopes.Distinct().ToList();
+        var now = DateTime.UtcNow;
+
+        await unit.CommitAsync(async t =>
         {
-            db.TenantMemberRoles.RemoveRange(member.MemberRoles);
-            member.MemberRoles.Clear();
-        }
+            // Drop any role grant so the chosen scopes are authoritative. This also migrates legacy
+            // links (which carried the Viewer role) onto the direct-permission model on first edit.
+            if (member.Roles.Count > 0)
+                await members.ReplaceRolesAsync(tenantId, member.Id, member.Roles.Select(r => r.RoleId).ToList(), [], now, t);
+            await members.SetDirectPermissionsAsync(tenantId, member.Id, permissions, now, t);
+            await unit.Context.SaveChangesAsync(t);
+        }, ct);
 
-        member.DirectPermissions = scopes.Distinct().ToList();
-        member.SysUpdatedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync(ct);
         _publicAccessCache.Evict(tenantId);
 
-        return ToDto(tenant, member);
+        return ToDto(tenant, member with { Roles = [], DirectPermissions = permissions });
     }
 
     /// <inheritdoc />
     public async Task<UserDisplayPreferences> GetTenantAppearanceAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var ownerPreferences = await db.TenantMembers.AsNoTracking()
-            .OwnersOf(tenantId)
-            .Select(m => m.Subject!.Preferences)
-            .FirstOrDefaultAsync(ct);
-
+        var ownerPreferences = await _members.GetEarliestOwnerPreferencesAsync(tenantId, ct);
         return UserDisplayPreferences.Deserialize(ownerPreferences).ToPresentationOnly();
     }
-
-    private Task<TenantMemberEntity?> GetPublicMemberAsync(NocturneDbContext db, Guid tenantId, CancellationToken ct) =>
-        db.TenantMembers
-            .Include(m => m.MemberRoles)
-                .ThenInclude(mr => mr.TenantRole)
-            .Include(m => m.Subject)
-            .FirstOrDefaultAsync(m => m.TenantId == tenantId
-                && m.Subject!.IsSystemSubject && m.Subject.Name == PublicSubjectName, ct);
 
     /// <summary>
     /// Mints a token whose digest is not already stored. Returns the token itself; the caller
     /// stores <see cref="CredentialHash.ShareToken"/> of it.
     /// </summary>
-    private async Task<string> GenerateUniqueTokenAsync(NocturneDbContext db, CancellationToken ct)
+    private async Task<string> GenerateUniqueTokenAsync(ITenantRepository tenants, CancellationToken ct)
     {
         for (var attempt = 0; attempt < MaxTokenAttempts; attempt++)
         {
             var candidate = _tokenGenerator.Generate();
-            var candidateHash = CredentialHash.ShareToken(candidate);
-            var exists = await db.Tenants.AnyAsync(t => t.ShareToken == candidateHash, ct);
-            if (!exists)
+            if (!await tenants.ShareTokenHashExistsAsync(CredentialHash.ShareToken(candidate), ct))
                 return candidate;
         }
 
@@ -295,16 +281,16 @@ public sealed class ShareLinkService : IShareLinkService
     /// <paramref name="attemptedDecrypt"/> is true on the reveal path, where
     /// <paramref name="token"/> is the outcome of an actual decrypt and so a null one settles
     /// <see cref="ShareLinkDto.CanReveal"/>. Off the reveal path the columns are all there is to go
-    /// on, and they cannot see the changed-key case <see cref="TenantEntity.ShareTokenEncrypted"/>
+    /// on, and they cannot see the changed-key case <see cref="TenantRecord.ShareTokenEncrypted"/>
     /// describes.
     /// </remarks>
     private ShareLinkDto ToDto(
-        TenantEntity tenant,
-        TenantMemberEntity? member,
+        TenantRecord tenant,
+        TenantMemberRecord? member,
         string? token = null,
         bool attemptedDecrypt = false)
     {
-        var enabled = tenant.ShareToken != null;
+        var enabled = tenant.ShareTokenHash != null;
         return new ShareLinkDto
         {
             Enabled = enabled,
@@ -323,7 +309,7 @@ public sealed class ShareLinkService : IShareLinkService
 
     /// <summary>
     /// Ciphertext of <paramref name="token"/>, or null when it could not be produced. Minting is
-    /// not refused over it; see <see cref="TenantEntity.ShareTokenEncrypted"/>.
+    /// not refused over it; see <see cref="TenantRecord.ShareTokenEncrypted"/>.
     /// </summary>
     private string? EncryptToken(string token)
     {
@@ -343,12 +329,12 @@ public sealed class ShareLinkService : IShareLinkService
 
     /// <summary>
     /// The token behind <paramref name="tenant"/>'s live link, or null in any of the cases
-    /// <see cref="TenantEntity.ShareTokenEncrypted"/> lists. This is the only place the third of
+    /// <see cref="TenantRecord.ShareTokenEncrypted"/> lists. This is the only place the third of
     /// them is detectable.
     /// </summary>
-    private string? DecryptToken(TenantEntity tenant)
+    private string? DecryptToken(TenantRecord tenant)
     {
-        if (tenant.ShareToken == null || tenant.ShareTokenEncrypted == null || !_secrets.IsConfigured)
+        if (tenant.ShareTokenHash == null || tenant.ShareTokenEncrypted == null || !_secrets.IsConfigured)
             return null;
 
         try
@@ -365,9 +351,8 @@ public sealed class ShareLinkService : IShareLinkService
     /// <summary>
     /// The public-shareable read scopes the Public subject currently resolves to — the union of any
     /// role-granted permissions and direct permissions, narrowed to <see cref="Scope.PublicShareScopes"/>.
-    /// Requires <see cref="TenantMemberEntity.MemberRoles"/> (with their roles) to be loaded.
     /// </summary>
-    private static List<string> ComputeScopes(TenantMemberEntity? member)
+    private static List<string> ComputeScopes(TenantMemberRecord? member)
     {
         if (member == null)
             return [];

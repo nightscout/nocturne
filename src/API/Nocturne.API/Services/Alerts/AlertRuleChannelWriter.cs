@@ -1,17 +1,19 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Checks and builds an alert rule's delivery channels from a request, for every writer that takes
-/// channels from a caller: the rule editor and the setup hub's starter rules.
+/// Checks an alert rule's delivery channels from a request and turns them into what the repository
+/// stores, for every writer that takes channels from a caller: the rule editor and the setup hub's
+/// starter rules.
 /// </summary>
 public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
 {
@@ -34,6 +36,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
         List<CreateAlertRuleChannelRequest>? channels,
         IReadOnlySet<string> storedRecipients,
         NocturneDbContext db,
+        ITenantMembershipRepository members,
         Guid? subjectId,
         CancellationToken ct)
     {
@@ -69,7 +72,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             {
                 var goesToSaver = string.IsNullOrWhiteSpace(ch.Destination)
                                   || storedRecipients.Contains(ch.Destination);
-                var member = await ResolveInAppRecipientAsync(db, ch.Destination, storedRecipients, subjectId, ct);
+                var member = await ResolveInAppRecipientAsync(members, db.TenantId, ch.Destination, storedRecipients, subjectId, ct);
                 if (member is null)
                 {
                     return goesToSaver
@@ -198,11 +201,11 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
     /// channel reaching no one.
     /// </remarks>
     private static async Task<Guid?> ResolveInAppRecipientAsync(
-        NocturneDbContext db, string? destination, IReadOnlySet<string> storedRecipients, Guid? subjectId,
-        CancellationToken ct)
+        ITenantMembershipRepository members, Guid tenantId, string? destination, IReadOnlySet<string> storedRecipients,
+        Guid? subjectId, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(destination)
-            && await InAppRecipients.ResolveAsync(db, db.TenantId, destination, ct) is { } named)
+            && await InAppRecipients.ResolveAsync(members, tenantId, destination, ct) is { } named)
         {
             return named;
         }
@@ -212,11 +215,11 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             return null;
         }
 
-        return await InAppRecipients.ResolveAsync(db, db.TenantId, subjectId?.ToString(), ct);
+        return await InAppRecipients.ResolveAsync(members, tenantId, subjectId?.ToString(), ct);
     }
 
     /// <summary>The in-app recipients stored on <paramref name="channels"/>.</summary>
-    public static HashSet<string> InAppRecipientsOf(IEnumerable<AlertRuleChannelEntity> channels) =>
+    public static HashSet<string> InAppRecipientsOf(IEnumerable<AlertRuleChannelSnapshot> channels) =>
         channels.Where(c => c.ChannelType == ChannelType.InApp).Select(c => c.Destination).ToHashSet();
 
     public static readonly IReadOnlySet<string> NoStoredRecipients = new HashSet<string>();
@@ -225,64 +228,22 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
     private static string WireName(ChannelType channelType) =>
         JsonSerializer.Serialize(channelType).Trim('"');
 
-    public static readonly IReadOnlyDictionary<(ChannelType, string), string> NoRetainedSecrets =
-        new Dictionary<(ChannelType, string), string>();
-
-    public AlertRuleChannelEntity Build(
-        CreateAlertRuleChannelRequest req, Guid ruleId, Guid tenantId, int sortOrder,
-        IReadOnlyDictionary<(ChannelType, string), string> retainedSecrets) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        TenantId = tenantId,
-        AlertRuleId = ruleId,
-        ChannelType = req.ChannelType,
-        Destination = req.Destination ?? string.Empty,
-        DestinationLabel = req.DestinationLabel,
-        Metadata = SerializeMetadata(req.Metadata),
-        Secret = ResolveSecret(req, retainedSecrets),
-        SortOrder = sortOrder,
-    };
-
     /// <summary>
-    /// The stored ciphertext of every channel that carries a signing secret, keyed by the pair a
-    /// caller can still name after a read: an update replaces the channel list wholesale and mints
-    /// new ids, and the secret is never echoed back, so a channel arriving without one has to be
-    /// matched to its predecessor by type and destination.
+    /// The channel as stored. A secret omitted from the request keeps the one stored against this
+    /// channel type and destination (<see cref="AlertRuleChannelWrite.KeepsStoredSecret"/>); one
+    /// that is empty once trimmed clears it.
     /// </summary>
-    /// <remarks>
-    /// A pair held by more than one stored secret retains none of them: the key cannot tell which
-    /// of the duplicates an incoming channel descends from, and a guess would sign one receiver's
-    /// alerts with another's secret. Ciphertext is compared rather than plaintext, so two channels
-    /// sharing a destination are ambiguous even when the secret behind them is the same — they are
-    /// re-entered rather than silently mismatched.
-    /// </remarks>
-    public static IReadOnlyDictionary<(ChannelType, string), string> CollectRetainedSecrets(
-        IEnumerable<AlertRuleChannelEntity> channels) => channels
-            .Where(c => c.Secret is not null)
-            .GroupBy(c => (c.ChannelType, c.Destination))
-            .Select(g => (g.Key, Secrets: g.Select(c => c.Secret!).Distinct(StringComparer.Ordinal).ToArray()))
-            .Where(g => g.Secrets.Length == 1)
-            .ToDictionary(g => g.Key, g => g.Secrets[0]);
+    public AlertRuleChannelWrite ToWrite(CreateAlertRuleChannelRequest req) => new(
+        req.ChannelType,
+        req.Destination ?? string.Empty,
+        req.DestinationLabel,
+        SerializeMetadata(req.Metadata),
+        Secret: req.Secret is null ? null : EncryptSecret(req.Secret),
+        KeepsStoredSecret: req.Secret is null);
 
-    /// <summary>
-    /// Ciphertext for the channel's signing secret. A secret omitted from the request keeps the one
-    /// stored against this channel type and destination (the editor cannot re-send what it was
-    /// never shown); one that is empty once trimmed clears it.
-    /// </summary>
-    private string? ResolveSecret(
-        CreateAlertRuleChannelRequest req,
-        IReadOnlyDictionary<(ChannelType, string), string> retainedSecrets)
-    {
-        if (req.Secret is null)
-        {
-            return retainedSecrets.TryGetValue(
-                (req.ChannelType, req.Destination ?? string.Empty), out var retained)
-                ? retained
-                : null;
-        }
-
-        return EncryptSecret(req.Secret);
-    }
+    /// <inheritdoc cref="ToWrite(CreateAlertRuleChannelRequest)"/>
+    public List<AlertRuleChannelWrite> ToWrites(IEnumerable<CreateAlertRuleChannelRequest> requests) =>
+        requests.Select(ToWrite).ToList();
 
     /// <summary>
     /// Ciphertext for a caller-supplied secret, or null when it is blank. Surrounding whitespace is

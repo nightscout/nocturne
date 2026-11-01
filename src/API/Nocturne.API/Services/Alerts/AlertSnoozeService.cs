@@ -20,6 +20,7 @@ internal sealed class AlertSnoozeService(
     INocturneDbContextFactory contextFactory,
     ITenantAccessor tenantAccessor,
     IAlertRepository repository,
+    IAlertRuleRepository ruleRepository,
     IAlertDeliveryService deliveryService,
     ISensorContextEnricher contextEnricher,
     ICanonicalGlucoseService canonicalGlucose,
@@ -58,7 +59,7 @@ internal sealed class AlertSnoozeService(
 
         // A chat-bot delivery still pending would otherwise be picked up by the bot's poll
         // mid-snooze; the resume dispatch creates fresh rows.
-        await repository.ExpirePendingDeliveriesAsync(tenantId, [instanceId], ct);
+        await repository.ExpirePendingDeliveriesAsync([instanceId], ct);
 
         try
         {
@@ -138,7 +139,7 @@ internal sealed class AlertSnoozeService(
         var context = baseContext;
         try
         {
-            context = await contextEnricher.EnrichAsync(baseContext, [rule], tenantId, ct);
+            context = await contextEnricher.EnrichAsync(baseContext, [rule], ct);
         }
         catch (Exception ex)
         {
@@ -155,8 +156,8 @@ internal sealed class AlertSnoozeService(
             return false;
         }
 
-        var channels = await repository.GetChannelsForRuleAsync(tenantId, rule.Id, ct);
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);
+        var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
+        var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
         var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
 
         var payload = AlertPayloads.Build(

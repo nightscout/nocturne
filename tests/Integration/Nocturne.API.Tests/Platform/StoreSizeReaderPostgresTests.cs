@@ -165,7 +165,8 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
 
         Large = await SeedTenantAsync("large", LargeRows);
         Small = await SeedTenantAsync("small", SmallRows);
-        await ExecuteAsync("ANALYZE");
+        // Autovacuum's first pass would otherwise add a visibility map page between a test's reads.
+        await ExecuteAsync("VACUUM ANALYZE");
     }
 
     public async Task DisposeAsync() => await Provider.DisposeAsync();

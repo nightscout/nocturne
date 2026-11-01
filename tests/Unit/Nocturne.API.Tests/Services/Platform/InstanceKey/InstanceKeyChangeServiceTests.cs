@@ -11,6 +11,7 @@ using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -25,6 +26,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.API.Tests.Services.Platform.InstanceKey;
 
@@ -69,6 +71,8 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         services.AddScoped<IInAppNotificationService>(sp =>
             new RecordingNotifications(sp.GetRequiredService<ITenantAccessor>(), this));
         services.AddTransient(_ => _key);
+        services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
+        services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddTransient<UndecryptableSecretScanner>();
         _provider = services.BuildServiceProvider();
     }
@@ -137,8 +141,9 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await StoreWebhookChannelAsync(Affected, "Bare", "hooks/token-in-the-path", _oldKey);
         await StoreWebhookChannelAsync(Affected, "Mixed", "https://a.example.com/x, not a url", _oldKey);
 
+        var affected = _database.ContextFactory.AsNocturneFactory(Affected);
         var found = await new UndecryptableSecretScanner(
-            _database.ContextFactory.AsNocturneFactory(Affected), _newKey).ScanTenantAsync(CancellationToken.None);
+            affected, new ConnectorConfigurationRepository(affected), new AlertRuleRepository(affected), _newKey).ScanTenantAsync(CancellationToken.None);
 
         found.AlertChannels.Select(c => (c.RuleName, c.Destination)).Should().Equal(
             ("Bare", ""), ("Mixed", "a.example.com"));
@@ -365,10 +370,9 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         return new InstanceKeyChangeService(
             _provider,
             new InstanceKeyCheck(root, _key),
-            new UndecryptableSecretScanner(root, _key),
             new OwnerNoticeLedger(root),
-            new ActiveTenantSnapshot(snapshotContexts ?? root, _clock, NullLogger<ActiveTenantSnapshot>.Instance),
-            root,
+            new ActiveTenantSnapshot(new TenantRepository(snapshotContexts ?? root), _clock, NullLogger<ActiveTenantSnapshot>.Instance),
+            new TenantMembershipRepository(root),
             _clock,
             _log);
     }

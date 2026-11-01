@@ -16,7 +16,6 @@ namespace Nocturne.API.Controllers.V3;
 /// Implements the /api/v3/treatments endpoints with pagination, field selection, sorting, and advanced filtering.
 /// </summary>
 /// <seealso cref="ITreatmentService"/>
-/// <seealso cref="ITreatmentStore"/>
 /// <seealso cref="Treatment"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -215,7 +214,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             // Route through TreatmentService which handles StateSpan creation for temp basals
             var created = await _treatmentService.CreateTreatmentsAsync(
                 [processedTreatment],
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             if (created.Rejected is [{ Reason: var reason }])
@@ -287,7 +286,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             // Save to database
             var createdTreatments = await _treatmentService.CreateTreatmentsAsync(
                 processedTreatments,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             var createdArray = TreatmentEcho.InSubmittedOrder(createdTreatments);

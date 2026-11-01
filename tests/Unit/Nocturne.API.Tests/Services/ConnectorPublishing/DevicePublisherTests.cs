@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -18,7 +19,7 @@ namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 [Trait("Category", "Unit")]
 public class DevicePublisherTests
 {
-    private readonly Mock<IDeviceStatusDecomposer> _mockDecomposer;
+    private readonly Mock<IDeviceStatusService> _mockDeviceStatuses;
     private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepository;
     private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepository;
     private readonly Mock<IPumpSnapshotRepository> _mockPumpSnapshotRepository;
@@ -28,22 +29,22 @@ public class DevicePublisherTests
 
     public DevicePublisherTests()
     {
-        _mockDecomposer = new Mock<IDeviceStatusDecomposer>();
+        _mockDeviceStatuses = new Mock<IDeviceStatusService>();
         _mockDeviceEventRepository = new Mock<IDeviceEventRepository>();
         _mockApsSnapshotRepository = new Mock<IApsSnapshotRepository>();
         _mockPumpSnapshotRepository = new Mock<IPumpSnapshotRepository>();
         _mockUploaderSnapshotRepository = new Mock<IUploaderSnapshotRepository>();
         _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
-        _mockDecomposer
-            .Setup(d => d.DecomposeAsync(
-                It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+        _mockDeviceStatuses
+            .Setup(d => d.CreateDeviceStatusesAsync(
+                It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _mockDeviceEventRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<DeviceEvent>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         _publisher = new DevicePublisher(
-            _mockDecomposer.Object,
+            _mockDeviceStatuses.Object,
             _mockDeviceEventRepository.Object,
             _mockPatientDeviceStamper.Object,
             Mock.Of<IAuditContext>(),
@@ -57,15 +58,17 @@ public class DevicePublisherTests
     }
 
     [Fact]
-    public async Task PublishDeviceStatusAsync_DelegatesToDecomposer()
+    public async Task PublishDeviceStatusAsync_DelegatesToTheDeviceStatusService()
     {
         var statuses = new List<DeviceStatus> { new() };
 
         var result = await _publisher.PublishDeviceStatusAsync(statuses, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
-        _mockDecomposer.Verify(
-            s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), "test-source", WriteOrigin.Live, It.IsAny<CancellationToken>()),
+        _mockDeviceStatuses.Verify(
+            s => s.CreateDeviceStatusesAsync(
+                It.Is<IReadOnlyList<DeviceStatus>>(l => l.SequenceEqual(statuses)), "test-source", WriteOrigin.Live,
+                It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -73,8 +76,9 @@ public class DevicePublisherTests
     [Fact]
     public async Task PublishDeviceStatusAsync_ReturnsFalse_OnException()
     {
-        _mockDecomposer
-            .Setup(s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+        _mockDeviceStatuses
+            .Setup(s => s.CreateDeviceStatusesAsync(
+                It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
         var result = await _publisher.PublishDeviceStatusAsync(new List<DeviceStatus> { new() }, "test-source", WriteOrigin.Live);

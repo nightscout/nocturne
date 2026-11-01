@@ -44,6 +44,7 @@ public class ClockReadGuardTests
         "src/API/Nocturne.API/Services/CoachMarks",
         "src/API/Nocturne.API/Services/Docs",
         "src/API/Nocturne.API/Services/DevOnly",
+        "src/API/Nocturne.API/Services/Jobs",
     ];
 
     /// <summary>Migrated files whose folder is not yet migrated as a whole.</summary>
@@ -70,18 +71,16 @@ public class ClockReadGuardTests
     [Fact]
     public void A_migrated_folder_reads_no_static_clock()
     {
-        var root = RepositoryRoot();
         var reads = new List<string>();
 
         foreach (var folder in Folders)
         {
-            var directory = Path.Combine(root, folder);
-            Directory.Exists(directory).Should().BeTrue($"{folder} is listed in {nameof(Folders)}");
+            Directory.Exists(Path.Combine(RepoSources.Root, folder)).Should().BeTrue($"{folder} is listed in {nameof(Folders)}");
 
-            foreach (var path in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
+            foreach (var file in RepoSources.Under(folder))
             {
-                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-                var source = File.ReadAllText(path);
+                var relative = file.Path;
+                var source = file.Text;
                 var inQueryOnly = DatabaseClockFiles.TryGetValue(relative, out var permitted);
                 var violations = Violations(source, inQueryOnly);
                 reads.AddRange(violations.Select(v => $"{relative}:{v}"));
@@ -96,14 +95,13 @@ public class ClockReadGuardTests
     [Fact]
     public void A_migrated_file_reads_no_static_clock()
     {
-        var root = RepositoryRoot();
         var reads = new List<string>();
 
         foreach (var file in Files)
         {
-            var path = Path.Combine(root, file);
-            File.Exists(path).Should().BeTrue($"{file} is listed in {nameof(Files)}");
-            reads.AddRange(Violations(File.ReadAllText(path)).Select(v => $"{file}:{v}"));
+            var source = RepoSources.Src.SingleOrDefault(s => s.Path == file);
+            source.Should().NotBeNull($"{file} is listed in {nameof(Files)}");
+            reads.AddRange(Violations(source!.Text).Select(v => $"{file}:{v}"));
         }
 
         reads.Should().BeEmpty("these read a static clock or the system clock; inject TimeProvider instead");
@@ -189,19 +187,4 @@ public class ClockReadGuardTests
         MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
         _ => string.Empty,
     };
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-                return directory.FullName;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
-    }
 }

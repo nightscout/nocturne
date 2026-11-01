@@ -145,8 +145,8 @@ builder.Services.AddResponseCaching();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
-builder.Services.AddHostedService<AuditRetentionService>();
-builder.Services.AddHostedService<SoftDeleteCleanupService>();
+builder.Services.AddScheduledJob<AuditRetentionJob>();
+builder.Services.AddScheduledJob<SoftDeleteCleanupJob>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
 builder.Services.AddSingleton<IGoogleHealthGrantHolders, PostgresGoogleHealthGrantHolders>();
 builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
@@ -165,6 +165,7 @@ builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configurat
 builder.Services.AddScoped<SampleDataSeeder>();
 
 builder.Services.AddSingleton<ReadAccessLogWriter>();
+builder.Services.AddHostedService<ReadAccessLogDrain>();
 builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
@@ -493,15 +494,15 @@ app.MapScalarApiReference((options, httpContext) =>
 // API surface. A public info page would need the latest_entry payload stripped first.
 app.MapGet(
     "/",
-    async (IEntryStore entryStore) =>
+    async (IEntryService entries) =>
     {
-        // Check database connection by fetching the latest entry
+        // The latest entry may be a cache hit; database_status says whether one was served, not that the database was reached.
         string databaseStatus = "unknown";
         object? latestEntry = null;
 
         try
         {
-            var entry = await entryStore.GetCurrentAsync();
+            var entry = await entries.GetCurrentEntryAsync();
 
             if (entry != null)
             {
@@ -591,7 +592,7 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
             migratorConnectionString, Nocturne.API.Services.BackgroundJobLiveStates.ByTable, logger);
     }
 
-    // Validate RLS, ownership, default privileges, and pool reset-on-close under the app role.
+    // Validate RLS, ownership, default privileges, and the context pool's isolation under the app role.
     await app.Services.ValidateDatabaseConfigurationAsync();
 
     // Sync config-managed OIDC providers to the database (satisfies FK constraints)
@@ -631,10 +632,11 @@ if (!app.Environment.IsDevelopment() && DevOnlyEndpoints.IsOptedIn(app.Configura
 if (app.Environment.IsDevelopment() && !isNSwagGeneration)
 {
     using var devSeedScope = app.Services.CreateScope();
-    await using var devSeedDb = await devSeedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
     var devSeedLogger = devSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DevIdentityFixtureSeeder.SeedAsync(
-        devSeedDb, app.Configuration, app.Services.GetRequiredService<TimeProvider>(), devSeedLogger, CancellationToken.None);
+        devSeedScope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Auth.ISubjectRepository>(),
+        devSeedScope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Auth.IPasskeyCredentialRepository>(),
+        app.Configuration, app.Services.GetRequiredService<TimeProvider>(), devSeedLogger, CancellationToken.None);
 }
 
 await app.RunAsync();

@@ -200,7 +200,7 @@ public class ProfileDeletionServiceRecreationTests : IDisposable
         new TargetRangeScheduleRepository(_factory, audit, NullLogger<TargetRangeScheduleRepository>.Instance),
         TempBasalTestDeps.NoReresolution(),
         Moq.Mock.Of<ILoopClosedLoopStamper>(),
-        TimeProvider.System, NullLogger<ProfileDecomposer>.Instance);
+        NullLogger<ProfileDecomposer>.Instance);
 
     private ProfileDeletionService Deletion(IAuditContext audit) => new(
         _factory,

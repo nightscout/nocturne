@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
@@ -5,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
-using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
@@ -181,21 +182,14 @@ public class RecentTreatmentRepublishTests : IDisposable
 
         var decomposer = new TreatmentDecomposer(
             _context.AsFactory(), bolus, Mock.Of<ITempBasalRepository>(), carbs, bgChecks, notes, deviceEvents, calculations,
-            Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), Mock.Of<IDeviceService>(),
-            Mock.Of<IPatientDeviceStamper>(), Mock.Of<IActiveProfileResolver>(),
+            Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), new UnresolvedDevices(),
+            Mock.Of<IPatientDeviceStamper>(), new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), audit, NullLogger<TreatmentDecomposer>.Instance);
-        var store = new TreatmentReadService(
-            Mock.Of<IV4ToLegacyProjectionService>(), decomposer, Mock.Of<IDecompositionPipeline>(),
-            Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations,
-            Mock.Of<IProfileActivationRepository>(),
-            Mock.Of<IStateSpanService>(),
-            NullLogger<TreatmentReadService>.Instance);
-        var service = new TreatmentService(
-            store, decomposer, Mock.Of<ITreatmentCache>(), Mock.Of<IDataEventSink<Treatment>>(),
-            Mock.Of<IPatientInsulinRepository>(), NullLogger<TreatmentService>.Instance);
+        var service = WritingTreatmentService.Over(
+            decomposer, Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations);
 
         return new TreatmentPublisher(
-            ctxFactory, service, decomposer, Mock.Of<ITreatmentCache>(),
+            service,
             bolus, carbs, bgChecks, calculations, Mock.Of<ITempBasalRepository>(),
             Mock.Of<IBasalInjectionRepository>(), notes, deviceEvents,
             Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),

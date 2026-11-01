@@ -69,7 +69,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
 
         var log = await ReadAuditLogAsync();
         log.Should().HaveCount(2).And.OnlyContain(l =>
-            l.Action == "delete" && l.EntityType == AuditEntityType && l.SubjectName == "tester");
+            l.Action == "delete" && l.EntityType == AuditEntityType && l.ActorName == "tester");
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
 
         var log = await ReadAuditLogAsync();
         log.Should().HaveCount(3).And.OnlyContain(l =>
-            l.Action == "delete" && l.EntityType == AuditEntityType && l.SubjectName == "tester");
+            l.Action == "delete" && l.EntityType == AuditEntityType && l.ActorName == "tester");
     }
 
     [Fact]

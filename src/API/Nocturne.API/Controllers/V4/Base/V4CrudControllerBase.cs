@@ -26,9 +26,9 @@ namespace Nocturne.API.Controllers.V4.Base;
 /// Create and update methods are annotated with <see cref="RemoteFormAttribute"/>;
 /// delete uses <see cref="RemoteCommandAttribute"/>.
 /// Every write action is gated on <see cref="WriteScope"/>, which derived controllers must declare.
-/// Each derived controller names the cache families its records feed with
-/// <see cref="ClearsTenantCacheAttribute"/>; the write actions record their timestamps in the
-/// request's <see cref="TenantCacheWriteFootprint"/> when it has one.
+/// A derived controller whose records feed a cache the repositories do not clear (statistics,
+/// eHbA1c) names it with <see cref="ClearsTenantCacheAttribute"/>; the write actions record their
+/// timestamps in the request's <see cref="TenantCacheWriteFootprint"/> when it has one.
 /// </remarks>
 /// <seealso cref="V4ReadOnlyControllerBase{TModel, TRepository}"/>
 /// <seealso cref="IV4Record"/>

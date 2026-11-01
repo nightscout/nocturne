@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -62,13 +63,13 @@ public class ResendKeepsCorrelationIdTests : IDisposable
             Id = "6500000000000000000000t1", EventType = "Temp Basal", Mills = At, Rate = 1.5, Absolute = 1.5, Duration = 30,
         };
 
-        await decomposer.DecomposeAsync(TempBasal(), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(TempBasal(), WriteOrigin.Live);
         var stored = await _context.TempBasals.AsNoTracking().SingleAsync();
 
         if (batch)
             await decomposer.DecomposeBatchAsync([TempBasal()], WriteOrigin.Live);
         else
-            await decomposer.DecomposeAsync(TempBasal(), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(TempBasal(), WriteOrigin.Live);
 
         var resent = await _context.TempBasals.AsNoTracking().SingleAsync();
         resent.CorrelationId.Should().Be(stored.CorrelationId);
@@ -84,7 +85,7 @@ public class ResendKeepsCorrelationIdTests : IDisposable
             Id = "6500000000000000000000m1", EventType = "Meal Bolus", Mills = At, Insulin = 2, Carbs = 30,
         };
 
-        await decomposer.DecomposeAsync(Meal(), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(Meal(), WriteOrigin.Live);
         var bolusId = (await _context.Boluses.AsNoTracking().SingleAsync()).CorrelationId;
         await _context.CarbIntakes.ExecuteUpdateAsync(s => s.SetProperty(c => c.CorrelationId, Guid.CreateVersion7()));
 
@@ -154,9 +155,9 @@ public class ResendKeepsCorrelationIdTests : IDisposable
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             foods.Object,
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             _audit,

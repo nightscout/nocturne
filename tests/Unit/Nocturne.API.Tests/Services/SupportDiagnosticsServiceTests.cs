@@ -40,7 +40,6 @@ public class SupportDiagnosticsServiceTests
             uiSettings,
             Mock.Of<ITherapySettingsResolver>(),
             new AlertRepository(new TestNocturneDbContextFactory(NewContext())),
-            MockTenantAccessor.Create(TenantId).Object,
             NullLogger<SupportDiagnosticsService>.Instance
         );
 

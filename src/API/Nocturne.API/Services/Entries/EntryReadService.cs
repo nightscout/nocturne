@@ -18,7 +18,7 @@ namespace Nocturne.API.Services.Entries;
 /// Sgv reads serve the canonical glucose stream: legacy clients get one coherent series even
 /// when multiple CGMs report concurrently.
 /// </summary>
-public class EntryReadService : IEntryStore
+internal class EntryReadService : IEntryStore
 {
     /// <summary>
     /// Canonical selection drops losing-stream rows after the DB query, so limit-based sgv
@@ -368,7 +368,7 @@ public class EntryReadService : IEntryStore
     /// <remarks>
     /// Each glucose type pages through its own <see cref="HistoryPage"/>, and the merge cuts on raw
     /// stamps before anything is withheld, for the reason given at
-    /// <see cref="V4.V4ToLegacyProjectionService.GetProjectedTreatmentsModifiedSinceAsync"/>. The cut
+    /// <see cref="Treatments.V4ToLegacyProjectionService.GetProjectedTreatmentsModifiedSinceAsync"/>. The cut
     /// then decides the cursor, not the delivered rows. A full page that withholds every row is
     /// followed by the next rather than returned: AAPS keeps its cursor on an empty page, so it
     /// would request the same withheld rows forever.

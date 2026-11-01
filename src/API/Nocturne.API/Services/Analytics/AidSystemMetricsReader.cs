@@ -51,7 +51,7 @@ public sealed class AidSystemMetricsReader(
 {
     /// <summary>
     /// Every collection is read uncapped, for the reason given on
-    /// <c>StatisticsController.FetchInsulinRecordsAsync</c>. The target range is the active
+    /// <see cref="InsulinDeliveryReader.ReadRecordsAsync"/>. The target range is the active
     /// profile's now (<see cref="ActiveTargetRange"/>) and is left out if it cannot be read.
     /// </summary>
     public async Task<AidSystemMetrics> ReadAsync(DateTime start, DateTime end, CancellationToken ct)

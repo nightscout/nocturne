@@ -1,7 +1,9 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
@@ -14,6 +16,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -53,7 +56,10 @@ public class DataSourceServiceHealthRecordsTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context, params IConnectorDataPurge[] dataPurges) => new(
-        context.AsFactory(),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new DemoDataPurgeRepository(context.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+        new ConnectorConfigurationRepository(context.AsFactory()),
         Mock.Of<ISensorGlucoseRepository>(),
         Mock.Of<IMeterGlucoseRepository>(),
         Mock.Of<ICalibrationRepository>(),

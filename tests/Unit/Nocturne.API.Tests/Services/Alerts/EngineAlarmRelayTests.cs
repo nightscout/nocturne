@@ -88,6 +88,16 @@ public class EngineAlarmRelayTests
     }
 
     [Fact]
+    public async Task Raising_reads_glucose_in_the_setup_default_when_the_owner_saved_no_units()
+    {
+        _tenant.SetupDefaultUnits("mmol");
+
+        await _tenant.Relay().RaiseAsync(Payload(AlertRuleSeverity.Warning, 72m), CancellationToken.None);
+
+        _tenant.Sent.Should().ContainSingle().Which.Notify.Message.Should().Be("BG Now: 4.0 mmol/L");
+    }
+
+    [Fact]
     public async Task Raising_an_info_rule_sends_nothing()
     {
         await _tenant.Relay().RaiseAsync(Payload(AlertRuleSeverity.Info), CancellationToken.None);

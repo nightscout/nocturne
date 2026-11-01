@@ -30,6 +30,7 @@ namespace Nocturne.API.Services.Alerts;
 internal sealed class AlertOrchestrator(
     IAlertEvaluationEngine evaluationEngine,
     IAlertRepository repository,
+    IAlertRuleRepository ruleRepository,
     ITenantAccessor tenantAccessor,
     IAlertDeliveryService deliveryService,
     ISensorContextEnricher contextEnricher,
@@ -43,10 +44,9 @@ internal sealed class AlertOrchestrator(
 {
     public async Task EvaluateAsync(SensorContext context, CancellationToken ct)
     {
-        var tenantId = tenantAccessor.TenantId;
-        if (tenantId == Guid.Empty) return;
+        if (tenantAccessor.TenantId == Guid.Empty) return;
 
-        var rules = await repository.GetEnabledRulesAsync(tenantId, ct);
+        var rules = await repository.GetEnabledRulesAsync(ct);
         await EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), context, ct);
     }
 
@@ -70,7 +70,7 @@ internal sealed class AlertOrchestrator(
 
         // One enrichment pass for the whole batch — RuleDataNeeds only fetches what any rule
         // in the surviving set will consult (IOB/COB/predictions/active-alerts/etc.).
-        var enriched = await contextEnricher.EnrichAsync(context, evaluable, tenantId, ct);
+        var enriched = await contextEnricher.EnrichAsync(context, evaluable, ct);
 
         foreach (var rule in evaluable)
         {
@@ -175,7 +175,6 @@ internal sealed class AlertOrchestrator(
 
         // Create alert instance with the simplified, schedule-free shape.
         var request = new CreateAlertInstanceRequest(
-            TenantId: tenantId,
             ExcursionId: excursionId,
             Status: "triggered",
             TriggeredAt: now);
@@ -184,10 +183,10 @@ internal sealed class AlertOrchestrator(
 
         // Look up the rule's flat channel list; an empty list is allowed (the user explicitly
         // chose "no delivery channels" — alert still tracked, just not pushed anywhere).
-        var channels = await repository.GetChannelsForRuleAsync(tenantId, rule.Id, ct);
+        var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
 
         // Active excursion count + tenant subject for payload.
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);
+        var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
         var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
 
         var payload = AlertPayloads.Build(
@@ -203,7 +202,7 @@ internal sealed class AlertOrchestrator(
         if (suppressingScope is { } scope)
         {
             await repository.MarkInstanceSuppressedAsync(
-                tenantId, instance.Id, DndSuppressionGate.SuppressionReason(scope), ct);
+                instance.Id, DndSuppressionGate.SuppressionReason(scope), ct);
             logger.LogInformation(
                 "Alert instance {InstanceId} for rule {RuleName} suppressed by DND (scope {Scope})",
                 instance.Id, rule.Name, scope);

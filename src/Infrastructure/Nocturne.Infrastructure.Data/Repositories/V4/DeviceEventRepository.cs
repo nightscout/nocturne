@@ -36,14 +36,16 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="broadcaster">Optional realtime broadcaster for native V4 record shapes.</param>
     /// <param name="reactor">Optional domain reaction to live creates and deletes — the tracker trigger.
     /// Null when the repository is constructed without DI, in which case writes simply run no reaction.</param>
+    /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
     public DeviceEventRepository(
         INocturneDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<DeviceEventRepository> logger,
         IV4RecordBroadcaster<DeviceEvent>? broadcaster = null,
-        IDeviceEventReactor? reactor = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IDeviceEventReactor? reactor = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
     {
         _deduplicationService = deduplicationService;
         _reactor = reactor;
@@ -188,7 +190,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
 
         query = ApplyReadVisibility(query, ctx);
 
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
+        query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(DeviceEventMapper.ToDomainModel);
     }

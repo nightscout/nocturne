@@ -56,7 +56,7 @@ public class AuditController : ControllerBase
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "created_at_desc",
-        [FromQuery] Guid? subjectId = null,
+        [FromQuery] Guid? actorSubjectId = null,
         [FromQuery] string? entityType = null,
         [FromQuery] string? action = null,
         [FromQuery] Guid? entityId = null,
@@ -73,8 +73,8 @@ public class AuditController : ControllerBase
         var query = db.MutationAuditLog.AsNoTracking()
             .Where(e => e.CreatedAt >= from && e.CreatedAt <= to);
 
-        if (subjectId.HasValue)
-            query = query.Where(e => e.SubjectId == subjectId.Value);
+        if (actorSubjectId.HasValue)
+            query = query.Where(e => e.ActorSubjectId == actorSubjectId.Value);
         if (!string.IsNullOrEmpty(entityType))
             query = query.Where(e => e.EntityType == entityType);
         if (!string.IsNullOrEmpty(action))
@@ -101,8 +101,8 @@ public class AuditController : ControllerBase
                 EntityId = e.EntityId,
                 Action = e.Action,
                 Changes = e.ChangesJson,
-                SubjectId = e.SubjectId,
-                SubjectName = e.SubjectName,
+                ActorSubjectId = e.ActorSubjectId,
+                ActorName = e.ActorName,
                 AuthType = e.AuthType,
                 IpAddress = e.IpAddress,
                 Endpoint = e.Endpoint,
@@ -129,7 +129,7 @@ public class AuditController : ControllerBase
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "created_at_desc",
-        [FromQuery] Guid? subjectId = null,
+        [FromQuery] Guid? actorSubjectId = null,
         [FromQuery] string? entityType = null,
         [FromQuery] string? endpoint = null,
         [FromQuery] int? statusCode = null,
@@ -146,8 +146,8 @@ public class AuditController : ControllerBase
         var query = db.ReadAccessLog.AsNoTracking()
             .Where(e => e.CreatedAt >= from && e.CreatedAt <= to);
 
-        if (subjectId.HasValue)
-            query = query.Where(e => e.SubjectId == subjectId.Value);
+        if (actorSubjectId.HasValue)
+            query = query.Where(e => e.ActorSubjectId == actorSubjectId.Value);
         if (!string.IsNullOrEmpty(entityType))
             query = query.Where(e => e.EntityType == entityType);
         if (!string.IsNullOrEmpty(endpoint))
@@ -175,8 +175,8 @@ public class AuditController : ControllerBase
                 RecordCount = e.RecordCount,
                 StatusCode = e.StatusCode,
                 QueryParameters = e.QueryParametersJson,
-                SubjectId = e.SubjectId,
-                SubjectName = e.SubjectName,
+                ActorSubjectId = e.ActorSubjectId,
+                ActorName = e.ActorName,
                 AuthType = e.AuthType,
                 IpAddress = e.IpAddress,
                 CredentialFingerprint = e.CredentialFingerprint,

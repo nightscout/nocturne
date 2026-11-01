@@ -7,10 +7,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
-using Nocturne.API.Services.Devices;
-using Nocturne.API.Services.Treatments;
+using Nocturne.API.Services.Analytics;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Repositories;
@@ -75,21 +75,11 @@ public class RetrospectiveControllerTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), token),
             Times.Once);
 
-    private static DeviceStatusProjectionService CreateProjectionService()
-    {
-        return new DeviceStatusProjectionService(
-            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
-                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
-                == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
-            new Mock<IApsSnapshotRepository>().Object,
-            new Mock<IPumpSnapshotRepository>().Object,
-            new Mock<IUploaderSnapshotRepository>().Object,
-            new Mock<IStateSpanRepository>().Object,
-            new Mock<IDeviceStatusExtrasRepository>().Object,
-            TimeProvider.System,
-            new Mock<ILogger<DeviceStatusProjectionService>>().Object);
-    }
+    private static IDeviceStatusService NoDeviceStatuses() =>
+        Mock.Of<IDeviceStatusService>(s => s.GetDeviceStatusesAsync(
+                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<ReadSortField>())
+            == Task.FromResult<IReadOnlyList<DeviceStatus>>(Array.Empty<DeviceStatus>()));
 
     private RetrospectiveController CreateController()
     {
@@ -100,7 +90,7 @@ public class RetrospectiveControllerTests
             _bolusRepoMock.Object,
             _carbIntakeRepoMock.Object,
             _tempBasalRepoMock.Object,
-            CreateProjectionService(),
+            NoDeviceStatuses(),
             _therapyTimelineResolverMock.Object,
             _stateSpans.Object,
             Mock.Of<IApsSnapshotRepository>(),

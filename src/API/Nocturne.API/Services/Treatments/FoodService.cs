@@ -32,7 +32,7 @@ public class FoodService : IFoodService
     /// </summary>
     /// <param name="food">The food repository for data access.</param>
     /// <param name="documentProcessingService">Service for HTML sanitization of food fields.</param>
-    /// <param name="sideEffects">Handles cache invalidation, SignalR broadcasting, and V4 decomposition on writes.</param>
+    /// <param name="sideEffects">Handles cache invalidation and SignalR broadcasting on writes.</param>
     /// <param name="events">The event sink for broadcasting create/update/delete events.</param>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>

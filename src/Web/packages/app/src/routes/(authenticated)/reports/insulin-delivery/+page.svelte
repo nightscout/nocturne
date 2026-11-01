@@ -30,10 +30,10 @@
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import type { InsulinDeliveryStatistics } from "#lib/api/index.js";
   import {
-    getInsulinDeliveryStatistics,
-    getDailyBasalBolusRatios,
-    getHourlyInsulinDelivery,
-  } from "#lib/api/generated/statistics.generated.remote.js";
+    getDailyBasalBolusReport,
+    getHourlyDeliveryReport,
+    getInsulinDeliveryReport,
+  } from "#lib/api/reports.remote.js";
   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
@@ -41,34 +41,19 @@
   // Default: 30 days for insulin delivery analysis (TDD and ratios benefit from more data)
   const reportsParams = requireDateParamsContext(30);
 
-  // Date args shared by every statistics query on this page.
-  // Send ISO strings, not Date objects. A Date can't be serialised as a
-  // remote-query argument ("Unknown date type"), so passing Dates left these
-  // queries erroring — empty on first load, hard error when the filter dates
-  // change. The server schema is z.coerce.date(), which parses the ISO strings
-  // back to dates.
-  // Same pattern as ReplayPanel's replay() call.
-  const statisticsDates = $derived({
-    startDate: reportsParams.startDate.toISOString(),
-    endDate: reportsParams.endDate.toISOString(),
-  });
+  // The picked days, read in the patient's zone by the server.
+  const range = $derived({ from: reportsParams.fromDay, to: reportsParams.toDay });
 
-  // Routed through contextResource (not a bare $derived query) so a resolved
-  // response is retained across superseded query instances. A raw
-  // $derived(getDailyBasalBolusRatios(...)) stranded the value on a superseded
-  // instance (sveltejs/kit#14915), leaving .current undefined and the chart
-  // permanently showing "no insulin data available" even though the endpoint
-  // returned full daily data.
+  // contextResource keeps a resolved response across superseded query instances; a bare
+  // $derived query strands it on a superseded one (sveltejs/kit#14915).
   const dailyRatiosResource = contextResource(
-    () => getDailyBasalBolusRatios(statisticsDates),
+    () => getDailyBasalBolusReport(range),
     { errorTitle: "Error loading insulin delivery data" }
   );
 
-  // Headline insulin figures for the selected range. The fixed-bucket
-  // multi-period endpoint was used here instead, so every number above the
-  // charts described the last 30 days no matter what the picker said.
+  // Headline insulin figures for the selected range.
   const insulinResource = contextResource(
-    () => getInsulinDeliveryStatistics(statisticsDates),
+    () => getInsulinDeliveryReport(range),
     {
       errorTitle: "Error loading insulin delivery data",
       dateParams: reportsParams,
@@ -78,7 +63,7 @@
   // Hourly delivery pattern with automatic layout registration. Computed
   // backend-side from pump-confirmed records, bucketed by the user's timezone.
   const hourlyDeliveryResource = contextResource(
-    () => getHourlyInsulinDelivery(statisticsDates),
+    () => getHourlyDeliveryReport(range),
     { errorTitle: "Error loading insulin delivery data" }
   );
   const hourlyDelivery = $derived(hourlyDeliveryResource.current);
@@ -258,12 +243,7 @@
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.mealBoluses ?? 0}</span>
               <span class="text-xs text-muted-foreground">
-                {(insulinStats.manualBolusCount ?? 0) > 0
-                  ? (
-                      ((insulinStats.mealBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) *
-                      100
-                    ).toFixed(0)
-                  : 0}% of boluses
+                {(insulinStats.mealBolusPercent ?? 0).toFixed(0)}% of boluses
               </span>
             </dd>
           </div>
@@ -272,12 +252,7 @@
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.correctionBoluses ?? 0}</span>
               <span class="text-xs text-muted-foreground">
-                {(insulinStats.manualBolusCount ?? 0) > 0
-                  ? (
-                      ((insulinStats.correctionBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) *
-                      100
-                    ).toFixed(0)
-                  : 0}% of boluses
+                {(insulinStats.correctionBolusPercent ?? 0).toFixed(0)}% of boluses
               </span>
             </dd>
           </div>

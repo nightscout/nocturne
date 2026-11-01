@@ -88,20 +88,37 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
         spans.Add(new ProfileSpan(store, start, toMs, active?.Scaling, active?.Schedules, applied));
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ActiveProfileAt>> GetActiveAtAsync(
+        IReadOnlyList<long> timesMills, CancellationToken ct = default)
+    {
+        if (timesMills.Count == 0)
+            return [];
+
+        var active = await _activations.GetAtAsync(timesMills, ct);
+        var stores = await _stores.GetAsync(ct);
+        return [.. timesMills.Zip(active, (t, a) => new ActiveProfileAt(stores.StoreFor(a?.ProfileName, t), a))];
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// An effective activation uploaded without the insulin falls back to the requested activation
     /// it confirms, which an uploader may have sent it on instead.
     /// </remarks>
-    public async Task<TreatmentInsulinContext?> GetActiveInsulinContextAsync(long timeMills, CancellationToken ct = default)
+    public async Task<IReadOnlyList<TreatmentInsulinContext?>> GetActiveInsulinContextsAsync(
+        IReadOnlyList<long> timesMills, CancellationToken ct = default)
     {
-        if ((await _activations.GetAtAsync(timeMills, ct))?.Activation is not { } active)
-            return null;
+        var active = (await GetActiveAtAsync(timesMills, ct)).Select(a => a.Active?.Activation).ToList();
+        var requestedIds = active
+            .Where(a => a?.Snapshot?.Insulin is null && a?.RequestedActivationId is not null)
+            .Select(a => a!.RequestedActivationId!.Value)
+            .Distinct()
+            .ToList();
+        var requested = requestedIds.Count == 0
+            ? new Dictionary<Guid, ProfileActivation>()
+            : (await _repository.GetByIdsAsync(requestedIds, ct)).ToDictionary(a => a.Id);
 
-        if (active.Snapshot?.Insulin is { } insulin)
-            return insulin;
-
-        return active.RequestedActivationId is { } requestedId
-            ? (await _repository.GetByIdAsync(requestedId, ct))?.Snapshot?.Insulin
-            : null;
+        return [.. active.Select(a => a?.Snapshot?.Insulin
+            ?? (a?.RequestedActivationId is { } id ? requested.GetValueOrDefault(id)?.Snapshot?.Insulin : null))];
     }
 }

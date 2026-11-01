@@ -6,13 +6,12 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
@@ -52,7 +51,7 @@ public class RetrospectiveController : ControllerBase
     private readonly IBolusRepository _bolusRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly ITempBasalRepository _tempBasalRepository;
-    private readonly DeviceStatusProjectionService _projectionService;
+    private readonly IDeviceStatusService _deviceStatuses;
     private readonly ITherapyTimelineResolver _therapyTimelineResolver;
     private readonly IStateSpanRepository _stateSpanRepository;
     private readonly IApsSnapshotRepository _apsSnapshotRepository;
@@ -66,7 +65,7 @@ public class RetrospectiveController : ControllerBase
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
         ITempBasalRepository tempBasalRepository,
-        DeviceStatusProjectionService projectionService,
+        IDeviceStatusService deviceStatuses,
         ITherapyTimelineResolver therapyTimelineResolver,
         IStateSpanRepository stateSpanRepository,
         IApsSnapshotRepository apsSnapshotRepository,
@@ -81,7 +80,7 @@ public class RetrospectiveController : ControllerBase
         _bolusRepository = bolusRepository;
         _carbIntakeRepository = carbIntakeRepository;
         _tempBasalRepository = tempBasalRepository;
-        _projectionService = projectionService;
+        _deviceStatuses = deviceStatuses;
         _therapyTimelineResolver = therapyTimelineResolver;
         _stateSpanRepository = stateSpanRepository;
         _apsSnapshotRepository = apsSnapshotRepository;
@@ -248,11 +247,11 @@ public class RetrospectiveController : ControllerBase
             limit: 5000, offset: 0, descending: false, ct: cancellationToken
         )).ToList();
         // Get device status
-        var deviceStatus = await _projectionService.GetMatchingAsync(
+        var deviceStatus = await _deviceStatuses.GetDeviceStatusesAsync(
             FindQuery.Empty,
             count: 500,
             skip: 0,
-            ct: cancellationToken
+            cancellationToken: cancellationToken
         );
         var deviceStatusList = deviceStatus?
             .Where(d => d.Mills >= startMills && d.Mills <= endMills)

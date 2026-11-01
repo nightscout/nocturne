@@ -1,6 +1,8 @@
+import type {} from "@vitest/browser-playwright";
 import { render } from "vitest-browser-svelte";
-import { page, userEvent } from "vitest/browser";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cdp, page, userEvent } from "vitest/browser";
+import { resetLocalTimeZone } from "@internationalized/date";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const createLab = vi.hoisted(() => vi.fn(() => undefined));
@@ -27,21 +29,21 @@ const timelinePoints = [
 const labResults = [
   {
     id: "lab-result-1",
-    measuredAt: "2025-01-03T12:00:00",
+    measuredAt: "2025-01-03",
     valuePercent: 6.6,
     a1cDisplay: { percent: 6.6, mmolMol: 48.63405 },
     note: "Annual lab test",
   },
   {
     id: "lab-result-2",
-    measuredAt: "2025-01-05T12:00:00",
+    measuredAt: "2025-01-05",
     valuePercent: 6.4,
     a1cDisplay: { percent: 6.4, mmolMol: 46.44825 },
     note: "Same-day lab test",
   },
   {
     id: "lab-result-before-first-estimate",
-    measuredAt: "2024-12-30T12:00:00",
+    measuredAt: "2024-12-30",
     valuePercent: 6.1,
     a1cDisplay: { percent: 6.1, mmolMol: 43.16955 },
     note: "Before glucose history",
@@ -64,13 +66,16 @@ vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", () => ({
     })),
 }));
 
+const createdLabResults: typeof labResults = [];
+
 vi.mock("#lib/api/generated/labHbA1cs.generated.remote.js", () => ({
-  getAll: () => remoteQuery(() => labResults),
+  getAll: () => remoteQuery(() => [...labResults, ...createdLabResults]),
   create: remoteCommand(createLab),
   remove: remoteCommand(() => undefined),
 }));
 
 import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
+import { formatLocale } from "#lib/utils/formatting.js";
 
 import EHbA1cPage from "./+page.svelte";
 
@@ -175,4 +180,61 @@ describe("eHbA1c chart tooltips", () => {
 
     expect(screenLineStart.x).toBeGreaterThan(markerBounds.right);
   });
+});
+
+describe("lab result day", () => {
+  async function viewFrom(timeZone: string) {
+    await cdp().send("Emulation.setTimezoneOverride", { timezoneId: timeZone });
+    resetLocalTimeZone();
+  }
+
+  const longDate = (year: number, month: number, day: number) =>
+    new Intl.DateTimeFormat(formatLocale(), {
+      timeZone: "UTC",
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(Date.UTC(year, month - 1, day));
+
+  beforeEach(() => {
+    createdLabResults.length = 0;
+    createLab.mockClear();
+    createLab.mockImplementation(((request: { measuredAt: string; value: number }) => {
+      createdLabResults.push({
+        id: "lab-result-new",
+        measuredAt: request.measuredAt,
+        valuePercent: request.value,
+        a1cDisplay: { percent: request.value, mmolMol: 0 },
+        note: "Entered lab test",
+      });
+    }) as () => undefined);
+    applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+  });
+
+  afterEach(async () => {
+    await cdp().send("Emulation.setTimezoneOverride", { timezoneId: "" });
+    resetLocalTimeZone();
+  });
+
+  it.each(["America/Toronto", "Pacific/Auckland"])(
+    "shows the day entered, and the day the server stored, for a viewer in %s",
+    async (timeZone) => {
+      await viewFrom(timeZone);
+      render(EHbA1cPage, {});
+      await expect.element(page.getByTestId("lab-marker").first()).toBeVisible();
+      await expect.element(page.getByText(longDate(2025, 1, 3), { exact: true })).toBeVisible();
+
+      await page.getByLabelText("Date of blood draw").fill("2025-01-04");
+      await page.getByLabelText("Result (%)").fill("6.8");
+      await page.getByRole("button", { name: "Add lab result" }).click();
+
+      expect(createLab).toHaveBeenCalledWith(expect.objectContaining({ measuredAt: "2025-01-04" }));
+      await expect.element(page.getByText(longDate(2025, 1, 4), { exact: true })).toBeVisible();
+      const markerTitles = (await page.getByTestId("lab-marker").elements()).map(
+        (marker) => marker.querySelector("title")?.textContent ?? ""
+      );
+      expect(markerTitles.some((title) => title.includes(longDate(2025, 1, 4)))).toBe(true);
+    }
+  );
 });

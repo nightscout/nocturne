@@ -6,21 +6,17 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.API.Services.Devices;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
 /// V3 DeviceStatus controller that provides full V3 API compatibility with Nightscout devicestatus endpoints.
-/// Writes decompose directly into V4 snapshot tables; reads project back from V4.
 /// </summary>
-/// <seealso cref="IDeviceStatusDecomposer"/>
-/// <seealso cref="DeviceStatusProjectionService"/>
+/// <seealso cref="IDeviceStatusService"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
 [Tags("V3")]
@@ -28,32 +24,16 @@ namespace Nocturne.API.Controllers.V3;
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 {
-    private readonly DeviceStatusProjectionService _projection;
-    private readonly IDeviceStatusDecomposer _decomposer;
-    private readonly IWriteSideEffects _sideEffects;
-    private readonly IDataEventSink<DeviceStatus> _events;
-
-    private const string CollectionName = "devicestatus";
-
-    /// <summary>
-    /// Suppress V4 decomposition in side effects — the controller decomposes directly.
-    /// </summary>
-    private static readonly WriteEffectOptions NoDecompose = new() { DecomposeToV4 = false };
+    private readonly IDeviceStatusService _deviceStatuses;
 
     public DeviceStatusController(
-        DeviceStatusProjectionService projection,
-        IDeviceStatusDecomposer decomposer,
-        IWriteSideEffects sideEffects,
-        IDataEventSink<DeviceStatus> events,
+        IDeviceStatusService deviceStatuses,
         IDocumentProcessingService documentProcessingService,
         ILogger<DeviceStatusController> logger
     )
         : base(documentProcessingService, logger)
     {
-        _projection = projection;
-        _decomposer = decomposer;
-        _sideEffects = sideEffects;
-        _events = events;
+        _deviceStatuses = deviceStatuses;
     }
 
     /// <summary>
@@ -79,14 +59,14 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         {
             var parameters = ParseV3QueryParameters();
 
-            var find = DeviceStatusProjectionService
-                .ParseFind(
+            var find = FindQuery
+                .ParseDeviceStatus(
                     ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                         ?? ConvertV3FilterToV1Find(parameters.Filter))
                 .WithFieldRenamed("identifier", "_id");
 
             var deviceStatusList = (
-                await _projection.GetMatchingAsync(
+                await _deviceStatuses.GetDeviceStatusesAsync(
                     find,
                     parameters.Limit,
                     parameters.Offset,
@@ -152,7 +132,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        var result = await _projection.GetByIdAsync(id, cancellationToken);
+        var result = await _deviceStatuses.GetDeviceStatusByIdAsync(id, cancellationToken);
 
         if (result == null)
         {
@@ -237,7 +217,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 var single = recordsList[0];
                 if (!string.IsNullOrEmpty(single.Id))
                 {
-                    var existing = await _projection.GetByIdAsync(
+                    var existing = await _deviceStatuses.GetDeviceStatusByIdAsync(
                         single.Id,
                         cancellationToken
                     );
@@ -248,34 +228,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 }
             }
 
-            // Decompose each device status directly into V4 snapshot tables
-            var projectedResults = new List<DeviceStatus>();
-            foreach (var ds in recordsList)
-            {
-                // Direct v3 upload has no connector data source; a live upload broadcasts.
-                await _decomposer.DecomposeAsync(ds, source: null, WriteOrigin.Live, cancellationToken);
-
-                // Project the V4 snapshots back to DeviceStatus shape for the response
-                var projected = ds;
-                if (!string.IsNullOrEmpty(ds.Id))
-                {
-                    var fromV4 = await _projection.GetByIdAsync(ds.Id, cancellationToken);
-                    if (fromV4 != null)
-                        projected = fromV4;
-                }
-
-                projectedResults.Add(projected);
-            }
-
-            // Broadcast via WriteSideEffectsService (cache invalidation + SignalR)
-            await _sideEffects.OnCreatedAsync(
-                CollectionName,
-                projectedResults,
-                NoDecompose,
-                cancellationToken
-            );
-
-            await _events.OnCreatedAsync(projectedResults, cancellationToken);
+            var projectedResults = await _deviceStatuses.CreateDeviceStatusesAsync(
+                recordsList, cancellationToken: cancellationToken);
 
             if (deviceStatusData.ValueKind == JsonValueKind.Array)
             {
@@ -297,8 +251,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     }
 
     /// <summary>
-    /// Replace a device status record by ID with V3 format, rewriting its stored V4 snapshots in
-    /// place and projecting the result back.
+    /// Replace a device status record by ID with V3 format.
     /// </summary>
     /// <param name="id">Device status ID to update</param>
     /// <param name="request">Updated device status data</param>
@@ -356,26 +309,11 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
         }
 
-        // The path's wire form may only resolve to the stored id, which is what the stored
-        // snapshots are found by.
-        var existing = await _projection.GetByIdAsync(id, cancellationToken);
-        if (existing?.Id is not { } storedId
-            || await _decomposer.ReplaceAsync(storedId, deviceStatus, WriteOrigin.Live, cancellationToken) is null)
+        var updated = await _deviceStatuses.ReplaceDeviceStatusAsync(id, deviceStatus, cancellationToken);
+        if (updated is null)
         {
             return CreateV3ErrorResponse(404, "Device status not found");
         }
-
-        var updated = await _projection.GetByIdAsync(deviceStatus.Id!, cancellationToken) ?? deviceStatus;
-
-        // Broadcast via WriteSideEffectsService (cache invalidation + SignalR)
-        await _sideEffects.OnUpdatedAsync(
-            CollectionName,
-            updated,
-            NoDecompose,
-            cancellationToken
-        );
-
-        await _events.OnUpdatedAsync(updated, cancellationToken);
 
         return Ok(
             new Dictionary<string, object>
@@ -411,10 +349,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        // The path's wire form may only resolve to the stored id; the projection is also the broadcast.
-        var deviceStatusToDelete = await _projection.GetByIdAsync(id, cancellationToken);
-        if (deviceStatusToDelete?.Id is not { } storedId
-            || await _decomposer.DeleteStoredAsync(storedId, WriteOrigin.Live, cancellationToken) == 0)
+        if (!await _deviceStatuses.DeleteDeviceStatusAsync(id, cancellationToken))
         {
             return CreateV3ErrorResponse(
                 404,
@@ -422,15 +357,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 $"Device status with ID '{id}' was not found"
             );
         }
-
-        await _sideEffects.OnDeletedAsync(
-            CollectionName,
-            deviceStatusToDelete,
-            NoDecompose,
-            cancellationToken
-        );
-
-        await _events.OnDeletedAsync(deviceStatusToDelete, cancellationToken);
 
         _logger.LogDebug("Successfully deleted device status with ID {Id}", id);
 
@@ -464,7 +390,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         limit = Math.Min(Math.Max(limit, 1), 1000);
 
-        var deviceStatuses = (await _projection.GetModifiedSinceAsync(
+        var deviceStatuses = (await _deviceStatuses.GetDeviceStatusesModifiedSinceAsync(
             lastModified,
             limit,
             cancellationToken

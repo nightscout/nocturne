@@ -143,29 +143,18 @@ public class SleepSessionRepository : ISleepSessionRepository
     private const int IdLockClass = 0x534C_4944;
 
     /// <summary>
-    /// Serialises writers of one sleep-session key, so a concurrent duplicate waits for the first
-    /// to commit and then replaces its row rather than failing a unique index or deleting a row
-    /// already gone. A PostgreSQL transaction-scoped advisory lock; other providers take nothing.
-    /// Two keys of one kind whose hashes collide only wait for each other. A writer takes the
-    /// source-record key before the primary-key key and never the reverse, so two writers cannot
-    /// deadlock.
+    /// The source-record half of the sleep-session key lock, taken first. It serialises writers of
+    /// one key, so a concurrent duplicate waits for the first to commit and then replaces its row
+    /// rather than failing a unique index or deleting a row already gone. Two keys of one kind
+    /// whose hashes collide only wait for each other. A writer takes this before
+    /// <see cref="LockIdAsync"/> and never the reverse, so two writers cannot deadlock.
     /// </summary>
-    private static async Task LockAsync(NocturneDbContext ctx, int lockClass, string key, CancellationToken ct)
-    {
-        if (!ctx.Database.IsNpgsql())
-            return;
-
-        await ctx.Database.ExecuteSqlAsync(
-            $"SELECT pg_advisory_xact_lock({lockClass}, hashtext({key}))", ct);
-    }
-
-    /// <summary>The source-record half of <see cref="LockAsync"/>, taken first.</summary>
     private static Task LockSourceRecordAsync(NocturneDbContext ctx, SleepSessionEntity entity, CancellationToken ct) =>
-        LockAsync(ctx, SourceRecordLockClass, $"{ctx.TenantId}|{entity.Source}|{entity.OriginalId}", ct);
+        ctx.LockForTransactionAsync(SourceRecordLockClass, $"{ctx.TenantId}|{entity.Source}|{entity.OriginalId}", ct);
 
-    /// <summary>The primary-key half of <see cref="LockAsync"/>, taken last.</summary>
+    /// <summary>The primary-key half of the sleep-session key lock, taken last.</summary>
     private static Task LockIdAsync(NocturneDbContext ctx, Guid id, CancellationToken ct) =>
-        LockAsync(ctx, IdLockClass, $"{ctx.TenantId}|{id}", ct);
+        ctx.LockForTransactionAsync(IdLockClass, $"{ctx.TenantId}|{id}", ct);
 
     /// <inheritdoc />
     public async Task<SleepSession?> UpdateSessionAsync(Guid id, SleepSession session, CancellationToken cancellationToken = default)

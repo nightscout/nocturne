@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -19,6 +20,7 @@ namespace Nocturne.API.Services.Platform;
 public class ClockFaceService : IClockFaceService
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ISubjectRepository _subjects;
     private readonly TimeProvider _time;
     private readonly ILogger<ClockFaceService> _logger;
 
@@ -30,10 +32,12 @@ public class ClockFaceService : IClockFaceService
 
     public ClockFaceService(
         INocturneDbContextFactory contexts,
+        ISubjectRepository subjects,
         TimeProvider timeProvider,
         ILogger<ClockFaceService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _time = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -99,13 +103,8 @@ public class ClockFaceService : IClockFaceService
     /// <inheritdoc />
     public async Task<ClockFaceConfig> GetStarterConfigAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var db = await _contexts.CreateAsync(cancellationToken);
         var preferences = Guid.TryParse(userId, out var subjectId)
-            ? await db.Subjects
-                .AsNoTracking()
-                .Where(s => s.Id == subjectId)
-                .Select(s => s.Preferences)
-                .FirstOrDefaultAsync(cancellationToken)
+            ? (await _subjects.GetAsync(subjectId, cancellationToken))?.Preferences
             : null;
 
         return ClockFaceConfig.Starter(UserDisplayPreferences.Deserialize(preferences));

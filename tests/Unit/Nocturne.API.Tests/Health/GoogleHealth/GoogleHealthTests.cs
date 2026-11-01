@@ -68,6 +68,7 @@ public class GoogleHealthTests : IDisposable
         await db.SaveChangesAsync();
         var services = new ServiceCollection();
         services.AddSingleton(db.AsFactory());
+        services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddSingleton(Mock.Of<ITenantAccessor>());
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
@@ -1305,11 +1306,11 @@ public class GoogleHealthTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Leaving_a_connection_drops_a_former_tenant_client_secret_and_the_stale_enabled_flag(bool purge)
+    public async Task Leaving_a_connection_drops_a_former_tenant_client_secret(bool purge)
     {
         var store = new TestConnectorStore();
         var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
-        store.SetConfiguration("""{"enabled":true,"clientId":"synthetic.apps.googleusercontent.com","callbackUrl":"https://tenant.example/settings/connectors/google-health/callback"}""");
+        store.SetConfiguration("""{"clientId":"synthetic.apps.googleusercontent.com","callbackUrl":"https://tenant.example/settings/connectors/google-health/callback"}""");
         await store.Configurations.SaveSecretsAsync("GoogleHealth", new Dictionary<string, string>
         {
             ["refreshToken"] = "refresh",
@@ -1322,7 +1323,38 @@ public class GoogleHealthTests : IDisposable
 
         Assert.False(store.Secrets.ContainsKey("clientSecret"));
         Assert.False(store.Configuration.TryGetProperty("callbackUrl", out _));
-        Assert.False(store.Configuration.TryGetProperty("enabled", out _));
+    }
+
+    [Theory]
+    [InlineData("enabled")]
+    [InlineData("Enabled")]
+    public async Task Saving_options_enables_a_connector_whose_stored_flag_is_off(string spelling)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        store.SetConfiguration($$"""{"{{spelling}}":false,"callbackUrl":"https://tenant.example/settings/connectors/google-health/callback"}""");
+
+        await service.SaveAsync(Options(), Guid.NewGuid(), default);
+
+        Assert.True(ConnectorEnabledKey.IsEnabled(store.Configuration.GetRawText()));
+        Assert.False(store.Configuration.TryGetProperty("callbackUrl", out _));
+    }
+
+    [Theory]
+    [InlineData("enabled")]
+    [InlineData("Enabled")]
+    public async Task Reconnecting_enables_a_connector_whose_stored_flag_is_off(string spelling)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, Google([], _ => "account"), Guid.NewGuid());
+        store.SetConfiguration($$"""{"{{spelling}}":false,"lookbackDays":7}""");
+        var subject = Guid.NewGuid();
+
+        var authorization = await service.StartAsync(subject, null, default);
+        var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
+        await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
+
+        Assert.True(ConnectorEnabledKey.IsEnabled(store.Configuration.GetRawText()));
     }
 
     [Fact]
@@ -1823,18 +1855,16 @@ public class GoogleHealthTests : IDisposable
                 .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
                 {
                     if (FailConfigurationSaves) throw new InvalidOperationException("configuration store unavailable");
-                    configuration?.Dispose();
-                    configuration = JsonDocument.Parse(document.RootElement.GetRawText());
-                    response ??= new ConnectorConfigurationResponse
-                    {
-                        ConnectorName = "GoogleHealth",
-                        IsActive = true
-                    };
-                    response.Configuration = configuration;
-                    response.IsActive = !configuration.RootElement.TryGetProperty("enabled", out var enabled) || enabled.GetBoolean();
+                    Store(ConnectorEnabledKey.CarryOver(
+                        document.RootElement.GetRawText(), configuration?.RootElement.GetRawText() ?? "{}"));
                     OnSave?.Invoke();
                 })
                 .ReturnsAsync(() => response!);
+            configurations.Setup(value => value.SetActiveAsync(
+                    "GoogleHealth", It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .Callback<string, bool, string?, CancellationToken>((_, isActive, _, _) =>
+                    Store(ConnectorEnabledKey.With(configuration?.RootElement.GetRawText() ?? "{}", isActive)))
+                .Returns(Task.CompletedTask);
             configurations.Setup(value => value.GetSecretsAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
                 .Returns<string, CancellationToken>((_, ct) =>
@@ -1885,6 +1915,15 @@ public class GoogleHealthTests : IDisposable
         public IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> Loader { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
         public JsonElement Configuration => configuration!.RootElement;
+
+        private void Store(string value)
+        {
+            configuration?.Dispose();
+            configuration = JsonDocument.Parse(value);
+            response ??= new ConnectorConfigurationResponse { ConnectorName = "GoogleHealth" };
+            response.Configuration = configuration;
+            response.IsActive = ConnectorEnabledKey.IsEnabled(value);
+        }
 
         public void SetConfiguration(string value)
         {
