@@ -193,6 +193,8 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
             await _patientDeviceStamper.StampAsync(sgvList, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
         if (mbgList.Count > 0)
             await _patientDeviceStamper.StampAsync(mbgList, DeviceAttributionCategories.MeterGlucose, batchSource: null, ct);
+        CarryAttributionAcrossResends(sgvList);
+        CarryAttributionAcrossResends(mbgList);
 
         using (SystemAttributedBatchWrites(_auditContext))
         {
@@ -202,6 +204,26 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// A legacy id sent more than once in a batch is written as its last version; a version that
+    /// resolved no device keeps the one an earlier version resolved, as a re-send keeps the device of
+    /// the row it updates.
+    /// </summary>
+    private static void CarryAttributionAcrossResends<TRecord>(List<TRecord> records)
+        where TRecord : IV4Record, IDeviceAttributed
+    {
+        var resolved = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        foreach (var record in records)
+        {
+            if (record.LegacyId is not { } legacyId)
+                continue;
+            if (record.PatientDeviceId is { } deviceId)
+                resolved[legacyId] = deviceId;
+            else if (resolved.TryGetValue(legacyId, out var earlier))
+                record.PatientDeviceId = earlier;
+        }
     }
 
     /// <summary>

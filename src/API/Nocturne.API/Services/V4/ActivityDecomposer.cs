@@ -502,11 +502,9 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         result.SkippedDeleted += models.Count(m => m.Id != null && userDeleted.Contains(m.Id));
         models = models.Where(m => m.Id == null || !userDeleted.Contains(m.Id)).ToList();
 
+        var lastOfId = models.Where(m => m.Id != null).GroupBy(m => m.Id!).ToDictionary(g => g.Key, g => g.Last());
         var updated = new List<TEntity>();
-        foreach (var model in models
-                     .Where(m => m.Id != null && stored.ContainsKey(m.Id))
-                     .GroupBy(m => m.Id!)
-                     .Select(g => g.Last()))
+        foreach (var model in lastOfId.Values.Where(m => stored.ContainsKey(m.Id!)))
         {
             var existing = stored[model.Id!];
             applyUpdate(existing, model);
@@ -515,7 +513,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         }
 
         var fresh = models
-            .Where(m => m.Id == null || !stored.ContainsKey(m.Id))
+            .Where(m => m.Id == null || (!stored.ContainsKey(m.Id) && ReferenceEquals(lastOfId[m.Id], m)))
             .Select(m => (Model: m, Entity: toEntity(m)))
             .ToList();
         var toInsert = fresh.Where(p => p.Entity.SyncIdentifier == null).Select(p => p.Entity).ToList();
