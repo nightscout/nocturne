@@ -177,9 +177,8 @@ public class DedupDeltaGoldenTests
             new SensorGlucose { Timestamp = T0.AddSeconds(10), Mgdl = 120.5, DataSource = "libre", LegacyId = "g-b" },
         }, WriteOrigin.Live, CancellationToken.None);
 
-        // D7 re-baseline: each pair links into one canonical group, and ALL dedup participants now
-        // exclude the non-primary via the base CountAsync + ApplyReadVisibility hook (was: only
-        // CarbIntake excluded; Bolus and SensorGlucose over-counted at 2).
+        // Each pair links into one canonical group, and every dedup participant's base CountAsync
+        // excludes the non-primary copy through ReadVisibilityFilter.
         (await carb.CountAsync(null, null)).Should().Be(1, "CarbIntake.CountAsync excludes non-primary (D7)");
         (await bolus.CountAsync(null, null)).Should().Be(1, "Bolus.CountAsync now excludes non-primary (D7)");
         (await sg.CountAsync(null, null)).Should().Be(1, "SensorGlucose.CountAsync now excludes non-primary (D7)");

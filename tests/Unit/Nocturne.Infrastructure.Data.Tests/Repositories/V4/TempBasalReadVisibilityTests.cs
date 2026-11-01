@@ -64,32 +64,7 @@ public class TempBasalReadVisibilityTests : IDisposable
             Rate = 0.5,
         }, WriteOrigin.Live);
 
-        var canonicalId = Guid.CreateVersion7();
-        var mills = new DateTimeOffset(start, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        _context.LinkedRecords.AddRange(
-            new LinkedRecordEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = TestTenantId,
-                CanonicalId = canonicalId,
-                RecordType = "tempbasal",
-                RecordId = primary.Id,
-                SourceTimestamp = mills,
-                DataSource = "mylife-connector",
-                IsPrimary = true,
-            },
-            new LinkedRecordEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = TestTenantId,
-                CanonicalId = canonicalId,
-                RecordType = "tempbasal",
-                RecordId = duplicate.Id,
-                SourceTimestamp = mills,
-                DataSource = "glooko-connector",
-                IsPrimary = false,
-            });
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.TempBasal, primary.Id, duplicate.Id);
 
         var fetched = (await _repo.GetAsync(
             from: null, to: null, device: null, source: null)).ToList();

@@ -460,8 +460,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var current = await _repository.GetCurrentPumpModeAsync();
 
@@ -480,11 +479,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        var canonicalId = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(canonicalId, primaryEntity.Id, isPrimary: true),
-            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var spans = (await _repository.GetStateSpansAsync()).ToList();
 
@@ -501,8 +496,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var spans = await _repository.GetActivityStateSpansAsync();
 
@@ -520,11 +514,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        var canonicalId = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(canonicalId, primaryEntity.Id, isPrimary: true),
-            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var active = await _repository.GetActiveAtAsync(
             StateSpanCategory.Override, null, new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc));
@@ -549,14 +539,8 @@ public class StateSpanRepositoryTests : IDisposable
         windowDuplicate.Source = "duplicate";
 
         _context.StateSpans.AddRange(carriedPrimary, carriedDuplicate, windowPrimary, windowDuplicate);
-        var carriedGroup = Guid.NewGuid();
-        var windowGroup = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(carriedGroup, carriedPrimary.Id, isPrimary: true),
-            Link(carriedGroup, carriedDuplicate.Id, isPrimary: false),
-            Link(windowGroup, windowPrimary.Id, isPrimary: true),
-            Link(windowGroup, windowDuplicate.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, carriedPrimary.Id, carriedDuplicate.Id);
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, windowPrimary.Id, windowDuplicate.Id);
 
         var result = await _repository.GetByCategories(
             [StateSpanCategory.Override, StateSpanCategory.PumpMode], from, from.AddDays(1));
@@ -564,18 +548,6 @@ public class StateSpanRepositoryTests : IDisposable
         result[StateSpanCategory.Override].Should().ContainSingle().Which.Source.Should().Be("primary");
         result[StateSpanCategory.PumpMode].Should().ContainSingle().Which.Source.Should().Be("primary");
     }
-
-    private static LinkedRecordEntity Link(Guid canonicalId, Guid recordId, bool isPrimary) => new()
-    {
-        Id = Guid.NewGuid(),
-        CanonicalId = canonicalId,
-        RecordType = "statespan",
-        RecordId = recordId,
-        SourceTimestamp = 0,
-        DataSource = isPrimary ? "primary" : "duplicate",
-        IsPrimary = isPrimary,
-        SysCreatedAt = DateTime.UtcNow,
-    };
 
     // --- GetActiveAtAsync ---
 

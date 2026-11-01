@@ -1201,9 +1201,8 @@ public class DataOverviewServiceTests : IDisposable
             Text = "anchors the day",
             DataSource = "glooko"
         });
-        AddNonPrimaryLink("bgcheck", bgCheckId);
-        AddNonPrimaryLink("tempbasal", tempBasalId);
-        await _dbContext.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_dbContext, RecordType.BGCheck, primary: null, bgCheckId);
+        await DuplicateGroups.LinkAsync(_dbContext, RecordType.TempBasal, primary: null, tempBasalId);
 
         var result = await _service.GetDailySummaryAsync(2024);
 
@@ -1211,19 +1210,6 @@ public class DataOverviewServiceTests : IDisposable
         result.Days[0].Counts.Should().NotContainKeys("BGChecks", "TempBasals");
         result.Days[0].TotalCount.Should().Be(1);
     }
-
-    private void AddNonPrimaryLink(string recordType, Guid recordId) =>
-        _dbContext.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.CreateVersion7(),
-            CanonicalId = Guid.NewGuid(),
-            RecordType = recordType,
-            RecordId = recordId,
-            SourceTimestamp = June15_2024_Noon,
-            DataSource = "duplicate",
-            IsPrimary = false,
-            SysCreatedAt = DateTime.UtcNow,
-        });
 
     #endregion
 

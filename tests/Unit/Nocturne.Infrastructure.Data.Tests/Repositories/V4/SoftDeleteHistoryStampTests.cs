@@ -236,7 +236,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
             Link(first, ledByA.B.Id, isPrimary: false, "source-b", RecordType.SensorGlucose),
             Link(second, ledByB.A.Id, isPrimary: false, "source-a", RecordType.SensorGlucose),
             Link(second, ledByB.B.Id, isPrimary: true, "source-b", RecordType.SensorGlucose));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.SensorGlucose, ledByA.B.Id, ledByB.A.Id);
         foreach (var row in new[] { ledByA.A, ledByA.B, ledByB.A, ledByB.B })
             row.SysUpdatedAt = Written;
         await _context.SaveChangesAsync();
@@ -266,7 +266,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.LinkedRecords.AddRange(
             Link(canonical, primary.Id, isPrimary: true, "source-a", RecordType.SensorGlucose),
             Link(canonical, copy.Id, isPrimary: false, "source-b", RecordType.SensorGlucose));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.SensorGlucose, copy.Id);
         _context.ChangeTracker.Clear();
         await _context.SensorGlucose.Where(g => g.Id == primary.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(g => g.DeletedAt, Written));
@@ -366,7 +366,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.LinkedRecords.AddRange(
             Link(canonical, primary.Id, isPrimary: true, "source-a", RecordType.StateSpan),
             Link(canonical, copy.Id, isPrimary: false, "source-b", RecordType.StateSpan));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.StateSpan, copy.Id);
         _context.ChangeTracker.Clear();
 
         var repository = new StateSpanRepository(
@@ -423,7 +423,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
             primaries.Add(primary.Id);
             copies.Add(copy.Id);
         }
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.SensorGlucose, [.. copies]);
         await _context.SensorGlucose.ExecuteUpdateAsync(s => s.SetProperty(g => g.SysUpdatedAt, Written));
         _context.ChangeTracker.Clear();
         return (primaries, copies);
@@ -438,7 +438,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.LinkedRecords.AddRange(
             Link(canonical, primary.Id, isPrimary: true, "source-a"),
             Link(canonical, copy.Id, isPrimary: false, "source-b"));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.Note, copy.Id);
         await _context.Notes.ExecuteUpdateAsync(s => s.SetProperty(n => n.SysUpdatedAt, Written));
         _context.ChangeTracker.Clear();
         return (primary.Id, copy.Id);

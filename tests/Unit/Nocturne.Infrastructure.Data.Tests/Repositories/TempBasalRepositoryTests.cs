@@ -70,23 +70,6 @@ public class TempBasalRepositoryTests : IDisposable
         return ids;
     }
 
-    private async Task AddNonPrimaryLinkAsync(Guid tenantId, Guid recordId)
-    {
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            CanonicalId = Guid.NewGuid(),
-            RecordType = "tempbasal",
-            RecordId = recordId,
-            SourceTimestamp = 0,
-            DataSource = "test",
-            IsPrimary = false,
-            SysCreatedAt = DateTime.UtcNow,
-        });
-        await _context.SaveChangesAsync();
-    }
-
     [Fact]
     public async Task GetActiveAtAsync_returns_null_when_no_rows()
     {
@@ -187,7 +170,7 @@ public class TempBasalRepositoryTests : IDisposable
     [Fact]
     public async Task GetActiveAtAsync_excludes_non_primary_linked_records()
     {
-        // Two overlapping windows; the more-recent one is marked non-primary via LinkedRecord.
+        // Two overlapping windows; the more-recent one is a non-primary duplicate of the older.
         // Result must be the primary (older) row, not the non-primary.
         var olderStart = new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc);
         var olderEnd = new DateTime(2026, 4, 30, 13, 0, 0, DateTimeKind.Utc);
@@ -198,8 +181,7 @@ public class TempBasalRepositoryTests : IDisposable
             (olderStart, olderEnd, 1.0),
             (newerStart, newerEnd, 2.5));
 
-        // Mark the more-recent row (index 1) as a non-primary duplicate.
-        await AddNonPrimaryLinkAsync(TenantA, ids[1]);
+        await DuplicateGroups.LinkAsync(_context, RecordType.TempBasal, ids[0], ids[1]);
 
         var result = await _repository.GetActiveAtAsync(
             new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),

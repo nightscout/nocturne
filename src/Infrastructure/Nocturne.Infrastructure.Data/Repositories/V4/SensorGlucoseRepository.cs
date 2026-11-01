@@ -21,7 +21,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// Repository for managing sensor glucose (CGM) records in the database. A DeduplicationService
 /// participant on top of the sync-key upsert and keyed delete of
 /// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
-/// (non-primary LinkedRecords filter + keyset cursor), the legacy entries projection, the tenant
+/// (duplicate filter + keyset cursor), the legacy entries projection, the tenant
 /// last-reading watermark, the post-commit dedup linking, and the source/time-range deletes.
 /// </summary>
 public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
@@ -219,8 +219,8 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     protected internal override RecordType? DedupRecordType => RecordType.SensorGlucose;
 
     /// <summary>
-    /// Routes the base 7-arg form through the extended sensor-glucose query (non-primary LinkedRecords
-    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// Routes the base 7-arg form through the extended sensor-glucose query (duplicate
+    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>
     public override Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
@@ -308,7 +308,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         if (patientDeviceId.HasValue)
             query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
         // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
@@ -400,7 +400,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 
     /// <inheritdoc />
     /// <remarks>
-    /// Queries raw storage without the non-primary LinkedRecords exclusion: a reading whose copies
+    /// Queries raw storage without the duplicate filter: a reading whose copies
     /// are all linked non-primary is still a stored duplicate, and hiding it here caused uploads
     /// from a second source to re-insert their whole window on every cycle.
     /// </remarks>
@@ -427,7 +427,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 
     /// <summary>
     /// The duplicate probe's query, shared by the single-entry and whole-batch forms so both see
-    /// the same rows in the same order. Deliberately without the non-primary LinkedRecords filter.
+    /// the same rows in the same order. Deliberately without the duplicate filter.
     /// </summary>
     private static IQueryable<SensorGlucoseEntity> StoredDuplicateQuery(
         NocturneDbContext ctx, IReadOnlyCollection<string>? devices, DateTime from, DateTime to)
