@@ -276,6 +276,32 @@ describe("glucoseScale", () => {
     const scale = intensityScale("--insulin", [0, Infinity], 50, [10, 20], null, 90, {}, [5, 40]);
     expect(scale.domain).toEqual([5, 40]);
     expect(scale.window).toEqual([10, 20]);
-    expect(intensityScale("--insulin", [0, Infinity], 50, [10, 20], null, 90).domain).toEqual([0, 50]);
+  });
+
+  it("spans an intensity ramp across a window saved without a color range, as before the range existed", () => {
+    expect(intensityScale("--insulin", [0, Infinity], 50, [10, 20], null, 90).domain).toEqual([10, 20]);
+    expect(intensityScale("--insulin", [0, Infinity], 50, null, null, 90).domain).toEqual([0, 50]);
+  });
+
+  it("adds a boundary while kept boundaries lie outside the color range", () => {
+    const scale = intensityScale(
+      "--insulin",
+      [0, Infinity],
+      50,
+      null,
+      [
+        { value: 2, position: 0.6, color: "#112233" },
+        { value: 45, position: 0.7 },
+      ],
+      90,
+      {},
+      [10, 30]
+    );
+    const next = addColorBoundary(scale)!;
+    expect(next.map((b) => b.value)).toEqual([2, 20, 45]);
+    expect(next[0].color).toBe("#112233");
+    expect(next[1].position).toBeCloseTo(0.5);
+    expect(next[0].position).toBeLessThan(next[1].position);
+    expect(next[1].position).toBeLessThan(next[2].position);
   });
 });

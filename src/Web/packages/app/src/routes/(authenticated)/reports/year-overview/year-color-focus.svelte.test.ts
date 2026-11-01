@@ -154,7 +154,12 @@ describe("year overview page color focus integration", () => {
     await selectMetric("TDD");
     await expect.element(minimum()).toHaveValue(10);
     await expect.element(maximum()).toHaveValue(70);
-    expect(stored()).toEqual({ tddBand: [10, 70], bolusBand: [2, 25] });
+    expect(stored()).toEqual({
+      tddBand: [10, 70],
+      tddColorRange: [0, 500],
+      bolusBand: [2, 25],
+      bolusColorRange: [0, 500],
+    });
 
     await screen.unmount();
     render(YearOverviewPage);
@@ -162,10 +167,10 @@ describe("year overview page color focus integration", () => {
     await expect.element(minimum("Bolus")).toHaveValue(2);
     await expect.element(maximum("Bolus")).toHaveValue(25);
     await reset("Bolus").click();
-    expect(stored()).toEqual({ tddBand: [10, 70] });
+    expect(stored()).toEqual({ tddBand: [10, 70], tddColorRange: [0, 500] });
   });
 
-  it("drops keys saved in the retired shape on the next change", async () => {
+  it("drops keys saved in the retired shape on the next change, keeping the saved window's colors", async () => {
     applyPreferences({
       yearOverviewColors: {
         advancedMode: true,
@@ -178,7 +183,7 @@ describe("year overview page color focus integration", () => {
     await selectMetric("TDD");
     await expect.element(minimum()).toHaveValue(5);
     await maximum().fill("70");
-    expect(stored()).toEqual({ tddBand: [5, 70] });
+    expect(stored()).toEqual({ tddBand: [5, 70], tddColorRange: [5, 60] });
   });
 
   it("leaves off the bands and dimming a retired blob saved with advanced mode off", async () => {
@@ -195,7 +200,7 @@ describe("year overview page color focus integration", () => {
     await expect.element(maximum()).toHaveValue(500);
     await expect.element(page.getByRole("spinbutton", { name: "Dim outside" })).toHaveValue(90);
     await maximum().fill("70");
-    expect(stored()).toEqual({ tddBand: [0, 70] });
+    expect(stored()).toEqual({ tddBand: [0, 70], tddColorRange: [0, 500] });
   });
 
   it("keeps a saved window and color range when lazy loading introduces a larger outlier", async () => {
@@ -281,9 +286,9 @@ describe("year overview page color focus integration", () => {
     await expect.element(cell("2026-01-02")).toBeInTheDocument();
     await selectMetric("TDD");
     await setWindow(10, 70);
-    await vi.waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ yearOverviewColors: { tddBand: [10, 70] } })));
+    await vi.waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ yearOverviewColors: { tddBand: [10, 70], tddColorRange: [0, 500] } })));
     const cookie = document.cookie.split("; ").find(row => row.startsWith("nocturne-prefs="))!.slice("nocturne-prefs=".length);
-    expect(parsePrefsCookie(cookie)?.yearOverviewColors).toEqual({ tddBand: [10, 70] });
+    expect(parsePrefsCookie(cookie)?.yearOverviewColors).toEqual({ tddBand: [10, 70], tddColorRange: [0, 500] });
   });
 
   it("dims glucose outside its window without moving its colors, which the color range moves", async () => {

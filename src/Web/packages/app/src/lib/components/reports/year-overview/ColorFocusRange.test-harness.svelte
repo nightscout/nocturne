@@ -53,7 +53,10 @@
   {glucose}
   {units}
   {unit}
-  onWindowChange={(next) => (focusWindow = next)}
+  onWindowChange={(next) => {
+    if (!glucose && !colorRange) colorRange = [...scale.domain];
+    focusWindow = next;
+  }}
   onRangeChange={(next) => (colorRange = next)}
   onBoundariesChange={(next) => (boundaries = next)}
   onEndsChange={(next) => (ends = next)}

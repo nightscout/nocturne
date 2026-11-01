@@ -187,7 +187,10 @@ describe("year overview color focus", () => {
       expect(bounds.width).toBeGreaterThan(300);
 
       await page.screenshot({ path: "test-results/color-focus-mobile.png" });
+      // The window was saved without a color range, so the high color dot covers the handle's
+      // middle; the handle is grabbed above the bar.
       await userEvent.dragAndDrop(maximumSlider(), track, {
+        sourcePosition: { x: 5, y: 3 },
         targetPosition: { x: bounds.width * 0.6, y: bounds.height / 2 },
       });
 
@@ -201,7 +204,7 @@ describe("year overview color focus", () => {
   });
 
   it("moves the end colors with the outer dots and leaves the dimming window alone", async () => {
-    render(Harness, { initialWindow: [10, 70] });
+    render(Harness, { initialWindow: [10, 70], initialRange: [0, 500] });
     const fill = (element: Element) => getComputedStyle(element).backgroundColor;
     const swatch = (end: "low" | "high") =>
       elementOf(page.getByLabelText(`TDD ${end} end color`, { exact: true }), HTMLInputElement)
@@ -224,12 +227,37 @@ describe("year overview color focus", () => {
     expect(gradient()).not.toBe(before);
   });
 
+  it("orders the row as the bar does and shows a saved boundary color outside the color range", async () => {
+    render(Harness, {
+      initialRange: [100, 300],
+      initialBoundaries: [
+        { value: 50, position: 0.3, color: "#ff0000" },
+        { value: 200, position: 0.5 },
+      ],
+    });
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const outside = boundaryInput(1).element();
+    const low = rangeInput("low").element();
+    const inside = boundaryInput(2).element();
+    const high = rangeInput("high").element();
+    expect(follows(outside, low)).toBe(true);
+    expect(follows(low, inside)).toBe(true);
+    expect(follows(inside, high)).toBe(true);
+    const swatch = elementOf(page.getByLabelText("TDD color boundary 1 color", { exact: true }), HTMLInputElement);
+    expect(getComputedStyle(swatch.parentElement!).backgroundColor).toBe("rgb(255, 0, 0)");
+    await expect.element(addBoundary()).toBeEnabled();
+    await addBoundary().click();
+    await expect.element(selected("boundaries")).toHaveTextContent('"value":50');
+    expect(JSON.parse(selected("boundaries").element().textContent!)).toHaveLength(3);
+  });
+
   it("moves the dimming window without moving the colors", async () => {
     render(Harness, { initialWindow: [10, 70] });
     const before = gradient();
     await minimumInput().fill("20");
     await expect.element(selected("window")).toHaveTextContent("[20,70]");
-    await expect.element(selected("range")).toHaveTextContent("null");
+    await expect.element(selected("range")).toHaveTextContent("[10,70]");
     expect(gradient()).toBe(before);
   });
 

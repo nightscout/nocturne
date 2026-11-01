@@ -18,6 +18,7 @@
     insertSliderSteps,
     rampColor,
     resolveColorBoundaries,
+    scaleColor,
     resolveColorFocusRange,
     scaleGradient,
     type ColorBoundary,
@@ -184,6 +185,31 @@
   const lowColor = $derived(rampColor(scale.ramp, 0));
   const highColor = $derived(rampColor(scale.ramp, 1));
 
+  /** A boundary's own color, else the color the scale draws at its value. */
+  const boundaryColor = (boundary: ColorBoundary) => boundary.color ?? scaleColor(boundary.value, scale);
+
+  /**
+   * The controls under the bar in the order they sit on it: a boundary the color range no longer
+   * reaches lies beyond that end's control.
+   */
+  const rowItems = $derived.by(() => {
+    type Item = { kind: "low" | "high" | "add" | "boundary"; index: number };
+    const placed: { at: number; rank: number; item: Item }[] = [
+      { at: scale.domain[0], rank: 1, item: { kind: "low", index: -1 } },
+      { at: scale.domain[1], rank: 1, item: { kind: "high", index: -1 } },
+      ...scale.boundaries.map((b, index) => ({
+        at: b.value,
+        rank: b.value <= scale.domain[0] ? 0 : 2,
+        item: { kind: "boundary" as const, index },
+      })),
+    ];
+    const next = added?.[addAt];
+    placed.push({ at: next ? next.value : scale.domain[1], rank: next ? 1.5 : 0.5, item: { kind: "add", index: -1 } });
+    return placed
+      .sort((a, b) => a.at - b.at || a.rank - b.rank)
+      .map(({ item }) => item);
+  });
+
   function colorBoundary(index: number, color: string) {
     onBoundariesChange(scale.boundaries.map((b, i) => (i === index ? { ...b, color } : b)));
   }
@@ -282,8 +308,10 @@
       </div>
 
       <!-- The dimming window is its own slider laid over the color bar, so it never moves the
-           colors. Its handles stand taller than the color dots, which lie above them. -->
-      <div class="relative h-10 w-full">
+           colors. Its handles stand taller than the color dots, which lie above them: the bar and
+           the dots take the pointer for the colors, and above and below the bar it reaches the
+           window's handles. -->
+      <div class="relative h-12 w-full">
         <Slider.Root
           type="multiple"
           min={scale.axis[0]}
@@ -302,7 +330,7 @@
                 index={thumb.index}
                 aria-label={`${metricLabel} focus ${thumb.index === 0 ? "minimum" : "maximum"}`}
                 aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                class="pointer-events-auto relative z-10 block h-9 w-2.5 cursor-ew-resize rounded-sm border-2 border-foreground bg-background shadow-md before:absolute before:inset-y-0 before:-inset-x-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+                class="pointer-events-auto relative z-10 block h-12 w-2.5 cursor-ew-resize rounded-sm border-2 border-foreground bg-background shadow-md before:absolute before:inset-y-0 before:-inset-x-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
               />
             {/each}
           {/snippet}
@@ -316,12 +344,12 @@
           autoSort={false}
           thumbPositioning="exact"
           bind:value={() => [...colorValues], moveColors}
-          class="relative flex h-10 w-full touch-none select-none items-center"
+          class="pointer-events-none relative flex h-12 w-full touch-none select-none items-center"
           aria-label={`${metricLabel} color scale`}
         >
           {#snippet children({ thumbItems })}
             <span
-              class="relative h-3.5 w-full overflow-hidden rounded-sm bg-(image:--scale-gradient)"
+              class="pointer-events-auto relative h-3.5 w-full overflow-hidden rounded-sm bg-(image:--scale-gradient)"
               style:--scale-gradient={gradient}
               role="img"
               aria-label={`${metricLabel} color scale from ${formatted(scale.axis[0])} to ${formatted(scale.axis[1])} ${unitLabel}`}
@@ -350,7 +378,7 @@
                   index={thumb.index}
                   aria-label={end === "low" ? `${metricLabel} low color position` : `${metricLabel} high color position`}
                   aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                  class="relative z-20 block size-5 cursor-ew-resize rounded-full border-2 border-foreground bg-(--pin) shadow-md before:absolute before:inset-y-0 before:-inset-x-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+                  class="pointer-events-auto relative z-20 block size-5 cursor-ew-resize rounded-full border-2 border-foreground bg-(--pin) shadow-md before:absolute before:inset-y-0 before:-inset-x-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
                   style="--pin: {end === 'low' ? lowColor : highColor}"
                   data-testid={`color-range-${end}-handle`}
                 />
@@ -360,8 +388,8 @@
                   index={thumb.index}
                   aria-label={`${metricLabel} color boundary ${thumb.index - 1}`}
                   aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                  class="relative z-30 block size-4 cursor-pointer rounded-full border-2 border-foreground bg-(--pin) shadow-sm before:absolute before:inset-y-0 before:-inset-x-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
-                  style="--pin: {rampColor(scale.ramp, boundary.position)}"
+                  class="pointer-events-auto relative z-30 block size-4 cursor-pointer rounded-full border-2 border-foreground bg-(--pin) shadow-sm before:absolute before:inset-y-0 before:-inset-x-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+                  style="--pin: {boundaryColor(boundary)}"
                 />
               {/if}
             {/each}
@@ -372,58 +400,60 @@
       <!-- The end colors, the boundaries and the button that adds the next boundary share one
            row, in the order they sit on the bar. -->
       <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 tabular-nums">
-        <span class="flex items-center gap-1.5">
-          <ColorSwatchInput
-            color={lowColor}
-            label={`${metricLabel} low end color`}
-            onChange={(low) => onEndsChange({ ...scale.ends, low })}
-          />
-          {@render rangeInput(0)}
-          <span class="whitespace-nowrap">{unitLabel}</span>
-        </span>
-        {#each scale.boundaries as boundary, index (boundary.position)}
-          {#if index === addAt}
+        {#each rowItems as item (item.kind === "boundary" ? `b${scale.boundaries[item.index].position}` : item.kind)}
+          {#if item.kind === "low"}
+            <span class="flex items-center gap-1.5">
+              <ColorSwatchInput
+                color={lowColor}
+                label={`${metricLabel} low end color`}
+                onChange={(low) => onEndsChange({ ...scale.ends, low })}
+              />
+              {@render rangeInput(0)}
+              <span class="whitespace-nowrap">{unitLabel}</span>
+            </span>
+          {:else if item.kind === "high"}
+            <span class="flex items-center gap-1.5">
+              {@render rangeInput(1)}
+              <span class="whitespace-nowrap">{unitLabel}</span>
+              <ColorSwatchInput
+                color={highColor}
+                label={`${metricLabel} high end color`}
+                onChange={(high) => onEndsChange({ ...scale.ends, high })}
+              />
+            </span>
+          {:else if item.kind === "add"}
             {@render addButton()}
+          {:else}
+            {@const index = item.index}
+            {@const boundary = scale.boundaries[index]}
+            <span class="flex items-center gap-1">
+              <ColorSwatchInput
+                color={boundaryColor(boundary)}
+                label={`${metricLabel} color boundary ${index + 1} color`}
+                onChange={(color) => colorBoundary(index, color)}
+              />
+              <Input
+                type="number"
+                inputmode="decimal"
+                step={step ?? "any"}
+                value={display(boundary.value)}
+                oninput={(event: Event & { currentTarget: HTMLInputElement }) => typeBoundary(index, event)}
+                aria-label={`${metricLabel} color boundary ${index + 1}`}
+                aria-invalid={invalid === "boundary"}
+                size="xs"
+                class="w-16 tabular-nums"
+              />
+              <Button
+                variant="ghost-muted"
+                size="icon-xs"
+                aria-label={`Remove ${metricLabel} color boundary ${index + 1}`}
+                onclick={() => removeBoundary(index)}
+              >
+                <X />
+              </Button>
+            </span>
           {/if}
-          <span class="flex items-center gap-1">
-            <ColorSwatchInput
-              color={rampColor(scale.ramp, boundary.position)}
-              label={`${metricLabel} color boundary ${index + 1} color`}
-              onChange={(color) => colorBoundary(index, color)}
-            />
-            <Input
-              type="number"
-              inputmode="decimal"
-              step={step ?? "any"}
-              value={display(boundary.value)}
-              oninput={(event: Event & { currentTarget: HTMLInputElement }) => typeBoundary(index, event)}
-              aria-label={`${metricLabel} color boundary ${index + 1}`}
-              aria-invalid={invalid === "boundary"}
-              size="xs"
-              class="w-16 tabular-nums"
-            />
-            <Button
-              variant="ghost-muted"
-              size="icon-xs"
-              aria-label={`Remove ${metricLabel} color boundary ${index + 1}`}
-              onclick={() => removeBoundary(index)}
-            >
-              <X />
-            </Button>
-          </span>
         {/each}
-        {#if addAt >= scale.boundaries.length}
-          {@render addButton()}
-        {/if}
-        <span class="flex items-center gap-1.5">
-          {@render rangeInput(1)}
-          <span class="whitespace-nowrap">{unitLabel}</span>
-          <ColorSwatchInput
-            color={highColor}
-            label={`${metricLabel} high end color`}
-            onChange={(high) => onEndsChange({ ...scale.ends, high })}
-          />
-        </span>
       </div>
     </div>
   </div>

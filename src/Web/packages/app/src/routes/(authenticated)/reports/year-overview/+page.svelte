@@ -200,8 +200,14 @@
     yearOverviewColors.current = next;
   }
 
+  /**
+   * A dose or carb ramp without a saved range spans the window (see `intensityScale`), so the
+   * first move of the window pins the range where it is and the colors stay put.
+   */
   function setScaleWindow(focusWindow: ColorFocusRange | null) {
     saveColorPreferences((next) => {
+      if (selectedMetric !== "avgGlucose" && !next[scaleKeys.range])
+        next[scaleKeys.range] = [...scale.domain];
       if (focusWindow) next[scaleKeys.band] = [...focusWindow];
       else delete next[scaleKeys.band];
     });

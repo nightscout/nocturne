@@ -84,9 +84,10 @@ export function glucoseScale(
 }
 
 /**
- * A metric with no fixed meaning per value spans its ramp across zero through the largest value
- * seen, or across a saved color range. The axis reaches past a saved window or range that is
- * smaller.
+ * A metric with no fixed meaning per value spans its ramp across a saved color range. Without one
+ * it spans the window, as before the range existed, so a saved window keeps its colors; the window
+ * defaults to zero through the largest value seen. The axis reaches past a saved window or range
+ * that is smaller.
  */
 export function intensityScale(
   cssVar: string,
@@ -105,7 +106,7 @@ export function intensityScale(
       : 1;
   const automatic: ColorFocusRange = [limits[0], max];
   const window = resolveColorFocusRange(savedWindow, limits) ?? automatic;
-  const domain = resolveColorFocusRange(savedRange, limits) ?? automatic;
+  const domain = resolveColorFocusRange(savedRange, limits) ?? window;
   // Checked against the limits, not the range: a boundary the range no longer reaches is
   // kept, and only the ramp ignores it.
   const boundaries = resolveColorBoundaries(savedBoundaries, limits) ?? [];
@@ -342,8 +343,38 @@ export function addColorBoundary(
   }
   const value = snap((edges[gap] + edges[gap + 1]) / 2);
   const position = rampPosition(value, domain, boundaries);
-  const candidate = [...boundaries, { value, position }].sort((a, b) => a.value - b.value);
-  return resolveColorBoundaries(candidate, domain);
+  if (boundaries.some((b) => b.value === value)) return null;
+  const candidate = fitOutsideDomain(
+    [...boundaries, { value, position }].sort((a, b) => a.value - b.value),
+    domain
+  );
+  // Checked against the axis, not the domain: boundaries the domain no longer reaches are kept.
+  return resolveColorBoundaries(candidate, [scale.axis[0], Infinity]);
+}
+
+/**
+ * Boundaries outside `domain` keep the positions they had in an earlier, wider domain, and the
+ * ramp ignores them. Where those positions no longer increase into the boundaries inside it, they
+ * are spread evenly beside them instead, keeping their order and their colors.
+ */
+function fitOutsideDomain(
+  boundaries: readonly ColorBoundary[],
+  domain: ColorFocusRange
+): ColorBoundary[] {
+  const below = boundaries.filter((b) => b.value <= domain[0]);
+  const inside = boundaries.filter((b) => b.value > domain[0] && b.value < domain[1]);
+  const above = boundaries.filter((b) => b.value >= domain[1]);
+  const floor = inside[0]?.position ?? 1;
+  const ceiling = inside.at(-1)?.position ?? 0;
+  const spread = (group: readonly ColorBoundary[], from: number, to: number) =>
+    group.map((b, i) => ({ ...b, position: from + ((i + 1) / (group.length + 1)) * (to - from) }));
+  const increasing = (group: readonly ColorBoundary[]) =>
+    group.every((b, i) => i === 0 || b.position > group[i - 1].position);
+  return [
+    ...(increasing(below) && (below.at(-1)?.position ?? 0) < floor ? below : spread(below, 0, floor)),
+    ...inside,
+    ...(increasing(above) && (above[0]?.position ?? 1) > ceiling ? above : spread(above, ceiling, 1)),
+  ];
 }
 
 export function insertSliderSteps(base: readonly number[], extra: readonly number[]): number[] {
