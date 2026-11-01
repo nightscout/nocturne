@@ -37,7 +37,7 @@ public class PatientDeviceLocalDateTests
         _outgoing = Cgm(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 10));
         _incoming = Cgm(new DateOnly(2026, 6, 11), null);
         _patientDevices
-            .Setup(r => r.GetByDeviceIdAsync(_deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(_deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync([_outgoing, _incoming]);
         _patientDevices
             .Setup(r => r.GetByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -108,7 +108,7 @@ public class PatientDeviceLocalDateTests
         var beforeTheTrip = Cgm(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 10));
         var afterTheTrip = Cgm(new DateOnly(2026, 5, 11), null);
         _patientDevices
-            .Setup(r => r.GetByDeviceIdAsync(_deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(_deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync([beforeTheTrip, afterTheTrip]);
         _patientDevices
             .Setup(r => r.GetByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))

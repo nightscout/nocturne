@@ -98,7 +98,7 @@ public class ModelConventionTests
                 && i.GetFilter() == "deleted_at IS NULL");
 
     /// <summary>
-    /// GetLatestAsync and GetLatestBeforeAsync pin no data source, so the watermark index above
+    /// GetLatestAsync and the pump GetTimelineAsync pin no data source, so the watermark index above
     /// cannot serve them.
     /// </summary>
     [Fact]

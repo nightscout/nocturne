@@ -67,18 +67,6 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns spans of <paramref name="category"/> starting at or after <paramref name="from"/>,
-    /// oldest first. Unlike <see cref="GetStateSpansAsync"/>, excludes open spans that started earlier.
-    /// </summary>
-    /// <param name="source">Matches every source when null.</param>
-    Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
-        StateSpanCategory category,
-        string? source,
-        DateTime from,
-        int count,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Counts state spans matching the specified filters.
     /// </summary>
     /// <param name="category">Optional <see cref="StateSpanCategory"/> filter.</param>
@@ -112,11 +100,35 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Bulk upserts multiple state spans, typically used by connector imports.
+    /// Upserts <paramref name="stateSpans"/> by original id with one save, leaving the rows
+    /// <see cref="UpsertStateSpanAsync"/> per span in input order would.
     /// </summary>
-    /// <returns>The number of records upserted.</returns>
-    Task<int> BulkUpsertAsync(
+    /// <returns>Per input span, what the upsert did with it.</returns>
+    Task<IReadOnlyList<StateSpanUpsert>> BulkUpsertAsync(
         IEnumerable<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes each of <paramref name="stateSpans"/> onto the live row carrying its id, with one save.
+    /// </summary>
+    /// <remarks>A span's id is its original id when it has one, as <see cref="UpdateStateSpanAsync"/> matches it.</remarks>
+    /// <returns>Per input span, the row it updated, or <c>null</c> where no live row carries its id.</returns>
+    Task<IReadOnlyList<StateSpan?>> UpdateStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The spans of <paramref name="category"/> still open or overlapping <paramref name="from"/>
+    /// through <paramref name="through"/>, and the first <paramref name="following"/> starting after
+    /// <paramref name="through"/> from each of <paramref name="followingSources"/>, in one query. A null
+    /// or empty source matches every source.
+    /// </summary>
+    Task<IReadOnlyList<StateSpan>> GetStateSpansAroundAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime through,
+        IReadOnlyCollection<string?> followingSources,
+        int following,
         CancellationToken cancellationToken = default);
 
     /// <param name="stateSpan">The updated <see cref="StateSpan"/> data.</param>
@@ -295,3 +307,10 @@ public interface IStateSpanRepository
         string id,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>What an upsert did with one state span.</summary>
+/// <param name="Span">The row the span wrote, or the soft-deleted row that blocked it.</param>
+/// <param name="Outcome">
+/// <see langword="null"/> when a row the user deleted holds the span's original id, so nothing was written.
+/// </param>
+public sealed record StateSpanUpsert(StateSpan Span, V4.Repositories.UpsertOutcome? Outcome);

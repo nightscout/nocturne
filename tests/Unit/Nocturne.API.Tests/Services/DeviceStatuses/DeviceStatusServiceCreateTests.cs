@@ -33,9 +33,7 @@ public class DeviceStatusServiceCreateTests
 
     public DeviceStatusServiceCreateTests()
     {
-        _decomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => Wrote());
+        SetupDecomposed();
         _uploaders
             .Setup(r => r.GetByLegacyIdAsync(Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UploaderSnapshot { Id = Guid.CreateVersion7(), LegacyId = Id, Timestamp = At, Battery = 64 });
@@ -68,16 +66,15 @@ public class DeviceStatusServiceCreateTests
         served.Uploader!.Battery.Should().Be(64);
         served.DataSource.Should().BeNull();
         VerifyAnnounced(served);
-        _decomposer.Verify(d => d.DecomposeAsync(It.IsAny<DeviceStatus>(), null, WriteOrigin.Live, It.IsAny<CancellationToken>()));
+        _decomposer.Verify(d => d.DecomposeBatchAsync(
+            It.Is<IReadOnlyList<DeviceStatus>>(l => l.Count == 1), null, WriteOrigin.Live, It.IsAny<CancellationToken>(), It.IsAny<DeviceStatusDecomposition?>()), Times.Once);
     }
 
     /// <summary>A status the user deleted writes nothing, so nothing is announced for it.</summary>
     [Fact]
     public async Task AStatusThatWroteNothingIsNotAnnounced()
     {
-        _decomposer
-            .Setup(d => d.DecomposeAsync(It.Is<DeviceStatus>(s => s.Id == OtherId), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
+        SetupDecomposed([true, false], skippedDeleted: 1);
 
         var created = await _service.CreateDeviceStatusesAsync([Posted(Id), Posted(OtherId)]);
 
@@ -86,18 +83,32 @@ public class DeviceStatusServiceCreateTests
         VerifyAnnounced(created[0]);
     }
 
+    /// <summary>A re-send whose every record is already stored as it decomposes is served, and not announced.</summary>
     [Fact]
-    public async Task ARequestCancelledMidBatchStillAnnouncesWhatItWrote()
+    public async Task AnUnchangedResendIsServedButNotAnnounced()
+    {
+        SetupDecomposed([false]);
+
+        var created = await _service.CreateDeviceStatusesAsync([Posted(Id)]);
+
+        created.Should().ContainSingle().Which.Uploader!.Battery.Should().Be(64);
+        _sideEffects.VerifyNoOtherCalls();
+        _events.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// A batch that fails after its snapshots committed announces the statuses those writes created or
+    /// updated, and not a status it found already stored.
+    /// </summary>
+    [Fact]
+    public async Task ARequestCancelledMidBatchAnnouncesWhatItsCommittedWritesWrote()
     {
         using var request = new CancellationTokenSource();
-        _decomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Returns((DeviceStatus status, string? _, WriteOrigin _, CancellationToken ct) =>
-            {
-                ct.ThrowIfCancellationRequested();
-                request.Cancel();
-                return Task.FromResult(Wrote());
-            });
+        request.Cancel();
+        _uploaders
+            .Setup(r => r.GetByLegacyIdAsync(OtherId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UploaderSnapshot { Id = Guid.CreateVersion7(), LegacyId = OtherId, Timestamp = At, Battery = 30 });
+        SetupDecomposed([true, false], thenThrow: new OperationCanceledException(request.Token));
 
         var create = () => _service.CreateDeviceStatusesAsync([Posted(Id), Posted(OtherId)], cancellationToken: request.Token);
 
@@ -112,12 +123,28 @@ public class DeviceStatusServiceCreateTests
             It.Is<CancellationToken>(t => !t.IsCancellationRequested)), Times.Once);
     }
 
+    /// <summary>A batch that fails before any write commits announces nothing, though its statuses read back.</summary>
+    [Fact]
+    public async Task ABatchThatFailsBeforeItsWritesAnnouncesNothing()
+    {
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(), It.IsAny<DeviceStatusDecomposition?>()))
+            .ThrowsAsync(new TimeoutException("device read"));
+
+        var create = () => _service.CreateDeviceStatusesAsync([Posted(Id)]);
+
+        await create.Should().ThrowAsync<TimeoutException>();
+        _sideEffects.VerifyNoOtherCalls();
+        _events.VerifyNoOtherCalls();
+    }
+
     [Fact]
     public async Task ABackfillIsWrittenWithoutAnAnnouncement()
     {
         await _service.CreateDeviceStatusesAsync([Posted(Id)], origin: WriteOrigin.Backfill);
 
-        _decomposer.Verify(d => d.DecomposeAsync(It.IsAny<DeviceStatus>(), null, WriteOrigin.Backfill, It.IsAny<CancellationToken>()));
+        _decomposer.Verify(d => d.DecomposeBatchAsync(
+            It.IsAny<IReadOnlyList<DeviceStatus>>(), null, WriteOrigin.Backfill, It.IsAny<CancellationToken>(), It.IsAny<DeviceStatusDecomposition?>()));
         VerifyNothingAnnounced();
     }
 
@@ -129,16 +156,14 @@ public class DeviceStatusServiceCreateTests
         var served = created.Should().ContainSingle().Subject;
         served.DataSource.Should().Be(DataSources.NightscoutConnector);
         VerifyAnnounced(served);
-        _decomposer.Verify(d => d.DecomposeAsync(
-            It.IsAny<DeviceStatus>(), DataSources.NightscoutConnector, WriteOrigin.Live, It.IsAny<CancellationToken>()));
+        _decomposer.Verify(d => d.DecomposeBatchAsync(
+            It.IsAny<IReadOnlyList<DeviceStatus>>(), DataSources.NightscoutConnector, WriteOrigin.Live, It.IsAny<CancellationToken>(), It.IsAny<DeviceStatusDecomposition?>()));
     }
 
     [Fact]
     public async Task AConnectorsStatusThatWroteNothingIsNotAnnounced()
     {
-        _decomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
+        SetupDecomposed([false, false], skippedDeleted: 2);
 
         var created = await _service.CreateDeviceStatusesAsync([Posted(Id), Posted(OtherId)], DataSources.NightscoutConnector);
 
@@ -173,7 +198,31 @@ public class DeviceStatusServiceCreateTests
         _uploaders.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private static DecompositionResult Wrote() => new() { CreatedRecords = { new UploaderSnapshot() } };
+    /// <summary>
+    /// Has the decomposer fill the service's decomposition: each status a group of its own, with an
+    /// uploader snapshot created where <paramref name="wrote"/> says so and found unchanged where not,
+    /// every status writing when it is null. A <paramref name="thenThrow"/> is thrown once filled.
+    /// </summary>
+    private void SetupDecomposed(IReadOnlyList<bool>? wrote = null, int skippedDeleted = 0, Exception? thenThrow = null) =>
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(), It.IsAny<DeviceStatusDecomposition?>()))
+            .Returns((IReadOnlyList<DeviceStatus> statuses, string? _, WriteOrigin _, CancellationToken _, DeviceStatusDecomposition? into) =>
+            {
+                var result = into ?? new DeviceStatusDecomposition();
+                var groups = statuses.Select(_ => Guid.CreateVersion7()).ToList();
+                result.Begin(groups);
+                for (var i = 0; i < groups.Count; i++)
+                {
+                    var snapshot = new UploaderSnapshot { CorrelationId = groups[i] };
+                    if (wrote?[i] ?? true)
+                        result.CreatedRecords.Add(snapshot);
+                    else
+                        result.UnchangedRecords.Add(snapshot);
+                }
+
+                result.SkippedDeleted = skippedDeleted;
+                return thenThrow is null ? Task.FromResult(result) : Task.FromException<DeviceStatusDecomposition>(thenThrow);
+            });
 
     private static DeviceStatus Posted(string id) =>
         new() { Id = id, Device = "loop://iphone", CreatedAt = "2026-10-01T08:00:00.000Z" };

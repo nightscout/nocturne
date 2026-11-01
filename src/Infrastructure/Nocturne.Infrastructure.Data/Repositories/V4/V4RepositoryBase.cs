@@ -992,26 +992,36 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             ct: ct);
 
         var (upserts, inserted) = written;
-        if (inserted.Count > 0 || upserts.UpdatedInPlace.Count > 0)
-        {
-            await DedupCommittedAsync(ctx, inserted, origin, ct);
-            await RaiseBroadcastAsync(
-                inserted.Select(ToDomain).ToList(),
-                upserts.MateriallyChanged.Select(ToDomain).ToList(),
-                [],
-                origin, ct,
-                vacated: upserts.Vacated);
-        }
-
-        Logger.LogSkippedDeleted(typeof(TModel).Name, upserts.SkippedDeleted);
-        Logger.LogUnchanged(typeof(TModel).Name, upserts.Unchanged.Count);
         var updated = upserts.UpdatedInPlace.Select(ToDomain).ToList();
         var unchanged = upserts.Unchanged.Select(ToDomain).ToList();
-        return new BulkWrite<TModel>([.. updated, .. unchanged, .. inserted.Select(ToDomain)], upserts.SkippedDeleted)
+        var committed = new BulkWrite<TModel>([.. updated, .. unchanged, .. inserted.Select(ToDomain)], upserts.SkippedDeleted)
         {
             Updated = updated,
             Unchanged = unchanged,
         };
+
+        try
+        {
+            if (inserted.Count > 0 || upserts.UpdatedInPlace.Count > 0)
+            {
+                await DedupCommittedAsync(ctx, inserted, origin, ct);
+                await RaiseBroadcastAsync(
+                    inserted.Select(ToDomain).ToList(),
+                    upserts.MateriallyChanged.Select(ToDomain).ToList(),
+                    [],
+                    origin, ct,
+                    vacated: upserts.Vacated);
+            }
+        }
+        catch (Exception ex)
+        {
+            CommittedWrite.Attach(ex, committed);
+            throw;
+        }
+
+        Logger.LogSkippedDeleted(typeof(TModel).Name, upserts.SkippedDeleted);
+        Logger.LogUnchanged(typeof(TModel).Name, upserts.Unchanged.Count);
+        return committed;
     }
 
     /// <summary>
@@ -1021,7 +1031,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// lose them.
     /// </summary>
     /// <remarks>
-    /// A stored <see cref="IDeviceAttributed.PatientDeviceId"/> is carried onto a record that
+    /// A stored <see cref="IPatientDeviceLinked.PatientDeviceId"/> is carried onto a record that
     /// resolved none, so a re-send whose attribution has since become ambiguous cannot unattribute
     /// the row; the single path does the same through <c>DecomposerBase.StampAttributionAsync</c>.
     /// </remarks>
@@ -1062,8 +1072,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 continue;
             }
 
-            if (record is IDeviceAttributed { PatientDeviceId: null } attributed
-                && ToDomain(entity) is IDeviceAttributed storedAttribution)
+            if (record is IPatientDeviceLinked { PatientDeviceId: null } attributed
+                && ToDomain(entity) is IPatientDeviceLinked storedAttribution)
             {
                 attributed.PatientDeviceId = storedAttribution.PatientDeviceId;
             }

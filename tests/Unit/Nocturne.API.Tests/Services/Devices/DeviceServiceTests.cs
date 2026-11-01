@@ -41,7 +41,7 @@ public class DeviceServiceTests
         // Assert
         result.Should().BeNull();
         _mockRepository.Verify(
-            r => r.FindByCategoryTypeAndSerialAsync(It.IsAny<DeviceCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            r => r.FindByIdentitiesAsync(It.IsAny<IReadOnlyCollection<(DeviceCategory, string, string)>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -55,7 +55,7 @@ public class DeviceServiceTests
         // Assert
         result.Should().BeNull();
         _mockRepository.Verify(
-            r => r.FindByCategoryTypeAndSerialAsync(It.IsAny<DeviceCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            r => r.FindByIdentitiesAsync(It.IsAny<IReadOnlyCollection<(DeviceCategory, string, string)>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -69,7 +69,7 @@ public class DeviceServiceTests
         // Assert
         result.Should().BeNull();
         _mockRepository.Verify(
-            r => r.FindByCategoryTypeAndSerialAsync(It.IsAny<DeviceCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            r => r.FindByIdentitiesAsync(It.IsAny<IReadOnlyCollection<(DeviceCategory, string, string)>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -84,8 +84,8 @@ public class DeviceServiceTests
         var mills = 1700000000000L;
 
         _mockRepository
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Device?)null);
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(category, type, serial), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found((Device?)null));
 
         _mockRepository
             .Setup(r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -130,8 +130,8 @@ public class DeviceServiceTests
         };
 
         _mockRepository
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existingDevice);
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(category, type, serial), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(existingDevice));
 
         // Act
         var result = await _service.ResolveAsync(category, type, serial, mills);
@@ -166,8 +166,8 @@ public class DeviceServiceTests
         };
 
         _mockRepository
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existingDevice);
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(category, type, serial), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(existingDevice));
 
         // Act
         var result = await _service.ResolveAsync(category, type, serial, newerMills);
@@ -205,8 +205,8 @@ public class DeviceServiceTests
         };
 
         _mockRepository
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existingDevice);
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(category, type, serial), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(existingDevice));
 
         // Act
         var result = await _service.ResolveAsync(category, type, serial, olderMills);
@@ -240,8 +240,8 @@ public class DeviceServiceTests
         };
 
         _mockRepository
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existingDevice);
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(category, type, serial), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(existingDevice));
 
         // Act — call twice with same category/type/serial
         var result1 = await _service.ResolveAsync(category, type, serial, mills);
@@ -251,7 +251,7 @@ public class DeviceServiceTests
         result1.Should().Be(existingId);
         result2.Should().Be(existingId);
         _mockRepository.Verify(
-            r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()),
+            r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(category, type, serial), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -339,8 +339,8 @@ public class DeviceServiceTests
     private void SetupDeviceCreation()
     {
         _mockRepository
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Device?)null);
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found((Device?)null));
         _mockRepository
             .Setup(r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Device device, WriteOrigin _, CancellationToken _) => device);
@@ -493,8 +493,8 @@ public class DeviceServiceTests
     private void SetupExistingDevice(Guid id, long lastSeenMills, long firstSeenMills = 0L)
     {
         _mockRepository
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Device
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(new Device
             {
                 Id = id,
                 Category = DeviceCategory.InsulinPump,
@@ -502,7 +502,7 @@ public class DeviceServiceTests
                 Serial = "ABC123",
                 FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(firstSeenMills).UtcDateTime,
                 LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(lastSeenMills).UtcDateTime
-            });
+            }));
     }
 
     private void VerifyWidenings(Guid id, params long[] expectedMills)
@@ -519,7 +519,7 @@ public class DeviceServiceTests
         var mills = DateTimeOffset.Parse("2026-03-15T12:00:00Z").ToUnixTimeMilliseconds();
 
         _mockPatientDeviceRepository
-            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<PatientDevice>
             {
                 new()
@@ -551,7 +551,7 @@ public class DeviceServiceTests
         var mills = DateTimeOffset.Parse("2026-03-15T12:00:00Z").ToUnixTimeMilliseconds();
 
         _mockPatientDeviceRepository
-            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<PatientDevice>());
 
         var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
@@ -567,7 +567,7 @@ public class DeviceServiceTests
         var mills = DateTimeOffset.Parse("2025-06-15T12:00:00Z").ToUnixTimeMilliseconds();
 
         _mockPatientDeviceRepository
-            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<PatientDevice>
             {
                 new()
@@ -592,7 +592,7 @@ public class DeviceServiceTests
         var mills = DateTimeOffset.Parse("2030-01-01T12:00:00Z").ToUnixTimeMilliseconds();
 
         _mockPatientDeviceRepository
-            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<PatientDevice>
             {
                 new()
@@ -617,7 +617,7 @@ public class DeviceServiceTests
         var mills = DateTimeOffset.Parse("2026-03-15T12:00:00Z").ToUnixTimeMilliseconds();
 
         _mockPatientDeviceRepository
-            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<PatientDevice>
             {
                 new()
@@ -635,7 +635,7 @@ public class DeviceServiceTests
         result1.Should().Be(patientDeviceId);
         result2.Should().Be(patientDeviceId);
         _mockPatientDeviceRepository.Verify(
-            r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()),
+            r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(deviceId), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }
