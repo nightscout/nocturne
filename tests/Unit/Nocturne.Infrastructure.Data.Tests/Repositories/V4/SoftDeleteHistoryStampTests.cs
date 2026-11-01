@@ -274,12 +274,18 @@ public class SoftDeleteHistoryStampTests : IDisposable
         var pending = Glucose("source-c", 150);
         _context.SensorGlucose.Add(pending);
 
-        await DuplicateGroupPrimaries.RepointAwayFromAsync(
-            _context, RecordType.SensorGlucose, [primary.Id], Written, CancellationToken.None);
+        await using (var transaction = await _context.Database.BeginTransactionAsync())
+        {
+            await DuplicateGroupPrimaries.RepointAwayFromAsync(
+                _context, RecordType.SensorGlucose, [primary.Id], Written, CancellationToken.None);
+            await transaction.CommitAsync();
+        }
 
         _context.Entry(pending).State.Should().Be(EntityState.Added);
         await using var verify = _db.CreateContext();
         (await verify.LinkedRecords.SingleAsync(l => l.IsPrimary)).RecordId.Should().Be(copy.Id);
+        (await verify.SensorGlucose.IgnoreQueryFilters().Where(g => g.IsDuplicate).Select(g => g.Id).ToListAsync())
+            .Should().Equal(primary.Id);
     }
 
     [Fact]

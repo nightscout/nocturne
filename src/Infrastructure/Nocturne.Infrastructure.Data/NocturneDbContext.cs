@@ -2476,6 +2476,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.IsPrimary).HasDefaultValue(false);
         });
 
+        foreach (var flagged in modelBuilder.Model.GetEntityTypes()
+                     .Where(e => typeof(IDuplicateFlagged).IsAssignableFrom(e.ClrType)).ToList())
+        {
+            var flag = modelBuilder.Entity(flagged.ClrType).Property(nameof(IDuplicateFlagged.IsDuplicate));
+            flag.HasDefaultValue(false).ValueGeneratedNever();
+            flag.Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+            flag.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+        }
+
         // One row per tenant, keyed on the tenant id rather than an Id of its own.
         modelBuilder.Entity<DedupReconcileStateEntity>(entity =>
         {
