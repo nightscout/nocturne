@@ -384,6 +384,16 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         Validator.Validate(spec).Errors.Should().BeEmpty($"{name} drawn as {op.Marks[0].Name}");
     }
 
+    [Fact]
+    public void Each_op_names_the_axis_its_layer_lies_along_for_each_axis_of_its_sources()
+    {
+        var ops = Catalogue().Ops.ToDictionary(o => o.Name);
+
+        ops["scatter"].OutputXKinds.Should().OnlyContain(k => k == "value");
+        ops["lag_correlation"].OutputXKinds.Should().Equal("lag");
+        ops["rolling_mean"].OutputXKinds.Should().Equal(ops["rolling_mean"].SourceXKinds);
+    }
+
     public static TheoryData<string> OpNames => [.. ReportDerivedOps.All.Select(o => o.Name)];
 
     [Fact]
@@ -403,6 +413,7 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         var datasets = Catalogue().Datasets;
 
         datasets.Single(d => d.Name == "event_response").SeriesField.Should().Be("cohort");
+        datasets.Single(d => d.Name == "event_response").SeriesParameter.Should().Be("cohorts");
         datasets.Where(d => d.Name != "event_response").Should().OnlyContain(d => d.SeriesField == null);
     }
 }

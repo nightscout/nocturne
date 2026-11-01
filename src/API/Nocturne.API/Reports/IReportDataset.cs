@@ -185,6 +185,9 @@ internal interface IReportDataset
     /// <summary>The row field holding a row's group number, for a dataset whose rows come in groups.</summary>
     string? SeriesField => null;
 
+    /// <summary>The parameter that lists the groups, one item each, for a dataset with <see cref="SeriesField"/>.</summary>
+    string? SeriesParameter => null;
+
     /// <summary>The rows of group <paramref name="series"/>, from 1, that a derived source reads.</summary>
     IEnumerable<IReadOnlyDictionary<string, object?>> SeriesRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, int series) => rows;
 

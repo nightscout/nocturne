@@ -64,6 +64,7 @@ public sealed record CustomReportMarkSlot(
 /// <param name="XRule">The axis the series lies along, in words.</param>
 /// <param name="UnitRule">The series' unit, in words.</param>
 /// <param name="SourceXKinds">The axes a source may lie along.</param>
+/// <param name="OutputXKinds">The axis a layer of it lies along for a source along each of <paramref name="SourceXKinds"/>, in the same order.</param>
 /// <param name="SourceFieldKinds">The kinds of field a source may use; the field must also have an aggregate.</param>
 /// <param name="Marks">The marks that may draw it, the default first, each with its bindings.</param>
 public sealed record CustomReportOp(
@@ -75,6 +76,7 @@ public sealed record CustomReportOp(
     [property: Required] string XRule,
     [property: Required] string UnitRule,
     [property: Required] IReadOnlyList<string> SourceXKinds,
+    [property: Required] IReadOnlyList<string> OutputXKinds,
     [property: Required] IReadOnlyList<string> SourceFieldKinds,
     [property: Required] IReadOnlyList<CustomReportOpMark> Marks);
 
@@ -100,6 +102,7 @@ public sealed record CustomReportOpMark([property: Required] string Name, [prope
 /// The field naming the group a row is in, for a dataset whose rows come in groups (the event groups of
 /// event_response); a derived source of it names the group it reads. Null for a dataset in one group.
 /// </param>
+/// <param name="SeriesParameter">The parameter that lists the groups, one item each, for a dataset with <paramref name="SeriesField"/>.</param>
 public sealed record CustomReportDataset(
     [property: Required] string Name,
     [property: Required] string Label,
@@ -115,7 +118,8 @@ public sealed record CustomReportDataset(
     [property: Required] double MaxRangeHours,
     [property: Required] string RangeLimit,
     [property: Required] int MaxReadsPerReport,
-    string? SeriesField);
+    string? SeriesField,
+    string? SeriesParameter);
 
 /// <summary>A field of a dataset's rows.</summary>
 /// <param name="Kind">time, number, category, percent, offset (minutes from an event), time_of_day or day.</param>
@@ -265,6 +269,7 @@ internal sealed class ReportCatalogue(
             op.XRule,
             op.UnitRule,
             [.. op.SourceXKinds.Select(ReportWire.Name)],
+            [.. op.SourceXKinds.Select(k => ReportWire.Name(op.OutputXKind(k)))],
             ["number", "percent"],
             [.. op.Marks(spec).Select(m => new CustomReportOpMark(ReportWire.Name(m), Wire(op.DefaultBindings(m, spec))))]);
     }
@@ -295,7 +300,8 @@ internal sealed class ReportCatalogue(
             dataset.MaxRange.TotalHours,
             $"This data covers at most {ReportSpecValidator.Describe(dataset.MaxRange)}.",
             dataset.MaxPanelsPerReport,
-            dataset.SeriesField);
+            dataset.SeriesField,
+            dataset.SeriesParameter);
     }
 
     /// <summary>The bindings a new layer of <paramref name="dataset"/> drawn as <paramref name="mark"/> starts with, normalised by the validator.</summary>

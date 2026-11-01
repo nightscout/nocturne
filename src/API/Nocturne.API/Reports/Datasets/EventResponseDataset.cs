@@ -102,6 +102,8 @@ internal sealed class EventResponseDataset : IReportDataset
 
     public string? SeriesField => "cohort";
 
+    public string? SeriesParameter => "cohorts";
+
     public IEnumerable<IReadOnlyDictionary<string, object?>> SeriesRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, int series) =>
         rows.Where(r => Equals(r.GetValueOrDefault("cohort"), series) && Equals(r.GetValueOrDefault("range"), "primary"));
 
