@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Nocturne.API.Reports;
 using Nocturne.API.Reports.Derived;
@@ -152,6 +153,27 @@ public class ReportDerivedOpsTests
             "the interval is narrowest near the mean of x");
     }
 
+    [Theory]
+    [InlineData(0.1)]
+    [InlineData(3.9)]
+    public void A_constant_that_rounding_leaves_a_little_spread_has_no_line_or_correlation(double constant)
+    {
+        var flat = Enumerable.Repeat(constant, 50).Select((v, i) => (v * (1 + i) / (1 + i), 100.0 + i)).ToList();
+
+        DerivedMath.LeastSquares(flat).Should().BeNull();
+        DerivedMath.Pearson(flat).Should().BeNull();
+        DerivedMath.Pearson([.. flat.Select(p => (p.Item2, p.Item1))]).Should().BeNull();
+    }
+
+    [Fact]
+    public void A_rolling_window_on_a_time_of_day_axis_runs_back_past_midnight()
+    {
+        double?[] day = [10, 20, 30, 40];
+
+        DerivedMath.Rolling(day, 2, wrap: true).Mean.Should().Equal(25.0, 15.0, 25.0, 35.0);
+        DerivedMath.Rolling(day, 2).Mean.Should().Equal(10.0, 15.0, 25.0, 35.0);
+    }
+
     [Fact]
     public void A_t_quantile_is_close_to_the_tables()
     {
@@ -193,5 +215,43 @@ public class ReportDerivedOpsTests
         texts.Should().NotBeEmpty();
         foreach (var text in texts)
             Directions.Where(w => text.Contains(w, StringComparison.OrdinalIgnoreCase)).Should().BeEmpty(text);
+    }
+
+    /// <summary>
+    /// The cells of period_comparison's direction column: which way a figure moved against the clinical
+    /// consensus for it, a value in a table cell, never a sentence.
+    /// </summary>
+    private static readonly HashSet<string> DirectionCells =
+    [
+        "better",
+        "worse",
+        "better or worse: whether B's value is better than A's for this figure; empty where neither a rise nor a fall is better, or nothing changed.",
+    ];
+
+    /// <summary>
+    /// Every string the datasets and the runner write, as source text: a sentence, fact or legend line any of
+    /// them builds reaches a panel's headline through one of these, whichever branch a run takes.
+    /// </summary>
+    [Fact]
+    public void No_dataset_sentence_or_fact_template_gives_a_direction()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "src", "API", "Nocturne.API", "Reports")))
+            root = root.Parent;
+        root.Should().NotBeNull("the tests run inside the repository");
+        var reports = Path.Combine(root!.FullName, "src", "API", "Nocturne.API", "Reports");
+        var files = Directory.GetFiles(Path.Combine(reports, "Datasets"), "*.cs")
+            .Concat(new[] { "GlucoseSummary.cs", "ReportFacts.cs", "ReportSpecRunner.cs" }.Select(f => Path.Combine(reports, f)))
+            .ToList();
+
+        var literals = files.SelectMany(file => File.ReadLines(file)
+                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+                .SelectMany(line => Regex.Matches(line, @"""(?:[^""\\]|\\.)*""").Select(m => m.Value.Trim('"')))
+                .Select(text => (File: Path.GetFileName(file), Text: text)))
+            .ToList();
+
+        literals.Should().HaveCountGreaterThan(500);
+        foreach (var (file, text) in literals.Where(l => !(l.File == "PeriodComparisonDataset.cs" && DirectionCells.Contains(l.Text))))
+            Directions.Where(w => text.Contains(w, StringComparison.OrdinalIgnoreCase)).Should().BeEmpty($"{file}: {text}");
     }
 }

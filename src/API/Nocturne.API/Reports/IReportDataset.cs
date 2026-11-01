@@ -86,6 +86,10 @@ internal enum ReportAggregate
 /// sends it with the field, so the colour is the data's, never the view's.
 /// </param>
 /// <param name="Aggregate">How the field folds onto a panel's grid; null for a field that cannot be folded.</param>
+/// <param name="Setting">
+/// A value of the profile's settings (a scheduled basal, a profile ISF, a target): drawn as it is, never a source of a
+/// derived layer, so no derived figure compares the data with the settings.
+/// </param>
 internal sealed record ReportField(
     string Name,
     string Label,
@@ -99,7 +103,8 @@ internal sealed record ReportField(
     bool Step = false,
     string? ColorField = null,
     bool Companion = false,
-    ReportAggregate? Aggregate = null)
+    ReportAggregate? Aggregate = null,
+    bool Setting = false)
 {
     public const string GlucoseUnit = "glucose";
 
@@ -174,6 +179,15 @@ internal interface IReportDataset
     /// <summary>The longest range one read of this dataset may cover.</summary>
     TimeSpan MaxRange { get; }
 
+    /// <summary>The groups the rows of a query come in (event groups); a derived source reads one.</summary>
+    int SeriesCount(ReportDatasetParameters parameters) => 1;
+
+    /// <summary>The row field holding a row's group number, for a dataset whose rows come in groups.</summary>
+    string? SeriesField => null;
+
+    /// <summary>The rows of group <paramref name="series"/>, from 1, that a derived source reads.</summary>
+    IEnumerable<IReadOnlyDictionary<string, object?>> SeriesRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, int series) => rows;
+
     /// <summary>The most reads of this dataset one report may make, for a dataset whose read costs more than one.</summary>
     int MaxPanelsPerReport => ReportSpec.MaxReads;
 
@@ -239,6 +253,15 @@ internal sealed record ReportDatasetOutput
     /// <summary>The one sentence the view prints under the facts; the summary carries every detail.</summary>
     public string? Sentence { get; init; }
 
+    /// <summary>
+    /// The fields <see cref="Sentence"/> is about: a chart layer prints it only when it draws one of them.
+    /// Null for a sentence about the whole dataset; empty for one about a table's rows, which no chart prints.
+    /// </summary>
+    public IReadOnlyList<string>? SentenceAbout { get; init; }
+
+    /// <summary>Sentences a chart layer prints in place of <see cref="Sentence"/> when it draws none of its fields, the first that fits.</summary>
+    public IReadOnlyList<ReportSentence> OtherSentences { get; init; } = [];
+
     /// <summary>The panel's range and how much it read, as one line: "2026-10-15 08:39 to 2026-10-29 08:39 UTC. 4025 readings."</summary>
     public string? Context { get; init; }
 
@@ -248,6 +271,9 @@ internal sealed record ReportDatasetOutput
     /// <summary>The query the panel's web report opens with, in place of the range's days; null for the range's days.</summary>
     public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
 }
+
+/// <summary>A sentence about <paramref name="About"/>, the fields a chart layer must draw one of to print it.</summary>
+internal sealed record ReportSentence(string Text, IReadOnlyList<string> About);
 
 /// <summary>One shaded span of a band layer: its words ("Glucose P25–P75") and its low and high edge fields.</summary>
 internal sealed record ReportBandSpan(string Label, string Low, string High)

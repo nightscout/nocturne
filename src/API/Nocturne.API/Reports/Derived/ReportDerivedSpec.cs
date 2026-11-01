@@ -62,6 +62,9 @@ internal sealed record ReportSourceSpec
     [Description("The field to use: a number field with an aggregate, or a derived series' output field.")]
     [JsonRequired]
     public string Field { get; init; } = string.Empty;
+
+    [Description("The group of a dataset that comes in groups (the event groups of event_response): its number, from 1. Required when it has more than one.")]
+    public int? Series { get; init; }
 }
 
 [Description("difference: source a minus source b, slot by slot. Both in one unit.")]

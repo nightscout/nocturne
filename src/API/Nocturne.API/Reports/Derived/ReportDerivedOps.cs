@@ -413,10 +413,14 @@ internal abstract class SingleOp : IReportDerivedOp
     public virtual IEnumerable<(string Field, string Message)> Validate(ReportDerivedSpec spec, ReportSourceInfo a, ReportSourceInfo? b) => [];
     public abstract ReportDerivedOutput Compute(ReportDerivedSpec spec, ReportDerivedInput input);
 
-    protected static IEnumerable<(string Field, string Message)> Minutes(int minutes)
+    protected static IEnumerable<(string Field, string Message)> Minutes(int minutes, ReportXKind kind)
     {
         if (minutes is < 15 or > 10080)
             yield return ("minutes", "Send 15 to 10080 minutes.");
+        else if (kind == ReportXKind.Day && minutes < 1440)
+            yield return ("minutes", "On a day axis the window is in whole days. Send 1440 minutes (one day) or more.");
+        else if (kind == ReportXKind.Day && minutes % 1440 != 0)
+            yield return ("minutes", $"On a day axis the window is in whole days. Send a multiple of 1440 minutes, such as {minutes / 1440 * 1440}.");
     }
 }
 
@@ -440,12 +444,12 @@ internal sealed class RollingMeanOp : SingleOp
         new() { X = ReportDerivedOps.SlotField, Y = ["value"] };
 
     public override IEnumerable<(string Field, string Message)> Validate(ReportDerivedSpec spec, ReportSourceInfo a, ReportSourceInfo? b) =>
-        Minutes(((RollingMeanSpec)spec).Minutes);
+        Minutes(((RollingMeanSpec)spec).Minutes, a.XKind);
 
     public override ReportDerivedOutput Compute(ReportDerivedSpec spec, ReportDerivedInput input)
     {
         var minutes = ((RollingMeanSpec)spec).Minutes;
-        var (mean, _) = DerivedMath.Rolling(input.A, ReportDerivedOps.Window(minutes, input.StepMinutes, input.XKind));
+        var (mean, _) = DerivedMath.Rolling(input.A, ReportDerivedOps.Window(minutes, input.StepMinutes, input.XKind), input.XKind == ReportXKind.TimeOfDay);
         var unit = input.SourceA.Field.Unit;
         var overall = DerivedMath.Mean(input.A);
         var sentence = overall is { } m
@@ -485,7 +489,7 @@ internal sealed class TrendOp : SingleOp
     }
 
     public override IReadOnlyList<ReportMark> Marks(ReportDerivedSpec spec) =>
-        ((TrendSpec)spec).Confidence ? [ReportMark.Band, ReportMark.Line] : [ReportMark.Line];
+        ((TrendSpec)spec).Confidence ? [ReportMark.Line, ReportMark.Band] : [ReportMark.Line];
 
     public override ReportLayerBindings DefaultBindings(ReportMark mark, ReportDerivedSpec spec) => mark == ReportMark.Band
         ? new ReportLayerBindings { X = ReportDerivedOps.SlotField, Y = ["value"], Edges = ["low", "high"] }
@@ -577,12 +581,12 @@ internal sealed class BandSdOp : SingleOp
         : new ReportLayerBindings { X = ReportDerivedOps.SlotField, Y = ["mean"] };
 
     public override IEnumerable<(string Field, string Message)> Validate(ReportDerivedSpec spec, ReportSourceInfo a, ReportSourceInfo? b) =>
-        Minutes(((BandSdSpec)spec).Minutes);
+        Minutes(((BandSdSpec)spec).Minutes, a.XKind);
 
     public override ReportDerivedOutput Compute(ReportDerivedSpec spec, ReportDerivedInput input)
     {
         var minutes = ((BandSdSpec)spec).Minutes;
-        var (mean, sd) = DerivedMath.Rolling(input.A, ReportDerivedOps.Window(minutes, input.StepMinutes, input.XKind));
+        var (mean, sd) = DerivedMath.Rolling(input.A, ReportDerivedOps.Window(minutes, input.StepMinutes, input.XKind), input.XKind == ReportXKind.TimeOfDay);
         var low = DerivedMath.Pairwise(mean, sd, (m, s) => m - s);
         var high = DerivedMath.Pairwise(mean, sd, (m, s) => m + s);
         var unit = input.SourceA.Field.Unit;

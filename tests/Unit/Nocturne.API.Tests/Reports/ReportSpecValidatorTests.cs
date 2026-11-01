@@ -235,7 +235,7 @@ public class ReportSpecValidatorTests
     public void A_derived_layers_sources_count_as_reads_and_share_with_a_visible_layer()
     {
         var spec = Layers(Layer(Glucose, "line") + "," +
-            $$"""{ "derived": { "op": "difference", "a": {{Source("glucose")}}, "b": {{Source("targetHigh")}} } }""");
+            $$"""{ "derived": { "op": "difference", "a": {{Source("glucose")}}, "b": {{Source("glucoseMgdl")}} } }""");
 
         Validate(spec).Errors.Should().BeEmpty();
     }
@@ -482,11 +482,11 @@ public class ReportSpecValidatorTests
     [Fact]
     public void A_source_may_be_derived_once_and_no_deeper()
     {
-        var difference = $$"""{ "op": "difference", "a": {{Source("glucose")}}, "b": {{Source("targetHigh")}} }""";
+        var difference = $$"""{ "op": "difference", "a": {{Source("glucose")}}, "b": {{Source("glucoseMgdl")}} }""";
         var trend = $$"""{ "derived": { "op": "trend", "confidence": true, "a": { "derived": {{difference}}, "field": "value" } } }""";
         var spec = Validate(Layers(trend));
         spec.Errors.Should().BeEmpty();
-        spec.Spec!.Panels[0].Tracks![0].Layers[0].Mark.Should().Be(ReportMark.Band);
+        spec.Spec!.Panels[0].Tracks![0].Layers[0].Mark.Should().Be(ReportMark.Line);
 
         var deep = $$"""{ "op": "rolling_mean", "a": { "derived": {{difference}}, "field": "value" } }""";
         var error = SingleError(Layers($$"""{ "derived": { "op": "trend", "a": { "derived": {{deep}}, "field": "value" } } }"""));
@@ -597,10 +597,83 @@ public class ReportSpecValidatorTests
         foreach (var op in ReportDerivedOps.All)
         {
             var b = op.SourceCount == 2 ? $", \"b\": {Source("glucose")}" : "";
-            var a = op.Name == "difference" ? Source("targetHigh") : Source("glucose");
+            var a = op.Name == "difference" ? Source("glucoseMgdl") : Source("glucose");
             var json = Layers($$"""{ "derived": { "op": "{{op.Name}}", "a": {{a}}{{b}} } }""", ", \"grid\": 15");
             Validate(json).Errors.Should().BeEmpty(op.Name);
         }
+    }
+
+    /// <summary>Every setting field of every dataset, as a source of every op, in each place a source goes.</summary>
+    public static TheoryData<string, string, string> SettingSources()
+    {
+        var data = new TheoryData<string, string, string>();
+        foreach (var dataset in Registry.All)
+            foreach (var field in dataset.Fields.Where(f => f.Setting))
+                foreach (var op in ReportDerivedOps.All)
+                {
+                    data.Add(op.Name, $"{dataset.Name}.{field.Name}", "a");
+                    if (op.SourceCount == 2)
+                        data.Add(op.Name, $"{dataset.Name}.{field.Name}", "b");
+                }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(SettingSources))]
+    public void No_op_takes_a_profile_setting_as_a_source(string op, string source, string at)
+    {
+        var (dataset, field) = (source.Split('.')[0], source.Split('.')[1]);
+        var setting = Source(field, $$"""{ "name": "{{dataset}}" }""");
+        var data = Source("glucose");
+        var sources = ReportDerivedOps.Find(op)!.SourceCount == 1 ? $"\"a\": {setting}"
+            : at == "a" ? $"\"a\": {setting}, \"b\": {data}" : $"\"a\": {data}, \"b\": {setting}";
+
+        var errors = Validate(Layers($$"""{ "derived": { "op": "{{op}}", {{sources}} } }""", ", \"grid\": 15")).Errors;
+
+        errors.Should().Contain(e => e.Path == $"panels[0].tracks[0].layers[0].derived.{at}.field"
+            && e.Message.Contains("a value of the profile's settings") && e.Message.Contains("never compared with the settings"));
+    }
+
+    private const string TwoCohorts = """{ "name": "event_response", "cohorts": [ { "anchor": "Meal" }, { "anchor": "CorrectionBolus" } ] }""";
+
+    [Fact]
+    public void A_source_of_data_in_groups_names_the_group_it_reads()
+    {
+        var missing = SingleError(Layers($$"""{ "derived": { "op": "rolling_mean", "a": {{Source("glucoseP50", TwoCohorts)}} } }"""));
+        missing.Path.Should().Be("panels[0].tracks[0].layers[0].derived.a.series");
+        missing.Message.Should().Contain("This data comes in 2 groups").And.Contain("1 to 2");
+
+        SingleError(Layers($$"""{ "derived": { "op": "rolling_mean", "a": { "dataset": {{TwoCohorts}}, "field": "glucoseP50", "series": 3 } } }"""))
+            .Path.Should().Be("panels[0].tracks[0].layers[0].derived.a.series");
+        SingleError(Layers($$"""{ "derived": { "op": "rolling_mean", "a": { "dataset": {{Glucose}}, "field": "glucose", "series": 1 } } }"""))
+            .Message.Should().Contain("no groups");
+
+        var spec = Validate(Layers($$"""{ "derived": { "op": "rolling_mean", "a": { "dataset": {{TwoCohorts}}, "field": "glucoseP50", "series": 2 } } }"""));
+        spec.Errors.Should().BeEmpty();
+        spec.Spec!.Panels[0].Tracks![0].Layers[0].Derived!.Sources[0].Series.Should().Be(2);
+    }
+
+    [Fact]
+    public void Every_reading_cannot_be_shown_when_two_sources_pair_inside_a_source()
+    {
+        var difference = $$"""{ "op": "difference", "a": {{Source("glucose")}}, "b": {{Source("glucoseMgdl")}} }""";
+
+        var error = SingleError(Layers($$"""{ "derived": { "op": "trend", "a": { "derived": {{difference}}, "field": "value" } } }""", ", \"grid\": 0"));
+
+        error.Path.Should().Be("panels[0].grid");
+    }
+
+    [Fact]
+    public void A_window_on_a_day_axis_is_in_whole_days()
+    {
+        var daily = """{ "name": "daily_summary" }""";
+        var error = SingleError(Layers($$"""{ "derived": { "op": "rolling_mean", "a": {{Source("timeInRange", daily)}}, "minutes": 60 } }""",
+            ", \"range\": { \"hours\": 720 }"));
+
+        error.Path.Should().Be("panels[0].tracks[0].layers[0].derived.minutes");
+        error.Message.Should().Contain("whole days");
+        Validate(Layers($$"""{ "derived": { "op": "band_sd", "a": {{Source("timeInRange", daily)}}, "minutes": 10080 } }""",
+            ", \"range\": { \"hours\": 720 }")).Errors.Should().BeEmpty();
     }
 
     private static string L(string bindings, string dataset = Glucose, string mark = "line") => Layers(Layer(dataset, mark, bindings));
@@ -652,7 +725,7 @@ public class ReportSpecValidatorTests
         { Layers("""{ "derived": { "op": "trend", "a": { "dataset": { "name": "glucose_series" }, "field": "glucose", "colour": 1 } } }"""), "panels[0].tracks[0].layers[0].derived.a.colour" },
         { Layers("""{ "derived": { "op": "trend", "a": { "dataset": { "name": "glucose_series" }, "field": "glucose" }, "colour": 1 } }"""), "panels[0].tracks[0].layers[0].derived.colour" },
         { Layers("""{ "derived": { "op": "trend", "a": { "derived": { "op": "scatter", "a": { "dataset": { "name": "glucose_series" }, "field": "iob" }, "b": { "dataset": { "name": "glucose_series" }, "field": "glucose" } }, "field": "b" } } }"""), "panels[0].tracks[0].layers[0].derived.a.derived.op" },
-        { Layers("""{ "derived": { "op": "trend", "a": { "derived": { "op": "difference", "a": { "dataset": { "name": "glucose_series" }, "field": "glucose" }, "b": { "dataset": { "name": "glucose_series" }, "field": "targetHigh" } }, "field": "x" } } }"""), "panels[0].tracks[0].layers[0].derived.a.field" },
+        { Layers("""{ "derived": { "op": "trend", "a": { "derived": { "op": "difference", "a": { "dataset": { "name": "glucose_series" }, "field": "glucose" }, "b": { "dataset": { "name": "glucose_series" }, "field": "glucoseMgdl" } }, "field": "x" } } }"""), "panels[0].tracks[0].layers[0].derived.a.field" },
         { """{ "version": 1, "panels": [ { "kind": "table", "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Lunch" } ] } } ] }""", "panels[0].dataset.cohorts[0].anchor" },
         { """{ "version": 1, "panels": [ { "kind": "table", "dataset": { "name": "event_response", "cohorts": [] } } ] }""", "panels[0].dataset.cohorts" },
         { """{ "version": 1, "panels": [ { "kind": "table", "dataset": { "name": "event_response" }, "bindings": { "columns": ["glucoseP50"] } } ] }""", "panels[0].bindings.columns" },

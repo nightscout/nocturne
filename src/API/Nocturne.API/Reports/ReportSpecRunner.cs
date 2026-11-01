@@ -277,7 +277,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var all = trackResults.SelectMany(t => t.Layers).ToList();
         var drawn = all.Where(l => l.Status == ReportPanelStatus.Ok).ToList();
         var notDrawn = all.Where(l => l.Status != ReportPanelStatus.Ok).ToList();
-        var first = drawn.FirstOrDefault();
+        var first = Lead(trackResults[MainTrack(tracks)].Layers) ?? drawn.FirstOrDefault();
         var sentence = first?.Sentence;
         if (notDrawn.Count > 0)
             sentence = string.Join(' ', new[] { sentence }.OfType<string>().Append(
@@ -289,7 +289,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var result = new ReportPanelResult
         {
             Id = panel.Id!,
-            Title = panel.Title,
+            Title = panel.Title ?? DefaultPanelTitle(tracks.SelectMany(t => t.Layers).Single(l => l.Id == (first ?? all[0]).Id)),
             Kind = ReportPanelKind.Chart,
             Status = drawn.Count > 0 ? ReportPanelStatus.Ok : all[0].Status,
             Window = new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),
@@ -308,6 +308,53 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         };
         return limited ? result with { Summary = result.Summary + '\n' + LimitedNote, Limited = true } : result;
     }
+
+    /// <summary>The main plot: the tallest track, the first of the tallest.</summary>
+    internal static int MainTrack(IReadOnlyList<ReportTrackSpec> tracks) =>
+        tracks.Select((t, i) => (Height: t.Height ?? 1, Index: i)).MaxBy(t => t.Height).Index;
+
+    /// <summary>
+    /// The layer whose facts and sentence speak for the panel: the first drawn line, area, band or bars layer
+    /// of <paramref name="main"/> that has a sentence, else the first that has none, else its first drawn layer.
+    /// </summary>
+    internal static ReportLayerResult? Lead(IReadOnlyList<ReportLayerResult> main)
+    {
+        var drawn = main.Where(l => l.Status == ReportPanelStatus.Ok).ToList();
+        var plotted = drawn.Where(l => l.Mark is ReportMark.Line or ReportMark.Area or ReportMark.Band or ReportMark.Bars).ToList();
+        return plotted.FirstOrDefault(l => l.Sentence is not null) ?? plotted.FirstOrDefault() ?? drawn.FirstOrDefault();
+    }
+
+    /// <summary>An untitled chart panel's title: its lead layer's title, else the name of that layer's dataset or op.</summary>
+    private string DefaultPanelTitle(ReportLayerSpec lead) =>
+        lead.Title ?? (lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : registry.Find(lead.Dataset!.DatasetName)!.Label);
+
+    /// <summary>The facts and the sentence of <paramref name="output"/> about a field <paramref name="drawn"/> names.</summary>
+    internal static (IReadOnlyList<ReportFact> Facts, string? Sentence) About(ReportDatasetOutput output, IReadOnlyCollection<string> drawn)
+    {
+        var facts = output.Facts.Where(f => f.About is null || f.About.Any(drawn.Contains)).Take(ReportFacts.Max).ToList();
+        var sentence = output.SentenceAbout is null || output.SentenceAbout.Any(drawn.Contains)
+            ? output.Sentence
+            : output.OtherSentences.FirstOrDefault(s => s.About.Any(drawn.Contains))?.Text;
+        return (facts, sentence);
+    }
+
+    private static string AggregateWords(ReportAggregate aggregate) => aggregate switch
+    {
+        ReportAggregate.Sum => "total",
+        ReportAggregate.Mean => "mean",
+        ReportAggregate.Max => "highest value",
+        ReportAggregate.Last => "last value",
+        _ => throw new ArgumentOutOfRangeException(nameof(aggregate), aggregate, null),
+    };
+
+    internal static string StepWords(int minutes) =>
+        minutes % 1440 == 0 ? ReportFacts.Plural(minutes / 1440, "day")
+        : minutes % 60 == 0 ? ReportFacts.Plural(minutes / 60, "hour")
+        : ReportFacts.Plural(minutes, "minute");
+
+    /// <summary>How each folded field went onto the grid: "Basal rate, last value per 1 day".</summary>
+    internal static string FoldWords(IEnumerable<ReportField> folded, int step) =>
+        string.Join("; ", folded.Select(f => $"{f.Label}, {AggregateWords(f.Aggregate!.Value)} per {StepWords(step)}"));
 
     private static string NotDrawnWords(ReportPanelStatus status) => status switch
     {
@@ -442,9 +489,11 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
         var folded = panel.Grid is > 0 && ReportGrid.Applies(layer.XKind) && layer.Mark != ReportMark.Spans;
         var step = folded ? ReportGrid.Step(layer.XKind, panel.Grid!.Value, from, to) : 0;
+        string? context = null;
         if (folded)
         {
             var foldFields = fields.Where(f => valueNames.Contains(f.Name)).ToList();
+            context = FoldWords(foldFields, step);
             var colourFields = fields.Select(f => f.ColorField).OfType<string>().ToHashSet(StringComparer.Ordinal);
             var carried = fields
                 .Where(f => (f.Companion && f.Name != ReportField.SentenceField) || colourFields.Contains(f.Name))
@@ -456,6 +505,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var markers = layer.Mark == ReportMark.Markers
             ? Markers(folded ? rows : output.Rows, bindings, fields)
             : [];
+        if (layer.Title is null && layer.Mark == ReportMark.Markers)
+            title = MarkersTitle(dataset.Label, fields, bindings, markers);
+        var (facts, sentence) = About(output, layer.Mark == ReportMark.Spans ? boundNames : valueNames);
 
         return (new ReportLayerResult
         {
@@ -470,8 +522,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Window = output.Window ?? new ReportWindow(fromMs, toMs),
             Fields = fields,
             Rows = rows,
-            Facts = Facts(output),
-            Sentence = output.Sentence,
+            Facts = facts,
+            Sentence = sentence,
+            Context = context,
             Summary = folded ? $"{output.Summary}\nFolded onto a grid of {step} minutes." : output.Summary,
             Spans = layer.Mark == ReportMark.Band
                 ? ReportBandSpan.Of([.. (bindings.Edges ?? []).Select(n => fields.FirstOrDefault(f => f.Name == n)).OfType<ReportField>()])
@@ -481,6 +534,14 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Omitted = output.Omitted,
             Resolution = output.Resolution,
         }, output);
+    }
+
+    /// <summary>An untitled markers layer's name in the legend: the dataset's, and the fields it drew a marker of, if any.</summary>
+    internal static string MarkersTitle(string datasetLabel, IReadOnlyList<ReportField> fields, ReportLayerBindings bindings, IReadOnlyList<ReportMarker> markers)
+    {
+        var kinds = markers.Select(m => m.Kind).ToHashSet();
+        var shown = fields.Where(f => (bindings.Y ?? []).Contains(f.Name) && f.Marker is { } k && kinds.Contains(k)).Select(f => f.Label).ToList();
+        return shown.Count == 0 ? datasetLabel : $"{datasetLabel} · {string.Join(", ", shown)}";
     }
 
     /// <summary>The field names a layer's bindings draw, in drawing order.</summary>
@@ -544,7 +605,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var op = ReportDerivedOps.Of(derived);
         var fromMs = from.ToUnixTimeMilliseconds();
         var toMs = to.ToUnixTimeMilliseconds();
-        var series = new List<(Dictionary<long, double?> Values, bool Carry)>();
+        var series = new List<GridSeries>();
         var infos = new List<ReportSourceInfo>();
         ReportXKind? sourceKind = null;
         var step = 0;
@@ -559,8 +620,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 var kind = ReportDerivedOps.Of(inner).OutputXKind(nested.Info!.XKind);
                 sourceKind = kind;
                 step = nested.Step;
-                series.Add((nested.Output!.Rows.Where(r => r.GetValueOrDefault(ReportDerivedOps.SlotField) is long)
-                    .ToDictionary(r => (long)r[ReportDerivedOps.SlotField]!, r => r.GetValueOrDefault(field.Name) as double?), false));
+                series.Add(new GridSeries(nested.Output!.Rows.Where(r => r.GetValueOrDefault(ReportDerivedOps.SlotField) is long)
+                    .ToDictionary(r => (long)r[ReportDerivedOps.SlotField]!, r => r.GetValueOrDefault(field.Name) as double?)));
                 infos.Add(new ReportSourceInfo(field, kind, field.Label));
                 continue;
             }
@@ -577,8 +638,11 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             var sourceField = catalogue.Single(f => f.Name == source.Field).ResolveUnit(run.Context.UseMmol);
             sourceKind = axis.AxisKind!.Value;
             step = ReportGrid.Step(sourceKind.Value, panel.Grid is > 0 ? panel.Grid.Value : ReportGrid.DefaultMinutes, from, to);
-            series.Add((ReportGrid.Values(output.Rows, axis.Name, sourceField, sourceKind.Value, step, fromMs, toMs),
-                sourceField.Step && sourceField.Aggregate == ReportAggregate.Last));
+            var window = output.Window ?? new ReportWindow(fromMs, toMs);
+            series.Add(new GridSeries(
+                ReportGrid.Values([.. dataset.SeriesRows(output.Rows, source.Series ?? 1)], axis.Name, sourceField, sourceKind.Value, step, fromMs, toMs),
+                sourceField.Step && sourceField.Aggregate == ReportAggregate.Last,
+                sourceField.Aggregate == ReportAggregate.Sum ? (window.From, window.To) : null));
             infos.Add(new ReportSourceInfo(sourceField, sourceKind.Value, sourceField.Label));
         }
 

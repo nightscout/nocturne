@@ -70,8 +70,17 @@ internal sealed class StateSpansDataset : IReportDataset
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
+    /// <summary>The dataset a span is read from, as the read log names it.</summary>
+    private static string ReadOf(Span span) => span.Kind switch
+    {
+        ReportSpanKind.PumpMode => "pump_modes",
+        ReportSpanKind.Profile => "profiles",
+        ReportSpanKind.Activity when span.Sleep => "sleep",
+        _ => "treatments",
+    };
+
     /// <summary>One span before it is a row.</summary>
-    internal sealed record Span(ReportSpanKind Kind, string Label, long Start, long End, ChartColor Color);
+    internal sealed record Span(ReportSpanKind Kind, string Label, long Start, long End, ChartColor Color, bool Sleep = false);
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
@@ -84,6 +93,8 @@ internal sealed class StateSpansDataset : IReportDataset
         var spans = Spans(data, kinds, from, to);
         var withheld = kinds.Where(k => !request.HasScope(ScopeOf(k))).ToList();
         var kept = spans.OrderBy(s => s.Start).Take(Budget).ToList();
+        foreach (var (dataset, count) in kept.GroupBy(ReadOf).Select(g => (g.Key, g.Count())))
+            request.ReadLog.Record(dataset, count);
         var rows = kept.Select(s => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
         {
             ["kind"] = Words(s.Kind),
@@ -130,7 +141,7 @@ internal sealed class StateSpansDataset : IReportDataset
                 var start = Math.Max(s.StartMills, from);
                 var end = Math.Min(s.EndMills ?? to, to);
                 if (end > start)
-                    spans.Add(new Span(kind, string.IsNullOrWhiteSpace(s.State) ? Words(kind) : s.State, start, end, s.Color));
+                    spans.Add(new Span(kind, string.IsNullOrWhiteSpace(s.State) ? Words(kind) : s.State, start, end, s.Color, s.Kind == ChartSpanKind.Sleep));
             }
         }
         Add(ReportSpanKind.PumpMode, data.PumpModeSpans);

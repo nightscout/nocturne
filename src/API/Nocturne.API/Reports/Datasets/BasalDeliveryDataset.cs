@@ -31,7 +31,7 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         new("delivered", "Delivered basal", ReportFieldKind.Number, "U/h", "The basal rate delivered.",
             Color: ChartColor.InsulinBasal, Step: true, Aggregate: ReportAggregate.Last),
         new("scheduled", "Scheduled basal", ReportFieldKind.Number, "U/h", "The rate the basal schedule called for, an override's scale included.",
-            Scope.TherapyRead, ChartColor.InsulinTempBasal, Step: true, Aggregate: ReportAggregate.Last),
+            Scope.TherapyRead, ChartColor.InsulinTempBasal, Step: true, Aggregate: ReportAggregate.Last, Setting: true),
         new("origin", "Origin", ReportFieldKind.Category, null, "Where the delivered rate came from: Algorithm, Scheduled, Manual, Suspended or Inferred."),
     ];
 
@@ -89,6 +89,7 @@ internal sealed class BasalDeliveryDataset : IReportDataset
             Sentence = series.Count == 0 ? "No basal records in this period."
                 : "Changes by origin: " + string.Join(", ", series.GroupBy(p => p.Origin).OrderByDescending(g => g.Count())
                     .Select(g => $"{g.Key} {g.Count()}")) + ".",
+            SentenceAbout = series.Count == 0 ? null : ["delivered"],
             Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(series.Count, "rate change")}.",
             Omitted = omitted,
             Resolution = new ReportResolution(1, interval, series.Count, rows.Count, rows.Count < series.Count),
@@ -112,15 +113,16 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         static string N(double value) => ReportFacts.Number(value, "0.##");
         var facts = new List<ReportFact>
         {
-            new("Lowest delivered", N(series.Min(p => p.Rate)), "U/h"),
-            new("Highest delivered", N(series.Max(p => p.Rate)), "U/h"),
+            new("Lowest delivered", N(series.Min(p => p.Rate)), "U/h", About: ["delivered"]),
+            new("Highest delivered", N(series.Max(p => p.Rate)), "U/h", About: ["delivered"]),
         };
         var scheduled = series.Where(p => p.ScheduledRate is not null).Select(p => p.ScheduledRate!.Value).ToList();
         if (therapy && scheduled.Count > 0)
         {
-            facts.Add(new ReportFact("Scheduled", scheduled.Min() == scheduled.Max() ? N(scheduled.Min()) : $"{N(scheduled.Min())}-{N(scheduled.Max())}", "U/h"));
-            facts.Add(ReportFacts.Count("Above schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate > s), "changes"));
-            facts.Add(ReportFacts.Count("Below schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate < s), "changes"));
+            facts.Add(new ReportFact("Scheduled", scheduled.Min() == scheduled.Max() ? N(scheduled.Min()) : $"{N(scheduled.Min())}-{N(scheduled.Max())}", "U/h",
+                About: ["scheduled"]));
+            facts.Add(ReportFacts.Count("Above schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate > s), "changes").Of("delivered", "scheduled"));
+            facts.Add(ReportFacts.Count("Below schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate < s), "changes").Of("delivered", "scheduled"));
         }
         return facts;
     }

@@ -204,7 +204,7 @@ public class RecordDatasetTests
         var layer = Spec(ReportSpecValidatorTests.Layers("""{ "dataset": { "name": "treatments" } }""")).Panels[0].Tracks![0].Layers[0];
 
         layer.Mark.Should().Be(ReportMark.Markers);
-        layer.Bindings!.Y.Should().Equal("insulin", "carbs");
+        layer.Bindings!.Y.Should().Equal("insulin", "injectionUnits", "carbs", "bgCheck");
         layer.HasAxis.Should().BeFalse();
         var dataset = ReportSpecValidatorTests.Registry.Find("treatments")!;
         dataset.Fields.Single(f => f.Name == "insulin").Marker.Should().Be(ReportMarkerKind.Bolus);
@@ -234,7 +234,7 @@ public class RecordDatasetTests
 
         var line = result.Panels[0].Tracks[0].Layers[0];
         line.Markers.Select(m => (m.Kind, m.Amount, m.Automatic)).Should().Equal(
-            (ReportMarkerKind.Bolus, 4.5, false), (ReportMarkerKind.Bolus, 0.3, true));
+            (ReportMarkerKind.Bolus, 4.5, false), (ReportMarkerKind.Bolus, 0.3, true), (ReportMarkerKind.BasalInjection, 20, false));
         var injection = result.Panels[1].Rows.Single(r => (string?)r["type"] == "basal_injection");
         injection["insulin"].Should().BeNull("a 20 U long-acting dose is not a bolus");
         injection["injectionUnits"].Should().Be(20.0);

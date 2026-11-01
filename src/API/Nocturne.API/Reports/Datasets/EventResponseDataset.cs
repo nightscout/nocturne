@@ -98,6 +98,13 @@ internal sealed class EventResponseDataset : IReportDataset
 
     public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
 
+    public int SeriesCount(ReportDatasetParameters parameters) => ((EventResponseParameters)parameters).AppliedCohorts.Count;
+
+    public string? SeriesField => "cohort";
+
+    public IEnumerable<IReadOnlyDictionary<string, object?>> SeriesRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, int series) =>
+        rows.Where(r => Equals(r.GetValueOrDefault("cohort"), series) && Equals(r.GetValueOrDefault("range"), "primary"));
+
     public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Band, ReportMark.Line];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(30);

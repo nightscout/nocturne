@@ -98,7 +98,6 @@ internal sealed class ReportRunCache
             includeHealthSeries: false, cancellationToken);
         data = ChartDataReadScopeGuard.Redact(data, request.GrantedScopes);
         data.TrackerMarkers = [];
-        GlucoseSeriesDataset.RecordReads(data, request.ReadLog);
         _chart[key] = data;
         return data;
     }

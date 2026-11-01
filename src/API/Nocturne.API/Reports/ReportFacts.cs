@@ -6,7 +6,15 @@ namespace Nocturne.API.Reports;
 /// One figure the view prints under a panel, label above value: its words, its value as the API
 /// wrote it, its unit (printed muted, apart from the value) and an optional short note under it.
 /// </summary>
-internal sealed record ReportFact(string Label, string Value, string? Unit = null, string? Note = null);
+/// <param name="About">
+/// The fields the figure is about: a chart layer prints it only when it draws one of them. Null for a
+/// figure about the whole dataset.
+/// </param>
+internal sealed record ReportFact(string Label, string Value, string? Unit = null, string? Note = null,
+    [property: System.Text.Json.Serialization.JsonIgnore] IReadOnlyList<string>? About = null)
+{
+    public ReportFact Of(params string[] fields) => this with { About = fields };
+}
 
 /// <summary>Builds a panel's <see cref="ReportFact"/>s in the display unit, invariant culture.</summary>
 internal static class ReportFacts

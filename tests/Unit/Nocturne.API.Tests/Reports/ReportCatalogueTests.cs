@@ -4,6 +4,7 @@ using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Reports;
+using Nocturne.API.Reports.Derived;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
@@ -135,7 +136,7 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         ops["ratio"].UnitRule.Should().Contain("over the unit of b");
         ops["scatter"].Marks.Should().ContainSingle().Which.DefaultBindings.Should().BeEquivalentTo(
             new CustomReportLayerBindings("a", ["b"], null, null, "fit", null, null, null, null, null));
-        ops["trend"].Marks.Select(m => m.Name).Should().Equal("band", "line");
+        ops["trend"].Marks.Select(m => m.Name).Should().Equal("line", "band");
         ops["rolling_mean"].Parameters.GetProperty("properties").GetProperty("minutes").GetProperty("minimum").GetDouble().Should().Be(15);
         ops["rolling_mean"].Parameters.GetProperty("properties").TryGetProperty("a", out _).Should().BeFalse("the sources are drawn as forms of their own");
         ops["trend"].Parameters.GetProperty("properties").GetProperty("confidence").GetProperty("default").GetBoolean().Should().BeFalse();
@@ -358,5 +359,50 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         treatments.GetProperty("minCarbs").GetProperty("type").GetString().Should().Be("number");
         treatments.GetProperty("types").GetProperty("items").GetProperty("enum").EnumerateArray()
             .Should().OnlyContain(v => v.ValueKind == JsonValueKind.String);
+    }
+
+    [Theory]
+    [MemberData(nameof(OpNames))]
+    public void An_ops_first_mark_draws_it_with_its_default_settings(string name)
+    {
+        var op = Catalogue().Ops.Single(o => o.Name == name);
+        var sources = op.Sources == 2
+            ? new { a = new { dataset = new { name = "glucose_series" }, field = "glucoseMgdl" }, b = (object?)new { dataset = new { name = "glucose_series" }, field = "glucose" } }
+            : new { a = new { dataset = new { name = "glucose_series" }, field = "glucose" }, b = (object?)null };
+        var derived = new Dictionary<string, object?> { ["op"] = name, ["a"] = sources.a };
+        if (sources.b is not null)
+            derived["b"] = sources.b;
+        var spec = JsonSerializer.SerializeToElement(new
+        {
+            version = 1,
+            panels = new[]
+            {
+                new { kind = "chart", range = new { hours = 24 }, grid = 15, tracks = new[] { new { layers = new[] { new { derived, mark = op.Marks[0].Name } } } } },
+            },
+        });
+
+        Validator.Validate(spec).Errors.Should().BeEmpty($"{name} drawn as {op.Marks[0].Name}");
+    }
+
+    public static TheoryData<string> OpNames => [.. ReportDerivedOps.All.Select(o => o.Name)];
+
+    [Fact]
+    public void A_profile_setting_is_marked_as_one()
+    {
+        var settings = Catalogue().Datasets.SelectMany(d => d.Fields.Where(f => f.Setting).Select(f => $"{d.Name}.{f.Name}"));
+
+        settings.Should().BeEquivalentTo(
+            "settings_evidence.basalProfile", "settings_evidence.isfProfile", "settings_evidence.carbRatioProfile",
+            "daily_profile.scheduledBasal", "daily_profile.targetLow", "daily_profile.targetHigh",
+            "glucose_series.targetLow", "glucose_series.targetHigh", "basal_delivery.scheduled");
+    }
+
+    [Fact]
+    public void A_dataset_whose_rows_come_in_groups_names_its_group_field()
+    {
+        var datasets = Catalogue().Datasets;
+
+        datasets.Single(d => d.Name == "event_response").SeriesField.Should().Be("cohort");
+        datasets.Where(d => d.Name != "event_response").Should().OnlyContain(d => d.SeriesField == null);
     }
 }

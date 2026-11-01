@@ -50,11 +50,53 @@ public class ReportGridTests
         var bolus = Field("rate", ReportAggregate.Sum);
 
         var step = ReportGrid.Values(rows, "time", rate, ReportXKind.Time, 60, 0, 5 * Hour);
-        var (keys, series) = ReportGrid.Align(ReportXKind.Time, 60, 0, 5 * Hour, [(step, true), (ReportGrid.Values(rows, "time", bolus, ReportXKind.Time, 60, 0, 5 * Hour), false)]);
+        var (keys, series) = ReportGrid.Align(ReportXKind.Time, 60, 0, 5 * Hour,
+            [new GridSeries(step, Carry: true), new GridSeries(ReportGrid.Values(rows, "time", bolus, ReportXKind.Time, 60, 0, 5 * Hour))]);
 
         keys.Should().HaveCount(5);
         series[0].Should().Equal(0.8, 0.8, 0.8, 1.2, 1.2);
         series[1].Should().Equal(0.8, null, null, 1.2, null);
+    }
+
+    [Fact]
+    public void A_summed_field_is_zero_in_every_empty_slot_its_dataset_read_and_empty_outside_it()
+    {
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows = [Row(Hour + 1, ("carbs", 30.0))];
+        var carbs = Field("carbs", ReportAggregate.Sum);
+
+        var values = ReportGrid.Values(rows, "time", carbs, ReportXKind.Time, 60, 0, 5 * Hour);
+        var (_, series) = ReportGrid.Align(ReportXKind.Time, 60, 0, 5 * Hour, [new GridSeries(values, Zeros: (0, 4 * Hour))]);
+
+        series[0].Should().Equal(0.0, 30.0, 0.0, 0.0, null);
+    }
+
+    [Fact]
+    public void A_scatter_of_glucose_against_carbs_pairs_every_slot_with_a_reading()
+    {
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> glucose =
+            [.. Enumerable.Range(0, 12).Select(i => Row(i * 15 * 60_000L, ("glucose", 100.0 + i)))];
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> carbs = [Row(30 * 60_000, ("carbs", 40.0))];
+        var a = ReportGrid.Values(carbs, "time", Field("carbs", ReportAggregate.Sum), ReportXKind.Time, 15, 0, 3 * Hour);
+        var b = ReportGrid.Values(glucose, "time", Field("glucose", ReportAggregate.Mean), ReportXKind.Time, 15, 0, 3 * Hour);
+
+        var (keys, series) = ReportGrid.Align(ReportXKind.Time, 15, 0, 3 * Hour, [new GridSeries(a, Zeros: (0, 3 * Hour)), new GridSeries(b)]);
+
+        var pairs = keys.Select((_, i) => (series[0][i], series[1][i])).Where(p => p.Item1 is not null && p.Item2 is not null).ToList();
+        pairs.Should().HaveCount(12, "a slot with no carb entry is 0 g of carbs, so every reading is paired");
+        pairs.Count(p => p.Item1 == 0).Should().Be(11);
+    }
+
+    [Fact]
+    public void Time_slots_lie_on_whole_steps_from_the_epoch_wherever_the_range_starts()
+    {
+        const long Minute = 60_000;
+        var (first, _) = ReportGrid.Align(ReportXKind.Time, 15, 7 * Minute, Hour, [new GridSeries([])]);
+        var (second, _) = ReportGrid.Align(ReportXKind.Time, 15, 11 * Minute, Hour + 4 * Minute, [new GridSeries([])]);
+
+        first.Should().Equal(0, 15 * Minute, 30 * Minute, 45 * Minute);
+        second.Should().Equal(0, 15 * Minute, 30 * Minute, 45 * Minute, Hour);
+        ReportGrid.Slot(ReportXKind.Time, 7 * Minute + 0.5, 15, 7 * Minute).Should().Be(0);
+        ReportGrid.Slot(ReportXKind.TimeOfDay, 1439, 60, 0).Should().Be(1380, "a time-of-day slot counts from local midnight");
     }
 
     [Fact]

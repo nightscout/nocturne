@@ -459,4 +459,17 @@ public partial class LoopAnalysisDatasetTests
         lines.Should().ContainSingle(l => l.Contains(expected));
         lines.Any(l => l.StartsWith("Meals & events over local days")).Should().Be(!outside);
     }
+
+    [Fact]
+    public void A_derived_source_of_event_groups_reads_its_own_groups_primary_rows()
+    {
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
+        [
+            new Dictionary<string, object?> { ["cohort"] = 1, ["range"] = "primary", ["minute"] = 0 },
+            new Dictionary<string, object?> { ["cohort"] = 2, ["range"] = "primary", ["minute"] = 0 },
+            new Dictionary<string, object?> { ["cohort"] = 2, ["range"] = "comparison", ["minute"] = 0 },
+        ];
+
+        new EventResponseDataset().SeriesRows(rows, 2).Should().ContainSingle().Which["range"].Should().Be("primary");
+    }
 }

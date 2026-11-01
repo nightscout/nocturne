@@ -50,16 +50,16 @@ internal sealed class DailyProfileDataset : IReportDataset
         new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the slot's readings.", Aggregate: ReportAggregate.Mean),
         new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the slot across the range.", Aggregate: ReportAggregate.Sum),
         new("scheduledBasal", "Scheduled basal", ReportFieldKind.Number, "U/h", "Median scheduled basal, including any override's scale.",
-            Scope.TherapyRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
+            Scope.TherapyRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean, Setting: true),
         new("deliveredBasal", "Delivered basal", ReportFieldKind.Number, "U/h", "Median delivered basal.", Scope.TreatmentsRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
         new("netLoopCorrection", "Net loop correction", ReportFieldKind.Number, "U/h",
             "Mean across days of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, Aggregate: ReportAggregate.Mean),
         new("iob", "IOB median", ReportFieldKind.Number, "U", "Median insulin on board.", Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
         new("cob", "COB median", ReportFieldKind.Number, "g", "Median carbs on board.", Scope.TreatmentsRead, ChartColor.Carbs, Aggregate: ReportAggregate.Mean),
         new("targetLow", "Target low", ReportFieldKind.Number, ReportField.GlucoseUnit,
-            "The low edge of the target range in force (a temporary target where one ran), median across days.", Scope.TherapyRead, ChartColor.GlucoseLow, Aggregate: ReportAggregate.Mean),
+            "The low edge of the target range in force (a temporary target where one ran), median across days.", Scope.TherapyRead, ChartColor.GlucoseLow, Aggregate: ReportAggregate.Mean, Setting: true),
         new("targetHigh", "Target high", ReportFieldKind.Number, ReportField.GlucoseUnit,
-            "The high edge of the target range in force, median across days.", Scope.TherapyRead, ChartColor.GlucoseHigh, Aggregate: ReportAggregate.Mean),
+            "The high edge of the target range in force, median across days.", Scope.TherapyRead, ChartColor.GlucoseHigh, Aggregate: ReportAggregate.Mean, Setting: true),
         new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
             "One sentence that states the slot's glucose figures; the chart shows it for the slot under the pointer.", Companion: true),
     ];
@@ -143,6 +143,8 @@ internal sealed class DailyProfileDataset : IReportDataset
             Summary = Summarise(report, useMmol),
             Facts = FactsOf(report, useMmol),
             Sentence = NoTimeZone(report, "Daily profile") ?? SentenceOf(report),
+            SentenceAbout = NoTimeZone(report, "Daily profile") is null ? SentenceAboutOf(report) : null,
+            OtherSentences = NoTimeZone(report, "Daily profile") is null ? [new ReportSentence(PooledSentence, GlucoseFields)] : [],
             Context = ContextLine(report, ReportFacts.Plural(readings, "reading")),
             Omitted = Omitted(report, FieldSeries),
             Window = Window(report),
@@ -162,18 +164,29 @@ internal sealed class DailyProfileDataset : IReportDataset
             var highest = withGlucose.MaxBy(s => s.Glucose!.P50)!;
             var lowest = withGlucose.MinBy(s => s.Glucose!.P50)!;
             var widest = withGlucose.MaxBy(s => s.Glucose!.P90 - s.Glucose!.P10)!;
-            facts.Add(ReportFacts.Glucose("Highest median", highest.Glucose!.P50, useMmol, $"at {Clock(highest.MinuteOfDay)}"));
-            facts.Add(ReportFacts.Glucose("Lowest median", lowest.Glucose!.P50, useMmol, $"at {Clock(lowest.MinuteOfDay)}"));
+            facts.Add(ReportFacts.Glucose("Highest median", highest.Glucose!.P50, useMmol, $"at {Clock(highest.MinuteOfDay)}").Of(GlucoseFields));
+            facts.Add(ReportFacts.Glucose("Lowest median", lowest.Glucose!.P50, useMmol, $"at {Clock(lowest.MinuteOfDay)}").Of(GlucoseFields));
             facts.Add(new ReportFact("Widest P10 to P90",
                 $"{GlucoseSummary.Format(widest.Glucose!.P10, useMmol)}-{GlucoseSummary.Format(widest.Glucose!.P90, useMmol)}",
-                ReportFacts.GlucoseUnit(useMmol), $"at {Clock(widest.MinuteOfDay)}"));
+                ReportFacts.GlucoseUnit(useMmol), $"at {Clock(widest.MinuteOfDay)}", GlucoseFields));
         }
         if (range.Summary.Insulin is { } insulin)
-            facts.Add(new ReportFact("Insulin per day", Number(insulin.Total.P50, "0.#"), "U", $"median of {insulin.Total.N} days"));
+            facts.Add(new ReportFact("Insulin per day", Number(insulin.Total.P50, "0.#"), "U", $"median of {insulin.Total.N} days",
+                ["deliveredBasal", "netLoopCorrection", "iob"]));
         if (range.Summary.NetLoopCorrectionPerDay is { } perDay)
-            facts.Add(new ReportFact("Net loop correction", Number(perDay, "0.##"), "U/day"));
+            facts.Add(new ReportFact("Net loop correction", Number(perDay, "0.##"), "U/day", About: ["netLoopCorrection"]));
         return facts;
     }
+
+    private const string PooledSentence = "Glucose percentiles in each five-minute slot of the day, pooled across the days.";
+
+    private static readonly string[] GlucoseFields = ["glucoseP10", "glucoseP25", "glucoseP50", "glucoseP75", "glucoseP90"];
+
+    /// <summary>The fields <see cref="SentenceOf"/> is about, as it chose its sentence.</summary>
+    internal static IReadOnlyList<string>? SentenceAboutOf(DailyProfileResponse report) =>
+        !report.Primary.Slots.Any(s => s.Glucose is not null) ? null
+        : report.Primary.Summary.DeliveredToScheduledRatio is not null ? ["deliveredBasal", "scheduledBasal"]
+        : GlucoseFields;
 
     internal static string SentenceOf(DailyProfileResponse report)
     {
@@ -181,7 +194,7 @@ internal sealed class DailyProfileDataset : IReportDataset
             return "No glucose readings in the analyzed time.";
         return report.Primary.Summary.DeliveredToScheduledRatio is { } ratio
             ? $"Delivered basal was {Number(ratio, "0.##")} times the scheduled basal."
-            : "Glucose percentiles in each five-minute slot of the day, pooled across the days.";
+            : PooledSentence;
     }
 
     internal static string Summarise(DailyProfileResponse report, bool useMmol)

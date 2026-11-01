@@ -55,7 +55,7 @@ internal sealed class TreatmentsDataset : IReportDataset
 
     public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark switch
     {
-        ReportMark.Markers => new ReportLayerBindings { X = "time", Y = ["insulin", "carbs"] },
+        ReportMark.Markers => new ReportLayerBindings { X = "time", Y = ["insulin", "injectionUnits", "carbs", "bgCheck"] },
         ReportMark.Points or ReportMark.Bars => new ReportLayerBindings { X = "time", Y = ["insulin"] },
         _ => null,
     };
@@ -125,6 +125,7 @@ internal sealed class TreatmentsDataset : IReportDataset
                 : latest.Count < kept.Count
                     ? $"The table holds the latest {latest.Count} of {kept.Count} records; the counts cover all of them."
                     : $"The table holds every record, newest last.",
+            SentenceAbout = kept.Count == 0 ? null : [],
             Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(kept.Count, "record")}.",
             Resolution = new ReportResolution(0, 0, kept.Count, latest.Count, latest.Count < kept.Count),
         };
@@ -213,20 +214,20 @@ internal sealed class TreatmentsDataset : IReportDataset
     internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<Record> records, IReadOnlySet<ReportTreatmentType> kinds)
     {
         var facts = new List<ReportFact>();
-        void Add(ReportTreatmentType type, string label, Func<IReadOnlyList<Record>, string?>? note = null)
+        void Add(ReportTreatmentType type, string label, string[] about, Func<IReadOnlyList<Record>, string?>? note = null)
         {
             if (!kinds.Contains(type))
                 return;
             var of = records.Where(r => r.Type == type).ToList();
-            facts.Add(ReportFacts.Count(label, of.Count, null, of.Count > 0 ? note?.Invoke(of) : null));
+            facts.Add(ReportFacts.Count(label, of.Count, null, of.Count > 0 ? note?.Invoke(of) : null).Of(about));
         }
-        Add(ReportTreatmentType.Bolus, "Boluses", of => $"{ReportFacts.Number(of.Sum(r => r.Insulin ?? 0), "0.##")} U in all");
-        Add(ReportTreatmentType.Carbs, "Carb entries", of => $"{ReportFacts.Number(of.Sum(r => r.Carbs ?? 0), "0")} g in all");
-        Add(ReportTreatmentType.TempBasal, "Temp basals");
-        Add(ReportTreatmentType.Override, "Overrides");
-        Add(ReportTreatmentType.Note, "Notes");
-        Add(ReportTreatmentType.BasalInjection, "Injections", of => $"{ReportFacts.Number(of.Sum(r => r.Insulin ?? 0), "0.##")} U in all");
-        Add(ReportTreatmentType.BgCheck, "BG checks");
+        Add(ReportTreatmentType.Bolus, "Boluses", ["insulin"], of => $"{ReportFacts.Number(of.Sum(r => r.Insulin ?? 0), "0.##")} U in all");
+        Add(ReportTreatmentType.Carbs, "Carb entries", ["carbs"], of => $"{ReportFacts.Number(of.Sum(r => r.Carbs ?? 0), "0")} g in all");
+        Add(ReportTreatmentType.TempBasal, "Temp basals", ["rate"]);
+        Add(ReportTreatmentType.Override, "Overrides", ["durationMinutes"]);
+        Add(ReportTreatmentType.Note, "Notes", ["detail"]);
+        Add(ReportTreatmentType.BasalInjection, "Injections", ["injectionUnits"], of => $"{ReportFacts.Number(of.Sum(r => r.Insulin ?? 0), "0.##")} U in all");
+        Add(ReportTreatmentType.BgCheck, "BG checks", ["bgCheck"]);
         return facts;
     }
 

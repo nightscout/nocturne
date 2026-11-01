@@ -27,6 +27,9 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
 
     public string RequiredScope => Scope.GlucoseRead;
 
+    /// <summary>The readings' fields, which the glucose facts and sentence are about.</summary>
+    private static readonly string[] GlucoseFields = ["glucose", "glucoseMgdl"];
+
     public IReadOnlyList<ReportField> Fields { get; } =
     [
         new("time", "Time", ReportFieldKind.Time, null, "When the reading was taken, Unix milliseconds."),
@@ -39,10 +42,10 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
             "The trend arrow: DoubleUp, SingleUp, FortyFiveUp, Flat, FortyFiveDown, SingleDown, DoubleDown, or empty."),
         new("targetLow", "Range low", ReportFieldKind.Number, ReportField.GlucoseUnit,
             "The lower limit of the in-range band, 70 mg/dL (3.9 mmol/L), the clinical consensus limit the reports use. Not the user's profile target.",
-            Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last),
+            Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last, Setting: true),
         new("targetHigh", "Range high", ReportFieldKind.Number, ReportField.GlucoseUnit,
             "The upper limit of the in-range band, 180 mg/dL (10.0 mmol/L), the clinical consensus limit the reports use. Not the user's profile target.",
-            Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last),
+            Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last, Setting: true),
         new("iob", "IOB", ReportFieldKind.Number, "U", "Insulin on board at the reading.",
             Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
         new("cob", "COB", ReportFieldKind.Number, "g", "Carbs on board at the reading.",
@@ -73,6 +76,7 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var data = await request.Cache.ChartAsync(request, cancellationToken);
+        RecordReads(data, request.ReadLog);
         var treatments = request.HasScope(Scope.TreatmentsRead);
         var interval = IntervalFor(request.From, request.To, 1, Budget);
         var sampled = Downsample(data.GlucoseData, request.From.ToUnixTimeMilliseconds(), interval);
@@ -88,8 +92,9 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         {
             Rows = Rows(sampled, data, thresholds, request.UseMmol),
             Summary = GlucoseSummary.Build(data, statistics, request.UseMmol, request.From, request.To, [.. omitted.Select(o => o.Field)]),
-            Facts = facts,
+            Facts = [.. facts.Select(f => f.Of(GlucoseFields))],
             Sentence = sentence,
+            SentenceAbout = GlucoseFields,
             Context = context,
             Omitted = omitted,
             Thresholds = ReportThresholds.Of(thresholds, request.UseMmol),
@@ -171,29 +176,15 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
     }
 
     /// <summary>
-    /// Every dataset the redacted payload carries, with its record count. Redaction has already
-    /// emptied what the token's scopes do not cover, so an empty dataset is left out.
+    /// What a run serves of the redacted payload: the readings, and the IOB, COB and basal series
+    /// its rows carry. Redaction has already emptied what the token's scopes do not cover.
     /// </summary>
     internal static void RecordReads(DashboardChartData data, ReportReadLog readLog)
     {
-        void Read(string dataset, int records)
-        {
-            if (records > 0)
-                readLog.Record(dataset, records);
-        }
-
-        Read("glucose", data.GlucoseData.Count + data.BgCheckMarkers.Count);
-        Read("treatments",
-            data.BolusMarkers.Count + data.CarbMarkers.Count + data.BasalInjectionMarkers.Count
-            + data.BasalSeries.Count + data.IobSeries.Count + data.CobSeries.Count
-            + data.TempBasalSpans.Count + data.BasalDeliverySpans.Count + data.OverrideSpans.Count
-            + data.ActivitySpans.Count(s => s.Kind != ChartSpanKind.Sleep));
-        Read("device_events", data.DeviceEventMarkers.Count + data.SystemEventMarkers.Count);
-        Read("pump_modes", data.PumpModeSpans.Count);
-        Read("profiles", data.ProfileSpans.Count);
-        Read("heart_rate", data.HeartRateSeries.Count);
-        Read("steps", data.StepSeries.Count);
-        Read("sleep", data.ActivitySpans.Count(s => s.Kind == ChartSpanKind.Sleep));
-        Read("trackers", data.TrackerMarkers.Count);
+        if (data.GlucoseData.Count > 0)
+            readLog.Record("glucose", data.GlucoseData.Count);
+        var treatments = data.IobSeries.Count + data.CobSeries.Count + data.BasalSeries.Count;
+        if (treatments > 0)
+            readLog.Record("treatments", treatments);
     }
 }

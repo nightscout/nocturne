@@ -281,6 +281,77 @@ public class ReportSpecRunnerTests
         layer.Rows[0]["time"].Should().Be(Now.AddHours(-3).ToUnixTimeMilliseconds());
         layer.Rows[0]["glucose"].Should().Be(105.5, "the mean of the twelve readings 100 to 111 in the first hour");
         layer.Summary.Should().EndWith("Folded onto a grid of 60 minutes.");
+        layer.Context.Should().Be("Glucose, mean per 1 hour");
+    }
+
+    [Fact]
+    public void A_folded_layers_context_names_each_fields_aggregate_and_the_step()
+    {
+        ReportField Field(string label, ReportAggregate aggregate) => new(label, label, ReportFieldKind.Number, "U/h", label, Aggregate: aggregate);
+
+        ReportSpecRunner.FoldWords([Field("Basal rate", ReportAggregate.Last)], 1440).Should().Be("Basal rate, last value per 1 day");
+        ReportSpecRunner.FoldWords([Field("Bolus", ReportAggregate.Sum), Field("Peak", ReportAggregate.Max)], 15)
+            .Should().Be("Bolus, total per 15 minutes; Peak, highest value per 15 minutes");
+    }
+
+    [Fact]
+    public async Task The_panels_lead_is_the_first_plotted_layer_of_its_main_track_that_has_a_sentence()
+    {
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead);
+
+        var panel = (await runner.RunAsync(Spec(GlucoseChart(3)), context, CancellationToken.None)).Panels.Single();
+
+        var layers = panel.Tracks.SelectMany(t => t.Layers).ToDictionary(l => l.Id);
+        layers["glucose"].Sentence.Should().NotBeNull();
+        panel.Sentence.Should().StartWith(layers["glucose"].Sentence!, "the glucose track is the main plot; the basal track above it is not");
+        panel.Facts.Should().Equal(layers["glucose"].Facts);
+        layers["target"].Sentence.Should().BeNull("the range edges are not the readings the sentence is about");
+    }
+
+    [Fact]
+    public async Task A_layer_of_iob_alone_carries_no_glucose_sentence_or_facts()
+    {
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead);
+        var spec = Spec(Layers(Layer("""{ "name": "glucose_series" }""", "line", """{ "y": ["iob"] }"""), reportExtras: """, "range": { "hours": 3 }"""));
+
+        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
+
+        var layer = panel.Tracks[0].Layers.Single();
+        layer.Sentence.Should().BeNull();
+        layer.Facts.Should().BeEmpty();
+        panel.Sentence.Should().BeNull();
+        panel.Title.Should().Be("Glucose readings", "an untitled chart takes its lead layer's dataset's name");
+    }
+
+    [Fact]
+    public async Task An_untitled_chart_takes_its_lead_layers_title()
+    {
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead);
+        var spec = Spec(Layers("""{ "title": "Sensor", "dataset": { "name": "glucose_series" }, "mark": "line" }"""));
+
+        (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single().Title.Should().Be("Sensor");
+    }
+
+    [Fact]
+    public void An_untitled_markers_layer_names_only_the_kinds_it_drew()
+    {
+        var bindings = new ReportLayerBindings { X = "time", Y = ["insulin", "carbs", "bgCheck"] };
+
+        ReportSpecRunner.MarkersTitle("Treatments", new TreatmentsDataset().Fields, bindings, [new ReportMarker(1, ReportMarkerKind.BgCheck, 120)])
+            .Should().Be("Treatments · BG check");
+        ReportSpecRunner.MarkersTitle("Treatments", new TreatmentsDataset().Fields, bindings, []).Should().Be("Treatments");
+    }
+
+    [Fact]
+    public async Task A_glucose_layer_records_the_readings_and_series_it_serves_and_no_other_part_of_the_chart()
+    {
+        var (runner, context, readLog, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead);
+        var spec = Spec(Layers(Layer("""{ "name": "glucose_series" }""", "line"), reportExtras: """, "range": { "hours": 3 }"""));
+
+        await runner.RunAsync(spec, context, CancellationToken.None);
+
+        readLog.Datasets.Should().BeEquivalentTo("glucose", "treatments");
+        readLog.RecordCount.Should().Be(37 * 4, "37 readings and the IOB, COB and basal point at each");
     }
 
     [Fact]

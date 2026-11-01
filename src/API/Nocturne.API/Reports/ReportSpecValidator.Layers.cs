@@ -11,7 +11,7 @@ internal sealed partial class ReportSpecValidator
     private static readonly string[] DatasetPanelKeys = ["id", "title", "kind", "range", "dataset", "bindings"];
     private static readonly string[] TrackKeys = ["id", "title", "height", "layers"];
     private static readonly string[] LayerKeys = ["id", "title", "dataset", "derived", "mark", "bindings", "range"];
-    private static readonly string[] SourceKeys = ["dataset", "derived", "field"];
+    private static readonly string[] SourceKeys = ["dataset", "derived", "field", "series"];
     private static readonly string[] ColumnKeys = ["columns"];
     private static readonly string[] LayerBindingKeys = ["x", "y", "edges", "series", "fit", "stacked", "orientation", "start", "end", "category"];
 
@@ -549,8 +549,12 @@ internal sealed partial class ReportSpecValidator
             at,
             reads,
             dataset is null ? [] : bindings.Value.Folded,
-            derived?.Op.SourceCount == 2);
+            derived is not null && IsPaired(derived.Spec));
     }
+
+    /// <summary>Whether a derived series pairs two sources anywhere in it, a source's own derivation included.</summary>
+    internal static bool IsPaired(ReportDerivedSpec derived) =>
+        derived.Second is not null || derived.Sources.Any(s => s.Derived is { } inner && IsPaired(inner));
 
     private ParsedDerived? ReadDerived(JsonElement element, string at, int depth, bool useMmol, Action<string, string> error)
     {
@@ -648,17 +652,43 @@ internal sealed partial class ReportSpecValidator
                 error($"{path}.dataset.name", $"{dataset.Label} has no axis of time, minutes, time of day or days, so a series cannot be derived from it.");
                 return null;
             }
-            var usable = fields.Where(x => x.IsNumber && x.Aggregate is not null).ToList();
+            var usable = fields.Where(x => x.IsNumber && x.Aggregate is not null && !x.Setting).ToList();
             var field = usable.FirstOrDefault(x => x.Name == fieldName);
             if (field is null)
             {
-                error($"{path}.field", (fieldName is null ? "Missing. " : $"'{Shorten(fieldName)}' cannot be a source. ")
-                    + $"Send a number field of {dataset.Label}: {string.Join(", ", usable.Select(x => x.Name))}.");
+                var setting = fields.FirstOrDefault(x => x.Name == fieldName && x.Setting);
+                error($"{path}.field", setting is not null
+                    ? $"'{setting.Label}' is a value of the profile's settings. A derived series uses the data only and is never compared with the settings. "
+                      + $"Send a field of the data: {string.Join(", ", usable.Select(x => x.Name))}."
+                    : (fieldName is null ? "Missing. " : $"'{Shorten(fieldName)}' cannot be a source. ")
+                      + $"Send a number field of {dataset.Label}: {string.Join(", ", usable.Select(x => x.Name))}.");
+                return null;
+            }
+            int? series = null;
+            var seriesCount = dataset.SeriesCount(parameters);
+            var seriesSent = element.TryGetProperty("series", out var s) && s.ValueKind != JsonValueKind.Null;
+            if (seriesSent)
+            {
+                if (dataset.SeriesField is not null && s.ValueKind == JsonValueKind.Number && s.TryGetInt32(out var n) && n >= 1 && n <= seriesCount)
+                    series = n;
+                else
+                {
+                    error($"{path}.series", dataset.SeriesField is null
+                        ? "This data has no groups. Remove the group number."
+                        : $"Send the number of the group this source reads, 1 to {seriesCount}.");
+                    return null;
+                }
+            }
+            else if (seriesCount > 1)
+            {
+                error($"{path}.series", $"This data comes in {seriesCount} groups, and a source reads one. "
+                    + $"Send the number of the group this source reads, 1 to {seriesCount}.");
                 return null;
             }
             reads.Add(new LayerRead(dataset, parameters, axis.Name));
             var resolved = field.ResolveUnit(useMmol);
-            return (new ReportSourceSpec { Dataset = parameters, Field = field.Name }, new ReportSourceInfo(resolved, axis.AxisKind!.Value, resolved.Label));
+            return (new ReportSourceSpec { Dataset = parameters, Field = field.Name, Series = series },
+                new ReportSourceInfo(resolved, axis.AxisKind!.Value, resolved.Label));
         }
 
         if (depth >= 1)

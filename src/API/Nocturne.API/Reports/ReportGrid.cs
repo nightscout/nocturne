@@ -2,8 +2,9 @@ namespace Nocturne.API.Reports;
 
 /// <summary>
 /// A chart panel's grid: the slots its layers' rows fold into, by each field's own
-/// <see cref="ReportAggregate"/>. Slots are counted from the range's start on a time axis, from zero
-/// minutes on an offset or time-of-day axis, and are the days themselves on a day axis.
+/// <see cref="ReportAggregate"/>. Slots are whole steps from the Unix epoch on a time axis (so they
+/// stay put from one run to the next), from zero minutes on an offset axis and from local midnight on
+/// a time-of-day axis, and are the days themselves on a day axis.
 /// </summary>
 internal static class ReportGrid
 {
@@ -33,7 +34,7 @@ internal static class ReportGrid
     /// <summary>The slot an x value falls in, as the slot's own x value.</summary>
     public static long Slot(ReportXKind kind, double x, int step, long fromMills) => kind switch
     {
-        ReportXKind.Time => fromMills + (long)Math.Floor((x - fromMills) / (step * 60_000.0)) * step * 60_000L,
+        ReportXKind.Time => (long)Math.Floor(x / (step * 60_000.0)) * step * 60_000L,
         ReportXKind.Offset or ReportXKind.TimeOfDay => (long)Math.Floor(x / step) * step,
         _ => (long)x,
     };
@@ -135,14 +136,16 @@ internal static class ReportGrid
     /// The slots one or two folded series lie on, in order, and each series' value in each: every slot
     /// of the range on a time axis, every slot of the day on a time-of-day axis, every slot from the
     /// first to the last on an offset axis, and the days either series has on a day axis. A step
-    /// field folded by its last value is carried into the slots after it that have none.
+    /// field folded by its last value is carried into the slots after it that have none; an amount
+    /// folded by its sum is 0 in a slot with none inside the range its dataset read, since no bolus
+    /// in a slot is a bolus of 0 there.
     /// </summary>
     public static (long[] Keys, double?[][] Series) Align(
         ReportXKind kind,
         int step,
         long fromMills,
         long toMills,
-        IReadOnlyList<(Dictionary<long, double?> Values, bool Carry)> series)
+        IReadOnlyList<GridSeries> series)
     {
         long[] keys;
         switch (kind)
@@ -150,8 +153,9 @@ internal static class ReportGrid
             case ReportXKind.Time:
             {
                 var stepMs = step * 60_000L;
-                var count = (int)Math.Max(0, (toMills - fromMills + stepMs - 1) / stepMs);
-                keys = [.. Enumerable.Range(0, count).Select(i => fromMills + i * stepMs)];
+                var first = Slot(kind, fromMills, step, fromMills);
+                var count = (int)Math.Max(0, (toMills - first + stepMs - 1) / stepMs);
+                keys = [.. Enumerable.Range(0, count).Select(i => first + i * stepMs)];
                 break;
             }
             case ReportXKind.TimeOfDay:
@@ -177,10 +181,16 @@ internal static class ReportGrid
                 var found = s.Values.TryGetValue(keys[i], out var v) && v is not null;
                 if (found)
                     held = v;
-                values[i] = found ? v : s.Carry ? held : null;
+                var covered = s.Zeros is { } zeros && (kind != ReportXKind.Time || (keys[i] >= Slot(kind, zeros.From, step, zeros.From) && keys[i] < zeros.To));
+                values[i] = found ? v : s.Carry ? held : covered ? 0 : null;
             }
             return values;
         }).ToArray();
         return (keys, aligned);
     }
 }
+
+/// <summary>One source folded onto a grid, by slot.</summary>
+/// <param name="Carry">A step field folded by its last value: held into the slots after it that have none.</param>
+/// <param name="Zeros">An amount folded by its sum: 0 in an empty slot inside this range, Unix milliseconds, that its dataset read.</param>
+internal sealed record GridSeries(Dictionary<long, double?> Values, bool Carry = false, (long From, long To)? Zeros = null);

@@ -28,6 +28,12 @@ internal static class DerivedMath
         return pairs;
     }
 
+    /// <summary>
+    /// Whether a sum of squares about the mean is rounding error of the sum of squares: a constant
+    /// series such as 0.1 or 3.9 leaves a few ulps of spread, not zero.
+    /// </summary>
+    private static bool Flat(double aboutMean, double squares) => aboutMean <= 1e-12 * squares;
+
     /// <summary>Pearson's r of the pairs, or null for fewer than <see cref="MinPairs"/> pairs or a series that does not vary.</summary>
     public static double? Pearson(IReadOnlyList<(double X, double Y)> pairs)
     {
@@ -42,7 +48,7 @@ internal static class DerivedMath
             sxx += (x - mx) * (x - mx);
             syy += (y - my) * (y - my);
         }
-        if (sxx <= 0 || syy <= 0)
+        if (Flat(sxx, pairs.Sum(p => p.X * p.X)) || Flat(syy, pairs.Sum(p => p.Y * p.Y)))
             return null;
         return Math.Clamp(sxy / Math.Sqrt(sxx * syy), -1, 1);
     }
@@ -73,7 +79,7 @@ internal static class DerivedMath
             sxx += (x - mx) * (x - mx);
             syy += (y - my) * (y - my);
         }
-        if (sxx <= 0)
+        if (Flat(sxx, pairs.Sum(p => p.X * p.X)))
             return null;
         var slope = sxy / sxx;
         var intercept = my - slope * mx;
@@ -101,19 +107,22 @@ internal static class DerivedMath
         return pairs;
     }
 
-    /// <summary>The mean and the sample standard deviation of the values in the <paramref name="window"/> slots up to each slot.</summary>
-    public static (double?[] Mean, double?[] Sd) Rolling(double?[] values, int window)
+    /// <summary>
+    /// The mean and the sample standard deviation of the values in the <paramref name="window"/> slots up to each slot;
+    /// with <paramref name="wrap"/> (a time-of-day axis) the window runs back past midnight into the end of the day.
+    /// </summary>
+    public static (double?[] Mean, double?[] Sd) Rolling(double?[] values, int window, bool wrap = false)
     {
         var mean = new double?[values.Length];
         var sd = new double?[values.Length];
-        var w = Math.Max(1, window);
+        var w = Math.Clamp(window, 1, Math.Max(1, values.Length));
         for (var i = 0; i < values.Length; i++)
         {
             double sum = 0, sumSq = 0;
             var n = 0;
-            for (var k = Math.Max(0, i - w + 1); k <= i; k++)
+            for (var j = wrap ? i - w + 1 : Math.Max(0, i - w + 1); j <= i; j++)
             {
-                if (values[k] is not { } v)
+                if (values[(j + values.Length) % values.Length] is not { } v)
                     continue;
                 sum += v;
                 sumSq += v * v;

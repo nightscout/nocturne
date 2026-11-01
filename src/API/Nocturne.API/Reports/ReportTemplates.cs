@@ -198,6 +198,7 @@ internal static class ReportTemplates
                                 title = "Boluses and carbs",
                                 dataset = new { name = TreatmentsParameters.Name, types = new[] { "bolus", "carbs" } },
                                 mark = "markers",
+                                bindings = new { x = "time", y = new[] { "insulin", "carbs" } },
                             },
                         },
                     },
@@ -300,7 +301,7 @@ internal static class ReportTemplates
                 new
                 {
                     id = "lag",
-                    title = "Correlation with glucose shifted later",
+                    title = "Correlation of IOB with glucose shifted earlier and later",
                     kind = "chart",
                     grid = 15,
                     tracks = new object[]

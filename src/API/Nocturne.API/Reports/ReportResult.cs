@@ -190,6 +190,9 @@ internal sealed record ReportLayerResult
 
     public string? Sentence { get; init; }
 
+    /// <summary>How the layer's values were folded onto the panel's grid ("Basal rate, last value per 1 day"); null for a layer drawn as read.</summary>
+    public string? Context { get; init; }
+
     public string Summary { get; init; } = string.Empty;
 
     /// <summary>A band's spans, inner first: the words for each and the fields of its low and high edges.</summary>

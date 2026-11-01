@@ -96,6 +96,10 @@ public sealed record CustomReportOpMark([property: Required] string Name, [prope
 /// <param name="MaxRangeHours">The longest range one read of it covers, in hours.</param>
 /// <param name="RangeLimit">That limit as a sentence.</param>
 /// <param name="MaxReadsPerReport">The most reads of it one report makes.</param>
+/// <param name="SeriesField">
+/// The field naming the group a row is in, for a dataset whose rows come in groups (the event groups of
+/// event_response); a derived source of it names the group it reads. Null for a dataset in one group.
+/// </param>
 public sealed record CustomReportDataset(
     [property: Required] string Name,
     [property: Required] string Label,
@@ -110,7 +114,8 @@ public sealed record CustomReportDataset(
     [property: Required] double DefaultRangeHours,
     [property: Required] double MaxRangeHours,
     [property: Required] string RangeLimit,
-    [property: Required] int MaxReadsPerReport);
+    [property: Required] int MaxReadsPerReport,
+    string? SeriesField);
 
 /// <summary>A field of a dataset's rows.</summary>
 /// <param name="Kind">time, number, category, percent, offset (minutes from an event), time_of_day or day.</param>
@@ -118,6 +123,7 @@ public sealed record CustomReportDataset(
 /// <param name="Permitted">Whether the caller holds the dataset's scope and <paramref name="Scope"/>.</param>
 /// <param name="Aggregate">How it folds onto a chart's grid: sum, last, mean or max; null when it cannot be folded.</param>
 /// <param name="Marker">The treatment glyph a markers layer draws for it, or null.</param>
+/// <param name="Setting">A value of the profile's settings, which no derived layer takes as a source.</param>
 public sealed record CustomReportField(
     [property: Required] string Name,
     [property: Required] string Label,
@@ -127,7 +133,8 @@ public sealed record CustomReportField(
     string? Scope,
     [property: Required] bool Permitted,
     string? Aggregate,
-    string? Marker);
+    string? Marker,
+    [property: Required] bool Setting);
 
 /// <summary>A kind of panel that may show a dataset, and the fields it may show.</summary>
 public sealed record CustomReportDatasetPanelKind([property: Required] string Name, [property: Required] IReadOnlyList<string> Columns);
@@ -277,7 +284,8 @@ internal sealed class ReportCatalogue(
                 f.Name, f.Label, ReportWire.Name(f.Kind), f.Unit, f.Description, f.Scope,
                 permitted && (f.Scope is null || Scope.Satisfies(granted, f.Scope)),
                 f.Aggregate is { } aggregate ? ReportWire.Name(aggregate) : null,
-                f.Marker is { } marker ? ReportWire.Name(marker) : null))],
+                f.Marker is { } marker ? ReportWire.Name(marker) : null,
+                f.Setting))],
             [.. dataset.Marks.SelectMany(ReportMarks.XKinds).Distinct()
                 .Where(k => chartFields.Any(f => f.AxisKind == k)).Select(ReportWire.Name)],
             [.. dataset.PanelKinds.Select(k => new CustomReportDatasetPanelKind(
@@ -286,7 +294,8 @@ internal sealed class ReportCatalogue(
             dataset.DefaultRange.TotalHours,
             dataset.MaxRange.TotalHours,
             $"This data covers at most {ReportSpecValidator.Describe(dataset.MaxRange)}.",
-            dataset.MaxPanelsPerReport);
+            dataset.MaxPanelsPerReport,
+            dataset.SeriesField);
     }
 
     /// <summary>The bindings a new layer of <paramref name="dataset"/> drawn as <paramref name="mark"/> starts with, normalised by the validator.</summary>
