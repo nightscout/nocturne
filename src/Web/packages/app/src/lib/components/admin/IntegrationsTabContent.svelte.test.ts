@@ -57,4 +57,40 @@ describe("Google Health instance settings", () => {
       .element(page.getByRole("textbox", { name: "Callback URL" }))
       .toHaveValue(callback);
   });
+
+  it("sends the callback only when it was edited", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(IntegrationsTabContent, { platforms: [platform], onSave, onDelete: vi.fn() });
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => onSave.mock.calls.length).toBe(1);
+    expect(onSave.mock.calls[0][2]).toMatchObject({ redirectUri: "" });
+
+    const edited = "https://other.example/api/v4/google-health/oauth/callback";
+    await page.getByRole("textbox", { name: "Callback URL" }).fill(edited);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => onSave.mock.calls.length).toBe(2);
+    expect(onSave.mock.calls[1][2]).toMatchObject({ redirectUri: edited });
+  });
+
+  it("shows the callback from the refreshed summary after a save", async () => {
+    const stored = "https://stored.example/api/v4/google-health/oauth/callback";
+    render(IntegrationsTabContent, {
+      platforms: [platform],
+      refreshed: [
+        {
+          ...platform,
+          fields: platform.fields!.map((field) =>
+            field.name === "redirectUri" ? { ...field, defaultValue: stored } : field
+          ),
+        },
+      ],
+      onSave: vi.fn().mockResolvedValue(undefined),
+      onDelete: vi.fn(),
+    });
+    await page.getByRole("textbox", { name: "Callback URL" }).fill(` ${stored} `);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .element(page.getByRole("textbox", { name: "Callback URL" }))
+      .toHaveValue(stored);
+  });
 });

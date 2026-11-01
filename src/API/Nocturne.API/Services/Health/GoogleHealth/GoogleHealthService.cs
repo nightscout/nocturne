@@ -196,7 +196,7 @@ public sealed class GoogleHealthService(
         var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
         var expires = time.GetUtcNow().Add(FlowLifetime);
         var state = oauthState.Protect(tenantSlug, expires);
-        var flow = new GoogleHealthCoordinator.Flow(state, verifier, subject, expires);
+        var flow = new GoogleHealthCoordinator.Flow(state, verifier, subject, expires, platform.ClientId, platform.RedirectUri);
         var secrets = await connectorConfigurations.GetSecretsAsync(GoogleHealthConnectorService.ConnectorName, ct);
         secrets["oauthFlow"] = JsonSerializer.Serialize(flow, Json);
         await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), ct);
@@ -238,6 +238,11 @@ public sealed class GoogleHealthService(
                 throw new GoogleHealthException("expired_signin");
 
             await ClearFlowAsync(ct);
+            // The code was issued to the client and callback the sign-in started with; an
+            // administrator who changed either since makes the exchange fail at Google.
+            var platform = await platformOptions.GetAsync(ct);
+            if (flow.ClientId != platform.ClientId || flow.RedirectUri != platform.RedirectUri)
+                throw new GoogleHealthException("expired_signin");
             var requestedScopes = GoogleHealthClient.SupportedTypes
                 .Select(GoogleHealthClient.ScopeFor).Append("openid")
                 .Distinct(StringComparer.Ordinal).ToArray();

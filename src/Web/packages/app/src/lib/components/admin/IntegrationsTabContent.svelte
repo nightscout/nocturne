@@ -41,21 +41,60 @@
   type PlatformState = {
     enabled: boolean;
     fieldValues: Record<string, string>;
+    /** The values the server last showed, so only an edited one is sent back. */
+    shownValues: Record<string, string>;
     saving: boolean;
     deleting: boolean;
   };
 
+  function shownValues(platform: PlatformSettingsSummary): Record<string, string> {
+    return Object.fromEntries(
+      (platform.fields ?? []).map((field) => [field.name ?? "", field.defaultValue ?? ""])
+    );
+  }
+
   function buildInitialState(platform: PlatformSettingsSummary): PlatformState {
-    const fieldValues: Record<string, string> = {};
-    for (const field of platform.fields ?? []) {
-      fieldValues[field.name ?? ""] = field.defaultValue ?? "";
-    }
+    const shown = shownValues(platform);
     return {
       enabled: platform.enabled ?? false,
-      fieldValues,
+      fieldValues: { ...shown },
+      shownValues: shown,
       saving: false,
       deleting: false,
     };
+  }
+
+  /** Shows the server's values again after a save or removal, from the refreshed summary. */
+  function showSaved(category: string) {
+    const state = states[category];
+    const platform = platforms.find((p) => p.category === category);
+    if (!state || !platform) return;
+    state.shownValues = shownValues(platform);
+    state.fieldValues = { ...state.shownValues };
+  }
+
+  /** A value left as the server showed it is sent blank, which keeps what is stored. */
+  function editedValues(state: PlatformState): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(state.fieldValues).map(([key, value]) => [
+        key,
+        value === state.shownValues[key] ? "" : value,
+      ])
+    );
+  }
+
+  const fieldErrorMessages: Record<string, string> = {
+    invalid_client_id: "The client ID must end in .apps.googleusercontent.com.",
+    invalid_redirect_uri:
+      "The callback URL must be an https address that ends in /api/v4/google-health/oauth/callback.",
+  };
+
+  /** The server's error with each known field code written out. */
+  function saveErrorMessage(err: unknown): string | undefined {
+    return errorMessage(err)
+      ?.split("; ")
+      .map((part) => fieldErrorMessages[part] ?? part)
+      .join(" ");
   }
 
   let states = $state<Record<string, PlatformState>>(
@@ -75,18 +114,16 @@
 
     state.saving = true;
     try {
-      await onSave(category, state.enabled, state.fieldValues);
-      // Clear field values after successful save (secrets are stored, not echoed)
-      for (const key of Object.keys(state.fieldValues)) {
-        if (key !== "redirectUri") state.fieldValues[key] = "";
-      }
+      await onSave(category, state.enabled, editedValues(state));
+      // Secrets are stored, not echoed, so their fields come back blank.
+      showSaved(category);
       toast.success(
         category === "google-health"
           ? "Google Health settings saved. No restart required."
           : "Settings saved. Restart the frontend for changes to take effect."
       );
     } catch (err) {
-      toast.error("Failed to save settings", { description: errorMessage(err) });
+      toast.error("Failed to save settings", { description: saveErrorMessage(err) });
     } finally {
       state.saving = false;
     }
@@ -104,9 +141,7 @@
     try {
       await onDelete(category);
       state.enabled = false;
-      for (const key of Object.keys(state.fieldValues)) {
-        state.fieldValues[key] = "";
-      }
+      showSaved(category);
       toast.success(`${displayName} configuration removed.`);
     } catch {
       toast.error("Failed to remove settings");

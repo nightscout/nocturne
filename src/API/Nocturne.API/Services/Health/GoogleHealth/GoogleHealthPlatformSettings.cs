@@ -19,16 +19,18 @@ public sealed class GoogleHealthPlatformSettings(
     private async Task<GoogleHealthPlatformOptions> LoadAsync(CancellationToken ct)
     {
         var credentials = await settings.GetCredentialsAsync(Category, ct);
-        var fields = credentials?.Fields;
+        var enabled = credentials?.Enabled == true;
         return new GoogleHealthPlatformOptions
         {
-            ClientId = credentials?.Enabled == true ? fields?.GetValueOrDefault("clientId") ?? "" : "",
-            ClientSecret = credentials?.Enabled == true ? fields?.GetValueOrDefault("clientSecret") ?? "" : "",
-            RedirectUri = fields?.GetValueOrDefault("redirectUri") is { Length: > 0 } configured
-                ? configured
-                : DefaultRedirectUri(baseDomain.Value),
+            ClientId = enabled ? Field(credentials, "clientId") ?? "" : "",
+            ClientSecret = enabled ? Field(credentials, "clientSecret") ?? "" : "",
+            RedirectUri = Field(credentials, "redirectUri") ?? DefaultRedirectUri(baseDomain.Value),
         };
     }
+
+    /// <summary>A stored value without surrounding whitespace; null when unset or blank.</summary>
+    public static string? Field(PlatformCredentials? credentials, string name) =>
+        credentials?.Fields.GetValueOrDefault(name)?.Trim() is { Length: > 0 } value ? value : null;
 
     public static string DefaultRedirectUri(BaseDomainOptions options) =>
         options.PublicOrigin is { } origin ? origin + GoogleHealthPlatformOptions.CallbackPath : "";

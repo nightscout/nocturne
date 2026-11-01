@@ -75,7 +75,7 @@ Sign in as an instance administrator and open **Settings > Administration > Inte
 2. Check the **Callback URL**. Nocturne fills it in from `BASE_DOMAIN`. Change it only when your
    public address is different, or when `BASE_DOMAIN` is not set. It must end in
    `/api/v4/google-health/oauth/callback` and match the redirect URI in Google Cloud exactly.
-3. Turn on **Enabled** and click **Save**.
+3. Turn on **Enabled** and select **Save**.
 
 The change applies to new requests and sync jobs at once. You do not have to restart Nocturne.
 The **Connect Google Health** button then appears for everyone on the server. Each person still
@@ -83,7 +83,7 @@ authorizes their own Google account and controls consent in Google.
 
 To keep a stored value, leave its field blank when you save. Nocturne encrypts the client secret
 on the server and never sends it back to the browser. Only instance administrators can see or
-change this card; tenant owners and administrators cannot.
+change this card. Tenant owners and administrators cannot.
 
 If you turn Google Health off or remove the card's settings, connections and syncing stop.
 Imported data is kept.
@@ -93,8 +93,9 @@ Imported data is kept.
   Earlier versions read the client from the `GOOGLE_HEALTH_CLIENT_ID`,
   `GOOGLE_HEALTH_CLIENT_SECRET` and `GOOGLE_HEALTH_REDIRECT_URI` environment variables. Nocturne
   no longer reads them. After you upgrade, enter the same client ID and secret on the
-  **Google Health** card. With the same client ID, existing connections keep working. You can
-  then remove the variables from your `.env`.
+  **Google Health** card. If you set `GOOGLE_HEALTH_REDIRECT_URI`, enter the same value as the
+  **Callback URL**. With the same client ID, existing connections keep working. You can then
+  remove the variables from your `.env`.
 
 </Callout>
 

@@ -91,5 +91,49 @@ public sealed class GoogleHealthAdminSettingsTests : IDisposable
         Assert.Equal(3, result.Errors!.Count);
     }
 
+    [Fact]
+    public async Task Saved_values_are_trimmed_and_a_blank_callback_falls_back_to_the_public_one()
+    {
+        var service = Service();
+        Assert.True((await service.UpsertAsync(Category, true, new()
+        {
+            ["clientId"] = "  test.apps.googleusercontent.com ",
+            ["clientSecret"] = " test-client-secret\n",
+            ["redirectUri"] = "   ",
+        })).Success);
+        var runtime = await Runtime().GetAsync();
+        Assert.True(runtime.IsConfigured);
+        Assert.Equal("test.apps.googleusercontent.com", runtime.ClientId);
+        Assert.Equal("test-client-secret", runtime.ClientSecret);
+        var callback = "https://nocturne.example" + GoogleHealthPlatformOptions.CallbackPath;
+        Assert.Equal(callback, runtime.RedirectUri);
+        var summary = await service.GetAsync(Category);
+        Assert.Equal(callback, summary!.Fields.Single(f => f.Name == "redirectUri").DefaultValue);
+    }
+
+    [Fact]
+    public async Task A_blank_stored_value_reads_as_unset()
+    {
+        db.PlatformSettings.Add(new Nocturne.Infrastructure.Data.Entities.PlatformSettingsEntity
+        {
+            Category = Category,
+            Enabled = true,
+            EncryptedJson = JsonSerializer.Serialize(encryption.EncryptSecrets(new Dictionary<string, string>
+            {
+                ["clientId"] = " test.apps.googleusercontent.com ",
+                ["clientSecret"] = "test-client-secret",
+                ["redirectUri"] = " ",
+            }), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            ConfiguredFields = ["clientId", "clientSecret", "redirectUri"],
+        });
+        await db.SaveChangesAsync();
+        var callback = "https://nocturne.example" + GoogleHealthPlatformOptions.CallbackPath;
+        var runtime = await Runtime().GetAsync();
+        Assert.Equal("test.apps.googleusercontent.com", runtime.ClientId);
+        Assert.Equal(callback, runtime.RedirectUri);
+        var summary = await Service().GetAsync(Category);
+        Assert.Equal(callback, summary!.Fields.Single(f => f.Name == "redirectUri").DefaultValue);
+    }
+
     public void Dispose() => db.Dispose();
 }

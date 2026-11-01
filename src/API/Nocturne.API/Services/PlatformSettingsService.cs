@@ -142,7 +142,9 @@ public class PlatformSettingsService
         if (_encryption.IsConfigured && entity is not null)
         {
             var encrypted = JsonSerializer.Deserialize<Dictionary<string, string>>(entity.EncryptedJson, JsonOptions) ?? [];
-            redirectUri = _encryption.DecryptSecrets(encrypted).GetValueOrDefault("redirectUri") ?? redirectUri;
+            redirectUri = _encryption.DecryptSecrets(encrypted).GetValueOrDefault("redirectUri")?.Trim() is { Length: > 0 } stored
+                ? stored
+                : redirectUri;
         }
         return CategorySchemas[category].Select(field => field.Name == "redirectUri"
             ? field with { DefaultValue = redirectUri } : field).ToList();
@@ -260,10 +262,11 @@ public class PlatformSettingsService
                 continue; // Strip unknown keys
 
             if (!string.IsNullOrWhiteSpace(value))
-                merged[key] = value;
+                merged[key] = category == GoogleHealthPlatformSettings.Category ? value.Trim() : value;
         }
 
-        if (category == GoogleHealthPlatformSettings.Category && !merged.ContainsKey("redirectUri") &&
+        if (category == GoogleHealthPlatformSettings.Category &&
+            string.IsNullOrWhiteSpace(merged.GetValueOrDefault("redirectUri")) &&
             GoogleHealthPlatformSettings.DefaultRedirectUri(_baseDomain.Value) is { Length: > 0 } callback)
             merged["redirectUri"] = callback;
 
