@@ -112,6 +112,21 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         return TreatmentFoodMapper.ToDomainModel(entity, food);
     }
 
+    /// <inheritdoc />
+    public async Task CreateManyAsync(
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (entries.Count == 0)
+            return;
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        db.Set<TreatmentFoodEntity>().AddRange(entries.Select(TreatmentFoodMapper.ToEntity));
+        await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
+    }
+
     /// <summary>
     /// Update a food breakdown entry.
     /// </summary>

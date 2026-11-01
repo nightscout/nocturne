@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Treatments;
@@ -31,7 +33,7 @@ internal static class WritingTreatmentService
         ITreatmentFoodService? foods = null)
     {
         IV4ToLegacyProjectionService projection = contexts is null
-            ? Mock.Of<IV4ToLegacyProjectionService>()
+            ? new Mock<IV4ToLegacyProjectionService>().AnswersSpanIdsPerId().Object
             : new V4ToLegacyProjectionService(
                 boluses, carbs, bgChecks, notes, deviceEvents, tempBasals, calculations,
                 Mock.Of<IProfileActivationRepository>(), foods ?? Mock.Of<ITreatmentFoodService>(), contexts,
@@ -40,7 +42,8 @@ internal static class WritingTreatmentService
         var store = new TreatmentReadService(
             projection, decomposer,
             tempBasals, boluses, carbs, bgChecks, notes, deviceEvents, calculations,
-            Mock.Of<IProfileActivationRepository>(), Mock.Of<IStateSpanService>(),
+            new Mock<IProfileActivationRepository>().AnswersServedIdsPerKey<IProfileActivationRepository, ProfileActivation>().Object,
+            Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
 
         return new TreatmentService(

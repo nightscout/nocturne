@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -25,7 +26,7 @@ public class TreatmentCreateBroadcastTests
     private const string Connector = "nightscout-connector";
     private static readonly DateTime At = new(2026, 10, 1, 8, 0, 0, DateTimeKind.Utc);
 
-    private readonly Mock<ITreatmentDecomposer> _decomposer = new();
+    private readonly Mock<IPerTreatmentDecomposer> _decomposer = new Mock<IPerTreatmentDecomposer>().AnswersBatchPerTreatment();
     private readonly Mock<IV4ToLegacyProjectionService> _projection = new();
     private readonly Mock<ITempBasalRepository> _tempBasals = new();
     private readonly Mock<IBolusRepository> _boluses = new();
@@ -43,16 +44,23 @@ public class TreatmentCreateBroadcastTests
             .Callback<string, object>((_, data) => _creates.Add((StorageDocumentEvent)data))
             .Returns(Task.CompletedTask);
 
+        _tempBasals.AnswersServedIdsPerKey<ITempBasalRepository, TempBasal>();
+        _boluses.AnswersServedIdsPerKey<IBolusRepository, Bolus>();
+        _carbs.AnswersServedIdsPerKey<ICarbIntakeRepository, CarbIntake>();
+        _notes.AnswersServedIdsPerKey<INoteRepository, Note>();
+        _activations.AnswersServedIdsPerKey<IProfileActivationRepository, ProfileActivation>();
+        _projection.AnswersSpanIdsPerId();
+        LegacyTreatmentRepositoryMockExtensions.AnswersCorrelationIdsPerId(_boluses, _carbs);
         var store = new TreatmentReadService(
             _projection.Object,
             _decomposer.Object,
             _tempBasals.Object,
             _boluses.Object,
             _carbs.Object,
-            Mock.Of<IBGCheckRepository>(),
+            new Mock<IBGCheckRepository>().AnswersServedIdsPerKey<IBGCheckRepository, BGCheck>().Object,
             _notes.Object,
-            Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(),
+            new Mock<IDeviceEventRepository>().AnswersServedIdsPerKey<IDeviceEventRepository, DeviceEvent>().Object,
+            new Mock<IBolusCalculationRepository>().AnswersServedIdsPerKey<IBolusCalculationRepository, BolusCalculation>().Object,
             _activations.Object,
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);

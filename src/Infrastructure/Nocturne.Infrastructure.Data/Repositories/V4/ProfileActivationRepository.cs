@@ -117,30 +117,22 @@ public class ProfileActivationRepository
         return entities.Select(ProfileActivationMapper.ToDomainModel).ToList();
     }
 
-    public async Task<int> SetEndsAsync(IReadOnlyDictionary<Guid, DateTime?> ends, CancellationToken ct = default)
+    public async Task<int> SettleAsync(
+        IReadOnlyDictionary<Guid, DateTime?> ends, IReadOnlyDictionary<Guid, Guid?> confirms, CancellationToken ct = default)
     {
-        if (ends.Count == 0)
+        var ids = ends.Keys.Concat(confirms.Keys).Distinct().ToList();
+        if (ids.Count == 0)
             return 0;
 
-        var ids = ends.Keys.ToList();
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx.ProfileActivations.Where(e => ids.Contains(e.Id)).ToListAsync(ct);
         foreach (var entity in entities)
-            entity.EndTimestamp = ends[entity.Id];
-        return entities.Count == 0 ? 0 : await SaveChangedAsync(ctx, entities, ct);
-    }
-
-    public async Task<int> SetRequestedActivationAsync(
-        IReadOnlyCollection<Guid> effectiveIds, Guid? requestedId, CancellationToken ct = default)
-    {
-        if (effectiveIds.Count == 0)
-            return 0;
-
-        var ids = effectiveIds.ToList();
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.ProfileActivations.Where(e => ids.Contains(e.Id)).ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.RequestedActivationId = requestedId;
+        {
+            if (ends.TryGetValue(entity.Id, out var end))
+                entity.EndTimestamp = end;
+            if (confirms.TryGetValue(entity.Id, out var requested))
+                entity.RequestedActivationId = requested;
+        }
         return entities.Count == 0 ? 0 : await SaveChangedAsync(ctx, entities, ct);
     }
 

@@ -103,9 +103,9 @@ public class BatchResendMatchesSingleTests : IDisposable
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             foods.Object,
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             _audit,
@@ -126,9 +126,9 @@ public class BatchResendMatchesSingleTests : IDisposable
             Rate = rate, Absolute = rate, Duration = 30,
         };
 
-        await decomposer.DecomposeAsync(Carbs(20), WriteOrigin.Live);
-        await decomposer.DecomposeAsync(Note("before"), WriteOrigin.Live);
-        await decomposer.DecomposeAsync(TempBasal(0.5), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(Carbs(20), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(Note("before"), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(TempBasal(0.5), WriteOrigin.Live);
 
         var result = await decomposer.DecomposeBatchAsync(
             [Carbs(35), Note("after"), TempBasal(1.5)], WriteOrigin.Live);
@@ -139,7 +139,7 @@ public class BatchResendMatchesSingleTests : IDisposable
         _context.Notes.Select(e => e.Text).Should().Equal("after");
         _context.TempBasals.Select(e => e.Rate).Should().Equal(1.5);
         foods.Verify(
-            s => s.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            s => s.AddManyAsync(It.Is<IReadOnlyCollection<TreatmentFood>>(lines => lines.Count == 1), It.IsAny<CancellationToken>()),
             Times.Once,
             "the food line is seeded on create only, so a resend leaves a user's deletion of it standing");
     }

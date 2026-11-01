@@ -42,9 +42,6 @@ public interface IProfileScopedRepository<TRecord> : ILegacyKeyedRepository<TRec
     Task<IEnumerable<TRecord>> GetByProfileNamesAsync(
         IEnumerable<string> profileNames, CancellationToken ct = default);
 
-    /// <summary>Every record stored under any of <paramref name="legacyIds"/>, in one query.</summary>
-    Task<IEnumerable<TRecord>> GetByLegacyIdsAsync(IEnumerable<string> legacyIds, CancellationToken ct = default);
-
     /// <summary>
     /// Delete all records whose legacy ObjectId starts with <paramref name="prefix"/>, replacing an
     /// entire profile upload atomically during decomposition.

@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
@@ -355,10 +357,25 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return entity is null ? null : ToDomain(entity);
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdsAsync" />
+    public async Task<IEnumerable<TModel>> GetByLegacyIdsAsync(
+        IEnumerable<string> legacyIds, CancellationToken ct = default)
+    {
+        var ids = legacyIds.Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0) return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.Set<TEntity>()
+            .AsNoTracking()
+            .Where(e => e.LegacyId != null && ids.Contains(e.LegacyId))
+            .ToListAsync(ct);
+        return entities.Select(ToDomain).ToList();
+    }
+
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdUuidPrefixAsync" />
     /// <remarks>
     /// Each range spans one case of one form, so it is correct under any collation that orders
-    /// same-case hex digits in hex order (C, libc and ICU all do). The ILIKE only re-checks the
+    /// same-case hex digits in hex order (C, libc and ICU all do). The prefix match only re-checks the
     /// rows a range admitted.
     /// </remarks>
     public async Task<TModel?> GetByLegacyIdUuidPrefixAsync(string objectId, CancellationToken ct = default)
@@ -366,26 +383,79 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         if (!MongoObjectId.IsObjectId(objectId))
             return null;
 
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await UuidPrefixed(ctx, objectId).OrderBy(e => e.Id).FirstOrDefaultAsync(ct);
+        return entity is null ? null : ToDomain(entity);
+    }
+
+    /// <summary>The rows whose UUID legacy id has <paramref name="objectId"/> as its 24-hex prefix.</summary>
+    private static IQueryable<TEntity> UuidPrefixed(NocturneDbContext ctx, string objectId) =>
+        UuidPrefixRanges(objectId)
+            .Select(range => ctx.Set<TEntity>().Where(range))
+            .Aggregate(Queryable.Concat);
+
+    /// <summary>
+    /// One range per form a UUID legacy id with <paramref name="objectId"/> as its 24-hex prefix is stored
+    /// in: dashed and dashless, each in lower and upper case.
+    /// </summary>
+    private static IEnumerable<Expression<Func<TEntity, bool>>> UuidPrefixRanges(string objectId)
+    {
         var dashed = string.Join('-', objectId[..8], objectId[8..12], objectId[12..16], objectId[16..20], objectId[20..]);
 
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        IQueryable<TEntity> InRange(string prefix, string lowSuffix, string highSuffix, int length)
+        Expression<Func<TEntity, bool>> InRange(string prefix, string lowSuffix, string highSuffix, int length)
         {
-            var (low, high, pattern) = (prefix + lowSuffix, prefix + highSuffix, prefix + "%");
-            return ctx.Set<TEntity>().Where(e => e.LegacyId != null
+            var (low, high) = (prefix + lowSuffix, prefix + highSuffix);
+            return e => e.LegacyId != null
                 && string.Compare(e.LegacyId, low) >= 0
                 && string.Compare(e.LegacyId, high) <= 0
                 && e.LegacyId.Length == length
-                && EF.Functions.ILike(e.LegacyId, pattern));
+                && e.LegacyId.StartsWith(prefix);
         }
 
-        var entity = await InRange(dashed, "00000000", "ffffffff", 36)
-            .Concat(InRange(dashed.ToUpperInvariant(), "00000000", "FFFFFFFF", 36))
-            .Concat(InRange(objectId, "00000000", "ffffffff", 32))
-            .Concat(InRange(objectId.ToUpperInvariant(), "00000000", "FFFFFFFF", 32))
-            .OrderBy(e => e.Id)
-            .FirstOrDefaultAsync(ct);
-        return entity is null ? null : ToDomain(entity);
+        yield return InRange(dashed, "00000000", "ffffffff", 36);
+        yield return InRange(dashed.ToUpperInvariant(), "00000000", "FFFFFFFF", 36);
+        yield return InRange(objectId, "00000000", "ffffffff", 32);
+        yield return InRange(objectId.ToUpperInvariant(), "00000000", "FFFFFFFF", 32);
+    }
+
+    /// <summary>
+    /// Served ids <see cref="GetByServedIdsAsync"/> reads in one statement; a statement for fewer repeats
+    /// the last, so every read has one shape.
+    /// </summary>
+    internal const int ServedIdsPerStatement = 50;
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByServedIdsAsync" />
+    public async Task<IReadOnlyList<TModel>> GetByServedIdsAsync(
+        IReadOnlyCollection<string> objectIds, CancellationToken ct = default)
+    {
+        var ids = objectIds.Where(MongoObjectId.IsObjectId).Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var found = new List<TEntity>();
+        foreach (var chunk in ids.Chunk(ServedIdsPerStatement))
+        {
+            Expression<Func<TEntity, bool>> byLegacyId = e => e.LegacyId != null && chunk.Contains(e.LegacyId);
+            var row = byLegacyId.Parameters[0];
+            var matches = byLegacyId.Body;
+            void Or(Expression<Func<TEntity, bool>> predicate) =>
+                matches = Expression.OrElse(matches, ReplacingExpressionVisitor.Replace(predicate.Parameters[0], row, predicate.Body));
+
+            foreach (var id in chunk.Concat(Enumerable.Repeat(chunk[^1], ServedIdsPerStatement - chunk.Length)))
+            {
+                if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+                    Or(e => e.Id >= low && e.Id <= high);
+                foreach (var range in UuidPrefixRanges(id))
+                    Or(range);
+            }
+
+            found.AddRange(await ctx.Set<TEntity>().AsNoTracking()
+                .Where(Expression.Lambda<Func<TEntity, bool>>(matches, row))
+                .ToListAsync(ct));
+        }
+
+        return [.. found.DistinctBy(e => e.Id).Select(ToDomain)];
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdHashAsync" />

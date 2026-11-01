@@ -62,6 +62,42 @@ internal static class StateSpanServiceMockExtensions
         return rows;
     }
 
+    /// <summary>
+    /// Answers the treatment decomposer's span reads and bulk writes through the per-span forms, so a
+    /// test sets up and verifies one span at a time: the open suspensions through
+    /// <see cref="IStateSpanService.GetStateSpansAsync"/>, every write through
+    /// <see cref="IStateSpanService.UpsertStateSpanAsync"/>.
+    /// </summary>
+    public static Mock<IStateSpanService> AnswersBatchFormsPerSpan(this Mock<IStateSpanService> mock)
+    {
+        mock
+            .Setup(s => s.GetStateSpansAroundAsync(
+                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlyCollection<string?>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Returns(async (StateSpanCategory category, DateTime _, DateTime _, IReadOnlyCollection<string?> _, int _, CancellationToken ct) =>
+                (IReadOnlyList<StateSpan>)[.. await mock.Object.GetStateSpansAsync(
+                    category, PumpModeState.Suspended.ToString(), null, null, null, true, 1, 0, true, ct) ?? []]);
+        mock
+            .Setup(s => s.UpsertStateSpansAsync(It.IsAny<IReadOnlyList<StateSpan>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IReadOnlyList<StateSpan> spans, CancellationToken ct) =>
+            {
+                var written = new List<StateSpanUpsert>();
+                foreach (var span in spans)
+                    written.Add(new StateSpanUpsert(await mock.Object.UpsertStateSpanAsync(span, ct) ?? span, UpsertOutcome.Created));
+                return (IReadOnlyList<StateSpanUpsert>)written;
+            });
+        mock
+            .Setup(s => s.UpdateStateSpansAsync(It.IsAny<IReadOnlyList<StateSpan>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IReadOnlyList<StateSpan> spans, CancellationToken ct) =>
+            {
+                var written = new List<StateSpan?>();
+                foreach (var span in spans)
+                    written.Add(await mock.Object.UpsertStateSpanAsync(span, ct) ?? span);
+                return (IReadOnlyList<StateSpan?>)written;
+            });
+        return mock;
+    }
+
     private static StateSpan Copy(StateSpan span) => new()
     {
         Id = span.Id,

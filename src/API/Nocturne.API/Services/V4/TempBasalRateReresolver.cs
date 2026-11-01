@@ -134,10 +134,9 @@ internal sealed class TempBasalRateReresolver(
         while (true)
         {
             var page = await tempBasals.GetScheduleDerivedAsync(window.From, window.To, after, PageSize, ct);
-            foreach (var tempBasal in page)
+            foreach (var (tempBasal, (rate, scheduled)) in page.Zip(await rates.RatesAtAsync(page, ct)))
             {
                 var percent = tempBasal.Percent!.Value;
-                var (rate, scheduled) = await rates.RateAtAsync(percent, tempBasal.StartMills, ct);
                 if (rate == tempBasal.Rate && scheduled == tempBasal.ScheduledRate)
                     continue;
 

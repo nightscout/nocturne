@@ -245,20 +245,6 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<TempBasal>> GetByLegacyIdsAsync(
-        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
-    {
-        if (legacyIds.Count == 0)
-            return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.TempBasals.AsNoTracking()
-            .Where(t => t.LegacyId != null && legacyIds.Contains(t.LegacyId))
-            .ToListAsync(ct);
-        return entities.Select(TempBasalMapper.ToDomainModel).ToList();
-    }
-
-    /// <inheritdoc />
     public async Task<TempBasal?> GetActiveAtAsync(DateTime at, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);

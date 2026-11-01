@@ -31,6 +31,12 @@ public interface ITreatmentFoodService
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>Adds food breakdown entries in one write.</summary>
+    Task AddManyAsync(
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default
+    );
+
     /// <summary>
     /// Update an existing food breakdown entry.
     /// </summary>

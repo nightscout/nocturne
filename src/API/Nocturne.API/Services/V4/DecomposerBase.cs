@@ -184,41 +184,18 @@ public abstract class DecomposerBase
     /// mutation trail.
     /// </summary>
     /// <remarks>
-    /// Every legacy create reaches a decomposer's batch path — v1 and v3 normalize a lone record
-    /// into a one-element array — so that path carries uploader ingestion (Loop, AAPS, xDrip,
-    /// connectors, the demo seeder) at CGM sample rate. The audit interceptor drops
-    /// system-attributed saves, and provenance for those rows lives on their own
-    /// <see cref="IV4Record.DataSource"/>. The single-record path deliberately keeps caller
-    /// attribution: it is reached from a genuine per-record edit, and since a legacy record
-    /// persists only as its decomposed v4 rows, their audit rows are the whole trail of that edit.
-    /// Connector re-syncs of the single path are system-attributed by the sync scope's own audit
-    /// context rather than here. <see cref="ProfileDecomposer"/> takes no scope on either path: a
-    /// profile persists only as its decomposed rows, so their audit rows are the whole trail of a
-    /// user's profile edit, and an unchanged re-upsert writes nothing to audit.
+    /// The audit interceptor drops system-attributed saves, so a decomposer applies this only to writes
+    /// whose audit rows would not be a person's trail. Entries and device statuses arrive from uploaders
+    /// at CGM sample rate and keep their provenance on each row's <see cref="IV4Record.DataSource"/>, so
+    /// they are always system-attributed. A legacy treatment or profile persists only as its decomposed
+    /// rows, so their audit rows are the whole trail of a careportal entry or an edit: a live treatment
+    /// keeps the caller's attribution and only a backfill is system-attributed, except the removal of a
+    /// reclassified treatment's rows (<see cref="TreatmentDecomposer.DropAbsentAsync"/>), and
+    /// <see cref="ProfileDecomposer"/> takes no scope, since an unchanged re-upsert writes nothing to
+    /// audit. Connector syncs are system-attributed by the sync scope's own audit context.
     /// </remarks>
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext);
-
-    /// <summary>
-    /// Runs <paramref name="body"/> with last-seen writes held, then writes each device's once. A
-    /// throwing <paramref name="body"/> discards them instead, so its exception is the one that
-    /// surfaces rather than a flush failure replacing it.
-    /// </summary>
-    protected static async Task DeferLastSeenAsync(IDeviceService deviceService, Func<Task> body, CancellationToken ct)
-    {
-        await using var deferral = deviceService.DeferLastSeen(ct);
-        var completed = false;
-        try
-        {
-            await body();
-            completed = true;
-        }
-        finally
-        {
-            if (!completed)
-                deferral?.Discard();
-        }
-    }
 
     protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
     {
@@ -259,7 +236,7 @@ public abstract class DecomposerBase
     /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, or, when the row
     /// already held it, in <see cref="DecompositionResult.UnchangedRecords"/>.
     /// </summary>
-    protected static async Task BulkUpsertAsync<TRecord>(
+    protected static async Task<BulkWrite<TRecord>> BulkUpsertAsync<TRecord>(
         IBulkUpsertRepository<TRecord> repository,
         List<TRecord> records,
         DecompositionResult result,
@@ -268,7 +245,7 @@ public abstract class DecomposerBase
         where TRecord : class
     {
         if (records.Count == 0)
-            return;
+            return [];
 
         BulkWrite<TRecord> written;
         try
@@ -282,6 +259,7 @@ public abstract class DecomposerBase
         }
 
         Fold(written, result);
+        return written;
     }
 
     protected static async Task BulkCreateAsync<TRecord>(

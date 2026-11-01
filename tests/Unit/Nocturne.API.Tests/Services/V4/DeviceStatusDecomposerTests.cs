@@ -242,11 +242,10 @@ public class DeviceStatusDecomposerTests : IDisposable
             Device = "openaps://Samsung",
             Pump = new PumpStatus { Manufacturer = "Insulet", Model = "Omnipod 5" }
         };
-        _deviceServiceMock
-            .SetupSequence(s => s.ResolvePatientDeviceAsync(
-                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(first)
-            .ReturnsAsync(second);
+        _deviceServiceMock.Links()
+            .SetupSequence(l => l.Resolve(It.IsAny<Guid?>(), It.IsAny<long>()))
+            .Returns(first)
+            .Returns(second);
 
         await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
         await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
@@ -268,11 +267,10 @@ public class DeviceStatusDecomposerTests : IDisposable
 
         // The second resolution is ambiguous (a second pump has been registered since), so it
         // returns nothing and the stored attribution has to survive the re-decompose.
-        _deviceServiceMock
-            .SetupSequence(s => s.ResolvePatientDeviceAsync(
-                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(patientDeviceId)
-            .ReturnsAsync((Guid?)null);
+        _deviceServiceMock.Links()
+            .SetupSequence(l => l.Resolve(It.IsAny<Guid?>(), It.IsAny<long>()))
+            .Returns(patientDeviceId)
+            .Returns((Guid?)null);
 
         await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
         await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
@@ -2652,12 +2650,9 @@ public class DeviceStatusDecomposerTests : IDisposable
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedDeviceId);
 
-        _deviceServiceMock
-            .Setup(s => s.ResolvePatientDeviceAsync(
-                expectedDeviceId,
-                1700000000000,
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedPatientDeviceId);
+        _deviceServiceMock.Links()
+            .Setup(l => l.Resolve(expectedDeviceId, 1700000000000))
+            .Returns(expectedPatientDeviceId);
 
         var ds = new DeviceStatus
         {

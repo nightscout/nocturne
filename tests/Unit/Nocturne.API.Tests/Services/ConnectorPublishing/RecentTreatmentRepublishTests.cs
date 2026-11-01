@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
@@ -181,8 +182,8 @@ public class RecentTreatmentRepublishTests : IDisposable
 
         var decomposer = new TreatmentDecomposer(
             _context.AsFactory(), bolus, Mock.Of<ITempBasalRepository>(), carbs, bgChecks, notes, deviceEvents, calculations,
-            Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), Mock.Of<IDeviceService>(),
-            Mock.Of<IPatientDeviceStamper>(), Mock.Of<IActiveProfileResolver>(),
+            Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), new UnresolvedDevices(),
+            Mock.Of<IPatientDeviceStamper>(), new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), audit, NullLogger<TreatmentDecomposer>.Instance);
         var service = WritingTreatmentService.Over(
             decomposer, Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations);

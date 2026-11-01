@@ -136,6 +136,23 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     /// <param name="correlationId">The correlation identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of bolus records.</returns>
+    public async Task<IEnumerable<Bolus>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds,
+        CancellationToken ct = default
+    )
+    {
+        var ids = correlationIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .Boluses.AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+        return entities.Select(BolusMapper.ToDomainModel).ToList();
+    }
+
     public async Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default

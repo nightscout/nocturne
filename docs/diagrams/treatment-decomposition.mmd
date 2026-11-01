@@ -28,6 +28,15 @@ flowchart LR
     device --> DeviceEvent
     state --> StateSpan
 
+    subgraph phases["DecomposeBatchAsync: four phases, a fixed number of queries whatever the batch's size"]
+        direction TB
+        p1["<b>1. Preload</b><br/>live rows under the batch's legacy ids, one read per table<br/>treatment spans under them, one read<br/>pumps of the batch, one resolution; their patient-device links, one read<br/>meal carbs paired with the stored boluses, one read<br/>pump-mode spans: every open span, those overlapping the suspends and resumes, and the first 10 after them"]
+        p2["<b>2. Build</b><br/>per legacy id its last version that writes<br/>every model in memory; a field Nocturne cannot read refuses only its treatment"]
+        p3["<b>3. Write</b><br/>drops of what a reclassified treatment no longer writes<br/>profile activations settled in memory over one bounded read, written in one upsert and one settle<br/>temp basal insulin and percent rates, one read each<br/>one bulk upsert per table, calculations before boluses<br/>food lines, one read and one write"]
+        p4["<b>4. Fold</b><br/>pump suspends and resumes, oldest first, over the preloaded spans<br/>changed spans in one update, opened spans with the overrides and temporary targets in one upsert"]
+        p1 --> p2 --> p3 --> p4
+    end
+
     subgraph v4["V4 Decomposed Models"]
         direction TB
 

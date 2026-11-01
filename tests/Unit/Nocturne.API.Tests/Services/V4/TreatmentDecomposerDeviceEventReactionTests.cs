@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -66,9 +67,9 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             Mock.Of<ITreatmentFoodService>(),
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             audit,
@@ -84,7 +85,7 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
     }
 
     private Task DecomposeSensorChangeAsync() =>
-        _decomposer.DecomposeAsync(
+        _decomposer.DecomposeOneAsync(
             new Treatment { Id = LegacyId, EventType = "Sensor Change", Mills = At, EnteredBy = "careportal" },
             WriteOrigin.Live);
 

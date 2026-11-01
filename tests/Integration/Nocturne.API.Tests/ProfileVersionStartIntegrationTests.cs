@@ -88,14 +88,13 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
                 .ToList());
         starts.Should().Equal((first.UtcDateTime, 1.0), (second.UtcDateTime, 2.0));
 
-        var (before, between, after) = await WithTenantScopeAsync(async sp =>
-        {
-            var basal = sp.GetRequiredService<IBasalRateResolver>();
-            return (
-                await basal.FindBasalRateAsync(first.AddDays(1).ToUnixTimeMilliseconds()),
-                await basal.FindBasalRateAsync(second.AddDays(1).ToUnixTimeMilliseconds()),
-                await basal.FindBasalRateAsync(Now.ToUnixTimeMilliseconds()));
-        });
+        var rates = await WithTenantScopeAsync(sp => sp.GetRequiredService<IBasalRateResolver>().FindBasalRatesAsync(
+        [
+            first.AddDays(1).ToUnixTimeMilliseconds(),
+            second.AddDays(1).ToUnixTimeMilliseconds(),
+            Now.ToUnixTimeMilliseconds(),
+        ]));
+        var (before, between, after) = (rates[0], rates[1], rates[2]);
         before.Should().Be(1.0, "the first document is in force until the second starts");
         between.Should().Be(2.0, "the second document starts before then");
         after.Should().Be(2.0);
