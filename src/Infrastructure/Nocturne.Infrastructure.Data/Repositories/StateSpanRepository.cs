@@ -295,16 +295,57 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     ) => (await UpsertBatchAsync([stateSpan], cancellationToken))[0];
 
-    /// <summary>
-    /// Bulk upsert state spans (for connector imports)
-    /// </summary>
-    /// <param name="stateSpans">The collection of state spans to upsert.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The number of spans processed.</returns>
-    public async Task<int> BulkUpsertAsync(
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StateSpan>> BulkUpsertAsync(
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default
-    ) => (await UpsertBatchAsync(stateSpans.ToList(), cancellationToken)).Count;
+    ) => await UpsertBatchAsync(stateSpans.ToList(), cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StateSpan?>> UpdateStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = stateSpans.Select(s => s.Id).OfType<string>().Distinct().ToList();
+        if (ids.Count == 0)
+            return [.. stateSpans.Select(_ => (StateSpan?)null)];
+
+        var guids = ids.Select(id => Guid.TryParse(id, out var guid) ? guid : (Guid?)null).OfType<Guid>().ToList();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db.StateSpans
+            .Where(s => (s.OriginalId != null && ids.Contains(s.OriginalId)) || guids.Contains(s.Id))
+            .ToListAsync(cancellationToken);
+        var byOriginalId = entities.Where(e => e.OriginalId != null)
+            .GroupBy(e => e.OriginalId!).ToDictionary(g => g.Key, g => g.First());
+        var byId = entities.ToDictionary(e => e.Id.ToString(), StringComparer.OrdinalIgnoreCase);
+
+        var updated = new List<StateSpanEntity?>(stateSpans.Count);
+        foreach (var stateSpan in stateSpans)
+        {
+            var entity = stateSpan.Id is { } id ? byOriginalId.GetValueOrDefault(id) ?? byId.GetValueOrDefault(id) : null;
+            if (entity is not null)
+                StateSpanMapper.UpdateEntity(entity, stateSpan);
+            updated.Add(entity);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
+        return [.. updated.Select(e => e is null ? null : StateSpanMapper.ToDomainModel(e))];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StateSpan>> GetOpenOrEndingFromAsync(
+        StateSpanCategory category,
+        DateTime? endingFrom,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = BuildFilteredQuery(db, category, null, null, null, null, null);
+        query = endingFrom is { } from
+            ? query.Where(s => s.EndTimestamp == null || s.EndTimestamp >= from)
+            : query.Where(s => s.EndTimestamp == null);
+        return [.. (await query.ToListAsync(cancellationToken)).Select(StateSpanMapper.ToDomainModel)];
+    }
 
     /// <summary>
     /// Upserts <paramref name="stateSpans"/> by <c>OriginalId</c> with one save, leaving the rows a

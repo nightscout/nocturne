@@ -1935,7 +1935,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasFilter("deleted_at IS NULL");
 
         // Devices unique index (scoped to live records, per tenant).
-        // TenantId must be part of the key: devices are tenant-owned (FindByCategoryTypeAndSerialAsync
+        // TenantId must be part of the key: devices are tenant-owned (FindByIdentitiesAsync
         // is RLS-scoped to the current tenant) and the type/serial often carry shared, non-unique
         // values — e.g. a pump's manufacturer/model ("Insulet"/"Omnipod 5") or the generic Loop
         // uploader identity ("iPhone"/"unknown"). Without TenantId the constraint is global, so the

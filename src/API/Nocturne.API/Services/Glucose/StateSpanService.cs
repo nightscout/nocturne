@@ -135,6 +135,27 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpan>> UpsertStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+        => stateSpans.Count == 0
+            ? Task.FromResult<IReadOnlyList<StateSpan>>([])
+            : _repository.BulkUpsertAsync(stateSpans, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpan?>> UpdateStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+        => _repository.UpdateStateSpansAsync(stateSpans, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpan>> GetOpenOrEndingFromAsync(
+        StateSpanCategory category,
+        DateTime? endingFrom,
+        CancellationToken cancellationToken = default)
+        => _repository.GetOpenOrEndingFromAsync(category, endingFrom, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<bool> DeleteStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default)

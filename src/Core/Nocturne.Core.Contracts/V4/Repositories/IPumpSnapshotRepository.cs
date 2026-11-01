@@ -51,6 +51,13 @@ public interface IPumpSnapshotRepository : ILegacyKeyedRepository<PumpSnapshot>
     Task<PumpSnapshot?> GetLatestBeforeAsync(DateTime timestamp, CancellationToken ct = default);
 
     /// <summary>
+    /// The snapshots from <paramref name="from"/> through <paramref name="through"/>, with the newest
+    /// before <paramref name="from"/>, in one query: what <see cref="GetLatestBeforeAsync"/> reads for
+    /// any instant in the window.
+    /// </summary>
+    Task<IReadOnlyList<PumpSnapshot>> GetTimelineAsync(DateTime from, DateTime through, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the latest <see cref="PumpSnapshot"/> for the current tenant, or <c>null</c>
     /// if none exists.
     /// </summary>

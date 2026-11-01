@@ -111,6 +111,22 @@ public interface IStateSpanService
         StateSpan stateSpan,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.BulkUpsertAsync"/>
+    Task<IReadOnlyList<StateSpan>> UpsertStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.UpdateStateSpansAsync"/>
+    Task<IReadOnlyList<StateSpan?>> UpdateStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetOpenOrEndingFromAsync"/>
+    Task<IReadOnlyList<StateSpan>> GetOpenOrEndingFromAsync(
+        StateSpanCategory category,
+        DateTime? endingFrom,
+        CancellationToken cancellationToken = default);
+
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteStateSpanAsync(
         string id,

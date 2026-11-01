@@ -146,6 +146,44 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
         return [.. rows.OrderBy(r => r.Timestamp).Select(ToLoopCycle)];
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ApsSnapshotMark>> GetMarksAsync(
+        IReadOnlyCollection<string?> devices, DateTime after, DateTime through, int following,
+        CancellationToken ct = default)
+    {
+        if (devices.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        IQueryable<ApsSnapshotEntity> Of(string? device) =>
+            device is null ? ctx.ApsSnapshots.AsNoTracking() : ctx.ApsSnapshots.AsNoTracking().Where(e => e.Device == device);
+
+        IEnumerable<string?> filters = devices.Contains(null) ? [null] : devices.Distinct();
+        IQueryable<MarkColumns>? query = null;
+        foreach (var device in filters)
+        {
+            var marks = Of(device).Where(e => e.Timestamp > after && e.Timestamp <= through).Select(Mark)
+                .Concat(Of(device).Where(e => e.Timestamp > through)
+                    .OrderBy(e => e.Timestamp).ThenBy(e => e.Id).Take(following).Select(Mark));
+            query = query is null ? marks : query.Concat(marks);
+        }
+
+        var rows = await query!.ToListAsync(ct);
+        return [.. rows.DistinctBy(r => r.Id).Select(r => new ApsSnapshotMark(r.Id, r.LegacyId, r.Device, r.Timestamp))];
+    }
+
+    private static readonly System.Linq.Expressions.Expression<Func<ApsSnapshotEntity, MarkColumns>> Mark =
+        e => new MarkColumns { Id = e.Id, LegacyId = e.LegacyId, Device = e.Device, Timestamp = e.Timestamp };
+
+    /// <summary>Set by member initialisation, which EF can translate on both sides of a union.</summary>
+    private sealed class MarkColumns
+    {
+        public Guid Id { get; init; }
+        public string? LegacyId { get; init; }
+        public string? Device { get; init; }
+        public DateTime Timestamp { get; init; }
+    }
+
     internal static ApsLoopCycle ToLoopCycle(LoopCycleColumns r)
     {
         var reason = string.IsNullOrEmpty(r.Reason) ? null : r.Reason;

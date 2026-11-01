@@ -70,6 +70,17 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<PumpSnapshot>> GetTimelineAsync(DateTime from, DateTime through, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var snapshots = ctx.PumpSnapshots.AsNoTracking();
+        var entities = await snapshots.Where(e => e.Timestamp < from).OrderByDescending(e => e.Timestamp).Take(1)
+            .Concat(snapshots.Where(e => e.Timestamp >= from && e.Timestamp <= through))
+            .ToListAsync(ct);
+        return [.. entities.Select(PumpSnapshotMapper.ToDomainModel)];
+    }
+
+    /// <inheritdoc />
     public async Task<PumpSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);

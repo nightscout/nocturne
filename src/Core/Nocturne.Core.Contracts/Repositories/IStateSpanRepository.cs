@@ -112,11 +112,30 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Bulk upserts multiple state spans, typically used by connector imports.
+    /// Upserts <paramref name="stateSpans"/> by original id with one save, leaving the rows
+    /// <see cref="UpsertStateSpanAsync"/> per span in input order would.
     /// </summary>
-    /// <returns>The number of records upserted.</returns>
-    Task<int> BulkUpsertAsync(
+    /// <returns>Per input span, the row it wrote or the soft-deleted row that blocked it.</returns>
+    Task<IReadOnlyList<StateSpan>> BulkUpsertAsync(
         IEnumerable<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes each of <paramref name="stateSpans"/> onto the live row carrying its id, with one save.
+    /// </summary>
+    /// <remarks>A span's id is its original id when it has one, as <see cref="UpdateStateSpanAsync"/> matches it.</remarks>
+    /// <returns>Per input span, the row it updated, or <c>null</c> where no live row carries its id.</returns>
+    Task<IReadOnlyList<StateSpan?>> UpdateStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The spans of <paramref name="category"/> still open, or ending at or after
+    /// <paramref name="endingFrom"/> when one is given, in one query.
+    /// </summary>
+    Task<IReadOnlyList<StateSpan>> GetOpenOrEndingFromAsync(
+        StateSpanCategory category,
+        DateTime? endingFrom,
         CancellationToken cancellationToken = default);
 
     /// <param name="stateSpan">The updated <see cref="StateSpan"/> data.</param>

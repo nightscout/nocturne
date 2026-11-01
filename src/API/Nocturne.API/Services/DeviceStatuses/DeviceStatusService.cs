@@ -47,38 +47,33 @@ internal sealed class DeviceStatusService(
 
     /// <remarks>
     /// The announcement runs whatever ends the batch, and not on the request's token: a status that was
-    /// written stays written when the request is cancelled or a later status fails, and a client that
-    /// missed its broadcast, or an upstream that missed its write-back, would never learn of it.
+    /// written stays written when the request is cancelled or the batch fails part-way, and a client that
+    /// missed its broadcast, or an upstream that missed its write-back, would never learn of it. A batch
+    /// that failed reports no verdicts, so each status stored by then is announced.
     /// </remarks>
     public async Task<BulkWrite<DeviceStatus>> CreateDeviceStatusesAsync(
         IReadOnlyList<DeviceStatus> statuses, string? source = null, WriteOrigin origin = WriteOrigin.Live,
         CancellationToken cancellationToken = default)
     {
         var announce = origin == WriteOrigin.Live;
-        var decomposed = new List<(DeviceStatus Status, bool Wrote)>(statuses.Count);
+        DeviceStatusDecomposition? result = null;
         IReadOnlyList<DeviceStatus> served = [];
-        var skippedDeleted = 0;
         try
         {
-            foreach (var status in statuses)
-            {
-                var result = await decomposer.DecomposeAsync(status, source, origin, cancellationToken);
-                skippedDeleted += result.SkippedDeleted;
-                decomposed.Add((status, result.CreatedRecords.Count > 0 || result.UpdatedRecords.Count > 0));
-            }
+            result = await decomposer.DecomposeBatchAsync(statuses, source, origin, cancellationToken);
         }
         finally
         {
             if (announce)
-                served = await AnnounceCreatedAsync(decomposed, source);
+                served = await AnnounceCreatedAsync(statuses, result?.Wrote, source);
         }
 
-        return new BulkWrite<DeviceStatus>(announce ? served : [.. decomposed.Select(d => d.Status)], skippedDeleted);
+        return new BulkWrite<DeviceStatus>(announce ? served : statuses, result!.SkippedDeleted);
     }
 
-    public Task<DecompositionResult> ImportDeviceStatusesAsync(
+    public async Task<DecompositionResult> ImportDeviceStatusesAsync(
         IReadOnlyList<DeviceStatus> statuses, string? source, CancellationToken cancellationToken = default) =>
-        decomposer.DecomposeBatchAsync(statuses, source, WriteOrigin.Backfill, cancellationToken);
+        await decomposer.DecomposeBatchAsync(statuses, source, WriteOrigin.Backfill, cancellationToken);
 
     /// <remarks>
     /// The id may be only the wire form of the stored one, and the stored snapshots are found by the
@@ -137,21 +132,24 @@ internal sealed class DeviceStatusService(
     }
 
     /// <summary>
-    /// Reads each status back as reads serve it, and announces those that wrote a record. A read carries
-    /// no data source, so each is stamped with <paramref name="source"/> for the write-back to skip on.
+    /// Reads each status back as reads serve it, and announces those that wrote a record, or, without
+    /// <paramref name="wrote"/>, those stored. A read carries no data source, so each is stamped with
+    /// <paramref name="source"/> for the write-back to skip on.
     /// </summary>
     /// <returns>Every status, as read back or else as given.</returns>
     private async Task<IReadOnlyList<DeviceStatus>> AnnounceCreatedAsync(
-        IReadOnlyList<(DeviceStatus Status, bool Wrote)> decomposed, string? source)
+        IReadOnlyList<DeviceStatus> statuses, IReadOnlyList<bool>? wrote, string? source)
     {
-        var served = new List<DeviceStatus>(decomposed.Count);
-        var announced = new List<DeviceStatus>(decomposed.Count);
-        foreach (var (status, wrote) in decomposed)
+        var served = new List<DeviceStatus>(statuses.Count);
+        var announced = new List<DeviceStatus>(statuses.Count);
+        for (var i = 0; i < statuses.Count; i++)
         {
-            var read = await ReadBackAsync(status);
+            var read = await ReadBackAsync(statuses[i]);
+            var stored = read is not null;
+            read ??= statuses[i];
             read.DataSource = source;
             served.Add(read);
-            if (wrote)
+            if (wrote?[i] ?? stored)
                 announced.Add(read);
         }
 
@@ -164,20 +162,23 @@ internal sealed class DeviceStatusService(
         return served;
     }
 
-    /// <remarks>The write has committed, so a failed read-back serves the status as written.</remarks>
-    private async Task<DeviceStatus> ReadBackAsync(DeviceStatus status)
+    /// <remarks>
+    /// The write has committed, so a failed read-back serves the status as written.
+    /// </remarks>
+    /// <returns>The status as stored, or <see langword="null"/> when it could not be read back.</returns>
+    private async Task<DeviceStatus?> ReadBackAsync(DeviceStatus status)
     {
         if (string.IsNullOrEmpty(status.Id))
-            return status;
+            return null;
 
         try
         {
-            return await store.GetByIdAsync(status.Id, CancellationToken.None) ?? status;
+            return await store.GetByIdAsync(status.Id, CancellationToken.None);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Created device status {Id} could not be read back", status.Id);
-            return status;
+            return null;
         }
     }
 }

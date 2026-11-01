@@ -119,4 +119,13 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// </summary>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
     Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// The marks of the snapshots of <paramref name="devices"/> after <paramref name="after"/> through
+    /// <paramref name="through"/>, and of each device's first <paramref name="following"/> after that,
+    /// in one query. A null device matches every device.
+    /// </summary>
+    Task<IReadOnlyList<ApsSnapshotMark>> GetMarksAsync(
+        IReadOnlyCollection<string?> devices, DateTime after, DateTime through, int following,
+        CancellationToken ct = default);
 }

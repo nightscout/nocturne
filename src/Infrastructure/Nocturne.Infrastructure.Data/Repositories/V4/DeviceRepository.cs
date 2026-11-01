@@ -36,21 +36,24 @@ public class DeviceRepository : IDeviceRepository
         return entity is null ? null : DeviceMapper.ToDomainModel(entity);
     }
 
-    /// <summary>
-    /// Finds a device by its category, type, and serial number.
-    /// </summary>
-    /// <param name="category">The device category.</param>
-    /// <param name="type">The device type.</param>
-    /// <param name="serial">The device serial number.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The matching device, or null if not found.</returns>
-    public async Task<Device?> FindByCategoryTypeAndSerialAsync(DeviceCategory category, string type, string serial, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Device>> FindByIdentitiesAsync(
+        IReadOnlyCollection<(DeviceCategory Category, string Type, string Serial)> identities,
+        CancellationToken ct = default)
     {
+        if (identities.Count == 0)
+            return [];
+
+        var keys = identities.Select(i => (Category: i.Category.ToString(), i.Type, i.Serial)).ToHashSet();
+        var categories = keys.Select(k => k.Category).Distinct().ToList();
+        var types = keys.Select(k => k.Type).Distinct().ToList();
+        var serials = keys.Select(k => k.Serial).Distinct().ToList();
+
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var categoryStr = category.ToString();
-        var entity = await ctx.Devices
-            .FirstOrDefaultAsync(e => e.Category == categoryStr && e.Type == type && e.Serial == serial, ct);
-        return entity is null ? null : DeviceMapper.ToDomainModel(entity);
+        var entities = await ctx.Devices
+            .Where(e => categories.Contains(e.Category) && types.Contains(e.Type) && serials.Contains(e.Serial))
+            .ToListAsync(ct);
+        return [.. entities.Where(e => keys.Contains((e.Category, e.Type, e.Serial))).Select(DeviceMapper.ToDomainModel)];
     }
 
     /// <summary>
