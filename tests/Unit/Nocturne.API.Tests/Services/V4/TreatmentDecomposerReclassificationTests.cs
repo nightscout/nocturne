@@ -45,7 +45,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         AuthType = "SessionCookie",
     };
     private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
-    private readonly Mock<IStateSpanService> _stateSpans = new();
+    private readonly Mock<IStateSpanService> _stateSpans = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
     private readonly RecordingLegacyReads _legacyReads = new();
 
     public TreatmentDecomposerReclassificationTests()
@@ -118,9 +118,9 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             foods.Object,
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             _audit,
@@ -128,9 +128,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             legacyReads: _legacyReads);
     }
 
-    private Task DecomposeAsync(Treatment treatment, bool batch) => batch
-        ? Decomposer().DecomposeBatchAsync([treatment], WriteOrigin.Live)
-        : Decomposer().DecomposeAsync(treatment, WriteOrigin.Live);
+    private Task DecomposeAsync(Treatment treatment) => Decomposer().DecomposeOneAsync(treatment, WriteOrigin.Live);
 
     private static Treatment PlainNote() => new()
     {
@@ -171,15 +169,13 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         + await _context.BolusCalculations.IgnoreQueryFilters().CountAsync(e => e.DeletedAt != null)
         + await _context.StateSpans.IgnoreQueryFilters().CountAsync(e => e.DeletedAt != null);
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task A_note_reuploaded_as_an_effective_profile_switch_becomes_the_activation_alone(bool batch)
+    [Fact]
+    public async Task A_note_reuploaded_as_an_effective_profile_switch_becomes_the_activation_alone()
     {
-        await DecomposeAsync(PlainNote(), batch);
+        await DecomposeAsync(PlainNote());
         (await _context.Notes.CountAsync()).Should().Be(1);
 
-        await DecomposeAsync(EffectiveSwitch(), batch);
+        await DecomposeAsync(EffectiveSwitch());
 
         (await _context.Notes.CountAsync()).Should().Be(0, "the note it was first read as is no longer the treatment");
         var activation = await _context.ProfileActivations.AsNoTracking().SingleAsync(a => a.LegacyId == "aaps-1");
@@ -190,7 +186,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     [Fact]
     public async Task A_drop_that_committed_is_reported_when_a_later_span_drop_fails()
     {
-        await DecomposeAsync(PlainNote(), batch: false);
+        await DecomposeAsync(PlainNote());
         StoreSpan(new StateSpan
         {
             OriginalId = "aaps-1",
@@ -204,7 +200,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         _legacyReads.Models.Clear();
 
         var reupload = () => DecomposeAsync(
-            new Treatment { Id = "aaps-1", EventType = "Correction Bolus", Mills = At, Insulin = 1 }, batch: false);
+            new Treatment { Id = "aaps-1", EventType = "Correction Bolus", Mills = At, Insulin = 1 });
 
         await reupload.Should().ThrowAsync<InvalidOperationException>();
         (await _context.Notes.CountAsync()).Should().Be(0, "the note's drop committed before the span drop failed");
@@ -214,8 +210,8 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     [Fact]
     public async Task The_removed_note_does_not_hold_off_a_later_upload_that_writes_it_again()
     {
-        await DecomposeAsync(PlainNote(), batch: false);
-        await DecomposeAsync(EffectiveSwitch(), batch: false);
+        await DecomposeAsync(PlainNote());
+        await DecomposeAsync(EffectiveSwitch());
 
         (await _context.GetBlockingLegacyIdsAsync<NoteEntity>(["aaps-1"])).Held.Should().BeEmpty(
             "a reclassification is not the user deleting the note");
@@ -228,9 +224,9 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         {
             Id = "ps-1", EventType = "Profile Switch", Mills = At, Profile = "Weekend", Duration = 0,
             ProfileJson = """{"units":"mmol","dia":5,"basal":[{"time":"00:00","timeAsSeconds":0,"value":0.9}]}""",
-        }, batch: false);
+        });
 
-        await DecomposeAsync(new Treatment { Id = "ps-1", EventType = "Note", Mills = At, Notes = "Weekend" }, batch: false);
+        await DecomposeAsync(new Treatment { Id = "ps-1", EventType = "Note", Mills = At, Notes = "Weekend" });
 
         (await _context.ProfileActivations.CountAsync()).Should().Be(0);
         (await _context.ProfileActivations.IgnoreQueryFilters().SingleAsync())
@@ -240,28 +236,24 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         (await _context.Notes.SingleAsync()).Text.Should().Be("Weekend");
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task A_bolus_wizard_edited_to_drop_its_carbs_loses_only_the_carb_half(bool batch)
+    [Fact]
+    public async Task A_bolus_wizard_edited_to_drop_its_carbs_loses_only_the_carb_half()
     {
-        await DecomposeAsync(BolusWizard(carbs: 40), batch);
+        await DecomposeAsync(BolusWizard(carbs: 40));
         (await _context.CarbIntakes.CountAsync()).Should().Be(1);
 
-        await DecomposeAsync(BolusWizard(carbs: null), batch);
+        await DecomposeAsync(BolusWizard(carbs: null));
 
         (await _context.CarbIntakes.CountAsync()).Should().Be(0);
         (await _context.Boluses.SingleAsync()).Insulin.Should().Be(4);
         (await _context.BolusCalculations.CountAsync()).Should().Be(1);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task A_reupload_of_the_same_kind_removes_nothing(bool batch)
+    [Fact]
+    public async Task A_reupload_of_the_same_kind_removes_nothing()
     {
-        await DecomposeAsync(BolusWizard(carbs: 40, notes: "lunch"), batch);
-        await DecomposeAsync(BolusWizard(carbs: 40, notes: "lunch"), batch);
+        await DecomposeAsync(BolusWizard(carbs: 40, notes: "lunch"));
+        await DecomposeAsync(BolusWizard(carbs: 40, notes: "lunch"));
 
         (await DeletedRowsAsync()).Should().Be(0);
         (await _context.Boluses.CountAsync()).Should().Be(1);
@@ -273,8 +265,8 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     [Fact]
     public async Task A_reupload_of_an_effective_profile_switch_removes_nothing()
     {
-        await DecomposeAsync(EffectiveSwitch(), batch: false);
-        await DecomposeAsync(EffectiveSwitch(), batch: false);
+        await DecomposeAsync(EffectiveSwitch());
+        await DecomposeAsync(EffectiveSwitch());
 
         (await DeletedRowsAsync()).Should().Be(0);
         _stateSpans.Verify(s => s.DeleteStateSpanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -299,7 +291,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        var result = await Decomposer().DecomposeAsync(
+        var result = await Decomposer().DecomposeOneAsync(
             new Treatment { Id = "meal-pre-fix", EventType = "Meal Bolus", Mills = At, Carbs = 60 }, WriteOrigin.Live);
 
         result.UpdatedRecords.OfType<Nocturne.Core.Models.V4.CarbIntake>().Should().ContainSingle().Which.Carbs.Should().Be(60);
@@ -321,8 +313,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         _context.ChangeTracker.Clear();
 
         await DecomposeAsync(
-            new Treatment { Id = "syn-temp-basal", EventType = "Meal Bolus", Mills = At, Insulin = 0.0014756944 },
-            batch: true);
+            new Treatment { Id = "syn-temp-basal", EventType = "Meal Bolus", Mills = At, Insulin = 0.0014756944 });
 
         (await _context.TempBasals.CountAsync()).Should().Be(1);
     }

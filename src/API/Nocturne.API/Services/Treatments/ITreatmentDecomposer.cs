@@ -7,35 +7,31 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
-/// Decomposes legacy Treatment records into v4 granular models (Bolus, CarbIntake, BGCheck, Note, BolusCalculation)
-/// and delegates StateSpan-backed types (TempBasal, ProfileSwitch) to <see cref="IStateSpanService"/>.
+/// Decomposes legacy Treatment records into v4 granular models (Bolus, CarbIntake, BGCheck, Note,
+/// BolusCalculation, DeviceEvent, TempBasal, ProfileActivation) and writes the state spans of overrides,
+/// temporary targets and pump suspensions through <see cref="IStateSpanService"/>.
 /// Handles idempotent create-or-update based on LegacyId matching.
 /// </summary>
 /// <seealso cref="IStateSpanService"/>
 internal interface ITreatmentDecomposer
 {
     /// <summary>
-    /// Decomposes a single legacy Treatment into the appropriate v4 record types
-    /// based on <see cref="Treatment.EventType"/> and presence of insulin/carb data.
+    /// Decomposes a batch of legacy Treatments into v4 records with a fixed number of queries whatever
+    /// the batch's size.
     /// </summary>
-    /// <param name="treatment">The legacy Treatment to decompose</param>
-    /// <returns>
-    /// A <see cref="DecompositionResult"/> containing the created or updated v4 records.
-    /// A single Treatment may produce multiple records (e.g., Bolus + CarbIntake for a Meal Bolus).
-    /// Returns an empty result if the event type is unrecognized and no insulin/carbs are present.
-    /// </returns>
-    Task<DecompositionResult> DecomposeAsync(Treatment treatment, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>
-    /// Decomposes a batch of legacy Treatments into v4 records using bulk-insert operations,
-    /// eliminating per-record DB round-trips. State span treatments (TempBasal, ProfileSwitch,
-    /// Override, TemporaryTarget) are upserted individually since they require idempotent semantics.
-    /// Bolus-to-BolusCalculation linking is performed in a post-insert pass.
-    /// </summary>
-    /// <param name="treatments">The batch of legacy Treatments to decompose.</param>
-    /// <returns>A single <see cref="DecompositionResult"/> containing all created v4 records.</returns>
-    Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default);
+    /// <param name="treatments">The batch of legacy Treatments to decompose, in the order they were sent.</param>
+    /// <param name="into">
+    /// The decomposition to fill as each write commits, so a caller still reads what committed when the
+    /// batch throws part-way.
+    /// </param>
+    /// <param name="origin">
+    /// A <see cref="WriteOrigin.Live"/> write keeps the caller's attribution; a backfill's is
+    /// system-attributed (<see cref="V4.DecomposerBase.SystemAttributedBatchWrites"/>).
+    /// </param>
+    /// <returns>What the batch wrote, and what each treatment of it wrote.</returns>
+    Task<TreatmentDecomposition> DecomposeBatchAsync(
+        IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default,
+        TreatmentDecomposition? into = null);
 
     /// <summary>
     /// Deletes all v4 records that were decomposed from a legacy Treatment with the given ID, and

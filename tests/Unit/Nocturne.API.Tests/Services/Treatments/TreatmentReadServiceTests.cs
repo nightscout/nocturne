@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,7 +19,7 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class TreatmentReadServiceTests
 {
     private readonly Mock<IV4ToLegacyProjectionService> _projection = new();
-    private readonly Mock<ITreatmentDecomposer> _decomposer = new();
+    private readonly Mock<IPerTreatmentDecomposer> _decomposer = new Mock<IPerTreatmentDecomposer>().AnswersBatchPerTreatment();
     private readonly Mock<ITempBasalRepository> _tempBasalRepo = new();
     private readonly Mock<IBolusRepository> _bolusRepo = new();
     private readonly Mock<ICarbIntakeRepository> _carbIntakeRepo = new();
@@ -30,6 +31,9 @@ public class TreatmentReadServiceTests
 
     public TreatmentReadServiceTests()
     {
+        LegacyTreatmentRepositoryMockExtensions.AnswerServedIdsPerKey(
+            _tempBasalRepo, _bolusRepo, _carbIntakeRepo, _bgCheckRepo, _noteRepo, _deviceEventRepo, _bolusCalcRepo);
+        _projection.AnswersSpanIdsPerId();
         _service = new TreatmentReadService(
             _projection.Object,
             _decomposer.Object,
@@ -40,7 +44,7 @@ public class TreatmentReadServiceTests
             _noteRepo.Object,
             _deviceEventRepo.Object,
             _bolusCalcRepo.Object,
-            Mock.Of<IProfileActivationRepository>(),
+            new Mock<IProfileActivationRepository>().AnswersServedIdsPerKey<IProfileActivationRepository, ProfileActivation>().Object,
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
     }
@@ -301,7 +305,7 @@ public class TreatmentReadServiceTests
         var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
         var canceled = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
         var next = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
-        DecomposeAll();
+        DecomposeAll(writes: true);
         FailOn(canceled, new OperationCanceledException());
 
         var act = () => _service.CreateAsync([first, canceled, next], WriteOrigin.Live);
@@ -319,7 +323,7 @@ public class TreatmentReadServiceTests
         var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
         var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
         var last = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
-        DecomposeAll(skippedDeleted: 1);
+        DecomposeAll(skippedDeleted: 1, writes: true);
         FailOn(bad, failure);
 
         var act = () => _service.CreateAsync([first, bad, last], WriteOrigin.Live);
@@ -329,8 +333,51 @@ public class TreatmentReadServiceTests
         failed.InnerException.Should().BeSameAs(failure);
         failed.Written.Select(t => t.Id).Should().Equal("t1");
         failed.Written.SkippedDeleted.Should().Be(1);
-        failed.Message.Should().Contain("stored 1 treatment(s) before it");
+        failed.Message.Should().Contain("1 treatment(s) were stored");
         NeverDecomposed(last);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenTheBatchStops_CarriesItsRefusalsAndNamesNoRefusedTreatment()
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var refused = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var failing = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        DecomposeAll(writes: true);
+        FailOn(refused, new TreatmentMappingException(new FormatException("bad date")));
+        FailOn(failing, new TimeoutException());
+
+        var act = () => _service.CreateAsync([first, refused, failing], WriteOrigin.Live);
+
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.Written.Rejected.Should().ContainSingle().Which.Index.Should().Be(1);
+        failed.FailedIndex.Should().Be(2, "a treatment refused for its data stores nothing by design");
+        failed.Written.Select(t => t.Id).Should().Equal("t1");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenTheBatchStopsAfterEveryTreatmentStored_NamesNone()
+    {
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
+                It.IsAny<TreatmentDecomposition?>()))
+            .Returns((IReadOnlyList<Treatment> treatments, WriteOrigin _, CancellationToken _, TreatmentDecomposition? into) =>
+            {
+                var groups = treatments.Select(_ => Guid.CreateVersion7()).ToList();
+                into!.Begin(groups);
+                into.CreatedRecords.AddRange(groups.Select(g => new Note { Id = Guid.CreateVersion7(), CorrelationId = g }));
+                throw new TimeoutException("the span write timed out");
+            });
+
+        var act = () => _service.CreateAsync(
+            [new Treatment { Id = "t1", Mills = 1000, EventType = "Note" }, new Treatment { Id = "t2", Mills = 2000, EventType = "Note" }],
+            WriteOrigin.Live);
+
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.FailedIndex.Should().BeNull();
+        failed.Written.Select(t => t.Id).Should().Equal("t1", "t2");
+        failed.Message.Should().Contain("no treatment left to store").And.Contain("2 treatment(s) were stored").And.Contain("0 refused");
     }
 
     public static TheoryData<Exception> TransientFailures() => new()
@@ -453,13 +500,20 @@ public class TreatmentReadServiceTests
         var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
         failed.Written.Select(t => t.Id).Should().Equal("t1", "t2");
         failed.Message.Should().Contain("was stored but could not be read back");
-        NeverDecomposed(last);
+        failed.FailedIndex.Should().Be(1);
     }
 
-    private void DecomposeAll(int skippedDeleted = 0) =>
+    /// <param name="writes">Whether each treatment writes a record, so a batch that fails after it carries it as stored.</param>
+    private void DecomposeAll(int skippedDeleted = 0, bool writes = false) =>
         _decomposer
             .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new DecompositionResult { CorrelationId = Guid.NewGuid(), SkippedDeleted = skippedDeleted });
+            .ReturnsAsync(() =>
+            {
+                var stored = new DecompositionResult { CorrelationId = Guid.NewGuid(), SkippedDeleted = skippedDeleted };
+                if (writes)
+                    stored.CreatedRecords.Add(new Note { Id = Guid.CreateVersion7(), CorrelationId = stored.CorrelationId });
+                return stored;
+            });
 
     private void FailOn(Treatment treatment, Exception failure) =>
         _decomposer

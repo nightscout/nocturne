@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 using Nocturne.API.Services.Entries;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Treatments;
@@ -262,6 +264,104 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     {
         await using var db = await _contexts.CreateAsync(ct);
         return await FindStateSpanAsync(db, id, ct) is { } row ? ((StateSpanEntity)row.Record).OriginalId : null;
+    }
+
+    /// <summary>Span ids <see cref="GetStateSpanTreatmentIdsAsync"/> reads in one statement.</summary>
+    internal const int SpanIdsPerStatement = 50;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Every statement matches exactly <see cref="SpanIdsPerStatement"/> ids, the last repeated to fill
+    /// it, through <see cref="SpanIdBounds"/>, so every read has one shape whatever ids it is asked for.
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<string, string>> GetStateSpanTreatmentIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        var unresolved = ids.Distinct(StringComparer.Ordinal).ToList();
+        if (unresolved.Count == 0)
+            return keys;
+
+        await using var db = await _contexts.CreateAsync(ct);
+        foreach (var table in LegacyTreatmentTables.StateSpanTables)
+        {
+            if (unresolved.Count == 0)
+                break;
+
+            var spans = new List<StateSpanEntity>();
+            foreach (var chunk in unresolved.Chunk(SpanIdsPerStatement))
+            {
+                var bounds = chunk.Concat(Enumerable.Repeat(chunk[^1], SpanIdsPerStatement - chunk.Length))
+                    .Select(SpanIdBounds.Of);
+                spans.AddRange(await table.Rows(db).Where(SpanIdBounds.MatchingAny(bounds)).ToListAsync(ct));
+            }
+
+            foreach (var id in unresolved.ToList())
+            {
+                var bounds = SpanIdBounds.Of(id);
+                var span = spans.Where(bounds.Matches)
+                    .OrderBy(s => s.OriginalId == id ? 0 : 1)
+                    .ThenBy(s => s.Id.ToString("N"), StringComparer.Ordinal)
+                    .FirstOrDefault();
+                if (span?.OriginalId is { } key)
+                {
+                    keys[id] = key;
+                    unresolved.Remove(id);
+                }
+            }
+        }
+
+        return keys;
+    }
+
+    /// <summary>
+    /// The spans one id names, as <see cref="MatchingId"/> finds them, in one form for every kind of id:
+    /// the span keyed to it, the uuids <see cref="Low"/> through <see cref="High"/>, and the original ids
+    /// from <see cref="From"/> through <see cref="To"/> in lower case or upper case. A uuid names one
+    /// uuid; an id that is neither names only the span keyed to it.
+    /// </summary>
+    private readonly record struct SpanIdBounds(
+        string Id, Guid Low, Guid High, string From, string To, string UpperFrom, string UpperTo)
+    {
+        public static SpanIdBounds Of(string id)
+        {
+            if (Guid.TryParse(id, out var guid))
+                return new(id, guid, guid, guid.ToString(), guid.ToString(),
+                    guid.ToString().ToUpperInvariant(), guid.ToString().ToUpperInvariant());
+
+            return MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high)
+                ? new(id, low, high, low.ToString(), high.ToString(),
+                    low.ToString().ToUpperInvariant(), high.ToString().ToUpperInvariant())
+                : new(id, Guid.Empty, Guid.Empty, id, id, id, id);
+        }
+
+        public bool Matches(StateSpanEntity span)
+        {
+            static bool Between(string? value, string from, string to) =>
+                value is not null && string.CompareOrdinal(value, from) >= 0 && string.CompareOrdinal(value, to) <= 0;
+            return span.OriginalId == Id
+                || Between(span.Id.ToString(), Low.ToString(), High.ToString())
+                || Between(span.OriginalId, From, To)
+                || Between(span.OriginalId, UpperFrom, UpperTo);
+        }
+
+        public static Expression<Func<StateSpanEntity, bool>> MatchingAny(IEnumerable<SpanIdBounds> bounds)
+        {
+            Expression<Func<StateSpanEntity, bool>> none = s => false;
+            var row = none.Parameters[0];
+            Expression? matches = null;
+            foreach (var (id, low, high, from, to, upperFrom, upperTo) in bounds)
+            {
+                Expression<Func<StateSpanEntity, bool>> term = s => s.OriginalId == id
+                    || (s.Id >= low && s.Id <= high)
+                    || (string.Compare(s.OriginalId, from) >= 0 && string.Compare(s.OriginalId, to) <= 0)
+                    || (string.Compare(s.OriginalId, upperFrom) >= 0 && string.Compare(s.OriginalId, upperTo) <= 0);
+                var body = ReplacingExpressionVisitor.Replace(term.Parameters[0], row, term.Body);
+                matches = matches is null ? body : Expression.OrElse(matches, body);
+            }
+
+            return Expression.Lambda<Func<StateSpanEntity, bool>>(matches ?? none.Body, row);
+        }
     }
 
     private async Task<FetchedRecord?> FindStateSpanAsync(NocturneDbContext db, string id, CancellationToken ct)

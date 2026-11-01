@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Devices;
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Services.Devices;
@@ -336,6 +337,45 @@ public class DeviceServiceTests
         VerifyWidenings(existingId, 2_000L);
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveManyAsync_SightingsAllAfterTheStoredWindow_WritesOnlyTheLastSeen()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L, firstSeenMills: 1_000L);
+
+        await ResolveOmnipodsAsync(2_000L, 6_000L, 4_000L);
+
+        VerifyWidenings(existingId, 6_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveManyAsync_SightingsEitherSideOfTheStoredWindow_WritesEachBoundOnce()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 5_000L, firstSeenMills: 4_000L);
+
+        await ResolveOmnipodsAsync(3_000L, 6_000L, 2_000L, 7_000L);
+
+        VerifyWidenings(existingId, 7_000L, 2_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveManyAsync_SightingsInsideTheStoredWindow_WritesNothing()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 9_000L, firstSeenMills: 1_000L);
+
+        await ResolveOmnipodsAsync(2_000L, 5_000L, 9_000L);
+
+        VerifyWidenings(existingId);
+    }
+
+    private Task<IReadOnlyList<Guid?>> ResolveOmnipodsAsync(params long[] mills) =>
+        _service.ResolveManyAsync([.. mills.Select(m => new DeviceSighting(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", m))]);
+
     private void SetupDeviceCreation()
     {
         _mockRepository
@@ -369,124 +409,6 @@ public class DeviceServiceTests
         VerifyWidenings(existingId, 2_000L);
     }
 
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task DeferLastSeen_FailedFlush_LeavesCachedLastSeenAtPersistedValue()
-    {
-        var existingId = Guid.NewGuid();
-        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
-        await ResolveOmnipodAsync(1_000L);
-
-        _mockRepository
-            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("transient"));
-        var failed = async () =>
-        {
-            await using (_service.DeferLastSeen())
-                await ResolveOmnipodAsync(3_000L);
-        };
-        await failed.Should().ThrowAsync<InvalidOperationException>();
-
-        _mockRepository
-            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid id, DateTime t, WriteOrigin _, CancellationToken _) => _updates.Add((id, t)))
-            .Returns(Task.CompletedTask);
-        await ResolveOmnipodAsync(2_000L);
-
-        VerifyWidenings(existingId, 2_000L);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task DeferLastSeen_OldestFirstSequence_WritesOnlyTheLatestOnceTheScopeEnds()
-    {
-        var existingId = Guid.NewGuid();
-        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
-
-        await using (_service.DeferLastSeen())
-        {
-            await ResolveOmnipodAsync(2_000L);
-            await ResolveOmnipodAsync(3_000L);
-            await ResolveOmnipodAsync(4_000L);
-
-            VerifyWidenings(existingId);
-        }
-
-        VerifyWidenings(existingId, 4_000L);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task DeferLastSeen_WideningBothEnds_WritesTheWidestOfEachOnceTheScopeEnds()
-    {
-        var existingId = Guid.NewGuid();
-        SetupExistingDevice(existingId, lastSeenMills: 5_000L, firstSeenMills: 4_000L);
-
-        await using (_service.DeferLastSeen())
-        {
-            await ResolveOmnipodAsync(3_000L);
-            await ResolveOmnipodAsync(6_000L);
-            await ResolveOmnipodAsync(2_000L);
-            await ResolveOmnipodAsync(7_000L);
-
-            VerifyWidenings(existingId);
-        }
-
-        VerifyWidenings(existingId, 7_000L, 2_000L);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task DeferLastSeen_NestedScopes_WriteWhenTheOutermostEnds()
-    {
-        var existingId = Guid.NewGuid();
-        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
-
-        await using (_service.DeferLastSeen())
-        {
-            await using (_service.DeferLastSeen())
-                await ResolveOmnipodAsync(2_000L);
-
-            VerifyWidenings(existingId);
-            await ResolveOmnipodAsync(3_000L);
-        }
-
-        VerifyWidenings(existingId, 3_000L);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task DeferLastSeen_AfterTheScopeEnds_WritesEachAdvanceAgain()
-    {
-        var existingId = Guid.NewGuid();
-        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
-
-        await using (_service.DeferLastSeen())
-            await ResolveOmnipodAsync(2_000L);
-        await ResolveOmnipodAsync(3_000L);
-
-        VerifyWidenings(existingId, 2_000L, 3_000L);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task DeferLastSeen_Discarded_WritesNothingAndLeavesCachedLastSeenAtPersistedValue()
-    {
-        var existingId = Guid.NewGuid();
-        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
-        await ResolveOmnipodAsync(1_000L);
-
-        await using (var deferral = _service.DeferLastSeen())
-        {
-            await ResolveOmnipodAsync(3_000L);
-            deferral.Discard();
-        }
-        VerifyWidenings(existingId);
-
-        await ResolveOmnipodAsync(2_000L);
-        VerifyWidenings(existingId, 2_000L);
-    }
-
     private Task<Guid?> ResolveOmnipodAsync(long mills) =>
         _service.ResolveAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", mills);
 
@@ -512,7 +434,7 @@ public class DeviceServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task ResolvePatientDeviceAsync_WithMatchingDeviceAndTimestamp_ReturnsPatientDeviceId()
+    public async Task PatientDeviceLinks_WithMatchingDeviceAndTimestamp_ReturnsPatientDeviceId()
     {
         var deviceId = Guid.CreateVersion7();
         var patientDeviceId = Guid.CreateVersion7();
@@ -531,21 +453,21 @@ public class DeviceServiceTests
                 }
             });
 
-        var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        var result = (await _service.GetPatientDeviceLinksAsync([deviceId])).Resolve(deviceId, mills);
         result.Should().Be(patientDeviceId);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task ResolvePatientDeviceAsync_WithNullDeviceId_ReturnsNull()
+    public async Task PatientDeviceLinks_WithNullDeviceId_ReturnsNull()
     {
-        var result = await _service.ResolvePatientDeviceAsync(null, 1700000000000L);
+        var result = (await _service.GetPatientDeviceLinksAsync([null])).Resolve(null, 1700000000000L);
         result.Should().BeNull();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task ResolvePatientDeviceAsync_WithNoMatchingPatientDevice_ReturnsNull()
+    public async Task PatientDeviceLinks_WithNoMatchingPatientDevice_ReturnsNull()
     {
         var deviceId = Guid.CreateVersion7();
         var mills = DateTimeOffset.Parse("2026-03-15T12:00:00Z").ToUnixTimeMilliseconds();
@@ -554,13 +476,13 @@ public class DeviceServiceTests
             .Setup(r => r.GetByDeviceIdsAsync(DeviceRepositoryMatchers.Including(deviceId), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<PatientDevice>());
 
-        var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        var result = (await _service.GetPatientDeviceLinksAsync([deviceId])).Resolve(deviceId, mills);
         result.Should().BeNull();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task ResolvePatientDeviceAsync_WithTimestampOutsideDateRange_ReturnsNull()
+    public async Task PatientDeviceLinks_WithTimestampOutsideDateRange_ReturnsNull()
     {
         var deviceId = Guid.CreateVersion7();
         var patientDeviceId = Guid.CreateVersion7();
@@ -579,13 +501,13 @@ public class DeviceServiceTests
                 }
             });
 
-        var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        var result = (await _service.GetPatientDeviceLinksAsync([deviceId])).Resolve(deviceId, mills);
         result.Should().BeNull();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task ResolvePatientDeviceAsync_WithNullEndDate_MatchesCurrentDevice()
+    public async Task PatientDeviceLinks_WithNullEndDate_MatchesCurrentDevice()
     {
         var deviceId = Guid.CreateVersion7();
         var patientDeviceId = Guid.CreateVersion7();
@@ -604,13 +526,13 @@ public class DeviceServiceTests
                 }
             });
 
-        var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        var result = (await _service.GetPatientDeviceLinksAsync([deviceId])).Resolve(deviceId, mills);
         result.Should().Be(patientDeviceId);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task ResolvePatientDeviceAsync_SameDeviceTwice_UsesCacheSecondTime()
+    public async Task PatientDeviceLinks_SameDeviceTwice_UsesCacheSecondTime()
     {
         var deviceId = Guid.CreateVersion7();
         var patientDeviceId = Guid.CreateVersion7();
@@ -629,8 +551,8 @@ public class DeviceServiceTests
                 }
             });
 
-        var result1 = await _service.ResolvePatientDeviceAsync(deviceId, mills);
-        var result2 = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        var result1 = (await _service.GetPatientDeviceLinksAsync([deviceId])).Resolve(deviceId, mills);
+        var result2 = (await _service.GetPatientDeviceLinksAsync([deviceId])).Resolve(deviceId, mills);
 
         result1.Should().Be(patientDeviceId);
         result2.Should().Be(patientDeviceId);

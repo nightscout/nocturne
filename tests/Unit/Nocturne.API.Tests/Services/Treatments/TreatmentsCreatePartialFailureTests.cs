@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -29,7 +30,7 @@ namespace Nocturne.API.Tests.Services.Treatments;
 [Trait("Category", "Unit")]
 public class TreatmentsCreatePartialFailureTests
 {
-    private readonly Mock<ITreatmentDecomposer> _decomposer = new();
+    private readonly Mock<IPerTreatmentDecomposer> _decomposer = new Mock<IPerTreatmentDecomposer>().AnswersBatchPerTreatment();
     private readonly Mock<ITreatmentCache> _cache = new();
     private readonly Mock<IDataEventSink<Treatment>> _events = new();
     private readonly TreatmentsController _controller;

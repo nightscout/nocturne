@@ -367,8 +367,7 @@ internal class TreatmentService : ITreatmentService
         // Apply patch fields to existing treatment
         ApplyJsonPatch(existing, patchData);
 
-        // Re-decompose (idempotent upsert via LegacyId matching)
-        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
+        (await _decomposer.DecomposeBatchAsync([existing], WriteOrigin.Live, cancellationToken)).ThrowIfRejected(0);
 
         // The merged record carries the upsert key, which the wire would coerce to a different
         // identifier than the create returned; AAPS stores the identifier from every response and

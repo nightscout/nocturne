@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -19,7 +20,7 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class TreatmentServiceTests
 {
     private readonly Mock<ITreatmentStore> _mockStore;
-    private readonly Mock<ITreatmentDecomposer> _mockDecomposer;
+    private readonly Mock<IPerTreatmentDecomposer> _mockDecomposer;
     private readonly Mock<ITreatmentCache> _mockCache;
     private readonly Mock<IDataEventSink<Treatment>> _mockEvents;
     private readonly Mock<IPatientInsulinRepository> _mockInsulinRepo;
@@ -29,7 +30,7 @@ public class TreatmentServiceTests
     public TreatmentServiceTests()
     {
         _mockStore = new Mock<ITreatmentStore>();
-        _mockDecomposer = new Mock<ITreatmentDecomposer>();
+        _mockDecomposer = new Mock<IPerTreatmentDecomposer>().AnswersBatchPerTreatment();
         _mockCache = new Mock<ITreatmentCache>();
         _mockEvents = new Mock<IDataEventSink<Treatment>>();
         _mockInsulinRepo = new Mock<IPatientInsulinRepository>();
@@ -395,9 +396,10 @@ public class TreatmentServiceTests
     {
         var insulin = new PatientInsulin { Id = Guid.NewGuid(), Name = "Fiasp", Role = InsulinRole.Bolus, IsPrimary = true };
         _mockInsulinRepo.Setup(x => x.GetPrimaryBolusInsulinAsync(It.IsAny<CancellationToken>())).ReturnsAsync(insulin);
-        var stored = new DecompositionResult();
+        var stored = new TreatmentDecomposition();
         _mockDecomposer
-            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Treatment>>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>(), null))
             .ReturnsAsync(stored);
         var bolus = new Treatment { EventType = "Correction Bolus", Insulin = 1 };
 

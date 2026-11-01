@@ -146,6 +146,23 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
         return entities.Select(CarbIntakeMapper.ToDomainModel);
     }
 
+    public async Task<IEnumerable<CarbIntake>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds,
+        CancellationToken ct = default
+    )
+    {
+        var ids = correlationIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .CarbIntakes.AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+        return entities.Select(CarbIntakeMapper.ToDomainModel).ToList();
+    }
+
     /// <summary>
     /// Insert-time deduplication runs AFTER commit: the ingested rows are durably persisted first, and
     /// dedup linking is best-effort (a failure is logged, not allowed to roll back the insert). A row

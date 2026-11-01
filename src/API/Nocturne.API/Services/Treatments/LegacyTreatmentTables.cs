@@ -196,10 +196,21 @@ internal abstract class LegacyKeyedRecords
     internal abstract Task UpdateAsync(LegacyTreatmentRepositories repositories, IV4Record record, CancellationToken ct);
 
     /// <summary>
-    /// This table's half of the Meal Bolus correlated by <paramref name="correlationId"/>, or none; a
-    /// table outside <see cref="LegacyTreatmentTables.MealTables"/> holds none.
+    /// This table's half of the Meal Bolus correlated by each of <paramref name="correlationIds"/> that
+    /// has one, in one read; a table outside <see cref="LegacyTreatmentTables.MealTables"/> holds none.
     /// </summary>
-    internal abstract Task<IV4Record?> MealHalfAsync(LegacyTreatmentRepositories repositories, Guid correlationId, CancellationToken ct);
+    internal abstract Task<IReadOnlyDictionary<Guid, IV4Record>> MealHalvesAsync(
+        LegacyTreatmentRepositories repositories, IReadOnlyCollection<Guid> correlationIds, CancellationToken ct);
+
+    /// <summary>
+    /// The records any of <paramref name="objectIds"/> could name by a key other than
+    /// <see cref="LegacyRecordKey.LegacyIdHash"/>, in one read, for <see cref="Pick"/> to resolve.
+    /// </summary>
+    internal abstract Task<IReadOnlyList<IV4Record>> FindServedAsync(
+        LegacyTreatmentRepositories repositories, IReadOnlyCollection<string> objectIds, CancellationToken ct);
+
+    /// <summary>The record of <paramref name="found"/> <see cref="FindAsync"/> resolves <paramref name="key"/> to, or none.</summary>
+    internal abstract IV4Record? Pick(IReadOnlyList<IV4Record> found, LegacyRecordKey key);
 }
 
 /// <summary>
@@ -208,7 +219,7 @@ internal abstract class LegacyKeyedRecords
 /// </summary>
 internal sealed class LegacyKeyedRecords<TRecord>(
     Func<LegacyTreatmentRepositories, ILegacyKeyedRepository<TRecord>> repository,
-    Func<LegacyTreatmentRepositories, Guid, CancellationToken, Task<IEnumerable<TRecord>>>? correlated = null,
+    Func<LegacyTreatmentRepositories, IReadOnlyCollection<Guid>, CancellationToken, Task<IEnumerable<TRecord>>>? correlated = null,
     Func<TRecord, bool>? served = null
 ) : LegacyKeyedRecords
     where TRecord : class, IV4Record
@@ -229,9 +240,26 @@ internal sealed class LegacyKeyedRecords<TRecord>(
     internal override Task UpdateAsync(LegacyTreatmentRepositories repositories, IV4Record record, CancellationToken ct) =>
         repository(repositories).UpdateAsync(record.Id, (TRecord)record, WriteOrigin.Live, ct);
 
-    internal override async Task<IV4Record?> MealHalfAsync(
-        LegacyTreatmentRepositories repositories, Guid correlationId, CancellationToken ct) =>
-        correlated is null ? null : LegacyTreatmentTables.MealHalf(await correlated(repositories, correlationId, ct));
+    internal override async Task<IReadOnlyDictionary<Guid, IV4Record>> MealHalvesAsync(
+        LegacyTreatmentRepositories repositories, IReadOnlyCollection<Guid> correlationIds, CancellationToken ct)
+    {
+        if (correlated is null || correlationIds.Count == 0)
+            return new Dictionary<Guid, IV4Record>();
+
+        return (await correlated(repositories, correlationIds, ct))
+            .Where(r => r.CorrelationId is not null)
+            .GroupBy(r => r.CorrelationId!.Value)
+            .Select(g => (g.Key, Half: LegacyTreatmentTables.MealHalf(g)))
+            .Where(h => h.Half is not null)
+            .ToDictionary(h => h.Key, h => (IV4Record)h.Half!);
+    }
+
+    internal override async Task<IReadOnlyList<IV4Record>> FindServedAsync(
+        LegacyTreatmentRepositories repositories, IReadOnlyCollection<string> objectIds, CancellationToken ct) =>
+        [.. await repository(repositories).GetByServedIdsAsync(objectIds, ct)];
+
+    internal override IV4Record? Pick(IReadOnlyList<IV4Record> found, LegacyRecordKey key) =>
+        key.Resolve(found) is TRecord record && (served?.Invoke(record) ?? true) ? record : null;
 }
 
 /// <inheritdoc cref="ILegacyTreatmentTable"/>
@@ -242,7 +270,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     Func<TEntity, TRecord> toRecord,
     Func<TRecord, CarbFoodIndex, Treatment> project,
     Func<NocturneDbContext, DateTime?, DateTime?, CancellationToken, Task<long>>? count = null,
-    Func<LegacyTreatmentRepositories, Guid, CancellationToken, Task<IEnumerable<TRecord>>>? correlated = null
+    Func<LegacyTreatmentRepositories, IReadOnlyCollection<Guid>, CancellationToken, Task<IEnumerable<TRecord>>>? correlated = null
 ) : ILegacyKeyedTreatmentTable
     where TRecord : class, IV4Record
     where TEntity : class, ISystemTimestamped, IIdentified, ISoftDeletable, IObservationTimestamped
@@ -870,13 +898,13 @@ internal static class LegacyTreatmentTables
             repositories => repositories.Boluses,
             c => c.Boluses, RecordType.Bolus, BolusMapper.ToDomainModel,
             (r, _) => ProjectCorrectionBolus(r),
-            correlated: (repositories, id, ct) => repositories.Boluses.GetByCorrelationIdAsync(id, ct)),
+            correlated: (repositories, ids, ct) => repositories.Boluses.GetByCorrelationIdsAsync(ids, ct)),
         new LegacyTreatmentTable<CarbIntake, CarbIntakeEntity>(
             repositories => repositories.CarbIntakes,
             c => c.CarbIntakes, RecordType.CarbIntake, CarbIntakeMapper.ToDomainModel,
             (r, foods) => ProjectCarbCorrection(r, foods.For(r.Id)),
             CountCarbIntakesServedApartAsync,
-            (repositories, id, ct) => repositories.CarbIntakes.GetByCorrelationIdAsync(id, ct)),
+            (repositories, ids, ct) => repositories.CarbIntakes.GetByCorrelationIdsAsync(ids, ct)),
         new LegacyTreatmentTable<BGCheck, BGCheckEntity>(
             repositories => repositories.BGChecks,
             c => c.BGChecks, RecordType.BGCheck, BGCheckMapper.ToDomainModel,

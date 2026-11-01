@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Moq;
 using Nocturne.Core.Contracts.Devices;
 
@@ -6,8 +7,8 @@ namespace Nocturne.API.Tests.TestDoubles;
 internal static class DeviceServiceMockExtensions
 {
     /// <summary>
-    /// Answers the batch forms through the per-record ones, so a test sets up and verifies one device
-    /// or one link at a time.
+    /// Answers the batch forms through the per-record resolution and <see cref="Links"/>, so a test sets
+    /// up and verifies one device or one link at a time.
     /// </summary>
     public static Mock<IDeviceService> AnswersBatchFormsPerRecord(this Mock<IDeviceService> mock)
     {
@@ -22,16 +23,13 @@ internal static class DeviceServiceMockExtensions
             });
         mock
             .Setup(s => s.GetPatientDeviceLinksAsync(It.IsAny<IEnumerable<Guid?>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new PerRecordLinks(mock));
-        mock
-            .Setup(s => s.DeferLastSeen(It.IsAny<CancellationToken>()))
-            .Returns(Mock.Of<ILastSeenDeferral>());
+            .ReturnsAsync(() => mock.Links().Object);
         return mock;
     }
 
-    private sealed class PerRecordLinks(Mock<IDeviceService> mock) : IPatientDeviceLinks
-    {
-        public Guid? Resolve(Guid? deviceId, long mills) =>
-            mock.Object.ResolvePatientDeviceAsync(deviceId, mills).GetAwaiter().GetResult();
-    }
+    private static readonly ConditionalWeakTable<Mock<IDeviceService>, Mock<IPatientDeviceLinks>> LinksOf = new();
+
+    /// <summary>The links <see cref="IDeviceService.GetPatientDeviceLinksAsync"/> answers with, set up per device and time.</summary>
+    public static Mock<IPatientDeviceLinks> Links(this Mock<IDeviceService> mock) =>
+        LinksOf.GetValue(mock, _ => new Mock<IPatientDeviceLinks>());
 }

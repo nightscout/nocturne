@@ -70,7 +70,9 @@ internal interface ITreatmentStore
     /// The created <see cref="Treatment"/> records, each under the id reads serve for it, carrying
     /// how many of their records were not written because the user had deleted them.
     /// </returns>
-    /// <exception cref="TreatmentBatchFailedException">A treatment could not be stored.</exception>
+    /// <exception cref="TreatmentBatchFailedException">
+    /// The batch could not be stored, or a stored treatment could not be read back.
+    /// </exception>
     /// <param name="treatments">The treatments to write, in order.</param>
     /// <param name="origin">Write classification of the decomposed records.</param>
     /// <param name="ct">The cancellation token.</param>

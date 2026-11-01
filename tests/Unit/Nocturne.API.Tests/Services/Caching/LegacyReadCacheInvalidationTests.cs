@@ -224,8 +224,9 @@ public class LegacyReadCacheInvalidationTests : IDisposable
             WriteOrigin.Live);
         _written.Models.Clear();
 
-        await repository.SetEndsAsync(
-            new Dictionary<Guid, DateTime?> { [activation.Id] = new DateTime(2026, 5, 1, 13, 0, 0, DateTimeKind.Utc) });
+        await repository.SettleAsync(
+            new Dictionary<Guid, DateTime?> { [activation.Id] = new DateTime(2026, 5, 1, 13, 0, 0, DateTimeKind.Utc) },
+            new Dictionary<Guid, Guid?>());
 
         _written.Models.Should().Equal(typeof(ProfileActivation));
     }

@@ -31,6 +31,11 @@ public interface ITreatmentFoodRepository
         TreatmentFood entry,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Creates food breakdown entries in one save.</summary>
+    Task CreateManyAsync(
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Update a food breakdown entry.
     /// </summary>

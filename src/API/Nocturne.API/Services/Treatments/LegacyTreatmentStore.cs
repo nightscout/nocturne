@@ -45,6 +45,43 @@ internal abstract record LegacyRecordKey
         }
     }
 
+    /// <summary>
+    /// The record of <paramref name="found"/> <see cref="FindInAsync{T}"/> would return for this key: any
+    /// one stored under a legacy id, else the first by id of those a prefix or range admits.
+    /// </summary>
+    internal IV4Record? Resolve(IReadOnlyList<IV4Record> found)
+    {
+        var named = found.Where(Names);
+        return this is LegacyId
+            ? named.FirstOrDefault()
+            : named.OrderBy(r => r.Id.ToString("N"), StringComparer.Ordinal).FirstOrDefault();
+    }
+
+    private bool Names(IV4Record record) => this switch
+    {
+        RecordId k => record.Id == k.Id,
+        LegacyId k => record.LegacyId == k.Id,
+        RecordIdPrefix k => string.CompareOrdinal(record.Id.ToString("N"), k.Low.ToString("N")) >= 0
+            && string.CompareOrdinal(record.Id.ToString("N"), k.High.ToString("N")) <= 0,
+        LegacyIdUuidPrefix k => record.LegacyId is { } legacyId && HasUuidPrefix(legacyId, k.ObjectId),
+        LegacyIdHash k => record.LegacyId is { } legacyId && MongoObjectId.Coerce(legacyId) == k.ObjectId,
+        _ => throw new UnreachableException(),
+    };
+
+    /// <summary>
+    /// Whether <paramref name="legacyId"/> is a UUID, dashed or not and in one case, whose 24-hex prefix
+    /// is <paramref name="objectId"/>, as <see cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdUuidPrefixAsync"/> matches it.
+    /// </summary>
+    private static bool HasUuidPrefix(string legacyId, string objectId)
+    {
+        var dashed = string.Join('-', objectId[..8], objectId[8..12], objectId[12..16], objectId[16..20], objectId[20..]);
+        var prefix = legacyId.Length switch { 36 => dashed, 32 => objectId, _ => null };
+        return prefix is not null
+            && Guid.TryParse(legacyId, out _)
+            && (legacyId == legacyId.ToLowerInvariant() || legacyId == legacyId.ToUpperInvariant())
+            && legacyId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+
     internal async Task<T?> FindInAsync<T>(ILegacyKeyedRepository<T> repository, CancellationToken ct)
         where T : class, IV4Record =>
         this switch
@@ -134,26 +171,49 @@ internal sealed class LegacyTreatmentStore(
     }
 
     /// <summary>
-    /// Keys a created treatment whose id Nocturne served for a stored record or state span to its
-    /// upsert key, so a client re-sending a document it read back replaces it, as Nightscout's upsert
-    /// on <c>_id</c> does. Only an id shaped like a served one is looked up, and never by
-    /// <see cref="LegacyRecordKey.LegacyIdHash"/>, which scans every legacy id: a fresh client ObjectId
-    /// costs indexed lookups at most.
+    /// Keys each created treatment whose id Nocturne served for a stored record or state span to its
+    /// upsert key, so a client re-sending a document it read back (AAPS's nightscoutId, Loop's
+    /// objectIdCache) replaces it, as Nightscout's upsert on <c>_id</c> does. Only ids shaped like a
+    /// served one are looked up, and never by <see cref="LegacyRecordKey.LegacyIdHash"/>, which scans
+    /// every legacy id. Each table is read once for all of them, the meal halves of what they name once
+    /// per meal table, and the state spans once for those no record holds.
     /// </summary>
-    internal async Task KeyToServedAsync(Treatment treatment, CancellationToken ct)
+    internal async Task KeyToServedAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
     {
-        if (!MongoObjectId.IsGuidPrefixShaped(treatment.Id))
+        var ids = treatments.Select(t => t.Id).Where(MongoObjectId.IsGuidPrefixShaped).OfType<string>()
+            .Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0)
             return;
 
-        var keys = LegacyRecordKey.For(treatment.Id!).Where(key => key is not LegacyRecordKey.LegacyIdHash);
-        if (await FindStoredAsync(keys, treatment.Id!, ct) is { } stored)
+        var found = new Dictionary<ILegacyKeyedTreatmentTable, IReadOnlyList<IV4Record>>();
+        foreach (var table in LegacyTreatmentTables.ByServedPrecedence)
+            found[table] = await table.Records.FindServedAsync(_repositories, ids, ct);
+
+        var named = new Dictionary<string, StoredRecord>(StringComparer.Ordinal);
+        foreach (var id in ids)
         {
-            if (stored.Record.LegacyId != treatment.Id)
-                treatment.Id = await UpsertKeyAsync(stored, ct);
+            var stored = LegacyRecordKey.For(id)
+                .Where(key => key is not LegacyRecordKey.LegacyIdHash)
+                .SelectMany(key => LegacyTreatmentTables.ByServedPrecedence
+                    .Select(table => (Table: table, Record: table.Records.Pick(found[table], key))))
+                .FirstOrDefault(hit => hit.Record is not null);
+            if (stored.Record is not null)
+                named[id] = new StoredRecord(this, stored.Table, stored.Record, id);
         }
-        else if (await _projection.GetStateSpanTreatmentIdAsync(treatment.Id!, ct) is { } spanKey)
+
+        var rekeyed = named.Values.Where(s => s.Record.LegacyId != s.Id).ToList();
+        var halves = await MealHalvesAsync(rekeyed, ct);
+        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var stored in rekeyed)
+            keys[stored.Id] = await UpsertKeyAsync(halves.GetValueOrDefault(stored) ?? [stored], ct);
+
+        var spanKeys = await _projection.GetStateSpanTreatmentIdsAsync([.. ids.Where(id => !named.ContainsKey(id))], ct);
+        foreach (var treatment in treatments)
         {
-            treatment.Id = spanKey;
+            if (treatment.Id is not { } id)
+                continue;
+            if (keys.TryGetValue(id, out var key) || (!named.ContainsKey(id) && spanKeys.TryGetValue(id, out key)))
+                treatment.Id = key;
         }
     }
 
@@ -281,16 +341,55 @@ internal sealed class LegacyTreatmentStore(
         if (!LegacyTreatmentTables.MealTables.Contains(table) || record.CorrelationId is not { } correlationId)
             return null;
 
-        var halves = new List<(ILegacyKeyedTreatmentTable Table, IV4Record Record)>();
-        foreach (var mealTable in LegacyTreatmentTables.MealTables)
-        {
-            if (await mealTable.Records.MealHalfAsync(_repositories, correlationId, ct) is { } half)
-                halves.Add((mealTable, half));
-        }
+        var byTable = await MealHalvesByTableAsync([correlationId], ct);
+        return HalvesOf(byTable, correlationId, record);
+    }
 
+    /// <summary>The meal half each meal table holds per correlation id, one read per table.</summary>
+    private async Task<List<(ILegacyKeyedTreatmentTable Table, IReadOnlyDictionary<Guid, IV4Record> Halves)>> MealHalvesByTableAsync(
+        IReadOnlyCollection<Guid> correlationIds, CancellationToken ct)
+    {
+        var byTable = new List<(ILegacyKeyedTreatmentTable, IReadOnlyDictionary<Guid, IV4Record>)>();
+        foreach (var mealTable in LegacyTreatmentTables.MealTables)
+            byTable.Add((mealTable, await mealTable.Records.MealHalvesAsync(_repositories, correlationIds, ct)));
+        return byTable;
+    }
+
+    private static IReadOnlyList<(ILegacyKeyedTreatmentTable Table, IV4Record Record)>? HalvesOf(
+        IEnumerable<(ILegacyKeyedTreatmentTable Table, IReadOnlyDictionary<Guid, IV4Record> Halves)> byTable,
+        Guid correlationId, IV4Record record)
+    {
+        var halves = byTable
+            .Where(t => t.Halves.ContainsKey(correlationId))
+            .Select(t => (t.Table, Record: t.Halves[correlationId]))
+            .ToList();
         return halves.Count == LegacyTreatmentTables.MealTables.Count && halves.Any(h => h.Record.Id == record.Id)
             ? halves
             : null;
+    }
+
+    /// <summary>
+    /// <see cref="ServedTogetherAsync"/> for each of <paramref name="stored"/> in a meal table, with one
+    /// read per meal table for all of them.
+    /// </summary>
+    private async Task<Dictionary<StoredRecord, IReadOnlyList<StoredRecord>>> MealHalvesAsync(
+        IReadOnlyList<StoredRecord> stored, CancellationToken ct)
+    {
+        var meal = stored
+            .Where(s => LegacyTreatmentTables.MealTables.Contains(s.Table) && s.Record.CorrelationId is not null)
+            .ToList();
+        if (meal.Count == 0)
+            return [];
+
+        var byTable = await MealHalvesByTableAsync([.. meal.Select(s => s.Record.CorrelationId!.Value).Distinct()], ct);
+        var together = new Dictionary<StoredRecord, IReadOnlyList<StoredRecord>>();
+        foreach (var record in meal)
+        {
+            if (HalvesOf(byTable, record.Record.CorrelationId!.Value, record.Record) is { } halves)
+                together[record] = [.. halves.Select(half => record with { Table = half.Table, Record = half.Record })];
+        }
+
+        return together;
     }
 
     /// <summary>
@@ -300,9 +399,13 @@ internal sealed class LegacyTreatmentStore(
     /// else the id the wire already shows. A record that holds another keeps it: its source re-syncs
     /// it by that id, and the decomposer finds a meal's carbs through their bolus.
     /// </summary>
-    private async Task<string> UpsertKeyAsync(StoredRecord stored, CancellationToken ct)
+    private async Task<string> UpsertKeyAsync(StoredRecord stored, CancellationToken ct) =>
+        await UpsertKeyAsync(await ServedTogetherAsync(stored, ct), ct);
+
+    /// <inheritdoc cref="UpsertKeyAsync(StoredRecord, CancellationToken)"/>
+    /// <param name="records">A stored record and those served beside it, as <see cref="ServedTogetherAsync"/> finds them.</param>
+    private async Task<string> UpsertKeyAsync(IReadOnlyList<StoredRecord> records, CancellationToken ct)
     {
-        var records = await ServedTogetherAsync(stored, ct);
         var key = records.Select(r => r.Record.LegacyId).FirstOrDefault(id => !string.IsNullOrEmpty(id))
             ?? MongoObjectId.FromGuid(records[0].Record.Id);
 
@@ -382,7 +485,7 @@ internal sealed class LegacyTreatmentStore(
 
             var upsertKey = await Store.UpsertKeyAsync(this, ct);
             treatment.Id = upsertKey;
-            await Store._decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+            (await Store._decomposer.DecomposeBatchAsync([treatment], WriteOrigin.Live, ct)).ThrowIfRejected(0);
             return await Store.ReadAsync(upsertKey, ct) ?? throw ReadBackFailed(Id);
         }
 
@@ -443,7 +546,7 @@ internal sealed class LegacyTreatmentStore(
                 return null;
 
             treatment.Id = upsertKey;
-            await Store._decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+            (await Store._decomposer.DecomposeBatchAsync([treatment], WriteOrigin.Live, ct)).ThrowIfRejected(0);
             return await Store._projection.GetProjectedStateSpanTreatmentAsync(servedId, ct)
                 ?? throw ReadBackFailed(Id);
         }

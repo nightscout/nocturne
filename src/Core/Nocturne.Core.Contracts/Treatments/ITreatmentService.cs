@@ -99,8 +99,9 @@ public interface ITreatmentService
     /// Create new treatments with WebSocket broadcasting
     /// </summary>
     /// <remarks>
-    /// Each treatment written is announced as reads serve it, under the id reads serve; one the user
-    /// had deleted, which is not written again, is not announced.
+    /// Each treatment that created or changed a record is announced as reads serve it, under the id
+    /// reads serve. One already stored as sent is returned as served but not announced, and one the
+    /// user had deleted, which is not written again, is not announced.
     /// </remarks>
     /// <param name="origin">
     /// Write origin for the decomposed records. A <see cref="WriteOrigin.Backfill"/> announces no
@@ -111,7 +112,8 @@ public interface ITreatmentService
     /// because the user had deleted them.
     /// </returns>
     /// <exception cref="TreatmentBatchFailedException">
-    /// A treatment could not be stored. The ones before it are stored and announced.
+    /// The batch could not be stored. <see cref="TreatmentBatchFailedException.Written"/> names the
+    /// treatments that stored a record before the failure; those that created or changed one are announced.
     /// </exception>
     Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
         IEnumerable<Treatment> treatments,
@@ -125,7 +127,8 @@ public interface ITreatmentService
     /// POST stores it. Both halves are returned, the bolus first.
     /// </summary>
     /// <exception cref="TreatmentBatchFailedException">
-    /// A treatment could not be stored. The ones before it are stored and announced.
+    /// The batch could not be stored. <see cref="TreatmentBatchFailedException.Written"/> names the
+    /// treatments that stored a record before the failure; those that created or changed one are announced.
     /// </exception>
     Task<BulkWrite<Treatment>> CreateV1TreatmentsAsync(
         IEnumerable<Treatment> treatments,

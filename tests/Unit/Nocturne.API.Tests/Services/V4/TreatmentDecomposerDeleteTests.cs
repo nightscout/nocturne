@@ -98,9 +98,9 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         ProfileActivationTestDeps.Repository(context),
         ProfileActivationTestDeps.Writer(context),
         Mock.Of<ITreatmentFoodService>(),
-        Mock.Of<IDeviceService>(),
+        new UnresolvedDevices(),
         Mock.Of<IPatientDeviceStamper>(),
-        Mock.Of<IActiveProfileResolver>(),
+        new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
         Mock.Of<IPatientInsulinRepository>(),
         TempBasalTestDeps.Unscheduled(),
         auditContext,
@@ -372,8 +372,8 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         await using (var ctx = NewContext())
         {
             var decomposer = CreateDecomposer(ctx, _userAuditContext);
-            await decomposer.DecomposeAsync(ProfileSwitch("weekday", Inside, "Weekday"), WriteOrigin.Live);
-            await decomposer.DecomposeAsync(ProfileSwitch("weekend", Inside.AddHours(1), "Weekend"), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("weekday", Inside, "Weekday"), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("weekend", Inside.AddHours(1), "Weekend"), WriteOrigin.Live);
         }
         (await ActivationAsync("weekday")).EndTimestamp.Should().Be(Inside.AddHours(1));
 
@@ -389,8 +389,8 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         await using (var ctx = NewContext())
         {
             var decomposer = CreateDecomposer(ctx, _userAuditContext);
-            await decomposer.DecomposeAsync(ProfileSwitch("sick", Inside, "Sick", minutes: 120), WriteOrigin.Live);
-            await decomposer.DecomposeAsync(ProfileSwitch("exercise", Inside.AddHours(1), "Exercise", minutes: 30), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("sick", Inside, "Sick", minutes: 120), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("exercise", Inside.AddHours(1), "Exercise", minutes: 30), WriteOrigin.Live);
         }
         (await ActivationAsync("sick")).EndTimestamp.Should().Be(Inside.AddHours(1));
 
@@ -406,8 +406,8 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         await using (var ctx = NewContext())
         {
             var decomposer = CreateDecomposer(ctx, _userAuditContext);
-            await decomposer.DecomposeAsync(ProfileSwitch("weekday", Inside.AddDays(-1), "Weekday"), WriteOrigin.Live);
-            await decomposer.DecomposeAsync(ProfileSwitch("weekend", Inside, "Weekend"), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("weekday", Inside.AddDays(-1), "Weekday"), WriteOrigin.Live);
+            await decomposer.DecomposeOneAsync(ProfileSwitch("weekend", Inside, "Weekend"), WriteOrigin.Live);
         }
 
         await BulkDeleteAsync(_userAuditContext);

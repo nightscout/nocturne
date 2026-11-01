@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -54,7 +55,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         var audit = new Mock<IAuditContext>().Object;
         var factory = new TestNocturneDbContextFactory(_context);
 
-        var deviceService = new Mock<IDeviceService>();
+        var deviceService = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
         deviceService
             .Setup(s => s.ResolveAsync(It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
@@ -62,7 +63,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         _decomposer = new TreatmentDecomposer(
             factory,
             new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
-            new Mock<ITempBasalRepository>().Object,
+            new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord().Object,
             new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),
             new BGCheckRepository(factory, dedup, audit, NullLogger<BGCheckRepository>.Instance),
             new NoteRepository(factory, dedup, audit, NullLogger<NoteRepository>.Instance),
@@ -74,7 +75,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
             new Mock<ITreatmentFoodService>().Object,
             deviceService.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().Object,
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             new Mock<IPatientInsulinRepository>().Object,
             TempBasalTestDeps.Unscheduled(),
             Mock.Of<IAuditContext>(),
@@ -140,7 +141,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AProfileSwitchIsARequestedActivationOfTheProfileItCustomizes()
     {
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
 
         var stored = ProfileActivationMapper.ToDomainModel(await StoredAsync("ps-1"));
         stored.Phase.Should().Be(V4Models.ProfileActivationPhase.Requested);
@@ -160,8 +161,8 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AProfileSwitchWritesNoProfileSnapshotRows()
     {
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(EffectiveSwitch(), WriteOrigin.Live);
 
         (await _context.TherapySettings.CountAsync()).Should().Be(0);
         (await _context.StateSpans.CountAsync()).Should().Be(0);
@@ -170,7 +171,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AnEffectiveProfileSwitchIsAnEffectiveActivationNotANote()
     {
-        await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(EffectiveSwitch(), WriteOrigin.Live);
 
         (await _context.Notes.CountAsync()).Should().Be(0);
         var stored = ProfileActivationMapper.ToDomainModel(await StoredAsync("eps-1"));
@@ -193,7 +194,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         treatment.OriginalDuration = 0;
         treatment.OriginalEnd = ConfirmedMills;
 
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         var stored = await StoredAsync("eps-1");
         stored.EndTimestamp.Should().BeNull();
@@ -215,7 +216,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
             }),
         };
 
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         var insulin = ProfileActivationMapper.ToDomainModel(await StoredAsync("eps-1")).Snapshot!.Insulin!;
         insulin.InsulinName.Should().Be("Lyumjev");
@@ -229,7 +230,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         var treatment = TemporarySwitch();
         treatment.ProfileJson = "{not json";
 
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         var stored = ProfileActivationMapper.ToDomainModel(await StoredAsync("ps-1"));
         stored.Snapshot.Should().BeNull();
@@ -242,7 +243,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         var treatment = EffectiveSwitch(enteredBy: null);
         treatment.AdditionalProperties = new() { ["app"] = JsonSerializer.SerializeToElement("AAPS") };
 
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         var stored = await StoredAsync("eps-1");
         stored.App.Should().Be("AAPS");
@@ -252,7 +253,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task ACareportalSwitchIsAUsersAndItsShiftIsHours()
     {
-        await _decomposer.DecomposeAsync(new Treatment
+        await _decomposer.DecomposeOneAsync(new Treatment
         {
             Id = "ps-careportal",
             EventType = "Profile Switch",
@@ -275,7 +276,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task ANoteWithoutAnOriginalProfileNameStaysANote()
     {
-        await _decomposer.DecomposeAsync(new Treatment
+        await _decomposer.DecomposeOneAsync(new Treatment
         {
             Id = "note-1",
             EventType = "Note",
@@ -300,8 +301,8 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AnEffectiveSwitchConfirmsAndEndsTheRequestedSwitchItRuns()
     {
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(EffectiveSwitch(), WriteOrigin.Live);
 
         var requested = await StoredAsync("ps-1");
         var effective = await StoredAsync("eps-1");
@@ -313,8 +314,8 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task ARequestedSwitchUploadedBehindItsEffectiveSwitchIsConfirmedAndEndedByIt()
     {
-        await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(EffectiveSwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
 
         var requested = await StoredAsync("ps-1");
         requested.EndTimestamp.Should().Be(At(ConfirmedMills));
@@ -327,16 +328,16 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         var permanent = TemporarySwitch();
         permanent.Duration = 0;
         permanent.OriginalDuration = 0;
-        await _decomposer.DecomposeAsync(permanent, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(permanent, WriteOrigin.Live);
 
         var first = EffectiveSwitch();
         first.OriginalDuration = 0;
-        await _decomposer.DecomposeAsync(first, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(first, WriteOrigin.Live);
         var second = EffectiveSwitch();
         second.Id = "eps-2";
         second.Mills = ConfirmedMills + 7_200_000;
         second.OriginalDuration = 0;
-        await _decomposer.DecomposeAsync(second, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(second, WriteOrigin.Live);
 
         var requested = await StoredAsync("ps-1");
         (await StoredAsync("eps-1")).RequestedActivationId.Should().Be(requested.Id);
@@ -351,8 +352,8 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     {
         var other = TemporarySwitch();
         other.EnteredBy = "careportal";
-        await _decomposer.DecomposeAsync(other, WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(other, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(EffectiveSwitch(), WriteOrigin.Live);
 
         var requested = await StoredAsync("ps-1");
         requested.EndTimestamp.Should().Be(At(SwitchMills + 3_600_000));
@@ -362,8 +363,8 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task APermanentSwitchEndsThePreviousPermanentSwitchOfItsSource()
     {
-        await _decomposer.DecomposeAsync(PermanentSwitch("a", SwitchMills, "Weekday"), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(PermanentSwitch("b", SwitchMills + 3_600_000, "Weekend"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(PermanentSwitch("a", SwitchMills, "Weekday"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(PermanentSwitch("b", SwitchMills + 3_600_000, "Weekend"), WriteOrigin.Live);
 
         (await StoredAsync("a")).EndTimestamp.Should().Be(At(SwitchMills + 3_600_000));
         (await StoredAsync("b")).EndTimestamp.Should().BeNull();
@@ -373,8 +374,8 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task APermanentSwitchUploadedBehindALaterOneEndsAtIt()
     {
-        await _decomposer.DecomposeAsync(PermanentSwitch("b", SwitchMills + 3_600_000, "Weekend"), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(PermanentSwitch("a", SwitchMills, "Weekday"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(PermanentSwitch("b", SwitchMills + 3_600_000, "Weekend"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(PermanentSwitch("a", SwitchMills, "Weekday"), WriteOrigin.Live);
 
         (await StoredAsync("a")).EndTimestamp.Should().Be(At(SwitchMills + 3_600_000));
         (await StoredAsync("b")).EndTimestamp.Should().BeNull();
@@ -383,10 +384,10 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task ATemporarySwitchEndsAtItsLengthAndLeavesThePermanentSwitchRunning()
     {
-        await _decomposer.DecomposeAsync(PermanentSwitch("a", SwitchMills, "Weekday"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(PermanentSwitch("a", SwitchMills, "Weekday"), WriteOrigin.Live);
         var temporary = PermanentSwitch("t", SwitchMills + 3_600_000, "Sick");
         temporary.Duration = 30;
-        await _decomposer.DecomposeAsync(temporary, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(temporary, WriteOrigin.Live);
 
         (await StoredAsync("t")).EndTimestamp.Should().Be(At(SwitchMills + 3_600_000 + 1_800_000));
         (await StoredAsync("a")).EndTimestamp.Should().BeNull();
@@ -397,8 +398,8 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     {
         var temporary = PermanentSwitch("t", SwitchMills, "Sick");
         temporary.Duration = 120;
-        await _decomposer.DecomposeAsync(temporary, WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(PermanentSwitch("b", SwitchMills + 1_800_000, "Weekday"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(temporary, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(PermanentSwitch("b", SwitchMills + 1_800_000, "Weekday"), WriteOrigin.Live);
 
         (await StoredAsync("t")).EndTimestamp.Should().Be(At(SwitchMills + 1_800_000));
         (await ProjectAsync("t")).Duration.Should().Be(120, "the switch is served with the length it asked for");
@@ -407,7 +408,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AnEffectiveSwitchReadsBackAsTheNoteItWasUploadedAs()
     {
-        await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(EffectiveSwitch(), WriteOrigin.Live);
 
         var stored = await StoredAsync("eps-1");
         var projected = await ProjectAsync("eps-1");
@@ -433,7 +434,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AnAapsProfileSwitchReadsBackWithItsCustomizedNameAndOriginalFields()
     {
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
 
         var projected = await ProjectAsync("ps-1");
         projected.EventType.Should().Be("Profile Switch");
@@ -458,7 +459,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         treatment.PumpSerial = "33013206";
         treatment.AdditionalProperties = new() { ["app"] = JsonSerializer.SerializeToElement("AAPS") };
 
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         (await StoredAsync("ps-1")).TimeshiftMs.Should().Be(-7_200_000);
         var projected = await ProjectAsync("ps-1");
@@ -482,7 +483,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         treatment.OriginalDuration = null;
         treatment.OriginalEnd = null;
 
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         var projected = await ProjectAsync("eps-1");
         projected.ProfileJson.Should().Be(EffectiveProfileJson);
@@ -502,7 +503,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         treatment.PumpType = "OMNIPOD_DASH";
         treatment.PumpSerial = "33013206";
 
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         var projected = await ProjectAsync("eps-1");
         projected.PumpId.Should().Be(77);
@@ -513,12 +514,12 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AReuploadUpdatesTheActivationInPlace()
     {
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
         var first = await StoredAsync("ps-1");
 
         var edited = TemporarySwitch();
         edited.Percentage = 120;
-        await _decomposer.DecomposeAsync(edited, WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(edited, WriteOrigin.Live);
 
         var second = await StoredAsync("ps-1");
         second.Id.Should().Be(first.Id, "the served identifier does not move");
@@ -528,7 +529,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AnAapsV1ProfileSwitchShiftIsStoredAndServedInMilliseconds()
     {
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
 
         var stored = ProfileActivationMapper.ToDomainModel(await StoredAsync("ps-1"));
         stored.TimeshiftMs.Should().Be(3_600_000);
@@ -540,14 +541,14 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AnIdenticalResendWritesNoRowVersion()
     {
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(EffectiveSwitch(), WriteOrigin.Live);
         var requested = (await StoredAsync("ps-1")).SysUpdatedAt;
         var effective = (await StoredAsync("eps-1")).SysUpdatedAt;
         _context.ChangeTracker.Clear();
 
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(EffectiveSwitch(), WriteOrigin.Live);
 
         (await StoredAsync("ps-1")).SysUpdatedAt.Should().Be(requested, "its settled end and link are written with it, not after");
         (await StoredAsync("eps-1")).SysUpdatedAt.Should().Be(effective);
@@ -585,9 +586,9 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AnEffectiveSwitchAfterATemporaryRequestRanOutConfirmsThePermanentRequestBeforeIt()
     {
-        await _decomposer.DecomposeAsync(AapsPermanentSwitch("ps-0", SwitchMills - 3_600_000, "Rhys"), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(
+        await _decomposer.DecomposeOneAsync(AapsPermanentSwitch("ps-0", SwitchMills - 3_600_000, "Rhys"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(
             AapsPermanentEffectiveSwitch("eps-back", SwitchMills + 2 * 3_600_000, "Rhys"), WriteOrigin.Live);
 
         (await StoredAsync("eps-back")).RequestedActivationId.Should().Be((await StoredAsync("ps-0")).Id,
@@ -597,9 +598,9 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task AnEffectiveSwitchConfirmsNoRequestOlderThanTheNewestStillRunning()
     {
-        await _decomposer.DecomposeAsync(AapsPermanentSwitch("ps-0", SwitchMills - 3_600_000, "Rhys"), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(AapsPermanentSwitch("ps-other", SwitchMills, "Other"), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(
+        await _decomposer.DecomposeOneAsync(AapsPermanentSwitch("ps-0", SwitchMills - 3_600_000, "Rhys"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(AapsPermanentSwitch("ps-other", SwitchMills, "Other"), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(
             AapsPermanentEffectiveSwitch("eps-late", SwitchMills + 3_600_000, "Rhys"), WriteOrigin.Live);
 
         (await StoredAsync("eps-late")).RequestedActivationId.Should().BeNull(
@@ -609,14 +610,14 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     [Fact]
     public async Task ADeleteBlocksTheSwitchComingBack()
     {
-        await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
+        await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
         var stored = await _context.ProfileActivations.SingleAsync(a => a.LegacyId == "ps-1");
         stored.DeletedAt = DateTime.UtcNow;
         _context.Entry(stored).Property<bool>("DeletedByUser").CurrentValue = true;
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        var result = await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
+        var result = await _decomposer.DecomposeOneAsync(TemporarySwitch(), WriteOrigin.Live);
 
         result.SkippedDeleted.Should().Be(1);
         (await _context.ProfileActivations.CountAsync()).Should().Be(0);

@@ -23,8 +23,6 @@ public class DeviceService : IDeviceService
     private (string TenantId, DeviceDateClock Clock)? _deviceDateClock;
     private readonly ConcurrentDictionary<(string, string, string, string), Device> _cache = new();
     private readonly ConcurrentDictionary<(string, Guid), IReadOnlyList<PatientDevice>> _patientDeviceCache = new();
-    private readonly Dictionary<Guid, (Device Device, DateTime FirstPersisted, DateTime LastPersisted)> _deferredSeen = [];
-    private int _deferDepth;
 
     private string TenantCacheId => _tenantAccessor.Context?.TenantId.ToString()
         ?? throw new InvalidOperationException("Tenant context is not resolved");
@@ -94,8 +92,11 @@ public class DeviceService : IDeviceService
 
         foreach (var (key, (first, last)) in window)
         {
-            await WidenSeenWindowAsync(_cache[key], first, ct);
-            await WidenSeenWindowAsync(_cache[key], last, ct);
+            var device = _cache[key];
+            if (last > device.LastSeenTimestamp)
+                await WidenSeenWindowAsync(device, last, ct);
+            if (first < device.FirstSeenTimestamp)
+                await WidenSeenWindowAsync(device, first, ct);
         }
 
         return [.. keys.Select(key => key is { } k ? _cache[k].Id : (Guid?)null)];
@@ -106,13 +107,6 @@ public class DeviceService : IDeviceService
         // The stored window only ever widens, so an instant inside this copy's window is inside it too.
         if (timestamp >= device.FirstSeenTimestamp && timestamp <= device.LastSeenTimestamp)
             return;
-
-        if (_deferDepth > 0)
-        {
-            _deferredSeen.TryAdd(device.Id, (device, device.FirstSeenTimestamp, device.LastSeenTimestamp));
-            Widen(device, timestamp);
-            return;
-        }
 
         await _repository.WidenSeenWindowAsync(device.Id, timestamp, WriteOrigin.Live, ct);
 
@@ -128,91 +122,6 @@ public class DeviceService : IDeviceService
         if (timestamp < device.FirstSeenTimestamp)
             device.FirstSeenTimestamp = timestamp;
     }
-
-    public ILastSeenDeferral DeferLastSeen(CancellationToken ct = default)
-    {
-        _deferDepth++;
-        return new SeenWindowDeferral(this, ct);
-    }
-
-    /// <summary>
-    /// A deferred widening is already on the cached device, so a failed flush rolls back every device
-    /// it has not yet written, for the reason <see cref="WidenSeenWindowAsync(Device, DateTime, CancellationToken)"/>
-    /// widens its copy only after the write.
-    /// </summary>
-    private async Task FlushDeferredSeenAsync(CancellationToken ct)
-    {
-        if (--_deferDepth > 0)
-            return;
-
-        var pending = TakeDeferredSeen();
-        for (var i = 0; i < pending.Count; i++)
-        {
-            var (device, firstPersisted, lastPersisted) = pending[i];
-            try
-            {
-                if (device.LastSeenTimestamp > lastPersisted)
-                    await _repository.WidenSeenWindowAsync(device.Id, device.LastSeenTimestamp, WriteOrigin.Live, ct);
-                if (device.FirstSeenTimestamp < firstPersisted)
-                    await _repository.WidenSeenWindowAsync(device.Id, device.FirstSeenTimestamp, WriteOrigin.Live, ct);
-            }
-            catch
-            {
-                Restore(pending.Skip(i));
-                throw;
-            }
-        }
-    }
-
-    private void DiscardDeferredSeen()
-    {
-        if (--_deferDepth > 0)
-            return;
-
-        Restore(TakeDeferredSeen());
-    }
-
-    private List<(Device Device, DateTime FirstPersisted, DateTime LastPersisted)> TakeDeferredSeen()
-    {
-        var pending = _deferredSeen.Values.ToList();
-        _deferredSeen.Clear();
-        return pending;
-    }
-
-    private static void Restore(IEnumerable<(Device Device, DateTime FirstPersisted, DateTime LastPersisted)> pending)
-    {
-        foreach (var (device, first, last) in pending)
-        {
-            device.FirstSeenTimestamp = first;
-            device.LastSeenTimestamp = last;
-        }
-    }
-
-    private sealed class SeenWindowDeferral(DeviceService owner, CancellationToken ct) : ILastSeenDeferral
-    {
-        private bool _settled;
-
-        public ValueTask DisposeAsync()
-        {
-            if (_settled)
-                return ValueTask.CompletedTask;
-
-            _settled = true;
-            return new(owner.FlushDeferredSeenAsync(ct));
-        }
-
-        public void Discard()
-        {
-            if (_settled)
-                return;
-
-            _settled = true;
-            owner.DiscardDeferredSeen();
-        }
-    }
-
-    public async Task<Guid?> ResolvePatientDeviceAsync(Guid? deviceId, long mills, CancellationToken ct = default)
-        => (await GetPatientDeviceLinksAsync([deviceId], ct)).Resolve(deviceId, mills);
 
     public async Task<IPatientDeviceLinks> GetPatientDeviceLinksAsync(IEnumerable<Guid?> deviceIds, CancellationToken ct = default)
     {

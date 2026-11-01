@@ -17,7 +17,7 @@ namespace Nocturne.API.Tests.Services.Devices;
 
 /// <summary>
 /// A device's dates are local calendar dates, so the two ingest paths that match a record to a
-/// device, <see cref="DeviceService.ResolvePatientDeviceAsync"/> and
+/// device, <see cref="DeviceService.GetPatientDeviceLinksAsync"/> and
 /// <see cref="PatientDeviceStamper"/>, and the device windows of <see cref="AidSystemMetricsReader"/>
 /// must place a record in the hours where the wearer's date is already the next one on the same
 /// device.
@@ -132,9 +132,10 @@ public class PatientDeviceLocalDateTests
         matched.Should().Be(afterTheTrip.Id, "the wearer's 11 May began at 15:00Z");
     }
 
-    private Task<Guid?> ResolveAsync(DeviceDateClockResolver deviceDates, DateTime reading) =>
-        new DeviceService(Mock.Of<IDeviceRepository>(), _patientDevices.Object, MockTenantAccessor.Create().Object, deviceDates)
-            .ResolvePatientDeviceAsync(_deviceId, new DateTimeOffset(reading).ToUnixTimeMilliseconds());
+    private async Task<Guid?> ResolveAsync(DeviceDateClockResolver deviceDates, DateTime reading) =>
+        (await new DeviceService(Mock.Of<IDeviceRepository>(), _patientDevices.Object, MockTenantAccessor.Create().Object, deviceDates)
+            .GetPatientDeviceLinksAsync([_deviceId]))
+            .Resolve(_deviceId, new DateTimeOffset(reading).ToUnixTimeMilliseconds());
 
     private async Task<Guid?> StampAsync(DeviceDateClockResolver deviceDates, DateTime reading)
     {

@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Xunit;
 using Xunit.Abstractions;
@@ -91,41 +92,100 @@ public class TreatmentBatchFailureIntegrationTests(ApiIntegrationTestFixture fix
             .GetProperty("notes").GetString().Should().Be("lone \uFFFD and nul \uFFFD");
     }
 
+    [Fact]
+    public async Task A_span_the_store_refuses_rejects_only_its_treatment_and_every_resend_is_answered()
+    {
+        var batch = new object[]
+        {
+            new
+            {
+                eventType = "Temporary Target", enteredBy = new string('e', 60), duration = 60,
+                targetTop = 140, targetBottom = 120, units = "mg/dl", created_at = "2026-09-30T02:00:00.000Z",
+            },
+            new { eventType = "Note", notes = "after the target", created_at = "2026-09-30T02:05:00.000Z" },
+        };
+
+        for (var send = 0; send < 2; send++)
+        {
+            var response = await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", batch);
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            var echoed = (await response.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray().ToList();
+            echoed.Should().HaveCount(2);
+            echoed[0].TryGetProperty(TreatmentEcho.RefusalMember, out _).Should().BeTrue();
+            echoed[1].TryGetProperty(TreatmentEcho.RefusalMember, out _).Should().BeFalse();
+        }
+
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        (await db.Set<NoteEntity>().Select(n => n.Text).ToListAsync()).Should().Equal("after the target");
+        (await db.StateSpans.CountAsync()).Should().Be(0);
+        (await RejectedUploadsAsync()).Should().ContainSingle()
+            .Which.GetProperty("reason").GetString().Should().StartWith("A text value is longer than Nocturne can store");
+    }
+
+    [Fact]
+    public async Task A_food_line_the_store_refuses_rejects_only_its_treatment()
+    {
+        var batch = new object[]
+        {
+            new { eventType = "Meal Bolus", carbs = 30, foodType = new string('f', 1200), created_at = "2026-09-30T03:00:00.000Z" },
+            new { eventType = "Meal Bolus", carbs = 20, foodType = "toast", created_at = "2026-09-30T03:05:00.000Z" },
+        };
+
+        var response = await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", batch);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var echoed = (await response.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray().ToList();
+        echoed.Should().HaveCount(2);
+        echoed[0].TryGetProperty(TreatmentEcho.RefusalMember, out _).Should().BeTrue();
+        echoed[1].TryGetProperty(TreatmentEcho.RefusalMember, out _).Should().BeFalse();
+
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        (await db.Set<TreatmentFoodEntity>().Select(l => l.Note).ToListAsync()).Should().Equal("toast");
+        (await RejectedUploadsAsync()).Should().ContainSingle()
+            .Which.GetProperty("reason").GetString().Should().StartWith("A text value is longer than Nocturne can store");
+    }
+
     private async Task<List<JsonElement>> RejectedUploadsAsync() =>
         (await AuthenticatedClient.GetFromJsonAsync<JsonElement>("/api/v4/rejected-uploads"))
             .GetProperty("data").EnumerateArray().ToList();
 
+    /// <summary>
+    /// A batch is written table by table, so a store failure part way keeps the tables before it: the
+    /// bolus is stored, the notes are not, and the first treatment with nothing stored names the stop.
+    /// </summary>
     [Fact]
     public async Task A_batch_stopped_by_a_store_failure_keeps_what_it_stored_before_it()
     {
         await using var scope = TenantJobScope.Open(
             Fixture.Services, new TenantContext(Fixture.TenantId, "", "", true, false), "test:treatment-batch");
         var notes = new ProxyGenerator().CreateInterfaceProxyWithTarget(
-            scope.ServiceProvider.GetRequiredService<INoteRepository>(), new TimesOutWriting("second"));
+            scope.ServiceProvider.GetRequiredService<INoteRepository>(), new TimesOutWritingNotes());
         var decomposer = ActivatorUtilities.CreateInstance<TreatmentDecomposer>(scope.ServiceProvider, notes);
         var store = ActivatorUtilities.CreateInstance<TreatmentReadService>(scope.ServiceProvider, decomposer);
 
         var act = () => store.CreateAsync(
         [
-            new Treatment { EventType = "Note", Notes = "first", Mills = 1_790_000_000_000 },
-            new Treatment { EventType = "Note", Notes = "second", Mills = 1_790_000_300_000 },
-            new Treatment { EventType = "Note", Notes = "third", Mills = 1_790_000_600_000 },
+            new Treatment { Id = "batch-stop-bolus", EventType = "Correction Bolus", Insulin = 1.5, Mills = 1_790_000_000_000 },
+            new Treatment { Id = "batch-stop-second", EventType = "Note", Notes = "second", Mills = 1_790_000_300_000 },
+            new Treatment { Id = "batch-stop-third", EventType = "Note", Notes = "third", Mills = 1_790_000_600_000 },
         ], WriteOrigin.Live);
 
         var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
-        failed.Written.Select(t => t.Notes).Should().Equal("first");
+        failed.Written.Select(t => t.Id).Should().Equal("batch-stop-bolus");
+        failed.FailedIndex.Should().Be(1);
 
         await using var db = Fixture.CreateDbContext(Fixture.TenantId);
-        (await db.Set<NoteEntity>().Select(n => n.Text).ToListAsync()).Should().Equal("first");
+        (await db.Set<BolusEntity>().Select(b => b.LegacyId).ToListAsync()).Should().Equal("batch-stop-bolus");
+        (await db.Set<NoteEntity>().CountAsync()).Should().Be(0);
     }
 
-    /// <summary>Times out the note write whose text is <paramref name="text"/>.</summary>
-    private sealed class TimesOutWriting(string text) : IInterceptor
+    /// <summary>Times out every note write.</summary>
+    private sealed class TimesOutWritingNotes : IInterceptor
     {
         public void Intercept(IInvocation invocation)
         {
-            if (invocation.Method.Name == nameof(INoteRepository.CreateAsync)
-                && invocation.Arguments[0] is Note { Text: var written } && written == text)
+            if (invocation.Method.Name == nameof(INoteRepository.BulkUpsertAsync))
                 throw new TimeoutException();
 
             invocation.Proceed();

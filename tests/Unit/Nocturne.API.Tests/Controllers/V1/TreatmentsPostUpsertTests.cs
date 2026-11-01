@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -59,7 +60,7 @@ public class TreatmentsPostUpsertTests : IDisposable
         var deviceEventRepo = new DeviceEventRepository(ctxFactory, dedup, audit, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance);
 
-        var tempBasalRepo = new Mock<ITempBasalRepository>();
+        var tempBasalRepo = new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord();
         tempBasalRepo.As<IV4Repository<Nocturne.Core.Models.V4.TempBasal>>()
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -71,7 +72,7 @@ public class TreatmentsPostUpsertTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var devices = new Mock<IDeviceService>();
+        var devices = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
         devices
             .Setup(s => s.ResolveAsync(
                 It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -88,7 +89,7 @@ public class TreatmentsPostUpsertTests : IDisposable
             foods.Object,
             devices.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             audit,

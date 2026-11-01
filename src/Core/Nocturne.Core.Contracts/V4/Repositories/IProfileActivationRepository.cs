@@ -46,8 +46,12 @@ public interface IProfileActivationRepository
     Task<ProfileActivation?> FindBySyncIdentifierAsync(
         string dataSource, string syncIdentifier, CancellationToken ct = default);
 
-    /// <summary>Writes a set of activations' ends in one save; ids with no live row are skipped.</summary>
-    Task<int> SetEndsAsync(IReadOnlyDictionary<Guid, DateTime?> ends, CancellationToken ct = default);
+    /// <summary>
+    /// Writes activations' ends, and the requested activation each effective one confirms or none, in
+    /// one save; ids with no live row are skipped.
+    /// </summary>
+    Task<int> SettleAsync(
+        IReadOnlyDictionary<Guid, DateTime?> ends, IReadOnlyDictionary<Guid, Guid?> confirms, CancellationToken ct = default);
 
     /// <summary>
     /// Hard-deletes every activation written by <paramref name="dataSource"/> and writes
@@ -56,8 +60,4 @@ public interface IProfileActivationRepository
     /// </summary>
     Task ReplaceByDataSourceAsync(
         string dataSource, IReadOnlyCollection<ProfileActivation> activations, CancellationToken ct = default);
-
-    /// <summary>Links effective activations to the requested activation they confirm, or to none.</summary>
-    Task<int> SetRequestedActivationAsync(
-        IReadOnlyCollection<Guid> effectiveIds, Guid? requestedId, CancellationToken ct = default);
 }

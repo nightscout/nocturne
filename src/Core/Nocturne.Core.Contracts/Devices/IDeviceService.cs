@@ -29,26 +29,9 @@ public interface IDeviceService
 
     /// <summary>
     /// The patient-device links of <paramref name="deviceIds"/>, read in one query for the ids not yet
-    /// read in this scope, to resolve as <see cref="ResolvePatientDeviceAsync"/> does without a read each.
+    /// read in this scope, to resolve each record's patient device without a read each.
     /// </summary>
     Task<IPatientDeviceLinks> GetPatientDeviceLinksAsync(IEnumerable<Guid?> deviceIds, CancellationToken ct = default);
-
-    /// <summary>
-    /// Resolve a <see cref="PatientDevice"/> by matching the given <paramref name="deviceId"/>
-    /// to patient device records whose date range contains the timestamp.
-    /// </summary>
-    /// <param name="deviceId">The resolved device ID, or <c>null</c> to short-circuit.</param>
-    /// <param name="mills">Timestamp in Unix milliseconds.</param>
-    /// <returns>The matching patient device <see cref="Guid"/>, or <c>null</c> if no match.</returns>
-    Task<Guid?> ResolvePatientDeviceAsync(Guid? deviceId, long mills, CancellationToken ct = default);
-
-    /// <summary>
-    /// Holds the seen-window widenings <see cref="ResolveAsync"/> makes until the returned scope is
-    /// disposed, then writes each device's widest first and last seen once. For a batch of records,
-    /// each of which would otherwise widen its device's window again.
-    /// </summary>
-    /// <param name="ct">Cancellation token for the writes made on dispose.</param>
-    ILastSeenDeferral DeferLastSeen(CancellationToken ct = default);
 }
 
 /// <summary>A device seen at <see cref="Mills"/>, as <see cref="IDeviceService.ResolveAsync"/> takes it.</summary>
@@ -58,21 +41,9 @@ public readonly record struct DeviceSighting(DeviceCategory Category, string? Ty
 public interface IPatientDeviceLinks
 {
     /// <summary>
-    /// <see cref="IDeviceService.ResolvePatientDeviceAsync"/> over the links read; <c>null</c> for a device
-    /// whose links were not read.
+    /// The <see cref="PatientDevice"/> linked to <paramref name="deviceId"/> whose date range contains
+    /// <paramref name="mills"/>; <c>null</c> for no match, a null device, or a device whose links were
+    /// not read.
     /// </summary>
     Guid? Resolve(Guid? deviceId, long mills);
-}
-
-/// <summary>
-/// The scope <see cref="IDeviceService.DeferLastSeen"/> opens. Disposing it writes the held widenings.
-/// </summary>
-public interface ILastSeenDeferral : IAsyncDisposable
-{
-    /// <summary>
-    /// Drops the held widenings without writing them and settles the scope, so a later dispose does
-    /// nothing. In a nested scope it settles only that scope: the outermost scope still writes every
-    /// held widening when it is disposed.
-    /// </summary>
-    void Discard();
 }
