@@ -121,7 +121,7 @@ internal sealed class StateSpansDataset : IReportDataset
         {
             Rows = rows,
             Summary = string.Join('\n', lines),
-            Facts = [.. counts.Select(c => ReportFacts.Count(Words(c.Kind), c.Count, "spans"))],
+            Facts = [.. counts.Select(c => ReportFacts.Count(Words(c.Kind), c.Count, "spans").Of("start", "end"))],
             Sentence = spans.Count == 0 ? "No state spans in this period." : $"{ReportFacts.Plural(spans.Count, "span")} in this period.",
             Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(spans.Count, "span")}.",
             Resolution = new ReportResolution(0, 0, spans.Count, kept.Count, kept.Count < spans.Count),

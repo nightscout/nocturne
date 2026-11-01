@@ -32,11 +32,11 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
         new("block", "Block", ReportFieldKind.Category, null, "The local time block, HH:mm-HH:mm."),
         new("startMinute", "Block start", ReportFieldKind.TimeOfDay, "min", "Start of the block, minutes after local midnight."),
         new("basalObserved", "Basal observed", ReportFieldKind.Number, "U/h", "The basal need the data showed in the block.", Color: ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
-        new("basalProfile", "Basal in profile", ReportFieldKind.Number, "U/h", "The profile's basal rate over the block.", Aggregate: ReportAggregate.Mean, Setting: true),
+        new("basalProfile", "Basal in profile", ReportFieldKind.Number, "U/h", "The profile's basal rate over the block.", Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
         new("isfObserved", "ISF observed", ReportFieldKind.Number, "glucose/U", "The ISF the data showed in the block.", Color: ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
-        new("isfProfile", "ISF in profile", ReportFieldKind.Number, "glucose/U", "The profile's ISF over the block.", Aggregate: ReportAggregate.Mean, Setting: true),
+        new("isfProfile", "ISF in profile", ReportFieldKind.Number, "glucose/U", "The profile's ISF over the block.", Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
         new("carbRatioObserved", "Carb ratio observed", ReportFieldKind.Number, "g/U", "The carb ratio the data showed in the block.", Color: ChartColor.Carbs, Aggregate: ReportAggregate.Mean),
-        new("carbRatioProfile", "Carb ratio in profile", ReportFieldKind.Number, "g/U", "The profile's carb ratio over the block.", Aggregate: ReportAggregate.Mean, Setting: true),
+        new("carbRatioProfile", "Carb ratio in profile", ReportFieldKind.Number, "g/U", "The profile's carb ratio over the block.", Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
         new("episodes", "Episodes", ReportFieldKind.Number, null, "Episodes (basal: days) that qualified.", Aggregate: ReportAggregate.Sum),
         new("spread", "Middle half", ReportFieldKind.Category, null, "The 25th to 75th percentile of the episodes' values, with the unit."),
         new("confidence", "Confidence", ReportFieldKind.Category, null, "Low, Moderate or High; empty where there is no value."),
@@ -102,6 +102,10 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
             Sentence = report.WithheldReason is not null || report.TimeZoneUnavailableReason is not null
                 ? Summarise(report, rows, request.UseMmol)
                 : "Values the data showed, next to the profile's values: observations from the range, not instructions.",
+            SentenceAbout = report.WithheldReason is not null || report.TimeZoneUnavailableReason is not null
+                ? null
+                : ["basalObserved|isfObserved|carbRatioObserved", "basalProfile|isfProfile|carbRatioProfile"],
+            SentenceComparesSettings = report.WithheldReason is null && report.TimeZoneUnavailableReason is null,
             Context = ContextLine(report, ReportFacts.Plural(rows.Count, "figure")),
             Omitted = report.Primary is null && report.WithheldReason == SettingsEvidenceWithheldReason.ReadScopes
                 ? [.. Fields.Select(f => new ReportOmittedField(f.Name, ScopeOf(LoopAnalysisSeries.SettingsEvidence)))]
@@ -174,7 +178,7 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
         {
             var observed = g.Key switch { "basal" => "basalObserved", "isf" => "isfObserved", _ => "carbRatioObserved" };
             var name = g.Key switch { "basal" => "Basal", "isf" => "ISF", _ => "Carb ratio" };
-            return new ReportFact(name, $"{g.Count(r => r.GetValueOrDefault(observed) is double)} of {g.Count()}", "blocks", "with an observed value");
+            return new ReportFact(name, $"{g.Count(r => r.GetValueOrDefault(observed) is double)} of {g.Count()}", "blocks", "with an observed value", [observed]);
         }),
     ];
 

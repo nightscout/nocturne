@@ -7,13 +7,30 @@ namespace Nocturne.API.Reports;
 /// wrote it, its unit (printed muted, apart from the value) and an optional short note under it.
 /// </summary>
 /// <param name="About">
-/// The fields the figure is about: a chart layer prints it only when it draws one of them. Null for a
-/// figure about the whole dataset.
+/// The fields the figure is about (<see cref="ReportAbout"/>): a chart layer prints it only when it draws
+/// every one of them. Null for a figure only a table or tiles panel prints.
 /// </param>
 internal sealed record ReportFact(string Label, string Value, string? Unit = null, string? Note = null,
     [property: System.Text.Json.Serialization.JsonIgnore] IReadOnlyList<string>? About = null)
 {
     public ReportFact Of(params string[] fields) => this with { About = fields };
+
+    /// <summary>A figure that sets the data against the profile's settings: a layer that draws both may print it, a panel's headline never does.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ComparesSettings { get; init; }
+
+    public ReportFact AgainstSettings() => this with { ComparesSettings = true };
+}
+
+/// <summary>
+/// What a fact or a sentence is about, as a list of fields a layer must draw all of. One entry may name
+/// fields that carry the same values in other units, split by '|' ("glucose|glucoseMgdl"): drawing any of
+/// them draws that entry.
+/// </summary>
+internal static class ReportAbout
+{
+    public static bool DrawnBy(IReadOnlyList<string> about, IReadOnlyCollection<string> drawn) =>
+        about.Count > 0 && about.All(entry => entry.Split('|').Any(drawn.Contains));
 }
 
 /// <summary>Builds a panel's <see cref="ReportFact"/>s in the display unit, invariant culture.</summary>
@@ -45,6 +62,15 @@ internal static class ReportFacts
         var name = TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var iana) ? iana : zone.Id;
         return string.Create(CultureInfo.InvariantCulture,
             $"{TimeZoneInfo.ConvertTime(from, zone):yyyy-MM-dd HH:mm} to {TimeZoneInfo.ConvertTime(to, zone):yyyy-MM-dd HH:mm} {name}");
+    }
+
+    /// <summary>"2026-10-26 14:05 Australia/Sydney": one instant in the tenant's zone, "... UTC" when it has none.</summary>
+    public static string Instant(DateTimeOffset at, TimeZoneInfo? zone = null)
+    {
+        if (zone is null)
+            return string.Create(CultureInfo.InvariantCulture, $"{at.UtcDateTime:yyyy-MM-dd HH:mm} UTC");
+        var name = TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var iana) ? iana : zone.Id;
+        return string.Create(CultureInfo.InvariantCulture, $"{TimeZoneInfo.ConvertTime(at, zone):yyyy-MM-dd HH:mm} {name}");
     }
 
     /// <summary>"1 reading" or "4025 readings".</summary>

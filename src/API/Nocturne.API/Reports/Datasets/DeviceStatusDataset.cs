@@ -161,17 +161,17 @@ internal sealed class DeviceStatusDataset : IReportDataset
         var reservoir = pump.Where(p => p.Reservoir is not null).ToList();
         if (reservoir.Count > 0)
             facts.Add(new ReportFact("Reservoir", ReportFacts.Number(reservoir[^1].Reservoir!.Value), "U",
-                $"lowest {ReportFacts.Number(reservoir.Min(p => p.Reservoir!.Value))} U"));
+                $"lowest {ReportFacts.Number(reservoir.Min(p => p.Reservoir!.Value))} U", ["reservoir"]));
         var pumpBattery = pump.Where(p => p.BatteryPercent is not null).ToList();
         if (pumpBattery.Count > 0)
             facts.Add(new ReportFact("Pump battery", ReportFacts.Number(pumpBattery[^1].BatteryPercent!.Value, "0"), "%",
-                $"lowest {ReportFacts.Number(pumpBattery.Min(p => p.BatteryPercent!.Value), "0")}%"));
+                $"lowest {ReportFacts.Number(pumpBattery.Min(p => p.BatteryPercent!.Value), "0")}%", ["pumpBattery"]));
         var uploaderBattery = uploader.Where(u => u.Battery is not null).ToList();
         if (uploaderBattery.Count > 0)
             facts.Add(new ReportFact("Uploader battery", ReportFacts.Number(uploaderBattery[^1].Battery!.Value, "0"), "%",
-                $"lowest {ReportFacts.Number(uploaderBattery.Min(u => u.Battery!.Value), "0")}%"));
+                $"lowest {ReportFacts.Number(uploaderBattery.Min(u => u.Battery!.Value), "0")}%", ["uploaderBattery"]));
         if (sensor is not null)
-            facts.Add(new ReportFact("Sensor age", $"{sensor.Days}d {sensor.Hours}h", null, "now"));
+            facts.Add(new ReportFact("Sensor age", $"{sensor.Days}d {sensor.Hours}h", null, "now", ["sensorAgeHours"]));
         return facts;
     }
 

@@ -99,7 +99,7 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(bands, count, request.From, request.To, useMmol),
-            Facts = count == 0 ? [] : [.. bands.Select(b => ReportFacts.Percent(b.Label, Math.Round(b.Percent, 1), Limits(b, useMmol)))],
+            Facts = count == 0 ? [] : [.. bands.Select(b => ReportFacts.Percent(b.Label, Math.Round(b.Percent, 1), Limits(b, useMmol)).Of("percent|minutes"))],
             Sentence = count == 0
                 ? "No glucose readings in this period."
                 : $"Below range, total: {ReportFacts.Number(bands[0].Percent + bands[1].Percent)}%. "

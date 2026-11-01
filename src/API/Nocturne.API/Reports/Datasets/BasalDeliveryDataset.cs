@@ -31,7 +31,7 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         new("delivered", "Delivered basal", ReportFieldKind.Number, "U/h", "The basal rate delivered.",
             Color: ChartColor.InsulinBasal, Step: true, Aggregate: ReportAggregate.Last),
         new("scheduled", "Scheduled basal", ReportFieldKind.Number, "U/h", "The rate the basal schedule called for, an override's scale included.",
-            Scope.TherapyRead, ChartColor.InsulinTempBasal, Step: true, Aggregate: ReportAggregate.Last, Setting: true),
+            Scope.TherapyRead, ChartColor.InsulinTempBasal, Step: true, Aggregate: ReportAggregate.Last, Setting: ReportSetting.Profile),
         new("origin", "Origin", ReportFieldKind.Category, null, "Where the delivered rate came from: Algorithm, Scheduled, Manual, Suspended or Inferred."),
     ];
 
@@ -121,8 +121,8 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         {
             facts.Add(new ReportFact("Scheduled", scheduled.Min() == scheduled.Max() ? N(scheduled.Min()) : $"{N(scheduled.Min())}-{N(scheduled.Max())}", "U/h",
                 About: ["scheduled"]));
-            facts.Add(ReportFacts.Count("Above schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate > s), "changes").Of("delivered", "scheduled"));
-            facts.Add(ReportFacts.Count("Below schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate < s), "changes").Of("delivered", "scheduled"));
+            facts.Add(ReportFacts.Count("Above schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate > s), "changes").Of("delivered", "scheduled").AgainstSettings());
+            facts.Add(ReportFacts.Count("Below schedule", series.Count(p => p.ScheduledRate is { } s && p.Rate < s), "changes").Of("delivered", "scheduled").AgainstSettings());
         }
         return facts;
     }

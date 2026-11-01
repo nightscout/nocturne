@@ -28,7 +28,7 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
     public string RequiredScope => Scope.GlucoseRead;
 
     /// <summary>The readings' fields, which the glucose facts and sentence are about.</summary>
-    private static readonly string[] GlucoseFields = ["glucose", "glucoseMgdl"];
+    private static readonly string[] GlucoseFields = ["glucose|glucoseMgdl"];
 
     public IReadOnlyList<ReportField> Fields { get; } =
     [
@@ -42,10 +42,10 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
             "The trend arrow: DoubleUp, SingleUp, FortyFiveUp, Flat, FortyFiveDown, SingleDown, DoubleDown, or empty."),
         new("targetLow", "Range low", ReportFieldKind.Number, ReportField.GlucoseUnit,
             "The lower limit of the in-range band, 70 mg/dL (3.9 mmol/L), the clinical consensus limit the reports use. Not the user's profile target.",
-            Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last, Setting: true),
+            Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last, Setting: ReportSetting.FixedLimit),
         new("targetHigh", "Range high", ReportFieldKind.Number, ReportField.GlucoseUnit,
             "The upper limit of the in-range band, 180 mg/dL (10.0 mmol/L), the clinical consensus limit the reports use. Not the user's profile target.",
-            Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last, Setting: true),
+            Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last, Setting: ReportSetting.FixedLimit),
         new("iob", "IOB", ReportFieldKind.Number, "U", "Insulin on board at the reading.",
             Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
         new("cob", "COB", ReportFieldKind.Number, "g", "Carbs on board at the reading.",

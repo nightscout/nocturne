@@ -295,7 +295,7 @@ public class ReportSpecRunnerTests
     }
 
     [Fact]
-    public async Task The_panels_lead_is_the_first_plotted_layer_of_its_main_track_that_has_a_sentence()
+    public async Task The_glucose_line_leads_the_glucose_chart_whatever_the_tracks_heights()
     {
         var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead);
 
@@ -303,9 +303,75 @@ public class ReportSpecRunnerTests
 
         var layers = panel.Tracks.SelectMany(t => t.Layers).ToDictionary(l => l.Id);
         layers["glucose"].Sentence.Should().NotBeNull();
-        panel.Sentence.Should().StartWith(layers["glucose"].Sentence!, "the glucose track is the main plot; the basal track above it is not");
+        panel.Sentence.Should().StartWith(layers["glucose"].Sentence!, "the glucose line leads, not the basal track above it");
+        panel.Title.Should().Be("Glucose");
+        panel.Context.Should().Contain("reading").And.NotContain("rate change", "the panel's range line is its lead layer's, not its first track's");
         panel.Facts.Should().Equal(layers["glucose"].Facts);
         layers["target"].Sentence.Should().BeNull("the range edges are not the readings the sentence is about");
+    }
+
+    private static ReportLayerResult Result(string id, ReportMark mark, string? sentence = null, bool glucose = false, bool settings = false) => new()
+    {
+        Id = id,
+        Title = id,
+        Mark = mark,
+        Bindings = new ReportLayerBindings { X = "time", Y = ["v"] },
+        XKind = ReportXKind.Time,
+        Side = ReportAxisSide.Left,
+        Status = ReportPanelStatus.Ok,
+        Window = new ReportWindow(0, 1),
+        Fields = [new("v", "V", ReportFieldKind.Number, null, "v", GlucoseScale: glucose)],
+        Sentence = sentence,
+        SettingsSentence = settings,
+    };
+
+    /// <summary>The reviewer's a1 to a4: the lead is chosen by what a layer draws, never by its track's height.</summary>
+    public static TheoryData<string, string[], string> Leads => new()
+    {
+        { "a large basal track above the glucose line", ["basal:area:Basal changes.", "target:band", "glucose:line:Glucose sentence.:glucose"], "glucose" },
+        { "a tallest on-board track with no sentence", ["iob:line", "cob:line", "basal:area:Basal changes."], "basal" },
+        { "a tallest spans lane", ["spans:spans:2 spans.", "iob:line"], "iob" },
+        { "a tall markers track", ["markers:markers:Boluses.", "bars:bars"], "bars" },
+        { "a settings comparison never heads the panel", ["profile:line:Delivered basal was 1.06 times the scheduled basal.:settings", "iob:line:IOB."], "iob" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Leads))]
+    public void The_lead_is_chosen_by_what_a_layer_draws(string because, string[] layers, string lead)
+    {
+        var results = layers.Select(spec =>
+        {
+            var parts = spec.Split(':');
+            var mark = Enum.Parse<ReportMark>(parts[1], ignoreCase: true);
+            var sentence = parts.Length > 2 && parts[2].Length > 0 ? parts[2] : null;
+            return Result(parts[0], mark, sentence, parts.Contains("glucose"), parts.Contains("settings"));
+        }).ToList();
+
+        ReportSpecRunner.Lead(results)!.Id.Should().Be(lead, because);
+    }
+
+    [Fact]
+    public void A_figure_or_sentence_about_two_fields_needs_a_layer_that_draws_both()
+    {
+        var output = new ReportDatasetOutput
+        {
+            Rows = [],
+            Summary = "",
+            Facts = [ReportFacts.Count("Above schedule", 4).Of("delivered", "scheduled").AgainstSettings(), ReportFacts.Count("Changes", 9).Of("delivered"),
+                ReportFacts.Count("Untagged", 1)],
+            Sentence = "Delivered basal was 1.06 times the scheduled basal.",
+            SentenceAbout = ["deliveredBasal", "scheduledBasal"],
+            SentenceComparesSettings = true,
+        };
+
+        var scheduledOnly = ReportSpecRunner.About(output, ["scheduledBasal"]);
+        scheduledOnly.Sentence.Should().BeNull();
+        ReportSpecRunner.About(output, ["scheduled"]).Facts.Should().BeEmpty("the comparison needs the delivered basal drawn too, and an untagged figure is never a chart's");
+        var both = ReportSpecRunner.About(output, ["deliveredBasal", "scheduledBasal"]);
+        both.Sentence.Should().NotBeNull();
+        both.SettingsSentence.Should().BeTrue();
+        ReportSpecRunner.About(output, ["delivered", "scheduled"]).Facts.Select(f => f.Label).Should().Equal("Above schedule", "Changes");
+        ReportAbout.DrawnBy(["glucose|glucoseMgdl"], ["glucoseMgdl"]).Should().BeTrue();
     }
 
     [Fact]

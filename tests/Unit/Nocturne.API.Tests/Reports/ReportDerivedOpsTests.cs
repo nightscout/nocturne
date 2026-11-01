@@ -154,6 +154,21 @@ public class ReportDerivedOpsTests
     }
 
     [Theory]
+    [InlineData(3.9)]
+    [InlineData(7.3)]
+    public void A_trend_of_a_series_that_does_not_vary_gives_no_r_squared_and_says_so(double level)
+    {
+        var flat = Enumerable.Repeat((double?)level, 288).ToArray();
+
+        var output = new TrendOp().Compute(new TrendSpec(), Input(flat));
+
+        output.Facts.Select(f => f.Label).Should().NotContain("r²");
+        output.Sentence.Should().Contain("does not vary over 288 slots").And.NotContain("r²");
+        var pairs = flat.Select((v, i) => ((double)i, v!.Value)).ToList();
+        DerivedMath.LeastSquares(pairs)!.RSquared.Should().BeNull();
+    }
+
+    [Theory]
     [InlineData(0.1)]
     [InlineData(3.9)]
     public void A_constant_that_rounding_leaves_a_little_spread_has_no_line_or_correlation(double constant)

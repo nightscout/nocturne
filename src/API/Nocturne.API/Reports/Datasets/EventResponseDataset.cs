@@ -52,7 +52,8 @@ internal sealed class EventResponseDataset : IReportDataset
         new("iobP50", "IOB median", ReportFieldKind.Number, "U", "Median insulin on board.", Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
         new("cobP50", "COB median", ReportFieldKind.Number, "g", "Median carbs on board.", Scope.TreatmentsRead, ChartColor.Carbs, Aggregate: ReportAggregate.Mean),
         new("netLoopCorrectionP50", "Net loop correction median", ReportFieldKind.Number, "U/h",
-            "Median of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
+            "Median of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean,
+            Setting: ReportSetting.ProfileRelative),
         new("events", "Events", ReportFieldKind.Number, null, "Events with a glucose value in the slot.", Aggregate: ReportAggregate.Sum),
         new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
             "One sentence that states the slot's glucose figures for its cohort; the chart shows it for the slot under the pointer.", Companion: true),
@@ -72,9 +73,10 @@ internal sealed class EventResponseDataset : IReportDataset
         new("drop", "Drop", ReportFieldKind.Number, ReportField.GlucoseUnit, "Fall events: the start minus the reading at the window's end."),
         new("nadir", "Lowest", ReportFieldKind.Number, ReportField.GlucoseUnit, "Fall events: the lowest reading after the event."),
         new("minutesToNadir", "Time to lowest", ReportFieldKind.Number, "min", "Fall events: minutes from the event to the lowest reading."),
-        new("netInsulin", "Net insulin", ReportFieldKind.Number, "U", "Insulin above the basal schedule over the window.", Scope.TreatmentsRead),
+        new("netInsulin", "Net insulin", ReportFieldKind.Number, "U", "Insulin above the basal schedule over the window.", Scope.TreatmentsRead,
+            Setting: ReportSetting.ProfileRelative),
         new("gramsPerUnit", "Carbs per unit", ReportFieldKind.Number, "g/U",
-            "An isolated meal's carbs over its net insulin.", Scope.TreatmentsRead),
+            "An isolated meal's carbs over its net insulin.", Scope.TreatmentsRead, Setting: ReportSetting.ProfileRelative),
         new("summary", "Summary", ReportFieldKind.Category, null, "One sentence that states what the event's figures show."),
     ];
 
@@ -598,10 +600,16 @@ internal sealed class EventResponseDataset : IReportDataset
                     note = $"median rise {(rise.P50 >= 0 ? "+" : "-")}{G(rise.P50)} {unit} at {Number(toPeak.P50, "0")} min";
                 else if (result is { Events: > 0 } && result.Metrics.Drop is { } drop)
                     note = $"median drop {G(drop.P50)} {unit}";
-                return new ReportFact(labels[cohort.Cohort], events.ToString(CultureInfo.InvariantCulture), events == 1 ? "event" : "events", note);
+                return new ReportFact(labels[cohort.Cohort], events.ToString(CultureInfo.InvariantCulture), events == 1 ? "event" : "events", note, [GlucoseFields]);
             }),
         ];
     }
+
+    /// <summary>The fields of an event group's glucose at a minute: a percentile of the reading or of its change.</summary>
+    private const string GlucoseFields =
+        "glucoseP10|glucoseP25|glucoseP50|glucoseP75|glucoseP90|deltaP10|deltaP25|deltaP50|deltaP75|deltaP90";
+
+    public IReadOnlyList<string>? RowSentenceAbout => [GlucoseFields];
 
     internal static string WindowSentence(EventResponseDefinition definition) =>
         $"Each event from {definition.MinutesBefore} minutes before to {definition.MinutesAfter} minutes after it"

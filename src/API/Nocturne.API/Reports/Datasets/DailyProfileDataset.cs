@@ -50,16 +50,17 @@ internal sealed class DailyProfileDataset : IReportDataset
         new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the slot's readings.", Aggregate: ReportAggregate.Mean),
         new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the slot across the range.", Aggregate: ReportAggregate.Sum),
         new("scheduledBasal", "Scheduled basal", ReportFieldKind.Number, "U/h", "Median scheduled basal, including any override's scale.",
-            Scope.TherapyRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean, Setting: true),
+            Scope.TherapyRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
         new("deliveredBasal", "Delivered basal", ReportFieldKind.Number, "U/h", "Median delivered basal.", Scope.TreatmentsRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
         new("netLoopCorrection", "Net loop correction", ReportFieldKind.Number, "U/h",
-            "Mean across days of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, Aggregate: ReportAggregate.Mean),
+            "Mean across days of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, Aggregate: ReportAggregate.Mean,
+            Setting: ReportSetting.ProfileRelative),
         new("iob", "IOB median", ReportFieldKind.Number, "U", "Median insulin on board.", Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
         new("cob", "COB median", ReportFieldKind.Number, "g", "Median carbs on board.", Scope.TreatmentsRead, ChartColor.Carbs, Aggregate: ReportAggregate.Mean),
         new("targetLow", "Target low", ReportFieldKind.Number, ReportField.GlucoseUnit,
-            "The low edge of the target range in force (a temporary target where one ran), median across days.", Scope.TherapyRead, ChartColor.GlucoseLow, Aggregate: ReportAggregate.Mean, Setting: true),
+            "The low edge of the target range in force (a temporary target where one ran), median across days.", Scope.TherapyRead, ChartColor.GlucoseLow, Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
         new("targetHigh", "Target high", ReportFieldKind.Number, ReportField.GlucoseUnit,
-            "The high edge of the target range in force, median across days.", Scope.TherapyRead, ChartColor.GlucoseHigh, Aggregate: ReportAggregate.Mean, Setting: true),
+            "The high edge of the target range in force, median across days.", Scope.TherapyRead, ChartColor.GlucoseHigh, Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
         new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
             "One sentence that states the slot's glucose figures; the chart shows it for the slot under the pointer.", Companion: true),
     ];
@@ -145,6 +146,8 @@ internal sealed class DailyProfileDataset : IReportDataset
             Sentence = NoTimeZone(report, "Daily profile") ?? SentenceOf(report),
             SentenceAbout = NoTimeZone(report, "Daily profile") is null ? SentenceAboutOf(report) : null,
             OtherSentences = NoTimeZone(report, "Daily profile") is null ? [new ReportSentence(PooledSentence, GlucoseFields)] : [],
+            SentenceComparesSettings = NoTimeZone(report, "Daily profile") is null && report.Primary.Summary.DeliveredToScheduledRatio is not null
+                && report.Primary.Slots.Any(s => s.Glucose is not null),
             Context = ContextLine(report, ReportFacts.Plural(readings, "reading")),
             Omitted = Omitted(report, FieldSeries),
             Window = Window(report),
@@ -157,7 +160,7 @@ internal sealed class DailyProfileDataset : IReportDataset
         if (report.TimeZoneUnavailableReason is not null)
             return [];
         var range = report.Primary;
-        var facts = new List<ReportFact> { ReportFacts.Count("Days with data", range.Summary.DaysWithData) };
+        var facts = new List<ReportFact> { ReportFacts.Count("Days with data", range.Summary.DaysWithData).Of(GlucoseFields) };
         var withGlucose = range.Slots.Where(s => s.Glucose is not null).ToList();
         if (withGlucose.Count > 0)
         {
@@ -172,7 +175,7 @@ internal sealed class DailyProfileDataset : IReportDataset
         }
         if (range.Summary.Insulin is { } insulin)
             facts.Add(new ReportFact("Insulin per day", Number(insulin.Total.P50, "0.#"), "U", $"median of {insulin.Total.N} days",
-                ["deliveredBasal", "netLoopCorrection", "iob"]));
+                ["deliveredBasal|netLoopCorrection|iob"]));
         if (range.Summary.NetLoopCorrectionPerDay is { } perDay)
             facts.Add(new ReportFact("Net loop correction", Number(perDay, "0.##"), "U/day", About: ["netLoopCorrection"]));
         return facts;
@@ -180,9 +183,11 @@ internal sealed class DailyProfileDataset : IReportDataset
 
     private const string PooledSentence = "Glucose percentiles in each five-minute slot of the day, pooled across the days.";
 
-    private static readonly string[] GlucoseFields = ["glucoseP10", "glucoseP25", "glucoseP50", "glucoseP75", "glucoseP90"];
+    private static readonly string[] GlucoseFields = ["glucoseP10|glucoseP25|glucoseP50|glucoseP75|glucoseP90"];
 
     /// <summary>The fields <see cref="SentenceOf"/> is about, as it chose its sentence.</summary>
+    public IReadOnlyList<string>? RowSentenceAbout => GlucoseFields;
+
     internal static IReadOnlyList<string>? SentenceAboutOf(DailyProfileResponse report) =>
         !report.Primary.Slots.Any(s => s.Glucose is not null) ? null
         : report.Primary.Summary.DeliveredToScheduledRatio is not null ? ["deliveredBasal", "scheduledBasal"]

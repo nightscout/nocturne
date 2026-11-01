@@ -87,8 +87,8 @@ internal enum ReportAggregate
 /// </param>
 /// <param name="Aggregate">How the field folds onto a panel's grid; null for a field that cannot be folded.</param>
 /// <param name="Setting">
-/// A value of the profile's settings (a scheduled basal, a profile ISF, a target): drawn as it is, never a source of a
-/// derived layer, so no derived figure compares the data with the settings.
+/// Why the field is not data a derived layer may take (<see cref="ReportSetting"/>): it is drawn as it is, and no
+/// derived figure compares the data with the settings or rebuilds them.
 /// </param>
 internal sealed record ReportField(
     string Name,
@@ -104,7 +104,7 @@ internal sealed record ReportField(
     string? ColorField = null,
     bool Companion = false,
     ReportAggregate? Aggregate = null,
-    bool Setting = false)
+    ReportSetting Setting = ReportSetting.None)
 {
     public const string GlucoseUnit = "glucose";
 
@@ -188,6 +188,20 @@ internal interface IReportDataset
     /// <summary>The parameter that lists the groups, one item each, for a dataset with <see cref="SeriesField"/>.</summary>
     string? SeriesParameter => null;
 
+    /// <summary>
+    /// What a read of this dataset reads differently by, beyond its query, as a key part: the bound fields a
+    /// chart layer draws (<see cref="ReportDatasetRequest.Fields"/>) and a derived source's read of every row
+    /// (<see cref="ReportDatasetRequest.Whole"/>). Null for a dataset that reads the same rows for all of them,
+    /// so its layers and sources share one read.
+    /// </summary>
+    string? ReadVariant(IReadOnlyList<string>? fields, bool whole) => null;
+
+    /// <summary>
+    /// The fields the rows' sentence companion (<see cref="ReportField.SentenceField"/>) is about
+    /// (<see cref="ReportAbout"/>); a chart layer carries it only when it draws them. Null for a sentence about the whole row.
+    /// </summary>
+    IReadOnlyList<string>? RowSentenceAbout => null;
+
     /// <summary>The rows of group <paramref name="series"/>, from 1, that a derived source reads.</summary>
     IEnumerable<IReadOnlyDictionary<string, object?>> SeriesRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, int series) => rows;
 
@@ -220,12 +234,30 @@ internal sealed record ReportDatasetRequest(
     Datasets.ReportRunCache? RunCache = null,
     DateTimeOffset? Now = null,
     string? X = null,
-    TimeZoneInfo? Zone = null)
+    TimeZoneInfo? Zone = null,
+    IReadOnlyList<string>? Fields = null,
+    bool Whole = false)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
     /// <summary>The run's shared reads; a request made outside a run gets its own.</summary>
     public Datasets.ReportRunCache Cache { get; } = RunCache ?? new Datasets.ReportRunCache();
+}
+
+/// <summary>Why a field is not data a derived layer may take as a source.</summary>
+internal enum ReportSetting
+{
+    /// <summary>Data: a derived layer may take it.</summary>
+    None,
+
+    /// <summary>A value of the profile's settings: a scheduled basal, a profile ISF or carb ratio, a target.</summary>
+    Profile,
+
+    /// <summary>Worked out against the profile's scheduled basal, so a derived layer of it with the delivered basal rebuilds the schedule.</summary>
+    ProfileRelative,
+
+    /// <summary>A fixed limit the reports draw (the clinical consensus range), the same for everyone: not data.</summary>
+    FixedLimit,
 }
 
 /// <summary>A dataset's rows over the whole catalogue, before the runner picks the bound fields.</summary>
@@ -256,14 +288,29 @@ internal sealed record ReportDatasetOutput
     /// <summary>The one sentence the view prints under the facts; the summary carries every detail.</summary>
     public string? Sentence { get; init; }
 
-    /// <summary>
+    /// The fields <see cref="Sentence"/> is about (<see cref="ReportAbout"/>): a chart layer prints it only when it draws them all.
     /// The fields <see cref="Sentence"/> is about: a chart layer prints it only when it draws one of them.
     /// Null for a sentence about the whole dataset; empty for one about a table's rows, which no chart prints.
     /// </summary>
     public IReadOnlyList<string>? SentenceAbout { get; init; }
 
-    /// <summary>Sentences a chart layer prints in place of <see cref="Sentence"/> when it draws none of its fields, the first that fits.</summary>
+    /// <summary>Sentences a chart layer prints in place of <see cref="Sentence"/> when it does not draw its fields, the first that fits.</summary>
     public IReadOnlyList<ReportSentence> OtherSentences { get; init; } = [];
+
+    /// <summary>
+    /// <see cref="Sentence"/> sets the data against the profile's settings: a layer that draws both prints it,
+    /// a chart panel's headline never does.
+    /// </summary>
+    public bool SentenceComparesSettings { get; init; }
+
+    /// <summary>
+    /// Where the rows were cut to a budget or a read limit: the instant from which they hold every record,
+    /// so a total is 0 in an empty slot only from there. Null when the rows hold every record of the range.
+    /// </summary>
+    public long? CompleteFrom { get; init; }
+
+    /// <summary>The sentence a chart layer adds when the rows it draws were cut, saying so; null when they were not.</summary>
+    public string? CutNote { get; init; }
 
     /// <summary>The panel's range and how much it read, as one line: "2026-10-15 08:39 to 2026-10-29 08:39 UTC. 4025 readings."</summary>
     public string? Context { get; init; }
@@ -275,7 +322,7 @@ internal sealed record ReportDatasetOutput
     public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
 }
 
-/// <summary>A sentence about <paramref name="About"/>, the fields a chart layer must draw one of to print it.</summary>
+/// <summary>A sentence about <paramref name="About"/> (<see cref="ReportAbout"/>), the fields a chart layer must draw to print it.</summary>
 internal sealed record ReportSentence(string Text, IReadOnlyList<string> About);
 
 /// <summary>One shaded span of a band layer: its words ("Glucose P25–P75") and its low and high edge fields.</summary>

@@ -540,15 +540,26 @@ internal sealed class TrendOp : SingleOp
             }
         }
         var slopeUnit = unit is null ? $"per {per}" : $"{unit} per {per}";
-        var sentence = $"{input.SourceA.Label}: the least-squares line has a slope of {ReportDerivedOps.N(line.Slope, "0.###")} {slopeUnit} "
-            + $"over {ReportFacts.Plural(line.N, "slot")}; r² = {ReportDerivedOps.N(line.RSquared, "0.00")}."
-            + (confidence ? " The band is the line's 95% confidence interval." : string.Empty);
         IReadOnlyList<(string, double?[])> columns = confidence ? [("value", value), ("low", low), ("high", high)] : [("value", value)];
+        if (line.RSquared is not { } r2)
+        {
+            var level = pairs[0].Y;
+            var flat = $"{input.SourceA.Label} does not vary over {ReportFacts.Plural(line.N, "slot")}: it is {ReportDerivedOps.N(level, "0.###")}"
+                + $"{(unit is null ? "" : $" {unit}")} in each, so the line is level.";
+            return new(
+                ReportDerivedOps.Rows(input.Keys, [.. columns]),
+                [new ReportFact("Slope", "0", slopeUnit), ReportFacts.Count("Slots", line.N)],
+                flat,
+                flat);
+        }
+        var sentence = $"{input.SourceA.Label}: the least-squares line has a slope of {ReportDerivedOps.N(line.Slope, "0.###")} {slopeUnit} "
+            + $"over {ReportFacts.Plural(line.N, "slot")}; r² = {ReportDerivedOps.N(r2, "0.00")}."
+            + (confidence ? " The band is the line's 95% confidence interval." : string.Empty);
         return new(
             ReportDerivedOps.Rows(input.Keys, [.. columns]),
             [
                 new ReportFact("Slope", ReportDerivedOps.N(line.Slope, "0.###"), slopeUnit),
-                new ReportFact("r²", ReportDerivedOps.N(line.RSquared, "0.00")),
+                new ReportFact("r²", ReportDerivedOps.N(r2, "0.00")),
                 ReportFacts.Count("Slots", line.N),
             ],
             sentence,

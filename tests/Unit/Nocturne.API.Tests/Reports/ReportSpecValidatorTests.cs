@@ -608,7 +608,7 @@ public class ReportSpecValidatorTests
     {
         var data = new TheoryData<string, string, string>();
         foreach (var dataset in Registry.All)
-            foreach (var field in dataset.Fields.Where(f => f.Setting))
+            foreach (var field in dataset.FieldsFor(ReportPanelKind.Chart).Where(f => f.Setting != ReportSetting.None && f.Aggregate is not null))
                 foreach (var op in ReportDerivedOps.All)
                 {
                     data.Add(op.Name, $"{dataset.Name}.{field.Name}", "a");
@@ -630,8 +630,14 @@ public class ReportSpecValidatorTests
 
         var errors = Validate(Layers($$"""{ "derived": { "op": "{{op}}", {{sources}} } }""", ", \"grid\": 15")).Errors;
 
+        var reason = Registry.Find(dataset)!.Fields.Single(f => f.Name == field).Setting switch
+        {
+            ReportSetting.Profile => "is a value of the profile's settings, which a derived series is never compared with",
+            ReportSetting.ProfileRelative => "is worked out against the profile's scheduled basal",
+            _ => "is a fixed limit that is the same for everyone, not data",
+        };
         errors.Should().Contain(e => e.Path == $"panels[0].tracks[0].layers[0].derived.{at}.field"
-            && e.Message.Contains("a value of the profile's settings") && e.Message.Contains("never compared with the settings"));
+            && e.Message.Contains(reason) && e.Message.Contains("A derived series uses the data only."));
     }
 
     private const string TwoCohorts = """{ "name": "event_response", "cohorts": [ { "anchor": "Meal" }, { "anchor": "CorrectionBolus" } ] }""";
@@ -661,6 +667,22 @@ public class ReportSpecValidatorTests
         var error = SingleError(Layers($$"""{ "derived": { "op": "trend", "a": { "derived": {{difference}}, "field": "value" } } }""", ", \"grid\": 0"));
 
         error.Path.Should().Be("panels[0].grid");
+        error.Message.Should().Contain("Difference at panels[0].tracks[0].layers[0].derived.a.derived pairs two sources");
+    }
+
+    [Theory]
+    [InlineData("rolling_mean", 15, 60, "60")]
+    [InlineData("band_sd", 100, 60, "120")]
+    [InlineData("rolling_mean", 45, 30, "60")]
+    public void A_window_that_is_not_a_whole_number_of_the_grids_slots_is_refused(string op, int minutes, int grid, string suggested)
+    {
+        var error = SingleError(Layers($$"""{ "derived": { "op": "{{op}}", "minutes": {{minutes}}, "a": {{Source("glucose")}} } }""",
+            $", \"grid\": {grid}", """, "range": { "hours": 48 }"""));
+
+        error.Path.Should().Be("panels[0].tracks[0].layers[0].derived.minutes");
+        error.Message.Should().Contain($"The grid here is {grid} minutes").And.Contain($"such as {suggested}");
+        Validate(Layers($$"""{ "derived": { "op": "{{op}}", "minutes": {{grid * 2}}, "a": {{Source("glucose")}} } }""",
+            $", \"grid\": {grid}", """, "range": { "hours": 48 }""")).Errors.Should().BeEmpty();
     }
 
     [Fact]

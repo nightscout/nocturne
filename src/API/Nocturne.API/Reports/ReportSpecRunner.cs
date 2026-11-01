@@ -159,20 +159,22 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         DateTimeOffset to,
         ReportPanelKind kind,
         string? x,
-        Run run)
+        Run run,
+        IReadOnlyList<string>? fields = null,
+        bool whole = false)
     {
         if (!run.Context.HasScope(dataset.RequiredScope))
             return new Read(null, ReportPanelStatus.NotPermitted,
                 $"Not shown: the token does not hold the '{dataset.RequiredScope}' scope that {dataset.Name} needs.");
         var context = run.Context;
-        var key = ReportSpecValidator.ReadKey(parameters, range, kind, x);
+        var key = ReportSpecValidator.ReadKey(parameters, range, kind, x) + (dataset.ReadVariant(fields, whole) is { } variant ? $"|{variant}" : "");
         if (run.Deadline.IsCancellationRequested && !context.Cache.Has(key))
             return new Read(null, ReportPanelStatus.TimedOut, "Not shown: the report ran out of time before this was read.");
         try
         {
             var output = await context.Cache.ReadAsync(key, () => dataset.RunAsync(
                 new ReportDatasetRequest(parameters, kind, from, to, context.UseMmol, context.GrantedScopes, context.Services, context.ReadLog,
-                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone),
+                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, fields, whole),
                 run.Token));
             return new Read(output, ReportPanelStatus.Ok, null);
         }
@@ -259,6 +261,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
         var trackResults = new List<ReportTrackResult>();
         var outputs = new List<ReportDatasetOutput>();
+        var outputOf = new Dictionary<string, ReportDatasetOutput>(StringComparer.Ordinal);
         foreach (var track in tracks)
         {
             var units = track.Layers.Where(l => l.HasAxis).Select(l => l.Unit).Distinct().ToList();
@@ -267,7 +270,10 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             {
                 var (layerResult, output) = await RunLayerAsync(panel, layer, run);
                 if (output is not null)
+                {
                     outputs.Add(output);
+                    outputOf[layer.Id!] = output;
+                }
                 var side = !layer.HasAxis ? ReportAxisSide.None : units.IndexOf(layer.Unit) == 0 ? ReportAxisSide.Left : ReportAxisSide.Right;
                 results.Add(layerResult with { Side = side });
             }
@@ -277,8 +283,12 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var all = trackResults.SelectMany(t => t.Layers).ToList();
         var drawn = all.Where(l => l.Status == ReportPanelStatus.Ok).ToList();
         var notDrawn = all.Where(l => l.Status != ReportPanelStatus.Ok).ToList();
-        var first = Lead(trackResults[MainTrack(tracks)].Layers) ?? drawn.FirstOrDefault();
-        var sentence = first?.Sentence;
+        var first = Lead(all);
+        var leadOutput = first is null ? null : outputOf.GetValueOrDefault(first.Id);
+        var sentence = first is { SettingsSentence: false } ? first.Sentence : null;
+        var cutNotes = drawn.Where(l => l.CutNote is not null && l != first).Select(l => $"{l.Title}: {l.CutNote}").ToList();
+        if (cutNotes.Count > 0)
+            sentence = string.Join(' ', new[] { sentence }.OfType<string>().Concat(cutNotes));
         if (notDrawn.Count > 0)
             sentence = string.Join(' ', new[] { sentence }.OfType<string>().Append(
                 $"Not shown: {string.Join("; ", notDrawn.Select(l => $"{l.Title} ({NotDrawnWords(l.Status)})"))}."));
@@ -299,43 +309,51 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Thresholds = outputs.Select(o => o.Thresholds).OfType<ReportThresholds>().FirstOrDefault()
                 ?? (all.SelectMany(l => l.Fields).Any(f => f.GlucoseScale) ? ReportThresholds.Of(null, run.Context.UseMmol) : null),
             Summary = summary.ToString().TrimEnd(),
-            Facts = first?.Facts ?? [],
+            Facts = first?.Facts.Where(f => !f.ComparesSettings).ToList() ?? [],
             Sentence = sentence,
-            Context = outputs.Select(o => o.Context).OfType<string>().FirstOrDefault(),
+            Context = leadOutput?.Context,
             Omitted = [.. drawn.SelectMany(l => l.Omitted).DistinctBy(o => o.Field)],
             Cohorts = drawn.SelectMany(l => l.Cohorts).DistinctBy(c => c.Number).ToList(),
-            LinkQuery = outputs.Select(o => o.LinkQuery).FirstOrDefault(q => q is not null),
+            LinkQuery = leadOutput?.LinkQuery,
         };
+        result = result with { Limited = drawn.Any(l => l.Limited) };
         return limited ? result with { Summary = result.Summary + '\n' + LimitedNote, Limited = true } : result;
     }
 
-    /// <summary>The main plot: the tallest track, the first of the tallest.</summary>
-    internal static int MainTrack(IReadOnlyList<ReportTrackSpec> tracks) =>
-        tracks.Select((t, i) => (Height: t.Height ?? 1, Index: i)).MaxBy(t => t.Height).Index;
-
     /// <summary>
-    /// The layer whose facts and sentence speak for the panel: the first drawn line, area, band or bars layer
-    /// of <paramref name="main"/> that has a sentence, else the first that has none, else its first drawn layer.
+    /// The layer whose title, facts and sentence speak for the panel, chosen by what it draws, whatever its track's
+    /// height: the first drawn glucose line, area or band; else the first drawn line, area, band or bars layer with a
+    /// sentence that does not set the data against the settings; else the first drawn line, area, band, bars or points
+    /// layer. A layer of spans or markers never leads.
     /// </summary>
-    internal static ReportLayerResult? Lead(IReadOnlyList<ReportLayerResult> main)
+    internal static ReportLayerResult? Lead(IReadOnlyList<ReportLayerResult> layers)
     {
-        var drawn = main.Where(l => l.Status == ReportPanelStatus.Ok).ToList();
+        var drawn = layers.Where(l => l.Status == ReportPanelStatus.Ok && l.Mark is not (ReportMark.Spans or ReportMark.Markers)).ToList();
         var plotted = drawn.Where(l => l.Mark is ReportMark.Line or ReportMark.Area or ReportMark.Band or ReportMark.Bars).ToList();
-        return plotted.FirstOrDefault(l => l.Sentence is not null) ?? plotted.FirstOrDefault() ?? drawn.FirstOrDefault();
+        return plotted.FirstOrDefault(l => l.Mark != ReportMark.Bars && GlucoseScaled(l))
+            ?? plotted.FirstOrDefault(l => l.Sentence is not null && !l.SettingsSentence)
+            ?? drawn.FirstOrDefault();
     }
+
+    private static bool GlucoseScaled(ReportLayerResult layer) =>
+        (layer.Bindings.Y ?? []).Concat(layer.Bindings.Edges ?? [])
+            .Any(n => layer.Fields.FirstOrDefault(f => f.Name == n) is { GlucoseScale: true });
 
     /// <summary>An untitled chart panel's title: its lead layer's title, else the name of that layer's dataset or op.</summary>
     private string DefaultPanelTitle(ReportLayerSpec lead) =>
         lead.Title ?? (lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : registry.Find(lead.Dataset!.DatasetName)!.Label);
 
-    /// <summary>The facts and the sentence of <paramref name="output"/> about a field <paramref name="drawn"/> names.</summary>
-    internal static (IReadOnlyList<ReportFact> Facts, string? Sentence) About(ReportDatasetOutput output, IReadOnlyCollection<string> drawn)
+    /// <summary>
+    /// The facts and the sentence of <paramref name="output"/> about fields <paramref name="drawn"/> names every one of
+    /// (<see cref="ReportAbout"/>), and whether that sentence sets the data against the settings. A fact that names
+    /// no fields is a table's or a tile's, and no chart layer prints it.
+    /// </summary>
+    internal static (IReadOnlyList<ReportFact> Facts, string? Sentence, bool SettingsSentence) About(ReportDatasetOutput output, IReadOnlyCollection<string> drawn)
     {
-        var facts = output.Facts.Where(f => f.About is null || f.About.Any(drawn.Contains)).Take(ReportFacts.Max).ToList();
-        var sentence = output.SentenceAbout is null || output.SentenceAbout.Any(drawn.Contains)
-            ? output.Sentence
-            : output.OtherSentences.FirstOrDefault(s => s.About.Any(drawn.Contains))?.Text;
-        return (facts, sentence);
+        var facts = output.Facts.Where(f => f.About is not null && ReportAbout.DrawnBy(f.About, drawn)).Take(ReportFacts.Max).ToList();
+        if (output.SentenceAbout is null || ReportAbout.DrawnBy(output.SentenceAbout, drawn))
+            return (facts, output.Sentence, output.SentenceComparesSettings && output.Sentence is not null);
+        return (facts, output.OtherSentences.FirstOrDefault(s => ReportAbout.DrawnBy(s.About, drawn))?.Text, false);
     }
 
     private static string AggregateWords(ReportAggregate aggregate) => aggregate switch
@@ -433,6 +451,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             var op = ReportDerivedOps.Of(derived);
             var outputFields = computed.Fields!;
             var bound = BoundNames(layer.Bindings!);
+            var cut = computed.Cuts.Count > 0 ? string.Join(' ', computed.Cuts.Distinct()) : null;
             return (new ReportLayerResult
             {
                 Id = layer.Id!,
@@ -447,8 +466,13 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 Fields = [.. outputFields.Where(f => bound.Contains(f.Name))],
                 Rows = [.. computed.Output!.Rows.Select(row => (IReadOnlyDictionary<string, object?>)bound.ToDictionary(n => n, n => row.GetValueOrDefault(n)))],
                 Facts = computed.Output.Facts.Take(ReportFacts.Max).ToList(),
-                Sentence = computed.Output.Sentence,
-                Summary = $"{op.Label}, on a grid of {computed.Step} minutes. {computed.Output.Summary}",
+                Sentence = cut is null ? computed.Output.Sentence : $"{computed.Output.Sentence} {cut}",
+                Summary = cut is null
+                    ? $"{op.Label}, on a grid of {computed.Step} minutes. {computed.Output.Summary}"
+                    : $"{op.Label}, on a grid of {computed.Step} minutes. {computed.Output.Summary}\n{cut}",
+                Limited = cut is not null,
+                CutNote = cut,
+                SourceCohorts = computed.Cohorts,
                 Spans = layer.Mark == ReportMark.Band
                     ? ReportBandSpan.Of([.. (layer.Bindings!.Edges ?? []).Select(n => outputFields.Single(f => f.Name == n))])
                     : [],
@@ -456,15 +480,16 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         }
 
         var dataset = registry.Find(layer.Dataset!.DatasetName)!;
-        var read = await ReadAsync(dataset, layer.Dataset, range, from, to, ReportPanelKind.Chart, layer.Bindings!.X, run);
+        var bindings = layer.Bindings!;
+        var valueNames = (bindings.Y ?? []).Concat(bindings.Edges ?? []).Concat(new[] { bindings.Fit }.OfType<string>()).ToList();
+        var read = await ReadAsync(dataset, layer.Dataset, range, from, to, ReportPanelKind.Chart, bindings.X, run,
+            valueNames.Count > 0 ? valueNames : null);
         if (read.Output is not { } output)
             return (Empty(read.Status, read.Note!, from, to), null);
 
         var useMmol = run.Context.UseMmol;
         var omitted = output.Omitted.Select(o => o.Field).ToHashSet(StringComparer.Ordinal);
         var catalogue = dataset.FieldsFor(ReportPanelKind.Chart);
-        var bindings = layer.Bindings;
-        var valueNames = (bindings.Y ?? []).Concat(bindings.Edges ?? []).Concat(new[] { bindings.Fit }.OfType<string>()).ToList();
         var lost = valueNames.Where(omitted.Contains).ToList();
         if (valueNames.Count > 0 && lost.Count == valueNames.Count)
         {
@@ -478,7 +503,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             ? [.. catalogue.Where(f => !f.Companion).Select(f => f.Name)]
             : BoundNames(bindings);
         var colours = boundNames.Select(n => catalogue.FirstOrDefault(f => f.Name == n)?.ColorField).OfType<string>();
-        var companions = catalogue.Where(f => f.Companion).Select(f => f.Name);
+        var drawnNames = layer.Mark == ReportMark.Spans ? boundNames : valueNames;
+        var companions = catalogue.Where(f => f.Companion).Select(f => f.Name)
+            .Where(n => n != ReportField.SentenceField || dataset.RowSentenceAbout is not { } about || ReportAbout.DrawnBy(about, drawnNames));
         var fields = boundNames.Concat(colours).Concat(companions).Distinct(StringComparer.Ordinal)
             .Where(n => !omitted.Contains(n))
             .Select(n => Labelled(catalogue.Single(f => f.Name == n).ResolveUnit(useMmol), output))
@@ -498,7 +525,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             var carried = fields
                 .Where(f => (f.Companion && f.Name != ReportField.SentenceField) || colourFields.Contains(f.Name))
                 .Select(f => f.Name).Where(n => n != bindings.Series).ToList();
-            rows = ReportGrid.FoldRows(rows, bindings.X!, foldFields, bindings.Series, carried, layer.XKind, step, fromMs, toMs);
+            rows = ReportGrid.FoldRows(rows, bindings.X!, foldFields, bindings.Series, carried, layer.XKind, step, fromMs, toMs, run.Context.Zone);
             fields = [.. fields.Where(f => f.Name != ReportField.SentenceField)];
         }
 
@@ -507,7 +534,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             : [];
         if (layer.Title is null && layer.Mark == ReportMark.Markers)
             title = MarkersTitle(dataset.Label, fields, bindings, markers);
-        var (facts, sentence) = About(output, layer.Mark == ReportMark.Spans ? boundNames : valueNames);
+        var (facts, sentence, settingsSentence) = About(output, drawnNames);
+        if (output.CutNote is { } cutNote)
+            sentence = sentence is null ? cutNote : $"{sentence} {cutNote}";
 
         return (new ReportLayerResult
         {
@@ -524,8 +553,11 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Rows = rows,
             Facts = facts,
             Sentence = sentence,
+            SettingsSentence = settingsSentence,
             Context = context,
             Summary = folded ? $"{output.Summary}\nFolded onto a grid of {step} minutes." : output.Summary,
+            Limited = output.CutNote is not null,
+            CutNote = output.CutNote,
             Spans = layer.Mark == ReportMark.Band
                 ? ReportBandSpan.Of([.. (bindings.Edges ?? []).Select(n => fields.FirstOrDefault(f => f.Name == n)).OfType<ReportField>()])
                 : [],
@@ -578,7 +610,20 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     }
 
     /// <summary>What a derived series computed, or why it did not.</summary>
-    private sealed record Derivation(ReportPanelStatus Status, string? Note, ReportDerivedOutput? Output, IReadOnlyList<ReportField>? Fields, ReportSourceInfo? Info, int Step);
+    /// <param name="Cuts">Sentences saying where a source's rows were cut, so the series starts later than the range.</param>
+    /// <param name="Cohorts">The event groups each source of grouped data offers, by the source's key (a, b), with the API's words.</param>
+    private sealed record Derivation(
+        ReportPanelStatus Status,
+        string? Note,
+        ReportDerivedOutput? Output,
+        IReadOnlyList<ReportField>? Fields,
+        ReportSourceInfo? Info,
+        int Step,
+        IReadOnlyList<string> Cuts,
+        IReadOnlyDictionary<string, IReadOnlyList<ReportCohort>> Cohorts)
+    {
+        public static Derivation Failed(ReportPanelStatus status, string? note) => new(status, note, null, null, null, 0, [], new Dictionary<string, IReadOnlyList<ReportCohort>>());
+    }
 
     /// <summary>The scopes the sources of <paramref name="derived"/> need that the caller does not hold: each dataset's and each source field's.</summary>
     private List<string> MissingScopes(ReportDerivedSpec derived, ReportRunContext context)
@@ -607,15 +652,19 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var toMs = to.ToUnixTimeMilliseconds();
         var series = new List<GridSeries>();
         var infos = new List<ReportSourceInfo>();
+        var cuts = new List<string>();
+        var cohorts = new Dictionary<string, IReadOnlyList<ReportCohort>>(StringComparer.Ordinal);
+        var zone = run.Context.Zone;
         ReportXKind? sourceKind = null;
         var step = 0;
-        foreach (var source in derived.Sources)
+        foreach (var (source, key) in derived.Sources.Zip(new[] { "a", "b" }))
         {
             if (source.Derived is { } inner)
             {
                 var nested = await DeriveAsync(inner, panel, outputKind, range, from, to, run);
                 if (nested.Status != ReportPanelStatus.Ok)
                     return nested;
+                cuts.AddRange(nested.Cuts);
                 var field = nested.Fields!.Single(f => f.Name == source.Field);
                 var kind = ReportDerivedOps.Of(inner).OutputXKind(nested.Info!.XKind);
                 sourceKind = kind;
@@ -629,27 +678,32 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             var dataset = registry.Find(source.Dataset!.DatasetName)!;
             var catalogue = dataset.FieldsFor(ReportPanelKind.Chart);
             var axis = catalogue.First(f => !f.Companion && f.AxisKind is { } k && ReportDerivedOps.GridKinds.Contains(k));
-            var read = await ReadAsync(dataset, source.Dataset, range, from, to, ReportPanelKind.Chart, axis.Name, run);
+            var read = await ReadAsync(dataset, source.Dataset, range, from, to, ReportPanelKind.Chart, axis.Name, run, [source.Field], whole: true);
             if (read.Output is not { } output)
-                return new Derivation(read.Status, read.Note, null, null, null, 0);
+                return Derivation.Failed(read.Status, read.Note);
             if (output.Omitted.FirstOrDefault(o => o.Field == source.Field) is { } withheld)
-                return new Derivation(ReportPanelStatus.NotPermitted,
-                    $"Not shown: a source of this layer needs the {ScopeWords(withheld.Scope)} permission, which this token does not hold.", null, null, null, 0);
+                return Derivation.Failed(ReportPanelStatus.NotPermitted,
+                    $"Not shown: a source of this layer needs the {ScopeWords(withheld.Scope)} permission, which this token does not hold.");
             var sourceField = catalogue.Single(f => f.Name == source.Field).ResolveUnit(run.Context.UseMmol);
             sourceKind = axis.AxisKind!.Value;
             step = ReportGrid.Step(sourceKind.Value, panel.Grid is > 0 ? panel.Grid.Value : ReportGrid.DefaultMinutes, from, to);
             var window = output.Window ?? new ReportWindow(fromMs, toMs);
+            var zeroFrom = Math.Max(window.From, output.CompleteFrom ?? window.From);
+            if (output.CompleteFrom is not null && output.CutNote is { } cutNote)
+                cuts.Add(cutNote);
+            if (dataset.SeriesField is not null && output.Cohorts.Count > 0)
+                cohorts[key] = output.Cohorts;
             series.Add(new GridSeries(
-                ReportGrid.Values([.. dataset.SeriesRows(output.Rows, source.Series ?? 1)], axis.Name, sourceField, sourceKind.Value, step, fromMs, toMs),
+                ReportGrid.Values([.. dataset.SeriesRows(output.Rows, source.Series ?? 1)], axis.Name, sourceField, sourceKind.Value, step, fromMs, toMs, zone),
                 sourceField.Step && sourceField.Aggregate == ReportAggregate.Last,
-                sourceField.Aggregate == ReportAggregate.Sum ? (window.From, window.To) : null));
+                sourceField.Aggregate == ReportAggregate.Sum ? (zeroFrom, window.To) : null));
             infos.Add(new ReportSourceInfo(sourceField, sourceKind.Value, sourceField.Label));
         }
 
-        var (keys, aligned) = ReportGrid.Align(sourceKind!.Value, step, fromMs, toMs, series);
+        var (keys, aligned) = ReportGrid.Align(sourceKind!.Value, step, fromMs, toMs, series, zone);
         var input = new ReportDerivedInput(keys, aligned[0], aligned.Length > 1 ? aligned[1] : null, step, sourceKind.Value, infos[0], infos.ElementAtOrDefault(1));
         var computed = op.Compute(derived, input);
-        return new Derivation(ReportPanelStatus.Ok, null, computed, op.OutputFields(derived, infos[0], infos.ElementAtOrDefault(1)), infos[0], step);
+        return new Derivation(ReportPanelStatus.Ok, null, computed, op.OutputFields(derived, infos[0], infos.ElementAtOrDefault(1)), infos[0], step, cuts, cohorts);
     }
 
     /// <summary>A layer's name in the legend when it gives none: the dataset's and the fields' names, or the op's and the sources'.</summary>

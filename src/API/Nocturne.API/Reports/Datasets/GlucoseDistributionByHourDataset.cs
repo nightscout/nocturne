@@ -141,13 +141,18 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
         var below = withData.MaxBy(h => h.TimeInRange.VeryLow + h.TimeInRange.Low)!;
         return
         [
-            ReportFacts.Glucose("Highest median", highest.Percentiles.P50, useMmol, From(highest.Hour)),
-            ReportFacts.Glucose("Lowest median", lowest.Percentiles.P50, useMmol, From(lowest.Hour)),
-            ReportFacts.Percent("Most above range", above.TimeInRange.High + above.TimeInRange.VeryHigh, From(above.Hour)),
+            ReportFacts.Glucose("Highest median", highest.Percentiles.P50, useMmol, From(highest.Hour)).Of(GlucoseFields),
+            ReportFacts.Glucose("Lowest median", lowest.Percentiles.P50, useMmol, From(lowest.Hour)).Of(GlucoseFields),
+            ReportFacts.Percent("Most above range", above.TimeInRange.High + above.TimeInRange.VeryHigh, From(above.Hour)).Of("high|veryHigh"),
             ReportFacts.Percent("Most below range", below.TimeInRange.VeryLow + below.TimeInRange.Low,
-                below.TimeInRange.VeryLow + below.TimeInRange.Low > 0 ? From(below.Hour) : "in no hour"),
+                below.TimeInRange.VeryLow + below.TimeInRange.Low > 0 ? From(below.Hour) : "in no hour").Of("low|veryLow"),
         ];
     }
+
+    /// <summary>The fields of the hour's glucose: a median, a percentile or the mean.</summary>
+    private const string GlucoseFields = "glucoseP10|glucoseP25|glucoseP50|glucoseP75|glucoseP90|mean";
+
+    public IReadOnlyList<string>? RowSentenceAbout => [GlucoseFields];
 
     internal static string SentenceOf(IReadOnlyList<AveragedStats> hours, bool utc)
     {

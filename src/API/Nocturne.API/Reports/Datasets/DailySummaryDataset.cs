@@ -163,17 +163,17 @@ internal sealed class DailySummaryDataset : IReportDataset
             var worst = withData.MinBy(r => (double)r["timeInRange"]!)!;
             var mostBelow = withData.MaxBy(r => (double)r["timeBelow"]!)!;
             var highest = withData.MaxBy(r => (double)r["mean"]!)!;
-            facts.Add(ReportFacts.Percent("Highest time in range", (double)best["timeInRange"]!, (string?)best["date"]));
-            facts.Add(ReportFacts.Percent("Lowest time in range", (double)worst["timeInRange"]!, (string?)worst["date"]));
-            facts.Add(ReportFacts.Percent("Most below range", (double)mostBelow["timeBelow"]!, (double)mostBelow["timeBelow"]! > 0 ? (string?)mostBelow["date"] : "on no day"));
-            facts.Add(new ReportFact("Highest mean", ReportFacts.Number((double)highest["mean"]!, useMmol ? "0.0" : "0"), ReportFacts.GlucoseUnit(useMmol), (string?)highest["date"]));
+            facts.Add(ReportFacts.Percent("Highest time in range", (double)best["timeInRange"]!, (string?)best["date"]).Of("timeInRange"));
+            facts.Add(ReportFacts.Percent("Lowest time in range", (double)worst["timeInRange"]!, (string?)worst["date"]).Of("timeInRange"));
+            facts.Add(ReportFacts.Percent("Most below range", (double)mostBelow["timeBelow"]!, (double)mostBelow["timeBelow"]! > 0 ? (string?)mostBelow["date"] : "on no day").Of("timeBelow"));
+            facts.Add(new ReportFact("Highest mean", ReportFacts.Number((double)highest["mean"]!, useMmol ? "0.0" : "0"), ReportFacts.GlucoseUnit(useMmol), (string?)highest["date"], ["mean"]));
         }
         if (treatments && rows.Count > 0)
         {
             var most = rows.MaxBy(r => (double)r["totalInsulin"]!)!;
             var carbs = rows.MaxBy(r => (double)r["totalCarbs"]!)!;
-            facts.Add(new ReportFact("Most insulin", ReportFacts.Number((double)most["totalInsulin"]!), "U", (string?)most["date"]));
-            facts.Add(new ReportFact("Most carbs", ReportFacts.Number((double)carbs["totalCarbs"]!, "0"), "g", (string?)carbs["date"]));
+            facts.Add(new ReportFact("Most insulin", ReportFacts.Number((double)most["totalInsulin"]!), "U", (string?)most["date"], ["totalInsulin"]));
+            facts.Add(new ReportFact("Most carbs", ReportFacts.Number((double)carbs["totalCarbs"]!, "0"), "g", (string?)carbs["date"], ["totalCarbs"]));
         }
         return facts;
     }

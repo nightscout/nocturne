@@ -100,6 +100,39 @@ public class ReportGridTests
     }
 
     [Fact]
+    public void Day_slots_start_at_local_midnight_in_the_tenants_zone_across_a_clock_change()
+    {
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        // 2026-10-04 02:00 local: the clocks go forward an hour, so that day is 23 hours long.
+        var from = new DateTimeOffset(2026, 10, 2, 13, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var to = new DateTimeOffset(2026, 10, 6, 13, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var (keys, _) = ReportGrid.Align(ReportXKind.Time, 1440, from, to, [new GridSeries([])], sydney);
+
+        keys.Select(k => TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(k), sydney).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture))
+            .Should().Equal("2026-10-02 00:00", "2026-10-03 00:00", "2026-10-04 00:00", "2026-10-05 00:00", "2026-10-06 00:00");
+        (keys[3] - keys[2]).Should().Be(23 * Hour, "the day the clocks go forward is 23 hours long");
+
+        var sixHours = ReportGrid.Align(ReportXKind.Time, 360, from, to, [new GridSeries([])], sydney).Keys
+            .Select(k => TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(k), sydney).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture))
+            .Distinct().Order().ToList();
+        sixHours.Should().Contain(["00:00", "06:00", "12:00", "18:00"]);
+    }
+
+    [Fact]
+    public void A_half_hour_zone_slots_on_its_own_hours()
+    {
+        var kolkata = TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata");
+        var from = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var (keys, _) = ReportGrid.Align(ReportXKind.Time, 60, from, from + 3 * Hour, [new GridSeries([])], kolkata);
+
+        keys.Select(k => TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(k), kolkata).Minute).Should().OnlyContain(m => m == 0);
+        ReportGrid.Slot(ReportXKind.Time, from + 10 * 60_000, 1440, from, kolkata)
+            .Should().Be(new DateTimeOffset(2026, 9, 30, 18, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(), "05:40 local falls in the day from 00:00 local");
+    }
+
+    [Fact]
     public void Rows_outside_the_range_are_not_folded_in()
     {
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows = [Row(-1, ("g", 500.0)), Row(10, ("g", 100.0)), Row(Hour, ("g", 700.0))];

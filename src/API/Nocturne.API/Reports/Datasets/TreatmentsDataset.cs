@@ -93,10 +93,34 @@ internal sealed class TreatmentsDataset : IReportDataset
         string? Detail = null,
         double? GlucoseMgdl = null);
 
+    /// <summary>The kinds of record each field carries a value of; a chart layer reads only the kinds of the fields it draws.</summary>
+    private static readonly IReadOnlyDictionary<string, ReportTreatmentType[]> KindsOfField = new Dictionary<string, ReportTreatmentType[]>
+    {
+        ["insulin"] = [ReportTreatmentType.Bolus],
+        ["injectionUnits"] = [ReportTreatmentType.BasalInjection],
+        ["carbs"] = [ReportTreatmentType.Carbs],
+        ["bgCheck"] = [ReportTreatmentType.BgCheck],
+        ["rate"] = [ReportTreatmentType.TempBasal],
+        ["durationMinutes"] = [ReportTreatmentType.TempBasal, ReportTreatmentType.Override],
+    };
+
+    /// <summary>The kinds a chart layer drawing <paramref name="fields"/> reads: those of its fields, or every kind asked for when its fields name none.</summary>
+    internal static IReadOnlySet<ReportTreatmentType> KindsFor(IReadOnlySet<ReportTreatmentType> asked, IReadOnlyList<string>? fields)
+    {
+        var drawn = (fields ?? []).SelectMany(f => KindsOfField.GetValueOrDefault(f) ?? []).ToHashSet();
+        return drawn.Count == 0 ? asked : asked.Where(drawn.Contains).ToHashSet();
+    }
+
+    public string? ReadVariant(IReadOnlyList<string>? fields, bool whole)
+    {
+        var drawn = (fields ?? []).Where(KindsOfField.ContainsKey).Order(StringComparer.Ordinal).ToList();
+        return drawn.Count == 0 && !whole ? null : $"{string.Join(',', drawn)}{(whole ? "|whole" : "")}";
+    }
+
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var parameters = (TreatmentsParameters)request.Parameters;
-        var kinds = Kinds(parameters);
+        var kinds = request.Kind == ReportPanelKind.Chart ? KindsFor(Kinds(parameters), request.Fields) : Kinds(parameters);
         var glucose = request.HasScope(Scope.GlucoseRead);
         IReadOnlySet<ReportTreatmentType> read = glucose ? kinds : kinds.Where(k => k != ReportTreatmentType.BgCheck).ToHashSet();
         var (records, limited) = await ReadAsync(request.Services, read, request.From.UtcDateTime, request.To.UtcDateTime, cancellationToken);
@@ -110,9 +134,17 @@ internal sealed class TreatmentsDataset : IReportDataset
             ? [new ReportOmittedField("bgCheck", Scope.GlucoseRead)]
             : [];
 
-        var latest = kept.OrderByDescending(r => r.Time).Take(Budget).OrderBy(r => r.Time).ToList();
+        var latest = request.Whole ? kept.OrderBy(r => r.Time).ToList() : kept.OrderByDescending(r => r.Time).Take(Budget).OrderBy(r => r.Time).ToList();
         var summary = Summarise(kept, request.From, request.To, read,
             request.Services.GetRequiredService<IStatisticsService>(), latest.Count, limited);
+        var budgetCut = latest.Count < kept.Count;
+        var limitCut = records.Where(r => limited.Contains(r.Type)).Select(r => (long?)r.Time).Min();
+        long? completeFrom = budgetCut ? Math.Max(latest[0].Time, limitCut ?? long.MinValue) : limitCut;
+        string? cutNote = completeFrom is { } cutAt
+            ? budgetCut
+                ? $"Only the latest {latest.Count} of {kept.Count} records are shown, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(cutAt), request.Zone)}."
+                : $"The read stopped at {RecordLimit} records of a kind, so the records start at {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(cutAt), request.Zone)}."
+            : null;
 
         return new ReportDatasetOutput
         {
@@ -126,6 +158,8 @@ internal sealed class TreatmentsDataset : IReportDataset
                     ? $"The table holds the latest {latest.Count} of {kept.Count} records; the counts cover all of them."
                     : $"The table holds every record, newest last.",
             SentenceAbout = kept.Count == 0 ? null : [],
+            CompleteFrom = completeFrom,
+            CutNote = cutNote,
             Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(kept.Count, "record")}.",
             Resolution = new ReportResolution(0, 0, kept.Count, latest.Count, latest.Count < kept.Count),
         };

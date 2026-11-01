@@ -56,7 +56,8 @@ internal static class DerivedMath
     /// <summary>A least-squares line of y on x, with what its confidence interval needs.</summary>
     /// <param name="ResidualSe">The standard error of the residuals, on n - 2 degrees of freedom.</param>
     /// <param name="Sxx">The sum of squares of x about its mean.</param>
-    public sealed record Line(double Slope, double Intercept, int N, double MeanX, double Sxx, double ResidualSe, double RSquared)
+    /// <param name="RSquared">The share of y's variance the line explains; null for a y that does not vary, which leaves nothing to explain.</param>
+    public sealed record Line(double Slope, double Intercept, int N, double MeanX, double Sxx, double ResidualSe, double? RSquared)
     {
         public double At(double x) => Intercept + Slope * x;
 
@@ -85,7 +86,7 @@ internal static class DerivedMath
         var intercept = my - slope * mx;
         var residuals = pairs.Sum(p => Math.Pow(p.Y - (intercept + slope * p.X), 2));
         var se = Math.Sqrt(residuals / (pairs.Count - 2));
-        var r2 = syy <= 0 ? 1 : Math.Clamp(1 - residuals / syy, 0, 1);
+        double? r2 = Flat(syy, pairs.Sum(p => p.Y * p.Y)) ? null : Math.Clamp(1 - residuals / syy, 0, 1);
         return new Line(slope, intercept, pairs.Count, mx, sxx, se, r2);
     }
 

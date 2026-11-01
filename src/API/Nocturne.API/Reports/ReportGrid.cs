@@ -2,9 +2,11 @@ namespace Nocturne.API.Reports;
 
 /// <summary>
 /// A chart panel's grid: the slots its layers' rows fold into, by each field's own
-/// <see cref="ReportAggregate"/>. Slots are whole steps from the Unix epoch on a time axis (so they
-/// stay put from one run to the next), from zero minutes on an offset axis and from local midnight on
-/// a time-of-day axis, and are the days themselves on a day axis.
+/// <see cref="ReportAggregate"/>. Slots are whole steps from local midnight in the tenant's zone on a
+/// time axis and a time-of-day axis (so they stay put from one run to the next and a day's slot starts
+/// at its midnight), from zero minutes on an offset axis, and are the days themselves on a day axis.
+/// On a time axis a day that a clock change makes 23 or 25 hours long ends in a shorter slot, and
+/// the next day's slots start again at its midnight.
 /// </summary>
 internal static class ReportGrid
 {
@@ -31,13 +33,37 @@ internal static class ReportGrid
         return kind == ReportXKind.Time ? Math.Max(step, (int)Math.Ceiling((to - from).TotalMinutes / MaxSlots)) : step;
     }
 
-    /// <summary>The slot an x value falls in, as the slot's own x value.</summary>
-    public static long Slot(ReportXKind kind, double x, int step, long fromMills) => kind switch
+    /// <summary>The slot an x value falls in, as the slot's own x value; a time slot in <paramref name="zone"/> (UTC when null).</summary>
+    public static long Slot(ReportXKind kind, double x, int step, long fromMills, TimeZoneInfo? zone = null) => kind switch
     {
-        ReportXKind.Time => (long)Math.Floor(x / (step * 60_000.0)) * step * 60_000L,
+        ReportXKind.Time => TimeSlot((long)Math.Floor(x), step, zone),
         ReportXKind.Offset or ReportXKind.TimeOfDay => (long)Math.Floor(x / step) * step,
         _ => (long)x,
     };
+
+    /// <summary>The time slot an instant falls in: whole steps from the local midnight before it.</summary>
+    internal static long TimeSlot(long mills, int step, TimeZoneInfo? zone)
+    {
+        var stepMs = step * 60_000L;
+        var midnight = Midnight(mills, zone, 0);
+        return midnight + (mills - midnight) / stepMs * stepMs;
+    }
+
+    /// <summary>The time slot after <paramref name="slot"/>: a step on, or the next local midnight where that comes first.</summary>
+    internal static long NextTimeSlot(long slot, int step, TimeZoneInfo? zone) =>
+        Math.Min(slot + step * 60_000L, Midnight(slot, zone, 1));
+
+    /// <summary>The instant of local midnight on the day of <paramref name="mills"/>, <paramref name="days"/> days on.</summary>
+    private static long Midnight(long mills, TimeZoneInfo? zone, int days)
+    {
+        var tz = zone ?? TimeZoneInfo.Utc;
+        var date = TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(mills), tz).Date.AddDays(days);
+        var local = DateTime.SpecifyKind(date, DateTimeKind.Unspecified);
+        while (tz.IsInvalidTime(local))
+            local = local.AddMinutes(15);
+        var offset = tz.IsAmbiguousTime(local) ? tz.GetAmbiguousTimeOffsets(local).Max() : tz.GetUtcOffset(local);
+        return new DateTimeOffset(local, offset).ToUnixTimeMilliseconds();
+    }
 
     private static double? Number(object? value) => value switch
     {
@@ -73,7 +99,8 @@ internal static class ReportGrid
         ReportXKind kind,
         int step,
         long fromMills,
-        long toMills)
+        long toMills,
+        TimeZoneInfo? zone = null)
     {
         var groups = new SortedDictionary<(string Series, long Slot), List<IReadOnlyDictionary<string, object?>>>();
         foreach (var row in rows.OrderBy(r => Number(r.GetValueOrDefault(xName)) ?? double.MaxValue))
@@ -82,7 +109,7 @@ internal static class ReportGrid
                 continue;
             if (kind == ReportXKind.Time && (x < fromMills || x >= toMills))
                 continue;
-            var key = (series is null ? string.Empty : row.GetValueOrDefault(series)?.ToString() ?? string.Empty, Slot(kind, x, step, fromMills));
+            var key = (series is null ? string.Empty : row.GetValueOrDefault(series)?.ToString() ?? string.Empty, Slot(kind, x, step, fromMills, zone));
             if (!groups.TryGetValue(key, out var list))
                 groups[key] = list = [];
             list.Add(row);
@@ -114,7 +141,8 @@ internal static class ReportGrid
         ReportXKind kind,
         int step,
         long fromMills,
-        long toMills)
+        long toMills,
+        TimeZoneInfo? zone = null)
     {
         var slots = new SortedDictionary<long, List<double>>();
         foreach (var row in rows.OrderBy(r => Number(r.GetValueOrDefault(xName)) ?? double.MaxValue))
@@ -123,7 +151,7 @@ internal static class ReportGrid
                 continue;
             if (kind == ReportXKind.Time && (x < fromMills || x >= toMills))
                 continue;
-            var slot = Slot(kind, x, step, fromMills);
+            var slot = Slot(kind, x, step, fromMills, zone);
             if (!slots.TryGetValue(slot, out var list))
                 slots[slot] = list = [];
             if (Number(row.GetValueOrDefault(field.Name)) is { } v)
@@ -145,17 +173,18 @@ internal static class ReportGrid
         int step,
         long fromMills,
         long toMills,
-        IReadOnlyList<GridSeries> series)
+        IReadOnlyList<GridSeries> series,
+        TimeZoneInfo? zone = null)
     {
         long[] keys;
         switch (kind)
         {
             case ReportXKind.Time:
             {
-                var stepMs = step * 60_000L;
-                var first = Slot(kind, fromMills, step, fromMills);
-                var count = (int)Math.Max(0, (toMills - first + stepMs - 1) / stepMs);
-                keys = [.. Enumerable.Range(0, count).Select(i => first + i * stepMs)];
+                var slots = new List<long>();
+                for (var slot = TimeSlot(fromMills, step, zone); slot < toMills; slot = NextTimeSlot(slot, step, zone))
+                    slots.Add(slot);
+                keys = [.. slots];
                 break;
             }
             case ReportXKind.TimeOfDay:
@@ -181,7 +210,7 @@ internal static class ReportGrid
                 var found = s.Values.TryGetValue(keys[i], out var v) && v is not null;
                 if (found)
                     held = v;
-                var covered = s.Zeros is { } zeros && (kind != ReportXKind.Time || (keys[i] >= Slot(kind, zeros.From, step, zeros.From) && keys[i] < zeros.To));
+                var covered = s.Zeros is { } zeros && (kind != ReportXKind.Time || (keys[i] >= TimeSlot(zeros.From, step, zone) && keys[i] < zeros.To));
                 values[i] = found ? v : s.Carry ? held : covered ? 0 : null;
             }
             return values;

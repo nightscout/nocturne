@@ -199,6 +199,44 @@ public class RecordDatasetTests
     }
 
     [Fact]
+    public async Task A_derived_source_reads_every_record_and_a_markers_layer_cut_to_the_budget_says_so()
+    {
+        var harness = new Harness();
+        harness.WithBoluses([.. Enumerable.Range(0, 800).Select(i => (Now.AddMinutes(-15 * i - 1), 1.0))]);
+        harness.WithCarbs((Now.AddHours(-1), 30));
+        var (runner, context, _) = harness.Arrange(Scope.TreatmentsRead);
+
+        var result = await runner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 216 }, "panels": [
+              { "id": "c", "kind": "chart", "grid": 60, "tracks": [ { "layers": [
+                { "id": "markers", "dataset": { "name": "treatments" }, "mark": "markers", "bindings": { "y": ["insulin"] } },
+                { "id": "mean", "derived": { "op": "rolling_mean", "minutes": 60, "a": { "dataset": { "name": "treatments" }, "field": "insulin" } } } ] } ] } ] }
+            """), context, CancellationToken.None);
+
+        var panel = result.Panels.Single();
+        var markers = panel.Tracks[0].Layers[0];
+        var mean = panel.Tracks[0].Layers[1];
+        mean.Limited.Should().BeFalse("a derived source reads every record of the range");
+        mean.Rows.Select(r => r["value"]).OfType<double>().Count(v => v == 4.0).Should().BeGreaterThan(190,
+            "four boluses of 1 U in each of the 200 hours they cover; a read cut to the latest 500 would give 0 before the last 125");
+        markers.Limited.Should().BeTrue();
+        markers.Sentence.Should().Contain($"Only the latest {TreatmentsDataset.Budget} of 800 records are shown");
+        panel.Limited.Should().BeTrue();
+        panel.Sentence.Should().Contain("Only the latest");
+    }
+
+    [Fact]
+    public void A_chart_layer_reads_only_the_kinds_of_record_its_fields_draw()
+    {
+        var asked = TreatmentsDataset.Kinds(new TreatmentsParameters());
+
+        TreatmentsDataset.KindsFor(asked, ["insulin", "carbs"]).Should().BeEquivalentTo([ReportTreatmentType.Bolus, ReportTreatmentType.Carbs]);
+        TreatmentsDataset.KindsFor(asked, ["time"]).Should().BeEquivalentTo(asked);
+        new TreatmentsDataset().ReadVariant(["carbs", "insulin"], whole: false).Should().Be("carbs,insulin");
+        new TreatmentsDataset().ReadVariant(null, whole: false).Should().BeNull();
+    }
+
+    [Fact]
     public void A_treatments_layer_draws_its_amounts_as_the_dashboards_markers()
     {
         var layer = Spec(ReportSpecValidatorTests.Layers("""{ "dataset": { "name": "treatments" } }""")).Panels[0].Tracks![0].Layers[0];
@@ -352,6 +390,37 @@ public class RecordDatasetTests
         full.RangeLimit.Should().Be("This panel covers at most 90 days.");
         result.Panels[1].AtRangeLimit.Should().BeFalse();
         result.Panels[1].RangeLimit.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Every figure of every dataset a chart draws names the fields it is about (<see cref="ReportFact.About"/>), so a
+    /// layer prints only the figures about what it draws. The datasets this harness reads run whole; the rest are
+    /// checked through the functions that build their figures.
+    /// </summary>
+    [Fact]
+    public async Task Every_figure_of_a_dataset_a_chart_draws_names_the_fields_it_is_about()
+    {
+        var harness = new Harness();
+        harness.WithBoluses((Now.AddHours(-3), 5));
+        harness.WithCarbs((Now.AddHours(-2), 40));
+        var (runner, context, _) = harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
+
+        var result = await runner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 336 }, "panels": [
+              { "id": "treatments", "dataset": { "name": "treatments" }, "kind": "table" },
+              { "id": "days", "dataset": { "name": "daily_summary" }, "kind": "table" },
+              { "id": "bands", "dataset": { "name": "glucose_distribution" }, "kind": "stat_tiles" },
+              { "id": "hours", "dataset": { "name": "glucose_distribution_by_hour" }, "kind": "table" } ] }
+            """), context, CancellationToken.None);
+
+        var facts = result.Panels.SelectMany(p => p.Facts.Select(f => (p.Id, f))).ToList();
+        facts.Should().NotBeEmpty();
+        facts.Should().OnlyContain(x => x.f.About != null && x.f.About.Count > 0);
+
+        var series = new List<BasalPoint> { new() { Timestamp = 0, Rate = 0.8, ScheduledRate = 1 }, new() { Timestamp = 1, Rate = 1.2, ScheduledRate = 1 } };
+        BasalDeliveryDataset.FactsOf(series, therapy: true).Should().OnlyContain(f => f.About != null && f.About.Count > 0);
+        SettingsEvidenceDataset.FactsOf([new Dictionary<string, object?> { ["setting"] = "isf", ["isfObserved"] = 40.0 }])
+            .Should().OnlyContain(f => f.About != null && f.About.Count > 0);
     }
 
     [Fact]

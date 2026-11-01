@@ -320,9 +320,9 @@ internal sealed partial class ReportSpecValidator
             Error($"{at}.grid", xKind == ReportXKind.Day
                 ? "A chart over days has one slot each day. Remove the grid."
                 : "A chart over categories has no grid. Remove the grid.");
-        if (grid == 0 && layers.FirstOrDefault(l => l.Paired) is { } paired)
-            Error($"{at}.grid", $"A layer of two sources pairs them slot by slot, so every reading cannot be shown here ({LayerWords(paired)}). "
-                + "Send a grid of 1 minute or more.");
+        if (grid == 0 && layers.FirstOrDefault(l => l.Paired) is { } paired && PairedAt(paired.Spec.Derived!, $"{paired.At}.derived") is { } pairing)
+            Error($"{at}.grid", $"A layer of two sources pairs them slot by slot, so every reading cannot be shown here: "
+                + $"{pairing.Label} at {pairing.Path} pairs two sources. Send a grid of 1 minute or more.");
         if (grid is > 0 && ReportGrid.Applies(xKind))
             foreach (var layer in layers)
                 if (layer.Folded.FirstOrDefault(f => f.Aggregate is null) is { } loose)
@@ -340,6 +340,11 @@ internal sealed partial class ReportSpecValidator
             {
                 CheckSpan(read.Dataset, layerRange, layer.Spec.Range is null ? $"{at}.range" : $"{layer.At}.range", Error);
                 reads.TryAdd(ReadKey(read.Parameters, layerRange, ReportPanelKind.Chart, read.X), read.Dataset);
+            }
+            if (layer.Spec.Derived is { } derived)
+            {
+                var (from, to) = ReportSpecRunner.Resolve(layerRange, now);
+                CheckWindows(derived, $"{layer.At}.derived", kind => ReportGrid.Step(kind, grid is > 0 ? grid.Value : ReportGrid.DefaultMinutes, from, to), Error);
             }
         }
 
@@ -552,6 +557,57 @@ internal sealed partial class ReportSpecValidator
             derived is not null && IsPaired(derived.Spec));
     }
 
+    /// <summary>Why <paramref name="field"/> cannot be a source, in words.</summary>
+    private static string NotDataWords(ReportField field) => field.Setting switch
+    {
+        ReportSetting.Profile => $"'{field.Label}' is a value of the profile's settings, which a derived series is never compared with.",
+        ReportSetting.ProfileRelative => $"'{field.Label}' is worked out against the profile's scheduled basal, so a derived series of it could show the schedule.",
+        ReportSetting.FixedLimit => $"'{field.Label}' is a fixed limit that is the same for everyone, not data.",
+        _ => throw new ArgumentOutOfRangeException(nameof(field), field.Setting, null),
+    };
+
+    /// <summary>The first op in <paramref name="derived"/>, outermost first, that pairs two sources, in words, and its path.</summary>
+    private static (string Label, string Path)? PairedAt(ReportDerivedSpec derived, string path)
+    {
+        if (derived.Second is not null)
+            return (ReportDerivedOps.Of(derived).Label, path);
+        foreach (var (source, key) in derived.Sources.Zip(new[] { "a", "b" }))
+            if (source.Derived is { } inner && PairedAt(inner, $"{path}.{key}.derived") is { } found)
+                return found;
+        return null;
+    }
+
+    /// <summary>
+    /// Refuses a window that is not a whole number of the grid's slots, at its path, so the window a layer states is
+    /// the one it averages over. <paramref name="stepOf"/> gives the step a source along an axis is folded at.
+    /// </summary>
+    /// <returns>The axis <paramref name="derived"/> lies along.</returns>
+    private ReportXKind? CheckWindows(ReportDerivedSpec derived, string path, Func<ReportXKind, int> stepOf, Action<string, string> error)
+    {
+        var op = ReportDerivedOps.Of(derived);
+        ReportXKind? sourceKind = null;
+        foreach (var (source, key) in derived.Sources.Zip(new[] { "a", "b" }))
+        {
+            var kind = source.Derived is { } inner
+                ? CheckWindows(inner, $"{path}.{key}.derived", stepOf, error)
+                : registry.Find(source.Dataset!.DatasetName)?.FieldsFor(ReportPanelKind.Chart)
+                    .FirstOrDefault(f => !f.Companion && f.AxisKind is { } k && ReportDerivedOps.GridKinds.Contains(k))?.AxisKind;
+            sourceKind ??= kind;
+        }
+        if (sourceKind is not { } along)
+            return null;
+        var minutes = derived switch
+        {
+            RollingMeanSpec rolling => rolling.Minutes,
+            BandSdSpec band => band.Minutes,
+            _ => (int?)null,
+        };
+        if (minutes is { } window && along != ReportXKind.Day && stepOf(along) is var step && window % step != 0)
+            error($"{path}.minutes", $"The grid here is {step} minutes, so the window is a whole number of its slots. "
+                + $"Send a multiple of {step}, such as {Math.Max(step, (int)Math.Round(window / (double)step) * step)}.");
+        return op.OutputXKind(along);
+    }
+
     /// <summary>Whether a derived series pairs two sources anywhere in it, a source's own derivation included.</summary>
     internal static bool IsPaired(ReportDerivedSpec derived) =>
         derived.Second is not null || derived.Sources.Any(s => s.Derived is { } inner && IsPaired(inner));
@@ -652,14 +708,13 @@ internal sealed partial class ReportSpecValidator
                 error($"{path}.dataset.name", $"{dataset.Label} has no axis of time, minutes, time of day or days, so a series cannot be derived from it.");
                 return null;
             }
-            var usable = fields.Where(x => x.IsNumber && x.Aggregate is not null && !x.Setting).ToList();
+            var usable = fields.Where(x => x.IsNumber && x.Aggregate is not null && x.Setting == ReportSetting.None).ToList();
             var field = usable.FirstOrDefault(x => x.Name == fieldName);
             if (field is null)
             {
-                var setting = fields.FirstOrDefault(x => x.Name == fieldName && x.Setting);
+                var setting = fields.FirstOrDefault(x => x.Name == fieldName && x.Setting != ReportSetting.None);
                 error($"{path}.field", setting is not null
-                    ? $"'{setting.Label}' is a value of the profile's settings. A derived series uses the data only and is never compared with the settings. "
-                      + $"Send a field of the data: {string.Join(", ", usable.Select(x => x.Name))}."
+                    ? $"{NotDataWords(setting)} A derived series uses the data only. Send a field of the data: {string.Join(", ", usable.Select(x => x.Name))}."
                     : (fieldName is null ? "Missing. " : $"'{Shorten(fieldName)}' cannot be a source. ")
                       + $"Send a number field of {dataset.Label}: {string.Join(", ", usable.Select(x => x.Name))}.");
                 return null;

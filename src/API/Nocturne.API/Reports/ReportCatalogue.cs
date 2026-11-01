@@ -103,6 +103,7 @@ public sealed record CustomReportOpMark([property: Required] string Name, [prope
 /// event_response); a derived source of it names the group it reads. Null for a dataset in one group.
 /// </param>
 /// <param name="SeriesParameter">The parameter that lists the groups, one item each, for a dataset with <paramref name="SeriesField"/>.</param>
+/// <param name="DefaultSeriesCount">The groups a query of it that lists none comes in (every meal: 1); null for a dataset in one group.</param>
 public sealed record CustomReportDataset(
     [property: Required] string Name,
     [property: Required] string Label,
@@ -119,7 +120,8 @@ public sealed record CustomReportDataset(
     [property: Required] string RangeLimit,
     [property: Required] int MaxReadsPerReport,
     string? SeriesField,
-    string? SeriesParameter);
+    string? SeriesParameter,
+    int? DefaultSeriesCount);
 
 /// <summary>A field of a dataset's rows.</summary>
 /// <param name="Kind">time, number, category, percent, offset (minutes from an event), time_of_day or day.</param>
@@ -290,7 +292,7 @@ internal sealed class ReportCatalogue(
                 permitted && (f.Scope is null || Scope.Satisfies(granted, f.Scope)),
                 f.Aggregate is { } aggregate ? ReportWire.Name(aggregate) : null,
                 f.Marker is { } marker ? ReportWire.Name(marker) : null,
-                f.Setting))],
+                f.Setting != ReportSetting.None))],
             [.. dataset.Marks.SelectMany(ReportMarks.XKinds).Distinct()
                 .Where(k => chartFields.Any(f => f.AxisKind == k)).Select(ReportWire.Name)],
             [.. dataset.PanelKinds.Select(k => new CustomReportDatasetPanelKind(
@@ -301,7 +303,8 @@ internal sealed class ReportCatalogue(
             $"This data covers at most {ReportSpecValidator.Describe(dataset.MaxRange)}.",
             dataset.MaxPanelsPerReport,
             dataset.SeriesField,
-            dataset.SeriesParameter);
+            dataset.SeriesParameter,
+            dataset.SeriesField is null ? null : dataset.SeriesCount((ReportDatasetParameters)Activator.CreateInstance(dataset.ParametersType)!));
     }
 
     /// <summary>The bindings a new layer of <paramref name="dataset"/> drawn as <paramref name="mark"/> starts with, normalised by the validator.</summary>

@@ -193,6 +193,20 @@ internal sealed record ReportLayerResult
     /// <summary>How the layer's values were folded onto the panel's grid ("Basal rate, last value per 1 day"); null for a layer drawn as read.</summary>
     public string? Context { get; init; }
 
+    /// <summary>The rows were cut to a budget or a read limit, and <see cref="Sentence"/> says how.</summary>
+    public bool Limited { get; init; }
+
+    /// <summary>The sentence saying how the rows were cut, which the panel's sentence repeats; null when they were not.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? CutNote { get; init; }
+
+    /// <summary>The event groups each source of grouped data offers, by the source's key (a, b), with their words.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<ReportCohort>> SourceCohorts { get; init; } = new Dictionary<string, IReadOnlyList<ReportCohort>>();
+
+    /// <summary><see cref="Sentence"/> sets the data against the profile's settings, so it never heads the panel.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool SettingsSentence { get; init; }
+
     public string Summary { get; init; } = string.Empty;
 
     /// <summary>A band's spans, inner first: the words for each and the fields of its low and high edges.</summary>

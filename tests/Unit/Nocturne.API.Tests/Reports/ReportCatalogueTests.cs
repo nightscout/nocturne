@@ -396,15 +396,43 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
 
     public static TheoryData<string> OpNames => [.. ReportDerivedOps.All.Select(o => o.Name)];
 
-    [Fact]
-    public void A_profile_setting_is_marked_as_one()
-    {
-        var settings = Catalogue().Datasets.SelectMany(d => d.Fields.Where(f => f.Setting).Select(f => $"{d.Name}.{f.Name}"));
+    /// <summary>Words in a field's name, label or description that say it may be a setting, or worked out from one.</summary>
+    private static readonly System.Text.RegularExpressions.Regex SettingWords = new(
+        "profile|schedul|target|limit|isf|ratio", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        settings.Should().BeEquivalentTo(
-            "settings_evidence.basalProfile", "settings_evidence.isfProfile", "settings_evidence.carbRatioProfile",
-            "daily_profile.scheduledBasal", "daily_profile.targetLow", "daily_profile.targetHigh",
-            "glucose_series.targetLow", "glucose_series.targetHigh", "basal_delivery.scheduled");
+    /// <summary>Fields those words match that are data, each with why.</summary>
+    private static readonly Dictionary<string, string> NotSettings = new()
+    {
+        ["glucose_statistics.timeInRangePercent"] = "The share of the readings inside the consensus range: a figure of the readings.",
+        ["glucose_statistics.timeBelow"] = "The share of the readings below the consensus range: a figure of the readings.",
+        ["glucose_statistics.timeAbove"] = "The share of the readings above the consensus range: a figure of the readings.",
+        ["glucose_statistics.cv"] = "The readings' coefficient of variation; its description names the consensus target it is read against.",
+        ["settings_evidence.isfObserved"] = "The ISF the readings and boluses showed, not the profile's; the profile's is isfProfile.",
+        ["settings_evidence.carbRatioObserved"] = "The carb ratio the readings and meals showed, not the profile's; the profile's is carbRatioProfile.",
+        ["treatments.durationMinutes"] = "How long a temp basal or override ran: \"ratio\" is only a part of \"duration\".",
+    };
+
+    [Fact]
+    public void Every_field_that_names_a_setting_is_marked_as_one_unless_listed_as_data()
+    {
+        var unmarked = ReportSpecValidatorTests.Registry.All
+            .SelectMany(d => d.Fields.Select(f => (Key: $"{d.Name}.{f.Name}", Field: f)))
+            .Where(x => x.Field.Setting == ReportSetting.None && !x.Field.Companion && x.Field.IsNumber)
+            .Where(x => SettingWords.IsMatch(x.Field.Name) || SettingWords.IsMatch(x.Field.Label) || SettingWords.IsMatch(x.Field.Description))
+            .Select(x => x.Key)
+            .Where(key => !NotSettings.ContainsKey(key))
+            .ToList();
+
+        unmarked.Should().BeEmpty("a field worked out from the profile's settings is never a derived source");
+        NotSettings.Keys.Should().OnlyContain(key => ReportSpecValidatorTests.Registry.All.Any(d => key.StartsWith(d.Name + ".", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void A_setting_is_marked_in_the_catalogue()
+    {
+        var settings = Catalogue().Datasets.SelectMany(d => d.Fields.Where(f => f.Setting).Select(f => $"{d.Name}.{f.Name}")).ToList();
+
+        settings.Should().Contain(["daily_profile.netLoopCorrection", "event_response.netLoopCorrectionP50", "glucose_series.targetLow"]);
     }
 
     [Fact]
