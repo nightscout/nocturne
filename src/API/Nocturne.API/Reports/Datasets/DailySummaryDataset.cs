@@ -36,16 +36,16 @@ internal sealed class DailySummaryDataset : IReportDataset
     public IReadOnlyList<ReportField> Fields { get; } =
     [
         new("date", "Date", ReportFieldKind.Category, null, "The local date, yyyy-MM-dd."),
-        new("day", "Day", ReportFieldKind.Time, null, "Local midnight at the start of the day, Unix milliseconds."),
-        new("readings", "Readings", ReportFieldKind.Number, null, "The day's glucose readings."),
-        new("timeInRange", "In range", ReportFieldKind.Percent, "%", "Percent of the day's covered time in range.", Color: ChartColor.GlucoseInRange),
-        new("timeBelow", "Below range", ReportFieldKind.Percent, "%", "Percent of the day's covered time below range (low and very low).", Color: ChartColor.GlucoseLow),
-        new("timeAbove", "Above range", ReportFieldKind.Percent, "%", "Percent of the day's covered time above range (high and very high).", Color: ChartColor.GlucoseHigh),
-        new("mean", "Mean glucose", ReportFieldKind.Number, ReportField.GlucoseUnit, "The mean of the day's readings.", Color: ChartColor.GlucoseInRange),
-        new("totalInsulin", "Insulin", ReportFieldKind.Number, "U", "The day's insulin, bolus and basal.", Scope.TreatmentsRead, ChartColor.InsulinBolus),
-        new("totalBolus", "Bolus", ReportFieldKind.Number, "U", "The day's bolus insulin, the algorithm's included.", Scope.TreatmentsRead, ChartColor.InsulinBolus),
-        new("totalBasal", "Basal", ReportFieldKind.Number, "U", "The day's basal insulin.", Scope.TreatmentsRead, ChartColor.InsulinBasal),
-        new("totalCarbs", "Carbs", ReportFieldKind.Number, "g", "The day's carbs.", Scope.TreatmentsRead, ChartColor.Carbs),
+        new("day", "Day", ReportFieldKind.Day, null, "Local midnight at the start of the day, Unix milliseconds."),
+        new("readings", "Readings", ReportFieldKind.Number, null, "The day's glucose readings.", Aggregate: ReportAggregate.Sum),
+        new("timeInRange", "In range", ReportFieldKind.Percent, "%", "Percent of the day's covered time in range.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("timeBelow", "Below range", ReportFieldKind.Percent, "%", "Percent of the day's covered time below range (low and very low).", Color: ChartColor.GlucoseLow, Aggregate: ReportAggregate.Mean),
+        new("timeAbove", "Above range", ReportFieldKind.Percent, "%", "Percent of the day's covered time above range (high and very high).", Color: ChartColor.GlucoseHigh, Aggregate: ReportAggregate.Mean),
+        new("mean", "Mean glucose", ReportFieldKind.Number, ReportField.GlucoseUnit, "The mean of the day's readings.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("totalInsulin", "Insulin", ReportFieldKind.Number, "U", "The day's insulin, bolus and basal.", Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Sum),
+        new("totalBolus", "Bolus", ReportFieldKind.Number, "U", "The day's bolus insulin, the algorithm's included.", Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Sum),
+        new("totalBasal", "Basal", ReportFieldKind.Number, "U", "The day's basal insulin.", Scope.TreatmentsRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Sum),
+        new("totalCarbs", "Carbs", ReportFieldKind.Number, "g", "The day's carbs.", Scope.TreatmentsRead, ChartColor.Carbs, Aggregate: ReportAggregate.Sum),
         new("partial", "Partial day", ReportFieldKind.Category, null,
             "true for a day that starts before the last 24 hours a history-limited token reads: its row covers only part of the day."),
     ];
@@ -53,18 +53,20 @@ internal sealed class DailySummaryDataset : IReportDataset
     /// <summary>The fields read from insulin and carb records.</summary>
     internal static readonly IReadOnlyList<string> TreatmentFields = ["totalInsulin", "totalBolus", "totalBasal", "totalCarbs"];
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive switch
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark switch
     {
-        ReportPrimitive.Bar => new ReportBindings { X = "date", Y = ["timeBelow", "timeInRange", "timeAbove"], Stacked = true },
-        ReportPrimitive.TimeSeries => new ReportBindings { X = "day", Y = ["timeInRange"] },
+        ReportMark.Bars => new ReportLayerBindings { X = "day", Y = ["timeBelow", "timeInRange", "timeAbove"], Stacked = true },
+        ReportMark.Line or ReportMark.Points => new ReportLayerBindings { X = "day", Y = ["timeInRange"] },
         _ => null,
     };
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.Table, ReportPrimitive.Bar, ReportPrimitive.TimeSeries];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Bars, ReportMark.Line, ReportMark.Points];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(14);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
+    public TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
     public int PointBudget => V4ReadLimits.MaxAnalyticsSpanDays + 1;
 

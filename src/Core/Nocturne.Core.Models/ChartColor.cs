@@ -145,6 +145,16 @@ public enum ChartColor
     [EnumMember(Value = "chart-2"), JsonStringEnumMemberName("chart-2")]
     Override,
 
+    /// <summary>A series hue, for a layer whose fields' colour an earlier layer on its track takes.</summary>
+    [EnumMember(Value = "chart-3"), JsonStringEnumMemberName("chart-3")]
+    Chart3,
+
+    [EnumMember(Value = "chart-4"), JsonStringEnumMemberName("chart-4")]
+    Chart4,
+
+    [EnumMember(Value = "chart-5"), JsonStringEnumMemberName("chart-5")]
+    Chart5,
+
     [EnumMember(Value = "muted-foreground"), JsonStringEnumMemberName("muted-foreground")]
     MutedForeground,
 

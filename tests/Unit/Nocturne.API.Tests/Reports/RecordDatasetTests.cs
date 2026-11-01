@@ -139,7 +139,7 @@ public class RecordDatasetTests
 
         var result = await runner.RunAsync(Spec("""
             { "version": 1, "range": { "hours": 6 }, "panels": [
-              { "dataset": { "name": "treatments", "types": ["carbs", "note"], "minCarbs": 30 }, "primitive": "table" } ] }
+              { "dataset": { "name": "treatments", "types": ["carbs", "note"], "minCarbs": 30 }, "kind": "table" } ] }
             """), context, CancellationToken.None);
 
         harness.Carbs.Verify(c => c.GetAsync(Now.AddHours(-6).UtcDateTime, Now.UtcDateTime, null, null, TreatmentsDataset.RecordLimit, 0, true,
@@ -176,6 +176,7 @@ public class RecordDatasetTests
             + "Temp basals: 1. Latest at 2026-10-29 09:05.\n"
             + "Overrides: 0.\n"
             + "Notes: 1. Latest at 2026-10-29 09:06.\n"
+            + "BG checks: 0.\n"
             + "Long-acting injections: 0.");
         summary.Should().NotContain("Felt low", "a note's text is a row, not part of the summary");
     }
@@ -188,7 +189,7 @@ public class RecordDatasetTests
         var (runner, context, _) = harness.Arrange(Scope.TreatmentsRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 24 }, "panels": [ { "dataset": { "name": "treatments", "types": ["carbs"] }, "primitive": "table" } ] }
+            { "version": 1, "range": { "hours": 24 }, "panels": [ { "dataset": { "name": "treatments", "types": ["carbs"] }, "kind": "table" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Rows.Should().HaveCount(TreatmentsDataset.Budget);
@@ -198,11 +199,13 @@ public class RecordDatasetTests
     }
 
     [Fact]
-    public void A_treatments_time_series_draws_its_amounts_as_the_dashboards_markers()
+    public void A_treatments_layer_draws_its_amounts_as_the_dashboards_markers()
     {
-        var panel = Spec("""{ "version": 1, "panels": [ { "dataset": { "name": "treatments" }, "primitive": "time_series" } ] }""").Panels[0];
+        var layer = Spec(ReportSpecValidatorTests.Layers("""{ "dataset": { "name": "treatments" } }""")).Panels[0].Tracks![0].Layers[0];
 
-        panel.Bindings!.Y.Should().Equal("insulin");
+        layer.Mark.Should().Be(ReportMark.Markers);
+        layer.Bindings!.Y.Should().Equal("insulin", "carbs");
+        layer.HasAxis.Should().BeFalse();
         var dataset = ReportSpecValidatorTests.Registry.Find("treatments")!;
         dataset.Fields.Single(f => f.Name == "insulin").Marker.Should().Be(ReportMarkerKind.Bolus);
         dataset.Fields.Single(f => f.Name == "carbs").Marker.Should().Be(ReportMarkerKind.Carbs);
@@ -225,12 +228,11 @@ public class RecordDatasetTests
 
         var result = await runner.RunAsync(Spec("""
             { "version": 1, "range": { "hours": 6 }, "panels": [
-              { "id": "line", "dataset": { "name": "treatments" }, "primitive": "time_series" },
-              { "id": "rows", "dataset": { "name": "treatments" }, "primitive": "table" } ] }
+              { "id": "line", "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "treatments" } } ] } ] },
+              { "id": "rows", "dataset": { "name": "treatments" }, "kind": "table" } ] }
             """), context, CancellationToken.None);
 
-        var line = result.Panels[0];
-        line.Bindings.Y.Should().Equal("insulin");
+        var line = result.Panels[0].Tracks[0].Layers[0];
         line.Markers.Select(m => (m.Kind, m.Amount, m.Automatic)).Should().Equal(
             (ReportMarkerKind.Bolus, 4.5, false), (ReportMarkerKind.Bolus, 0.3, true));
         var injection = result.Panels[1].Rows.Single(r => (string?)r["type"] == "basal_injection");
@@ -255,7 +257,7 @@ public class RecordDatasetTests
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "treatments" }, "primitive": "table" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "treatments" }, "kind": "table" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Status.Should().Be(ReportPanelStatus.NotPermitted);
@@ -282,8 +284,8 @@ public class RecordDatasetTests
         var (runner, context, readLog) = harness.Arrange(Scope.TreatmentsRead, Scope.TherapyRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 6 }, "panels": [ { "dataset": { "name": "basal_delivery" }, "primitive": "time_series" } ] }
-            """), context, CancellationToken.None)).Panels.Single();
+            { "version": 1, "range": { "hours": 6 }, "panels": [ { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "basal_delivery" }, "mark": "line" } ] } ] } ] }
+            """), context, CancellationToken.None)).Panels.Single().Tracks[0].Layers[0];
 
         panel.Fields.Select(f => f.Name).Should().Equal("time", "delivered", "scheduled");
         panel.Fields.Where(f => f.Name != "time").Should().OnlyContain(f => f.Step);
@@ -306,8 +308,8 @@ public class RecordDatasetTests
         var (runner, context, readLog) = harness.Arrange(Scope.TreatmentsRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 6 }, "panels": [ { "dataset": { "name": "basal_delivery" }, "primitive": "time_series" } ] }
-            """), context, CancellationToken.None)).Panels.Single();
+            { "version": 1, "range": { "hours": 6 }, "panels": [ { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "basal_delivery" }, "mark": "line" } ] } ] } ] }
+            """), context, CancellationToken.None)).Panels.Single().Tracks[0].Layers[0];
 
         panel.Fields.Select(f => f.Name).Should().Equal("time", "delivered");
         panel.Rows.Should().OnlyContain(r => !r.ContainsKey("scheduled"));
@@ -324,9 +326,9 @@ public class RecordDatasetTests
 
         await runner.RunAsync(Spec("""
             { "version": 1, "range": { "hours": 336 }, "panels": [
-              { "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles" },
-              { "dataset": { "name": "glucose_distribution_by_hour" }, "primitive": "range_bands" },
-              { "dataset": { "name": "glucose_distribution" }, "primitive": "bar" } ] }
+              { "dataset": { "name": "glucose_statistics" }, "kind": "stat_tiles" },
+              { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "glucose_distribution_by_hour" } } ] } ] },
+              { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "glucose_distribution" } } ] } ] } ] }
             """), context, CancellationToken.None);
 
         harness.GlucoseReads.Should().Be(1);
@@ -341,8 +343,8 @@ public class RecordDatasetTests
 
         var result = await runner.RunAsync(Spec("""
             { "version": 1, "panels": [
-              { "id": "long", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles", "range": { "hours": 2160 } },
-              { "id": "short", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles", "range": { "hours": 24 } } ] }
+              { "id": "long", "dataset": { "name": "glucose_statistics" }, "kind": "stat_tiles", "range": { "hours": 2160 } },
+              { "id": "short", "dataset": { "name": "glucose_statistics" }, "kind": "stat_tiles", "range": { "hours": 24 } } ] }
             """), context, CancellationToken.None);
 
         var full = result.Panels[0];
@@ -359,11 +361,11 @@ public class RecordDatasetTests
 
         var result = await runner.RunAsync(Spec("""
             { "version": 1, "range": { "hours": 336 }, "panels": [
-              { "id": "stats", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles" },
-              { "id": "hours", "dataset": { "name": "glucose_distribution_by_hour" }, "primitive": "range_bands" },
-              { "id": "bands", "dataset": { "name": "glucose_distribution" }, "primitive": "bar" },
-              { "id": "days", "dataset": { "name": "daily_summary" }, "primitive": "table" },
-              { "id": "compare", "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "primitive": "comparison" } ] }
+              { "id": "stats", "dataset": { "name": "glucose_statistics" }, "kind": "stat_tiles" },
+              { "id": "hours", "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "glucose_distribution_by_hour" } } ] } ] },
+              { "id": "bands", "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "glucose_distribution" } } ] } ] },
+              { "id": "days", "dataset": { "name": "daily_summary" }, "kind": "table" },
+              { "id": "compare", "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "kind": "comparison" } ] }
             """), context, CancellationToken.None);
 
         result.Panels.Should().OnlyContain(p => p.Facts.Count > 0 && p.Facts.Count <= ReportFacts.Max);
@@ -384,7 +386,7 @@ public class RecordDatasetTests
         var (runner, context, _) = new Harness().Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "device_status" }, "primitive": "stat_tiles" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "device_status" }, "kind": "stat_tiles" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Facts.Should().BeEmpty();
@@ -410,13 +412,13 @@ public class RecordDatasetTests
 
         var result = await runner.RunAsync(Spec("""
             { "version": 1, "range": { "hours": 6 }, "panels": [
-              { "id": "line", "dataset": { "name": "device_status" }, "primitive": "time_series" },
-              { "id": "tiles", "dataset": { "name": "device_status" }, "primitive": "stat_tiles" } ] }
+              { "id": "line", "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "device_status" } } ] } ] },
+              { "id": "tiles", "dataset": { "name": "device_status" }, "kind": "stat_tiles" } ] }
             """), context, CancellationToken.None);
 
         harness.Pump.Verify(p => p.GetAsync(Now.AddHours(-6).UtcDateTime, Now.UtcDateTime, null, null, DeviceStatusDataset.RecordLimit, 0, false,
             It.IsAny<CancellationToken>()), Times.Exactly(2));
-        var line = result.Panels[0];
+        var line = result.Panels[0].Tracks[0].Layers[0];
         line.Bindings.Y.Should().Equal("pumpBattery", "uploaderBattery");
         line.Rows.Select(r => (r["pumpBattery"], r["uploaderBattery"])).Should().Equal((70, null), (null, 55), (69, null));
         var tiles = result.Panels[1];
@@ -440,7 +442,7 @@ public class RecordDatasetTests
         var (runner, context, _) = harness.ArrangeClamped(Scope.DevicesRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "device_status" }, "primitive": "stat_tiles" } ] }
+            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "device_status" }, "kind": "stat_tiles" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Summary.Should().Contain("Sensor age now: not shown. This token reads only the last 24 hours, and the latest sensor start can be older.");
@@ -453,7 +455,7 @@ public class RecordDatasetTests
         var (runner, context, _) = harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "device_status" }, "primitive": "stat_tiles" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "device_status" }, "kind": "stat_tiles" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Status.Should().Be(ReportPanelStatus.NotPermitted);
@@ -470,10 +472,10 @@ public class RecordDatasetTests
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 336 }, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar" } ] }
-            """), context, CancellationToken.None)).Panels.Single();
+            { "version": 1, "range": { "hours": 336 }, "panels": [ { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "glucose_distribution" } } ] } ] } ] }
+            """), context, CancellationToken.None)).Panels.Single().Tracks[0].Layers[0];
 
-        panel.Bindings.Should().BeEquivalentTo(new ReportBindings { X = "band", Y = ["percent"], Stacked = false, Orientation = ReportBarOrientation.Vertical });
+        panel.Bindings.Should().BeEquivalentTo(new ReportLayerBindings { X = "band", Y = ["percent"], Stacked = false, Orientation = ReportBarOrientation.Vertical });
         panel.Fields.Select(f => f.Name).Should().Equal("band", "percent", "color");
         panel.Fields.Single(f => f.Name == "band").ColorField.Should().Be("color");
         panel.Rows.Select(r => r["color"]).Should().Equal(
@@ -488,9 +490,9 @@ public class RecordDatasetTests
         var (runner, context, _) = new Harness().Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 336 }, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar",
-              "bindings": { "x": "period", "y": ["veryLow", "low", "inRange", "high", "veryHigh"], "stacked": true, "orientation": "horizontal" } } ] }
-            """), context, CancellationToken.None)).Panels.Single();
+            { "version": 1, "range": { "hours": 336 }, "panels": [ { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "glucose_distribution" }, "mark": "bars",
+              "bindings": { "x": "period", "y": ["veryLow", "low", "inRange", "high", "veryHigh"], "stacked": true, "orientation": "horizontal" } } ] } ] } ] }
+            """), context, CancellationToken.None)).Panels.Single().Tracks[0].Layers[0];
 
         panel.Bindings.Orientation.Should().Be(ReportBarOrientation.Horizontal);
         panel.Bindings.Stacked.Should().BeTrue();
@@ -508,7 +510,7 @@ public class RecordDatasetTests
         var (runner, context, _) = new Harness().Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "stat_tiles" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "kind": "stat_tiles" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Fields.Select(f => f.Name).Should().Equal("veryLow", "low", "inRange", "high", "veryHigh");
@@ -540,7 +542,7 @@ public class RecordDatasetTests
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "daily_summary" }, "primitive": "table" } ] }
+            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "daily_summary" }, "kind": "table" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         harness.VerifyNoInsulinRead();
@@ -560,14 +562,14 @@ public class RecordDatasetTests
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 24 }, "panels": [ { "dataset": { "name": "daily_summary" }, "primitive": "bar" } ] }
-            """), context, CancellationToken.None)).Panels.Single();
+            { "version": 1, "range": { "hours": 24 }, "panels": [ { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "daily_summary" }, "mark": "bars", "bindings": { "x": "date" } } ] } ] } ] }
+            """), context, CancellationToken.None)).Panels.Single().Tracks[0].Layers[0];
 
         // 2026-10-28 12:00Z to 2026-10-29 12:00Z is 2026-10-29 01:00 to 2026-10-30 01:00 in Auckland (UTC+13).
         var (start, _) = StatisticsService.PunchCardRange(new DateOnly(2026, 10, 29), new DateOnly(2026, 10, 30),
             TimeZoneInfo.FindSystemTimeZoneById("Pacific/Auckland"));
         harness.Carbs.Verify(c => c.GetAsync(start, It.IsAny<DateTime?>(), null, null, int.MaxValue, 0, false, null, null, It.IsAny<CancellationToken>()));
-        panel.Bindings.Should().BeEquivalentTo(new ReportBindings { X = "date", Y = ["timeBelow", "timeInRange", "timeAbove"], Stacked = true, Orientation = ReportBarOrientation.Vertical });
+        panel.Bindings.Should().BeEquivalentTo(new ReportLayerBindings { X = "date", Y = ["timeBelow", "timeInRange", "timeAbove"], Stacked = true, Orientation = ReportBarOrientation.Vertical });
         var rows = panel.Rows.ToDictionary(r => (string)r["date"]!);
         rows.Keys.Should().Equal("2026-10-29", "2026-10-30");
         readLog.Datasets.Should().Equal("glucose", "treatments");
@@ -580,7 +582,7 @@ public class RecordDatasetTests
         var (runner, context, _) = new Harness().ArrangeClamped(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "daily_summary" }, "primitive": "table" } ] }
+            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "daily_summary" }, "kind": "table" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         // The clamp moves the start to 2026-10-28 12:00 UTC, half way through that day.
@@ -594,7 +596,7 @@ public class RecordDatasetTests
         var (runner, context, _) = new Harness(zone: null).Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "daily_summary" }, "primitive": "table" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "daily_summary" }, "kind": "table" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Rows.Should().BeEmpty();
@@ -610,7 +612,7 @@ public class RecordDatasetTests
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "glucose_statistics" }, "kind": "stat_tiles" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         harness.VerifyNoInsulinRead();
@@ -628,56 +630,12 @@ public class RecordDatasetTests
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 48 }, "panels": [ { "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles" } ] }
+            { "version": 1, "range": { "hours": 48 }, "panels": [ { "dataset": { "name": "glucose_statistics" }, "kind": "stat_tiles" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Rows.Single()["tdd"].Should().Be(14.0, "28 U of bolus over two days, no basal recorded");
         panel.Rows.Single()["carbsPerDay"].Should().Be(70.0);
         panel.Summary.Should().Contain("Insulin per day 14 U, 0% of it basal. Carbs per day 70 g.");
         readLog.Datasets.Should().Equal("glucose", "treatments");
-    }
-
-    // ---- glucose_series markers ----
-
-    private static DashboardChartData ChartWithMarkers(long from)
-    {
-        var data = new DashboardChartData { Thresholds = new ChartThresholdsDto { Low = 70, High = 180, VeryLow = 54, VeryHigh = 250 } };
-        for (var i = 0; i < 12; i++)
-            data.GlucoseData.Add(new GlucosePointDto { Time = from + i * 300_000, Sgv = 110 + i });
-        data.BolusMarkers.Add(new BolusMarkerDto { Time = from + 600_000, Insulin = 4.5, BolusType = Nocturne.Core.Models.BolusType.MealBolus });
-        data.BolusMarkers.Add(new BolusMarkerDto { Time = from + 1_800_000, Insulin = 0.2, BolusType = Nocturne.Core.Models.BolusType.Smb });
-        data.CarbMarkers.Add(new CarbMarkerDto { Time = from + 600_000, Carbs = 45 });
-        return data;
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task A_glucose_line_draws_bolus_and_carb_markers_only_for_a_token_that_reads_treatments(bool treatments)
-    {
-        var harness = new Harness();
-        harness.Chart.Setup(c => c.GetDashboardChartDataAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((long from, long _, int _, bool _, CancellationToken _) => ChartWithMarkers(from));
-        var (runner, context, readLog) = treatments
-            ? harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead)
-            : harness.Arrange(Scope.GlucoseRead);
-
-        var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "range": { "hours": 1 }, "panels": [
-              { "dataset": { "name": "glucose_series", "markers": ["bolus", "carbs"] }, "primitive": "time_series", "bindings": { "y": ["glucose"] } } ] }
-            """), context, CancellationToken.None)).Panels[0];
-
-        if (treatments)
-        {
-            panel.Markers.Select(m => (m.Kind, m.Amount, m.Automatic)).Should().Equal(
-                (ReportMarkerKind.Bolus, 4.5, false), (ReportMarkerKind.Carbs, 45.0, false), (ReportMarkerKind.Bolus, 0.2, true));
-            panel.Summary.Should().EndWith("Markers drawn: 2 boluses, 1 carb entry.");
-            readLog.Datasets.Should().Contain("treatments");
-        }
-        else
-        {
-            panel.Markers.Should().BeEmpty();
-            panel.Summary.Should().EndWith("Markers omitted: bolus, carbs (scope not granted: treatments.read).");
-        }
     }
 }

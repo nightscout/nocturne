@@ -23,12 +23,6 @@ internal sealed class EventResponseDataset : IReportDataset
     /// <summary>The most events a table carries; the summary counts every one.</summary>
     public const int MaxEvents = 2000;
 
-    /// <summary>The most single events a glucose chart draws per cohort, newest first; the band covers every one.</summary>
-    public const int MaxTracesPerCohort = 30;
-
-    /// <summary>The most points one event's trace carries; a longer window is thinned to every n-th slot.</summary>
-    public const int TracePointBudget = 72;
-
     public string Name => EventResponseParameters.Name;
 
     public string Label => "Meals and events";
@@ -45,21 +39,21 @@ internal sealed class EventResponseDataset : IReportDataset
         new("cohort", "Cohort", ReportFieldKind.Number, null, "The cohort's number, 1 to 3, in the order the cohorts were sent.", Companion: true),
         new("range", "Range", ReportFieldKind.Category, null, "primary, or comparison for the comparison range.", Companion: true),
         new("minute", "Minutes from event", ReportFieldKind.Offset, "min", "Start of the five-minute slot, minutes from the event; negative before it."),
-        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose across the cohort's events in the slot."),
-        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of glucose."),
-        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median glucose.", GlucoseScale: true),
-        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of glucose."),
-        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of glucose."),
-        new("deltaP10", "Change P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose minus the glucose at the event."),
-        new("deltaP25", "Change P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the change from the event."),
-        new("deltaP50", "Change median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median change from the event."),
-        new("deltaP75", "Change P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the change from the event."),
-        new("deltaP90", "Change P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the change from the event."),
-        new("iobP50", "IOB median", ReportFieldKind.Number, "U", "Median insulin on board.", Scope.TreatmentsRead, ChartColor.InsulinBolus),
-        new("cobP50", "COB median", ReportFieldKind.Number, "g", "Median carbs on board.", Scope.TreatmentsRead, ChartColor.Carbs),
+        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose across the cohort's events in the slot.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of glucose.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median glucose.", GlucoseScale: true, Aggregate: ReportAggregate.Mean),
+        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of glucose.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of glucose.", Aggregate: ReportAggregate.Mean),
+        new("deltaP10", "Change P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose minus the glucose at the event.", Aggregate: ReportAggregate.Mean),
+        new("deltaP25", "Change P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the change from the event.", Aggregate: ReportAggregate.Mean),
+        new("deltaP50", "Change median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median change from the event.", Aggregate: ReportAggregate.Mean),
+        new("deltaP75", "Change P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the change from the event.", Aggregate: ReportAggregate.Mean),
+        new("deltaP90", "Change P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the change from the event.", Aggregate: ReportAggregate.Mean),
+        new("iobP50", "IOB median", ReportFieldKind.Number, "U", "Median insulin on board.", Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
+        new("cobP50", "COB median", ReportFieldKind.Number, "g", "Median carbs on board.", Scope.TreatmentsRead, ChartColor.Carbs, Aggregate: ReportAggregate.Mean),
         new("netLoopCorrectionP50", "Net loop correction median", ReportFieldKind.Number, "U/h",
-            "Median of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, ChartColor.InsulinBasal),
-        new("events", "Events", ReportFieldKind.Number, null, "Events with a glucose value in the slot."),
+            "Median of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
+        new("events", "Events", ReportFieldKind.Number, null, "Events with a glucose value in the slot.", Aggregate: ReportAggregate.Sum),
         new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
             "One sentence that states the slot's glucose figures for its cohort; the chart shows it for the slot under the pointer.", Companion: true),
     ];
@@ -86,34 +80,29 @@ internal sealed class EventResponseDataset : IReportDataset
 
     public IReadOnlyList<ReportField> Fields { get; } = [.. SlotFields, .. EventFields];
 
-    public IReadOnlyList<ReportField> FieldsFor(ReportPrimitive primitive) =>
-        primitive == ReportPrimitive.Table ? EventFields : SlotFields;
+    public IReadOnlyList<ReportField> FieldsFor(ReportPanelKind kind) =>
+        kind == ReportPanelKind.Table ? EventFields : SlotFields;
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive switch
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark switch
     {
-        ReportPrimitive.RangeBands => new ReportBindings
+        ReportMark.Band => new ReportLayerBindings
         {
             X = "minute",
             Y = ["glucoseP50"],
-            Band = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"],
+            Edges = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"],
             Series = "series",
         },
-        ReportPrimitive.GlucoseChart => new ReportBindings
-        {
-            X = "minute",
-            Y = ["glucoseP50"],
-            Band = ["glucoseP25", "glucoseP75"],
-            Series = "series",
-        },
+        ReportMark.Line => new ReportLayerBindings { X = "minute", Y = ["glucoseP50"], Series = "series" },
         _ => null,
     };
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } =
-        [ReportPrimitive.RangeBands, ReportPrimitive.Table, ReportPrimitive.GlucoseChart];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Band, ReportMark.Line];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(30);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => LoopAnalysisDatasetRun.MaxRange;
+    public TimeSpan MaxRange => LoopAnalysisDatasetRun.MaxRange;
 
     public int PointBudget => MaxEvents;
 
@@ -198,7 +187,6 @@ internal sealed class EventResponseDataset : IReportDataset
                 RequireCorroboration = parameters.RequireCorroboration,
             };
         var number = definition.Cohorts.ToDictionary(c => c.Cohort, c => kept[c.Cohort - 1].Number);
-        definition.IncludeTraces = request.Primitive == ReportPrimitive.GlucoseChart;
         var ignored = LoopAnalysisReadScopeGuard.NarrowEvents(definition, request.GrantedScopes)
             .Select(name => name.StartsWith("anchor", StringComparison.Ordinal) && int.TryParse(name[6..], out var n) && number.TryGetValue(n, out var original)
                 ? $"cohorts[{original - 1}] ({asked[original - 1].Anchor})"
@@ -223,7 +211,7 @@ internal sealed class EventResponseDataset : IReportDataset
         RecordReads(request.ReadLog, report, ran: definition.Cohorts.Count > 0 && resolved.Filter is not null && resolved.Zone is not null,
             readFoodNames: foodNames.Count > 0);
 
-        var rows = request.Primitive == ReportPrimitive.Table
+        var rows = request.Kind == ReportPanelKind.Table
             ? EventRows(events.Take(MaxEvents), labels, number, useMmol)
             : SlotRows(report, slotMinutes, labels, number, useMmol);
 
@@ -235,24 +223,14 @@ internal sealed class EventResponseDataset : IReportDataset
             ["netInsulin"] = LoopAnalysisSeries.EventNetInsulin,
             ["gramsPerUnit"] = LoopAnalysisSeries.EventNetInsulin,
         };
-        if (request.Primitive == ReportPrimitive.Table)
+        if (request.Kind == ReportPanelKind.Table)
             foreach (var field in EventFields)
                 fieldSeries.TryAdd(field.Name, LoopAnalysisSeries.EventList);
 
-        if (request.Primitive == ReportPrimitive.Table && events.Count > MaxEvents)
+        if (request.Kind == ReportPanelKind.Table && events.Count > MaxEvents)
             notes.Add($"The table shows the first {MaxEvents} of {events.Count} events.");
 
-        IReadOnlyList<ReportTrace> traces = [];
         var sentence = NoTimeZone(report, "Meals & events") ?? WindowSentence(report.Definition);
-        if (request.Primitive == ReportPrimitive.GlucoseChart)
-        {
-            var (drawn, note) = Traces(report, slotMinutes, number, useMmol);
-            traces = drawn;
-            if (note is not null)
-                notes.Add(note);
-            if (note == TracesWithheldNote)
-                sentence += " " + note;
-        }
         var counted = report.WithheldSeries.Contains(LoopAnalysisSeries.EventList)
             ? report.Primary.Cohorts.Sum(c => c.Events)
             : report.Primary.Events.Count;
@@ -267,52 +245,7 @@ internal sealed class EventResponseDataset : IReportDataset
             Omitted = Omitted(report, fieldSeries),
             Window = Window(report),
             Cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
-            Traces = traces,
         };
-    }
-
-    /// <summary>Why a glucose chart of cohorts draws no single events: the event list is withheld.</summary>
-    internal const string TracesWithheldNote =
-        "Single events are not drawn: the list of events needs the treatments.read scope, which this token does not hold.";
-
-    /// <summary>
-    /// Each cohort's newest events as traces of their own glucose, at most
-    /// <see cref="MaxTracesPerCohort"/> a cohort and <see cref="TracePointBudget"/> points a trace,
-    /// and the sentence that says how many were drawn and whether the budget thinned them.
-    /// </summary>
-    internal static (IReadOnlyList<ReportTrace> Traces, string? Note) Traces(
-        EventResponseReport report, IReadOnlyList<int> slotMinutes, IReadOnlyDictionary<int, int> number, bool useMmol)
-    {
-        if (report.WithheldSeries.Contains(LoopAnalysisSeries.EventList) && report.Primary.Cohorts.Any(c => c.Events > 0))
-            return ([], TracesWithheldNote);
-        var step = Math.Max(1, (int)Math.Ceiling(slotMinutes.Count / (double)TracePointBudget));
-        var traces = new List<ReportTrace>();
-        var counts = new List<string>();
-        foreach (var cohort in report.Definition.Cohorts)
-        {
-            var events = report.Primary.Events.Where(e => e.Cohorts.Contains(cohort.Cohort)).OrderByDescending(e => e.At).ToList();
-            var drawn = events.Take(MaxTracesPerCohort).ToList();
-            var shown = number.GetValueOrDefault(cohort.Cohort, cohort.Cohort);
-            foreach (var e in drawn)
-            {
-                var points = new List<double[]>();
-                for (var k = 0; k < e.GlucoseTrace.Count && k < slotMinutes.Count; k += step)
-                    if (e.GlucoseTrace[k] is { } mgdl)
-                        points.Add([slotMinutes[k], Glucose(mgdl, useMmol)!.Value]);
-                traces.Add(new ReportTrace(shown, new DateTimeOffset(DateTime.SpecifyKind(e.At, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
-                    points, EventSentence(e, useMmol)));
-            }
-            if (events.Count > 0)
-                counts.Add(drawn.Count == events.Count
-                    ? $"cohort {shown}, all {events.Count}"
-                    : $"cohort {shown}, the newest {drawn.Count} of {events.Count}");
-        }
-        if (counts.Count == 0)
-            return (traces, null);
-        var note = $"Single events drawn under the band: {string.Join("; ", counts)}.";
-        if (step > 1)
-            note += $" Each event's line has one point every {step * EventResponseDefinition.SlotMinutes} minutes, to stay within {TracePointBudget} points.";
-        return (traces, note);
     }
 
     /// <summary>The category each anchor's events are records of, as the read audit names it.</summary>

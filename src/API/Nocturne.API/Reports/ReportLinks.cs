@@ -10,10 +10,14 @@ namespace Nocturne.API.Reports;
 /// </summary>
 internal static class ReportLinks
 {
-    /// <summary>The link for <paramref name="panel"/> on <paramref name="origin"/>, or null for a dataset with no matching page.</summary>
+    /// <summary>
+    /// The link for a panel on <paramref name="origin"/>: the page of its dataset, or of a chart's first
+    /// layer of a dataset; null for none or a dataset with no matching page.
+    /// </summary>
     public static string? For(string origin, ReportPanelSpec panel, ReportPanelResult result, string? zoneId)
     {
-        var path = panel.Dataset switch
+        var dataset = panel.Dataset ?? (panel.Tracks ?? []).SelectMany(t => t.Layers).Select(l => l.Dataset).FirstOrDefault(d => d is not null);
+        var path = dataset switch
         {
             EventResponseParameters => "/reports/loop-analysis/meals-and-events",
             SettingsEvidenceParameters => "/reports/loop-analysis/settings-evidence",
@@ -43,7 +47,7 @@ internal static class ReportLinks
             new("to", Day(Math.Max(result.Window.From, result.Window.To - 1))),
         };
 
-        if (panel.Dataset is LoopAnalysisDatasetParameters masks)
+        if (dataset is LoopAnalysisDatasetParameters masks)
         {
             void Mask(string name, bool value, bool fallback)
             {
@@ -59,7 +63,7 @@ internal static class ReportLinks
                 query.Add(new("profile", masks.ProfileName.Trim()));
         }
 
-        if (panel.Dataset is EventResponseParameters events)
+        if (dataset is EventResponseParameters events)
         {
             if (events.ComparisonRange is { } comparison)
             {

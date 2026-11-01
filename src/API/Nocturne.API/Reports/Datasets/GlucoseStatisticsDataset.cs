@@ -56,11 +56,13 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
     /// <summary>The fields read from insulin and carb records, left out without <see cref="Scope.TreatmentsRead"/>.</summary>
     internal static readonly IReadOnlyList<string> InsulinFields = ["tdd", "basalPercent", "carbsPerDay"];
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.StatTiles, ReportPrimitive.Table];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.StatTiles, ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(14);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
+    public TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
     public int PointBudget => 1;
 

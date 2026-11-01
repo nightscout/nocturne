@@ -15,7 +15,7 @@ public class PeriodComparisonTests
 
     private static PeriodComparisonParameters Parameters(string json) =>
         (PeriodComparisonParameters)Validator.Validate(JsonDocument.Parse($$"""
-            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison", {{json}} }, "primitive": "comparison" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison", {{json}} }, "kind": "comparison" } ] }
             """).RootElement).Spec!.Panels[0].Dataset;
 
     private static ReportSpec Spec(string json) =>
@@ -58,7 +58,7 @@ public class PeriodComparisonTests
     public void Malformed_periods_are_errors_naming_where(string json, string path)
     {
         var validation = Validator.Validate(JsonDocument.Parse($$"""
-            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison", {{json}} }, "primitive": "comparison" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison", {{json}} }, "kind": "comparison" } ] }
             """).RootElement);
 
         validation.IsValid.Should().BeFalse();
@@ -133,7 +133,7 @@ public class PeriodComparisonTests
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "primitive": "comparison" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "kind": "comparison" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         harness.VerifyNoInsulinRead();
@@ -160,7 +160,7 @@ public class PeriodComparisonTests
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "primitive": "comparison" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "kind": "comparison" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Rows.Select(r => r["metric"]).Should().Contain("insulinPerDay");
@@ -174,7 +174,7 @@ public class PeriodComparisonTests
         var (runner, context, _) = new Harness().ArrangeClamped(Scope.GlucoseRead);
 
         var panel = (await runner.RunAsync(Spec("""
-            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison" }, "primitive": "comparison" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "period_comparison" }, "kind": "comparison" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
         panel.Rows.Should().BeEmpty();

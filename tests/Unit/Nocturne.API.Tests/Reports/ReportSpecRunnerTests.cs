@@ -4,13 +4,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Reports;
-using Nocturne.API.Reports;
 using Nocturne.API.Reports.Datasets;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
+using static Nocturne.API.Tests.Reports.ReportSpecValidatorTests;
 
 namespace Nocturne.API.Tests.Reports;
 
@@ -23,30 +23,13 @@ public class ReportSpecRunnerTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private static ReportSpec Spec(string json) =>
-        new ReportSpecValidator(ReportSpecValidatorTests.Registry, new FixedTime(Now)).Validate(JsonDocument.Parse(json).RootElement) is { IsValid: true } v
+    private static ReportSpec Spec(string json, IReportDatasetRegistry? registry = null) =>
+        new ReportSpecValidator(registry ?? Registry, new FixedTime(Now)).Validate(JsonDocument.Parse(json).RootElement) is { IsValid: true } v
             ? v.Spec!
-            : throw new InvalidOperationException("The test spec is not valid.");
+            : throw new InvalidOperationException("The test spec is not valid: "
+                + string.Join("; ", new ReportSpecValidator(registry ?? Registry, new FixedTime(Now)).Validate(JsonDocument.Parse(json).RootElement).Errors));
 
-    /// <summary>One reading every five minutes over the window, with IOB, COB and basal series.</summary>
-    /// <summary>One dashboard chart of the last <paramref name="hours"/> hours.</summary>
-    private static ReportSpec Glucose(int hours) => new()
-    {
-        Version = ReportSpec.CurrentVersion,
-        Range = new ReportRange { Hours = hours },
-        Panels =
-        [
-            new ReportPanelSpec
-            {
-                Id = "glucose",
-                Dataset = new GlucoseSeriesParameters(),
-                Primitive = ReportPrimitive.GlucoseChart,
-                Bindings = new ReportBindings(),
-                Range = new ReportRange { Hours = hours },
-            },
-        ],
-    };
-
+    /// <summary>One reading every <paramref name="spacingMinutes"/> minutes over the window, with IOB, COB and basal series, a bolus and spans.</summary>
     private static DashboardChartData ChartData(long from, long to, int spacingMinutes = 5)
     {
         var data = new DashboardChartData
@@ -62,13 +45,15 @@ public class ReportSpecRunnerTests
             data.BasalSeries.Add(new BasalPoint { Timestamp = t, Rate = 0.8 });
         }
         data.BolusMarkers.Add(new BolusMarkerDto { Time = from, Insulin = 2 });
+        data.PumpModeSpans.Add(new ChartStateSpanDto { Id = "m", State = "Automatic", StartMills = from - 3_600_000, EndMills = null, Color = ChartColor.PumpModeAutomatic });
+        data.OverrideSpans.Add(new ChartStateSpanDto { Id = "o", State = "Exercise", StartMills = from + 600_000, EndMills = from + 1_200_000, Color = ChartColor.Override });
         return data;
     }
 
-    private static (ReportSpecRunner Runner, ReportRunContext Context, ReportReadLog ReadLog) Arrange(
+    private static (ReportSpecRunner Runner, ReportRunContext Context, ReportReadLog ReadLog, Mock<IChartDataService> Chart) Arrange(
         IReportDatasetRegistry registry, params string[] scopes) => ArrangeWith(registry, 5, false, scopes);
 
-    private static (ReportSpecRunner Runner, ReportRunContext Context, ReportReadLog ReadLog) ArrangeWith(
+    private static (ReportSpecRunner Runner, ReportRunContext Context, ReportReadLog ReadLog, Mock<IChartDataService> Chart) ArrangeWith(
         IReportDatasetRegistry registry, int spacingMinutes, bool clamped, params string[] scopes)
     {
         var chartData = new Mock<IChartDataService>();
@@ -84,36 +69,34 @@ public class ReportSpecRunnerTests
 
         var readLog = new ReportReadLog();
         var context = new ReportRunContext(false, scopes.ToHashSet(), services, readLog, clamped);
-        return (new ReportSpecRunner(registry, new FixedTime(Now)), context, readLog);
+        return (new ReportSpecRunner(registry, new FixedTime(Now)), context, readLog, chartData);
     }
 
     [Fact]
     public async Task Fields_the_token_cannot_read_are_dropped_and_named()
     {
-        var (runner, context, _) = Arrange(ReportSpecValidatorTests.Registry, Scope.GlucoseRead);
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead);
         var spec = Spec("""
             { "version": 1, "range": { "hours": 3 }, "panels": [
-              { "dataset": { "name": "glucose_series" }, "primitive": "table", "bindings": { "columns": ["time", "glucose", "iob", "cob"] } } ] }
+              { "kind": "table", "dataset": { "name": "glucose_series" }, "bindings": { "columns": ["time", "glucose", "iob", "cob"] } } ] }
             """);
 
-        var result = await runner.RunAsync(spec, context, CancellationToken.None);
+        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
 
-        var panel = result.Panels.Single();
         panel.Status.Should().Be(ReportPanelStatus.Ok);
         panel.Fields.Select(f => f.Name).Should().Equal("time", "glucose");
         panel.Rows.Should().NotBeEmpty().And.OnlyContain(r => r.Keys.SequenceEqual(new[] { "time", "glucose" }));
         panel.Omitted.Select(o => o.Field).Should().Equal("iob", "cob", "basalRate");
-        panel.Omitted.Should().OnlyContain(o => o.Scope == Scope.TreatmentsRead);
         panel.Summary.Should().Contain("Fields omitted: iob, cob, basalRate (scope not granted).");
     }
 
     [Fact]
     public async Task With_the_scope_the_fields_carry_the_series_at_each_reading()
     {
-        var (runner, context, readLog) = Arrange(ReportSpecValidatorTests.Registry, Scope.GlucoseRead, Scope.TreatmentsRead);
+        var (runner, context, readLog, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead);
         var spec = Spec("""
             { "version": 1, "range": { "hours": 1 }, "panels": [
-              { "dataset": { "name": "glucose_series" }, "primitive": "table", "bindings": { "columns": ["glucose", "iob", "cob", "basalRate"] } } ] }
+              { "kind": "table", "dataset": { "name": "glucose_series" }, "bindings": { "columns": ["glucose", "iob", "cob", "basalRate"] } } ] }
             """);
 
         var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
@@ -122,62 +105,32 @@ public class ReportSpecRunnerTests
         panel.Rows[0].Should().Contain(new KeyValuePair<string, object?>("iob", 1.5))
             .And.Contain(new KeyValuePair<string, object?>("cob", 20.0))
             .And.Contain(new KeyValuePair<string, object?>("basalRate", 0.8));
-        readLog.Datasets.Should().Equal("glucose", "treatments");
+        readLog.Datasets.Should().Contain(["glucose", "treatments"]);
     }
 
     [Fact]
     public async Task A_long_range_is_downsampled_within_the_point_budget()
     {
-        var (runner, context, _) = Arrange(ReportSpecValidatorTests.Registry, Scope.GlucoseRead);
-        var spec = Spec("""
-            { "version": 1, "range": { "hours": 720 }, "panels": [
-              { "dataset": { "name": "glucose_series", "intervalMinutes": 5 }, "primitive": "time_series", "bindings": { "y": ["glucose"] } } ] }
-            """);
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead);
+        var spec = Spec(Layers(Layer("""{ "name": "glucose_series" }""", "line"), reportExtras: """, "range": { "hours": 720 }"""));
 
-        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
+        var layer = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single().Tracks[0].Layers[0];
 
-        panel.Rows.Count.Should().BeLessThanOrEqualTo(GlucoseSeriesDataset.Budget).And.BeGreaterThan(GlucoseSeriesDataset.Budget / 2);
-        panel.Resolution!.IntervalMinutes.Should().Be(22, "30 days of minutes over 2000 points, rounded up");
-        panel.Resolution.RequestedIntervalMinutes.Should().Be(5);
-        panel.Resolution.SourceRows.Should().Be(30 * 288 + 1);
-        panel.Resolution.Downsampled.Should().BeTrue();
-        panel.Summary.Should().Contain($"Readings: {30 * 288 + 1}.", "the summary covers every reading, not the sampled rows");
-    }
-
-    [Fact]
-    public async Task The_dashboard_chart_keeps_every_reading_under_the_point_budget()
-    {
-        var (runner, context, _) = ArrangeWith(ReportSpecValidatorTests.Registry, 1, false, Scope.GlucoseRead);
-
-        var panel = (await runner.RunAsync(Glucose(24), context, CancellationToken.None)).Panels.Single();
-
-        panel.Chart!.GlucoseData.Should().HaveCount(24 * 60 + 1, "one-minute readings, 1441 of them, are under the 2000-point budget");
-        panel.Resolution!.Downsampled.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task The_dashboard_chart_thins_only_past_the_point_budget()
-    {
-        var (runner, context, _) = ArrangeWith(ReportSpecValidatorTests.Registry, 1, false, Scope.GlucoseRead);
-        var spec = Spec("""
-            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "glucose_chart" } ] }
-            """);
-
-        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
-
-        panel.Chart!.GlucoseData.Count.Should().BeLessThanOrEqualTo(GlucoseSeriesDataset.Budget).And.BeGreaterThan(1000);
-        panel.Resolution!.Downsampled.Should().BeTrue();
-        panel.Resolution.IntervalMinutes.Should().Be(3);
+        layer.Rows.Count.Should().BeLessThanOrEqualTo(GlucoseSeriesDataset.Budget).And.BeGreaterThan(GlucoseSeriesDataset.Budget / 2);
+        layer.Resolution!.IntervalMinutes.Should().Be(22, "30 days of minutes over 2000 points, rounded up");
+        layer.Resolution.SourceRows.Should().Be(30 * 288 + 1);
+        layer.Resolution.Downsampled.Should().BeTrue();
+        layer.Summary.Should().Contain($"Readings: {30 * 288 + 1}.", "the summary covers every reading, not the sampled rows");
     }
 
     [Fact]
     public async Task A_history_clamped_caller_gets_the_last_24_hours_and_is_told()
     {
-        var (runner, context, _) = ArrangeWith(ReportSpecValidatorTests.Registry, 5, true, Scope.GlucoseRead);
+        var (runner, context, _, _) = ArrangeWith(Registry, 5, true, Scope.GlucoseRead);
         var spec = Spec("""
             { "version": 1, "range": { "hours": 72 }, "panels": [
-              { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"] } },
-              { "dataset": { "name": "glucose_series" }, "primitive": "table", "range": { "hours": 2 } } ] }
+              { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "glucose_series" } } ] } ] },
+              { "kind": "table", "dataset": { "name": "glucose_series" }, "range": { "hours": 2 } } ] }
             """);
 
         var result = await runner.RunAsync(spec, context, CancellationToken.None);
@@ -185,8 +138,8 @@ public class ReportSpecRunnerTests
         var clipped = result.Panels[0];
         clipped.Window.From.Should().Be(Now.AddHours(-24).ToUnixTimeMilliseconds());
         clipped.Limited.Should().BeTrue();
-        clipped.Summary.Should().StartWith("Glucose from 2026-10-28 12:00").And.Contain("Readings: 289.")
-            .And.EndWith(ReportSpecRunner.LimitedNote);
+        clipped.Tracks[0].Layers[0].Summary.Should().StartWith("Glucose from 2026-10-28 12:00").And.Contain("Readings: 289.");
+        clipped.Summary.Should().EndWith(ReportSpecRunner.LimitedNote);
         result.Panels[1].Limited.Should().BeFalse("a range inside the last day is not cut");
         result.Warnings.Should().ContainSingle().Which.Should().Be($"Panel p1: {ReportSpecRunner.LimitedNote}");
     }
@@ -194,10 +147,10 @@ public class ReportSpecRunnerTests
     [Fact]
     public async Task A_history_clamped_caller_asking_only_for_older_data_gets_no_panel_data()
     {
-        var (runner, context, _) = ArrangeWith(ReportSpecValidatorTests.Registry, 5, true, Scope.GlucoseRead);
+        var (runner, context, _, _) = ArrangeWith(Registry, 5, true, Scope.GlucoseRead);
         var spec = Spec($$"""
             { "version": 1, "range": { "from": "{{Now.AddDays(-5):O}}", "to": "{{Now.AddDays(-4):O}}" }, "panels": [
-              { "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }
+              { "kind": "table", "dataset": { "name": "glucose_series" } } ] }
             """);
 
         var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
@@ -216,40 +169,174 @@ public class ReportSpecRunnerTests
         kept.Select(r => r.Sgv).Should().Equal(100, 105, 110);
     }
 
+    private static string GlucoseChart(int hours) => ReportTemplatesJson(ReportTemplates.GlucoseSpec(hours));
+
+    private static string ReportTemplatesJson(object spec) => JsonSerializer.Serialize(spec);
+
     [Fact]
-    public async Task The_glucose_chart_carries_the_redacted_dashboard_payload()
+    public async Task The_four_track_glucose_chart_reads_each_query_once_and_sides_its_units()
     {
-        var (runner, context, readLog) = Arrange(ReportSpecValidatorTests.Registry, Scope.GlucoseRead);
+        var (runner, context, readLog, chart) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead);
 
-        var result = await runner.RunAsync(Glucose(3), context, CancellationToken.None);
+        var panel = (await runner.RunAsync(Spec(GlucoseChart(3)), context, CancellationToken.None)).Panels.Single();
 
-        var panel = result.Panels.Single();
-        panel.Primitive.Should().Be(ReportPrimitive.GlucoseChart);
-        panel.Rows.Should().BeEmpty();
-        panel.Chart!.GlucoseData.Should().HaveCount(37);
-        panel.Chart.BolusMarkers.Should().BeEmpty("treatments.read was not granted");
-        panel.OmittedScopes.Should().Contain(Scope.TreatmentsRead);
-        result.Summary.Should().StartWith("Glucose from 2026-10-29 09:00 to 2026-10-29 12:00 UTC.")
-            .And.Contain("Tracks omitted: insulin, carbs and basal");
-        readLog.Datasets.Should().Equal("glucose");
+        panel.Status.Should().Be(ReportPanelStatus.Ok);
+        panel.Tracks.Select(t => t.Id).Should().Equal("basal", "glucose", "onboard", "states");
+        chart.Verify(c => c.GetDashboardChartDataAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()),
+            Times.Once, "glucose_series and state_spans share one chart payload per range");
+        context.Cache.Reads.Should().Be(4, "basal, treatments, state spans, and one glucose_series query for the band, the line, IOB and COB");
+
+        var onboard = panel.Tracks[2].Layers;
+        onboard.Select(l => (l.Unit, l.Side)).Should().Equal(("U", ReportAxisSide.Left), ("g", ReportAxisSide.Right));
+        var glucose = panel.Tracks[1].Layers;
+        glucose.Select(l => l.Side).Should().Equal(ReportAxisSide.Left, ReportAxisSide.Left, ReportAxisSide.None);
+        glucose[2].Status.Should().Be(ReportPanelStatus.Failed, "the treatments repositories are not registered in this test");
+        panel.Sentence.Should().Contain("Not shown:").And.Contain("Boluses and carbs (an error occurred when it was read)");
+
+        var spans = panel.Tracks[3].Layers.Single();
+        spans.Rows.Should().HaveCount(2);
+        spans.Rows.Should().Contain(r => (string?)r["label"] == "Automatic" && (long)r["start"]! == Now.AddHours(-3).ToUnixTimeMilliseconds());
+        readLog.Datasets.Should().Contain(["glucose", "treatments", "pump_modes"]);
+    }
+
+    [Fact]
+    public async Task A_glucose_only_viewer_draws_glucose_and_is_told_what_is_not_shown()
+    {
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead);
+
+        var panel = (await runner.RunAsync(Spec(GlucoseChart(3)), context, CancellationToken.None)).Panels.Single();
+
+        panel.Status.Should().Be(ReportPanelStatus.Ok);
+        var layers = panel.Tracks.SelectMany(t => t.Layers).ToDictionary(l => l.Id);
+        layers["glucose"].Status.Should().Be(ReportPanelStatus.Ok);
+        layers["glucose"].Rows.Should().NotBeEmpty();
+        layers["basal"].Status.Should().Be(ReportPanelStatus.NotPermitted);
+        layers["spans"].Status.Should().Be(ReportPanelStatus.NotPermitted);
+        layers["treatments"].Status.Should().Be(ReportPanelStatus.NotPermitted);
+        layers["iob"].Status.Should().Be(ReportPanelStatus.NotPermitted);
+        layers["iob"].Sentence.Should().Contain("treatments permission");
+        panel.Sentence.Should().Contain("Basal (your access does not include it)");
+    }
+
+    [Fact]
+    public async Task A_later_layer_with_the_same_colour_on_a_track_gets_a_series_hue()
+    {
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead);
+        var spec = Spec(Layers(string.Join(",",
+            Layer("""{ "name": "glucose_series" }""", "line"),
+            """{ "dataset": { "name": "glucose_series" }, "mark": "points", "bindings": { "y": ["glucose"] } }""",
+            Layer("""{ "name": "glucose_series" }""", "line", """{ "y": ["iob"] }"""))));
+
+        var layers = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels[0].Tracks[0].Layers;
+
+        layers.Select(l => l.Color).Should().Equal(null, ChartColor.Profile, null);
+    }
+
+    [Fact]
+    public void Hues_skip_any_already_taken_on_the_track()
+    {
+        static ReportLayerResult Layer(string id, ChartColor? color) => new()
+        {
+            Id = id,
+            Title = id,
+            Mark = ReportMark.Line,
+            Bindings = new ReportLayerBindings { X = "x", Y = ["v"] },
+            XKind = ReportXKind.Time,
+            Side = ReportAxisSide.Left,
+            Status = ReportPanelStatus.Ok,
+            Window = new ReportWindow(0, 1),
+            Fields = [new("v", "V", ReportFieldKind.Number, null, "v", Color: color)],
+        };
+
+        var hued = ReportSpecRunner.Hue([Layer("a", ChartColor.Profile), Layer("b", ChartColor.Carbs), Layer("c", ChartColor.Carbs), Layer("d", ChartColor.Carbs)]);
+
+        hued.Select(l => l.Color).Should().Equal(null, null, ChartColor.Chart3, ChartColor.Override);
+    }
+
+    [Fact]
+    public void A_markers_layer_carries_its_markers_from_the_rows()
+    {
+        var markers = ReportSpecRunner.Markers(
+            [
+                new Dictionary<string, object?> { ["time"] = 1000L, ["insulin"] = 2.5, ["carbs"] = null, ["automatic"] = "yes" },
+                new Dictionary<string, object?> { ["time"] = 2000L, ["insulin"] = null, ["carbs"] = 30.0 },
+            ],
+            new ReportLayerBindings { X = "time", Y = ["insulin", "carbs"] },
+            new TreatmentsDataset().Fields);
+
+        markers.Should().Equal(
+            new ReportMarker(1000, ReportMarkerKind.Bolus, 2.5, true),
+            new ReportMarker(2000, ReportMarkerKind.Carbs, 30));
+    }
+
+    [Fact]
+    public async Task A_gridded_layer_is_folded_by_each_fields_aggregate()
+    {
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead);
+        var spec = Spec(Layers(Layer("""{ "name": "glucose_series" }""", "line"), ", \"grid\": 60", """, "range": { "hours": 3 }"""));
+
+        var layer = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels[0].Tracks[0].Layers[0];
+
+        layer.Rows.Should().HaveCount(3);
+        layer.Rows[0]["time"].Should().Be(Now.AddHours(-3).ToUnixTimeMilliseconds());
+        layer.Rows[0]["glucose"].Should().Be(105.5, "the mean of the twelve readings 100 to 111 in the first hour");
+        layer.Summary.Should().EndWith("Folded onto a grid of 60 minutes.");
+    }
+
+    [Fact]
+    public async Task A_derived_layer_reads_its_source_once_with_a_visible_layer_of_the_same_query()
+    {
+        var (runner, context, _, chart) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead);
+        var spec = Spec(Layers(Layer("""{ "name": "glucose_series" }""", "line") + ","
+            + """{ "derived": { "op": "rolling_mean", "minutes": 60, "a": { "dataset": { "name": "glucose_series" }, "field": "glucose" } } }""",
+            reportExtras: """, "range": { "hours": 6 }"""));
+
+        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels[0];
+
+        context.Cache.Reads.Should().Be(1);
+        var derived = panel.Tracks[0].Layers[1];
+        derived.Status.Should().Be(ReportPanelStatus.Ok);
+        derived.Title.Should().Be("Rolling mean · Glucose");
+        derived.Rows.Should().HaveCount(72, "six hours on the default five-minute grid");
+        derived.Fields.Select(f => f.Name).Should().Equal("x", "value");
+        derived.Color.Should().BeNull("the first layer is coloured by glucose, the mean in its own field's colour");
+        chart.Verify(c => c.GetDashboardChartDataAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_derived_layer_whose_source_the_token_cannot_read_is_not_permitted_and_reads_nothing()
+    {
+        var (runner, context, readLog, chart) = Arrange(Registry, Scope.GlucoseRead);
+        var spec = Spec(Layers(
+            """{ "derived": { "op": "scatter", "a": { "dataset": { "name": "glucose_series" }, "field": "iob" }, "b": { "dataset": { "name": "glucose_series" }, "field": "glucose" } } }""",
+            ", \"grid\": 15"));
+
+        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels[0];
+
+        var layer = panel.Tracks[0].Layers[0];
+        layer.Status.Should().Be(ReportPanelStatus.NotPermitted);
+        layer.Sentence.Should().Contain("treatments permission");
+        readLog.Datasets.Should().BeEmpty();
+        chart.Verify(c => c.GetDashboardChartDataAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Summaries_are_joined_under_the_panel_ids()
     {
-        var (runner, context, _) = Arrange(ReportSpecValidatorTests.Registry, Scope.GlucoseRead);
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead);
         var spec = Spec("""
             { "version": 1, "title": "Two panels", "range": { "hours": 2 }, "panels": [
-              { "id": "a", "title": "Glucose", "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"], "band": ["targetLow", "targetHigh"] } },
-              { "id": "b", "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }
+              { "id": "a", "title": "Glucose", "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "glucose_series" } } ] } ] },
+              { "id": "b", "kind": "table", "dataset": { "name": "glucose_series" } } ] }
             """);
 
         var result = await runner.RunAsync(spec, context, CancellationToken.None);
 
-        result.Summary.Should().StartWith("Two panels\n\n[a] Glucose\nGlucose from 2026-10-29 10:00")
+        result.Summary.Should().StartWith("Two panels\n\n[a] Glucose\n[Glucose readings · Glucose]\nGlucose from 2026-10-29 10:00")
             .And.Contain("\n\n[b] glucose_series\nGlucose from");
-        result.Panels[0].Fields.Select(f => f.Name).Should().Equal("time", "glucose", "targetLow", "targetHigh");
-        result.Panels[0].Fields.Single(f => f.Name == "glucose").Unit.Should().Be("mg/dL");
+        var layer = result.Panels[0].Tracks[0].Layers[0];
+        layer.Fields.Select(f => f.Name).Should().Equal("time", "glucose");
+        layer.Fields.Single(f => f.Name == "glucose").Unit.Should().Be("mg/dL");
         result.Panels[0].Thresholds.Should().Be(new ReportThresholds(54, 70, 180, 250, 1));
     }
 
@@ -257,7 +344,7 @@ public class ReportSpecRunnerTests
     public async Task A_dataset_whose_scope_the_token_lacks_is_not_read()
     {
         var slow = new FakeDataset("slow_series", Scope.HeartRateRead, TimeSpan.Zero);
-        var (runner, context, readLog) = Arrange(new ReportDatasetRegistry([slow]), Scope.GlucoseRead);
+        var (runner, context, readLog, _) = Arrange(new ReportDatasetRegistry([slow]), Scope.GlucoseRead);
 
         var result = await runner.RunAsync(FakeSpec("slow_series"), context, CancellationToken.None);
 
@@ -272,15 +359,53 @@ public class ReportSpecRunnerTests
     {
         var fast = new FakeDataset("fast", Scope.GlucoseRead, TimeSpan.Zero);
         var stuck = new FakeDataset("stuck", Scope.GlucoseRead, Timeout.InfiniteTimeSpan);
-        var (runner, context, _) = Arrange(new ReportDatasetRegistry([fast, stuck]), Scope.GlucoseRead);
-        runner = new ReportSpecRunner(new ReportDatasetRegistry([fast, stuck]), TimeProvider.System) { Timeout = TimeSpan.FromMilliseconds(200) };
+        var (_, context, _, _) = Arrange(new ReportDatasetRegistry([fast, stuck]), Scope.GlucoseRead);
+        var runner = new ReportSpecRunner(new ReportDatasetRegistry([fast, stuck]), TimeProvider.System) { Timeout = TimeSpan.FromMilliseconds(200) };
 
         var result = await runner.RunAsync(FakeSpec("fast", "stuck", "fast"), context, CancellationToken.None);
 
-        result.Panels.Select(p => p.Status).Should().Equal(ReportPanelStatus.Ok, ReportPanelStatus.TimedOut, ReportPanelStatus.TimedOut);
+        result.Panels.Select(p => p.Status).Should().Equal(ReportPanelStatus.Ok, ReportPanelStatus.TimedOut, ReportPanelStatus.Ok);
         result.Panels[0].Rows.Should().HaveCount(1);
-        result.Warnings.Should().ContainSingle().Which.Should().StartWith("Panels p2, p3 did not finish");
-        fast.Runs.Should().Be(1, "nothing runs after the deadline");
+        result.Warnings.Should().ContainSingle().Which.Should().StartWith("Panel p2 did not finish");
+        fast.Runs.Should().Be(1, "the third panel's query is the first's, read once");
+    }
+
+    [Fact]
+    public async Task A_layer_that_fails_fails_only_itself_and_the_panel_names_it()
+    {
+        var fine = new FakeDataset("fine", Scope.GlucoseRead, TimeSpan.Zero);
+        var broken = new FakeDataset("broken", Scope.GlucoseRead, TimeSpan.Zero, fails: true);
+        var registry = new ReportDatasetRegistry([fine, broken]);
+        var (runner, context, _, _) = Arrange(registry, Scope.GlucoseRead);
+        var spec = new ReportSpec
+        {
+            Panels =
+            [
+                new ReportPanelSpec
+                {
+                    Id = "p1",
+                    Kind = ReportPanelKind.Chart,
+                    Range = new ReportRange { Hours = 1 },
+                    Tracks =
+                    [
+                        new ReportTrackSpec
+                        {
+                            Id = "t1",
+                            Height = 1,
+                            Layers = [FakeLayer("a", "broken"), FakeLayer("b", "fine")],
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var result = await runner.RunAsync(spec, context, CancellationToken.None);
+
+        var panel = result.Panels.Single();
+        panel.Status.Should().Be(ReportPanelStatus.Ok);
+        panel.Tracks[0].Layers.Select(l => l.Status).Should().Equal(ReportPanelStatus.Failed, ReportPanelStatus.Ok);
+        panel.Sentence.Should().Contain("Not shown: broken · Value (an error occurred when it was read).");
+        result.Warnings.Should().ContainSingle().Which.Should().StartWith("Panel p1 (layer a): an error occurred");
     }
 
     [Fact]
@@ -288,7 +413,7 @@ public class ReportSpecRunnerTests
     {
         var fine = new FakeDataset("fine", Scope.GlucoseRead, TimeSpan.Zero);
         var broken = new FakeDataset("broken", Scope.GlucoseRead, TimeSpan.Zero, fails: true);
-        var (runner, context, _) = Arrange(new ReportDatasetRegistry([fine, broken]), Scope.GlucoseRead);
+        var (runner, context, _, _) = Arrange(new ReportDatasetRegistry([fine, broken]), Scope.GlucoseRead);
 
         var result = await runner.RunAsync(FakeSpec("broken", "fine"), context, CancellationToken.None);
 
@@ -296,14 +421,14 @@ public class ReportSpecRunnerTests
         result.Panels[0].Rows.Should().BeEmpty();
         result.Panels[0].Summary.Should().Be(ReportSpecRunner.FailedNote).And.NotContain("a dataset bug");
         result.Panels[1].Rows.Should().HaveCount(1);
-        result.Warnings.Should().ContainSingle().Which.Should().StartWith("Panel p1: Not shown");
+        result.Warnings.Should().ContainSingle().Which.Should().StartWith("Panel p1: an error occurred");
     }
 
     [Fact]
     public async Task A_caller_that_cancels_is_not_reported_as_a_timeout()
     {
         var stuck = new FakeDataset("stuck", Scope.GlucoseRead, Timeout.InfiniteTimeSpan);
-        var (runner, context, _) = Arrange(new ReportDatasetRegistry([stuck]), Scope.GlucoseRead);
+        var (runner, context, _, _) = Arrange(new ReportDatasetRegistry([stuck]), Scope.GlucoseRead);
         using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
         var run = () => runner.RunAsync(FakeSpec("stuck"), context, cancelled.Token);
@@ -311,13 +436,23 @@ public class ReportSpecRunnerTests
         await run.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    private static ReportLayerSpec FakeLayer(string id, string dataset) => new()
+    {
+        Id = id,
+        Dataset = new FakeParameters(dataset),
+        Mark = ReportMark.Line,
+        Bindings = new ReportLayerBindings { X = "time", Y = ["value"] },
+        XKind = ReportXKind.Time,
+        HasAxis = true,
+    };
+
     private static ReportSpec FakeSpec(params string[] datasets) => new()
     {
         Panels = [.. datasets.Select((name, i) => new ReportPanelSpec
         {
             Id = $"p{i + 1}",
+            Kind = ReportPanelKind.Table,
             Dataset = new FakeParameters(name),
-            Primitive = ReportPrimitive.Table,
             Bindings = new ReportBindings { Columns = ["value"] },
             Range = new ReportRange { Hours = 1 },
         })],
@@ -337,10 +472,15 @@ public class ReportSpecRunnerTests
         public string Description => name;
         public Type ParametersType => typeof(FakeParameters);
         public string RequiredScope => scope;
-        public IReadOnlyList<ReportField> Fields { get; } = [new("value", "Value", ReportFieldKind.Number, null, "A value.")];
-        public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.Table];
+        public IReadOnlyList<ReportField> Fields { get; } =
+        [
+            new("time", "Time", ReportFieldKind.Time, null, "A time."),
+            new("value", "Value", ReportFieldKind.Number, null, "A value."),
+        ];
+        public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
+        public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Line];
         public TimeSpan DefaultRange => TimeSpan.FromHours(1);
-        public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(1);
+        public TimeSpan MaxRange => TimeSpan.FromDays(1);
         public int PointBudget => 1;
         public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
 
@@ -350,7 +490,7 @@ public class ReportSpecRunnerTests
             await Task.Delay(delay, cancellationToken);
             if (fails)
                 throw new ArgumentOutOfRangeException(nameof(request), "a dataset bug");
-            return new ReportDatasetOutput { Rows = [new Dictionary<string, object?> { ["value"] = 1 }], Summary = name };
+            return new ReportDatasetOutput { Rows = [new Dictionary<string, object?> { ["time"] = 1L, ["value"] = 1 }], Summary = name };
         }
     }
 }

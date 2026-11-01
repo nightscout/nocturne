@@ -31,30 +31,32 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
         new("setting", "Setting", ReportFieldKind.Category, null, "basal, isf or carb_ratio."),
         new("block", "Block", ReportFieldKind.Category, null, "The local time block, HH:mm-HH:mm."),
         new("startMinute", "Block start", ReportFieldKind.TimeOfDay, "min", "Start of the block, minutes after local midnight."),
-        new("basalObserved", "Basal observed", ReportFieldKind.Number, "U/h", "The basal need the data showed in the block.", Color: ChartColor.InsulinBasal),
-        new("basalProfile", "Basal in profile", ReportFieldKind.Number, "U/h", "The profile's basal rate over the block."),
-        new("isfObserved", "ISF observed", ReportFieldKind.Number, "glucose/U", "The ISF the data showed in the block.", Color: ChartColor.InsulinBolus),
-        new("isfProfile", "ISF in profile", ReportFieldKind.Number, "glucose/U", "The profile's ISF over the block."),
-        new("carbRatioObserved", "Carb ratio observed", ReportFieldKind.Number, "g/U", "The carb ratio the data showed in the block.", Color: ChartColor.Carbs),
-        new("carbRatioProfile", "Carb ratio in profile", ReportFieldKind.Number, "g/U", "The profile's carb ratio over the block."),
-        new("episodes", "Episodes", ReportFieldKind.Number, null, "Episodes (basal: days) that qualified."),
+        new("basalObserved", "Basal observed", ReportFieldKind.Number, "U/h", "The basal need the data showed in the block.", Color: ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
+        new("basalProfile", "Basal in profile", ReportFieldKind.Number, "U/h", "The profile's basal rate over the block.", Aggregate: ReportAggregate.Mean),
+        new("isfObserved", "ISF observed", ReportFieldKind.Number, "glucose/U", "The ISF the data showed in the block.", Color: ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
+        new("isfProfile", "ISF in profile", ReportFieldKind.Number, "glucose/U", "The profile's ISF over the block.", Aggregate: ReportAggregate.Mean),
+        new("carbRatioObserved", "Carb ratio observed", ReportFieldKind.Number, "g/U", "The carb ratio the data showed in the block.", Color: ChartColor.Carbs, Aggregate: ReportAggregate.Mean),
+        new("carbRatioProfile", "Carb ratio in profile", ReportFieldKind.Number, "g/U", "The profile's carb ratio over the block.", Aggregate: ReportAggregate.Mean),
+        new("episodes", "Episodes", ReportFieldKind.Number, null, "Episodes (basal: days) that qualified.", Aggregate: ReportAggregate.Sum),
         new("spread", "Middle half", ReportFieldKind.Category, null, "The 25th to 75th percentile of the episodes' values, with the unit."),
         new("confidence", "Confidence", ReportFieldKind.Category, null, "Low, Moderate or High; empty where there is no value."),
         new("confidenceReasons", "Why not higher", ReportFieldKind.Category, null, "What keeps the confidence below High."),
         new("noValueReason", "Why no value", ReportFieldKind.Category, null, "Why the figure has no observed value, where it has none."),
-        new("rejected", "Rejected", ReportFieldKind.Number, null, "Candidate episodes the rules rejected."),
+        new("rejected", "Rejected", ReportFieldKind.Number, null, "Candidate episodes the rules rejected.", Aggregate: ReportAggregate.Sum),
         new("rejections", "Rejected by", ReportFieldKind.Category, null, "Each rule that rejected episodes, with its count."),
     ];
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.TimeSeries
-        ? new ReportBindings { X = "startMinute", Y = ["basalObserved", "basalProfile"] }
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark is ReportMark.Line or ReportMark.Points
+        ? new ReportLayerBindings { X = "startMinute", Y = ["basalObserved", "basalProfile"] }
         : null;
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.Table, ReportPrimitive.TimeSeries];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Line, ReportMark.Points];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(30);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => LoopAnalysisDatasetRun.MaxRange;
+    public TimeSpan MaxRange => LoopAnalysisDatasetRun.MaxRange;
 
     public int PointBudget => 20;
 

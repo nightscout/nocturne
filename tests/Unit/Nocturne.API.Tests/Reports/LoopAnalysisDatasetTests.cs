@@ -75,28 +75,30 @@ public partial class LoopAnalysisDatasetTests
     }
 
     [Fact]
-    public void An_event_response_panel_gets_range_bands_defaults_and_reads_its_cohorts()
+    public void An_event_response_layer_gets_band_defaults_and_reads_its_cohorts()
     {
         var validation = Validate($$"""
             { "version": 1, "panels": [
-              { "dataset": { "name": "event_response", "cohorts": [
+              { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "event_response", "cohorts": [
                   { "anchor": "Meal", "foods": ["{{Pasta}}"], "dayOfWeek": ["Mon", "Tue"], "timeOfDay": { "fromMinute": 360, "toMinute": 600 } } ],
-                "comparisonRange": { "from": "2026-09-01", "to": "2026-09-30" } },
-                "primitive": "range_bands" },
-              { "dataset": { "name": "event_response" }, "primitive": "table" } ] }
+                "comparisonRange": { "from": "2026-09-01", "to": "2026-09-30" } } } ] } ] },
+              { "dataset": { "name": "event_response" }, "kind": "table" } ] }
             """);
 
         validation.Errors.Should().BeEmpty();
-        var bands = validation.Spec!.Panels[0];
-        bands.Bindings.Should().BeEquivalentTo(new ReportBindings
+        var panel = validation.Spec!.Panels[0];
+        var bands = panel.Tracks![0].Layers[0];
+        bands.Mark.Should().Be(ReportMark.Band);
+        bands.XKind.Should().Be(ReportXKind.Offset);
+        bands.Bindings.Should().BeEquivalentTo(new ReportLayerBindings
         {
-            X = "minute", Y = ["glucoseP50"], Band = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"], Series = "series",
+            X = "minute", Y = ["glucoseP50"], Edges = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"], Series = "series",
         });
         var parameters = bands.Dataset.Should().BeOfType<EventResponseParameters>().Subject;
         parameters.Cohorts![0].Foods.Should().Equal(Pasta);
         parameters.Cohorts[0].DayOfWeek.Should().Equal(ReportWeekday.Mon, ReportWeekday.Tue);
         parameters.ComparisonRange.Should().Be(new ReportDateRange { From = new DateOnly(2026, 9, 1), To = new DateOnly(2026, 9, 30) });
-        bands.Range.Should().Be(new ReportRange { Hours = 30 * 24 });
+        panel.Range.Should().Be(new ReportRange { Hours = 30 * 24 });
 
         validation.Spec.Panels[1].Bindings!.Columns.Should().Contain(["at", "anchor", "summary"]).And.NotContain("glucoseP50");
     }
@@ -105,7 +107,7 @@ public partial class LoopAnalysisDatasetTests
     public void A_nested_parameter_error_names_its_path_and_the_choices()
     {
         var errors = Validate("""
-            { "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Lunch" } ] }, "primitive": "range_bands" } ] }
+            { "version": 1, "panels": [ { "kind": "table", "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Lunch" } ] } } ] }
             """).Errors;
 
         var error = errors.Should().ContainSingle().Subject;
@@ -114,16 +116,16 @@ public partial class LoopAnalysisDatasetTests
     }
 
     [Fact]
-    public void A_time_series_may_lie_along_the_time_of_day()
+    public void Layers_of_two_datasets_may_share_the_time_of_day()
     {
         var validation = Validate("""
-            { "version": 1, "panels": [
-              { "dataset": { "name": "settings_evidence", "setting": "isf" }, "primitive": "time_series",
-                "bindings": { "x": "startMinute", "y": ["isfObserved", "isfProfile"] } },
-              { "dataset": { "name": "daily_profile" }, "primitive": "time_series", "bindings": { "x": "minuteOfDay", "y": ["iob"] } } ] }
+            { "version": 1, "panels": [ { "kind": "chart", "tracks": [ { "layers": [
+              { "dataset": { "name": "settings_evidence", "setting": "isf" }, "mark": "line", "bindings": { "x": "startMinute", "y": ["isfObserved", "isfProfile"] } },
+              { "dataset": { "name": "daily_profile" }, "mark": "line", "bindings": { "x": "minuteOfDay", "y": ["iob"] } } ] } ] } ] }
             """);
 
         validation.Errors.Should().BeEmpty();
+        validation.Spec!.Panels[0].Tracks![0].Layers.Select(l => l.Unit).Should().Equal("mg/dL/U", "U");
     }
 
     [Fact]
@@ -391,60 +393,6 @@ public partial class LoopAnalysisDatasetTests
             .Should().Be("From 03:00 to 04:00: no readings.");
     }
 
-    [Fact]
-    public void An_event_response_glucose_chart_gets_the_median_and_middle_half_by_cohort()
-    {
-        var validation = Validate("""
-            { "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal" } ] }, "primitive": "glucose_chart" } ] }
-            """);
-
-        validation.Errors.Should().BeEmpty();
-        validation.Spec!.Panels[0].Bindings.Should().BeEquivalentTo(new ReportBindings
-        {
-            X = "minute", Y = ["glucoseP50"], Band = ["glucoseP25", "glucoseP75"], Series = "series",
-        });
-        Validate("""
-            { "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "glucose_chart", "bindings": { "y": ["glucose"] } } ] }
-            """).Errors.Should().ContainSingle(e => e.Path == "panels[0].bindings.y");
-    }
-
-    [Fact]
-    public void Traces_are_each_cohorts_newest_events_within_the_point_budget()
-    {
-        var definition = new EventResponseDefinition
-        {
-            MinutesBefore = 120, MinutesAfter = 480,
-            Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal }],
-        };
-        var slots = EventResponseCalculator.SlotMinutes(definition);
-        var start = new DateTime(2026, 10, 1, 6, 0, 0, DateTimeKind.Utc);
-        var report = new EventResponseReport
-        {
-            Definition = definition,
-            Primary = new EventResponseRange
-            {
-                Events = [.. Enumerable.Range(0, 40).Select(i => new EventResponseEvent
-                {
-                    At = start.AddDays(i), Date = $"day {i}", Time = "06:00", Anchor = EventAnchorKind.Meal, Response = EventResponseKind.Rise,
-                    Cohorts = [1], GlucoseTrace = [.. slots.Select(m => m == 0 ? null : (double?)(100 + i))],
-                })],
-            },
-        };
-
-        var (traces, note) = EventResponseDataset.Traces(report, slots, new Dictionary<int, int> { [1] = 1 }, useMmol: false);
-
-        slots.Count.Should().BeGreaterThan(EventResponseDataset.TracePointBudget);
-        traces.Should().HaveCount(EventResponseDataset.MaxTracesPerCohort);
-        traces[0].At.Should().Be(new DateTimeOffset(start.AddDays(39)).ToUnixTimeMilliseconds(), "the newest event is drawn first");
-        traces.Should().OnlyContain(t => t.Cohort == 1 && t.Points.Count <= EventResponseDataset.TracePointBudget && t.Points.Count > 0);
-        traces[0].Points.Should().NotContain(p => p[0] == 0, "a slot with no reading is left out");
-        traces[0].Points[0].Should().Equal(-120, 139);
-        traces[0].Sentence.Should().StartWith("Meal on day 39 at 06:00");
-        note.Should().Be("Single events drawn under the band: cohort 1, the newest 30 of 40. "
-            + "Each event's line has one point every 10 minutes, to stay within 72 points.");
-    }
-
-    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;
 
     [Fact]
     public void An_event_panel_links_to_the_meals_and_events_report_with_its_cohorts()
@@ -452,16 +400,28 @@ public partial class LoopAnalysisDatasetTests
         var panel = new ReportPanelSpec
         {
             Id = "p1",
-            Primitive = ReportPrimitive.RangeBands,
-            Dataset = new EventResponseParameters
-            {
-                Cohorts = [new ReportEventCohort { Anchor = EventAnchorKind.Meal, Foods = [Pasta], DayOfWeek = [ReportWeekday.Mon] }],
-                ExcludeOverrides = true,
-            },
+            Kind = ReportPanelKind.Chart,
+            Tracks =
+            [
+                new ReportTrackSpec
+                {
+                    Layers =
+                    [
+                        new ReportLayerSpec
+                        {
+                            Dataset = new EventResponseParameters
+                            {
+                                Cohorts = [new ReportEventCohort { Anchor = EventAnchorKind.Meal, Foods = [Pasta], DayOfWeek = [ReportWeekday.Mon] }],
+                                ExcludeOverrides = true,
+                            },
+                        },
+                    ],
+                },
+            ],
         };
         var result = new ReportPanelResult
         {
-            Id = "p1", Dataset = "event_response", Primitive = ReportPrimitive.RangeBands, Bindings = new ReportBindings(),
+            Id = "p1", Kind = ReportPanelKind.Chart,
             Status = ReportPanelStatus.Ok, Summary = "",
             Window = new ReportWindow(
                 new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(),

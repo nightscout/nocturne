@@ -29,49 +29,66 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
     public IReadOnlyList<ReportField> Fields { get; } =
     [
         new("hour", "Hour", ReportFieldKind.TimeOfDay, "min", "Start of the local hour, minutes after midnight."),
-        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of the hour's readings."),
-        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the hour's readings."),
+        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of the hour's readings.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the hour's readings.", Aggregate: ReportAggregate.Mean),
         new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median of the hour's readings.",
-            Color: ChartColor.GlucoseInRange, GlucoseScale: true),
-        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the hour's readings."),
-        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the hour's readings."),
-        new("mean", "Mean", ReportFieldKind.Number, ReportField.GlucoseUnit, "Mean of the hour's readings."),
-        new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the hour across the range."),
-        new("days", "Days", ReportFieldKind.Number, null, "Local days with a reading in the hour."),
-        new("veryLow", "Very low", ReportFieldKind.Percent, "%", "Percent of the hour's covered time very low.", Color: ChartColor.GlucoseVeryLow),
-        new("low", "Low", ReportFieldKind.Percent, "%", "Percent of the hour's covered time low.", Color: ChartColor.GlucoseLow),
-        new("tightRange", "Tight range", ReportFieldKind.Percent, "%", "Percent of the hour's covered time in the tight range.", Color: ChartColor.GlucoseInRange),
-        new("aboveTightRange", "Above tight range", ReportFieldKind.Percent, "%", "Percent of the hour's covered time above the tight range but in range."),
-        new("high", "High", ReportFieldKind.Percent, "%", "Percent of the hour's covered time high.", Color: ChartColor.GlucoseHigh),
-        new("veryHigh", "Very high", ReportFieldKind.Percent, "%", "Percent of the hour's covered time very high.", Color: ChartColor.GlucoseVeryHigh),
+            Color: ChartColor.GlucoseInRange, GlucoseScale: true, Aggregate: ReportAggregate.Mean),
+        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the hour's readings.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the hour's readings.", Aggregate: ReportAggregate.Mean),
+        new("mean", "Mean", ReportFieldKind.Number, ReportField.GlucoseUnit, "Mean of the hour's readings.", Aggregate: ReportAggregate.Mean),
+        new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the hour across the range.", Aggregate: ReportAggregate.Sum),
+        new("days", "Days", ReportFieldKind.Number, null, "Local days with a reading in the hour.", Aggregate: ReportAggregate.Max),
+        new("veryLow", "Very low", ReportFieldKind.Percent, "%", "Percent of the hour's covered time very low.", Color: ChartColor.GlucoseVeryLow, Aggregate: ReportAggregate.Mean),
+        new("low", "Low", ReportFieldKind.Percent, "%", "Percent of the hour's covered time low.", Color: ChartColor.GlucoseLow, Aggregate: ReportAggregate.Mean),
+        new("tightRange", "Tight range", ReportFieldKind.Percent, "%", "Percent of the hour's covered time in the tight range.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("aboveTightRange", "Above tight range", ReportFieldKind.Percent, "%", "Percent of the hour's covered time above the tight range but in range.", Aggregate: ReportAggregate.Mean),
+        new("high", "High", ReportFieldKind.Percent, "%", "Percent of the hour's covered time high.", Color: ChartColor.GlucoseHigh, Aggregate: ReportAggregate.Mean),
+        new("veryHigh", "Very high", ReportFieldKind.Percent, "%", "Percent of the hour's covered time very high.", Color: ChartColor.GlucoseVeryHigh, Aggregate: ReportAggregate.Mean),
         new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
             "One sentence that states the hour's glucose figures; the chart shows it for the hour under the pointer.", Companion: true),
     ];
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.RangeBands
-        ? new ReportBindings
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark switch
+    {
+        ReportMark.Band => new ReportLayerBindings
         {
             X = "hour",
             Y = ["glucoseP50"],
-            Band = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"],
-        }
-        : null;
+            Edges = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"],
+        },
+        ReportMark.Line => new ReportLayerBindings { X = "hour", Y = ["glucoseP50"] },
+        ReportMark.Bars => new ReportLayerBindings { X = "hour", Y = ["veryLow", "low", "tightRange", "aboveTightRange", "high", "veryHigh"], Stacked = true },
+        _ => null,
+    };
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.RangeBands];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Band, ReportMark.Line, ReportMark.Bars];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(14);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
+    public TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
     public int PointBudget => 24;
 
-    public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
+    public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters)
+    {
+        if (((GlucoseDistributionByHourParameters)parameters).DayOfWeek is { } days && days.Distinct().Count() != days.Count)
+            yield return ("dayOfWeek", "A weekday is named twice.");
+    }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var services = request.Services;
+        var parameters = (GlucoseDistributionByHourParameters)request.Parameters;
         var entries = await request.Cache.GlucoseAsync(request, cancellationToken);
         var clock = await services.GetRequiredService<TenantClockResolver>().ResolveAsync(cancellationToken);
+        if (parameters.DayOfWeek is { Count: > 0 } weekdays)
+        {
+            var days = weekdays.Select(d => d.ToDayOfWeek()).ToHashSet();
+            var zone = clock.Zone ?? TimeZoneInfo.Utc;
+            entries = [.. entries.Where(e => days.Contains(TimeZoneInfo.ConvertTimeFromUtc(e.Timestamp, zone).DayOfWeek))];
+        }
         var hours = services.GetRequiredService<IStatisticsService>().CalculateAveragedStats(entries, clock.Zone).ToList();
 
         var useMmol = request.UseMmol;

@@ -174,6 +174,9 @@ export const CHART_COLORS = [
 	'steps',
 	'chart-1',
 	'chart-2',
+	'chart-3',
+	'chart-4',
+	'chart-5',
 	'muted-foreground',
 	'primary',
 ] as const;

@@ -1,20 +1,27 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Reports.Derived;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.API.Reports;
 
 /// <summary>
-/// A custom report: panels, each a dataset drawn as a primitive. The normalised form of a spec;
+/// A custom report: panels, each a chart of tracks of layers or one dataset shown another way. The normalised form of a spec;
 /// <see cref="ReportSpecValidator"/> reads the JSON a member sends into it.
 /// </summary>
-[Description("A report: one or more panels, each one dataset drawn as one chart primitive.")]
+[Description("A report: one or more panels, each a chart of tracks of layers, or one dataset as figures, a table or two periods.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportSpec
 {
     public const int CurrentVersion = 1;
     public const int MaxPanels = 6;
+    public const int MaxTracks = 4;
+    public const int MaxLayers = 8;
+
+    /// <summary>The most dataset reads one report makes, counted after the run cache: a derived layer's sources count.</summary>
+    public const int MaxReads = 16;
     public const int MaxTitleLength = 200;
     public const int MaxIdLength = 32;
     public const string IdPattern = "^[A-Za-z0-9_-]{1,32}$";
@@ -64,7 +71,7 @@ internal sealed record ReportRange
     public DateTimeOffset? To { get; init; }
 }
 
-[Description("One panel: a dataset, the primitive that draws it, and which fields go where.")]
+[Description("One panel: a chart of tracks of layers, or one dataset as figures, a table or two periods side by side.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportPanelSpec
 {
@@ -77,60 +84,164 @@ internal sealed record ReportPanelSpec
     [StringLength(ReportSpec.MaxTitleLength)]
     public string? Title { get; init; }
 
-    [Description("The dataset to read, chosen by 'name', with that dataset's parameters.")]
+    [Description("chart (tracks of layers), stat_tiles, table or comparison.")]
     [JsonRequired]
-    public ReportDatasetParameters Dataset { get; init; } = null!;
-
-    [Description("How to draw the dataset. Each dataset allows only some primitives.")]
-    [JsonRequired]
-    public ReportPrimitive Primitive { get; init; }
-
-    [Description("Which dataset fields the primitive draws. Optional; defaults depend on the primitive.")]
-    public ReportBindings? Bindings { get; init; }
+    public ReportPanelKind Kind { get; init; }
 
     [Description("This panel's time range, in place of the report's. Optional.")]
     public ReportRange? Range { get; init; }
+
+    [Description(
+        "chart only: the minutes each layer's rows are folded into on a time, minutes-from-event or time-of-day axis, by each "
+        + "field's own aggregate; 0 for every row, not folded. Optional; each dataset's own spacing when missing.")]
+    public int? Grid { get; init; }
+
+    [Description("chart only: the tracks, top to bottom, sharing one horizontal axis. 1 to 4.")]
+    public IReadOnlyList<ReportTrackSpec>? Tracks { get; init; }
+
+    [Description("stat_tiles, table and comparison only: the dataset to read, chosen by 'name', with that dataset's parameters.")]
+    public ReportDatasetParameters? Dataset { get; init; }
+
+    [Description("stat_tiles, table and comparison only: which fields to show.")]
+    public ReportBindings? Bindings { get; init; }
+}
+
+/// <summary>The closed set of panel kinds the view draws.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportPanelKind>))]
+internal enum ReportPanelKind
+{
+    /// <summary>Tracks of layers over one horizontal axis.</summary>
+    [JsonStringEnumMemberName("chart")]
+    Chart,
+
+    [JsonStringEnumMemberName("stat_tiles")]
+    StatTiles,
+
+    [JsonStringEnumMemberName("table")]
+    Table,
+
+    /// <summary>Two periods side by side: each one's time in range bar, then each figure's two values and the change.</summary>
+    [JsonStringEnumMemberName("comparison")]
+    Comparison,
+}
+
+[Description("One track of a chart panel: layers drawn over the panel's horizontal axis, with up to two vertical axes.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ReportTrackSpec
+{
+    public const double MinHeight = 0.25;
+    public const double MaxHeight = 4;
+
+    /// <summary>The height a track of state spans alone takes when it gives none.</summary>
+    public const double LaneHeight = 0.3;
+
+    [Description("A short identifier, unique in the panel. Optional; t1, t2 ... when missing.")]
+    [StringLength(ReportSpec.MaxIdLength)]
+    [RegularExpression(ReportSpec.IdPattern)]
+    public string? Id { get; init; }
+
+    [Description("The track's heading. Optional.")]
+    [StringLength(ReportSpec.MaxTitleLength)]
+    public string? Title { get; init; }
+
+    [Description("The track's share of the panel's height, 0.25 to 4. Optional; 1, or 0.3 for a lane of state spans.")]
+    [Range(MinHeight, MaxHeight)]
+    public double? Height { get; init; }
+
+    [Description("The layers, drawn in order. At least one; at most 8 in the panel.")]
+    [JsonRequired]
+    public IReadOnlyList<ReportLayerSpec> Layers { get; init; } = [];
+}
+
+[Description("One layer: a dataset, or a series derived from one or two sources, drawn as one mark.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ReportLayerSpec
+{
+    [Description("A short identifier, unique in the panel. Optional; l1, l2 ... when missing.")]
+    [StringLength(ReportSpec.MaxIdLength)]
+    [RegularExpression(ReportSpec.IdPattern)]
+    public string? Id { get; init; }
+
+    [Description("The layer's name in the legend. Optional; the dataset's and the field's names when missing.")]
+    [StringLength(ReportSpec.MaxTitleLength)]
+    public string? Title { get; init; }
+
+    [Description("The dataset to read, chosen by 'name'. Send this or 'derived'.")]
+    public ReportDatasetParameters? Dataset { get; init; }
+
+    [Description("A series the API derives from one or two sources, chosen by 'op'. Send this or 'dataset'.")]
+    public ReportDerivedSpec? Derived { get; init; }
+
+    [Description("How the layer is drawn: line, area, band, bars, points, markers or spans. Optional; the first the data allows.")]
+    public ReportMark? Mark { get; init; }
+
+    [Description("Which fields the mark draws. Optional; each dataset and mark has defaults.")]
+    public ReportLayerBindings? Bindings { get; init; }
+
+    [Description("This layer's range, in place of the panel's: on a time-of-day, minutes-from-event or day axis only. Optional.")]
+    public ReportRange? Range { get; init; }
+
+    /// <summary>What the layer lies along; set by the validator.</summary>
+    [JsonIgnore]
+    public ReportXKind XKind { get; init; }
+
+    /// <summary>The unit of the layer's values on its vertical axis, null for none; set by the validator.</summary>
+    [JsonIgnore]
+    public string? Unit { get; init; }
+
+    /// <summary>Whether the layer takes a vertical axis (markers and spans do not); set by the validator.</summary>
+    [JsonIgnore]
+    public bool HasAxis { get; init; }
 }
 
 [Description(
-    "Field bindings. time_series: 'x' (a time, time-of-day or minutes-from-event field), 'y' (a list of fields in one unit) "
-    + "and optional 'band' (two fields: the lower and upper edge of a shaded range). "
-    + "range_bands: 'x', 'y' (one field: the median line), 'band' (two fields, or four: outer low, inner low, inner high, "
-    + "outer high) and optional 'series' (a category field; one set of bands per value). Optional; each dataset has defaults. "
-    + "bar: 'x' (a category field), 'y' (one or more number fields in one unit), optional 'stacked' and 'orientation'. "
-    + "table, stat_tiles and comparison: optional 'columns' (the fields to show, in order). glucose_chart: none for glucose_series; "
-    + "for event_response as range_bands, defaulting to the median and the middle half by cohort.")]
+    "A layer's field bindings. line, area and points: 'x' and 'y' (fields in one unit); points also 'fit' (a line through them). "
+    + "band: 'x', 'edges' (two fields, or four: outer low, inner low, inner high, outer high), optional 'y' (one middle line) "
+    + "and 'series' (a category; one set of bands per value). bars: 'x', 'y', 'stacked', 'orientation'. markers: 'x' and 'y' "
+    + "(marker fields). spans: 'start', 'end' and 'category'.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ReportLayerBindings
+{
+    [Description("The field along the horizontal axis.")]
+    public string? X { get; init; }
+
+    [Description("The fields drawn, all in one unit.")]
+    public IReadOnlyList<string>? Y { get; init; }
+
+    [Description("band only: two or four edge fields, in the unit of 'y'.")]
+    public IReadOnlyList<string>? Edges { get; init; }
+
+    [Description("band and line only: a category field; one set per value.")]
+    public string? Series { get; init; }
+
+    [Description("points only: a field drawn as a line through the points.")]
+    public string? Fit { get; init; }
+
+    [Description("bars only: true to stack the 'y' fields.")]
+    public bool? Stacked { get; init; }
+
+    [Description("bars only: vertical (the default) or horizontal.")]
+    public ReportBarOrientation? Orientation { get; init; }
+
+    [Description("spans only: the field where a span starts.")]
+    public string? Start { get; init; }
+
+    [Description("spans only: the field where a span ends.")]
+    public string? End { get; init; }
+
+    [Description("spans only: the category field that names each span.")]
+    public string? Category { get; init; }
+}
+
+[Description("stat_tiles, table and comparison: 'columns', the fields to show, in order. Optional; every field the token can read.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportBindings
 {
-    [Description("time_series and range_bands: the field on the horizontal axis: a time, time-of-day or minutes-from-event field. bar: a category field, one bar or group per value.")]
-    public string? X { get; init; }
-
-    [Description("time_series: the fields drawn as lines, all in one unit. range_bands: one field, the median line. bar: the fields drawn as bars, all in one unit.")]
-    public IReadOnlyList<string>? Y { get; init; }
-
-    [Description(
-        "time_series: two fields, the lower and upper edge of a shaded range, in the unit of 'y'. range_bands: two or four "
-        + "fields in the unit of 'y': the outer band's low edge, then (with four) the inner band's low and high edges, then the outer band's high edge.")]
-    public IReadOnlyList<string>? Band { get; init; }
-
-    [Description("range_bands only: a category field; each of its values is drawn as its own bands and line.")]
-    public string? Series { get; init; }
-
-    [Description("table, stat_tiles and comparison only: the fields to show, in order. Default: every field the token can read.")]
+    [Description("The fields to show, in order. Default: every field the token can read.")]
     public IReadOnlyList<string>? Columns { get; init; }
-
-    [Description("bar only: true to stack the 'y' fields in one bar per category, false (the default) to draw them side by side.")]
-    public bool? Stacked { get; init; }
-
-    [Description(
-        "bar only: 'vertical' (the default) for bars up from a category axis along the bottom, 'horizontal' for bars across "
-        + "from one down the side. One stacked category laid horizontal is drawn as one bar of parts of a whole, with each "
-        + "part's value printed in its key: glucose_distribution with x 'period' and the five bands as y.")]
-    public ReportBarOrientation? Orientation { get; init; }
 }
 
-/// <summary>Which way a bar panel's bars run.</summary>
+/// <summary>Which way a bars layer's bars run.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ReportBarOrientation>))]
 internal enum ReportBarOrientation
 {
@@ -139,6 +250,80 @@ internal enum ReportBarOrientation
 
     [JsonStringEnumMemberName("horizontal")]
     Horizontal,
+}
+
+/// <summary>The closed set of marks a layer is drawn as.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportMark>))]
+internal enum ReportMark
+{
+    [JsonStringEnumMemberName("line")]
+    Line,
+
+    /// <summary>A line with a fill to zero.</summary>
+    [JsonStringEnumMemberName("area")]
+    Area,
+
+    /// <summary>A shaded range between two edges, or two ranges between four, with an optional middle line.</summary>
+    [JsonStringEnumMemberName("band")]
+    Band,
+
+    [JsonStringEnumMemberName("bars")]
+    Bars,
+
+    [JsonStringEnumMemberName("points")]
+    Points,
+
+    /// <summary>The dashboard's bolus, carb, BG check and injection glyphs at their amounts; no axis.</summary>
+    [JsonStringEnumMemberName("markers")]
+    Markers,
+
+    /// <summary>State spans in a lane, each from its start to its end, named by its category; no axis.</summary>
+    [JsonStringEnumMemberName("spans")]
+    Spans,
+}
+
+/// <summary>What a chart panel's horizontal axis holds; every layer on the panel shares it.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportXKind>))]
+internal enum ReportXKind
+{
+    /// <summary>An instant, Unix milliseconds.</summary>
+    [JsonStringEnumMemberName("time")]
+    Time,
+
+    /// <summary>Minutes from an event's anchor.</summary>
+    [JsonStringEnumMemberName("offset")]
+    Offset,
+
+    /// <summary>Minutes after local midnight.</summary>
+    [JsonStringEnumMemberName("time_of_day")]
+    TimeOfDay,
+
+    /// <summary>A local calendar day, its midnight in Unix milliseconds.</summary>
+    [JsonStringEnumMemberName("day")]
+    Day,
+
+    [JsonStringEnumMemberName("category")]
+    Category,
+
+    /// <summary>A value of a scatter's first source, in its unit.</summary>
+    [JsonStringEnumMemberName("value")]
+    Value,
+
+    /// <summary>Minutes one source is shifted against the other.</summary>
+    [JsonStringEnumMemberName("lag")]
+    Lag,
+}
+
+/// <summary>Enum values as a spec writes them.</summary>
+internal static class ReportWire
+{
+    public static string Name<T>(T value) where T : struct, Enum =>
+        JsonSerializer.Serialize(value).Trim('"');
+
+    public static T? Parse<T>(string? name) where T : struct, Enum =>
+        name is null ? null : Enum.GetValues<T>().Cast<T?>().FirstOrDefault(v => Name(v!.Value) == name);
+
+    public static string List<T>(IEnumerable<T> values) where T : struct, Enum => string.Join(", ", values.Select(Name));
 }
 
 /// <summary>
@@ -159,6 +344,7 @@ internal enum ReportBarOrientation
 [JsonDerivedType(typeof(GlucoseDistributionParameters), GlucoseDistributionParameters.Name)]
 [JsonDerivedType(typeof(DailySummaryParameters), DailySummaryParameters.Name)]
 [JsonDerivedType(typeof(PeriodComparisonParameters), PeriodComparisonParameters.Name)]
+[JsonDerivedType(typeof(StateSpansParameters), StateSpansParameters.Name)]
 internal abstract record ReportDatasetParameters
 {
     [JsonIgnore]
@@ -173,22 +359,11 @@ internal sealed record GlucoseSeriesParameters : ReportDatasetParameters
 {
     public const string Name = "glucose_series";
 
-    public const int DefaultIntervalMinutes = 5;
-
     [JsonIgnore]
     public override string DatasetName => Name;
-
-    [Description("Minutes between rows, 1 to 60. A long range can make it coarser, to keep each series under its point limit.")]
-    [Range(1, 60)]
-    [DisplayName("Minutes between rows")]
-    public int IntervalMinutes { get; init; } = DefaultIntervalMinutes;
-
-    [Description("Treatment markers to draw on the glucose line. Lines over time only, over a range of at most 72 hours. Optional.")]
-    [ReportNeedsScope(Nocturne.Core.Models.Authorization.Scope.TreatmentsRead)]
-    public IReadOnlyList<ReportMarkerKind>? Markers { get; init; }
 }
 
-/// <summary>A treatment marker the dashboard chart draws, which a panel can draw on a time series.</summary>
+/// <summary>A treatment marker the dashboard chart draws, which a markers layer draws.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ReportMarkerKind>))]
 internal enum ReportMarkerKind
 {
@@ -197,6 +372,12 @@ internal enum ReportMarkerKind
 
     [JsonStringEnumMemberName("carbs")]
     Carbs,
+
+    [JsonStringEnumMemberName("bg_check")]
+    BgCheck,
+
+    [JsonStringEnumMemberName("basal_injection")]
+    BasalInjection,
 }
 
 [Description(
@@ -209,58 +390,4 @@ internal sealed record GlucoseStatisticsParameters : ReportDatasetParameters
 
     [JsonIgnore]
     public override string DatasetName => Name;
-}
-
-/// <summary>The closed set of chart primitives the view draws.</summary>
-[JsonConverter(typeof(JsonStringEnumConverter<ReportPrimitive>))]
-internal enum ReportPrimitive
-{
-    [JsonStringEnumMemberName("time_series")]
-    TimeSeries,
-
-    [JsonStringEnumMemberName("stat_tiles")]
-    StatTiles,
-
-    [JsonStringEnumMemberName("table")]
-    Table,
-
-    /// <summary>
-    /// The dashboard's glucose chart: readings with insulin, carbs, basal, pump modes, profiles and
-    /// the health tracks the token allows. <c>show_glucose</c> draws this. Over event cohorts
-    /// (<c>event_response</c>), each cohort's band and median over single events' glucose.
-    /// </summary>
-    [JsonStringEnumMemberName("glucose_chart")]
-    GlucoseChart,
-
-    /// <summary>Percentile bands (outer and inner) under a median line, one set per series, over an axis of time of day or minutes from an event.</summary>
-    [JsonStringEnumMemberName("range_bands")]
-    RangeBands,
-
-    /// <summary>Bars over a category axis, one or more fields per category, side by side or stacked.</summary>
-    [JsonStringEnumMemberName("bar")]
-    Bar,
-
-    /// <summary>Two periods side by side: each one's time in range bar, then each figure's two values and the change.</summary>
-    [JsonStringEnumMemberName("comparison")]
-    Comparison,
-}
-
-internal static class ReportPrimitives
-{
-    public static readonly IReadOnlyList<ReportPrimitive> All = Enum.GetValues<ReportPrimitive>();
-
-    public static string WireName(this ReportPrimitive primitive) => primitive switch
-    {
-        ReportPrimitive.TimeSeries => "time_series",
-        ReportPrimitive.StatTiles => "stat_tiles",
-        ReportPrimitive.Table => "table",
-        ReportPrimitive.GlucoseChart => "glucose_chart",
-        ReportPrimitive.RangeBands => "range_bands",
-        ReportPrimitive.Bar => "bar",
-        ReportPrimitive.Comparison => "comparison",
-        _ => throw new ArgumentOutOfRangeException(nameof(primitive), primitive, null),
-    };
-
-    public static ReportPrimitive? Parse(string? name) =>
-        All.Cast<ReportPrimitive?>().FirstOrDefault(p => p!.Value.WireName() == name);
 }

@@ -28,18 +28,18 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
     [
         new("band", "Band", ReportFieldKind.Category, null, "The glucose band.", ColorField: "color"),
         new("range", "Range", ReportFieldKind.Category, null, "The band's limits, in the display unit."),
-        new("percent", "Time", ReportFieldKind.Percent, "%", "Percent of the covered time in the band."),
-        new("minutes", "Minutes", ReportFieldKind.Number, "min", "Minutes in the band over the range."),
+        new("percent", "Time", ReportFieldKind.Percent, "%", "Percent of the covered time in the band.", Aggregate: ReportAggregate.Mean),
+        new("minutes", "Minutes", ReportFieldKind.Number, "min", "Minutes in the band over the range.", Aggregate: ReportAggregate.Sum),
         new("color", "Color", ReportFieldKind.Category, null, "The band's theme color. Its bar is drawn in this color."),
     ];
 
     private static readonly IReadOnlyList<ReportField> TileFields =
     [
-        new("veryLow", "Very low", ReportFieldKind.Percent, "%", "Percent of the covered time very low.", Color: ChartColor.GlucoseVeryLow),
-        new("low", "Low", ReportFieldKind.Percent, "%", "Percent of the covered time low.", Color: ChartColor.GlucoseLow),
-        new("inRange", "In range", ReportFieldKind.Percent, "%", "Percent of the covered time in range.", Color: ChartColor.GlucoseInRange),
-        new("high", "High", ReportFieldKind.Percent, "%", "Percent of the covered time high.", Color: ChartColor.GlucoseHigh),
-        new("veryHigh", "Very high", ReportFieldKind.Percent, "%", "Percent of the covered time very high.", Color: ChartColor.GlucoseVeryHigh),
+        new("veryLow", "Very low", ReportFieldKind.Percent, "%", "Percent of the covered time very low.", Color: ChartColor.GlucoseVeryLow, Aggregate: ReportAggregate.Mean),
+        new("low", "Low", ReportFieldKind.Percent, "%", "Percent of the covered time low.", Color: ChartColor.GlucoseLow, Aggregate: ReportAggregate.Mean),
+        new("inRange", "In range", ReportFieldKind.Percent, "%", "Percent of the covered time in range.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("high", "High", ReportFieldKind.Percent, "%", "Percent of the covered time high.", Color: ChartColor.GlucoseHigh, Aggregate: ReportAggregate.Mean),
+        new("veryHigh", "Very high", ReportFieldKind.Percent, "%", "Percent of the covered time very high.", Color: ChartColor.GlucoseVeryHigh, Aggregate: ReportAggregate.Mean),
     ];
 
     public IReadOnlyList<ReportField> Fields { get; } = [.. BarFields, PeriodField, .. TileFields];
@@ -47,22 +47,24 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
     private static readonly ReportField PeriodField =
         new("period", "Period", ReportFieldKind.Category, null, "The range, as one category: bind it as x with the band fields as y for one stacked bar.");
 
-    public IReadOnlyList<ReportField> FieldsFor(ReportPrimitive primitive) =>
-        primitive == ReportPrimitive.Bar ? [.. BarFields, PeriodField, .. TileFields] : TileFields;
+    public IReadOnlyList<ReportField> FieldsFor(ReportPanelKind kind) =>
+        kind == ReportPanelKind.Chart ? [.. BarFields, PeriodField, .. TileFields] : TileFields;
 
-    /// <summary>A bar panel bound to <c>period</c>: one row for the whole range, the bands as its columns.</summary>
+    /// <summary>Tiles, or bars along <c>period</c>: one row for the whole range, the bands as its columns.</summary>
     internal static bool OneRow(ReportDatasetRequest request) =>
-        request.Primitive != ReportPrimitive.Bar || request.Bindings?.X == PeriodField.Name;
+        request.Kind != ReportPanelKind.Chart || request.X == PeriodField.Name;
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.Bar
-        ? new ReportBindings { X = "band", Y = ["percent"], Stacked = false }
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark == ReportMark.Bars
+        ? new ReportLayerBindings { X = "band", Y = ["percent"], Stacked = false }
         : null;
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.Bar, ReportPrimitive.StatTiles];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.StatTiles];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Bars];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(14);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
+    public TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
     public int PointBudget => 5;
 

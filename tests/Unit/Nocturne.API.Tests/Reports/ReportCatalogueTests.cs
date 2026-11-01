@@ -14,7 +14,7 @@ namespace Nocturne.API.Tests.Reports;
 
 /// <summary>
 /// The report builder's catalogue against the registry the running API builds and the validator:
-/// a dataset, primitive or parameter shape added to one and not the other fails here.
+/// a dataset, mark, op or parameter shape added to one and not the other fails here.
 /// </summary>
 public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFixture<AuthenticationTestFactory>
 {
@@ -61,12 +61,16 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
     }
 
     [Fact]
-    public void Every_dataset_is_listed_with_words_fields_and_primitives()
+    public void Every_dataset_is_listed_with_words_fields_kinds_and_marks()
     {
         var catalogue = Catalogue(false, Scope.GlucoseRead);
 
         catalogue.MaxPanels.Should().Be(ReportSpec.MaxPanels);
+        catalogue.MaxTracks.Should().Be(4);
+        catalogue.MaxLayers.Should().Be(8);
+        catalogue.MaxReads.Should().Be(16);
         catalogue.MaxRangeHours.Should().Be(ReportSpec.MaxRangeHours);
+        catalogue.PanelKinds.Select(k => k.Name).Should().Equal("chart", "stat_tiles", "table", "comparison");
         catalogue.Datasets.Select(d => d.Name).Should().BeEquivalentTo(ReportSpecValidatorTests.Registry.All.Select(d => d.Name));
         foreach (var dataset in catalogue.Datasets)
         {
@@ -74,21 +78,81 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
             dataset.Description.Should().NotBeNullOrWhiteSpace(dataset.Name);
             dataset.Fields.Select(f => f.Name).Should().OnlyHaveUniqueItems(dataset.Name);
             dataset.Fields.Should().OnlyContain(f => f.Label.Length > 0 && f.Description.Length > 0, dataset.Name);
-            dataset.Primitives.Should().NotBeEmpty(dataset.Name);
-            dataset.Primitives.Select(p => p.Name).Should().OnlyContain(p => ReportPrimitives.Parse(p) != null);
+            (dataset.Marks.Count + dataset.PanelKinds.Count).Should().BePositive(dataset.Name);
+            dataset.Marks.Select(m => m.Name).Should().OnlyContain(m => ReportWire.Parse<ReportMark>(m) != null);
+            (dataset.Marks.Count == 0 || dataset.XKinds.Count > 0).Should().BeTrue($"{dataset.Name} names the axes its layers lie along");
+            dataset.RangeLimit.Should().StartWith("This data covers at most");
         }
+    }
+
+    [Fact]
+    public void Every_number_field_a_chart_can_bind_says_how_it_folds()
+    {
+        foreach (var dataset in ReportSpecValidatorTests.Registry.All.Where(d => d.Marks.Count > 0))
+            dataset.FieldsFor(ReportPanelKind.Chart).Where(f => f.IsNumber && !f.Companion)
+                .Should().OnlyContain(f => f.Aggregate != null, dataset.Name);
+
+        var fields = Catalogue().Datasets.ToDictionary(d => d.Name, d => d.Fields.ToDictionary(f => f.Name));
+        fields["treatments"]["insulin"].Aggregate.Should().Be("sum");
+        fields["treatments"]["insulin"].Marker.Should().Be("bolus");
+        fields["treatments"]["bgCheck"].Marker.Should().Be("bg_check");
+        fields["treatments"]["injectionUnits"].Marker.Should().Be("basal_injection");
+        fields["basal_delivery"]["delivered"].Aggregate.Should().Be("last");
+        fields["device_status"]["reservoir"].Aggregate.Should().Be("last");
+        fields["glucose_series"]["glucose"].Aggregate.Should().Be("mean");
+        fields["glucose_series"]["iob"].Aggregate.Should().Be("mean");
+        fields["glucose_series"]["direction"].Aggregate.Should().BeNull();
+        fields["daily_summary"]["day"].Kind.Should().Be("day");
+    }
+
+    [Fact]
+    public void Every_mark_lists_its_slots_axes_and_whether_it_takes_an_axis()
+    {
+        var marks = Catalogue().Marks.ToDictionary(m => m.Name);
+
+        marks.Keys.Should().Equal("line", "area", "band", "bars", "points", "markers", "spans");
+        marks["markers"].HasAxis.Should().BeFalse();
+        marks["spans"].HasAxis.Should().BeFalse();
+        marks["line"].HasAxis.Should().BeTrue();
+        marks["band"].Slots.Single(s => s.Key == "edges").Counts.Should().Equal(2, 4);
+        marks["spans"].Slots.Select(s => s.Key).Should().Equal("start", "end", "category");
+        marks["markers"].XKinds.Should().Equal("time");
+        marks["bars"].XKinds.Should().Contain("category");
+        marks["points"].XKinds.Should().Contain(["value", "lag"]);
+        marks["band"].XKinds.Should().NotContain("category");
+    }
+
+    [Fact]
+    public void Every_op_is_listed_with_its_settings_rules_and_marks()
+    {
+        var ops = Catalogue().Ops.ToDictionary(o => o.Name);
+
+        ops.Keys.Should().Equal("difference", "ratio", "scatter", "lag_correlation", "rolling_mean", "trend", "band_sd");
+        ops["scatter"].Sources.Should().Be(2);
+        ops["trend"].Sources.Should().Be(1);
+        ops["scatter"].XRule.Should().Be("Values of source a.");
+        ops["lag_correlation"].SourceXKinds.Should().Equal("time");
+        ops["ratio"].UnitRule.Should().Contain("over the unit of b");
+        ops["scatter"].Marks.Should().ContainSingle().Which.DefaultBindings.Should().BeEquivalentTo(
+            new CustomReportLayerBindings("a", ["b"], null, null, "fit", null, null, null, null, null));
+        ops["trend"].Marks.Select(m => m.Name).Should().Equal("band", "line");
+        ops["rolling_mean"].Parameters.GetProperty("properties").GetProperty("minutes").GetProperty("minimum").GetDouble().Should().Be(15);
+        ops["rolling_mean"].Parameters.GetProperty("properties").TryGetProperty("a", out _).Should().BeFalse("the sources are drawn as forms of their own");
+        ops["trend"].Parameters.GetProperty("properties").GetProperty("confidence").GetProperty("default").GetBoolean().Should().BeFalse();
+        ops.Values.Should().OnlyContain(o => o.SourceFieldKinds.SequenceEqual(new[] { "number", "percent" }));
     }
 
     [Fact]
     public void Every_default_binding_validates_and_names_only_the_fields_its_binding_may_name()
     {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
         foreach (var dataset in Catalogue().Datasets)
         {
-            foreach (var primitive in dataset.Primitives)
+            foreach (var mark in dataset.Marks)
             {
-                var at = $"{dataset.Name} as {primitive.Name}";
-                var slots = primitive.Bindings.ToDictionary(s => s.Key);
-                var defaults = primitive.DefaultBindings;
+                var at = $"{dataset.Name} as {mark.Name}";
+                var slots = mark.Bindings.ToDictionary(s => s.Key);
+                var defaults = mark.DefaultBindings;
                 void Within(string key, IEnumerable<string>? names)
                 {
                     if (names is null)
@@ -98,9 +162,11 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
                 }
                 Within("x", defaults.X is null ? null : [defaults.X]);
                 Within("y", defaults.Y);
-                Within("band", defaults.Band);
+                Within("edges", defaults.Edges);
                 Within("series", defaults.Series is null ? null : [defaults.Series]);
-                Within("columns", defaults.Columns);
+                Within("start", defaults.Start is null ? null : [defaults.Start]);
+                Within("end", defaults.End is null ? null : [defaults.End]);
+                Within("category", defaults.Category is null ? null : [defaults.Category]);
 
                 var spec = JsonSerializer.SerializeToElement(new
                 {
@@ -109,14 +175,23 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
                     {
                         new
                         {
-                            dataset = new { name = dataset.Name },
-                            primitive = primitive.Name,
-                            range = new { hours = (int)Math.Min(dataset.DefaultRangeHours, primitive.MaxRangeHours) },
-                            bindings = defaults,
+                            kind = "chart",
+                            range = new { hours = (int)Math.Min(dataset.DefaultRangeHours, dataset.MaxRangeHours) },
+                            tracks = new[] { new { layers = new[] { new { dataset = new { name = dataset.Name }, mark = mark.Name, bindings = defaults } } } },
                         },
                     },
-                }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
+                }, options);
                 Validator.Validate(spec).Errors.Should().BeEmpty(at);
+            }
+
+            foreach (var kind in dataset.PanelKinds)
+            {
+                var spec = JsonSerializer.SerializeToElement(new
+                {
+                    version = 1,
+                    panels = new[] { new { kind = kind.Name, dataset = new { name = dataset.Name }, bindings = new { columns = kind.Columns } } },
+                }, options);
+                Validator.Validate(spec).Errors.Should().BeEmpty($"{dataset.Name} as {kind.Name}");
             }
         }
     }
@@ -144,12 +219,12 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
     }
 
     [Fact]
-    public void Each_primitive_says_how_long_a_range_it_covers()
+    public void Each_dataset_says_how_long_a_range_it_covers()
     {
-        var chart = Catalogue().Datasets.Single(d => d.Name == "glucose_series").Primitives.Single(p => p.Name == "glucose_chart");
+        var treatments = Catalogue().Datasets.Single(d => d.Name == "treatments");
 
-        chart.MaxRangeHours.Should().Be(72);
-        chart.RangeLimit.Should().Be("This panel covers at most 3 days.");
+        treatments.MaxRangeHours.Should().Be(14 * 24);
+        treatments.RangeLimit.Should().Be("This data covers at most 14 days.");
     }
 
     [Fact]
@@ -184,6 +259,8 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
             dataset.Parameters.GetProperty("type").GetString().Should().Be("object", dataset.Name);
             Walk(dataset.Parameters, dataset.Name);
         }
+        foreach (var op in Catalogue().Ops)
+            Walk(op.Parameters, op.Name);
 
         problems.Should().BeEmpty();
     }
@@ -192,8 +269,8 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
     public void The_catalogue_emits_only_parameter_shapes_the_builder_form_draws()
     {
         var shapes = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var dataset in Catalogue().Datasets)
-            if (dataset.Parameters.TryGetProperty("properties", out var properties))
+        foreach (var parameters in Catalogue().Datasets.Select(d => d.Parameters).Concat(Catalogue().Ops.Select(o => o.Parameters)))
+            if (parameters.TryGetProperty("properties", out var properties))
                 foreach (var property in properties.EnumerateObject())
                     Collect(property.Value, shapes);
 
@@ -236,10 +313,10 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         JsonElement Property(string dataset, string name) =>
             datasets[dataset].Parameters.GetProperty("properties").GetProperty(name);
 
-        var interval = Property("glucose_series", "intervalMinutes");
-        interval.GetProperty("minimum").GetDouble().Should().Be(1);
-        interval.GetProperty("maximum").GetDouble().Should().Be(60);
-        interval.GetProperty("default").GetInt32().Should().Be(GlucoseSeriesParameters.DefaultIntervalMinutes);
+        Property("daily_profile", "dayOfWeek").GetProperty("maxItems").GetInt32().Should().Be(7);
+        Property("glucose_distribution_by_hour", "dayOfWeek").GetProperty("items").GetProperty("enum").GetArrayLength().Should().Be(7);
+        Property("state_spans", "kinds").GetProperty("items").GetProperty("x-enumLabels").EnumerateArray().Select(l => l.GetString())
+            .Should().Equal("Pump modes", "Profiles", "Overrides", "Activities", "Temp basals");
 
         Property("event_response", "minutesBefore").GetProperty("enum").EnumerateArray().Select(v => v.GetInt32())
             .Should().Equal(EventResponseDefinition.MinutesBeforeChoices);

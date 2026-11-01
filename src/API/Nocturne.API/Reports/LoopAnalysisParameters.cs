@@ -41,11 +41,16 @@ internal abstract record LoopAnalysisDatasetParameters : ReportDatasetParameters
     [StringLength(MaxProfileNameLength)]
     public string? ProfileName { get; init; }
 
+    /// <summary>The local weekdays analysed, or null for every day.</summary>
+    [JsonIgnore]
+    public virtual IReadOnlyList<ReportWeekday>? Weekdays => null;
+
     /// <summary>The query for local dates <paramref name="start"/> to <paramref name="end"/>, with these masks.</summary>
     public LoopAnalysisQuery ToQuery(DateOnly start, DateOnly end) => new()
     {
         StartDate = start,
         EndDate = end,
+        Days = Weekdays is { Count: > 0 } days ? [.. days.Select(d => d.ToDayOfWeek())] : null,
         ExcludeOverrides = ExcludeOverrides,
         ExcludeTemporaryTargets = ExcludeTemporaryTargets,
         ExcludeExercise = ExcludeExercise,
@@ -315,6 +320,14 @@ internal sealed record DailyProfileParameters : LoopAnalysisDatasetParameters
 
     [JsonIgnore]
     public override string DatasetName => Name;
+
+    [Description("Only these local weekdays. Optional; every day when missing.")]
+    [DisplayName("Weekdays")]
+    [Length(1, 7)]
+    public IReadOnlyList<ReportWeekday>? DayOfWeek { get; init; }
+
+    [JsonIgnore]
+    public override IReadOnlyList<ReportWeekday>? Weekdays => DayOfWeek;
 }
 
 [Description(
@@ -327,4 +340,9 @@ internal sealed record GlucoseDistributionByHourParameters : ReportDatasetParame
 
     [JsonIgnore]
     public override string DatasetName => Name;
+
+    [Description("Only readings on these local weekdays. Optional; every day when missing.")]
+    [DisplayName("Weekdays")]
+    [Length(1, 7)]
+    public IReadOnlyList<ReportWeekday>? DayOfWeek { get; init; }
 }

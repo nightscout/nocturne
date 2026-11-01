@@ -6,7 +6,7 @@ using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Reports;
 
-/// <summary>What a field holds, which decides where a primitive may bind it.</summary>
+/// <summary>What a field holds, which decides where a mark may bind it and what the axis along it is.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ReportFieldKind>))]
 internal enum ReportFieldKind
 {
@@ -29,6 +29,38 @@ internal enum ReportFieldKind
     /// <summary>Minutes after local midnight.</summary>
     [JsonStringEnumMemberName("time_of_day")]
     TimeOfDay,
+
+    /// <summary>A local calendar day: its midnight, Unix milliseconds.</summary>
+    [JsonStringEnumMemberName("day")]
+    Day,
+
+    /// <summary>A value of a scatter's first source, along its horizontal axis.</summary>
+    [JsonStringEnumMemberName("value")]
+    Value,
+
+    /// <summary>Minutes one source is shifted against another.</summary>
+    [JsonStringEnumMemberName("lag")]
+    Lag,
+}
+
+/// <summary>How a field's values in one slot of a panel's grid fold into one.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportAggregate>))]
+internal enum ReportAggregate
+{
+    /// <summary>Amounts given in the slot: a bolus, carbs, an injection.</summary>
+    [JsonStringEnumMemberName("sum")]
+    Sum,
+
+    /// <summary>A value that holds until the next one: a basal rate, a reservoir, a battery. Carried into a slot with none.</summary>
+    [JsonStringEnumMemberName("last")]
+    Last,
+
+    /// <summary>Samples of a level: glucose, insulin on board.</summary>
+    [JsonStringEnumMemberName("mean")]
+    Mean,
+
+    [JsonStringEnumMemberName("max")]
+    Max,
 }
 
 /// <summary>One field of a dataset's rows, as the catalogue and the result describe it.</summary>
@@ -43,16 +75,17 @@ internal enum ReportFieldKind
 /// <param name="Scope">The read scope it needs beyond the dataset's own, or null.</param>
 /// <param name="Color">The theme colour a line of it is drawn in.</param>
 /// <param name="GlucoseScale">Drawn on the glucose scale and coloured by the glucose thresholds.</param>
-/// <param name="Marker">Drawn on a time series as the dashboard's bolus or carb marker at each value, not as a line.</param>
+/// <param name="Marker">The dashboard glyph a markers layer draws at each value.</param>
 /// <param name="Step">The value holds until the next row, so a line of it is drawn as steps.</param>
 /// <param name="Companion">
 /// Sent with every row of the panel, bound or not: a row's sentence, or the cohort and range a band
 /// row belongs to, which the view needs to colour and name what it draws.
 /// </param>
 /// <param name="ColorField">
-/// The field each row carries its theme colour in, for a bar of this category; the runner sends it
-/// with the field, so a bar's colour is the data's, never the view's.
+/// The field each row carries its theme colour in, for a bar or a span of this category; the runner
+/// sends it with the field, so the colour is the data's, never the view's.
 /// </param>
+/// <param name="Aggregate">How the field folds onto a panel's grid; null for a field that cannot be folded.</param>
 internal sealed record ReportField(
     string Name,
     string Label,
@@ -65,7 +98,8 @@ internal sealed record ReportField(
     ReportMarkerKind? Marker = null,
     bool Step = false,
     string? ColorField = null,
-    bool Companion = false)
+    bool Companion = false,
+    ReportAggregate? Aggregate = null)
 {
     public const string GlucoseUnit = "glucose";
 
@@ -73,6 +107,24 @@ internal sealed record ReportField(
     /// A row field holding one sentence the API wrote about the row; a <see cref="Companion"/> field.
     /// </summary>
     public const string SentenceField = "sentence";
+
+    /// <summary>A row field that says, as <c>yes</c>, that the algorithm gave the row's bolus; a markers layer draws it outlined.</summary>
+    public const string AutomaticField = "automatic";
+
+    public bool IsNumber => Kind is ReportFieldKind.Number or ReportFieldKind.Percent;
+
+    /// <summary>The horizontal axis a field of this kind lays a chart along, or null for a value field.</summary>
+    public ReportXKind? AxisKind => Kind switch
+    {
+        ReportFieldKind.Time => ReportXKind.Time,
+        ReportFieldKind.Offset => ReportXKind.Offset,
+        ReportFieldKind.TimeOfDay => ReportXKind.TimeOfDay,
+        ReportFieldKind.Day => ReportXKind.Day,
+        ReportFieldKind.Category => ReportXKind.Category,
+        ReportFieldKind.Value => ReportXKind.Value,
+        ReportFieldKind.Lag => ReportXKind.Lag,
+        _ => null,
+    };
 
     /// <summary>Whether the field's values are glucose, or glucose per something, so written in the display unit.</summary>
     public bool InGlucoseUnit => Unit is not null && (Unit == GlucoseUnit || Unit.StartsWith(GlucoseUnit + "/", StringComparison.Ordinal));
@@ -104,22 +156,26 @@ internal interface IReportDataset
 
     IReadOnlyList<ReportField> Fields { get; }
 
-    IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; }
+    /// <summary>The kinds of panel other than a chart that may show it, in the order the builder offers them.</summary>
+    IReadOnlyList<ReportPanelKind> PanelKinds { get; }
 
-    /// <summary>The fields a panel drawn as <paramref name="primitive"/> may bind; a dataset whose rows differ by primitive narrows them.</summary>
-    IReadOnlyList<ReportField> FieldsFor(ReportPrimitive primitive) => Fields;
+    /// <summary>The marks a chart layer of it may be drawn as, the default first; none for a dataset no chart draws.</summary>
+    IReadOnlyList<ReportMark> Marks { get; }
 
-    /// <summary>The bindings a panel drawn as <paramref name="primitive"/> gets when it sends none, or null for the primitive's own defaults.</summary>
-    ReportBindings? DefaultBindings(ReportPrimitive primitive) => null;
+    /// <summary>The fields a panel of <paramref name="kind"/> may bind; a dataset whose rows differ by kind narrows them.</summary>
+    IReadOnlyList<ReportField> FieldsFor(ReportPanelKind kind) => Fields;
+
+    /// <summary>The bindings a layer drawn as <paramref name="mark"/> gets when it sends none, or null for the mark's own defaults.</summary>
+    ReportLayerBindings? DefaultBindings(ReportMark mark) => null;
 
     /// <summary>The range a panel gets when neither it nor the report gives one.</summary>
     TimeSpan DefaultRange { get; }
 
-    /// <summary>The longest range a panel of this dataset drawn as <paramref name="primitive"/> may ask for.</summary>
-    TimeSpan MaxRange(ReportPrimitive primitive);
+    /// <summary>The longest range one read of this dataset may cover.</summary>
+    TimeSpan MaxRange { get; }
 
-    /// <summary>The most panels of this dataset one report may hold, for a dataset whose panel costs more than one read.</summary>
-    int MaxPanelsPerReport => ReportSpec.MaxPanels;
+    /// <summary>The most reads of this dataset one report may make, for a dataset whose read costs more than one.</summary>
+    int MaxPanelsPerReport => ReportSpec.MaxReads;
 
     /// <summary>The most rows one series of this dataset carries; longer ranges are downsampled.</summary>
     int PointBudget { get; }
@@ -127,18 +183,16 @@ internal interface IReportDataset
     /// <summary>Errors in the parameters, as messages naming the parameter.</summary>
     IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters);
 
-    /// <summary>Errors in parameters that depend on how the panel draws the dataset and over how long.</summary>
-    IEnumerable<(string Field, string Message)> ValidatePanel(ReportDatasetParameters parameters, ReportPrimitive primitive, TimeSpan span) => [];
-
     Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken);
 }
 
-/// <summary>One panel's run of a dataset.</summary>
+/// <summary>One read of a dataset, for a panel or a layer.</summary>
+/// <param name="Kind">The kind of panel the rows are for; a chart's layers and sources read as <see cref="ReportPanelKind.Chart"/>.</param>
 /// <param name="Now">The instant the runner resolved <see cref="From"/> and <see cref="To"/> against; null outside a run.</param>
-/// <param name="Bindings">The panel's normalised bindings, for a dataset whose rows take the shape they bind.</param>
+/// <param name="X">The field a chart layer lays along, for a dataset whose rows take the shape they are drawn in.</param>
 internal sealed record ReportDatasetRequest(
     ReportDatasetParameters Parameters,
-    ReportPrimitive Primitive,
+    ReportPanelKind Kind,
     DateTimeOffset From,
     DateTimeOffset To,
     bool UseMmol,
@@ -148,7 +202,7 @@ internal sealed record ReportDatasetRequest(
     bool HistoryClamped = false,
     Datasets.ReportRunCache? RunCache = null,
     DateTimeOffset? Now = null,
-    ReportBindings? Bindings = null,
+    string? X = null,
     TimeZoneInfo? Zone = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
@@ -173,23 +227,11 @@ internal sealed record ReportDatasetOutput
     /// <summary>The glucose cut-points in the display unit, for a dataset with glucose fields.</summary>
     public ReportThresholds? Thresholds { get; init; }
 
-    /// <summary>The dashboard chart payload, redacted, for <see cref="ReportPrimitive.GlucoseChart"/>.</summary>
-    public DashboardChartData? Chart { get; init; }
-
-    /// <summary>The read scopes the token lacks, for the chart's legend.</summary>
-    public IReadOnlyList<string> OmittedScopes { get; init; } = [];
-
     /// <summary>The range the dataset read, where it differs from the one asked for: whole local days, say.</summary>
     public ReportWindow? Window { get; init; }
 
-    /// <summary>Treatment markers to draw on a time series panel.</summary>
-    public IReadOnlyList<ReportMarker> Markers { get; init; } = [];
-
     /// <summary>Every cohort the panel asked for, in order, with its label, shown or not.</summary>
     public IReadOnlyList<ReportCohort> Cohorts { get; init; } = [];
-
-    /// <summary>Single events' glucose aligned on their anchor, which a glucose chart of cohorts draws under the band.</summary>
-    public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
 
     /// <summary>At most <see cref="ReportFacts.Max"/> figures the view prints under the panel, label above value.</summary>
     public IReadOnlyList<ReportFact> Facts { get; init; } = [];
@@ -207,16 +249,7 @@ internal sealed record ReportDatasetOutput
     public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
 }
 
-/// <summary>
-/// One event's glucose over the window, aligned on its anchor.
-/// </summary>
-/// <param name="Cohort">The cohort's number, as <see cref="ReportCohort.Number"/>.</param>
-/// <param name="At">The anchor, Unix milliseconds.</param>
-/// <param name="Points">[minutes from the anchor, glucose in the display unit] pairs; slots with no reading are left out.</param>
-/// <param name="Sentence">What the event's figures show, as the event table's sentence.</param>
-internal sealed record ReportTrace(int Cohort, long At, IReadOnlyList<double[]> Points, string Sentence);
-
-/// <summary>One shaded span of a band panel: its words ("Glucose P25–P75") and its low and high edge fields.</summary>
+/// <summary>One shaded span of a band layer: its words ("Glucose P25–P75") and its low and high edge fields.</summary>
 internal sealed record ReportBandSpan(string Label, string Low, string High)
 {
     /// <summary>
@@ -248,7 +281,7 @@ internal sealed record ReportCohort(int Number, string Label);
 
 internal sealed record ReportOmittedField(string Field, string Scope);
 
-/// <summary>A treatment marker on a time series: when, which, and its amount (units of insulin, grams of carbs).</summary>
+/// <summary>A treatment marker on a markers layer: when, which, and its amount (units of insulin, grams of carbs, glucose).</summary>
 /// <param name="Automatic">A bolus the algorithm gave, drawn outlined as the dashboard draws it.</param>
 internal sealed record ReportMarker(long Time, ReportMarkerKind Kind, double Amount, bool Automatic = false);
 

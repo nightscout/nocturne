@@ -29,20 +29,26 @@ internal sealed class BasalDeliveryDataset : IReportDataset
     [
         new("time", "Time", ReportFieldKind.Time, null, "When the rate starts, Unix milliseconds."),
         new("delivered", "Delivered basal", ReportFieldKind.Number, "U/h", "The basal rate delivered.",
-            Color: ChartColor.InsulinBasal, Step: true),
+            Color: ChartColor.InsulinBasal, Step: true, Aggregate: ReportAggregate.Last),
         new("scheduled", "Scheduled basal", ReportFieldKind.Number, "U/h", "The rate the basal schedule called for, an override's scale included.",
-            Scope.TherapyRead, ChartColor.InsulinTempBasal, Step: true),
+            Scope.TherapyRead, ChartColor.InsulinTempBasal, Step: true, Aggregate: ReportAggregate.Last),
         new("origin", "Origin", ReportFieldKind.Category, null, "Where the delivered rate came from: Algorithm, Scheduled, Manual, Suspended or Inferred."),
     ];
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) =>
-        new() { X = "time", Y = ["delivered", "scheduled"] };
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark switch
+    {
+        ReportMark.Area => new ReportLayerBindings { X = "time", Y = ["delivered"] },
+        ReportMark.Line => new ReportLayerBindings { X = "time", Y = ["delivered", "scheduled"] },
+        _ => null,
+    };
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.TimeSeries];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Area, ReportMark.Line];
 
     public TimeSpan DefaultRange => TimeSpan.FromHours(24);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(14);
+    public TimeSpan MaxRange => TimeSpan.FromDays(14);
 
     public int PointBudget => Budget;
 

@@ -43,12 +43,14 @@ internal sealed class PeriodComparisonDataset : IReportDataset
 
     public IReadOnlyList<ReportField> Fields => RowFields;
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.Comparison, ReportPrimitive.Table];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Comparison, ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(28);
 
     /// <summary>The panel's own range is not read; each period is checked against <see cref="PeriodComparisonParameters.MaxPeriodDays"/>.</summary>
-    public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(PeriodComparisonParameters.MaxPeriodDays);
+    public TimeSpan MaxRange => TimeSpan.FromDays(PeriodComparisonParameters.MaxPeriodDays);
 
     public int PointBudget => 40;
 

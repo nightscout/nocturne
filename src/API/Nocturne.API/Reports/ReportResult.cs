@@ -47,7 +47,7 @@ internal enum ReportPanelStatus
     [JsonStringEnumMemberName("ok")]
     Ok,
 
-    /// <summary>Not read: the token lacks the dataset's scope.</summary>
+    /// <summary>Not read: the token lacks the scope of the dataset, or of a field or a source the layer needs.</summary>
     [JsonStringEnumMemberName("not_permitted")]
     NotPermitted,
 
@@ -55,7 +55,7 @@ internal enum ReportPanelStatus
     [JsonStringEnumMemberName("timed_out")]
     TimedOut,
 
-    /// <summary>The dataset failed; the other panels are still drawn.</summary>
+    /// <summary>The dataset failed; the other panels and layers are still drawn.</summary>
     [JsonStringEnumMemberName("failed")]
     Failed,
 }
@@ -66,28 +66,35 @@ internal sealed record ReportPanelResult
 
     public string? Title { get; init; }
 
-    public required string Dataset { get; init; }
+    public required ReportPanelKind Kind { get; init; }
 
-    public required ReportPrimitive Primitive { get; init; }
-
-    public required ReportBindings Bindings { get; init; }
-
+    /// <summary>Ok when the panel, or at least one of a chart's layers, was read.</summary>
     public required ReportPanelStatus Status { get; init; }
 
     /// <summary>The resolved range, Unix milliseconds.</summary>
     public required ReportWindow Window { get; init; }
 
-    /// <summary>The catalogue entries of the fields the bindings draw and the rows carry.</summary>
+    /// <summary>A figures, table or comparison panel's dataset; null for a chart.</summary>
+    public string? Dataset { get; init; }
+
+    /// <summary>A figures, table or comparison panel's columns; null for a chart.</summary>
+    public ReportBindings? Bindings { get; init; }
+
+    /// <summary>A figures, table or comparison panel's fields: the catalogue entries of the columns the rows carry.</summary>
     public IReadOnlyList<ReportField> Fields { get; init; } = [];
 
     public IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows { get; init; } = [];
 
+    /// <summary>A chart's horizontal axis, which every layer shares; null for another kind of panel.</summary>
+    public ReportXKind? XKind { get; init; }
+
+    /// <summary>A chart's grid as asked for: minutes, 0 for every reading, null for each dataset's own spacing.</summary>
+    public int? Grid { get; init; }
+
+    /// <summary>A chart's tracks, top to bottom.</summary>
+    public IReadOnlyList<ReportTrackResult> Tracks { get; init; } = [];
+
     public ReportThresholds? Thresholds { get; init; }
-
-    /// <summary>The dashboard chart payload, for <see cref="ReportPrimitive.GlucoseChart"/> only.</summary>
-    public DashboardChartData? Chart { get; init; }
-
-    public IReadOnlyList<string> OmittedScopes { get; init; } = [];
 
     public required string Summary { get; init; }
 
@@ -99,34 +106,22 @@ internal sealed record ReportPanelResult
 
     public ReportResolution? Resolution { get; init; }
 
-    /// <summary>Treatment markers the panel's time series draws, read under the token's scopes.</summary>
-    public IReadOnlyList<ReportMarker> Markers { get; init; } = [];
-
     /// <summary>The web report that shows this panel's data, with its range and parameters; null where there is none.</summary>
     public string? Link { get; init; }
 
     /// <summary>Every event cohort the panel asked for, with the label that names its filter; empty for other datasets.</summary>
     public IReadOnlyList<ReportCohort> Cohorts { get; init; } = [];
 
-    /// <summary>A glucose chart of event cohorts: single events' glucose, drawn faintly under each cohort's band.</summary>
-    public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
-
-    /// <summary>
-    /// A band panel's spans, inner first: the label the view prints for each and the fields of its low and
-    /// high edge. Empty for a panel without a band.
-    /// </summary>
-    public IReadOnlyList<ReportBandSpan> Spans { get; init; } = [];
-
     /// <summary>At most six figures the view prints under the panel, label above value; empty where the panel has none.</summary>
     public IReadOnlyList<ReportFact> Facts { get; init; } = [];
 
-    /// <summary>The one sentence the view prints under the facts; for a panel that was not drawn, why.</summary>
+    /// <summary>The one sentence the view prints under the facts; for a panel or a layer that was not drawn, why.</summary>
     public string? Sentence { get; init; }
 
     /// <summary>The panel's range and how much it read, as one line.</summary>
     public string? Context { get; init; }
 
-    /// <summary>The range is the longest the panel's dataset covers drawn so: no earlier data can be added to it.</summary>
+    /// <summary>The range is the longest the panel's data covers: no earlier data can be added to it.</summary>
     public bool AtRangeLimit { get; init; }
 
     /// <summary>The sentence that says how long a range the panel covers, where it is at that limit.</summary>
@@ -135,6 +130,81 @@ internal sealed record ReportPanelResult
     /// <summary>The query <see cref="ReportLinks"/> opens the panel's web report with, where the dataset gives one.</summary>
     [JsonIgnore]
     public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
+}
+
+/// <summary>One track of a chart: its layers over the chart's shared horizontal axis.</summary>
+/// <param name="Height">The track's share of the chart's height.</param>
+internal sealed record ReportTrackResult(string Id, string? Title, double Height, IReadOnlyList<ReportLayerResult> Layers);
+
+/// <summary>Which vertical axis a layer is drawn on.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportAxisSide>))]
+internal enum ReportAxisSide
+{
+    [JsonStringEnumMemberName("left")]
+    Left,
+
+    [JsonStringEnumMemberName("right")]
+    Right,
+
+    /// <summary>Markers and spans: drawn with no axis.</summary>
+    [JsonStringEnumMemberName("none")]
+    None,
+}
+
+/// <summary>One layer of a chart, resolved: its rows, how they are drawn and on which axis.</summary>
+internal sealed record ReportLayerResult
+{
+    public required string Id { get; init; }
+
+    /// <summary>The layer's name in the legend: its title, else the dataset's and the fields' names.</summary>
+    public required string Title { get; init; }
+
+    public required ReportMark Mark { get; init; }
+
+    public required ReportLayerBindings Bindings { get; init; }
+
+    public required ReportXKind XKind { get; init; }
+
+    /// <summary>The unit of the layer's values on its axis; null for no unit or no axis.</summary>
+    public string? Unit { get; init; }
+
+    public required ReportAxisSide Side { get; init; }
+
+    public required ReportPanelStatus Status { get; init; }
+
+    /// <summary>The layer's own range where it gives one; else the panel's.</summary>
+    public required ReportWindow Window { get; init; }
+
+    /// <summary>The catalogue entries of the fields the bindings draw and the rows carry, in the tenant's unit.</summary>
+    public IReadOnlyList<ReportField> Fields { get; init; } = [];
+
+    public IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows { get; init; } = [];
+
+    /// <summary>
+    /// A series hue the runner gave the layer because an earlier layer on its track takes its fields'
+    /// colour; null to draw each field in its own colour (a glucose line in the report's glucose colouring).
+    /// </summary>
+    public ChartColor? Color { get; init; }
+
+    public IReadOnlyList<ReportFact> Facts { get; init; } = [];
+
+    public string? Sentence { get; init; }
+
+    public string Summary { get; init; } = string.Empty;
+
+    /// <summary>A band's spans, inner first: the words for each and the fields of its low and high edges.</summary>
+    public IReadOnlyList<ReportBandSpan> Spans { get; init; } = [];
+
+    /// <summary>A markers layer's markers, from its rows.</summary>
+    public IReadOnlyList<ReportMarker> Markers { get; init; } = [];
+
+    /// <summary>Every event cohort the layer's dataset asked for, with the label that names its filter.</summary>
+    public IReadOnlyList<ReportCohort> Cohorts { get; init; } = [];
+
+    /// <summary>Fields left out because the token lacks their scope.</summary>
+    public IReadOnlyList<ReportOmittedField> Omitted { get; init; } = [];
+
+    public ReportResolution? Resolution { get; init; }
 }
 
 internal sealed record ReportWindow(long From, long To);

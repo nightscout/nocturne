@@ -42,42 +42,47 @@ internal sealed class DailyProfileDataset : IReportDataset
     public IReadOnlyList<ReportField> Fields { get; } =
     [
         new("minuteOfDay", "Time of day", ReportFieldKind.TimeOfDay, "min", "Start of the slot, minutes after local midnight."),
-        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of the slot's readings, pooled across days."),
-        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the slot's readings."),
+        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of the slot's readings, pooled across days.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the slot's readings.", Aggregate: ReportAggregate.Mean),
         new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median of the slot's readings.",
-            Color: ChartColor.GlucoseInRange, GlucoseScale: true),
-        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the slot's readings."),
-        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the slot's readings."),
-        new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the slot across the range."),
+            Color: ChartColor.GlucoseInRange, GlucoseScale: true, Aggregate: ReportAggregate.Mean),
+        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the slot's readings.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the slot's readings.", Aggregate: ReportAggregate.Mean),
+        new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the slot across the range.", Aggregate: ReportAggregate.Sum),
         new("scheduledBasal", "Scheduled basal", ReportFieldKind.Number, "U/h", "Median scheduled basal, including any override's scale.",
-            Scope.TherapyRead, ChartColor.InsulinBasal),
-        new("deliveredBasal", "Delivered basal", ReportFieldKind.Number, "U/h", "Median delivered basal.", Scope.TreatmentsRead, ChartColor.InsulinBasal),
+            Scope.TherapyRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
+        new("deliveredBasal", "Delivered basal", ReportFieldKind.Number, "U/h", "Median delivered basal.", Scope.TreatmentsRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
         new("netLoopCorrection", "Net loop correction", ReportFieldKind.Number, "U/h",
-            "Mean across days of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead),
-        new("iob", "IOB median", ReportFieldKind.Number, "U", "Median insulin on board.", Scope.TreatmentsRead, ChartColor.InsulinBolus),
-        new("cob", "COB median", ReportFieldKind.Number, "g", "Median carbs on board.", Scope.TreatmentsRead, ChartColor.Carbs),
+            "Mean across days of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, Aggregate: ReportAggregate.Mean),
+        new("iob", "IOB median", ReportFieldKind.Number, "U", "Median insulin on board.", Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
+        new("cob", "COB median", ReportFieldKind.Number, "g", "Median carbs on board.", Scope.TreatmentsRead, ChartColor.Carbs, Aggregate: ReportAggregate.Mean),
         new("targetLow", "Target low", ReportFieldKind.Number, ReportField.GlucoseUnit,
-            "The low edge of the target range in force (a temporary target where one ran), median across days.", Scope.TherapyRead, ChartColor.GlucoseLow),
+            "The low edge of the target range in force (a temporary target where one ran), median across days.", Scope.TherapyRead, ChartColor.GlucoseLow, Aggregate: ReportAggregate.Mean),
         new("targetHigh", "Target high", ReportFieldKind.Number, ReportField.GlucoseUnit,
-            "The high edge of the target range in force, median across days.", Scope.TherapyRead, ChartColor.GlucoseHigh),
+            "The high edge of the target range in force, median across days.", Scope.TherapyRead, ChartColor.GlucoseHigh, Aggregate: ReportAggregate.Mean),
         new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
             "One sentence that states the slot's glucose figures; the chart shows it for the slot under the pointer.", Companion: true),
     ];
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.RangeBands
-        ? new ReportBindings
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark switch
+    {
+        ReportMark.Band => new ReportLayerBindings
         {
             X = "minuteOfDay",
             Y = ["glucoseP50"],
-            Band = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"],
-        }
-        : null;
+            Edges = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"],
+        },
+        ReportMark.Line or ReportMark.Area => new ReportLayerBindings { X = "minuteOfDay", Y = ["glucoseP50"] },
+        _ => null,
+    };
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.RangeBands, ReportPrimitive.TimeSeries];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Band, ReportMark.Line, ReportMark.Area];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(14);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => LoopAnalysisDatasetRun.MaxRange;
+    public TimeSpan MaxRange => LoopAnalysisDatasetRun.MaxRange;
 
     public int PointBudget => 288;
 
@@ -86,6 +91,8 @@ internal sealed class DailyProfileDataset : IReportDataset
         var p = (DailyProfileParameters)parameters;
         if (p.ProfileName is { Length: > LoopAnalysisDatasetParameters.MaxProfileNameLength })
             yield return ("profileName", $"Use {LoopAnalysisDatasetParameters.MaxProfileNameLength} characters or fewer.");
+        if (p.DayOfWeek is { } days && days.Distinct().Count() != days.Count)
+            yield return ("dayOfWeek", "A weekday is named twice.");
     }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)

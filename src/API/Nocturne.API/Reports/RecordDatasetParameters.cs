@@ -6,8 +6,8 @@ namespace Nocturne.API.Reports;
 
 /// <summary>
 /// A kind of treatment record the <c>treatments</c> dataset reads: the Treatment Log's kinds that are
-/// treatments (<see cref="Nocturne.Core.Models.TreatmentLogCategory"/>, without BG checks and device
-/// events, which are other categories), and the temp basals and overrides the dashboard chart draws.
+/// treatments (<see cref="Nocturne.Core.Models.TreatmentLogCategory"/>, without device events), the temp
+/// basals and overrides the dashboard chart draws, and BG checks, which are glucose and need glucose.read.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ReportTreatmentType>))]
 internal enum ReportTreatmentType
@@ -29,6 +29,9 @@ internal enum ReportTreatmentType
 
     [JsonStringEnumMemberName("basal_injection")]
     BasalInjection,
+
+    [JsonStringEnumMemberName("bg_check")]
+    BgCheck,
 }
 
 [Description(
@@ -42,7 +45,7 @@ internal sealed record TreatmentsParameters : ReportDatasetParameters
     [JsonIgnore]
     public override string DatasetName => Name;
 
-    [Description("The kinds to read: bolus, carbs, temp_basal, note, override, basal_injection. Optional; default every kind.")]
+    [Description("The kinds to read: bolus, carbs, temp_basal, note, override, basal_injection, bg_check. Optional; default every kind.")]
     public IReadOnlyList<ReportTreatmentType>? Types { get; init; }
 
     [Description("Keep only carb entries of at least this many grams. Optional; the other kinds are not affected.")]
@@ -54,6 +57,48 @@ internal sealed record TreatmentsParameters : ReportDatasetParameters
     [Range(0, 100)]
     [DisplayName("Smallest insulin dose (U)")]
     public double? MinInsulin { get; init; }
+}
+
+/// <summary>A kind of state span the <c>state_spans</c> dataset reads, as the dashboard chart's lanes draw them.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportSpanKind>))]
+internal enum ReportSpanKind
+{
+    [Description("Pump modes")]
+    [JsonStringEnumMemberName("pump_mode")]
+    PumpMode,
+
+    [Description("Profiles")]
+    [JsonStringEnumMemberName("profile")]
+    Profile,
+
+    [Description("Overrides")]
+    [JsonStringEnumMemberName("override")]
+    Override,
+
+    [Description("Activities")]
+    [JsonStringEnumMemberName("activity")]
+    Activity,
+
+    [Description("Temp basals")]
+    [JsonStringEnumMemberName("temp_basal")]
+    TempBasal,
+}
+
+[Description(
+    "state_spans: pump modes, profiles, overrides, activities and temp basals, each from its start to its end, as the "
+    + "dashboard chart's lanes draw them.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record StateSpansParameters : ReportDatasetParameters
+{
+    public const string Name = "state_spans";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
+
+    [Description("The kinds to read. Optional; every kind when missing.")]
+    [DisplayName("Kinds")]
+    [Length(1, 5)]
+    public IReadOnlyList<ReportSpanKind>? Kinds { get; init; }
 }
 
 [Description("basal_delivery: the basal rate delivered over time beside the rate the schedule called for, as the dashboard's basal track draws them.")]

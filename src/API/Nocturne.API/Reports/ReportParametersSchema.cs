@@ -47,6 +47,20 @@ internal static partial class ReportParametersSchema
         return JsonSerializer.SerializeToElement(schema);
     }
 
+    /// <summary>A derived op's settings: the schema of its spec type without its sources, which the builder draws as forms of their own.</summary>
+    public static JsonElement ForOp(Type specType)
+    {
+        var schema = Options.GetJsonSchemaAsNode(specType, ExporterOptions);
+        if (schema["properties"] is JsonObject properties)
+            foreach (var source in new[] { "a", "b" })
+                properties.Remove(source);
+        if (schema["required"] is JsonArray required)
+            foreach (var source in required.Where(r => r?.GetValue<string>() is "a" or "b").ToList())
+                required.Remove(source);
+        Defaults(schema, specType);
+        return JsonSerializer.SerializeToElement(schema);
+    }
+
     /// <summary>
     /// The value each optional parameter holds in a new object of its type, as its <c>default</c>, so
     /// the form shows it filled in: a boolean, a number or an enum. A required member has none: its

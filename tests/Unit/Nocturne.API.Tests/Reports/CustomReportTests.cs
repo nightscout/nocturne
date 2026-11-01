@@ -26,9 +26,10 @@ public class CustomReportTests
           "version": 1,
           "title": "<script>alert(1)</script>",
           "panels": [
-            { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"] }, "range": { "hours": 24 } },
-            { "id": "stats", "dataset": { "name": "event_response", "cohorts": [{ "anchor": "Meal", "dayOfWeek": ["Mon"] }] },
-              "primitive": "range_bands", "range": { "from": "2026-10-01T00:00:00Z", "to": "2026-10-15T00:00:00Z" } }
+            { "kind": "chart", "range": { "hours": 24 }, "tracks": [ { "layers": [
+              { "dataset": { "name": "glucose_series" }, "mark": "line", "bindings": { "y": ["glucose"] } } ] } ] },
+            { "id": "stats", "kind": "chart", "range": { "from": "2026-10-01T00:00:00Z", "to": "2026-10-15T00:00:00Z" }, "tracks": [ { "layers": [
+              { "dataset": { "name": "event_response", "cohorts": [{ "anchor": "Meal", "dayOfWeek": ["Mon"] }] }, "mark": "band" } ] } ] }
           ]
         }
         """;
@@ -53,7 +54,7 @@ public class CustomReportTests
             }),
         ]);
         var old = JsonDocument.Parse("""
-            { "version": 0, "panels": [{ "dataset": { "name": "glucose" }, "primitive": "time_series", "bindings": { "y": ["glucose"] } }] }
+            { "version": 0, "panels": [{ "kind": "table", "dataset": { "name": "glucose" } }] }
             """).RootElement;
 
         var rewritten = rewriter.Rewrite(old);
@@ -66,7 +67,7 @@ public class CustomReportTests
     public void A_version_with_no_rewrite_is_left_for_the_validator_to_refuse()
     {
         var old = JsonDocument.Parse("""
-            { "version": 0, "panels": [{ "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"] } }] }
+            { "version": 0, "panels": [{ "kind": "table", "dataset": { "name": "glucose_series" } }] }
             """).RootElement;
 
         var rewritten = ReportSpecRewriter.Current.Rewrite(old);
@@ -164,10 +165,10 @@ public class CustomReportTests
         saved.Report!.Name.Should().Be("Lunch");
         var stored = JsonNode.Parse(repository.Rows.Single().SpecJson)!;
         stored["panels"]![0]!["id"]!.GetValue<string>().Should().Be("p1");
-        stored["panels"]![0]!["bindings"]!["x"]!.GetValue<string>().Should().Be("time");
+        stored["panels"]![0]!["tracks"]![0]!["layers"]![0]!["bindings"]!["x"]!.GetValue<string>().Should().Be("time");
 
         var refused = await store.CreateAsync("Other", JsonDocument.Parse("""
-            { "version": 1, "panels": [{ "dataset": { "name": "insulin" }, "primitive": "time_series", "bindings": { "y": ["glucose"] } }] }
+            { "version": 1, "panels": [{ "kind": "table", "dataset": { "name": "insulin" } }] }
             """).RootElement, Member, default);
         refused.Status.Should().Be(CustomReportWriteStatus.Invalid);
         refused.Errors.Should().ContainSingle().Which.Path.Should().Be("panels[0].dataset.name");
@@ -181,7 +182,7 @@ public class CustomReportTests
     public async Task A_stored_spec_that_no_longer_validates_opens_as_stored_with_the_errors()
     {
         var repository = new FakeRepository();
-        const string old = """{"version":0,"panels":[{"dataset":{"name":"glucose_series"},"primitive":"time_series","bindings":{"y":["glucose"]}}]}""";
+        const string old = """{"version":0,"panels":[{"kind":"table","dataset":{"name":"glucose_series"}}]}""";
         repository.Rows.Add(new SavedReportSpec(Guid.CreateVersion7(), "Old", old, 0, null, DateTime.UtcNow, DateTime.UtcNow));
 
         var report = await Store(repository).GetAsync(repository.Rows[0].Id, Member, default);

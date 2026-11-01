@@ -20,8 +20,9 @@ internal sealed record ReportSpecValidation(ReportSpec? Spec, IReadOnlyList<Repo
 
 /// <summary>
 /// Reads a report spec into a normalised <see cref="ReportSpec"/>,
-/// or lists every error in it. Normalised: version stamped, panel ids assigned, each panel's range
-/// and bindings filled from the report's or the dataset's defaults.
+/// or lists every error in it. Normalised: version stamped, panel, track and layer ids assigned, each
+/// panel's range, each layer's mark and bindings filled from the report's, the dataset's or the op's
+/// defaults, and each layer's axis, unit and side worked out.
 /// </summary>
 /// <remarks>
 /// It reads the JSON itself rather than deserialising the polymorphic type: the serializer stops
@@ -41,174 +42,10 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         NumberHandling = JsonNumberHandling.Strict,
     };
 
-    private static readonly string[] SpecKeys = ["version", "title", "range", "panels"];
-    private static readonly string[] PanelKeys = ["id", "title", "dataset", "primitive", "bindings", "range"];
     private static readonly string[] RangeKeys = ["hours", "from", "to"];
-    private static readonly string[] BindingKeys = ["x", "y", "band", "columns", "series", "stacked", "orientation"];
-
-    public ReportSpecValidation Validate(JsonElement spec, bool useMmol = false)
-    {
-        var errors = new List<ReportSpecError>();
-        void Error(string path, string message) => errors.Add(new ReportSpecError(path, message));
-        var now = time.GetUtcNow();
-
-        if (spec.ValueKind != JsonValueKind.Object)
-        {
-            Error("spec", "Send the spec as a JSON object with 'version' and 'panels'.");
-            return new ReportSpecValidation(null, errors);
-        }
-
-        UnknownKeys(spec, "spec", SpecKeys, Error);
-
-        if (!spec.TryGetProperty("version", out var version) || version.ValueKind == JsonValueKind.Null)
-            Error("version", $"Missing. Send \"version\": {ReportSpec.CurrentVersion}.");
-        else if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v != ReportSpec.CurrentVersion)
-            Error("version", $"{Shorten(version.GetRawText())} is not a supported version. Send the number {ReportSpec.CurrentVersion}.");
-
-        var title = OptionalString(spec, "title", "title", ReportSpec.MaxTitleLength, Error);
-        var reportRange = spec.TryGetProperty("range", out var r) ? ReadRange(r, "range", now, Error) : null;
-
-        var panels = new List<ReportPanelSpec>();
-        if (!spec.TryGetProperty("panels", out var panelsElement) || panelsElement.ValueKind != JsonValueKind.Array)
-        {
-            Error("panels", $"Missing. Send a list of 1 to {ReportSpec.MaxPanels} panels.");
-        }
-        else if (panelsElement.GetArrayLength() is 0 or > ReportSpec.MaxPanels)
-        {
-            Error("panels", $"A report has 1 to {ReportSpec.MaxPanels} panels; this one has {panelsElement.GetArrayLength()}. "
-                + "Split it into more than one report.");
-        }
-        else
-        {
-            var index = 0;
-            var ids = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var panel in panelsElement.EnumerateArray())
-            {
-                if (ReadPanel(panel, index, reportRange, ids, now, useMmol, Error) is { } read)
-                    panels.Add(read);
-                index++;
-            }
-
-            foreach (var group in panels.GroupBy(p => p.Dataset.DatasetName))
-            {
-                if (registry.Find(group.Key) is { } heavy && group.Count() > heavy.MaxPanelsPerReport)
-                    Error($"panels[{panels.IndexOf(group.ElementAt(heavy.MaxPanelsPerReport))}].dataset.name",
-                        $"A report holds at most {heavy.MaxPanelsPerReport} {heavy.Name} panels; this one has {group.Count()}. "
-                        + "Split them into more than one report.");
-            }
-
-            for (var i = 0; i < panels.Count; i++)
-            {
-                if (panels[i].Id is null)
-                {
-                    var assigned = NextFreeId(ids, i);
-                    ids.Add(assigned);
-                    panels[i] = panels[i] with { Id = assigned };
-                }
-            }
-        }
-
-        if (errors.Count > 0)
-            return new ReportSpecValidation(null, errors);
-
-        return new ReportSpecValidation(
-            new ReportSpec { Version = ReportSpec.CurrentVersion, Title = title, Range = reportRange, Panels = panels },
-            errors);
-    }
-
-    private ReportPanelSpec? ReadPanel(
-        JsonElement panel,
-        int index,
-        ReportRange? reportRange,
-        HashSet<string> ids,
-        DateTimeOffset now,
-        bool useMmol,
-        Action<string, string> error)
-    {
-        var at = $"panels[{index}]";
-        if (panel.ValueKind != JsonValueKind.Object)
-        {
-            error(at, "Send each panel as an object with 'dataset' and 'primitive'.");
-            return null;
-        }
-
-        var failed = false;
-        void Error(string path, string message)
-        {
-            failed = true;
-            error(path, message);
-        }
-
-        UnknownKeys(panel, at, PanelKeys, Error);
-
-        var id = OptionalString(panel, "id", $"{at}.id", ReportSpec.MaxIdLength, Error);
-        if (id is not null && !IdPattern().IsMatch(id))
-            Error($"{at}.id", "Use only letters, digits, '-' and '_'.");
-        if (id is not null && !ids.Add(id))
-            Error($"{at}.id", $"'{id}' is already the id of another panel. Panel ids must be unique.");
-
-        var title = OptionalString(panel, "title", $"{at}.title", ReportSpec.MaxTitleLength, Error);
-
-        var dataset = ReadDataset(panel, at, Error, out var parameters);
-
-        ReportPrimitive? primitive = null;
-        if (!panel.TryGetProperty("primitive", out var p) || p.ValueKind != JsonValueKind.String)
-        {
-            Error($"{at}.primitive", $"Missing. Send one of: {PrimitiveList(ReportPrimitives.All)}.");
-        }
-        else if (ReportPrimitives.Parse(p.GetString()) is not { } parsed)
-        {
-            Error($"{at}.primitive", $"'{Shorten(p.GetString()!)}' is not a primitive. Send one of: {PrimitiveList(ReportPrimitives.All)}.");
-        }
-        else if (dataset is not null && !dataset.AllowedPrimitives.Contains(parsed))
-        {
-            Error($"{at}.primitive",
-                $"{dataset.Name} cannot be drawn as {parsed.WireName()}. Send one of: {PrimitiveList(dataset.AllowedPrimitives)}.");
-        }
-        else
-        {
-            primitive = parsed;
-        }
-
-        var range = panel.TryGetProperty("range", out var pr) ? ReadRange(pr, $"{at}.range", now, Error) : null;
-        range ??= reportRange;
-        if (dataset is not null && primitive is { } drawn)
-        {
-            range ??= new ReportRange { Hours = (int)dataset.DefaultRange.TotalHours };
-            var max = dataset.MaxRange(drawn);
-            var span = range.Hours is { } hours ? TimeSpan.FromHours(hours) : range.To!.Value - range.From!.Value;
-            if (span > max)
-                Error($"{at}.range",
-                    $"{dataset.Name} drawn as {drawn.WireName()} covers at most {Describe(max)}; this range is {Describe(span)}. "
-                    + "Shorten it, or split it into more than one panel.");
-            if (parameters is not null)
-                foreach (var (field, message) in dataset.ValidatePanel(parameters, drawn, span))
-                    Error($"{at}.dataset.{field}", message);
-        }
-
-        ReportBindings? bindings = null;
-        if (dataset is not null && primitive is { } kind)
-        {
-            panel.TryGetProperty("bindings", out var b);
-            bindings = ReadBindings(b, $"{at}.bindings", dataset, kind, useMmol, Error);
-        }
-
-        if (failed || dataset is null || parameters is null || primitive is null)
-            return null;
-
-        return new ReportPanelSpec
-        {
-            Id = id,
-            Title = title,
-            Dataset = parameters,
-            Primitive = primitive.Value,
-            Bindings = bindings,
-            Range = range,
-        };
-    }
-
+    /// <summary>The dataset <paramref name="owner"/>'s <c>dataset</c> names, with its parameters read; null when it names none.</summary>
     private IReportDataset? ReadDataset(
-        JsonElement panel,
+        JsonElement owner,
         string at,
         Action<string, string> error,
         out ReportDatasetParameters? parameters)
@@ -216,7 +53,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         parameters = null;
         var names = string.Join(", ", registry.All.Select(d => d.Name));
 
-        if (!panel.TryGetProperty("dataset", out var element) || element.ValueKind != JsonValueKind.Object)
+        if (!owner.TryGetProperty("dataset", out var element) || element.ValueKind != JsonValueKind.Object)
         {
             error($"{at}.dataset", $"Missing. Send an object with 'name', one of: {names}.");
             return null;
@@ -335,296 +172,24 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         type.GetFields(BindingFlags.Public | BindingFlags.Static)
             .Select(f => f.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()?.Name ?? f.Name);
 
-    /// <summary>The dataset object without its discriminator, written property by property so a repeated key cannot throw.</summary>
-    private static byte[] WithoutName(JsonElement element)
+    /// <summary>The object without <paramref name="skip"/>, written property by property so a repeated key cannot throw.</summary>
+    private static byte[] WithoutName(JsonElement element, params string[] skip)
     {
+        if (skip.Length == 0)
+            skip = ["name"];
         var buffer = new ArrayBufferWriter<byte>();
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
             foreach (var property in element.EnumerateObject())
             {
-                if (property.Name == "name")
+                if (skip.Contains(property.Name, StringComparer.Ordinal))
                     continue;
                 property.WriteTo(writer);
             }
             writer.WriteEndObject();
         }
         return buffer.WrittenSpan.ToArray();
-    }
-
-    private static ReportBindings ReadBindings(
-        JsonElement element,
-        string at,
-        IReportDataset dataset,
-        ReportPrimitive primitive,
-        bool useMmol,
-        Action<string, string> error)
-    {
-        var present = element.ValueKind == JsonValueKind.Object;
-        if (element.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null or JsonValueKind.Object))
-        {
-            error(at, "Send the bindings as an object.");
-            present = false;
-        }
-
-        if (present)
-            UnknownKeys(element, at, BindingKeys, error);
-
-        string? Text(string key, out bool sent)
-        {
-            sent = present && element.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null;
-            if (!sent)
-                return null;
-            var v = element.GetProperty(key);
-            if (v.ValueKind == JsonValueKind.String)
-                return v.GetString();
-            error($"{at}.{key}", "Send one field name as text.");
-            return null;
-        }
-
-        var malformed = new HashSet<string>(StringComparer.Ordinal);
-        IReadOnlyList<string>? List(string key)
-        {
-            if (!present || !element.TryGetProperty(key, out var value) || value.ValueKind == JsonValueKind.Null)
-                return null;
-            if (value.ValueKind == JsonValueKind.Array && value.EnumerateArray().All(v => v.ValueKind == JsonValueKind.String))
-                return [.. value.EnumerateArray().Select(v => v.GetString()!)];
-            error($"{at}.{key}", "Send a list of field names, for example [\"glucose\"].");
-            malformed.Add(key);
-            return null;
-        }
-
-        bool? stacked = null;
-        var stackedSent = present && element.TryGetProperty("stacked", out var stackedValue) && stackedValue.ValueKind != JsonValueKind.Null;
-        if (stackedSent)
-        {
-            if (element.GetProperty("stacked").ValueKind is JsonValueKind.True or JsonValueKind.False)
-                stacked = element.GetProperty("stacked").GetBoolean();
-            else
-                error($"{at}.stacked", "Send true or false.");
-        }
-        if (primitive != ReportPrimitive.Bar && stackedSent)
-            error($"{at}.stacked", $"{primitive.WireName()} does not use 'stacked'. Remove it.");
-
-        ReportBarOrientation? orientation = null;
-        var orientationSent = present && element.TryGetProperty("orientation", out var orientationValue) && orientationValue.ValueKind != JsonValueKind.Null;
-        if (orientationSent)
-        {
-            orientation = element.GetProperty("orientation") is { ValueKind: JsonValueKind.String } o
-                ? o.GetString() switch { "vertical" => ReportBarOrientation.Vertical, "horizontal" => ReportBarOrientation.Horizontal, _ => null }
-                : null;
-            if (orientation is null)
-                error($"{at}.orientation", "Send \"vertical\" or \"horizontal\".");
-        }
-        if (primitive != ReportPrimitive.Bar && orientationSent)
-            error($"{at}.orientation", $"{primitive.WireName()} does not use 'orientation'. Remove it.");
-
-        var x = Text("x", out var xSent);
-        var y = List("y");
-        var band = List("band");
-        var columns = List("columns");
-        var series = Text("series", out var seriesSent);
-        // Companion fields travel with every row and are never drawn on their own.
-        var fields = dataset.FieldsFor(primitive).Where(f => !f.Companion).ToList();
-        var companions = dataset.FieldsFor(primitive).Where(f => f.Companion).Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
-        var fieldNames = string.Join(", ", fields.Select(f => f.Name));
-
-        if (!present && dataset.DefaultBindings(primitive) is { } defaults)
-        {
-            x = defaults.X;
-            xSent = x is not null;
-            y = defaults.Y;
-            band = defaults.Band;
-            columns = defaults.Columns;
-            series = defaults.Series;
-            seriesSent = series is not null;
-            stacked = defaults.Stacked;
-            orientation = defaults.Orientation;
-        }
-
-        ReportField? Field(string path, string name)
-        {
-            var field = fields.FirstOrDefault(f => f.Name == name);
-            if (field is null && companions.Contains(name))
-                error(path, $"'{name}' comes with every row and cannot be drawn on its own. Fields: {fieldNames}.");
-            else if (field is null)
-                error(path, $"'{Shorten(name)}' is not a field of {dataset.Name}. Fields: {fieldNames}.");
-            return field?.ResolveUnit(useMmol);
-        }
-
-        void NotFor(string key, bool sent)
-        {
-            if (sent)
-                error($"{at}.{key}", $"{primitive.WireName()} does not use '{key}'. Remove it.");
-        }
-
-        switch (primitive)
-        {
-            case ReportPrimitive.TimeSeries:
-            {
-                NotFor("columns", columns is not null);
-                NotFor("series", seriesSent);
-                var xName = xSent ? x : fields.FirstOrDefault(f => IsAxis(f.Kind))?.Name;
-                if (x is not null && Field($"{at}.x", x) is { } xField && !IsAxis(xField.Kind))
-                    error($"{at}.x", $"'{x}' is not a field the horizontal axis can show. Send a field of kind 'time', 'time_of_day' or 'offset'.");
-
-                if (y is null || y.Count == 0)
-                {
-                    if (!malformed.Contains("y"))
-                        error($"{at}.y", $"Missing. Send the fields to draw as lines, for example [\"glucose\"]. Fields: {fieldNames}.");
-                    return new ReportBindings { X = xName };
-                }
-
-                if (y.Distinct().Count() != y.Count)
-                    error($"{at}.y", "A field is named twice.");
-
-                var yFields = new List<ReportField>();
-                foreach (var name in y)
-                {
-                    if (Field($"{at}.y", name) is not { } field)
-                        continue;
-                    if (field.Kind is not (ReportFieldKind.Number or ReportFieldKind.Percent))
-                        error($"{at}.y", $"'{name}' is a {Wire(field.Kind)} field. A line needs a number field.");
-                    else
-                        yFields.Add(field);
-                }
-
-                if (yFields.Select(f => f.Unit).Distinct().Count() > 1)
-                    error($"{at}.y",
-                        $"The fields {string.Join(", ", yFields.Select(f => $"'{f.Name}' ({f.Unit ?? "no unit"})"))} have different units. "
-                        + "Put fields of another unit in their own panel.");
-
-                if (band is not null)
-                {
-                    if (band.Count != 2)
-                    {
-                        error($"{at}.band", "Send exactly two fields: the lower and the upper edge.");
-                    }
-                    else
-                    {
-                        var edges = band.Select(name => Field($"{at}.band", name)).ToList();
-                        var unit = yFields.FirstOrDefault()?.Unit;
-                        if (edges.All(e => e is not null) && edges.Any(e => e!.Unit != unit || e.Kind is not (ReportFieldKind.Number or ReportFieldKind.Percent)))
-                            error($"{at}.band", $"Both edges must be number fields in the unit of 'y' ({unit ?? "no unit"}).");
-                    }
-                }
-
-                return new ReportBindings { X = xName, Y = y, Band = band };
-            }
-
-            // A glucose chart of event cohorts lays out its band as range_bands does.
-            case ReportPrimitive.GlucoseChart when dataset.DefaultBindings(ReportPrimitive.GlucoseChart) is not null:
-            case ReportPrimitive.RangeBands:
-            {
-                NotFor("columns", columns is not null);
-                var xName = xSent ? x : fields.FirstOrDefault(f => f.Kind is ReportFieldKind.Offset or ReportFieldKind.TimeOfDay)?.Name;
-                if (xName is null)
-                    error($"{at}.x", "Missing. Send a field of kind 'time_of_day' or 'offset'.");
-                else if (Field($"{at}.x", xName) is { } xField && xField.Kind is not (ReportFieldKind.Offset or ReportFieldKind.TimeOfDay))
-                    error($"{at}.x", $"'{xName}' is not a field {primitive.WireName()} can lay out. Send a field of kind 'time_of_day' or 'offset'.");
-
-                ReportField? median = null;
-                if (y is not { Count: 1 })
-                {
-                    if (!malformed.Contains("y"))
-                        error($"{at}.y", "Send exactly one field: the median line.");
-                }
-                else if (Field($"{at}.y", y[0]) is { } field)
-                {
-                    if (field.Kind is not (ReportFieldKind.Number or ReportFieldKind.Percent))
-                        error($"{at}.y", $"'{y[0]}' is a {Wire(field.Kind)} field. A line needs a number field.");
-                    else
-                        median = field;
-                }
-
-                if (band is not { Count: 2 or 4 })
-                {
-                    if (!malformed.Contains("band"))
-                        error($"{at}.band", "Send two fields (the band's low and high edges) or four (outer low, inner low, inner high, outer high).");
-                }
-                else
-                {
-                    if (band.Distinct().Count() != band.Count)
-                        error($"{at}.band", "A field is named twice.");
-                    var edges = band.Select(name => Field($"{at}.band", name)).ToList();
-                    if (median is not null && edges.All(e => e is not null)
-                        && edges.Any(e => e!.Unit != median.Unit || e.Kind is not (ReportFieldKind.Number or ReportFieldKind.Percent)))
-                        error($"{at}.band", $"Every edge must be a number field in the unit of 'y' ({median.Unit ?? "no unit"}).");
-                }
-
-                if (series is not null && Field($"{at}.series", series) is { } seriesField && seriesField.Kind != ReportFieldKind.Category)
-                    error($"{at}.series", $"'{series}' is a {Wire(seriesField.Kind)} field. Send a category field.");
-
-                return new ReportBindings { X = xName, Y = y, Band = band, Series = series };
-            }
-
-            case ReportPrimitive.Table:
-            case ReportPrimitive.StatTiles:
-            case ReportPrimitive.Comparison:
-            {
-                NotFor("x", xSent);
-                NotFor("y", y is not null);
-                NotFor("band", band is not null);
-                NotFor("series", seriesSent);
-                if (columns is { Count: 0 })
-                    error($"{at}.columns", "Send at least one field, or leave 'columns' out for every field.");
-                foreach (var name in columns ?? [])
-                    Field($"{at}.columns", name);
-                if (columns is not null && columns.Distinct().Count() != columns.Count)
-                    error($"{at}.columns", "A field is named twice.");
-                return new ReportBindings { Columns = columns ?? [.. fields.Select(f => f.Name)] };
-            }
-
-            case ReportPrimitive.Bar:
-            {
-                NotFor("columns", columns is not null);
-                NotFor("band", band is not null);
-                NotFor("series", seriesSent);
-                var xName = xSent ? x : fields.FirstOrDefault(f => f.Kind == ReportFieldKind.Category)?.Name;
-                if (xName is null)
-                    error($"{at}.x", "Missing. Send a field of kind 'category'.");
-                else if (Field($"{at}.x", xName) is { } xField && xField.Kind != ReportFieldKind.Category)
-                    error($"{at}.x", $"'{xName}' is a {Wire(xField.Kind)} field. A bar's axis needs a category field.");
-
-                if (y is null || y.Count == 0)
-                {
-                    if (!malformed.Contains("y"))
-                        error($"{at}.y", $"Missing. Send the fields to draw as bars. Fields: {fieldNames}.");
-                    return new ReportBindings { X = xName, Stacked = stacked, Orientation = orientation ?? ReportBarOrientation.Vertical };
-                }
-
-                if (y.Distinct().Count() != y.Count)
-                    error($"{at}.y", "A field is named twice.");
-                var yFields = new List<ReportField>();
-                foreach (var name in y)
-                {
-                    if (Field($"{at}.y", name) is not { } field)
-                        continue;
-                    if (field.Kind is not (ReportFieldKind.Number or ReportFieldKind.Percent))
-                        error($"{at}.y", $"'{name}' is a {Wire(field.Kind)} field. A bar needs a number field.");
-                    else
-                        yFields.Add(field);
-                }
-                if (yFields.Select(f => f.Unit).Distinct().Count() > 1)
-                    error($"{at}.y",
-                        $"The fields {string.Join(", ", yFields.Select(f => $"'{f.Name}' ({f.Unit ?? "no unit"})"))} have different units. "
-                        + "Put fields of another unit in their own panel.");
-
-                return new ReportBindings { X = xName, Y = y, Stacked = stacked ?? false, Orientation = orientation ?? ReportBarOrientation.Vertical };
-            }
-
-            case ReportPrimitive.GlucoseChart:
-                NotFor("x", xSent);
-                NotFor("y", y is not null);
-                NotFor("band", band is not null);
-                NotFor("columns", columns is not null);
-                NotFor("series", seriesSent);
-                return new ReportBindings();
-
-            default:
-                throw new ArgumentOutOfRangeException(nameof(primitive), primitive, null);
-        }
     }
 
     private static ReportRange? ReadRange(JsonElement element, string at, DateTimeOffset now, Action<string, string> error)
@@ -742,16 +307,6 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 return id;
         }
     }
-
-    private static string PrimitiveList(IEnumerable<ReportPrimitive> primitives) =>
-        string.Join(", ", primitives.Select(p => p.WireName()));
-
-    /// <summary>Whether a field of <paramref name="kind"/> can lie along a time_series' horizontal axis.</summary>
-    private static bool IsAxis(ReportFieldKind kind) =>
-        kind is ReportFieldKind.Time or ReportFieldKind.TimeOfDay or ReportFieldKind.Offset;
-
-    private static string Wire(ReportFieldKind kind) =>
-        JsonSerializer.Serialize(kind).Trim('"');
 
     internal static string Describe(TimeSpan span) =>
         span.TotalHours <= 48

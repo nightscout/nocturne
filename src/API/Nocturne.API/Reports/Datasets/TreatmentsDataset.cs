@@ -27,7 +27,7 @@ internal sealed class TreatmentsDataset : IReportDataset
 
     public string Label => "Treatments";
 
-    public string Description => "Boluses, carbs, temp basals, notes, overrides and long-acting injections.";
+    public string Description => "Boluses, carbs, temp basals, notes, overrides, long-acting injections and BG checks.";
 
     public Type ParametersType => typeof(TreatmentsParameters);
 
@@ -36,28 +36,37 @@ internal sealed class TreatmentsDataset : IReportDataset
     public IReadOnlyList<ReportField> Fields { get; } =
     [
         new("time", "Time", ReportFieldKind.Time, null, "When the record starts, Unix milliseconds."),
-        new("type", "Type", ReportFieldKind.Category, null, "bolus, carbs, temp_basal, note, override or basal_injection."),
+        new("type", "Type", ReportFieldKind.Category, null, "bolus, carbs, temp_basal, note, override, basal_injection or bg_check."),
         new("insulin", "Bolus", ReportFieldKind.Number, "U", "Units of a bolus. Empty for every other kind.",
-            Color: ChartColor.InsulinBolus, Marker: ReportMarkerKind.Bolus),
+            Color: ChartColor.InsulinBolus, Marker: ReportMarkerKind.Bolus, Aggregate: ReportAggregate.Sum),
         new("injectionUnits", "Injection", ReportFieldKind.Number, "U", "Units of a long-acting injection. Empty for every other kind.",
-            Color: ChartColor.InsulinBasal),
-        new("carbs", "Carbs", ReportFieldKind.Number, "g", "Grams of a carb entry.", Color: ChartColor.Carbs, Marker: ReportMarkerKind.Carbs),
-        new("rate", "Rate", ReportFieldKind.Number, "U/h", "The rate of a temp basal."),
-        new("durationMinutes", "Duration", ReportFieldKind.Number, "min", "How long a temp basal or override ran. Empty while it runs."),
-        new("automatic", "Automatic", ReportFieldKind.Category, null, "'yes' for a bolus the algorithm gave."),
+            Color: ChartColor.InsulinBasal, Marker: ReportMarkerKind.BasalInjection, Aggregate: ReportAggregate.Sum),
+        new("carbs", "Carbs", ReportFieldKind.Number, "g", "Grams of a carb entry.", Color: ChartColor.Carbs, Marker: ReportMarkerKind.Carbs,
+            Aggregate: ReportAggregate.Sum),
+        new("bgCheck", "BG check", ReportFieldKind.Number, ReportField.GlucoseUnit, "A finger-stick reading. Empty for every other kind.",
+            Scope.GlucoseRead, ChartColor.GlucoseInRange, Marker: ReportMarkerKind.BgCheck, Aggregate: ReportAggregate.Mean),
+        new("rate", "Rate", ReportFieldKind.Number, "U/h", "The rate of a temp basal.", Aggregate: ReportAggregate.Last),
+        new("durationMinutes", "Duration", ReportFieldKind.Number, "min", "How long a temp basal or override ran. Empty while it runs.",
+            Aggregate: ReportAggregate.Max),
+        new(ReportField.AutomaticField, "Automatic", ReportFieldKind.Category, null, "'yes' for a bolus the algorithm gave."),
         new("detail", "Detail", ReportFieldKind.Category, null,
             "The bolus type, the temp basal's origin, the override's name, the insulin of an injection, or a note's text (cut to 120 characters)."),
     ];
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.TimeSeries
-        ? new ReportBindings { X = "time", Y = ["insulin"] }
-        : null;
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark switch
+    {
+        ReportMark.Markers => new ReportLayerBindings { X = "time", Y = ["insulin", "carbs"] },
+        ReportMark.Points or ReportMark.Bars => new ReportLayerBindings { X = "time", Y = ["insulin"] },
+        _ => null,
+    };
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.Table, ReportPrimitive.TimeSeries];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.Table];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Markers, ReportMark.Points, ReportMark.Bars];
 
     public TimeSpan DefaultRange => TimeSpan.FromHours(24);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(14);
+    public TimeSpan MaxRange => TimeSpan.FromDays(14);
 
     public int PointBudget => Budget;
 
@@ -81,25 +90,36 @@ internal sealed class TreatmentsDataset : IReportDataset
         double? Rate = null,
         double? DurationMinutes = null,
         bool? Automatic = null,
-        string? Detail = null);
+        string? Detail = null,
+        double? GlucoseMgdl = null);
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var parameters = (TreatmentsParameters)request.Parameters;
-        var (records, limited) = await ReadAsync(request.Services, Kinds(parameters), request.From.UtcDateTime, request.To.UtcDateTime, cancellationToken);
+        var kinds = Kinds(parameters);
+        var glucose = request.HasScope(Scope.GlucoseRead);
+        IReadOnlySet<ReportTreatmentType> read = glucose ? kinds : kinds.Where(k => k != ReportTreatmentType.BgCheck).ToHashSet();
+        var (records, limited) = await ReadAsync(request.Services, read, request.From.UtcDateTime, request.To.UtcDateTime, cancellationToken);
         var kept = Filter(records, parameters);
-        if (records.Count > 0)
-            request.ReadLog.Record("treatments", records.Count);
+        var treatments = records.Count(r => r.Type != ReportTreatmentType.BgCheck);
+        if (treatments > 0)
+            request.ReadLog.Record("treatments", treatments);
+        if (records.Count > treatments)
+            request.ReadLog.Record("glucose", records.Count - treatments);
+        IReadOnlyList<ReportOmittedField> omitted = !glucose && kinds.Contains(ReportTreatmentType.BgCheck)
+            ? [new ReportOmittedField("bgCheck", Scope.GlucoseRead)]
+            : [];
 
         var latest = kept.OrderByDescending(r => r.Time).Take(Budget).OrderBy(r => r.Time).ToList();
-        var summary = Summarise(kept, request.From, request.To, Kinds(parameters),
+        var summary = Summarise(kept, request.From, request.To, read,
             request.Services.GetRequiredService<IStatisticsService>(), latest.Count, limited);
 
         return new ReportDatasetOutput
         {
-            Rows = [.. latest.Select(Row)],
+            Rows = [.. latest.Select(r => Row(r, request.UseMmol))],
             Summary = summary,
-            Facts = FactsOf(kept, Kinds(parameters)),
+            Facts = FactsOf(kept, read),
+            Omitted = omitted,
             Sentence = kept.Count == 0
                 ? "No treatment records of these kinds in this period."
                 : latest.Count < kept.Count
@@ -107,21 +127,8 @@ internal sealed class TreatmentsDataset : IReportDataset
                     : $"The table holds every record, newest last.",
             Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(kept.Count, "record")}.",
             Resolution = new ReportResolution(0, 0, kept.Count, latest.Count, latest.Count < kept.Count),
-            Markers = Markers(latest),
         };
     }
-
-    /// <summary>
-    /// The bolus and carb entries among <paramref name="rows"/> as the markers a time series draws, with
-    /// the algorithm's boluses marked so: the view draws what this says, never deciding from a row.
-    /// </summary>
-    internal static IReadOnlyList<ReportMarker> Markers(IEnumerable<Record> rows) =>
-        [.. rows.Select(r => r.Type switch
-        {
-            ReportTreatmentType.Bolus => new ReportMarker(r.Time, ReportMarkerKind.Bolus, Math.Round(r.Insulin ?? 0, 2), r.Automatic == true),
-            ReportTreatmentType.Carbs => new ReportMarker(r.Time, ReportMarkerKind.Carbs, Math.Round(r.Carbs ?? 0, 1)),
-            _ => null,
-        }).OfType<ReportMarker>()];
 
     /// <summary>The kinds a request names, every kind when it names none.</summary>
     internal static IReadOnlySet<ReportTreatmentType> Kinds(TreatmentsParameters parameters) =>
@@ -154,6 +161,9 @@ internal sealed class TreatmentsDataset : IReportDataset
         if (kinds.Contains(ReportTreatmentType.BasalInjection))
             rows.AddRange((await services.GetRequiredService<IBasalInjectionRepository>().GetAsync(from, to, null, null, RecordLimit, 0, true, ct))
                 .Select(i => new Record(i.Mills, ReportTreatmentType.BasalInjection, Insulin: i.Units, Detail: Cut(i.InsulinContext?.InsulinName))));
+        if (kinds.Contains(ReportTreatmentType.BgCheck))
+            rows.AddRange((await services.GetRequiredService<IBGCheckRepository>().GetAsync(from, to, null, null, RecordLimit, 0, true, ct))
+                .Select(b => new Record(b.Mills, ReportTreatmentType.BgCheck, GlucoseMgdl: b.Mgdl, Detail: b.GlucoseType?.ToString())));
         var limited = rows.GroupBy(r => r.Type).Where(g => g.Count() >= RecordLimit).Select(g => g.Key).ToHashSet();
         return (rows, limited);
     }
@@ -167,13 +177,14 @@ internal sealed class TreatmentsDataset : IReportDataset
             _ => true,
         }).OrderBy(r => r.Time)];
 
-    internal static IReadOnlyDictionary<string, object?> Row(Record r) => new Dictionary<string, object?>
+    internal static IReadOnlyDictionary<string, object?> Row(Record r, bool useMmol) => new Dictionary<string, object?>
     {
         ["time"] = r.Time,
         ["type"] = Wire(r.Type),
         ["insulin"] = r.Type == ReportTreatmentType.Bolus && r.Insulin is { } u ? Math.Round(u, 2) : null,
         ["injectionUnits"] = r.Type == ReportTreatmentType.BasalInjection && r.Insulin is { } units ? Math.Round(units, 2) : null,
         ["carbs"] = r.Carbs is { } g ? Math.Round(g, 1) : null,
+        ["bgCheck"] = r.GlucoseMgdl is { } mgdl ? Extensions.GlucoseUnits.Scale(mgdl, useMmol) : null,
         ["rate"] = r.Rate is { } rate ? Math.Round(rate, 3) : null,
         ["durationMinutes"] = r.DurationMinutes is { } m ? Math.Round(m) : null,
         ["automatic"] = r.Automatic switch { true => "yes", false => "no", null => null },
@@ -188,6 +199,7 @@ internal sealed class TreatmentsDataset : IReportDataset
         ReportTreatmentType.Note => "note",
         ReportTreatmentType.Override => "override",
         ReportTreatmentType.BasalInjection => "basal_injection",
+        ReportTreatmentType.BgCheck => "bg_check",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
@@ -214,6 +226,7 @@ internal sealed class TreatmentsDataset : IReportDataset
         Add(ReportTreatmentType.Override, "Overrides");
         Add(ReportTreatmentType.Note, "Notes");
         Add(ReportTreatmentType.BasalInjection, "Injections", of => $"{ReportFacts.Number(of.Sum(r => r.Insulin ?? 0), "0.##")} U in all");
+        Add(ReportTreatmentType.BgCheck, "BG checks");
         return facts;
     }
 
@@ -285,6 +298,7 @@ internal sealed class TreatmentsDataset : IReportDataset
         CountOf(ReportTreatmentType.TempBasal, "Temp basals");
         CountOf(ReportTreatmentType.Override, "Overrides");
         CountOf(ReportTreatmentType.Note, "Notes");
+        CountOf(ReportTreatmentType.BgCheck, "BG checks");
         if (kinds.Contains(ReportTreatmentType.BasalInjection))
         {
             var injections = records.Where(r => r.Type == ReportTreatmentType.BasalInjection).ToList();

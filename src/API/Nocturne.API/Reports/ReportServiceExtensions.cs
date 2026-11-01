@@ -19,6 +19,7 @@ internal static class ReportServiceExtensions
         services.AddSingleton<IReportDataset, GlucoseDistributionDataset>();
         services.AddSingleton<IReportDataset, DailySummaryDataset>();
         services.AddSingleton<IReportDataset, PeriodComparisonDataset>();
+        services.AddSingleton<IReportDataset, StateSpansDataset>();
         services.AddSingleton<IReportDatasetRegistry, ReportDatasetRegistry>();
         services.AddSingleton<ReportSpecValidator>();
         services.AddSingleton<ReportSpecRunner>();

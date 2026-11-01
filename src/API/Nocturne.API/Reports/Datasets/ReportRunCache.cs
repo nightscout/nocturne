@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
@@ -9,16 +10,43 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Reports.Datasets;
 
 /// <summary>
-/// What one report run has read, by range, so panels over the same range share one read: an AGP's
-/// three glucose panels read and canonicalise the readings once, and the audit counts them once.
-/// One per run (<see cref="ReportRunContext.Cache"/>); the panels run in turn, so it is not locked.
+/// What one report run has read, so a query is read once however many panels, layers and derived
+/// sources name it: a dataset query by its key (<see cref="ReportReadKey"/>), and below that the
+/// readings and the dashboard chart payload by range, which several datasets share. The audit counts
+/// each read once. One per run (<see cref="ReportRunContext.Cache"/>); the layers run in turn, so it
+/// is not locked.
 /// </summary>
 internal sealed class ReportRunCache
 {
     private const DiabetesPopulation Population = DiabetesPopulation.Type1Adult;
 
+    /// <summary>The interval the chart payload's IOB, COB and basal series are computed at.</summary>
+    private const int ChartIntervalMinutes = 5;
+
+    private readonly Dictionary<string, Task<ReportDatasetOutput>> _reads = new(StringComparer.Ordinal);
     private readonly Dictionary<(long From, long To), IReadOnlyList<SensorGlucose>> _glucose = [];
     private readonly Dictionary<(long From, long To), ExtendedGlucoseAnalytics> _analysis = [];
+    private readonly Dictionary<(long From, long To), DashboardChartData> _chart = [];
+
+    /// <summary>The dataset reads made so far.</summary>
+    public int Reads => _reads.Count;
+
+    /// <summary>Whether the read <paramref name="key"/> names has been made, so a run past its deadline still draws what it read.</summary>
+    public bool Has(string key) => _reads.TryGetValue(key, out var task) && task.IsCompletedSuccessfully;
+
+    /// <summary>
+    /// The output of the read <paramref name="key"/> names, read the first time it is asked for. A read
+    /// that failed or ran out of time stays so for every layer that names it; it is not read again.
+    /// </summary>
+    public Task<ReportDatasetOutput> ReadAsync(string key, Func<Task<ReportDatasetOutput>> read)
+    {
+        if (!_reads.TryGetValue(key, out var task))
+        {
+            task = read();
+            _reads[key] = task;
+        }
+        return task;
+    }
 
     /// <summary>The canonical readings over the request's range, read and recorded for the audit the first time only.</summary>
     public async Task<IReadOnlyList<SensorGlucose>> GlucoseAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
@@ -52,6 +80,27 @@ internal sealed class ReportRunCache
             entries, [], [], StatisticsService.WindowDays(request.From.UtcDateTime, request.To.UtcDateTime), Population, timeZone: clock.Zone);
         _analysis[key] = analysis;
         return analysis;
+    }
+
+    /// <summary>
+    /// The dashboard chart's payload over the request's range, without the health series, redacted
+    /// for the caller as its endpoint redacts (<see cref="ChartDataReadScopeGuard"/>). Nothing is
+    /// recorded here: each dataset records what it serves of it.
+    /// </summary>
+    public async Task<DashboardChartData> ChartAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
+    {
+        var key = Key(request);
+        if (_chart.TryGetValue(key, out var cached))
+            return cached;
+
+        var data = await request.Services.GetRequiredService<IChartDataService>().GetDashboardChartDataAsync(
+            request.From.ToUnixTimeMilliseconds(), request.To.ToUnixTimeMilliseconds(), ChartIntervalMinutes,
+            includeHealthSeries: false, cancellationToken);
+        data = ChartDataReadScopeGuard.Redact(data, request.GrantedScopes);
+        data.TrackerMarkers = [];
+        GlucoseSeriesDataset.RecordReads(data, request.ReadLog);
+        _chart[key] = data;
+        return data;
     }
 
     private static (long, long) Key(ReportDatasetRequest request) =>

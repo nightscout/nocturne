@@ -33,9 +33,11 @@ internal sealed class DeviceStatusDataset : IReportDataset
     private static readonly IReadOnlyList<ReportField> SeriesFields =
     [
         new("time", "Time", ReportFieldKind.Time, null, "When the device reported, Unix milliseconds."),
-        new("reservoir", "Reservoir", ReportFieldKind.Number, "U", "Insulin left in the pump's reservoir.", Color: ChartColor.InsulinBolus, Step: true),
-        new("pumpBattery", "Pump battery", ReportFieldKind.Percent, "%", "The pump's battery.", Step: true),
-        new("uploaderBattery", "Uploader battery", ReportFieldKind.Percent, "%", "The uploader's (phone's) battery.", Step: true),
+        new("reservoir", "Reservoir", ReportFieldKind.Number, "U", "Insulin left in the pump's reservoir.", Color: ChartColor.InsulinBolus, Step: true,
+            Aggregate: ReportAggregate.Last),
+        new("pumpBattery", "Pump battery", ReportFieldKind.Percent, "%", "The pump's battery.", Step: true, Aggregate: ReportAggregate.Last),
+        new("uploaderBattery", "Uploader battery", ReportFieldKind.Percent, "%", "The uploader's (phone's) battery.", Step: true,
+            Aggregate: ReportAggregate.Last),
     ];
 
     private static readonly IReadOnlyList<ReportField> TileFields =
@@ -48,18 +50,20 @@ internal sealed class DeviceStatusDataset : IReportDataset
 
     public IReadOnlyList<ReportField> Fields { get; } = [.. SeriesFields, TileFields[^1]];
 
-    public IReadOnlyList<ReportField> FieldsFor(ReportPrimitive primitive) =>
-        primitive == ReportPrimitive.StatTiles ? TileFields : SeriesFields;
+    public IReadOnlyList<ReportField> FieldsFor(ReportPanelKind kind) =>
+        kind == ReportPanelKind.StatTiles ? TileFields : SeriesFields;
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.TimeSeries
-        ? new ReportBindings { X = "time", Y = ["pumpBattery", "uploaderBattery"] }
+    public ReportLayerBindings? DefaultBindings(ReportMark mark) => mark is ReportMark.Line or ReportMark.Points
+        ? new ReportLayerBindings { X = "time", Y = ["pumpBattery", "uploaderBattery"] }
         : null;
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.TimeSeries, ReportPrimitive.StatTiles];
+    public IReadOnlyList<ReportPanelKind> PanelKinds { get; } = [ReportPanelKind.StatTiles];
+
+    public IReadOnlyList<ReportMark> Marks { get; } = [ReportMark.Line, ReportMark.Points];
 
     public TimeSpan DefaultRange => TimeSpan.FromHours(24);
 
-    public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(30);
+    public TimeSpan MaxRange => TimeSpan.FromDays(30);
 
     public int PointBudget => Budget;
 
@@ -80,7 +84,7 @@ internal sealed class DeviceStatusDataset : IReportDataset
         var latestPump = pump.LastOrDefault(p => p.Reservoir is not null || p.BatteryPercent is not null);
         var latestUploader = uploader.LastOrDefault(u => u.Battery is not null);
         DeviceAgeInfo? sensor = null;
-        if (request.Primitive == ReportPrimitive.StatTiles)
+        if (request.Kind == ReportPanelKind.StatTiles)
         {
             var age = await services.GetRequiredService<IDeviceAgeService>().GetSensorAgeAsync(new DeviceAgePreferences(), null, cancellationToken);
             var latest = age.Min == "Sensor Change" ? age.SensorChange : age.SensorStart;
@@ -90,7 +94,7 @@ internal sealed class DeviceStatusDataset : IReportDataset
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
         int sourceRows, interval;
-        if (request.Primitive == ReportPrimitive.StatTiles)
+        if (request.Kind == ReportPanelKind.StatTiles)
         {
             rows =
             [
@@ -133,7 +137,7 @@ internal sealed class DeviceStatusDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(pump, uploader, sensor, request.From, request.To,
-                sensorAsked: request.Primitive == ReportPrimitive.StatTiles, clamped: request.HistoryClamped),
+                sensorAsked: request.Kind == ReportPanelKind.StatTiles, clamped: request.HistoryClamped),
             Facts = FactsOf(pump, uploader, sensor),
             Sentence = pump.Count + uploader.Count == 0
                 ? "No pump or uploader reports in this period."

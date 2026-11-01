@@ -33,15 +33,13 @@ public class Phase6ReviewTests
     };
 
     [Fact]
-    public void A_glucose_chart_without_treatments_read_says_why_it_has_no_boluses_rather_than_none()
+    public void A_glucose_sentence_states_the_episodes()
     {
-        var statistics = new StatisticsService(TimeProvider.System);
+        var (facts, sentence, context) = GlucoseSummary.Facts(Chart(), new StatisticsService(TimeProvider.System), false, From, From.AddHours(1));
 
-        var (_, without, _) = GlucoseSummary.Facts(Chart(), statistics, false, From, From.AddHours(1), chart: true, treatments: false);
-        var (_, with, _) = GlucoseSummary.Facts(Chart(), statistics, false, From, From.AddHours(1), chart: true, treatments: true);
-
-        without.Should().Contain("Boluses and carbs need the treatments.read scope").And.NotContain("0 boluses");
-        with.Should().Contain("0 boluses and 0 carb entries on the chart.");
+        sentence.Should().Be("0 episodes below range and 0 above it.");
+        facts.Select(f => f.Label).Should().Contain("In range");
+        context.Should().EndWith("2 readings.");
     }
 
     [Fact]
@@ -68,23 +66,6 @@ public class Phase6ReviewTests
         facts.Select(f => f.Label).Should().NotContain(["Insulin per day", "Net loop correction"]);
         facts.Select(f => f.Label).Should().Contain("Days with data");
         DailyProfileDataset.SentenceOf(redacted).Should().NotContain("basal");
-    }
-
-    [Fact]
-    public void Withheld_events_leave_the_traces_empty_and_say_why()
-    {
-        var definition = new EventResponseDefinition { Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.SensorStart }] };
-        var report = new EventResponseReport
-        {
-            Definition = definition,
-            Primary = new EventResponseRange { Cohorts = [new EventCohortResult { Cohort = 1, Events = 3 }] },
-        };
-        report.WithheldSeries.Add(LoopAnalysisSeries.EventList);
-
-        var (traces, note) = EventResponseDataset.Traces(report, EventResponseCalculator.SlotMinutes(definition), new Dictionary<int, int> { [1] = 1 }, false);
-
-        traces.Should().BeEmpty();
-        note.Should().Be(EventResponseDataset.TracesWithheldNote).And.Contain("treatments.read");
     }
 
     [Fact]
@@ -123,13 +104,13 @@ public class Phase6ReviewTests
     {
         var validation = Validator.Validate(JsonDocument.Parse("""
             { "version": 1, "panels": [
-              { "dataset": { "name": "period_comparison" }, "primitive": "comparison" },
-              { "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "primitive": "comparison" },
-              { "dataset": { "name": "period_comparison", "preset": "last30-prior30" }, "primitive": "table" } ] }
+              { "dataset": { "name": "period_comparison" }, "kind": "comparison" },
+              { "dataset": { "name": "period_comparison", "preset": "last7-prior7" }, "kind": "comparison" },
+              { "dataset": { "name": "period_comparison", "preset": "last30-prior30" }, "kind": "table" } ] }
             """).RootElement);
 
-        validation.Errors.Should().ContainSingle(e => e.Path == "panels[2].dataset.name")
-            .Which.Message.Should().Contain("at most 2 period_comparison panels");
+        validation.Errors.Should().ContainSingle(e => e.Path == "panels")
+            .Which.Message.Should().Contain("reads Period comparison at most 2 times; this one reads it 3 times");
     }
 
     [Fact]
@@ -155,14 +136,13 @@ public class Phase6ReviewTests
         null);
 
     [Theory]
-    [InlineData("""{ "y": ["glucoseP50"], "band": ["glucoseP10", "glucoseP90"], "series": "sentence" }""", "panels[0].bindings.series")]
-    [InlineData("""{ "x": "cohort", "y": ["glucoseP50"], "band": ["glucoseP10", "glucoseP90"] }""", "panels[0].bindings.x")]
-    [InlineData("""{ "y": ["glucoseP50"], "band": ["glucoseP10", "range"] }""", "panels[0].bindings.band")]
+    [InlineData("""{ "y": ["glucoseP50"], "edges": ["glucoseP10", "glucoseP90"], "series": "sentence" }""", "panels[0].tracks[0].layers[0].bindings.series")]
+    [InlineData("""{ "x": "cohort", "y": ["glucoseP50"], "edges": ["glucoseP10", "glucoseP90"] }""", "panels[0].tracks[0].layers[0].bindings.x")]
+    [InlineData("""{ "y": ["glucoseP50"], "edges": ["glucoseP10", "range"] }""", "panels[0].tracks[0].layers[0].bindings.edges")]
     public void A_companion_field_cannot_be_bound(string bindings, string path)
     {
-        var validation = Validator.Validate(JsonDocument.Parse($$"""
-            { "version": 1, "panels": [ { "dataset": { "name": "event_response" }, "primitive": "range_bands", "bindings": {{bindings}} } ] }
-            """).RootElement);
+        var validation = Validator.Validate(JsonDocument.Parse(ReportSpecValidatorTests.Layers(
+            $$"""{ "dataset": { "name": "event_response" }, "mark": "band", "bindings": {{bindings}} }""")).RootElement);
 
         validation.Errors.Should().Contain(e => e.Path == path && e.Message.Contains("comes with every row"));
     }
@@ -170,7 +150,7 @@ public class Phase6ReviewTests
     [Fact]
     public void The_api_names_each_band_span_and_a_mixed_band_keeps_both_names()
     {
-        var fields = new EventResponseDataset().FieldsFor(ReportPrimitive.RangeBands);
+        var fields = new EventResponseDataset().FieldsFor(ReportPanelKind.Chart);
         ReportField F(string name) => fields.Single(f => f.Name == name);
 
         ReportBandSpan.Of([F("glucoseP10"), F("glucoseP25"), F("glucoseP75"), F("glucoseP90")]).Select(s => s.Label)

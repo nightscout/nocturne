@@ -2,7 +2,6 @@ using FluentAssertions;
 using Nocturne.API.Reports;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Authorization;
 using Xunit;
 
 namespace Nocturne.API.Tests.Reports;
@@ -32,7 +31,7 @@ public class GlucoseSummaryTests
     [Fact]
     public void States_the_figures_the_chart_shows()
     {
-        var text = GlucoseSummary.Build(Fixture(), Statistics, useMmol: false, From, To, omittedTracks: []);
+        var text = GlucoseSummary.Build(Fixture(), Statistics, useMmol: false, From, To);
 
         text.Should().Be(
             """
@@ -41,58 +40,30 @@ public class GlucoseSummaryTests
             Min 60, max 200, mean 125 mg/dL.
             Time in range (70-180 mg/dL): 50%. Below: 25%. Above: 25%.
             Lows (episodes below range): 0. Highs (episodes above range): 0.
-            Boluses: 1. Carb entries: 2.
             """.ReplaceLineEndings("\n"));
     }
 
     [Fact]
     public void Writes_mmol_to_one_decimal()
     {
-        var text = GlucoseSummary.Build(Fixture(), Statistics, useMmol: true, From, To, omittedTracks: []);
+        var text = GlucoseSummary.Build(Fixture(), Statistics, useMmol: true, From, To);
 
         text.Should().Contain("Min 3.3, max 11.1, mean 6.9 mmol/L.")
             .And.Contain("Time in range (3.9-10.0 mmol/L): 50%.");
     }
 
     [Fact]
-    public void Names_the_tracks_the_token_cannot_read_and_drops_their_counts()
+    public void Names_its_omitted_fields_and_no_marker_counts()
     {
-        var granted = new HashSet<string> { Scope.GlucoseRead, Scope.DevicesRead };
-        var omitted = GlucoseSummary.OmittedTracks(s => Scope.Satisfies(granted, s));
-
-        var text = GlucoseSummary.Build(Fixture(), Statistics, useMmol: false, From, To, omitted);
-
-        omitted.Should().Equal("insulin, carbs and basal", "profiles", "heart rate", "steps", "sleep");
-        text.Should().EndWith(
-            "Tracks omitted: insulin, carbs and basal, profiles, heart rate, steps, sleep (scope not granted).");
-        text.Should().NotContain("Boluses");
-    }
-
-    [Fact]
-    public void A_panel_without_a_chart_names_its_omitted_fields_and_no_marker_counts()
-    {
-        var text = GlucoseSummary.Build(Fixture(), Statistics, useMmol: false, From, To,
-            omittedTracks: null, omittedFields: ["iob", "cob"]);
+        var text = GlucoseSummary.Build(Fixture(), Statistics, useMmol: false, From, To, omittedFields: ["iob", "cob"]);
 
         text.Should().EndWith("Fields omitted: iob, cob (scope not granted).").And.NotContain("Boluses");
     }
 
     [Fact]
-    public void A_readwrite_grant_omits_nothing()
-    {
-        var granted = new HashSet<string>
-        {
-            Scope.GlucoseRead, Scope.TreatmentsReadWrite, Scope.DevicesRead, Scope.TherapyRead,
-            Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead,
-        };
-
-        GlucoseSummary.OmittedTracks(s => Scope.Satisfies(granted, s)).Should().BeEmpty();
-    }
-
-    [Fact]
     public void Says_so_when_there_are_no_readings()
     {
-        var text = GlucoseSummary.Build(new DashboardChartData(), Statistics, useMmol: false, From, To, omittedTracks: []);
+        var text = GlucoseSummary.Build(new DashboardChartData(), Statistics, useMmol: false, From, To);
 
         text.Should().Contain("No glucose readings in this period.");
     }
