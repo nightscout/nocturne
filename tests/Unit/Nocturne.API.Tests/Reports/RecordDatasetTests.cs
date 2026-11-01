@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
@@ -59,6 +60,7 @@ public class RecordDatasetTests
         public readonly Mock<IUploaderSnapshotRepository> Uploader = new();
         public readonly Mock<IDeviceAgeService> Age = new();
         public readonly Mock<IChartDataService> Chart = new();
+        public readonly Mock<ILoopAnalysisService> Loop = new();
 
         public Harness(string? zone = "UTC")
         {
@@ -88,7 +90,7 @@ public class RecordDatasetTests
                 .AddSingleton(Glucose.Object).AddSingleton(Canonical.Object).AddSingleton(Therapy.Object)
                 .AddSingleton(Boluses.Object).AddSingleton(Carbs.Object).AddSingleton(Temps.Object).AddSingleton(Injections.Object)
                 .AddSingleton(Notes.Object).AddSingleton(Spans.Object).AddSingleton(Pump.Object).AddSingleton(Uploader.Object)
-                .AddSingleton(Age.Object).AddSingleton(Chart.Object)
+                .AddSingleton(Age.Object).AddSingleton(Chart.Object).AddSingleton(Loop.Object)
                 .AddSingleton(new TenantClockResolver(Therapy.Object, new CategoryReadContext(), NullLogger<TenantClockResolver>.Instance))
                 .AddSingleton<IStatisticsService>(new StatisticsService(new FixedTime(Now)))
                 .AddSingleton<TimeProvider>(new FixedTime(Now))
@@ -441,6 +443,54 @@ public class RecordDatasetTests
         var facts = result.Panels.SelectMany(p => p.Facts.Select(f => (p.Id, f))).ToList();
         facts.Should().NotBeEmpty();
         facts.Should().OnlyContain(x => x.f.About != null && x.f.About.Count > 0);
+
+        var loop = new Harness();
+        var aggregate = new LoopAnalysisAggregate { P10 = 80, P25 = 100, P50 = 130, P75 = 160, P90 = 200, N = 12 };
+        loop.Loop.Setup(l => l.GetDailyProfileAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DailyProfileResponse
+            {
+                Primary = new DailyProfileRange
+                {
+                    Slots = [new DailyProfileSlot { MinuteOfDay = 0, Glucose = aggregate }, new DailyProfileSlot { MinuteOfDay = 5, Glucose = aggregate }],
+                    Summary = new DailyProfileSummary { DaysWithData = 7, NetLoopCorrectionPerDay = 2.5 },
+                },
+            });
+        loop.Loop.Setup(l => l.GetEventResponseAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<EventResponseDefinition>(), It.IsAny<TimeZoneInfo>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LoopAnalysisFilter _, EventResponseDefinition definition, TimeZoneInfo _, CancellationToken _) => new EventResponseReport
+            {
+                Primary = new EventResponseRange
+                {
+                    Cohorts = [.. definition.Cohorts.Select(c => new EventCohortResult
+                    {
+                        Cohort = c.Cohort,
+                        Events = 3,
+                        Response = EventResponseKind.Rise,
+                        Slots = [new EventResponseSlot { Glucose = aggregate, GlucoseChange = aggregate }],
+                    })],
+                },
+            });
+        loop.Pump.Setup(p => p.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), 0, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PumpSnapshot { Timestamp = Now.AddHours(-2).UtcDateTime, Reservoir = 120, BatteryPercent = 70 },
+                new PumpSnapshot { Timestamp = Now.AddHours(-1).UtcDateTime, Reservoir = 118.5, BatteryPercent = 69 },
+            ]);
+        loop.Uploader.Setup(u => u.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), 0, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UploaderSnapshot { Timestamp = Now.AddMinutes(-90).UtcDateTime, Battery = 55 }]);
+        loop.Age.Setup(a => a.GetSensorAgeAsync(It.IsAny<DeviceAgePreferences>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SensorAgeInfo { SensorStart = new DeviceAgeInfo { Found = true, Age = 52, Days = 2, Hours = 4 } });
+        var (loopRunner, loopContext, _) = loop.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead, Scope.FoodRead);
+
+        var loopResult = await loopRunner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 168 }, "panels": [
+              { "id": "profile", "dataset": { "name": "daily_profile" }, "kind": "table" },
+              { "id": "events", "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal" }, { "anchor": "CorrectionBolus" } ] }, "kind": "table" },
+              { "id": "devices", "dataset": { "name": "device_status" }, "kind": "stat_tiles" } ] }
+            """), loopContext, CancellationToken.None);
+
+        loopResult.Panels.Should().OnlyContain(p => p.Status == ReportPanelStatus.Ok);
+        foreach (var panel in loopResult.Panels)
+            panel.Facts.Should().NotBeEmpty($"{panel.Id} has data").And.OnlyContain(f => f.About != null && f.About.Count > 0, panel.Id);
 
         var series = new List<BasalPoint> { new() { Timestamp = 0, Rate = 0.8, ScheduledRate = 1 }, new() { Timestamp = 1, Rate = 1.2, ScheduledRate = 1 } };
         BasalDeliveryDataset.FactsOf(series, therapy: true).Should().OnlyContain(f => f.About != null && f.About.Count > 0);
