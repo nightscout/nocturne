@@ -25,9 +25,6 @@ internal sealed class DeviceStatusService(
 
     private const int BulkDeleteLimit = 10_000;
 
-    /// <summary>The decomposer writes the snapshots itself, so the side effects only broadcast.</summary>
-    private static readonly WriteEffectOptions NoDecompose = new() { DecomposeToV4 = false };
-
     public Task<IReadOnlyList<DeviceStatus>> GetDeviceStatusesAsync(
         FindQuery find, int count, int skip, CancellationToken cancellationToken,
         bool descending = true, ReadSortField sort = ReadSortField.Time) =>
@@ -87,7 +84,7 @@ internal sealed class DeviceStatusService(
 
         var updated = await store.GetByIdAsync(status.Id!, cancellationToken) ?? status;
 
-        await sideEffects.OnUpdatedAsync(CollectionName, updated, NoDecompose, cancellationToken);
+        await sideEffects.OnUpdatedAsync(CollectionName, updated, cancellationToken: cancellationToken);
         await events.OnUpdatedAsync(updated, cancellationToken);
 
         return updated;
@@ -103,7 +100,7 @@ internal sealed class DeviceStatusService(
             || await decomposer.DeleteStoredAsync(storedId, WriteOrigin.Live, cancellationToken) == 0)
             return false;
 
-        await sideEffects.OnDeletedAsync(CollectionName, deleted, NoDecompose, cancellationToken);
+        await sideEffects.OnDeletedAsync(CollectionName, deleted, cancellationToken: cancellationToken);
         await events.OnDeletedAsync(deleted, cancellationToken);
 
         return true;
@@ -124,7 +121,7 @@ internal sealed class DeviceStatusService(
                 deletedCount++;
         }
 
-        await sideEffects.OnBulkDeletedAsync(CollectionName, deletedCount, NoDecompose, cancellationToken);
+        await sideEffects.OnBulkDeletedAsync(CollectionName, deletedCount, cancellationToken: cancellationToken);
         await events.OnBulkDeletedAsync(deletedCount, cancellationToken);
 
         return deletedCount;
@@ -152,7 +149,7 @@ internal sealed class DeviceStatusService(
 
         if (announced.Count > 0)
         {
-            await sideEffects.OnCreatedAsync(CollectionName, announced, NoDecompose, CancellationToken.None);
+            await sideEffects.OnCreatedAsync(CollectionName, announced, cancellationToken: CancellationToken.None);
             await events.OnCreatedAsync(announced, CancellationToken.None);
         }
 

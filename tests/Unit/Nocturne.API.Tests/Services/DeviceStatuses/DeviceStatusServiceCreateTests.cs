@@ -185,7 +185,7 @@ public class DeviceStatusServiceCreateTests
         _sideEffects.Verify(s => s.OnCreatedAsync(
             "devicestatus",
             It.Is<IReadOnlyList<DeviceStatus>>(l => l.Single() == served),
-            It.Is<WriteEffectOptions>(o => !o.DecomposeToV4),
+            It.IsAny<WriteEffectOptions?>(),
             It.IsAny<CancellationToken>()), Times.Once);
         _events.Verify(e => e.OnCreatedAsync(
             It.Is<IReadOnlyList<DeviceStatus>>(l => l.Single() == served), It.IsAny<CancellationToken>()), Times.Once);

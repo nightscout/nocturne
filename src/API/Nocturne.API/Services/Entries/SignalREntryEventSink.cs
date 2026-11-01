@@ -14,8 +14,7 @@ namespace Nocturne.API.Services.Entries;
 /// <remarks>
 /// The only cache this clears is eHbA1c: the years a written reading reaches (<see cref="OnWrittenAsync"/>),
 /// or all of them after a bulk delete. The entry reads are cleared by
-/// <see cref="Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation"/>. V4 decomposition is disabled
-/// here because <see cref="EntryService"/> writes directly to V4 tables via <see cref="IEntryDecomposer"/> before side effects fire.
+/// <see cref="Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation"/>.
 /// <c>dataUpdate</c> broadcasts are suppressed on single-record updates to avoid duplicate client refreshes.
 /// </remarks>
 /// <seealso cref="IDataEventSink{T}"/>
@@ -30,7 +29,7 @@ internal class SignalREntryEventSink : IDataEventSink<Entry>
     /// <summary>
     /// Initializes a new instance of <see cref="SignalREntryEventSink"/>.
     /// </summary>
-    /// <param name="sideEffects">Orchestrates cache invalidation, broadcasting, and V4 decomposition.</param>
+    /// <param name="sideEffects">Orchestrates cache invalidation and broadcasting.</param>
     /// <param name="logger">The logger instance.</param>
     public SignalREntryEventSink(
         IWriteSideEffects sideEffects,
@@ -42,13 +41,11 @@ internal class SignalREntryEventSink : IDataEventSink<Entry>
 
     private WriteEffectOptions BuildWriteOptions() => new()
     {
-        DecomposeToV4 = false,
         BroadcastDataUpdate = true,
     };
 
     private WriteEffectOptions BuildWriteOptionsNoBroadcastDataUpdate() => new()
     {
-        DecomposeToV4 = false,
         BroadcastDataUpdate = false,
     };
 
@@ -104,18 +101,6 @@ internal class SignalREntryEventSink : IDataEventSink<Entry>
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process update side effects for entry {Id}", entry.Id);
-        }
-    }
-
-    public async Task BeforeDeleteAsync(string id, CancellationToken ct = default)
-    {
-        try
-        {
-            await _sideEffects.BeforeDeleteAsync<Entry>(id, BuildWriteOptions(), ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process pre-delete side effects for entry {Id}", id);
         }
     }
 

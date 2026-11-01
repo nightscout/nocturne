@@ -147,8 +147,6 @@ public class StorageDeleteBroadcastContractTests
         new(
             Mock.Of<ITenantCache>(),
             capture.Broadcast,
-            Mock.Of<IDecompositionPipeline>(),
-            Enumerable.Empty<ICollectionEffectDescriptor>(),
             NullLogger<WriteSideEffectsService>.Instance
         );
 

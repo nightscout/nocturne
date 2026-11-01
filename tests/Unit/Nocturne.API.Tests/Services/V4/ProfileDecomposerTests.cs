@@ -19,14 +19,14 @@ public class ProfileDecomposerTests
     /// byte-identical re-upserts diff to empty and are skipped.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_PreservesCallerAuditAttribution()
+    public async Task DecomposeBatchAsync_PreservesCallerAuditAttribution()
     {
         var auditContext = new AuditContext { AuthType = "ApiKey", SubjectName = "someone" };
         var attributionDuringUpsert = new List<(bool IsSystem, string? AuthType)>();
         var repos = new Repositories(onUpsert: () =>
             attributionDuringUpsert.Add((auditContext.IsSystem, auditContext.AuthType)));
 
-        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         result.CreatedRecords.Should().HaveCount(5);
         attributionDuringUpsert.Should().HaveCount(5).And.AllSatisfy(a =>
@@ -41,7 +41,7 @@ public class ProfileDecomposerTests
     {
         var repos = new Repositories(outcome: UpsertOutcome.Unchanged);
 
-        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         result.UnchangedRecords.Should().HaveCount(5);
         result.CreatedRecords.Should().BeEmpty();
@@ -58,7 +58,7 @@ public class ProfileDecomposerTests
         var repos = new Repositories(outcome: UpsertOutcome.Updated);
         var profile = BuildProfile();
 
-        var result = await repos.Decomposer.DecomposeAsync(profile, WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeBatchAsync([profile], WriteOrigin.Live);
 
         result.UpdatedRecords.Should().HaveCount(5);
         var start = ProfileDecomposer.VersionStart(profile);
@@ -120,11 +120,11 @@ public class ProfileDecomposerTests
     [InlineData("""
         "enteredBy": "editor"
         """, "1970-01-01T00:00:00.000Z")]
-    public async Task DecomposeAsync_StartsEveryVersionAtTheDocumentsTime(string header, string expected)
+    public async Task DecomposeBatchAsync_StartsEveryVersionAtTheDocumentsTime(string header, string expected)
     {
         var repos = new Repositories();
 
-        await repos.Decomposer.DecomposeAsync(Upload("doc", header), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([Upload("doc", header)], WriteOrigin.Live);
 
         var start = DateTimeOffset.Parse(expected).UtcDateTime;
         repos.Written.Should().HaveCount(5).And.AllSatisfy(r => r.Timestamp.Should().Be(start));
@@ -152,7 +152,7 @@ public class ProfileDecomposerTests
     /// A document without <c>mills</c> that starts after every stored one is the newest, and claims.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_WithoutMills_ClaimsTheDefault_WhenItStartsAfterEveryStoredDocument()
+    public async Task DecomposeBatchAsync_WithoutMills_ClaimsTheDefault_WhenItStartsAfterEveryStoredDocument()
     {
         var repos = new Repositories(storedSettings:
         [
@@ -163,8 +163,8 @@ public class ProfileDecomposerTests
             },
         ]);
 
-        await repos.Decomposer.DecomposeAsync(
-            Upload("new", """ "startDate": "2025-10-05T00:00:00.000Z" """), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([
+            Upload("new", """ "startDate": "2025-10-05T00:00:00.000Z" """)], WriteOrigin.Live);
 
         WrittenDefaults(repos).Should().ContainSingle().Which.LegacyId.Should().Be("new:Default");
     }
@@ -190,11 +190,11 @@ public class ProfileDecomposerTests
     /// stamped from what it reads back, so preserving on them would let a fork survive.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_PreservesTheStoredCorrelationIdOnTheAnchorOnly()
+    public async Task DecomposeBatchAsync_PreservesTheStoredCorrelationIdOnTheAnchorOnly()
     {
         var repos = new Repositories();
 
-        await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         repos.PreserveFlags.Should().HaveCount(5);
         repos.PreserveFlags[typeof(TherapySettings)].Should().BeTrue();
@@ -209,12 +209,12 @@ public class ProfileDecomposerTests
     /// schedule rather than failing.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_StampsTheSchedulesWithTheAnchorsStoredCorrelationId()
+    public async Task DecomposeBatchAsync_StampsTheSchedulesWithTheAnchorsStoredCorrelationId()
     {
         var anchor = Guid.CreateVersion7();
         var repos = new Repositories(anchorCorrelationId: anchor);
 
-        await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         repos.Written.Where(r => r is not TherapySettings).Should().HaveCount(4).And.AllSatisfy(
             r => r.CorrelationId.Should().Be(anchor, "a sibling must land on the therapy settings row's id"));
@@ -224,11 +224,11 @@ public class ProfileDecomposerTests
     /// A stored id of null must not leave the anchor on a fresh id while the siblings keep theirs.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_StampsTheWholeGroupWithTheMintedId_WhenTheAnchorStoresNone()
+    public async Task DecomposeBatchAsync_StampsTheWholeGroupWithTheMintedId_WhenTheAnchorStoresNone()
     {
         var repos = new Repositories(anchorCorrelationId: null);
 
-        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         var ids = repos.Written.Select(r => r.CorrelationId).ToList();
         ids.Should().HaveCount(5);
@@ -241,11 +241,11 @@ public class ProfileDecomposerTests
     /// would fork the group off the settings row they belong to.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_WritesNoSchedules_ForAStoreWhoseAnchorWasRefused()
+    public async Task DecomposeBatchAsync_WritesNoSchedules_ForAStoreWhoseAnchorWasRefused()
     {
         var repos = new Repositories(refusedLegacyIds: ["profile1:Weekend"]);
 
-        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(stores: ["Default", "Weekend"]), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeBatchAsync([BuildProfile(stores: ["Default", "Weekend"])], WriteOrigin.Live);
 
         repos.Written.Select(r => r.LegacyId).Should().OnlyContain(id => id == "profile1:Default");
         repos.Written.Should().HaveCount(5);
@@ -350,15 +350,36 @@ public class ProfileDecomposerTests
     /// naming no store it holds leaves no default, rather than a case-insensitive near miss.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_MatchesTheDefaultStoreExactly()
+    public async Task DecomposeBatchAsync_MatchesTheDefaultStoreExactly()
     {
         var repos = new Repositories();
 
-        await repos.Decomposer.DecomposeAsync(
-            BuildProfile(stores: ["default"], defaultProfile: "Default"), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([
+            BuildProfile(stores: ["default"], defaultProfile: "Default")], WriteOrigin.Live);
 
         WrittenDefaults(repos).Should().BeEmpty();
         repos.SetDefaultCalls.Should().Equal([(Guid?)null]);
+    }
+
+    /// <summary>
+    /// A document sent twice in one batch is written as its last version, so that version's
+    /// <c>defaultProfile</c> is the one it claims.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_ADocumentSentTwice_ClaimsTheLastVersionsDefault()
+    {
+        var repos = new Repositories();
+
+        await repos.Decomposer.DecomposeBatchAsync([
+            BuildProfile(stores: ["Default", "Night"], defaultProfile: "Default"),
+            BuildProfile(stores: ["Default", "Night"], defaultProfile: "Night")], WriteOrigin.Live);
+
+        repos.Written.OfType<TherapySettings>()
+            .GroupBy(t => t.LegacyId)
+            .Select(versions => versions.Last())
+            .Where(t => t.IsDefault)
+            .Select(t => t.LegacyId)
+            .Should().Equal(["profile1:Night"], "the bulk upsert keeps each legacy id's last record");
     }
 
     /// <summary>
@@ -366,7 +387,7 @@ public class ProfileDecomposerTests
     /// flag a stored row of its own already carries.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_ForAnOlderDocument_KeepsTheStoredFlags()
+    public async Task DecomposeBatchAsync_ForAnOlderDocument_KeepsTheStoredFlags()
     {
         var repos = new Repositories(storedSettings:
         [
@@ -382,8 +403,8 @@ public class ProfileDecomposerTests
             },
         ]);
 
-        await repos.Decomposer.DecomposeAsync(
-            BuildProfile(id: "older", stores: ["Default", "Weekend"], mills: 1700000000000), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([
+            BuildProfile(id: "older", stores: ["Default", "Weekend"], mills: 1700000000000)], WriteOrigin.Live);
 
         WrittenDefaults(repos).Select(t => t.LegacyId).Should().Equal(["older:Weekend"]);
         repos.SetDefaultCalls.Should().BeEmpty();
@@ -397,7 +418,7 @@ public class ProfileDecomposerTests
     [InlineData("mmol", "mg/dL")]
     [InlineData(null, "mmol")]
     [InlineData("mmol/L", "mmol")]
-    public async Task DecomposeAsync_StoresAMmolStoresTargetsAndIsfInMgdl(string? storeUnits, string documentUnits)
+    public async Task DecomposeBatchAsync_StoresAMmolStoresTargetsAndIsfInMgdl(string? storeUnits, string documentUnits)
     {
         var repos = new Repositories();
         var profile = BuildProfile();
@@ -408,7 +429,7 @@ public class ProfileDecomposerTests
         store.TargetLow = [new TimeValue { Time = "00:00", Value = 5.0 }];
         store.TargetHigh = [new TimeValue { Time = "00:00", Value = 5.5 }];
 
-        await repos.Decomposer.DecomposeAsync(profile, WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([profile], WriteOrigin.Live);
 
         repos.Written.OfType<SensitivitySchedule>().Single().Entries.Single().Value.Should().Be(63);
         var target = repos.Written.OfType<TargetRangeSchedule>().Single().Entries.Single();

@@ -74,10 +74,8 @@ public sealed record LegacyCorrelation(string LegacyId, Guid CorrelationId);
 
 /// <summary>
 /// A V4 repository addressable by the legacy MongoDB <c>_id</c> its records were decomposed from.
-/// This is the surface the decomposers upsert through, so their create-or-update body can live in
-/// one generic place (<c>DecomposerBase.UpsertByLegacyIdAsync</c> per record,
-/// <see cref="BulkUpsertByLegacyIdAsync"/> or <see cref="IBulkUpsertRepository{TRecord}.BulkUpsertAsync"/>
-/// per batch).
+/// This is the surface the decomposers upsert through, a batch at a time
+/// (<see cref="BulkUpsertByLegacyIdAsync"/> or <see cref="IBulkUpsertRepository{TRecord}.BulkUpsertAsync"/>).
 /// </summary>
 /// <typeparam name="TRecord">The V4 record type stored by this repository.</typeparam>
 public interface ILegacyKeyedRepository<TRecord>

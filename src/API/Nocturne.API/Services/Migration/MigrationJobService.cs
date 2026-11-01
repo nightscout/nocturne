@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
@@ -1411,7 +1412,7 @@ internal class MigrationJob
         sp =>
         {
             var decomposer = sp.GetRequiredService<IActivityDecomposer>();
-            return (page, ct) => decomposer.DecomposeBatchAsync(page, WriteOrigin.Backfill, ct);
+            return async (page, ct) => await decomposer.DecomposeBatchAsync(page, WriteOrigin.Backfill, ct);
         });
 
     /// <summary>
@@ -1590,7 +1591,7 @@ internal class MigrationJob
                 }
 
                 tally = tally.Add(
-                    await decomposer.DecomposeAsync(profile, WriteOrigin.Backfill, ct), oneRecordPerDocument: false);
+                    await decomposer.DecomposeBatchAsync([profile], WriteOrigin.Backfill, ct), oneRecordPerDocument: false);
                 totalMigrated++;
                 UpdateCollectionProgress(collectionName, documents.Length, totalMigrated, totalFailed, false, tally);
                 UpdateOverallProgress();
@@ -2047,7 +2048,7 @@ internal class MigrationJob
 
         using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
-        await decomposer.DecomposeAsync(profile, WriteOrigin.Backfill, ct);
+        await decomposer.DecomposeBatchAsync([profile], WriteOrigin.Backfill, ct);
     }
 
     private async Task TransformFoodAsync(

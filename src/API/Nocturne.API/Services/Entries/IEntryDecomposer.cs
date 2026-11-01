@@ -5,17 +5,16 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Entries;
 
 /// <summary>
-/// Decomposes legacy Entry records into v4 granular models (SensorGlucose, MeterGlucose, Calibration).
-/// Handles idempotent create-or-update based on LegacyId matching.
+/// Decomposes legacy Entry records into v4 granular models (SensorGlucose, MeterGlucose, Calibration):
+/// an upload creates or updates by legacy id, an edit writes onto the stored reading its id names.
 /// </summary>
-/// <seealso cref="IDecompositionPipeline"/>
 internal interface IEntryDecomposer
 {
     /// <summary>
-    /// Decomposes a single legacy Entry into the appropriate v4 record type
-    /// based on <see cref="Entry.Type"/>.
+    /// Writes a user's edit of the stored reading <paramref name="entry"/>'s id names, as a batch of
+    /// one: by its legacy id, or, for a reading served under its own id, onto that reading.
     /// </summary>
-    /// <param name="entry">The legacy Entry to decompose</param>
+    /// <param name="entry">The edited legacy Entry.</param>
     /// <param name="origin">Write classification of the written records.</param>
     /// <param name="ct">Cancels the operation.</param>
     /// <returns>
@@ -55,16 +54,18 @@ internal interface IEntryDecomposer
     Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
-    /// Decomposes a batch of legacy entries into v4 records using bulk-insert,
-    /// eliminating per-entry round-trips. All entries share a single
-    /// <see cref="DecompositionResult.CorrelationId"/>.
+    /// Decomposes a batch of uploaded legacy entries into v4 records with a fixed number of queries
+    /// whatever its size, except the read of the rows its served-shaped ids name, one statement per 50
+    /// such ids per table. Each legacy id keeps the correlation id its stored rows carry, else is given
+    /// a fresh one shared by its re-sends in the batch.
     /// </summary>
     /// <param name="entries">The legacy entries to decompose.</param>
     /// <param name="origin">Write classification, as for <see cref="DecomposeAsync"/>.</param>
     /// <param name="ct">Cancels the operation.</param>
     /// <returns>
-    /// A <see cref="DecompositionResult"/> whose <see cref="DecompositionResult.CreatedRecords"/>
-    /// contains all bulk-inserted v4 records. Entries with unrecognised types are skipped.
+    /// A <see cref="DecompositionResult"/> with the records created, updated and left unchanged, whose
+    /// <see cref="DecompositionResult.CorrelationId"/> is the first entry's. Entries with unrecognised
+    /// types are skipped.
     /// </returns>
     Task<DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default);

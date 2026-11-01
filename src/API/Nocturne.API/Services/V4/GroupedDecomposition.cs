@@ -12,12 +12,15 @@ namespace Nocturne.API.Services.V4;
 /// (<see cref="Core.Contracts.V4.Repositories.CommittedWrite"/>), so a caller that passed it in reads
 /// what the batch committed even when the batch throws part-way.
 /// </remarks>
-internal abstract class GroupedDecomposition : DecompositionResult
+public abstract class GroupedDecomposition : DecompositionResult
 {
     private IReadOnlyList<Guid> _groups = [];
 
     /// <summary>The group each span the batch wrote belongs to.</summary>
     internal Dictionary<StateSpan, Guid> SpanOwners { get; } = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>The group each record the batch wrote belongs to, for a record that carries no correlation id.</summary>
+    internal Dictionary<object, Guid> RecordOwners { get; } = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Starts the decomposition of records whose groups are <paramref name="groups"/>, in batch order.</summary>
     internal void Begin(IReadOnlyList<Guid> groups) => _groups = groups;
@@ -31,7 +34,7 @@ internal abstract class GroupedDecomposition : DecompositionResult
         StateSpan span => SpanOwners.TryGetValue(span, out var owner) ? owner : null,
         IV4Record v4 => v4.CorrelationId,
         DeviceStatusExtras extras => extras.CorrelationId,
-        _ => null,
+        _ => RecordOwners.TryGetValue(record, out var owner) ? owner : null,
     };
 
     /// <summary>

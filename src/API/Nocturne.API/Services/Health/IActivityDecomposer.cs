@@ -1,35 +1,27 @@
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
-namespace Nocturne.Core.Contracts.V4;
+namespace Nocturne.API.Services.Health;
 
 /// <summary>
 /// Decomposes legacy Activity records into dedicated v4 models (HeartRate, StepCount), routed
 /// per <see cref="Classify"/>. Other activities pass through unchanged to StateSpan storage.
 /// </summary>
-/// <seealso cref="IDecompositionPipeline"/>
 /// <seealso cref="IHeartRateService"/>
 /// <seealso cref="IStepCountService"/>
 public interface IActivityDecomposer
 {
     /// <summary>
-    /// Classifies an activity and routes it to the appropriate dedicated table if it is sensor data.
-    /// Returns a result with created/updated records for heart rate or step count data.
-    /// Returns an empty result for regular activities (caller should proceed with StateSpan storage).
+    /// Decomposes a batch of legacy Activities with a fixed number of queries whatever its size:
+    /// heart rates into heart_rates, step counts into step_counts, and the rest as StateSpans.
     /// </summary>
-    Task<DecompositionResult> DecomposeAsync(Activity activity, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>
-    /// Decomposes a batch of legacy Activities into dedicated v4 models, using bulk insert.
-    /// Heart rate records are bulk-inserted into the heart_rates table, step counts into step_counts,
-    /// and regular activities are bulk-created as StateSpans.
-    /// </summary>
-    /// <param name="activities">The legacy Activities to decompose</param>
-    /// <returns>
-    /// A <see cref="DecompositionResult"/> containing all created V4 records across all activities.
-    /// </returns>
-    Task<DecompositionResult> DecomposeBatchAsync(
+    /// <param name="activities">The activities, in arrival order.</param>
+    /// <param name="origin">Write classification of the written records.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    /// <returns>What each activity wrote, by batch index.</returns>
+    Task<ActivityDecomposition> DecomposeBatchAsync(
         IReadOnlyList<Activity> activities, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>

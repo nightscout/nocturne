@@ -1103,7 +1103,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <remarks>
     /// A stored <see cref="IPatientDeviceLinked.PatientDeviceId"/> is carried onto a record that
     /// resolved none, so a re-send whose attribution has since become ambiguous cannot unattribute
-    /// the row; the single path does the same through <c>DecomposerBase.StampAttributionAsync</c>.
+    /// the row.
     /// </remarks>
     private async Task<UpsertSplit> SplitLegacyIdUpdatesAsync(
         NocturneDbContext ctx, List<TModel> records, CancellationToken ct)
