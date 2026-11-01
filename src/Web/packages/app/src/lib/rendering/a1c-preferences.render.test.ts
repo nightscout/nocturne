@@ -21,7 +21,7 @@ describe("A1c preferences under the production translation transform", () => {
       });
       return result.body;
     });
-    expect(body).toContain("A1c / eA1c: 53 mmol/mol");
+    expect(body).toContain("A1c / eA1c: 53.0 mmol/mol");
   });
   it.each(supportedLocales)(
     "renders measured and estimated names and navigation in %s",
@@ -35,7 +35,7 @@ describe("A1c preferences under the production translation transform", () => {
             return result.body;
           });
           expect(body).toContain(
-            `${a1cName} / e${a1cName}: ${a1cUnits === "percent" ? "7.0%" : "53 mmol/mol"}`
+            `${a1cName} / e${a1cName}: ${a1cUnits === "percent" ? "7.00%" : "53.0 mmol/mol"}`
           );
           expect(body).toContain(`<nav>e${a1cName}</nav>`);
           expect(body).toMatch(new RegExp(`<h1>[^<]*${a1cName}[^<]*</h1>`));
