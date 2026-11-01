@@ -18,6 +18,7 @@ public class YearOverviewColorPreferencesTests
             {
                 TddBand = [10, 70],
                 AvgGlucoseBand = [70, 180],
+                AvgGlucoseColorRange = [60, 250],
                 AvgGlucoseBoundaries = [Pin(100, 0.3), Pin(200, 0.6)],
             },
         };
@@ -69,6 +70,9 @@ public class YearOverviewColorPreferencesTests
         new YearOverviewColorPreferences { AvgGlucoseBand = [40, 351] }.Validate().Should().NotBeNull();
         new YearOverviewColorPreferences { AvgGlucoseBand = [100, 80] }.Validate().Should().NotBeNull();
         new YearOverviewColorPreferences { TirBand = [70, 100], TddBand = [0, 1000], AvgGlucoseBand = [40, 350] }.Validate().Should().BeNull();
+        new YearOverviewColorPreferences { AvgGlucoseColorRange = [39, 180] }.Validate().Should().NotBeNull();
+        new YearOverviewColorPreferences { TirColorRange = [80, 70] }.Validate().Should().NotBeNull();
+        new YearOverviewColorPreferences { AvgGlucoseColorRange = [70, 180], AvgGlucoseBand = [40, 350] }.Validate().Should().BeNull();
     }
 
     public static TheoryData<YearOverviewColorBoundary[]> InvalidBoundaries => new()

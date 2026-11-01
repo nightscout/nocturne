@@ -24,6 +24,7 @@
     scale,
     limits,
     onWindowChange,
+    onRangeChange,
     onBoundariesChange,
     onEndsChange,
     onDimChange,
@@ -38,6 +39,7 @@
     scale: MetricScale;
     limits: Range;
     onWindowChange: (window: Range | null) => void;
+    onRangeChange: (range: Range | null) => void;
     onBoundariesChange: (boundaries: ColorBoundary[] | null) => void;
     onEndsChange: (ends: ColorEnds) => void;
     onDimChange: (dim: number) => void;
@@ -126,6 +128,7 @@
           {units}
           {unit}
           {onWindowChange}
+          {onRangeChange}
           {onBoundariesChange}
           {onEndsChange}
           {onDimChange}

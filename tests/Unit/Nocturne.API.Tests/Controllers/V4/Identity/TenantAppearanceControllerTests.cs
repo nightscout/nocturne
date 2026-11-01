@@ -144,12 +144,12 @@ public sealed class TenantAppearanceControllerTests
         // declarations is what makes adding one a decision rather than a default.
         PropertyNames(typeof(YearOverviewColorPreferences)).Should().BeEquivalentTo(
             "OutOfBandTransparency",
-            "AvgGlucoseBand", "AvgGlucoseBoundaries", "AvgGlucoseLowColor", "AvgGlucoseHighColor",
-            "TirBand", "TirBoundaries", "TirLowColor", "TirHighColor",
-            "BolusBand", "BolusBoundaries", "BolusLowColor", "BolusHighColor",
-            "BasalBand", "BasalBoundaries", "BasalLowColor", "BasalHighColor",
-            "TddBand", "TddBoundaries", "TddLowColor", "TddHighColor",
-            "CarbsBand", "CarbsBoundaries", "CarbsLowColor", "CarbsHighColor");
+            "AvgGlucoseBand", "AvgGlucoseBoundaries", "AvgGlucoseLowColor", "AvgGlucoseHighColor", "AvgGlucoseColorRange",
+            "TirBand", "TirBoundaries", "TirLowColor", "TirHighColor", "TirColorRange",
+            "BolusBand", "BolusBoundaries", "BolusLowColor", "BolusHighColor", "BolusColorRange",
+            "BasalBand", "BasalBoundaries", "BasalLowColor", "BasalHighColor", "BasalColorRange",
+            "TddBand", "TddBoundaries", "TddLowColor", "TddHighColor", "TddColorRange",
+            "CarbsBand", "CarbsBoundaries", "CarbsLowColor", "CarbsHighColor", "CarbsColorRange");
         PropertyNames(typeof(YearOverviewColorBoundary)).Should().BeEquivalentTo("Value", "Position", "Color");
         PropertyNames(typeof(PredictionPreferences)).Should().BeEquivalentTo(
             "Enabled", "Minutes", "DisplayMode");
