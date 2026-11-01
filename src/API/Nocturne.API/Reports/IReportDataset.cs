@@ -189,12 +189,10 @@ internal interface IReportDataset
     string? SeriesParameter => null;
 
     /// <summary>
-    /// What a read of this dataset reads differently by, beyond its query, as a key part: the bound fields a
-    /// chart layer draws (<see cref="ReportDatasetRequest.Fields"/>) and a derived source's read of every row
-    /// (<see cref="ReportDatasetRequest.Whole"/>). Null for a dataset that reads the same rows for all of them,
-    /// so its layers and sources share one read.
+    /// What a read of this dataset reads differently by, beyond its query, as a key part (<see cref="ReportReadShape"/>).
+    /// Null for a dataset that reads the same rows for every shape, so its layers and sources share one read.
     /// </summary>
-    string? ReadVariant(IReadOnlyList<string>? fields, bool whole) => null;
+    string? ReadVariant(ReportReadShape shape) => null;
 
     /// <summary>
     /// The fields the rows' sentence companion (<see cref="ReportField.SentenceField"/>) is about
@@ -242,6 +240,16 @@ internal sealed record ReportDatasetRequest(
 
     /// <summary>The run's shared reads; a request made outside a run gets its own.</summary>
     public Datasets.ReportRunCache Cache { get; } = RunCache ?? new Datasets.ReportRunCache();
+}
+
+/// <summary>
+/// How a chart layer or a derived source reads a dataset beyond its query: the bound fields a layer draws
+/// (<see cref="ReportDatasetRequest.Fields"/>) and a derived source's read of every row
+/// (<see cref="ReportDatasetRequest.Whole"/>). The runner keys its reads and the validator counts them by it.
+/// </summary>
+internal sealed record ReportReadShape(IReadOnlyList<string>? Fields = null, bool Whole = false)
+{
+    public static readonly ReportReadShape Panel = new();
 }
 
 /// <summary>Why a field is not data a derived layer may take as a source.</summary>

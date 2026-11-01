@@ -232,8 +232,33 @@ public class RecordDatasetTests
 
         TreatmentsDataset.KindsFor(asked, ["insulin", "carbs"]).Should().BeEquivalentTo([ReportTreatmentType.Bolus, ReportTreatmentType.Carbs]);
         TreatmentsDataset.KindsFor(asked, ["time"]).Should().BeEquivalentTo(asked);
-        new TreatmentsDataset().ReadVariant(["carbs", "insulin"], whole: false).Should().Be("carbs,insulin");
-        new TreatmentsDataset().ReadVariant(null, whole: false).Should().BeNull();
+        new TreatmentsDataset().ReadVariant(new ReportReadShape(["carbs", "insulin"])).Should().Be("carbs,insulin");
+        new TreatmentsDataset().ReadVariant(ReportReadShape.Panel).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task The_read_cap_counts_the_reads_the_runner_makes()
+    {
+        var harness = new Harness();
+        harness.WithBoluses((Now.AddHours(-3), 5), (Now.AddHours(-2), 1));
+        harness.WithCarbs((Now.AddHours(-2), 40));
+        var (runner, context, _) = harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
+        var validation = Validator.Validate(JsonDocument.Parse("""
+            { "version": 1, "range": { "hours": 24 }, "panels": [ { "kind": "chart", "grid": 60, "tracks": [
+              { "layers": [
+                { "dataset": { "name": "treatments" }, "mark": "markers", "bindings": { "x": "time", "y": ["insulin", "carbs"] } },
+                { "dataset": { "name": "treatments" }, "mark": "bars", "bindings": { "x": "time", "y": ["insulin"] } },
+                { "dataset": { "name": "treatments" }, "mark": "bars", "bindings": { "x": "time", "y": ["insulin"] } } ] },
+              { "layers": [
+                { "derived": { "op": "rolling_mean", "minutes": 120, "a": { "dataset": { "name": "treatments" }, "field": "insulin" } } },
+                { "derived": { "op": "rolling_mean", "minutes": 240, "a": { "dataset": { "name": "treatments" }, "field": "insulin" } } } ] } ] } ] }
+            """).RootElement);
+        validation.Errors.Should().BeEmpty();
+
+        await runner.RunAsync(validation.Spec!, context, CancellationToken.None);
+
+        validation.Reads.Should().Be(3, "boluses and carbs for the markers, boluses for both bars layers, and every bolus once for both sources");
+        context.Cache.Reads.Should().Be(validation.Reads);
     }
 
     [Fact]

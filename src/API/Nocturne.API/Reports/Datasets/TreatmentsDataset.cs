@@ -111,10 +111,10 @@ internal sealed class TreatmentsDataset : IReportDataset
         return drawn.Count == 0 ? asked : asked.Where(drawn.Contains).ToHashSet();
     }
 
-    public string? ReadVariant(IReadOnlyList<string>? fields, bool whole)
+    public string? ReadVariant(ReportReadShape shape)
     {
-        var drawn = (fields ?? []).Where(KindsOfField.ContainsKey).Order(StringComparer.Ordinal).ToList();
-        return drawn.Count == 0 && !whole ? null : $"{string.Join(',', drawn)}{(whole ? "|whole" : "")}";
+        var drawn = (shape.Fields ?? []).Where(KindsOfField.ContainsKey).Order(StringComparer.Ordinal).ToList();
+        return drawn.Count == 0 && !shape.Whole ? null : $"{string.Join(',', drawn)}{(shape.Whole ? "|whole" : "")}";
     }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)

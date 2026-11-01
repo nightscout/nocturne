@@ -160,21 +160,21 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         ReportPanelKind kind,
         string? x,
         Run run,
-        IReadOnlyList<string>? fields = null,
-        bool whole = false)
+        ReportReadShape? shape = null)
     {
+        shape ??= ReportReadShape.Panel;
         if (!run.Context.HasScope(dataset.RequiredScope))
             return new Read(null, ReportPanelStatus.NotPermitted,
                 $"Not shown: the token does not hold the '{dataset.RequiredScope}' scope that {dataset.Name} needs.");
         var context = run.Context;
-        var key = ReportSpecValidator.ReadKey(parameters, range, kind, x) + (dataset.ReadVariant(fields, whole) is { } variant ? $"|{variant}" : "");
+        var key = ReportSpecValidator.ReadKey(dataset, parameters, range, kind, x, shape);
         if (run.Deadline.IsCancellationRequested && !context.Cache.Has(key))
             return new Read(null, ReportPanelStatus.TimedOut, "Not shown: the report ran out of time before this was read.");
         try
         {
             var output = await context.Cache.ReadAsync(key, () => dataset.RunAsync(
                 new ReportDatasetRequest(parameters, kind, from, to, context.UseMmol, context.GrantedScopes, context.Services, context.ReadLog,
-                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, fields, whole),
+                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, shape.Fields, shape.Whole),
                 run.Token));
             return new Read(output, ReportPanelStatus.Ok, null);
         }
@@ -481,9 +481,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
         var dataset = registry.Find(layer.Dataset!.DatasetName)!;
         var bindings = layer.Bindings!;
-        var valueNames = (bindings.Y ?? []).Concat(bindings.Edges ?? []).Concat(new[] { bindings.Fit }.OfType<string>()).ToList();
-        var read = await ReadAsync(dataset, layer.Dataset, range, from, to, ReportPanelKind.Chart, bindings.X, run,
-            valueNames.Count > 0 ? valueNames : null);
+        var valueNames = ValueNames(bindings);
+        var read = await ReadAsync(dataset, layer.Dataset, range, from, to, ReportPanelKind.Chart, bindings.X, run, LayerShape(bindings));
         if (read.Output is not { } output)
             return (Empty(read.Status, read.Note!, from, to), null);
 
@@ -567,6 +566,20 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Resolution = output.Resolution,
         }, output);
     }
+
+    /// <summary>How a layer drawn with <paramref name="bindings"/> reads its dataset: the value fields it draws.</summary>
+    internal static ReportReadShape LayerShape(ReportLayerBindings bindings)
+    {
+        var values = ValueNames(bindings);
+        return new ReportReadShape(values.Count > 0 ? values : null);
+    }
+
+    /// <summary>How a derived source reads its dataset: its one field, every row of the range.</summary>
+    internal static ReportReadShape SourceShape(ReportSourceSpec source) => new([source.Field], Whole: true);
+
+    /// <summary>The fields whose values a layer draws: its lines, edges and fit.</summary>
+    internal static IReadOnlyList<string> ValueNames(ReportLayerBindings bindings) =>
+        [.. (bindings.Y ?? []).Concat(bindings.Edges ?? []).Concat(new[] { bindings.Fit }.OfType<string>())];
 
     /// <summary>An untitled markers layer's name in the legend: the dataset's, and the fields it drew a marker of, if any.</summary>
     internal static string MarkersTitle(string datasetLabel, IReadOnlyList<ReportField> fields, ReportLayerBindings bindings, IReadOnlyList<ReportMarker> markers)
@@ -678,7 +691,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             var dataset = registry.Find(source.Dataset!.DatasetName)!;
             var catalogue = dataset.FieldsFor(ReportPanelKind.Chart);
             var axis = catalogue.First(f => !f.Companion && f.AxisKind is { } k && ReportDerivedOps.GridKinds.Contains(k));
-            var read = await ReadAsync(dataset, source.Dataset, range, from, to, ReportPanelKind.Chart, axis.Name, run, [source.Field], whole: true);
+            var read = await ReadAsync(dataset, source.Dataset, range, from, to, ReportPanelKind.Chart, axis.Name, run, SourceShape(source));
             if (read.Output is not { } output)
                 return Derivation.Failed(read.Status, read.Note);
             if (output.Omitted.FirstOrDefault(o => o.Field == source.Field) is { } withheld)

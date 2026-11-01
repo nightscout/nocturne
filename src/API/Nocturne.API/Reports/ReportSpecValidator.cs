@@ -16,6 +16,9 @@ internal sealed record ReportSpecError(string Path, string Message)
 internal sealed record ReportSpecValidation(ReportSpec? Spec, IReadOnlyList<ReportSpecError> Errors)
 {
     public bool IsValid => Errors.Count == 0 && Spec is not null;
+
+    /// <summary>The dataset reads a run of the spec makes, counted by the runner's read key; the cap is on this.</summary>
+    public int Reads { get; init; }
 }
 
 /// <summary>

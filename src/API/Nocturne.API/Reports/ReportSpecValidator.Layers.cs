@@ -18,14 +18,17 @@ internal sealed partial class ReportSpecValidator
     private static readonly JsonSerializerOptions KeyOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     /// <summary>
-    /// The key one read is cached and counted under: the dataset query, the range as the spec gives it,
-    /// the kind of panel and the field it is laid along. Two layers or sources with the same key read once.
+    /// The key one read is cached and counted under: the dataset query, the range as the spec gives it, the kind
+    /// of panel, the field it is laid along and what the dataset reads differently by (<see cref="IReportDataset.ReadVariant"/>).
+    /// Two layers or sources with the same key read once; the runner reads by this key and the cap counts it.
     /// </summary>
-    internal static string ReadKey(ReportDatasetParameters parameters, ReportRange range, ReportPanelKind kind, string? x) =>
-        $"{parameters.DatasetName}|{JsonSerializer.Serialize(parameters, parameters.GetType(), KeyOptions)}|{JsonSerializer.Serialize(range, KeyOptions)}|{ReportWire.Name(kind)}|{x}";
+    internal static string ReadKey(
+        IReportDataset dataset, ReportDatasetParameters parameters, ReportRange range, ReportPanelKind kind, string? x, ReportReadShape shape) =>
+        $"{parameters.DatasetName}|{JsonSerializer.Serialize(parameters, parameters.GetType(), KeyOptions)}|{JsonSerializer.Serialize(range, KeyOptions)}|{ReportWire.Name(kind)}|{x}"
+        + (dataset.ReadVariant(shape) is { } variant ? $"|{variant}" : "");
 
     /// <summary>One dataset read a layer makes: for the layer itself, or for one of its sources.</summary>
-    private sealed record LayerRead(IReportDataset Dataset, ReportDatasetParameters Parameters, string? X);
+    private sealed record LayerRead(IReportDataset Dataset, ReportDatasetParameters Parameters, string? X, ReportReadShape Shape);
 
     /// <summary>A layer as read, with what the panel's checks need beyond its spec.</summary>
     /// <param name="Folded">The fields the panel's grid folds, for a layer of a dataset.</param>
@@ -87,7 +90,8 @@ internal sealed partial class ReportSpecValidator
             if (reads.Count > ReportSpec.MaxReads)
                 Error("panels",
                     $"This report reads {reads.Count} datasets; a report reads at most {ReportSpec.MaxReads}. Layers and sources that read "
-                    + "the same data with the same settings and range count once. Remove layers, or split the report.");
+                    + "the same data with the same settings and range count once. Treatments count once for each set of kinds a layer draws, "
+                    + "and once more for each derived source, which reads every record. Remove layers, or split the report.");
 
             foreach (var group in reads.Values.GroupBy(d => d.Name))
             {
@@ -113,7 +117,7 @@ internal sealed partial class ReportSpecValidator
 
         return new ReportSpecValidation(
             new ReportSpec { Version = ReportSpec.CurrentVersion, Title = title, Range = reportRange, Panels = panels },
-            errors);
+            errors) { Reads = reads.Count };
     }
 
     private ReportPanelSpec? ReadPanel(
@@ -213,7 +217,7 @@ internal sealed partial class ReportSpecValidator
         var columns = ReadColumns(panel, $"{at}.bindings", dataset, fields, error);
         if (parameters is null || columns is null)
             return null;
-        reads.TryAdd(ReadKey(parameters, range, kind, null), dataset);
+        reads.TryAdd(ReadKey(dataset, parameters, range, kind, null, ReportReadShape.Panel), dataset);
         return new ReportPanelSpec
         {
             Kind = kind,
@@ -339,7 +343,7 @@ internal sealed partial class ReportSpecValidator
             foreach (var read in layer.Reads)
             {
                 CheckSpan(read.Dataset, layerRange, layer.Spec.Range is null ? $"{at}.range" : $"{layer.At}.range", Error);
-                reads.TryAdd(ReadKey(read.Parameters, layerRange, ReportPanelKind.Chart, read.X), read.Dataset);
+                reads.TryAdd(ReadKey(read.Dataset, read.Parameters, layerRange, ReportPanelKind.Chart, read.X, read.Shape), read.Dataset);
             }
             if (layer.Spec.Derived is { } derived)
             {
@@ -530,7 +534,7 @@ internal sealed partial class ReportSpecValidator
             return null;
 
         if (dataset is not null)
-            reads = [new LayerRead(dataset, parameters!, bindings.Value.Bindings.X)];
+            reads = [new LayerRead(dataset, parameters!, bindings.Value.Bindings.X, ReportSpecRunner.LayerShape(bindings.Value.Bindings))];
 
         if (id is null)
         {
@@ -740,9 +744,10 @@ internal sealed partial class ReportSpecValidator
                     + $"Send the number of the group this source reads, 1 to {seriesCount}.");
                 return null;
             }
-            reads.Add(new LayerRead(dataset, parameters, axis.Name));
+            var sourceSpec = new ReportSourceSpec { Dataset = parameters, Field = field.Name, Series = series };
+            reads.Add(new LayerRead(dataset, parameters, axis.Name, ReportSpecRunner.SourceShape(sourceSpec)));
             var resolved = field.ResolveUnit(useMmol);
-            return (new ReportSourceSpec { Dataset = parameters, Field = field.Name, Series = series },
+            return (sourceSpec,
                 new ReportSourceInfo(resolved, axis.AxisKind!.Value, resolved.Label));
         }
 
