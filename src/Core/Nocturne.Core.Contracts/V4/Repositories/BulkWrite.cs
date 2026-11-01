@@ -73,6 +73,28 @@ public static class BulkWrite
 }
 
 /// <summary>
+/// What a write committed, carried on the exception a step after its commit threw, so the caller
+/// still accounts for it.
+/// </summary>
+/// <remarks>
+/// Carried on the exception rather than wrapping it, so a cancellation stays a cancellation.
+/// </remarks>
+public static class CommittedWrite
+{
+    private const string Key = "Nocturne.CommittedWrite";
+
+    public static void Attach<TResult>(Exception exception, TResult committed) where TResult : class =>
+        exception.Data[Key] = committed;
+
+    public static bool TryGet<TResult>(Exception exception, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out TResult? committed)
+        where TResult : class
+    {
+        committed = exception.Data[Key] as TResult;
+        return committed is not null;
+    }
+}
+
+/// <summary>
 /// The outcome of <see cref="ILegacyKeyedRepository{TRecord}.BulkUpsertByLegacyIdAsync"/>: each
 /// written record keyed by legacy id, and how many records were withheld because the user had
 /// deleted them.

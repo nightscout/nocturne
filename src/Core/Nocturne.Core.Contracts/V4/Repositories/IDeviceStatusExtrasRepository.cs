@@ -28,6 +28,14 @@ public interface IDeviceStatusExtrasRepository : IBulkCreateRepository<DeviceSta
     /// <param name="correlationIds">Correlation IDs to match.</param>
     Task<IEnumerable<DeviceStatusExtras>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// Per candidate, the live row already holding the same extras at the same timestamp, or
+    /// <c>null</c>, in one query. A row carries no legacy id, so a re-sent status that wrote no snapshot
+    /// is recognised by what it holds.
+    /// </summary>
+    Task<IReadOnlyList<DeviceStatusExtras?>> FindStoredAsync(
+        IReadOnlyList<DeviceStatusExtras> candidates, CancellationToken ct = default);
+
     /// <summary>Delete the <see cref="DeviceStatusExtras"/> record(s) with the given correlation ID.</summary>
     /// <param name="correlationId">Correlation ID to match.</param>
     /// <returns>Number of records deleted.</returns>

@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -133,7 +134,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         var uploader = new Mock<IUploaderSnapshotRepository>();
         var decomposer = new DeviceStatusDecomposer(
             aps.Object, pump.Object, uploader.Object, extras.Object, Mock.Of<IStateSpanService>(),
-            Mock.Of<IDeviceService>(), Mock.Of<IAuditContext>(), Mock.Of<ILoopClosedLoopStamper>(), TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+            new UnresolvedDevices(), Mock.Of<IAuditContext>(), Mock.Of<ILoopClosedLoopStamper>(), TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
         var publisher = DevicePublisher(WritingDeviceStatusService.Over(decomposer), aps.Object, pump.Object, uploader.Object);
 
         var written = await publisher.PublishRecentDeviceStatusAsync(

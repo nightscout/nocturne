@@ -270,7 +270,18 @@ public abstract class DecomposerBase
         if (records.Count == 0)
             return;
 
-        Fold(await repository.BulkUpsertAsync(records, origin, ct), result);
+        BulkWrite<TRecord> written;
+        try
+        {
+            written = await repository.BulkUpsertAsync(records, origin, ct);
+        }
+        catch (Exception ex) when (CommittedWrite.TryGet<BulkWrite<TRecord>>(ex, out var committed))
+        {
+            Fold(committed, result);
+            throw;
+        }
+
+        Fold(written, result);
     }
 
     protected static async Task BulkCreateAsync<TRecord>(
@@ -284,7 +295,18 @@ public abstract class DecomposerBase
         if (records.Count == 0)
             return;
 
-        Fold(await repository.BulkCreateAsync(records, origin, ct), result);
+        BulkWrite<TRecord> written;
+        try
+        {
+            written = await repository.BulkCreateAsync(records, origin, ct);
+        }
+        catch (Exception ex) when (CommittedWrite.TryGet<BulkWrite<TRecord>>(ex, out var committed))
+        {
+            Fold(committed, result);
+            throw;
+        }
+
+        Fold(written, result);
     }
 
     private static void Fold<TRecord>(BulkWrite<TRecord> written, DecompositionResult result)

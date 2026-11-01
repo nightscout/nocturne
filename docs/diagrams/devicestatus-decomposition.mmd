@@ -24,6 +24,18 @@ flowchart LR
     xdrip -. extras .-> PumpSnapshot
     xdrip -. extras .-> UploaderSnapshot
 
+    subgraph phases["DecomposeBatchAsync: four phases, a fixed number of queries whatever the batch's size"]
+        direction TB
+        p1["<b>1. Preload</b><br/>stored correlation ids, one read per snapshot table<br/>devices of every status, one resolution<br/>their patient-device links, one read<br/>override spans: every open span, every span overlapping the observations, and the first 10 after them from each observing device<br/>pump-mode spans: every open span and every span overlapping the pump transitions"]
+        p2["<b>2. Build</b><br/>every snapshot and extras model in memory"]
+        p3["<b>3. Write</b><br/>one bulk upsert per snapshot table<br/>one read of the stored extras a status with no snapshot may already hold<br/>one bulk create of the rest, a group whose snapshots were all withheld writing none"]
+        p4["<b>4. Fold</b><br/>pump timeline and APS marks, one read each<br/>override observations, newest first<br/>suspension and mode of each stored pump snapshot, oldest first<br/>changed spans in one update, opened spans in one upsert"]
+        p1 --> p2 --> p3 --> p4
+    end
+
+    legacy --> phases
+    p4 --> v4
+
     subgraph v4["V4 Decomposed Snapshots (share CorrelationId)"]
         direction TB
 

@@ -588,8 +588,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
         var pumpId = Guid.NewGuid();
         var deviceRepo = new Mock<IDeviceRepository>();
         deviceRepo
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new V4Models.Device
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(new V4Models.Device
             {
                 Id = pumpId,
                 Category = V4Models.DeviceCategory.InsulinPump,
@@ -597,7 +597,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
                 Serial = "SN-1",
                 FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
                 LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
-            });
+            }));
         var decomposer = CreateDecomposer(CreateDeviceService(deviceRepo));
 
         var treatments = Enumerable.Range(1, 5)
@@ -629,8 +629,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
     {
         var deviceRepo = new Mock<IDeviceRepository>();
         deviceRepo
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new V4Models.Device
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DeviceRepositoryMatchers.Found(new V4Models.Device
             {
                 Id = Guid.NewGuid(),
                 Category = V4Models.DeviceCategory.InsulinPump,
@@ -638,9 +638,9 @@ public class TreatmentDecomposerBatchTests : IDisposable
                 Serial = "SN-1",
                 FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
                 LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
-            });
+            }));
         deviceRepo
-            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-2", It.IsAny<CancellationToken>()))
+            .Setup(r => r.FindByIdentitiesAsync(DeviceRepositoryMatchers.Naming(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-2"), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("batch failure"));
         deviceRepo
             .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -726,7 +726,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
     {
         var patientDevices = new Mock<IPatientDeviceRepository>();
         patientDevices
-            .Setup(r => r.GetByDeviceIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByDeviceIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         return new DeviceService(deviceRepo.Object, patientDevices.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc());
     }

@@ -787,7 +787,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         // A V4 list reads one tenant newest-first by timestamp, then id on the tables that tie-break
         // on it. With no index leading (tenant_id, timestamp), a LIMIT read reads every live row and
         // sorts; the three tables that keep such an index for the dedup read still gain the id
-        // tie-break and the live-rows predicate here. GetLatestAsync and GetLatestBeforeAsync on a
+        // tie-break and the live-rows predicate here. GetLatestAsync and the pump GetTimelineAsync on a
         // snapshot table walk the same index.
         foreach (var entity in V4SortedListEntities.Select(t => modelBuilder.Entity(t)))
         {
@@ -1935,7 +1935,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasFilter("deleted_at IS NULL");
 
         // Devices unique index (scoped to live records, per tenant).
-        // TenantId must be part of the key: devices are tenant-owned (FindByCategoryTypeAndSerialAsync
+        // TenantId must be part of the key: devices are tenant-owned (FindByIdentitiesAsync
         // is RLS-scoped to the current tenant) and the type/serial often carry shared, non-unique
         // values — e.g. a pump's manufacturer/model ("Insulet"/"Omnipod 5") or the generic Loop
         // uploader identity ("iPhone"/"unknown"). Without TenantId the constraint is global, so the
