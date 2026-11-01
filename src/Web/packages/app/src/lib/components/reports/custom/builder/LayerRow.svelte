@@ -12,6 +12,8 @@
     side: string;
     unit?: string | null;
     sentence?: string | null;
+    /** The event groups each source of grouped data offers, by source (a, b), with the API's words for them. */
+    sourceCohorts?: Record<string, { number: number; label: string }[]>;
   }
 </script>
 
@@ -233,6 +235,7 @@
         {draft}
         {op}
         source={item.derived.a}
+        groupLabels={preview?.sourceCohorts?.a}
         heading={op.sources === 2 ? "First source" : "Source"}
         idPrefix="{prefix}-a"
         messages={messagesUnder(messages?.derived ?? [], "a")}
@@ -246,6 +249,7 @@
           {draft}
           {op}
           source={item.derived.b}
+          groupLabels={preview?.sourceCohorts?.b}
           heading="Second source"
           idPrefix="{prefix}-b"
           messages={messagesUnder(messages?.derived ?? [], "b")}

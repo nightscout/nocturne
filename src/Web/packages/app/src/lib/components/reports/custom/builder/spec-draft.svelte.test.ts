@@ -76,10 +76,10 @@ describe("the builder's draft of a spec", () => {
     expect(draft.panels[0].tracks[1].layers[0]).toMatchObject({ dataset: null, mark: "points", bindings: { x: "a", y: ["b"], fit: "fit" } });
 
     const iobLayer = { ...draft.panels[0].tracks[0].layers[0], bindings: { x: "time", y: ["iob"] }, range: { hours: 12 } };
-    draft.copySource(0, 1, 0, "b", draft.panels[0].tracks[0].layers[0]);
     draft.copySource(0, 1, 0, "a", iobLayer);
+    draft.copySource(0, 1, 0, "b", draft.panels[0].tracks[0].layers[0]);
     expect(draft.panels[0].tracks[1].layers[0].derived!.a.field).toBe("iob");
-    expect(draft.panels[0].tracks[1].layers[0].range, "the copied layer's range comes with it").toEqual({ hours: 12 });
+    expect(draft.panels[0].tracks[1].layers[0].range, "the first source's layer's range comes with it; the second leaves it").toEqual({ hours: 12 });
 
     expect(draft.toSpec()).toMatchObject({
       panels: [{ tracks: [{}, { layers: [{ derived: { op: "scatter", a: { dataset: { name: "glucose_series" }, field: "iob" }, b: { field: "glucose" } } }] }] }],
@@ -106,6 +106,11 @@ describe("the builder's draft of a spec", () => {
     const draft = new SpecDraft(grouped);
 
     expect(draft.sourceGroups("glucose_series", {})).toEqual([1]);
+    const twoByDefault = new SpecDraft({
+      ...grouped,
+      datasets: grouped.datasets.map((d) => (d.name === "glucose_series" ? { ...d, defaultSeriesCount: 2 } : d)),
+    });
+    expect(twoByDefault.sourceGroups("glucose_series", {}), "the catalogue's count for a query that lists none").toEqual([1, 2]);
     expect(draft.sourceGroups("glucose_series", { cohorts: [{}, {}, {}] })).toEqual([1, 2, 3]);
     expect(draft.sourceGroups("glucose_statistics", { cohorts: [{}, {}] })).toEqual([]);
   });

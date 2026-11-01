@@ -1,7 +1,8 @@
 <!--
   One source of a derived layer: the data it reads, that data's settings, and the field it uses. Only
   data along an axis the op takes, and fields of the data that fold onto a grid, are offered (the API's
-  catalogue). Data that comes in groups asks which group the source reads. "Copy from layer" fills the
+  catalogue). Data that comes in groups asks which group the source reads, by the API's words for the groups
+  once a preview has given them. "Copy from layer" fills the
   source from a layer the chart already shows. A message no control here shows is listed at the top.
 -->
 <script lang="ts">
@@ -26,10 +27,12 @@
     layers: DraftLayer[];
     onchange: (source: DraftSource) => void;
     oncopy: (from: DraftLayer) => void;
+    /** The API's words for each group of the source's data, from the last preview; numbers until there is one. */
+    groupLabels?: { number: number; label: string }[];
     disabled?: boolean;
   }
 
-  let { draft, op, source, heading, idPrefix, messages, layers, onchange, oncopy, disabled = false }: Props = $props();
+  let { draft, op, source, heading, idPrefix, messages, layers, onchange, oncopy, groupLabels = [], disabled = false }: Props = $props();
 
   const dataset = $derived(draft.dataset(source.dataset));
   const fieldNames = $derived(draft.sourceFields(source.dataset, op));
@@ -39,6 +42,7 @@
   const fieldMessages = $derived(messagesUnder(messages, "field"));
   const seriesMessages = $derived(messagesUnder(messages, "series"));
   const groups = $derived(draft.sourceGroups(source.dataset, source.parameters));
+  const groupLabel = (group: number) => groupLabels.find((g) => g.number === group)?.label ?? `Group ${group}`;
   const parameterKeys = $derived(new Set(Object.keys(schema.properties ?? {})));
   /** Every message no control here shows: all of them for a source worked out from other data, which shows none. */
   const other = $derived(
@@ -117,11 +121,11 @@
             {disabled}
           >
             <Select.Trigger id="{idPrefix}-series" class="w-full" aria-invalid={seriesMessages.length > 0} data-testid="source-series">
-              {source.series === undefined ? "Choose" : `Group ${source.series}`}
+              {source.series === undefined ? "Choose" : groupLabel(source.series)}
             </Select.Trigger>
             <Select.Content>
               {#each groups as group (group)}
-                <Select.Item value={String(group)} label="Group {group}">Group {group}</Select.Item>
+                <Select.Item value={String(group)} label={groupLabel(group)}>{groupLabel(group)}</Select.Item>
               {/each}
             </Select.Content>
           </Select.Root>

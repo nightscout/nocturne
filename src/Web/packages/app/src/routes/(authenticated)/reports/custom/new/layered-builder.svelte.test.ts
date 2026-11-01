@@ -161,6 +161,31 @@ describe("the report builder on a chart of tracks of layers", () => {
     expect(page.getByRole("option", { name: /Scatter/ }).elements()).toHaveLength(0);
   });
 
+  it("names each group of grouped data by the API's words once a preview gives them", async () => {
+    catalogue.datasets = catalogue.datasets.map((d) =>
+      d.name === "glucose_series" ? { ...d, seriesField: "cohort", seriesParameter: "cohorts", defaultSeriesCount: 2 } : d,
+    );
+    respond = (spec) => {
+      const run = chartRun(spec);
+      const layers = run.result?.panels?.[0]?.tracks?.[0]?.layers ?? [];
+      for (const layer of layers)
+        if ((spec as unknown as Spec).panels[0].tracks[0].layers.find((l) => l.id === layer.id)?.derived)
+          Object.assign(layer, { status: "ok", sentence: null, sourceCohorts: { a: [{ number: 1, label: "Meal: all" }, { number: 2, label: "Correction bolus: all" }] } });
+      return run;
+    };
+    await openTemplate();
+    const track = page.getByTestId("track-section").nth(0);
+    await track.getByTestId("add-layer").click();
+    const row = track.getByTestId("layer-row").nth(1);
+    await row.getByLabelText("Data").first().click();
+    await page.getByRole("option", { name: /Rolling mean/ }).click();
+
+    await vi.waitFor(() => expect(lastSpec().panels[0].tracks[0].layers[1].derived).toMatchObject({ a: { series: 1 } }), { timeout: 3000 });
+    await expect.element(row.getByTestId("source-series")).toHaveTextContent("Meal: all");
+    await row.getByTestId("source-series").click();
+    await expect.element(page.getByRole("option", { name: "Correction bolus: all" })).toBeVisible();
+  });
+
   it("shows on the layer row every message whose path names no control of it", async () => {
     const at = "panels[0].tracks[0].layers[1]";
     const messages = [

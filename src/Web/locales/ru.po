@@ -39117,11 +39117,7 @@ msgstr ""
 msgid "Copy from layer"
 msgstr ""
 
-#. 0: source.series
 #. 0: group
-#. 0: group
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
 #: src/lib/components/reports/custom/builder/SourceEditor.svelte
 msgid "Group {0}"
 msgstr ""

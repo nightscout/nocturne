@@ -59,7 +59,16 @@
     id?: string;
     xKind?: string | null;
     omitted?: { field?: string }[];
-    tracks?: { layers?: { id?: string; status?: string; side?: string; unit?: string | null; sentence?: string | null }[] }[];
+    tracks?: {
+      layers?: {
+        id?: string;
+        status?: string;
+        side?: string;
+        unit?: string | null;
+        sentence?: string | null;
+        sourceCohorts?: Record<string, { number: number; label: string }[]>;
+      }[];
+    }[];
   }
 
   /** This panel's part of the run, found by its id. */
@@ -80,7 +89,10 @@
       (ownPanel?.tracks ?? [])
         .flatMap((t) => t.layers ?? [])
         .filter((l) => l.id)
-        .map((l): [string, LayerPreview] => [l.id ?? "", { status: l.status ?? "ok", side: l.side ?? "none", unit: l.unit, sentence: l.sentence }]),
+        .map((l): [string, LayerPreview] => [
+          l.id ?? "",
+          { status: l.status ?? "ok", side: l.side ?? "none", unit: l.unit, sentence: l.sentence, sourceCohorts: l.sourceCohorts },
+        ]),
     ),
   );
 

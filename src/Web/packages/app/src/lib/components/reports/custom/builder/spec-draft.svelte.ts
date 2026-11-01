@@ -504,10 +504,21 @@ export class SpecDraft {
     const layers = panel.tracks.flatMap((t) => t.layers).filter((l) => l.dataset);
     for (const layer of layers) {
       const field = this.sourceFields(layer.dataset, op)[0];
-      if (field) return { dataset: layer.dataset, parameters: { ...layer.parameters }, derived: null, field };
+      if (field) return { dataset: layer.dataset, parameters: { ...layer.parameters }, derived: null, field, series: this.#firstGroup(layer.dataset, layer.parameters) };
     }
     const dataset = this.sourceDatasets(op)[0];
-    return { dataset: dataset?.name ?? null, parameters: {}, derived: null, field: dataset ? (this.sourceFields(dataset.name, op)[0] ?? "") : "" };
+    return {
+      dataset: dataset?.name ?? null,
+      parameters: {},
+      derived: null,
+      field: dataset ? (this.sourceFields(dataset.name, op)[0] ?? "") : "",
+      series: this.#firstGroup(dataset?.name ?? null, {}),
+    };
+  }
+
+  /** The group a new source of grouped data starts on: the first; undefined for data in one group. */
+  #firstGroup(datasetName: string | null, parameters: DatasetParameters): number | undefined {
+    return this.sourceGroups(datasetName, parameters).length > 1 ? 1 : undefined;
   }
 
   /** The datasets a source of `op` may read: ones whose layers lie along an axis the op takes. */
@@ -522,12 +533,16 @@ export class SpecDraft {
       .map((f) => f.name);
   }
 
-  /** The groups a source of `dataset` with `parameters` may read, 1 to the number of groups; empty for data in one group. */
+  /**
+   * The groups a source of `dataset` with `parameters` may read, 1 to the number of groups: one for each item
+   * of the parameter the catalogue names as listing them, or the catalogue's count for a query that lists none.
+   * Empty for data in one group.
+   */
   sourceGroups(datasetName: string | null, parameters: DatasetParameters): number[] {
     const dataset = this.dataset(datasetName);
     if (!dataset?.seriesField || !dataset.seriesParameter) return [];
     const listed = parameters[dataset.seriesParameter];
-    const count = Array.isArray(listed) && listed.length > 0 ? listed.length : 1;
+    const count = Array.isArray(listed) && listed.length > 0 ? listed.length : (dataset.defaultSeriesCount ?? 1);
     return Array.from({ length: count }, (_, i) => i + 1);
   }
 
@@ -574,7 +589,8 @@ export class SpecDraft {
 
   /**
    * A source that reads what another layer of the panel reads, with that layer's first drawn field where
-   * a source may use it, and the layer's range, so the source covers what that layer shows.
+   * a source may use it. Copied into the first source, the layer's range comes too, so the series covers
+   * what that layer shows; the second source shares the series' range and leaves it as it is.
    */
   copySource(index: number, track: number, layer: number, which: "a" | "b", from: DraftLayer) {
     const l = this.layer(index, track, layer);
@@ -582,15 +598,14 @@ export class SpecDraft {
     if (!l?.derived || !op || !from.dataset) return;
     const usable = this.sourceFields(from.dataset, op);
     const drawn = strings(from.bindings.y)?.find((f) => usable.includes(f)) ?? usable[0] ?? "";
-    const groups = this.sourceGroups(from.dataset, from.parameters);
     this.setSource(index, track, layer, which, {
       dataset: from.dataset,
       parameters: { ...from.parameters },
       derived: null,
       field: drawn,
-      series: groups.length > 1 ? 1 : undefined,
+      series: this.#firstGroup(from.dataset, from.parameters),
     });
-    l.range = from.range ? { ...from.range } : null;
+    if (which === "a") l.range = from.range ? { ...from.range } : null;
   }
 
   setOpParameters(index: number, track: number, layer: number, parameters: DatasetParameters) {
