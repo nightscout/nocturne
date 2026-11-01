@@ -58,6 +58,11 @@ export const everyShapeParameters: ParameterSchema = {
   ),
 };
 
+const columnsKinds = [
+  { name: "stat_tiles", columns: ["timeInRangePercent", "mean", "tdd"] },
+  { name: "table", columns: ["timeInRangePercent", "mean", "tdd"] },
+];
+
 function dataset(overrides: Partial<CustomReportDataset>): CustomReportDataset {
   return {
     name: "glucose_statistics",
@@ -71,36 +76,72 @@ function dataset(overrides: Partial<CustomReportDataset>): CustomReportDataset {
       { name: "mean", label: "Mean", kind: "number", unit: "mg/dL", description: "x", permitted: true },
       { name: "tdd", label: "Insulin per day", kind: "number", unit: "U", description: "x", scope: "treatments.read", permitted: false },
     ],
-    primitives: [
-      {
-        name: "stat_tiles",
-        label: "Figures",
-        maxRangeHours: 2160,
-        rangeLimit: "This panel covers at most 90 days.",
-        defaultBindings: { columns: ["timeInRangePercent", "mean", "tdd"] },
-        bindings: [{ key: "columns", label: "Columns", input: "fields", fields: ["timeInRangePercent", "mean", "tdd"], counts: [], required: false, choices: [] }],
-      },
-      {
-        name: "table",
-        label: "Table",
-        maxRangeHours: 2160,
-        rangeLimit: "This panel covers at most 90 days.",
-        defaultBindings: { columns: ["timeInRangePercent", "mean", "tdd"] },
-        bindings: [{ key: "columns", label: "Columns", input: "fields", fields: ["timeInRangePercent", "mean", "tdd"], counts: [], required: false, choices: [] }],
-      },
-    ],
+    xKinds: [],
+    panelKinds: columnsKinds,
+    marks: [],
     defaultRangeHours: 336,
-    maxPanelsPerReport: 6,
+    maxRangeHours: 2160,
+    rangeLimit: "This data covers at most 90 days.",
+    maxReadsPerReport: 16,
     ...overrides,
   };
 }
 
-/** A catalogue of three datasets: statistics, one with a parameter of every shape, and one the caller cannot read. */
+const time = { name: "time", label: "Time", kind: "time", description: "x", permitted: true };
+const glucose = { name: "glucose", label: "Glucose", kind: "number", unit: "mg/dL", description: "x", permitted: true, aggregate: "mean" };
+const iob = { name: "iob", label: "IOB", kind: "number", unit: "U", description: "x", permitted: true, aggregate: "mean", scope: "treatments.read" };
+
+const lineSlots = [
+  { key: "x", label: "Horizontal axis", input: "field", fields: ["time"], counts: [], required: true, choices: [] },
+  { key: "y", label: "Lines", input: "fields", fields: ["glucose", "iob"], counts: [], required: true, choices: [] },
+];
+
+/** A catalogue of four datasets (statistics, one with a parameter of every shape, one the caller cannot read, glucose readings to chart) and two ops. */
 export const catalogue: CustomReportCatalogue = {
   maxPanels: 6,
+  maxTracks: 4,
+  maxLayers: 8,
+  maxReads: 16,
   maxTitleLength: 200,
   maxRangeHours: 2160,
   maxNameLength: 120,
+  maxGridMinutes: 1440,
+  panelKinds: [
+    { name: "chart", label: "Chart" },
+    { name: "stat_tiles", label: "Statistics tiles" },
+    { name: "table", label: "Table" },
+    { name: "comparison", label: "Comparison" },
+  ],
+  marks: [
+    { name: "line", label: "Line", hasAxis: true, xKinds: ["time"], slots: [] },
+    { name: "points", label: "Points", hasAxis: true, xKinds: ["time", "value"], slots: [] },
+  ],
+  ops: [
+    {
+      name: "rolling_mean",
+      label: "Rolling mean",
+      description: "The mean of the source over the given minutes up to each slot.",
+      sources: 1,
+      parameters: { type: "object", properties: { minutes: { type: "integer", title: "Window (minutes)", minimum: 15, maximum: 10080, default: 60 } } },
+      xRule: "The source's axis.",
+      unitRule: "The source's unit.",
+      sourceXKinds: ["time"],
+      sourceFieldKinds: ["number", "percent"],
+      marks: [{ name: "line", defaultBindings: { x: "x", y: ["value"] } }],
+    },
+    {
+      name: "scatter",
+      label: "Scatter",
+      description: "Each slot with both sources as a point.",
+      sources: 2,
+      parameters: { type: "object", properties: {} },
+      xRule: "Values of source a.",
+      unitRule: "Source b's unit up, source a's along the axis.",
+      sourceXKinds: ["time"],
+      sourceFieldKinds: ["number", "percent"],
+      marks: [{ name: "points", defaultBindings: { x: "a", y: ["b"], fit: "fit" } }],
+    },
+  ],
   datasets: [
     dataset({}),
     dataset({
@@ -115,6 +156,20 @@ export const catalogue: CustomReportCatalogue = {
       description: "Boluses, carbs, temp basals, notes, overrides and long-acting injections.",
       requiredScope: "treatments.read",
       permitted: false,
+      panelKinds: [{ name: "stat_tiles", columns: ["timeInRangePercent"] }, { name: "table", columns: ["timeInRangePercent"] }],
+    }),
+    dataset({
+      name: "glucose_series",
+      label: "Glucose readings",
+      description: "Glucose readings over time.",
+      fields: [time, glucose, iob],
+      xKinds: ["time"],
+      panelKinds: [{ name: "table", columns: ["time", "glucose", "iob"] }],
+      marks: [
+        { name: "line", defaultBindings: { x: "time", y: ["glucose"] }, bindings: lineSlots },
+        { name: "points", defaultBindings: { x: "time", y: ["glucose"] }, bindings: lineSlots },
+      ],
+      defaultRangeHours: 6,
     }),
   ],
 };
@@ -131,10 +186,34 @@ export const statisticsTemplate = {
     panels: [
       {
         id: "p1",
+        kind: "stat_tiles",
         dataset: { name: "glucose_statistics" },
-        primitive: "stat_tiles",
         bindings: { columns: ["timeInRangePercent", "mean", "tdd"] },
         range: { hours: 336 },
+      },
+    ],
+  },
+};
+
+/** A template spec as the API normalises it: a chart of glucose and IOB on two tracks. */
+export const chartTemplate = {
+  id: "glucose",
+  name: "Glucose chart",
+  description: "Glucose and IOB.",
+  spec: {
+    version: 1,
+    title: "Glucose",
+    range: { hours: 6 },
+    panels: [
+      {
+        id: "glucose",
+        kind: "chart",
+        range: { hours: 6 },
+        grid: null,
+        tracks: [
+          { id: "glucose", title: null, height: 2, layers: [{ id: "glucose", dataset: { name: "glucose_series" }, mark: "line", bindings: { x: "time", y: ["glucose"], edges: null } }] },
+          { id: "onboard", height: 1, layers: [{ id: "iob", dataset: { name: "glucose_series" }, mark: "line", bindings: { x: "time", y: ["iob"] } }] },
+        ],
       },
     ],
   },

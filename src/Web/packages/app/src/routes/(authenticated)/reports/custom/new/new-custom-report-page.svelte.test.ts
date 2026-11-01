@@ -94,6 +94,8 @@ describe("the report builder on a new report", () => {
     await page.getByRole("button", { name: /Blank/ }).click();
     await page.getByTestId("add-panel").click();
 
+    await page.getByLabelText("Panel type").click();
+    await page.getByRole("option", { name: "Statistics tiles" }).click();
     await page.getByLabelText("Data").click();
     await page.getByRole("option", { name: /Every setting/ }).click();
 
@@ -119,6 +121,8 @@ describe("the report builder on a new report", () => {
     render(NewCustomReportPage, {});
     await page.getByRole("button", { name: /Blank/ }).click();
     await page.getByTestId("add-panel").click();
+    await page.getByLabelText("Panel type").click();
+    await page.getByRole("option", { name: "Statistics tiles" }).click();
     await page.getByLabelText("Data").click();
     await page.getByRole("option", { name: /Every setting/ }).click();
 

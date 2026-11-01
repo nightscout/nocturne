@@ -11,7 +11,7 @@ import {
   timeToMinute,
   type ParameterSchema,
 } from "./schema-form.js";
-import { routeSpecErrors } from "./spec-errors.js";
+import { messagesUnder, routeSpecErrors } from "./spec-errors.js";
 import { everyShape } from "./schema-form.fixtures.js";
 
 /** The API test that pins the shapes its catalogue emits (`ReportCatalogueTests.FormShapes`); absent in a checkout of the web app alone. */
@@ -69,9 +69,10 @@ describe("the validator's messages", () => {
       { path: "title", message: "Use 200 characters or fewer." },
       { path: "panels[1].dataset.name", message: "'x' is not a dataset." },
       { path: "panels[1].dataset.cohorts[0].dayOfWeek[2]", message: "Send one of: Mon, Tue." },
-      { path: "panels[1].bindings.y", message: "Send exactly one field." },
+      { path: "panels[1].bindings.columns", message: "A field is named twice." },
       { path: "panels[1].range", message: "Shorten it." },
-      { path: "panels[0].primitive", message: "Cannot be drawn so." },
+      { path: "panels[0].kind", message: "Cannot be shown so." },
+      { path: "panels[0].grid", message: "Send a grid." },
       { path: "panels[0].id", message: "Use only letters." },
     ]);
 
@@ -79,10 +80,38 @@ describe("the validator's messages", () => {
     const second = routed.panels.get(1)!;
     expect(second.dataset).toEqual(["'x' is not a dataset."]);
     expect(second.parameters).toEqual([{ path: "cohorts[0].dayOfWeek[2]", message: "Send one of: Mon, Tue." }]);
-    expect(second.bindings).toEqual([{ path: "y", message: "Send exactly one field." }]);
+    expect(second.bindings).toEqual([{ path: "columns", message: "A field is named twice." }]);
     expect(second.range).toEqual(["Shorten it."]);
-    expect(routed.panels.get(0)!.primitive).toEqual(["Cannot be drawn so."]);
+    expect(routed.panels.get(0)!.kind).toEqual(["Cannot be shown so."]);
+    expect(routed.panels.get(0)!.grid).toEqual(["Send a grid."]);
     expect(routed.panels.get(0)!.panel).toEqual(["Use only letters."]);
+  });
+
+  it("go to the track and the layer row their path names, and to the part of the row", () => {
+    const routed = routeSpecErrors([
+      { path: "panels[0].tracks[1].layers[2]", message: "A track has at most two units." },
+      { path: "panels[0].tracks[1].layers[2].bindings.y", message: "Different units." },
+      { path: "panels[0].tracks[1].layers[0].dataset.dayOfWeek", message: "A weekday is named twice." },
+      { path: "panels[0].tracks[1].layers[0].derived.b.field", message: "Not a source." },
+      { path: "panels[0].tracks[1].layers[0].derived.minutes", message: "Send 15 to 10080 minutes." },
+      { path: "panels[0].tracks[1].layers[1].mark", message: "Cannot be drawn so." },
+      { path: "panels[0].tracks[1].height", message: "Send a number." },
+      { path: "panels[0].tracks", message: "A chart has 1 to 4 tracks." },
+    ]);
+
+    const panel = routed.panels.get(0)!;
+    expect(panel.tracks).toEqual(["A chart has 1 to 4 tracks."]);
+    const track = panel.trackMessages.get(1)!;
+    expect(track.height).toEqual(["Send a number."]);
+    expect(track.layers.get(2)!.layer).toEqual(["A track has at most two units."]);
+    expect(track.layers.get(2)!.bindings).toEqual([{ path: "y", message: "Different units." }]);
+    expect(track.layers.get(0)!.parameters).toEqual([{ path: "dayOfWeek", message: "A weekday is named twice." }]);
+    expect(track.layers.get(0)!.derived).toEqual([
+      { path: "b.field", message: "Not a source." },
+      { path: "minutes", message: "Send 15 to 10080 minutes." },
+    ]);
+    expect(messagesUnder(track.layers.get(0)!.derived, "b")).toEqual([{ path: "field", message: "Not a source." }]);
+    expect(track.layers.get(1)!.mark).toEqual(["Cannot be drawn so."]);
   });
 
   it("show at a leaf field with its items, and at a group or a list item only when they name it", () => {

@@ -1174,6 +1174,7 @@ msgstr "{0} reading{1}"
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
@@ -1268,6 +1269,7 @@ msgstr "Custom"
 #~ msgstr "Service hasn't reported recently — alerts may be delayed"
 
 #: src/lib/components/entries/BolusSection.svelte
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 msgid "Normal"
 msgstr "Normal"
@@ -5276,6 +5278,7 @@ msgstr "For healthcare providers"
 #~ msgid "Date"
 #~ msgstr "Date"
 
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/reports/custom/builder/PanelCard.svelte
 #: src/lib/components/reports/custom/builder/ReportBuilder.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
@@ -6580,6 +6583,7 @@ msgstr "Sharing"
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -24397,6 +24401,7 @@ msgstr "Workouts"
 msgid "Body fat"
 msgstr "Body fat"
 
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Height"
 msgstr "Height"
@@ -38712,6 +38717,7 @@ msgstr "Remove panel {0}"
 msgid "Panel {0}"
 msgstr "Panel {0}"
 
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/reports/custom/builder/PanelCard.svelte
 msgid "Your access does not include this data."
 msgstr "Your access does not include this data."
@@ -38720,11 +38726,14 @@ msgstr "Your access does not include this data."
 msgid "Your access does not include this data, so this panel shows nothing."
 msgstr "Your access does not include this data, so this panel shows nothing."
 
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/reports/custom/builder/PanelCard.svelte
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
 msgid "Data"
 msgstr "Data"
 
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 msgid "Show as"
 msgstr "Show as"
 
@@ -38928,7 +38937,10 @@ msgstr "Could not run the report. Try again."
 msgid "<0/> Nocturne is running the report."
 msgstr "<0/> Nocturne is running the report."
 
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
 msgid "Choose"
 msgstr "Choose"
 
@@ -38952,3 +38964,153 @@ msgstr "The food search did not work. Try again."
 #: src/lib/components/reports/custom/builder/FoodCategoryInput.svelte
 msgid "Nocturne could not load the food categories. You can type a category."
 msgstr "Nocturne could not load the food categories. You can type a category."
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Columns"
+msgstr "Columns"
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Each dataset's own spacing"
+msgstr "Each dataset's own spacing"
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Every reading"
+msgstr "Every reading"
+
+#. 0: value
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Every {0} minutes"
+msgstr "Every {0} minutes"
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Panel type"
+msgstr "Panel type"
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Grid"
+msgstr "Grid"
+
+#. 0: draft.catalogue.maxTracks
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "A chart can have at most {0} tracks."
+msgstr "A chart can have at most {0} tracks."
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "<0/> Add a track"
+msgstr "<0/> Add a track"
+
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Small"
+msgstr "Small"
+
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Large"
+msgstr "Large"
+
+#. 0: track + 1
+#. 0: track + 1
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Track {0}"
+msgstr "Track {0}"
+
+#. 0: track + 1
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Move track {0} up"
+msgstr "Move track {0} up"
+
+#. 0: track + 1
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Move track {0} down"
+msgstr "Move track {0} down"
+
+#. 0: track + 1
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Remove track {0}"
+msgstr "Remove track {0}"
+
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Track title"
+msgstr "Track title"
+
+#. 0: draft.catalogue.maxLayers
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "A chart can have at most {0} layers."
+msgstr "A chart can have at most {0} layers."
+
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "<0/> Add a layer"
+msgstr "<0/> Add a layer"
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Left axis"
+msgstr "Left axis"
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Right axis"
+msgstr "Right axis"
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "No axis"
+msgstr "No axis"
+
+#. 0: layer + 1
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Move layer {0} up"
+msgstr "Move layer {0} up"
+
+#. 0: layer + 1
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Move layer {0} down"
+msgstr "Move layer {0} down"
+
+#. 0: layer + 1
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Remove layer {0}"
+msgstr "Remove layer {0}"
+
+#. 0: layer + 1
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Layer {0}"
+msgstr "Layer {0}"
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Worked out from other data"
+msgstr "Worked out from other data"
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Your access does not include this data, so this layer shows nothing."
+msgstr "Your access does not include this data, so this layer shows nothing."
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Name in the key"
+msgstr "Name in the key"
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Same as the panel"
+msgstr "Same as the panel"
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "First source"
+msgstr "First source"
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Second source"
+msgstr "Second source"
+
+#. 0: draft.op(source.derived.op)?.label ?? source.derived.op
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+msgid "This source is worked out from other data: {0}."
+msgstr "This source is worked out from other data: {0}."
+
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+msgid "Field"
+msgstr "Field"
+
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+msgid "Choose a layer"
+msgstr "Choose a layer"
+
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+msgid "Copy from layer"
+msgstr "Copy from layer"

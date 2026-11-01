@@ -1174,6 +1174,7 @@ msgstr ""
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
@@ -1268,6 +1269,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/entries/BolusSection.svelte
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 msgid "Normal"
 msgstr ""
@@ -5276,6 +5278,7 @@ msgstr ""
 #~ msgid "Date"
 #~ msgstr ""
 
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/reports/custom/builder/PanelCard.svelte
 #: src/lib/components/reports/custom/builder/ReportBuilder.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
@@ -6580,6 +6583,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -24397,6 +24401,7 @@ msgstr "运动记录"
 msgid "Body fat"
 msgstr "体脂"
 
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Height"
 msgstr "身高"
@@ -38712,6 +38717,7 @@ msgstr ""
 msgid "Panel {0}"
 msgstr ""
 
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/reports/custom/builder/PanelCard.svelte
 msgid "Your access does not include this data."
 msgstr ""
@@ -38720,11 +38726,14 @@ msgstr ""
 msgid "Your access does not include this data, so this panel shows nothing."
 msgstr ""
 
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/reports/custom/builder/PanelCard.svelte
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
 msgid "Data"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 msgid "Show as"
 msgstr ""
 
@@ -38928,7 +38937,10 @@ msgstr ""
 msgid "<0/> Nocturne is running the report."
 msgstr ""
 
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/reports/custom/builder/SchemaField.svelte
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
 msgid "Choose"
 msgstr ""
 
@@ -38951,4 +38963,154 @@ msgstr ""
 
 #: src/lib/components/reports/custom/builder/FoodCategoryInput.svelte
 msgid "Nocturne could not load the food categories. You can type a category."
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Columns"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Each dataset's own spacing"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Every reading"
+msgstr ""
+
+#. 0: value
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Every {0} minutes"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Panel type"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "Grid"
+msgstr ""
+
+#. 0: draft.catalogue.maxTracks
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "A chart can have at most {0} tracks."
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/PanelCard.svelte
+msgid "<0/> Add a track"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Small"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Large"
+msgstr ""
+
+#. 0: track + 1
+#. 0: track + 1
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Track {0}"
+msgstr ""
+
+#. 0: track + 1
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Move track {0} up"
+msgstr ""
+
+#. 0: track + 1
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Move track {0} down"
+msgstr ""
+
+#. 0: track + 1
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Remove track {0}"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "Track title"
+msgstr ""
+
+#. 0: draft.catalogue.maxLayers
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "A chart can have at most {0} layers."
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/TrackSection.svelte
+msgid "<0/> Add a layer"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Left axis"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Right axis"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "No axis"
+msgstr ""
+
+#. 0: layer + 1
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Move layer {0} up"
+msgstr ""
+
+#. 0: layer + 1
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Move layer {0} down"
+msgstr ""
+
+#. 0: layer + 1
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Remove layer {0}"
+msgstr ""
+
+#. 0: layer + 1
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Layer {0}"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Worked out from other data"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Your access does not include this data, so this layer shows nothing."
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Name in the key"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Same as the panel"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "First source"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/LayerRow.svelte
+msgid "Second source"
+msgstr ""
+
+#. 0: draft.op(source.derived.op)?.label ?? source.derived.op
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+msgid "This source is worked out from other data: {0}."
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+msgid "Field"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+msgid "Choose a layer"
+msgstr ""
+
+#: src/lib/components/reports/custom/builder/SourceEditor.svelte
+msgid "Copy from layer"
 msgstr ""

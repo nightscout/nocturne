@@ -31,7 +31,7 @@ const layer = (id: string, title: string, mark: string, side: string, unit: stri
 });
 
 /** A chart panel as the API sends it. */
-const chart = (id: string, title: string, xKind: string, tracks: { id: string; title?: string; height: number; layers: unknown[] }[], extra: Record<string, unknown> = {}) => ({
+const chart = (id: string, title: string, xKind: string, tracks: { id: string; title?: string; height: number; layers: ReturnType<typeof layer>[] }[], extra: Record<string, unknown> = {}) => ({
   id, title, kind: "chart", xKind, status: "ok", window, fields: [], rows: [], tracks, thresholds, summary: title, ...extra,
 });
 

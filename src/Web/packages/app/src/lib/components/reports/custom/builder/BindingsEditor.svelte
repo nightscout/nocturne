@@ -1,14 +1,10 @@
 <!--
-  Which fields a panel draws where: the bindings its primitive takes, each offering only the fields
-  the API's catalogue lists for it. The catalogue's defaults are set when a panel or primitive is
-  chosen; this changes them.
+  Which fields a layer's mark (or a panel's columns) draws where: the bindings it takes, each offering
+  only the fields the API's catalogue lists for it. The catalogue's defaults are set when a layer or
+  mark is chosen; this changes them.
 -->
 <script lang="ts">
-  import type {
-    CustomReportBindings,
-    CustomReportBindingSlot,
-    CustomReportField,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  import type { CustomReportBindingSlot, CustomReportField } from "#lib/api/generated/nocturne-api-client.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -22,10 +18,10 @@
   interface Props {
     idPrefix: string;
     slots: CustomReportBindingSlot[];
-    bindings: CustomReportBindings;
+    bindings: Record<string, unknown>;
     fields: CustomReportField[];
     messages: FieldMessage[];
-    onchange: (key: keyof CustomReportBindings, value: unknown) => void;
+    onchange: (key: string, value: unknown) => void;
     onreset: () => void;
     disabled?: boolean;
   }
@@ -37,18 +33,11 @@
   let opened = $state(false);
   const open = $derived(opened || messages.length > 0);
 
-  const KEYS = ["x", "y", "band", "series", "columns", "stacked", "orientation"] as const;
-  type Key = (typeof KEYS)[number];
-
-  function isKey(key: string | undefined): key is Key {
-    return KEYS.some((k) => k === key);
-  }
-
-  function current(key: Key): unknown {
+  function current(key: string): unknown {
     return bindings[key];
   }
 
-  function list(key: Key): string[] {
+  function list(key: string): string[] {
     const v = current(key);
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
   }
@@ -66,8 +55,8 @@
     </Collapsible.Trigger>
     <Collapsible.Content>
       <div class="mt-2 space-y-4 rounded-md border border-border p-3" data-testid="bindings-editor">
-        {#each slots.filter((s) => isKey(s.key)) as slot (slot.key)}
-          {@const key = isKey(slot.key) ? slot.key : "x"}
+        {#each slots as slot (slot.key)}
+          {@const key = slot.key}
           {@const id = `${idPrefix}-${key}`}
           {@const problems = messagesAt(messages, key, true)}
           <div class="space-y-1.5">

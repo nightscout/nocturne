@@ -6,7 +6,7 @@ import { stackedBarPanel, glucoseChartPanel } from "#lib/server/report-image/rep
 const state = vi.hoisted(() => ({
   event: null as unknown,
   runs: [] as unknown[],
-  drawn: [] as { panel: { id: string; rows: unknown[] } }[],
+  drawn: [] as { panel: { id: string; rows: unknown[]; tracks: unknown[] } }[],
   result: null as unknown,
 }));
 
@@ -18,7 +18,7 @@ vi.mock("$app/server", () => ({
 
 vi.mock("#lib/server/report-image/render.js", async (original) => ({
   ...(await original<typeof import("#lib/server/report-image/render.js")>()),
-  renderReportImage: async (request: { panel: { id: string; rows: unknown[] } }) => {
+  renderReportImage: async (request: { panel: { id: string; rows: unknown[]; tracks: unknown[] } }) => {
     state.drawn.push(request);
     return Buffer.from("png");
   },
