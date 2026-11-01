@@ -29,7 +29,8 @@ public enum DuplicateDelete
 /// Keeps a duplicate group readable once its primary is soft-deleted. Reads show a group through
 /// its primary (<see cref="ReadVisibilityFilter.ExcludeNonPrimary{TEntity}"/>), so a deleted
 /// primary hides every other source's copy with it; and the promoted copy's own row did not
-/// change, so a v3 history client would never be sent it.
+/// change, so a v3 history client would never be sent it. Every primary move, here or in
+/// <see cref="DeduplicationService"/>, is written by <see cref="SetPrimariesAsync"/>.
 /// </summary>
 /// <remarks>
 /// The repoint writes by statement and tracks nothing, so the context may be the caller's scope
@@ -242,8 +243,7 @@ internal static class DuplicateGroupPrimaries
             ? spanEnds.Keys.ToHashSet()
             : await LiveIdsAsync(ctx, recordType, ids, ct);
 
-        var demote = new List<Guid>();
-        var promote = new List<Guid>();
+        var changes = new List<PrimaryChange>();
         var promotedLive = new List<Guid>();
         foreach (var group in rows.GroupBy(r => r.CanonicalId))
         {
@@ -251,20 +251,129 @@ internal static class DuplicateGroupPrimaries
             if (survivor.IsPrimary)
                 continue;
 
-            demote.AddRange(group.Where(r => r.IsPrimary).Select(r => r.Id));
-            promote.Add(survivor.Id);
+            changes.AddRange(group.Where(r => r.IsPrimary).Select(r => new PrimaryChange(r.RecordId, false)));
+            changes.Add(new PrimaryChange(survivor.RecordId, true));
             if (live.Contains(survivor.RecordId))
                 promotedLive.Add(survivor.RecordId);
         }
 
-        if (demote.Count > 0)
-            await ctx.LinkedRecords.Where(lr => demote.Contains(lr.Id))
-                .ExecuteUpdateAsync(s => s.SetProperty(lr => lr.IsPrimary, false), ct);
-        if (promote.Count > 0)
-            await ctx.LinkedRecords.Where(lr => promote.Contains(lr.Id))
-                .ExecuteUpdateAsync(s => s.SetProperty(lr => lr.IsPrimary, true), ct);
-
+        await SetPrimariesAsync(ctx, recordType, changes, ct);
         return promotedLive;
+    }
+
+    /// <summary>Ids <see cref="SetPrimariesAsync"/> writes per statement.</summary>
+    internal const int SetPrimariesChunkSize = 10_000;
+
+    /// <summary>
+    /// Makes each record's link its group's primary or not, as <paramref name="changes"/> says, and
+    /// sets each record's <see cref="IDuplicateFlagged.IsDuplicate"/> from its link as it then stands,
+    /// in the caller's transaction. Every change to <see cref="LinkedRecordEntity.IsPrimary"/> of a
+    /// stored link goes through here.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The chunk's links are locked first, in record order, whether or not their primary changes, so
+    /// no other transaction can move them until this one commits. The flag is then derived from the
+    /// links the statement sees rather than from <paramref name="changes"/>, so a caller whose plan
+    /// was overtaken by a concurrent writer still leaves the flag equal to the committed link.
+    /// SQLite takes no row locks; its write transactions are serialised on the whole database.
+    /// </para>
+    /// <para>
+    /// One statement per direction over an array of ids, and only rows that differ are written, so
+    /// an unchanged row gains no dead tuple. EF statements rather than a <c>VALUES</c> join keep one
+    /// path for PostgreSQL and the SQLite unit tests.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">No transaction is open on a relational context.</exception>
+    public static async Task SetPrimariesAsync(
+        NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<PrimaryChange> changes, CancellationToken ct)
+    {
+        RequireTransaction(ctx);
+        var key = RecordTypeKeys.Key(recordType);
+        foreach (var chunk in changes.OrderBy(c => c.RecordId).Chunk(SetPrimariesChunkSize))
+        {
+            var ids = chunk.Select(c => c.RecordId).ToArray();
+            var promote = chunk.Where(c => c.IsPrimary).Select(c => c.RecordId).ToArray();
+            var demote = chunk.Where(c => !c.IsPrimary).Select(c => c.RecordId).ToArray();
+
+            if (ctx.Database.IsNpgsql())
+            {
+                await ctx.Database.ExecuteSqlAsync($"""
+                    SELECT id FROM linked_records
+                    WHERE tenant_id = {ctx.TenantId} AND record_type = {key} AND record_id = ANY ({ids})
+                    ORDER BY record_id
+                    FOR UPDATE
+                    """, ct);
+            }
+
+            if (promote.Length > 0)
+                await ctx.LinkedRecords
+                    .Where(lr => lr.RecordType == key && promote.Contains(lr.RecordId) && !lr.IsPrimary)
+                    .ExecuteUpdateAsync(s => s.SetProperty(lr => lr.IsPrimary, true), ct);
+            if (demote.Length > 0)
+                await ctx.LinkedRecords
+                    .Where(lr => lr.RecordType == key && demote.Contains(lr.RecordId) && lr.IsPrimary)
+                    .ExecuteUpdateAsync(s => s.SetProperty(lr => lr.IsPrimary, false), ct);
+
+            await DeriveFlagsAsync(ctx, recordType, ids, ct);
+        }
+    }
+
+    /// <summary>
+    /// Sets the flag of the records whose links this transaction has just inserted. A link not yet
+    /// committed is invisible to every other transaction, so it needs no lock and no primary change
+    /// (<see cref="SetPrimariesAsync"/>).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on a relational context.</exception>
+    public static async Task FlagInsertedLinksAsync(
+        NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
+    {
+        RequireTransaction(ctx);
+        foreach (var chunk in recordIds.Order().Chunk(SetPrimariesChunkSize))
+            await DeriveFlagsAsync(ctx, recordType, chunk, ct);
+    }
+
+    private static void RequireTransaction(NocturneDbContext ctx)
+    {
+        if (ctx.Database.IsRelational() && ctx.Database.CurrentTransaction is null)
+            throw new InvalidOperationException(
+                "Primaries change in the transaction of the link change they belong to; none is open.");
+    }
+
+    /// <summary>
+    /// Sets each of <paramref name="ids"/>' flag to whether it has a non-primary link, with the history
+    /// clamp lifted (<see cref="HistoryClampLiftExtensions"/>): a clamped caller's link change reaches
+    /// records older than its window, which the clamp would silently leave stale. The statement sets
+    /// only the flag and returns a count.
+    /// </summary>
+    private static Task<int> DeriveFlagsAsync(
+        NocturneDbContext ctx, RecordType recordType, Guid[] ids, CancellationToken ct) =>
+        ids.Length == 0 ? Task.FromResult(0) : ctx.WriteWithHistoryClampLiftedAsync(token => recordType switch
+        {
+            RecordType.SensorGlucose => Derive(ctx, ctx.SensorGlucose, recordType, ids, token),
+            RecordType.Bolus => Derive(ctx, ctx.Boluses, recordType, ids, token),
+            RecordType.CarbIntake => Derive(ctx, ctx.CarbIntakes, recordType, ids, token),
+            RecordType.BGCheck => Derive(ctx, ctx.BGChecks, recordType, ids, token),
+            RecordType.DeviceEvent => Derive(ctx, ctx.DeviceEvents, recordType, ids, token),
+            RecordType.Note => Derive(ctx, ctx.Notes, recordType, ids, token),
+            RecordType.BolusCalculation => Derive(ctx, ctx.BolusCalculations, recordType, ids, token),
+            RecordType.TempBasal => Derive(ctx, ctx.TempBasals, recordType, ids, token),
+            RecordType.StateSpan => Derive(ctx, ctx.StateSpans, recordType, ids, token),
+            _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, null),
+        }, ct);
+
+    /// <remarks>Soft-deleted rows keep their links, so they keep their flag too.</remarks>
+    private static Task<int> Derive<TEntity>(
+        NocturneDbContext ctx, DbSet<TEntity> rows, RecordType recordType, Guid[] ids, CancellationToken ct)
+        where TEntity : class, IDuplicateFlagged
+    {
+        var key = RecordTypeKeys.Key(recordType);
+        return rows.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
+            .Where(e => ids.Contains(e.Id)
+                && e.IsDuplicate != ctx.LinkedRecords.Any(lr => lr.RecordType == key && lr.RecordId == e.Id && !lr.IsPrimary))
+            .ExecuteUpdateAsync(s => s.SetProperty(
+                e => e.IsDuplicate,
+                e => ctx.LinkedRecords.Any(lr => lr.RecordType == key && lr.RecordId == e.Id && !lr.IsPrimary)), ct);
     }
 
     private static Task<HashSet<Guid>> LiveIdsAsync(
@@ -325,3 +434,6 @@ internal static class DuplicateGroupPrimaries
         }
     }
 }
+
+/// <summary>Whether a record's link is to be its duplicate group's primary.</summary>
+internal readonly record struct PrimaryChange(Guid RecordId, bool IsPrimary);

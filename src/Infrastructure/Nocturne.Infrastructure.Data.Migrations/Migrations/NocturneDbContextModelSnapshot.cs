@@ -4624,6 +4624,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("end_timestamp");
 
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
+
                     b.Property<string>("MetadataJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata");
@@ -6424,6 +6429,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("glucose_type");
 
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
+
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
@@ -6838,6 +6848,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("insulin_recommendation_for_carbs");
 
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
+
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
@@ -6999,6 +7014,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("insulin_type");
+
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
 
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)
@@ -7288,6 +7308,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<double?>("FatGrams")
                         .HasColumnType("double precision")
                         .HasColumnName("fat_grams");
+
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
 
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)
@@ -7604,6 +7629,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("event_type");
+
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
 
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)
@@ -7926,6 +7956,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<bool>("IsAnnouncement")
                         .HasColumnType("boolean")
                         .HasColumnName("is_announcement");
+
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
 
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)
@@ -8861,6 +8896,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("glucose_processing");
 
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
+
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
@@ -9149,6 +9189,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<string>("InsulinContextJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("insulin_context");
+
+                    b.Property<bool>("IsDuplicate")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_duplicate");
 
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)

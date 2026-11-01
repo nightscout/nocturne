@@ -22,6 +22,7 @@ public class HistoryClampLiftAllowlistTests
     private static readonly string[] Allowed =
     [
         "src/Infrastructure/Nocturne.Infrastructure.Data/NocturneDbContext.cs: NocturneDbContext.SaveChangesAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.DeriveFlagsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/StateSpanSupersessionExtensions.cs: StateSpanSupersessionExtensions.ClearSupersededByAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TrackerRepository.cs: TrackerRepository.CompleteInstanceAsync",
     ];
