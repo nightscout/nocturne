@@ -584,9 +584,8 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         {
             await scheduler.PollAsync(default);
             await Task.Delay(20);
-            return daily.Runs == 6;
+            return daily.Runs == 6 && stuck.Started >= 2;
         });
-        await stuck.AllStarted(2).WaitAsync(TimeSpan.FromSeconds(30));
 
         stuck.Started.Should().Be(2, "the stuck job never holds more than its cap");
         stuck.Release();
