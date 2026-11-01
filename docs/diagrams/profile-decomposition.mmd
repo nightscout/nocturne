@@ -31,6 +31,15 @@ flowchart LR
     target_low --> TargetRangeSchedule
     target_high --> TargetRangeSchedule
 
+    subgraph phases["DecomposeBatchAsync: four phases, a fixed number of queries whatever the batch's size; a single document is a batch of one"]
+        direction TB
+        p1["<b>1. Preload</b><br/>the newest stored document row, one read<br/>the stored defaults when the batch does not claim, one read"]
+        p2["<b>2. Build</b><br/>every store of every document, keyed '{_id}:{store}'<br/>a Profile Switch's inline store skipped"]
+        p3["<b>3. Write</b><br/>TherapySettings anchors in one bulk upsert, keeping each stored correlation id<br/>the default claimed in one write<br/>each schedule table in one bulk upsert, under its anchor's id"]
+        p4["<b>4. Follow</b><br/>changed basal versions: schedule-derived temp basal rates re-resolved, once per profile name<br/>changed settings: Loop snapshots restamped, once per settings start"]
+        p1 --> p2 --> p3 --> p4
+    end
+
     subgraph v4["V4 Decomposed Models"]
         direction TB
 

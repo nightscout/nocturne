@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -74,14 +75,14 @@ internal static class MigrationJobHarness
 
         var profiles = new Mock<IProfileDecomposer>();
         profiles
-            .Setup(d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Profile profile, WriteOrigin _, CancellationToken _) =>
-                profileOutcome?.Invoke(profile) ?? new DecompositionResult());
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Profile>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Profile> batch, WriteOrigin _, CancellationToken _) =>
+                profileOutcome?.Invoke(batch.Single()) ?? new DecompositionResult());
 
         var activities = new Mock<IActivityDecomposer>();
         activities
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .ReturnsAsync(new ActivityDecomposition());
 
         return new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o =>

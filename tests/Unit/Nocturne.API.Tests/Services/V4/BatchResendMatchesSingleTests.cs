@@ -295,7 +295,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             AdditionalProperties = new Dictionary<string, object> { ["bpm"] = bpm },
         };
 
-        await decomposer.DecomposeAsync(HeartRate(60), WriteOrigin.Live);
+        await decomposer.DecomposeBatchAsync([HeartRate(60)], WriteOrigin.Live);
 
         var result = await decomposer.DecomposeBatchAsync([HeartRate(90)], WriteOrigin.Live);
 

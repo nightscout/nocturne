@@ -18,8 +18,6 @@ public class SignalREntryEventSinkTests
         var sideEffects = new WriteSideEffectsService(
             _cache.Object,
             Mock.Of<ISignalRBroadcastService>(),
-            Mock.Of<IDecompositionPipeline>(),
-            [],
             NullLogger<WriteSideEffectsService>.Instance);
         _sut = new SignalREntryEventSink(sideEffects, NullLogger<SignalREntryEventSink>.Instance);
     }

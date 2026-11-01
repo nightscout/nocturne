@@ -280,8 +280,8 @@ internal class EntryService : IEntryService
     /// <inheritdoc />
     /// <returns>The updated <see cref="Entry"/>, or <see langword="null"/> if no entry with the given <paramref name="id"/> exists.</returns>
     /// <remarks>
-    /// Verifies the entry exists via the store, then performs an idempotent upsert through
-    /// <see cref="IEntryDecomposer.DecomposeAsync"/> which matches on <c>LegacyId</c>.
+    /// Verifies the entry exists via the store, then writes the edit onto the stored reading
+    /// <paramref name="id"/> names, as reads resolve it, through <see cref="IEntryDecomposer.DecomposeAsync"/>.
     /// The repository chokepoint fires the real-time <c>entries</c> update.
     /// </remarks>
     public async Task<Entry?> UpdateEntryAsync(
@@ -292,7 +292,7 @@ internal class EntryService : IEntryService
         var existing = await _store.GetByIdAsync(id, cancellationToken);
         if (existing is null) return null;
 
-        // Ensure the entry carries the correct ID for LegacyId-based upsert
+        // The id the request named is what the decomposer resolves the stored reading by.
         entry.Id = id;
         await _decomposer.DecomposeAsync(entry, WriteOrigin.Live, cancellationToken);
 
@@ -302,9 +302,8 @@ internal class EntryService : IEntryService
     /// <inheritdoc />
     /// <returns>The patched <see cref="Entry"/>, or <see langword="null"/> if no entry with the given <paramref name="id"/> exists.</returns>
     /// <remarks>
-    /// JSON merge-patch: overlays <paramref name="patchData"/> onto the existing entry, then
-    /// upserts through <see cref="IEntryDecomposer.DecomposeAsync"/> (LegacyId match), same as
-    /// <see cref="UpdateEntryAsync"/>. AAPS's NSClientV3 PATCHes rather than PUTs entry updates.
+    /// JSON merge-patch: overlays <paramref name="patchData"/> onto the existing entry, then writes it
+    /// through <see cref="IEntryDecomposer.DecomposeAsync"/>, as <see cref="UpdateEntryAsync"/> does. AAPS's NSClientV3 PATCHes rather than PUTs entry updates.
     /// </remarks>
     public async Task<Entry?> PatchEntryAsync(
         string id,
@@ -324,8 +323,8 @@ internal class EntryService : IEntryService
 
     private static void ApplyJsonPatch(Entry entry, JsonElement patchData)
     {
-        // The identity used to upsert (LegacyId matching) must survive the round-trip; restore it
-        // after the merge, even when the patch names _id.
+        // The id the request named resolves the stored reading, so it must survive the merge, even when
+        // the patch names _id.
         var originalId = entry.Id;
 
         JsonMergePatch.ApplyInPlace(entry, patchData, CarrySgvAndMgdl);

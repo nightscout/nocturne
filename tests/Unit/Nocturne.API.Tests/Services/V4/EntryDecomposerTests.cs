@@ -509,7 +509,7 @@ public class EntryDecomposerTests : IDisposable
         // Assert
         result.CreatedRecords.Should().BeEmpty();
         result.UpdatedRecords.Should().BeEmpty();
-        result.CorrelationId.Should().NotBeNull("a correlation ID is always generated");
+        result.CorrelationId.Should().BeNull("nothing was written under one");
         result.SkippedUnsupported.Should().Be(1);
     }
 

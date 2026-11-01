@@ -17,7 +17,6 @@ public class WriteSideEffectsServiceTests
 {
     private readonly Mock<ITenantCache> _mockCache;
     private readonly Mock<ISignalRBroadcastService> _mockBroadcast;
-    private readonly Mock<IDecompositionPipeline> _mockPipeline;
     private readonly Mock<ILogger<WriteSideEffectsService>> _mockLogger;
     private readonly WriteSideEffectsService _service;
 
@@ -25,14 +24,11 @@ public class WriteSideEffectsServiceTests
     {
         _mockCache = new Mock<ITenantCache>();
         _mockBroadcast = new Mock<ISignalRBroadcastService>();
-        _mockPipeline = new Mock<IDecompositionPipeline>();
         _mockLogger = new Mock<ILogger<WriteSideEffectsService>>();
 
         _service = new WriteSideEffectsService(
             _mockCache.Object,
             _mockBroadcast.Object,
-            _mockPipeline.Object,
-            Enumerable.Empty<ICollectionEffectDescriptor>(),
             _mockLogger.Object
         );
     }
@@ -63,33 +59,6 @@ public class WriteSideEffectsServiceTests
     }
 
     [Fact]
-    public async Task OnCreatedAsync_WithDecomposeToV4_CallsPipeline()
-    {
-        var options = new WriteEffectOptions { DecomposeToV4 = true };
-        var entries = new List<Entry> { new() { Id = "1" } };
-
-        await _service.OnCreatedAsync("entries", entries, options);
-
-        _mockPipeline.Verify(
-            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    public async Task OnCreatedAsync_WithoutDecomposeToV4_SkipsPipeline()
-    {
-        var entries = new List<Entry> { new() { Id = "1" } };
-
-        await _service.OnCreatedAsync("entries", entries);
-
-        _mockPipeline.Verify(
-            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never
-        );
-    }
-
-    [Fact]
     public async Task OnCreatedAsync_WithBroadcastDataUpdate_CallsDataUpdate()
     {
         var options = new WriteEffectOptions { BroadcastDataUpdate = true };
@@ -99,19 +68,6 @@ public class WriteSideEffectsServiceTests
 
         _mockBroadcast.Verify(
             b => b.BroadcastDataUpdateAsync(It.IsAny<object>()),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    public async Task BeforeDeleteAsync_WithDecomposeToV4_CallsDeleteByLegacyId()
-    {
-        var options = new WriteEffectOptions { DecomposeToV4 = true };
-
-        await _service.BeforeDeleteAsync<Activity>("activity-123", options);
-
-        _mockPipeline.Verify(
-            p => p.DeleteByLegacyIdAsync<Activity>("activity-123", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -141,19 +97,14 @@ public class WriteSideEffectsServiceTests
     }
 
     [Fact]
-    public async Task OnUpdatedAsync_BroadcastsStorageUpdate_AndDecomposes()
+    public async Task OnUpdatedAsync_BroadcastsStorageUpdate()
     {
-        var options = new WriteEffectOptions { DecomposeToV4 = true };
         var entry = new Entry { Id = "1" };
 
-        await _service.OnUpdatedAsync("entries", entry, options);
+        await _service.OnUpdatedAsync("entries", entry);
 
         _mockBroadcast.Verify(
             b => b.BroadcastStorageUpdateAsync("entries", It.IsAny<object>()),
-            Times.Once
-        );
-        _mockPipeline.Verify(
-            p => p.DecomposeAsync(entry, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -172,24 +123,6 @@ public class WriteSideEffectsServiceTests
 
         _mockBroadcast.Verify(
             b => b.BroadcastStorageCreateAsync("entries", It.IsAny<object>()),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    public async Task BroadcastFailure_DoesNotPreventDecomposition()
-    {
-        _mockBroadcast
-            .Setup(b => b.BroadcastStorageCreateAsync(It.IsAny<string>(), It.IsAny<object>()))
-            .ThrowsAsync(new InvalidOperationException("SignalR down"));
-
-        var options = new WriteEffectOptions { DecomposeToV4 = true };
-        var entries = new List<Entry> { new() { Id = "1" } };
-
-        await _service.OnCreatedAsync("entries", entries, options);
-
-        _mockPipeline.Verify(
-            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }

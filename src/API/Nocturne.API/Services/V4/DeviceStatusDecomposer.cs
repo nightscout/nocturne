@@ -549,16 +549,11 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         if (group is not null)
         {
             foreach (var pump in pumpList)
-                await UpsertByLegacyIdAsync(_pumpRepo, group.LegacyId, pump, result, origin, ct,
-                    beforeWrite: existing => KeepAttribution(() => pump.PatientDeviceId ??= existing?.PatientDeviceId),
-                    findStored: () => Task.FromResult(group.Pump));
+                await WriteOntoStoredAsync(_pumpRepo, group.Pump, pump, result, origin, ct);
             foreach (var aps in apsList)
-                await UpsertByLegacyIdAsync(_apsRepo, group.LegacyId, aps, result, origin, ct,
-                    beforeWrite: existing => KeepAttribution(() => aps.PatientDeviceId ??= existing?.PatientDeviceId),
-                    findStored: () => Task.FromResult(group.Aps));
+                await WriteOntoStoredAsync(_apsRepo, group.Aps, aps, result, origin, ct);
             foreach (var uploader in uploaderList)
-                await UpsertByLegacyIdAsync(_uploaderRepo, group.LegacyId, uploader, result, origin, ct,
-                    findStored: () => Task.FromResult(group.Uploader));
+                await WriteOntoStoredAsync(_uploaderRepo, group.Uploader, uploader, result, origin, ct);
             await BulkCreateAsync(_extrasRepo, Unheld(extrasList), result, origin, ct);
             return;
         }
@@ -603,13 +598,6 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 .ToHashSet();
             return [.. extras.Where(e => !held.Contains(e.CorrelationId))];
         }
-    }
-
-    /// <summary>A re-resolution that has since become ambiguous cannot displace the stored link.</summary>
-    private static Task KeepAttribution(Action keep)
-    {
-        keep();
-        return Task.CompletedTask;
     }
 
     #endregion

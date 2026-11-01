@@ -5,7 +5,6 @@ namespace Nocturne.Core.Models.V4;
 /// <see cref="DeviceStatus"/>) into one or more V4 granular models.
 /// Tracks which records were created versus updated for idempotency reporting.
 /// </summary>
-/// <seealso cref="BatchDecompositionResult"/>
 /// <seealso cref="IV4Record"/>
 public class DecompositionResult
 {
