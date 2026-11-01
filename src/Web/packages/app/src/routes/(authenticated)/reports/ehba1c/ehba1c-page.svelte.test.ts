@@ -233,6 +233,12 @@ describe("eHbA1c lab tooltip on a dense timeline", () => {
     // Low in the chart, by the date axis, the lab draw above does not take over.
     await userEvent.hover(chart, { position: { x: marker.x + 4, y: chartBounds.height - 24 } });
     await expect.poll(tooltipText).not.toContain("Lab result");
+
+    // On the lab draw's own day but far from its marker, the tooltip shows only the estimate.
+    await userEvent.hover(chart, { position: { x: marker.x, y: marker.y } });
+    await expect.poll(tooltipText).toContain("Same-day lab test");
+    await userEvent.hover(chart, { position: { x: marker.x, y: chartBounds.height - 24 } });
+    await expect.poll(tooltipText).not.toContain("Lab result");
   });
 });
 

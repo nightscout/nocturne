@@ -256,28 +256,30 @@
 
   /**
    * A lab draw is one day wide on a year of daily estimates, so the tooltip snaps to the
-   * nearest lab marker when the pointer is within {@link LAB_SNAP_PX} of it. `pointerY` is in the
-   * same plot coordinates as `yScale`.
+   * nearest lab marker when the pointer is within {@link LAB_SNAP_PX} of it, and shows lab
+   * results only then. `pointerX` and `pointerY` are in the plot coordinates of the scales.
    */
-  function snapToLabDate(
+  function snapToLab(
     hovered: Date,
+    pointerX: number,
     pointerY: number,
     xScale: (value: Date) => number,
     yScale: (value: number) => number
-  ): Date {
-    const hoveredX = xScale(hovered);
+  ): { date: Date; labs: typeof labChartPoints } {
     const reach = coarsePointer.current ? LAB_SNAP_PX.coarse : LAB_SNAP_PX.fine;
-    let nearest = hovered;
+    let nearest: Date | null = null;
     let nearestDistance = reach;
     for (const labPoint of labChartPoints) {
       if (Math.abs(yScale(labPoint.displayValue) - pointerY) > reach) continue;
-      const distance = Math.abs(xScale(labPoint.date) - hoveredX);
+      const distance = Math.abs(xScale(labPoint.date) - pointerX);
       if (distance <= nearestDistance) {
         nearest = labPoint.date;
         nearestDistance = distance;
       }
     }
-    return nearest;
+    if (!nearest) return { date: hovered, labs: [] };
+    const key = dateKey(nearest);
+    return { date: nearest, labs: labChartPoints.filter((point) => dateKey(point.date) === key) };
   }
 
   function displayValueForChartDate(date: Date): number | null {
@@ -463,15 +465,17 @@
             {#snippet tooltip({ context })}
               <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg">
                 {#snippet children({ data })}
-                  {@const hoveredDate = snapToLabDate(
+                  {@const snapped = snapToLab(
                     context.x(data),
+                    context.tooltip.x - context.padding.left,
                     context.tooltip.y - context.padding.top,
                     context.xScale,
                     context.yScale
                   )}
+                  {@const hoveredDate = snapped.date}
                   {@const hoveredDateKey = dateKey(hoveredDate)}
                   {@const eHbA1cPoint = chartData.find((point) => dateKey(point.date) === hoveredDateKey)}
-                  {@const labResultsForDate = labChartPoints.filter((point) => dateKey(point.date) === hoveredDateKey)}
+                  {@const labResultsForDate = snapped.labs}
                   <div class="mb-2 text-sm font-semibold">{formatLongDate(hoveredDate)}</div>
                   <div class="min-w-56 space-y-1.5 text-sm" data-testid="ehba1c-tooltip">
                     {#if eHbA1cPoint}
