@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
 import type { ReportPanel, ReportResult } from "@nocturne/charts/core";
-import { staticDefaultHeight, staticPrimitive } from "@nocturne/charts/server";
+import { staticDefaultHeight, staticPanel } from "@nocturne/charts/server";
 import { drawPanel, type DrawJob } from "./draw.js";
 import { RenderPool } from "./pool.js";
 import { reportImageWords } from "./report-image-words.svelte.js";
@@ -41,20 +41,17 @@ function whole(value: unknown, name: string, min: number, max: number): number {
   return value;
 }
 
-/** Rows, single-event trace points and dashboard chart points: what a render's cost grows with. */
+/** Rows and markers of the panel and of every layer: what a render's cost grows with. */
 export function pointsOf(panel: ReportPanel): number {
-  const chart = panel.chart;
-  const chartPoints = chart
-    ? (chart.glucoseData?.length ?? 0) + (chart.basalSeries?.length ?? 0) + (chart.bolusMarkers?.length ?? 0) + (chart.carbMarkers?.length ?? 0)
-    : 0;
-  return panel.rows.length + (panel.traces ?? []).reduce((sum, t) => sum + t.points.length, 0) + (panel.markers?.length ?? 0) + chartPoints;
+  const layers = panel.tracks.flatMap((t) => t.layers);
+  return panel.rows.length + layers.reduce((sum, l) => sum + l.rows.length + (l.markers?.length ?? 0), 0);
 }
 
 /** The size, theme and ratio for a panel already chosen; the checks every request gets. */
 export function readOptions(report: ReportResult, panel: ReportPanel, fields: Record<string, unknown>): ReportImageRequest {
   if (panel.status !== "ok") throw new ReportImageError(`Panel '${panel.id}' was not drawn: ${panel.sentence ?? panel.summary}`);
-  if (!staticPrimitive(panel))
-    throw new ReportImageError(`Panel '${panel.id}' is a ${panel.primitive}, which has no image: its figures are in the summary.`);
+  if (!staticPanel(panel))
+    throw new ReportImageError(`Panel '${panel.id}' is a ${panel.kind} panel, which has no image: its figures are in the summary.`);
   const points = pointsOf(panel);
   if (points > REPORT_IMAGE_LIMITS.maxPoints)
     throw new ReportImageTooLargeError(

@@ -4,4 +4,4 @@ export { resolveChartTheme, themeColors, clinicalColorNames, STATIC_FONT_FAMILY 
 export { paint, staticText, type StaticTheme, type StaticRender } from "./theme/static-theme.js";
 export { cssColorToHex, parseCssColor, readCustomProperties } from "./theme/css-color.js";
 export { default as StaticReportPanel } from "./report/StaticReportPanel.svelte";
-export { staticPrimitive, staticDefaultHeight } from "./report/static/static-primitive.js";
+export { staticPanel, staticDefaultHeight } from "./report/static/static-panel.js";

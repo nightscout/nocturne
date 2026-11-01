@@ -38,13 +38,12 @@ export * from "./print/index.js";
 export * from "./icons/index.js";
 
 
-export { default as TimeSeriesChart } from "./report/TimeSeriesChart.svelte";
 export { default as StatTiles } from "./report/StatTiles.svelte";
 export { default as DataTable } from "./report/DataTable.svelte";
 export { default as PercentileBands } from "./report/PercentileBands.svelte";
-export { default as RangeBandsChart } from "./report/RangeBandsChart.svelte";
+export { default as LayeredChart } from "./report/LayeredChart.svelte";
 export { default as ReportView } from "./report/ReportView.svelte";
-export { default as BarChart } from "./report/BarChart.svelte";
+export { default as CategoryBars } from "./report/CategoryBars.svelte";
 export { default as StackedBar, type StackedBarSegment, type StackedBarInset } from "./report/StackedBar.svelte";
 export { default as ComparisonRow } from "./report/ComparisonRow.svelte";
 export { default as ComparisonChart } from "./report/ComparisonChart.svelte";

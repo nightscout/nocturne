@@ -1,7 +1,7 @@
 import { isHttpError } from "@sveltejs/kit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
-import { stackedBarPanel, timeSeriesPanel } from "#lib/server/report-image/report-image.fixtures.js";
+import { stackedBarPanel, glucoseChartPanel } from "#lib/server/report-image/report-image.fixtures.js";
 
 const state = vi.hoisted(() => ({
   event: null as unknown,
@@ -63,13 +63,13 @@ async function refusal(call: () => Promise<unknown>): Promise<{ status: number; 
   throw new Error("The command did not refuse.");
 }
 
-const spec = { version: 1, panels: [{ id: "glucose", dataset: { name: "glucose_series" }, primitive: "time_series" }] };
+const spec = { version: 1, panels: [{ id: "glucose", dataset: { name: "glucose_series" }, kind: "table" }] };
 
 describe("drawReportPanelImage", () => {
   beforeEach(() => {
     state.runs.length = 0;
     state.drawn.length = 0;
-    state.result = report([timeSeriesPanel]);
+    state.result = report([glucoseChartPanel]);
   });
 
   it("runs the spec again through the API under the member's access and draws the panel of that result", async () => {
@@ -80,12 +80,12 @@ describe("drawReportPanelImage", () => {
     expect(png).toBe(Buffer.from("png").toString("base64"));
     expect(state.runs).toEqual([{ spec }]);
     expect(state.drawn).toHaveLength(1);
-    expect(state.drawn[0].panel.rows).toEqual(timeSeriesPanel.rows);
+    expect(state.drawn[0].panel.tracks).toEqual(glucoseChartPanel.tracks);
   });
 
   it("refuses a report result sent by the page, and draws nothing", async () => {
     state.event = member();
-    const forged = report([{ ...timeSeriesPanel, rows: [{ time: 0, glucose: 999 }] }]);
+    const forged = report([{ ...glucoseChartPanel, tracks: [] }]);
 
     await expect(drawReportPanelImage({ result: forged, panelId: "glucose" } as never)).rejects.toThrow();
     await expect(drawReportPanelImage({ spec, result: forged, panelId: "glucose" } as never)).rejects.toThrow();
@@ -97,9 +97,9 @@ describe("drawReportPanelImage", () => {
     state.event = member();
     state.result = report([{ ...stackedBarPanel, id: "glucose" }]);
 
-    await drawReportPanelImage({ spec: report([{ ...timeSeriesPanel, rows: [{ time: 0, glucose: 999 }] }]), panelId: "glucose" });
+    await drawReportPanelImage({ spec: report([{ ...glucoseChartPanel, tracks: [] }]), panelId: "glucose" });
 
-    expect(state.drawn[0].panel.rows).toEqual(stackedBarPanel.rows);
+    expect(state.drawn[0].panel.tracks).toEqual(stackedBarPanel.tracks);
   });
 
   it.each([

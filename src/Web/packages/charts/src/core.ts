@@ -29,4 +29,5 @@ export * from "./report/bar-layout.js";
 export type { ReportViewLabels } from "./report/report-view-labels.js";
 export * from "./report/glucose-scale.js";
 export * from "./report/comparison.js";
-export * from "./report/static/static-primitive.js";
+export * from "./report/static/static-panel.js";
+export * from "./report/layered/layered-layout.js";

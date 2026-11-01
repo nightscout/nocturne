@@ -1,0 +1,217 @@
+import { describe, expect, it } from "vitest";
+import type { ReportLayer, ReportPanel, ReportTrack } from "../types.js";
+import {
+  bandSets,
+  barRects,
+  legend,
+  MINUTE_ORIGIN,
+  placeGlyphs,
+  rowsAt,
+  sideScales,
+  slots,
+  spanRects,
+  toDomain,
+  trackBands,
+  xExtent,
+} from "./layered-layout.js";
+
+const glucose = { name: "glucose", label: "Glucose", kind: "number" as const, unit: "mg/dL", color: "glucose-in-range" as const, glucoseScale: true };
+const iob = { name: "iob", label: "IOB", kind: "number" as const, unit: "U", color: "insulin-bolus" as const };
+const time = { name: "time", label: "Time", kind: "time" as const };
+
+function layer(over: Partial<ReportLayer>): ReportLayer {
+  return {
+    id: "l",
+    title: "Layer",
+    mark: "line",
+    bindings: { x: "time", y: ["glucose"] },
+    xKind: "time",
+    unit: "mg/dL",
+    side: "left",
+    status: "ok",
+    window: { from: 0, to: 1 },
+    fields: [time, glucose],
+    rows: [],
+    ...over,
+  };
+}
+
+const track = (layers: ReportLayer[], height = 1): ReportTrack => ({ id: "t", height, layers });
+
+describe("a layered chart's layout", () => {
+  it("shares the plot's height among tracks by their weights, with a gap between them", () => {
+    const bands = trackBands([{ height: 2 }, { height: 1 }, { height: 0.5 }], 370, 10);
+
+    expect(bands.map((b) => Math.round(b.height))).toEqual([200, 100, 50]);
+    expect(bands[1].top).toBeCloseTo(210);
+    expect(bands[2].bottom).toBeCloseTo(370);
+  });
+
+  it("gives a track a left and a right scale, each over its own layers, the glucose side reaching the high limit", () => {
+    const band = { top: 0, bottom: 100, height: 100 };
+    const t = track([
+      layer({ id: "g", rows: [{ time: 0, glucose: 120 }] }),
+      layer({ id: "i", side: "right", unit: "U", bindings: { x: "time", y: ["iob"] }, fields: [time, iob], rows: [{ time: 0, iob: 2 }] }),
+    ]);
+
+    const { left, right } = sideScales(t, band, 180);
+
+    expect(left?.unit).toBe("mg/dL");
+    expect(left?.domain[1]).toBeGreaterThanOrEqual(180);
+    expect(right?.unit).toBe("U");
+    expect(right?.domain[1]).toBeLessThan(3);
+    expect(left?.toPixel(0)).toBe(100);
+    expect(right?.toPixel(0)).toBe(100);
+  });
+
+  it("keeps a side for a layer that was not read, with no values on it", () => {
+    const t = track([layer({ id: "g", status: "not_permitted", rows: [] })]);
+
+    expect(sideScales(t, { top: 0, bottom: 50, height: 50 }, null).left?.domain[0]).toBe(0);
+  });
+
+  it("lays minutes of the day and from an event on a time axis from one origin", () => {
+    expect(toDomain("time_of_day", 90)).toEqual(new Date(MINUTE_ORIGIN + 90 * 60_000));
+    expect(toDomain("offset", -30)).toEqual(new Date(MINUTE_ORIGIN - 30 * 60_000));
+    expect(toDomain("value", 4.2)).toBe(4.2);
+    expect(toDomain("time", 1000)).toEqual(new Date(1000));
+  });
+
+  it("spans the window over time, the whole day over a time of day, and the rows elsewhere", () => {
+    const rows = (xs: number[]) => xs.map((x) => ({ x, value: 1 }));
+    const panel = (xKind: ReportPanel["xKind"], xs: number[]): Pick<ReportPanel, "tracks" | "window" | "xKind"> => ({
+      xKind,
+      window: { from: 10, to: 20 },
+      tracks: [track([layer({ bindings: { x: "x", y: ["value"] }, rows: rows(xs) })])],
+    });
+
+    expect(xExtent(panel("time", [1, 2]))).toEqual([10, 20]);
+    expect(xExtent(panel("time_of_day", [1, 2]))).toEqual([0, 1440]);
+    expect(xExtent(panel("lag", [-180, 0, 180]))).toEqual([-180, 180]);
+    expect(xExtent(panel("day", [0, 86_400_000]))).toEqual([0, 2 * 86_400_000]);
+  });
+
+  it("finds every series' row at the slot nearest the pointer, and none past the tolerance", () => {
+    const bands = layer({
+      mark: "band",
+      bindings: { x: "minute", y: ["p50"], edges: ["p25", "p75"], series: "series" },
+      rows: [
+        { minute: 0, series: "A", p50: 1 },
+        { minute: 0, series: "B", p50: 2 },
+        { minute: 5, series: "A", p50: 3 },
+      ],
+    });
+
+    expect(rowsAt(bands, 1, 5).map((r) => r.series)).toEqual(["A", "B"]);
+    expect(rowsAt(bands, 4, 5).map((r) => r.p50)).toEqual([3]);
+    expect(rowsAt(bands, 40, 5)).toEqual([]);
+  });
+
+  it("lists the slots every drawn layer has a row at, once each, in order", () => {
+    const panel = {
+      tracks: [
+        track([layer({ rows: [{ time: 5 }, { time: 1 }] }), layer({ id: "x", status: "failed", rows: [{ time: 99 }] })]),
+        track([layer({ id: "b", rows: [{ time: 1 }, { time: 3 }] })]),
+      ],
+    };
+
+    expect(slots(panel)).toEqual([1, 3, 5]);
+  });
+
+  it("colours each cohort of a band in its cohort's hue and draws a comparison range apart", () => {
+    const sets = bandSets(layer({
+      mark: "band",
+      bindings: { x: "minute", y: ["p50"], edges: ["p25", "p75"], series: "series" },
+      rows: [
+        { minute: 0, series: "Lunch", cohort: 2, p50: 1 },
+        { minute: 0, series: "Lunch", cohort: 2, range: "comparison", p50: 1 },
+        { minute: 0, series: "Dinner", cohort: 1, p50: 1 },
+      ],
+    }));
+
+    expect(sets.map((s) => [s.label, s.comparison, s.line])).toEqual([
+      ["Lunch", false, "var(--chart-3)"],
+      ["Lunch", true, "var(--chart-3)"],
+      ["Dinner", false, "var(--chart-1)"],
+    ]);
+  });
+
+  it("gives a band with no series the layer's colour, or the hue the API gave it", () => {
+    expect(bandSets(layer({ mark: "band" }))[0].line).toBe("var(--glucose-in-range)");
+    expect(bandSets(layer({ mark: "band", color: "chart-4" }))[0].line).toBe("var(--chart-4)");
+  });
+
+  it("stacks bars on a continuous axis from the last part's top, each in its field's colour", () => {
+    const bars = layer({
+      mark: "bars",
+      bindings: { x: "time", y: ["glucose", "iob"], stacked: true },
+      fields: [time, glucose, iob],
+      rows: [{ time: 0, glucose: 2, iob: 3 }, { time: 10, glucose: 1, iob: 1 }],
+    });
+    const rects = barRects(bars, (x) => x * 10, (v) => 100 - v * 10, 200);
+
+    expect(rects.map((r) => [r.y, r.height, r.color])).toEqual([
+      [80, 20, "var(--glucose-in-range)"],
+      [50, 30, "var(--insulin-bolus)"],
+      [90, 10, "var(--glucose-in-range)"],
+      [80, 10, "var(--insulin-bolus)"],
+    ]);
+  });
+
+  it("puts each span in its category's lane, in the row's own colour", () => {
+    const spans = layer({
+      mark: "spans",
+      bindings: { start: "start", end: "end", category: "kind" },
+      fields: [
+        { name: "kind", label: "Kind", kind: "category" },
+        { name: "label", label: "Name", kind: "category", colorField: "color" },
+        { name: "start", label: "Start", kind: "time" },
+        { name: "end", label: "End", kind: "time" },
+      ],
+      rows: [
+        { kind: "Pump mode", label: "Automatic", start: 0, end: 10, color: "pump-mode-automatic" },
+        { kind: "Override", label: "Exercise", start: 2, end: 4, color: "not-a-colour" },
+      ],
+    });
+
+    const { lanes, spans: rects } = spanRects(spans, { top: 0, bottom: 40, height: 40 }, (x) => x * 10);
+
+    expect(lanes.map((l) => [l.name, l.y])).toEqual([["Pump mode", 0], ["Override", 20]]);
+    expect(rects.map((r) => [r.x, r.width, r.label, r.color])).toEqual([
+      [0, 100, "Automatic", "var(--pump-mode-automatic)"],
+      [20, 20, "Exercise", "var(--muted-foreground)"],
+    ]);
+  });
+
+  it("sets a marker on the track's line at the nearest reading, a carb above a bolus", () => {
+    const line = layer({ rows: [{ time: 0, glucose: 100 }, { time: 10, glucose: 200 }] });
+    const markers = layer({
+      id: "m",
+      mark: "markers",
+      side: "none",
+      markers: [{ time: 9, kind: "bolus", amount: 2 }, { time: 9, kind: "carbs", amount: 30 }],
+    });
+    const t = track([line, markers]);
+
+    const glyphs = placeGlyphs(markers, t, { top: 0, bottom: 300, height: 300 }, (x) => x, () => (v) => 300 - v);
+
+    expect(glyphs.map((g) => [g.kind, g.y])).toEqual([["bolus", 100], ["carbs", 66]]);
+  });
+
+  it("names each drawn layer in the legend, with no swatch for a glucose line or a lane", () => {
+    const entries = legend({
+      tracks: [track([
+        layer({ id: "g", title: "Glucose" }),
+        layer({ id: "h", title: "Glucose again", color: "chart-1" }),
+        layer({ id: "s", title: "Modes", mark: "spans", side: "none" }),
+        layer({ id: "x", title: "Hidden", status: "not_permitted" }),
+      ])],
+    });
+
+    expect(entries.map((e) => [e.title, e.color])).toEqual([
+      ["Glucose", null],
+      ["Glucose again", "var(--chart-1)"],
+      ["Modes", null],
+    ]);
+  });
+});

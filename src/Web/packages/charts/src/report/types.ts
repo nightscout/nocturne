@@ -1,18 +1,26 @@
 /**
- * Structural mirror of the API's report result (Nocturne.API/Reports/ReportResult.cs), as
- * dto.ts mirrors the dashboard chart. Every value, unit, label and colour arrives in it.
+ * Structural mirror of the API's report result (Nocturne.API/Reports/ReportResult.cs). Every value,
+ * unit, label and colour arrives in it.
  */
 import type { ChartColor } from "../enums.js";
-import type { DashboardChartDataDto } from "../dto.js";
 import type { ChartFormat } from "../format.js";
 
-export type ReportPrimitive = "time_series" | "stat_tiles" | "table" | "glucose_chart" | "range_bands" | "bar" | "comparison";
+export type ReportPanelKind = "chart" | "stat_tiles" | "table" | "comparison";
 
-/** A treatment marker the dashboard chart draws. */
-export type ReportMarkerKind = "bolus" | "carbs";
+/** How a chart layer is drawn. */
+export type ReportMark = "line" | "area" | "band" | "bars" | "points" | "markers" | "spans";
 
-/** `offset` is minutes from an event, `time_of_day` minutes after local midnight. */
-export type ReportFieldKind = "time" | "number" | "category" | "percent" | "offset" | "time_of_day";
+/** What a chart's horizontal axis holds; every layer of a chart shares it. */
+export type ReportXKind = "time" | "offset" | "time_of_day" | "day" | "category" | "value" | "lag";
+
+/** A treatment glyph the dashboard chart draws. */
+export type ReportMarkerKind = "bolus" | "carbs" | "bg_check" | "basal_injection";
+
+/**
+ * `offset` is minutes from an event, `time_of_day` minutes after local midnight, `day` a local day's
+ * midnight, `value` a scatter's first source and `lag` minutes one source is shifted against another.
+ */
+export type ReportFieldKind = "time" | "number" | "category" | "percent" | "offset" | "time_of_day" | "day" | "value" | "lag";
 
 export interface ReportField {
   name: string;
@@ -26,15 +34,17 @@ export interface ReportField {
   color?: ChartColor | null;
   /** Drawn on the glucose scale and coloured by the glucose thresholds. */
   glucoseScale?: boolean;
-  /** Drawn on a time series as the dashboard's bolus or carb marker at each value, not as a line. */
+  /** The dashboard glyph a markers layer draws at each value. */
   marker?: ReportMarkerKind | null;
   /** The value holds until the next row: a line of it is drawn as steps. */
   step?: boolean;
-  /** The field each row carries its bar colour in (a theme colour name), for a bar of this category. */
+  /** The field each row carries its colour in (a theme colour name), for a bar or a span of this category. */
   colorField?: string | null;
+  /** How the field folds onto a chart's grid. */
+  aggregate?: "sum" | "last" | "mean" | "max" | null;
 }
 
-/** A treatment marker on a time series panel: its time, kind and amount (U or g). */
+/** A treatment marker of a markers layer: its time, kind and amount (U, g or glucose). */
 export interface ReportMarker {
   time: number;
   kind: ReportMarkerKind;
@@ -55,17 +65,27 @@ export interface ReportThresholds {
   mgdlPerUnit: number;
 }
 
+/** A figures, table or comparison panel's columns. */
 export interface ReportBindings {
+  columns?: string[] | null;
+}
+
+/** Which fields a chart layer's mark draws. */
+export interface ReportLayerBindings {
   x?: string | null;
   y?: string[] | null;
-  band?: string[] | null;
-  columns?: string[] | null;
-  /** range_bands: the category field whose values are drawn as separate bands. */
+  /** band: two edges, or four (outer low, inner low, inner high, outer high). */
+  edges?: string[] | null;
+  /** band and line: the category whose values are drawn as separate sets. */
   series?: string | null;
-  /** bar: stack the y fields in one bar per category. */
+  /** points: a field drawn as a line through the points. */
+  fit?: string | null;
   stacked?: boolean | null;
-  /** bar: bars up from a category axis along the bottom (vertical, the default), or across from one down the side. */
   orientation?: "vertical" | "horizontal" | null;
+  /** spans: where each span starts and ends, and the category that names its lane. */
+  start?: string | null;
+  end?: string | null;
+  category?: string | null;
 }
 
 export interface ReportResolution {
@@ -78,19 +98,69 @@ export interface ReportResolution {
 
 export type ReportPanelStatus = "ok" | "not_permitted" | "timed_out" | "failed";
 
-export interface ReportPanel {
+export type ReportAxisSide = "left" | "right" | "none";
+
+/** A band's span: the API's words for it and its low and high edge fields. */
+export interface ReportBandSpan {
+  label: string;
+  low: string;
+  high: string;
+}
+
+/** One layer of a chart: its rows, its mark and the axis it is drawn on. */
+export interface ReportLayer {
   id: string;
-  title?: string | null;
-  dataset: string;
-  primitive: ReportPrimitive;
-  bindings: ReportBindings;
+  /** The layer's name in the legend, the API's. */
+  title: string;
+  mark: ReportMark;
+  bindings: ReportLayerBindings;
+  xKind: ReportXKind;
+  unit?: string | null;
+  side: ReportAxisSide;
   status: ReportPanelStatus;
   window: { from: number; to: number };
   fields: ReportField[];
   rows: ReportRow[];
+  /** A series hue the API gave the layer, in place of its fields' own colours. */
+  color?: ChartColor | null;
+  facts?: ReportFact[];
+  sentence?: string | null;
+  summary?: string;
+  /** A band's spans, inner first. */
+  spans?: ReportBandSpan[];
+  /** A markers layer's markers. */
+  markers?: ReportMarker[];
+  cohorts?: ReportCohort[];
+  omitted?: { field: string; scope: string }[];
+  resolution?: ReportResolution | null;
+}
+
+/** One track of a chart: its layers, over the chart's shared horizontal axis. */
+export interface ReportTrack {
+  id: string;
+  title?: string | null;
+  /** The track's share of the chart's height. */
+  height: number;
+  layers: ReportLayer[];
+}
+
+export interface ReportPanel {
+  id: string;
+  title?: string | null;
+  kind: ReportPanelKind;
+  status: ReportPanelStatus;
+  window: { from: number; to: number };
+  /** A figures, table or comparison panel's dataset and columns. */
+  dataset?: string | null;
+  bindings?: ReportBindings | null;
+  fields: ReportField[];
+  rows: ReportRow[];
+  /** A chart's horizontal axis, which its layers share. */
+  xKind?: ReportXKind | null;
+  /** A chart's grid in minutes: 0 for every reading, null for each dataset's own spacing. */
+  grid?: number | null;
+  tracks: ReportTrack[];
   thresholds?: ReportThresholds | null;
-  chart?: DashboardChartDataDto | null;
-  omittedScopes?: string[];
   summary: string;
   /** The range was cut to the last 24 hours, all a history-clamped caller reads. */
   limited?: boolean;
@@ -98,32 +168,18 @@ export interface ReportPanel {
   resolution?: ReportResolution | null;
   /** The web report that shows the panel's data, with its range and parameters. */
   link?: string | null;
-  /** Treatment markers a time series panel draws on its line. */
-  markers?: ReportMarker[];
-  /** A band panel's spans, inner first: the API's words for each and its edge fields. */
-  spans?: { label: string; low: string; high: string }[];
   /** At most six figures the API picked for the panel, label above value. */
   facts?: ReportFact[];
-  /** The API's one sentence under the facts; for a panel that was not drawn, why. */
+  /** The API's one sentence under the facts; for a panel or a layer that was not drawn, why. */
   sentence?: string | null;
   /** The panel's range and how much it read, as one line. */
   context?: string | null;
-  /** The range is the longest the dataset covers drawn so: no earlier data can be added. */
+  /** The range is the longest the panel's data covers: no earlier data can be added. */
   atRangeLimit?: boolean;
   /** The API's sentence saying how long a range the panel covers, when it is at that limit. */
   rangeLimit?: string | null;
   /** Every event cohort the panel asked for, with the API's label naming its filter. */
   cohorts?: ReportCohort[];
-  /** A glucose chart of event cohorts: single events' glucose, drawn faintly under each cohort's band. */
-  traces?: ReportTrace[];
-}
-
-/** One event's glucose over the window, aligned on its anchor: [minutes from it, glucose] pairs. */
-export interface ReportTrace {
-  cohort: number;
-  at: number;
-  points: [number, number][];
-  sentence: string;
 }
 
 /** One figure under a panel: its words, its value as the API wrote it, its unit and an optional note. */
@@ -165,9 +221,9 @@ export interface ReportResult {
   hour12?: boolean | null;
 }
 
-/** The fields a time series draws, looked up by name in the panel's catalogue entries. */
-export function boundFields(panel: Pick<ReportPanel, "fields">, names: readonly string[] | null | undefined): ReportField[] {
-  return (names ?? []).flatMap((name) => panel.fields.filter((f) => f.name === name));
+/** The fields named, looked up in a panel's or a layer's catalogue entries. */
+export function boundFields(owner: { fields: ReportField[] }, names: readonly string[] | null | undefined): ReportField[] {
+  return (names ?? []).flatMap((name) => owner.fields.filter((f) => f.name === name));
 }
 
 /** Minutes after midnight as a clock time in the locale's format; the date is arbitrary and not shown. */
@@ -193,8 +249,10 @@ export function formatReportValue(
   if (value === null || value === undefined || value === "") return "–";
   if (field.kind === "time" && typeof value === "number")
     return new Intl.DateTimeFormat(format.locale, { dateStyle: "medium", timeStyle: "short", hour12: format.hour12, timeZone: format.timeZone }).format(value);
+  if (field.kind === "day" && typeof value === "number")
+    return new Intl.DateTimeFormat(format.locale, { dateStyle: "medium", timeZone: format.timeZone }).format(value);
   if (field.kind === "time_of_day" && typeof value === "number") return formatMinuteOfDay(value, format);
-  if (field.kind === "offset" && typeof value === "number") return formatOffset(value, format);
+  if ((field.kind === "offset" || field.kind === "lag") && typeof value === "number") return formatOffset(value, format);
   if (typeof value === "number") return new Intl.NumberFormat(format.locale, { maximumFractionDigits: 2 }).format(value);
   return String(value);
 }

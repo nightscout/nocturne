@@ -1,5 +1,5 @@
 <!--
-  BarChart's static mode: the same segments in the same colours (barLayout), painted on a canvas,
+  CategoryBars' static mode: the same segments in the same colours (barLayout), painted on a canvas,
   with the fields in a key. One stacked category laid across is drawn as the stacked bar with each
   part's value in its key.
 -->

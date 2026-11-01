@@ -39,7 +39,7 @@ function prepareCanvas() {
   canvasReady = true;
 }
 
-/** The panel as a PNG, drawn by its primitive in its static mode on a canvas of the job's size. */
+/** The panel as a PNG, drawn in its static mode on a canvas of the job's size. */
 export function drawPanel(job: DrawJob): Uint8Array {
   prepareCanvas();
   const { report, panel, width, height, devicePixelRatio } = job;

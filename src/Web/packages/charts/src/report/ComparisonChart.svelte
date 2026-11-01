@@ -84,7 +84,7 @@
 {#if still}
   <StaticComparison
     {still}
-    title={panel.title ?? panel.dataset}
+    title={panel.title ?? panel.dataset ?? ""}
     context={panel.context}
     {sides}
     {groups}

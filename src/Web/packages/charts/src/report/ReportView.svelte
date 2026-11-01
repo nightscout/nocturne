@@ -1,22 +1,17 @@
 <!--
-  A report result as a stack of panels: the report's title and warnings, then each panel's
-  primitive and the summary the API wrote for it. Every word is the API's or the host's (`labels`);
+  A report result as a stack of panels: the report's title and warnings, then each panel by its kind
+  (a chart of tracks of layers, figures, a table or two periods) and the summary the API wrote for it. Every word is the API's or the host's (`labels`);
   the title, panel titles, warnings and summaries are written as text. Host controls go in
   `controls`, under each panel's drawing.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import GlucoseChart from "../GlucoseChart.svelte";
   import type { ChartFormat } from "../format.js";
-  import { transformChartData } from "../transform.js";
-  import BarChart from "./BarChart.svelte";
   import ComparisonChart from "./ComparisonChart.svelte";
   import DataTable from "./DataTable.svelte";
-  import RangeBandsChart from "./RangeBandsChart.svelte";
+  import LayeredChart from "./LayeredChart.svelte";
   import StatTiles from "./StatTiles.svelte";
-  import TimeSeriesChart from "./TimeSeriesChart.svelte";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import { omittedToggles } from "./read.js";
   import type { ReportViewLabels } from "./report-view-labels.js";
   import type { ReportPanel, ReportResult, ReportRow } from "./types.js";
 
@@ -35,10 +30,8 @@
     selectable?: (panel: ReportPanel) => boolean;
     /** The picked row. */
     selected?: { panel: string; row: number } | null;
-    /** The host's controls for a panel, drawn under its primitive. */
+    /** The host's controls for a panel, drawn under its chart, figures or table. */
     controls?: Snippet<[ReportPanel]>;
-    /** Called with the API's sentence for what the reader picked in a chart; charts pick nothing without it. */
-    oncontext?: (panel: ReportPanel, text: string) => void;
   }
 
   let {
@@ -51,7 +44,6 @@
     selectable,
     selected = null,
     controls,
-    oncontext,
   }: Props = $props();
 
   /** The report's zone when this browser knows it, so times match the summaries; else the browser's own. */
@@ -65,14 +57,17 @@
   }
 
   const zoned = $derived<ChartFormat>({ ...format, timeZone: knownZone(report.timeZone ?? "UTC") });
-  const plotHeight = $derived(displayMode === "fullscreen" ? "h-[45vh] min-h-[280px]" : "h-[280px]");
+  const trackHeight = $derived(displayMode === "fullscreen" ? 360 : 240);
   const tableHeight = $derived(displayMode === "fullscreen" ? "max-h-[45vh]" : "max-h-[280px]");
   const colorMode = $derived(report.glucoseColorMode ?? "continuous");
   const reportHeading = $derived(`h${headingLevel}`);
 
   function printsItsFigures(panel: ReportPanel): boolean {
-    return panel.primitive === "stat_tiles"
-      || (panel.primitive === "bar" && panel.bindings.stacked === true && panel.bindings.orientation === "horizontal" && panel.rows.length === 1);
+    if (panel.kind === "stat_tiles") return true;
+    const layers = panel.tracks.flatMap((t) => t.layers);
+    const bars = layers[0];
+    return layers.length === 1 && bars.mark === "bars" && bars.bindings.stacked === true
+      && bars.bindings.orientation === "horizontal" && bars.rows.length === 1;
   }
   const panelHeading = $derived(`h${headingLevel + 1}`);
 </script>
@@ -118,7 +113,7 @@
     >
       <div class="flex flex-col gap-0.5">
         <svelte:element this={panelHeading} id="panel-{panel.id}" class="text-sm leading-tight font-semibold">
-          {panel.title ?? panel.dataset}
+          {panel.title ?? panel.dataset ?? ""}
         </svelte:element>
         {#if panel.context}
           <p class="text-xs text-muted-foreground tabular-nums" data-testid="report-context">{panel.context}</p>
@@ -126,30 +121,13 @@
       </div>
       {#if panel.status !== "ok"}
         <!-- The sentence below says why. -->
-      {:else if panel.primitive === "time_series"}
-        <TimeSeriesChart
-          {panel}
-          format={zoned}
-          heightClass={plotHeight}
-          lineColorMode={colorMode}
-          labels={labels.chart}
-          glucoseUnits={report.units}
-        />
-      {:else if panel.primitive === "comparison"}
+      {:else if panel.kind === "chart"}
+        <LayeredChart {panel} format={zoned} {trackHeight} lineColorMode={colorMode} labels={labels.chart} />
+      {:else if panel.kind === "comparison"}
         <ComparisonChart {panel} format={zoned} emptyText={labels.noData} />
-      {:else if panel.primitive === "bar"}
-        <BarChart {panel} format={zoned} heightClass={plotHeight} />
-      {:else if panel.primitive === "range_bands"}
-        <RangeBandsChart
-          {panel}
-          format={zoned}
-          heightClass={plotHeight}
-          lineColorMode={colorMode}
-          oncontext={oncontext ? (text) => oncontext(panel, text) : undefined}
-        />
-      {:else if panel.primitive === "stat_tiles"}
+      {:else if panel.kind === "stat_tiles"}
         <StatTiles {panel} format={zoned} emptyText={labels.noData} />
-      {:else if panel.primitive === "table"}
+      {:else if panel.kind === "table"}
         <DataTable
           {panel}
           format={zoned}
@@ -157,27 +135,6 @@
           emptyText={labels.noData}
           onselect={onselectrow && (selectable?.(panel) ?? true) ? (row, i) => onselectrow(panel, row, i) : undefined}
           selected={selected?.panel === panel.id ? selected.row : null}
-        />
-      {:else if panel.primitive === "glucose_chart" && !panel.chart}
-        <RangeBandsChart
-          {panel}
-          format={zoned}
-          heightClass={plotHeight}
-          lineColorMode={colorMode}
-          traces={panel.traces ?? []}
-          oncontext={oncontext ? (text) => oncontext(panel, text) : undefined}
-        />
-      {:else if panel.primitive === "glucose_chart" && panel.chart}
-        <GlucoseChart
-          data={transformChartData(panel.chart)}
-          xDomain={{ from: new Date(panel.window.from), to: new Date(panel.window.to) }}
-          now={panel.window.to}
-          glucoseUnits={report.units}
-          labels={labels.chart}
-          format={zoned}
-          heightClass="{displayMode === 'fullscreen' ? 'h-[70vh]' : 'h-[420px]'} w-full"
-          omittedTracks={omittedToggles(panel.omittedScopes ?? [])}
-          appearance={{ lineColorMode: colorMode }}
         />
       {/if}
       {@render controls?.(panel)}

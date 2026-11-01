@@ -2,7 +2,7 @@ import type { ScaleBand } from "d3-scale";
 import { resolveChartColor } from "../colors.js";
 import { isChartColor } from "../enums.js";
 import type { GlucoseRange } from "../print/patterns.js";
-import { boundFields, type ReportField, type ReportPanel } from "./types.js";
+import { boundFields, type ReportField, type ReportLayer } from "./types.js";
 
 /** One drawn piece of a bar: its category, the field it shows, where it starts and ends, and its colour. */
 export interface BarSegment {
@@ -42,11 +42,11 @@ export const GLUCOSE_PATTERNS: Partial<Record<string, GlucoseRange>> = {
 export const NEUTRAL_BAR = "var(--muted-foreground)";
 
 /**
- * A bar panel's segments. Every colour comes from the panel: a category whose field names a colour
+ * A bars layer's segments over its categories. Every colour comes from the API: a category whose field names a colour
  * field (glucose bands) colours its one bar from that row's value; otherwise each y field's bar takes
  * the field's theme colour; with neither, or with a value that is not a theme colour, the bar is neutral.
  */
-export function barLayout(panel: Pick<ReportPanel, "fields" | "rows" | "bindings">): BarLayout {
+export function barLayout(panel: Pick<ReportLayer, "fields" | "rows" | "bindings">): BarLayout {
   const horizontal = panel.bindings.orientation === "horizontal";
   const xName = panel.bindings.x ?? "";
   const xField = panel.fields.find((f) => f.name === xName);

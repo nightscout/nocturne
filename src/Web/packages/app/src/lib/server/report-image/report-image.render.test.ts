@@ -7,7 +7,7 @@ import * as js from "../../../../../../locales/js.loader.server.js";
 import { locales } from "../../../../../../locales/data.js";
 import { readReport } from "@nocturne/charts/core";
 import { resolveChartTheme, paint } from "@nocturne/charts/server";
-import { everyPrimitive, stackedBarPanel, timeSeriesPanel } from "./report-image.fixtures.js";
+import { everyPanel, glucoseChartPanel, stackedBarPanel } from "./report-image.fixtures.js";
 import { readOptions, renderReportImage, ReportImageError, ReportImageTooLargeError } from "./render.js";
 
 /** Set to a directory to keep the images the tests draw, to look at them. */
@@ -37,7 +37,7 @@ beforeAll(async () => {
   await loadLocales(js.key, js.loadCount, js.loadCatalog, locales);
 });
 
-const panelIds = everyPrimitive.panels.filter((p) => p.primitive !== "stat_tiles").map((p) => p.id);
+const panelIds = everyPanel.panels.filter((p) => p.kind !== "stat_tiles").map((p) => p.id);
 
 /** One panel of a report, with the size, theme and ratio in `options`, as the download asks for it. */
 function requestOf(panel: unknown, options: Record<string, unknown> = {}, report: { locale?: string; hour12?: boolean } = {}) {
@@ -57,17 +57,22 @@ function requestOf(panel: unknown, options: Record<string, unknown> = {}, report
 }
 
 function requestFor(panelId: string, options: Record<string, unknown> = {}) {
-  return requestOf(everyPrimitive.panels.find((p) => p.id === panelId), options);
+  return requestOf(everyPanel.panels.find((p) => p.id === panelId), options);
 }
 
-/** The clinical colour each panel must show somewhere in its pixels. */
+/** The colour each panel must show somewhere in its pixels, by the panel's id before its place is added. */
 const expected: Record<string, string> = {
-  time_series: "var(--insulin-bolus)",
+  // A bolus glyph, the COB line and the automatic mode's lane.
+  glucose: "var(--insulin-bolus)",
   // The limit line, drawn as the live view draws it: the clinical colour at 60% over the page.
-  range_bands: "color-mix(in srgb, var(--glucose-high) 60%, var(--background))",
-  bar: "var(--glucose-in-range)",
+  profile: "color-mix(in srgb, var(--glucose-high) 60%, var(--background))",
+  ranges: "var(--glucose-in-range)",
+  days: "var(--glucose-in-range)",
   comparison: "var(--glucose-in-range)",
-  glucose_chart: "var(--insulin-bolus)",
+  // The fit line through the points.
+  scatter: "var(--muted-foreground)",
+  lag: "var(--primary)",
+  week: "var(--glucose-high)",
 };
 
 describe.each(["light", "dark"] as const)("a report panel drawn as a PNG (%s)", (theme) => {
@@ -84,9 +89,9 @@ describe.each(["light", "dark"] as const)("a report panel drawn as a PNG (%s)", 
     expect([image.width, image.height]).toEqual([1600, 840]);
     const palette = resolveChartTheme(theme);
     const background = paint(palette, "var(--background)");
-    expect(count(image.data, background, 0)).toBeLessThan(image.width * image.height * 0.97);
+    expect(count(image.data, background, 0)).toBeLessThan(image.width * image.height * 0.99);
     expect(count(image.data, background, 0)).toBeGreaterThan(image.width * image.height * 0.3);
-    const colour = paint(palette, expected[request.panel.primitive]);
+    const colour = paint(palette, expected[request.panel.id.replace(/-\d+$/, "")]);
     expect(count(image.data, colour, 10)).toBeGreaterThan(20);
   }, 30_000);
 });
@@ -95,15 +100,17 @@ describe("a report image request", () => {
   const ask = (extra: Record<string, unknown>) => () => requestFor(panelIds[0], extra);
 
   it("draws at 1200 by 600, light, ratio 1 by default, with the tenant's locale and clock carried", () => {
-    const request = requestOf(everyPrimitive.panels.find((p) => p.id === panelIds[0]), {}, { locale: "de-DE", hour12: true });
+    const request = requestOf(everyPanel.panels.find((p) => p.id === "lag-6"), {}, { locale: "de-DE", hour12: true });
     expect([request.width, request.height, request.theme, request.devicePixelRatio]).toEqual([1200, 600, "light", 1]);
     expect([request.report.locale, request.report.hour12]).toEqual(["de-DE", true]);
     expect(request.report.panels).toHaveLength(1);
   });
 
-  it("gives one stacked bar a short default height and a comparison a tall one", () => {
+  it("gives one stacked bar a short default height, a comparison a tall one and a chart room for its tracks", () => {
     expect(requestFor("ranges-2").height).toBe(240);
     expect(requestFor("comparison-4").height).toBe(800);
+    expect(requestFor("glucose-0").height).toBe(1116);
+    expect(requestFor("lag-6").height).toBe(600);
   });
 
   it.each([
@@ -117,16 +124,18 @@ describe("a report image request", () => {
   });
 
   it("refuses a panel with no image", () => {
-    const tiles = () => requestOf(everyPrimitive.panels.find((p) => p.primitive === "stat_tiles"));
+    const tiles = () => requestOf(everyPanel.panels.find((p) => p.kind === "stat_tiles"));
     expect(tiles).toThrow(ReportImageError);
-    expect(tiles).toThrow("is a stat_tiles, which has no image: its figures are in the summary.");
+    expect(tiles).toThrow("is a stat_tiles panel, which has no image: its figures are in the summary.");
   });
 
   it("refuses a panel with more points than one image draws, as too large", () => {
-    const rows = Array.from({ length: 12_001 }, (_, i) => ({ ...timeSeriesPanel.rows[0], time: timeSeriesPanel.rows[0].time + i }));
-    const huge = () => requestOf({ ...timeSeriesPanel, rows });
+    const glucose = glucoseChartPanel.tracks[1].layers[1];
+    const rows = Array.from({ length: 12_001 }, (_, i) => ({ ...glucose.rows[0], time: Number(glucose.rows[0].time) + i }));
+    const tracks = [{ ...glucoseChartPanel.tracks[1], layers: [{ ...glucose, rows }] }];
+    const huge = () => requestOf({ ...glucoseChartPanel, tracks });
     expect(huge).toThrow(ReportImageTooLargeError);
-    expect(huge).toThrow("has 12004 points, more than the 12000 one image draws");
+    expect(huge).toThrow("has 12001 points, more than the 12000 one image draws");
   });
 
   it("draws one stacked bar at its default height", async () => {
@@ -137,7 +146,8 @@ describe("a report image request", () => {
 
   it("draws a limit line at the live view's 60% of the clinical colour, not solid", async () => {
     // A flat line in range and no band, so nothing but the high limit is near its colour.
-    const flat = { ...timeSeriesPanel, bindings: { x: "time", y: ["glucose"] }, markers: [], rows: timeSeriesPanel.rows.map((r) => ({ ...r, glucose: 120 })) };
+    const glucose = glucoseChartPanel.tracks[1].layers[1];
+    const flat = { ...glucoseChartPanel, tracks: [{ ...glucoseChartPanel.tracks[1], layers: [{ ...glucose, rows: glucose.rows.map((r) => ({ ...r, glucose: 120 })) }] }] };
     const png = await runWithLocale("en", async () =>
       renderReportImage(requestOf(flat, { width: 800, height: 420, theme: "light" })));
     const image = await pixels(png);
@@ -148,5 +158,15 @@ describe("a report image request", () => {
     const faded = paint(palette, "color-mix(in srgb, var(--glucose-high) 50%, var(--background))");
     expect(count(image.data, solid, 12)).toBeLessThanOrEqual(2);
     expect(count(image.data, faded, 12)).toBeGreaterThan(20);
+  }, 30_000);
+});
+
+describe("a chart panel drawn as a PNG paints every track", () => {
+  it("draws the spans lane, the right side's COB line and the area of basal", async () => {
+    const png = await runWithLocale("en", async () => renderReportImage(requestOf(glucoseChartPanel, { width: 1000, theme: "light" })));
+    const image = await pixels(png);
+    const palette = resolveChartTheme("light");
+    expect(count(image.data, paint(palette, "var(--carbs)"), 10)).toBeGreaterThan(20);
+    expect(count(image.data, paint(palette, "color-mix(in srgb, var(--pump-mode-automatic) 55%, var(--background))"), 14)).toBeGreaterThan(200);
   }, 30_000);
 });

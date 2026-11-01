@@ -6,7 +6,7 @@
 <script lang="ts">
   import { ReportView } from "@nocturne/charts";
   import { isHttpError } from "@sveltejs/kit";
-  import { readReport, staticPrimitive, type ReportPanel } from "@nocturne/charts/core";
+  import { readReport, staticPanel, type ReportPanel } from "@nocturne/charts/core";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -30,7 +30,7 @@
 
   /** The panel's file name: its title in lower case, words joined by hyphens. */
   function fileName(panel: ReportPanel): string {
-    const words = (panel.title ?? panel.dataset).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const words = (panel.title ?? panel.dataset ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     return `${words || panel.id}.png`;
   }
 
@@ -86,7 +86,7 @@
 
 {#snippet panelLink(panel: ReportPanel)}
   {@const path = panel.link ? localPath(panel.link) : null}
-  {#if path || (report && panel.status === "ok" && staticPrimitive(panel))}
+  {#if path || (report && panel.status === "ok" && staticPanel(panel))}
     <div class="mt-1 flex flex-wrap items-center gap-3">
       {#if path}
         <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a path the API built from the report registry's own routes -->
@@ -95,7 +95,7 @@
           Open the matching report
         </a>
       {/if}
-      {#if report && panel.status === "ok" && staticPrimitive(panel)}
+      {#if report && panel.status === "ok" && staticPanel(panel)}
         <Button
           variant="ghost-muted"
           size="xs"

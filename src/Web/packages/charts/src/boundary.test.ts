@@ -67,4 +67,13 @@ describe("@nocturne/charts imports", () => {
     }
     expect(found).toEqual([]);
   });
+
+  it("draw a report's charts with layerchart's marks only, no raw SVG", () => {
+    const raw = /<(svg|g|path|rect|circle|ellipse|line|text|polygon|polyline|defs|linearGradient)[\s>]/;
+    const found = files
+      .filter((file) => file.endsWith(".svelte") && relative(root, file).split(/[\\/]/)[0] === "report")
+      .filter((file) => raw.test(readFileSync(file, "utf8")))
+      .map((file) => relative(root, file));
+    expect(found).toEqual([]);
+  });
 });

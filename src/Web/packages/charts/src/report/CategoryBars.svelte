@@ -1,7 +1,6 @@
 <!--
-  Bars over a category axis from a report panel's rows: one or more fields per category, side by
-  side or stacked, up from the bottom or across from the side (`orientation`). Every colour is the
-  panel's (barLayout): a glucose band's bar takes the colour its row carries, another field's bar
+  A bars layer over a category axis: one or more fields per category, side by side or stacked, up
+  from the bottom or across from the side (`orientation`). Every colour is the API's (barLayout): a glucose band's bar takes the colour its row carries, another field's bar
   its theme colour, the rest are neutral. One stacked category laid across is a single bar of parts
   of a whole, drawn as the reports' time in range bar (StackedBar) with each part's value in its key.
 -->
@@ -13,19 +12,21 @@
   import StaticBars from "./static/StaticBars.svelte";
   import type { StaticRender } from "../theme/static-theme.js";
   import { bandScale, barLayout, valueScale, type BarSegment } from "./bar-layout.js";
-  import { formatReportValue, type ReportField, type ReportPanel } from "./types.js";
+  import { formatReportValue, type ReportField, type ReportLayer } from "./types.js";
 
   interface Props {
-    panel: ReportPanel;
+    layer: Pick<ReportLayer, "fields" | "rows" | "bindings">;
     format: ChartFormat;
     heightClass?: string;
-    /** Drawn on a canvas in the theme's colours, with no tooltip, for an image. */
+    /** Drawn on a canvas in the theme's colours, with no tooltip, for an image, under this title and range line. */
     static?: StaticRender;
+    title?: string;
+    context?: string | null;
   }
 
-  let { panel, format, heightClass = "h-[280px]", static: still }: Props = $props();
+  let { layer, format, heightClass = "h-[280px]", static: still, title = "", context = null }: Props = $props();
 
-  const layout = $derived(barLayout(panel));
+  const layout = $derived(barLayout(layer));
   const data = $derived(layout.categories.map((category) => ({ category })));
   const single = $derived(layout.horizontal && layout.stacked && layout.categories.length === 1);
 
@@ -80,7 +81,7 @@
 {/snippet}
 
 {#if still}
-  <StaticBars {still} {layout} {single} {whole} {withUnit} title={panel.title ?? panel.dataset} context={panel.context} />
+  <StaticBars {still} {layout} {single} {whole} {withUnit} {title} {context} />
 {:else if layout.segments.length === 0}
   <p class="flex {heightClass} items-center justify-center text-sm text-muted-foreground">No data in this range.</p>
 {:else if single}
