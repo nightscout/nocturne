@@ -148,19 +148,32 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
     private const int OverrideQueryLimit = 10;
 
-    private static StateSpan BuildOverrideSpan(DeviceStatus ds, DateTime timestamp, string? legacyId)
+    /// <summary>
+    /// The end the observation declares, or <see langword="null"/> for one with no duration or one whose
+    /// end is not after the status time. The span starts at the status time, so an end already past it
+    /// cannot be stored as-is.
+    /// </summary>
+    private static DateTime? DeclaredOverrideEnd(DeviceStatus ds, DateTime timestamp)
     {
         DateTime? end = ds.Override!.Duration is > 0
             ? (ParseTimestampToDateTime(ds.Override.Timestamp) ?? timestamp)
                 .AddSeconds(ds.Override.Duration.Value)
             : null;
+        return end > timestamp ? end : null;
+    }
+
+    /// <summary>The end of a span, held back to the first later contrary observation or span start.</summary>
+    private static DateTime? BoundedEnd(DateTime? end, DateTime? firstLater) =>
+        firstLater < (end ?? DateTime.MaxValue) ? firstLater : end;
+
+    private static StateSpan BuildOverrideSpan(DeviceStatus ds, DateTime timestamp, string? legacyId)
+    {
         return new StateSpan
         {
             Category = StateSpanCategory.Override,
             State = OverrideState.Custom.ToString(),
             StartTimestamp = timestamp,
-            // The span starts at the status time, so an end already past it cannot be stored as-is.
-            EndTimestamp = end > timestamp ? end : null,
+            EndTimestamp = DeclaredOverrideEnd(ds, timestamp),
             Source = ds.Device,
             OriginalId = legacyId,
             Metadata = BuildOverrideMetadata(ds.Override),
@@ -687,15 +700,22 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                   && metadata.OverrideScaleFactor() == observed.OverrideScaleFactor());
 
         var covered = false;
+        var conflicted = false;
+        var restated = new List<StateSpan>();
         var containing = spans[StateSpanCategory.Override]
             .Where(s => s.StartTimestamp <= at && (s.EndTimestamp == null || s.EndTimestamp >= at))
             .ToList();
         foreach (var span in containing)
         {
+            var unchanged = Unchanged(span);
             // Of two conflicting observations at one instant, the first decomposed wins.
-            if (Unchanged(span) || span.StartTimestamp >= at)
+            if (unchanged || span.StartTimestamp >= at)
             {
-                covered |= IsUploaderSpan(span, device);
+                var uploaders = IsUploaderSpan(span, device);
+                covered |= uploaders;
+                conflicted |= !unchanged;
+                if (uploaders && unchanged)
+                    restated.Add(span);
                 continue;
             }
 
@@ -707,7 +727,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             touched.Add(span);
         }
 
-        if (observed is null || covered)
+        if (observed is null)
             return touched;
 
         var next = spans[StateSpanCategory.Override]
@@ -723,6 +743,23 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             .OrderBy(m => m.Timestamp).ThenBy(m => m.Id)
             .FirstOrDefault()?.Timestamp;
 
+        var firstLater = contraryAt ?? next?.StartTimestamp;
+
+        if (covered)
+        {
+            // A conflict decomposed at this instant ends the restated span here. An extension outlives the
+            // status that made it, as a span it ended stays ended.
+            var end = BoundedEnd(DeclaredOverrideEnd(ds, at), firstLater);
+            foreach (var span in restated.Where(s => !conflicted && s.EndTimestamp is not null && (end is null || end > s.EndTimestamp)))
+            {
+                span.EndTimestamp = end;
+                spans.Change(span);
+                touched.Add(span);
+            }
+
+            return touched;
+        }
+
         var opened = BuildOverrideSpan(ds, at, key);
 
         if (next is not null
@@ -736,9 +773,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             return touched;
         }
 
-        var firstLater = contraryAt ?? next?.StartTimestamp;
-        if (firstLater < (opened.EndTimestamp ?? DateTime.MaxValue))
-            opened.EndTimestamp = firstLater;
+        opened.EndTimestamp = BoundedEnd(opened.EndTimestamp, firstLater);
 
         spans.Open(opened);
         touched.Add(opened);
