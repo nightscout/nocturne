@@ -52,6 +52,7 @@ public interface IDeduplicationService
     /// Start a deduplication job in the background
     /// </summary>
     /// <returns>The job ID for tracking progress</returns>
+    /// <exception cref="UnauthorizedAccessException">The caller's reads are limited to the last 24 hours.</exception>
     Task<Guid> StartDeduplicationJobAsync(CancellationToken cancellationToken = default);
 
     /// <returns>The job status, or null if not found</returns>

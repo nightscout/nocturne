@@ -36,7 +36,7 @@ public partial class SessionStateGuardTests
     public void NoAppSqlLeavesSessionState()
     {
         Sources
-            .SelectMany(s => SqlLiterals(s.Tree)
+            .SelectMany(s => SqlLiterals.In(s.Tree)
                 .Where(l => LeavesSessionState(l.Text))
                 .Select(l => $"{s.Path}: {l.Text.Trim()}"))
             .Should().BeEmpty("a pooled connection keeps it for the next lessee; use the transaction-scoped form");
@@ -46,7 +46,7 @@ public partial class SessionStateGuardTests
     public void OnlyTheInterceptorsGucsAreWrittenForTheSession()
     {
         var writers = Sources
-            .SelectMany(s => SqlLiterals(s.Tree)
+            .SelectMany(s => SqlLiterals.In(s.Tree)
                 .Where(l => WritesASessionGuc(l.Text))
                 .Select(l => $"{s.Path}: {EnclosingMember.Of(l.Node)}"))
             .Distinct()
@@ -141,7 +141,7 @@ public partial class SessionStateGuardTests
             }
             """");
 
-        SqlLiterals(tree).Select(l => LeavesSessionState(l.Text)).Should().Equal(true, true);
+        SqlLiterals.In(tree).Select(l => LeavesSessionState(l.Text)).Should().Equal(true, true);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public partial class SessionStateGuardTests
             }
             """);
 
-        SqlLiterals(tree).Select(l => l.Text).Should().Contain("SET {} = {}");
+        SqlLiterals.In(tree).Select(l => l.Text).Should().Contain("SET {} = {}");
     }
 
     private static IEnumerable<SyntaxNode> RawContextOpens(SyntaxTree tree)
@@ -180,44 +180,6 @@ public partial class SessionStateGuardTests
         || TempTable().IsMatch(sql)
         || HoldableCursor().IsMatch(sql)
         || SessionSet().IsMatch(sql);
-
-    private static IEnumerable<(SyntaxNode Node, string Text)> SqlLiterals(SyntaxTree tree)
-    {
-        foreach (var node in tree.GetRoot().DescendantNodes())
-        {
-            switch (node)
-            {
-                case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression):
-                    yield return (node, literal.Token.ValueText);
-                    break;
-                case InterpolatedStringExpressionSyntax interpolated:
-                    yield return (node, Render(interpolated));
-                    break;
-                case BinaryExpressionSyntax concatenation
-                    when concatenation.IsKind(SyntaxKind.AddExpression)
-                        && concatenation.Parent?.IsKind(SyntaxKind.AddExpression) != true
-                        && Operands(concatenation).Any(IsString):
-                    yield return (node, string.Concat(Operands(concatenation).Select(Render)));
-                    break;
-            }
-        }
-    }
-
-    private static IEnumerable<ExpressionSyntax> Operands(BinaryExpressionSyntax concatenation) =>
-        new[] { concatenation.Left, concatenation.Right }.SelectMany(e =>
-            e is BinaryExpressionSyntax inner && inner.IsKind(SyntaxKind.AddExpression) ? Operands(inner) : [e]);
-
-    private static bool IsString(ExpressionSyntax e) =>
-        e.IsKind(SyntaxKind.StringLiteralExpression) || e is InterpolatedStringExpressionSyntax;
-
-    /// <summary>A string as its text, with anything built at runtime as <c>{}</c>.</summary>
-    private static string Render(ExpressionSyntax e) => e switch
-    {
-        LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) => literal.Token.ValueText,
-        InterpolatedStringExpressionSyntax interpolated => string.Concat(interpolated.Contents.Select(c =>
-            c is InterpolatedStringTextSyntax text ? text.TextToken.ValueText : "{}")),
-        _ => "{}",
-    };
 
     /// <summary>
     /// A <c>set_config</c> whose third argument is anything but the literal <c>true</c>, including one

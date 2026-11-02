@@ -14,6 +14,19 @@ public class DeduplicationControllerTests
         new Mock<ILogger<DeduplicationController>>().Object);
 
     [Fact]
+    public async Task StartDeduplicationJob_Returns403WhenTheServiceRefusesAHistoryClampedCaller()
+    {
+        _deduplicationService
+            .Setup(s => s.StartDeduplicationJobAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new UnauthorizedAccessException("history-limited"));
+
+        var result = await BuildController().StartDeduplicationJob();
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
     public async Task GetRecordLinkedRecords_ReturnsTheWholeGroupForANonPrimaryMember()
     {
         var canonicalId = Guid.CreateVersion7();

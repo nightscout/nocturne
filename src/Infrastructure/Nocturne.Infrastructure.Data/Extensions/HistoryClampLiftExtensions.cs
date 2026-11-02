@@ -15,9 +15,11 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// back once the write returns, so a statement the transaction runs afterwards is clamped again. A
 /// lifted statement filters and returns rows as an unclamped reader would, so a write lifted here
 /// inserts, or targets rows the clamp already shows its caller, and reads back only the rows it
-/// wrote. The one exception is a referential clean-up that must reach hidden rows and returns only a
-/// count (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>). Its callers are
-/// pinned by <c>HistoryClampLiftAllowlistTests</c>.
+/// wrote. The exceptions are writes that must reach hidden rows, set one bookkeeping column and
+/// return only a count: a referential clean-up
+/// (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>) and the duplicate flag
+/// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>). Its callers are pinned by
+/// <c>HistoryClampLiftAllowlistTests</c>.
 /// <para>
 /// The transaction it opens is retried with no <c>verifySucceeded</c>: a commit that reported failure
 /// but landed is replayed, and its client-generated keys then fail with 23505 rather than writing

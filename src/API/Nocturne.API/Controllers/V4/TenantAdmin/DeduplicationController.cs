@@ -56,6 +56,10 @@ public class DeduplicationController : ControllerBase
                 StatusUrl = $"/api/v4/admin/deduplication/status/{jobId}"
             });
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 403, title: "Forbidden");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start deduplication job");

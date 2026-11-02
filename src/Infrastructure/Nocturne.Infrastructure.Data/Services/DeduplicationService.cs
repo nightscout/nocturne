@@ -785,6 +785,8 @@ public class DeduplicationService : IDeduplicationService
             db.LinkedRecords.AddRange(newLinks);
             await db.SaveChangesAsync(ct);
             db.ChangeTracker.Clear();
+            await DuplicateGroupPrimaries.FlagInsertedLinksAsync(
+                db, recordType, [.. newLinks.Where(l => !l.IsPrimary).Select(l => l.RecordId)], ct);
         }
 
         // 7. A wide join reaches up to ten minutes back, so it can land earlier than the group's
@@ -1431,6 +1433,7 @@ public class DeduplicationService : IDeduplicationService
         return await UnderWriteLockAsync(db, async token =>
         {
             var merged = 0;
+            var changes = new List<PrimaryChange>();
             foreach (var canonicals in mergedGroups)
             {
                 // Load every linked row in the merged canonicals (soft-deleted records included),
@@ -1456,11 +1459,12 @@ public class DeduplicationService : IDeduplicationService
 
                 var survivor = PickSurvivor(rows, rowInfo);
 
-                // Re-point every row to the survivor's canonical id and fix the IsPrimary invariant.
                 foreach (var r in rows)
                 {
                     r.CanonicalId = survivor.CanonicalId;
-                    r.IsPrimary = ReferenceEquals(r, survivor);
+                    var primary = ReferenceEquals(r, survivor);
+                    if (r.IsPrimary != primary)
+                        changes.Add(new PrimaryChange(r.RecordId, primary));
                 }
 
                 // Collapsing N canonicals into 1 removes (N-1) groups.
@@ -1471,6 +1475,7 @@ public class DeduplicationService : IDeduplicationService
             {
                 await db.SaveChangesAsync(token);
                 db.ChangeTracker.Clear();
+                await DuplicateGroupPrimaries.SetPrimariesAsync(db, recordType, changes, token);
             }
 
             return merged;
@@ -2275,6 +2280,20 @@ public class DeduplicationService : IDeduplicationService
                 + "would read no rows and report a vacuous success.");
         }
 
+        var reader = TenantReader.Of(
+            tenantContext,
+            _categoryReadContext ?? throw new InvalidOperationException(
+                "Cannot start a deduplication job without the caller's read context: the job would read "
+                + "past the caller's history clamp."));
+
+        // The job reads the tenant's whole history to decide which links are orphaned and which
+        // records match. Through a clamp, every record older than the window would read as gone.
+        if (reader.HistoryClamped)
+        {
+            throw new UnauthorizedAccessException(
+                "A deduplication job reads the tenant's whole history, which a history-limited caller cannot.");
+        }
+
         var jobId = Guid.CreateVersion7();
         var cts = new CancellationTokenSource();
 
@@ -2284,12 +2303,6 @@ public class DeduplicationService : IDeduplicationService
             State = DeduplicationJobState.Pending,
             StartedAt = DateTime.UtcNow
         };
-
-        var reader = TenantReader.Of(
-            tenantContext,
-            _categoryReadContext ?? throw new InvalidOperationException(
-                "Cannot start a deduplication job without the caller's read context: the job would read "
-                + "past the caller's history clamp."));
 
         _runningJobs[jobId] = status;
         _jobTenants[jobId] = tenantContext.TenantId;

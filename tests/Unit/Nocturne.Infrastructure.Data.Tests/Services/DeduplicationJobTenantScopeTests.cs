@@ -81,6 +81,22 @@ public class DeduplicationJobTenantScopeTests : IDisposable
     }
 
     [Fact]
+    public async Task StartDeduplicationJobAsync_RefusesAHistoryClampedCaller()
+    {
+        var scopeFactory = new Mock<IServiceScopeFactory>();
+        var clamped = new CategoryReadContext();
+        clamped.ClampMemberHistory();
+        var service = new DeduplicationService(
+            _db.CreateContext().AsFactory(), scopeFactory.Object, NullLogger<DeduplicationService>.Instance,
+            new StubTenantAccessor(TestTenant), clamped);
+
+        var act = async () => await service.StartDeduplicationJobAsync();
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        scopeFactory.Invocations.Should().BeEmpty("no job is started");
+    }
+
+    [Fact]
     public async Task StartDeduplicationJobAsync_PinsTheCapturedTenantBeforeResolvingTheScopedService()
     {
         var calls = new List<string>();
