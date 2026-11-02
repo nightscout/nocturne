@@ -103,9 +103,9 @@ public class TenantOverviewService : ITenantOverviewService
         bool historyClamped,
         CancellationToken ct)
     {
-        // A scope per tenant, since CanonicalGlucoseService caches per scope. The caller's request
-        // never passed through MemberScopeMiddleware for this tenant, so its clamp here is the one
-        // this membership decides, and every read below goes through the scope.
+        // A scope per tenant: the caller's request never passed through MemberScopeMiddleware for
+        // this tenant, so its clamp here is the one this membership decides, and every read below
+        // goes through the scope.
         var reader = TenantReader.Of(_scope)
             .ForTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo))
             .ClampedToDay(historyClamped);

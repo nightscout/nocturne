@@ -6,7 +6,6 @@ using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
@@ -26,7 +25,6 @@ namespace Nocturne.API.Services.Analytics;
 /// </summary>
 internal sealed partial class LoopAnalysisService(
     ISensorGlucoseRepository glucoseRepository,
-    ICanonicalGlucoseService canonicalGlucose,
     IBolusRepository bolusRepository,
     ICarbIntakeRepository carbIntakeRepository,
     ITempBasalRepository tempBasalRepository,
@@ -153,7 +151,7 @@ internal sealed partial class LoopAnalysisService(
         var toUtc = ToUtc(to);
         var lookbackUtc = ToUtc(from - DailyProfileCalculator.ActingMs);
 
-        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct);
+        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct, streams: GlucoseStreams.Canonical);
         var bolusTask = bolusRepository.GetAsync(lookbackUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var tempBasalTask = tempBasalRepository.GetAsync(
             StatisticsService.TempBasalReadStart(fromUtc), ToUtc(to + NetInsulinAboveSchedule.MaxInferredGapMs), null, null, int.MaxValue, descending: false, ct: ct);
@@ -170,7 +168,7 @@ internal sealed partial class LoopAnalysisService(
         var profiles = await activeProfileResolver.GetProfileSpansForRangeAsync(from, to, ct);
         var clock = await deviceDates.ResolveAsync(ct);
         return new Common(
-            await canonicalGlucose.SelectAsync([.. await glucoseTask], ct),
+            [.. await glucoseTask],
             [.. await bolusTask],
             [.. await tempBasalTask],
             spans,

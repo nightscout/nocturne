@@ -1,6 +1,5 @@
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Clinical.Statistics;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -22,7 +21,6 @@ public sealed class RangeAnalyticsReader(
     IBolusRepository bolusRepository,
     ICarbIntakeRepository carbIntakeRepository,
     IPatientDeviceRepository patientDeviceRepository,
-    ICanonicalGlucoseService canonicalGlucose,
     IStatisticsService statisticsService,
     TenantClockResolver tenantClock,
     IActiveProfileResolver activeProfileResolver,
@@ -75,19 +73,18 @@ public sealed class RangeAnalyticsReader(
 
         // int.MaxValue limit mirrors ActogramReportService so dense tenants are never
         // silently truncated (the cause of skewed report stats on high-frequency uploads).
-        var glucoseTask = sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, patientDeviceId: patientDeviceId, ct: ct);
+        // Unfiltered statistics compute over the canonical stream, never blended CGMs; one device's
+        // own series is read whole.
+        var glucoseTask = sensorGlucoseRepository.GetForAnalyticsAsync(
+            startDt, endDt, null, null, int.MaxValue, descending: false, patientDeviceId: patientDeviceId, ct: ct,
+            streams: patientDeviceId is null ? GlucoseStreams.Canonical : GlucoseStreams.All);
+        var countsTask = sensorGlucoseRepository.CountByPatientDeviceAsync(startDt, endDt, patientDeviceId, ct);
         var devicesTask = patientDeviceRepository.GetByDateRangeAsync(startDt, endDt, ct: ct);
 
-        await Task.WhenAll(glucoseTask, treatments.ManualBoluses, treatments.Carbs, devicesTask);
+        await Task.WhenAll(glucoseTask, countsTask, treatments.ManualBoluses, treatments.Carbs, devicesTask);
 
-        var rawGlucose = (await glucoseTask).ToList();
-
-        // Unfiltered statistics compute over the canonical stream, never blended CGMs.
-        // A patientDeviceId filter already restricts the fetch to one device raw, so there
-        // is nothing left to canonicalize/blend.
-        var entries = patientDeviceId is null
-            ? (await canonicalGlucose.SelectAsync(rawGlucose, ct)).ToList()
-            : rawGlucose;
+        var entries = (await glucoseTask).ToList();
+        var readingCounts = await countsTask;
         var boluses = await treatments.ManualBoluses;
         var carbs = await treatments.Carbs;
         var devices = await devicesTask;
@@ -108,7 +105,7 @@ public sealed class RangeAnalyticsReader(
                 StatisticsService.WindowDays(startDt, endDt, clock.Zone)),
             AveragedStats = statisticsService.CalculateAveragedStats(entries, clock.Zone).ToList(),
             HourlyBandThresholds = statisticsService.HourlyBandThresholds,
-            ContributingDevices = statisticsService.CalculateContributingDevices(rawGlucose, devices).ToList(),
+            ContributingDevices = statisticsService.CalculateContributingDevices(readingCounts, devices).ToList(),
             PersonalRange = await CalculatePersonalRangeAsync(entries, clock.Zone, ct),
             TimeZoneUnavailableReason = clock.Reason,
         };

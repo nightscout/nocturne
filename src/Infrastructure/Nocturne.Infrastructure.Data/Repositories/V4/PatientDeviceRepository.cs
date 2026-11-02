@@ -13,6 +13,11 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <summary>
 /// Repository for managing patient device records (diabetes technology used by the patient) in the database.
 /// </summary>
+/// <remarks>
+/// A CGM's place in the priority order decides which stream each glucose bucket shows, so a write
+/// that moves it requests the tenant's stream recompute in the same transaction
+/// (<see cref="GlucoseStreamFlags"/>).
+/// </remarks>
 public class PatientDeviceRepository : IPatientDeviceRepository
 {
     private readonly INocturneDbContextFactory _contextFactory;
@@ -140,7 +145,7 @@ public class PatientDeviceRepository : IPatientDeviceRepository
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = PatientDeviceMapper.ToEntity(model);
         ctx.PatientDevices.Add(entity);
-        await ctx.SaveChangesAsync(ct);
+        await SaveAsync(ctx, IsCgm(entity.DeviceCategory), ct);
         return PatientDeviceMapper.ToDomainModel(entity);
     }
 
@@ -154,8 +159,11 @@ public class PatientDeviceRepository : IPatientDeviceRepository
         var entity = await ctx.PatientDevices.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"PatientDevice {id} not found");
 
+        var before = (entity.DeviceCategory, entity.Rank, entity.StartDate);
         PatientDeviceMapper.UpdateEntity(entity, model);
-        await ctx.SaveChangesAsync(ct);
+        var reranked = (IsCgm(before.DeviceCategory) || IsCgm(entity.DeviceCategory))
+            && before != (entity.DeviceCategory, entity.Rank, entity.StartDate);
+        await SaveAsync(ctx, reranked, ct);
         return PatientDeviceMapper.ToDomainModel(entity);
     }
 
@@ -169,7 +177,7 @@ public class PatientDeviceRepository : IPatientDeviceRepository
             ?? throw new KeyNotFoundException($"PatientDevice {id} not found");
 
         entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
+        await SaveAsync(ctx, IsCgm(entity.DeviceCategory), ct);
     }
 
     /// <inheritdoc />
@@ -195,7 +203,7 @@ public class PatientDeviceRepository : IPatientDeviceRepository
         }
 
         if (changed.Count > 0)
-            await ctx.SaveChangesAsync(ct);
+            await SaveAsync(ctx, changed.Any(d => IsCgm(d.DeviceCategory)), ct);
         return changed;
     }
 
@@ -203,15 +211,43 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     public async Task<PatientDevice> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return PatientDeviceMapper.ToDomainModel(await ctx.RestoreDeletedAsync<PatientDeviceEntity>(id, nameof(PatientDevice), ct));
+        return await ctx.ExecuteInTransactionAsync(async token =>
+        {
+            var restored = await ctx.RestoreDeletedAsync<PatientDeviceEntity>(id, nameof(PatientDevice), token);
+            if (IsCgm(restored.DeviceCategory))
+                await GlucoseStreamFlags.RequestHistoryAsync(ctx, token);
+            return PatientDeviceMapper.ToDomainModel(restored);
+        }, ct: ct);
     }
 
     /// <inheritdoc />
     public async Task<BulkRestoreResult<PatientDevice>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return (await ctx.RestoreDeletedAsync<PatientDeviceEntity>(ids, nameof(PatientDevice), ct)).Map(PatientDeviceMapper.ToDomainModel);
+        return await ctx.ExecuteInTransactionAsync(async token =>
+        {
+            var restored = await ctx.RestoreDeletedAsync<PatientDeviceEntity>(ids, nameof(PatientDevice), token);
+            if (restored.Restored.Any(d => IsCgm(d.DeviceCategory)))
+                await GlucoseStreamFlags.RequestHistoryAsync(ctx, token);
+            return restored.Map(PatientDeviceMapper.ToDomainModel);
+        }, ct: ct);
     }
+
+    /// <summary>Saves, and requests the stream recompute in the same transaction when <paramref name="reranked"/>.</summary>
+    private static Task SaveAsync(NocturneDbContext ctx, bool reranked, CancellationToken ct) =>
+        reranked
+            ? ctx.ExecuteInTransactionAsync(async token =>
+            {
+                await ctx.SaveChangesAsync(token);
+                await GlucoseStreamFlags.RequestHistoryAsync(ctx, token);
+            }, ct)
+            : ctx.SaveChangesAsync(ct);
+
+    private static bool IsCgm(DeviceCategory category) => category == DeviceCategory.CGM;
+
+    /// <summary>A stored category, read as <see cref="PatientDeviceMapper.ToDomainModel"/> reads it.</summary>
+    private static bool IsCgm(string category) =>
+        !Enum.TryParse<DeviceCategory>(category, ignoreCase: true, out var parsed) || parsed == DeviceCategory.CGM;
 
     /// <inheritdoc />
     public async Task<IEnumerable<PatientDevice>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)

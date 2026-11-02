@@ -162,6 +162,8 @@ internal static class DuplicateGroupPrimaries
             }
 
             var saved = await ctx.SaveChangesAsync(token);
+            if (recordType == RecordType.SensorGlucose)
+                await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, [entity.Id, .. copies.Select(c => c.Id)], token);
             return (saved, copies);
         }, ct: ct);
 
@@ -291,6 +293,7 @@ internal static class DuplicateGroupPrimaries
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<PrimaryChange> changes, CancellationToken ct)
     {
         RequireTransaction(ctx);
+        await LockStreamsAsync(ctx, recordType, ct);
         var key = RecordTypeKeys.Key(recordType);
         foreach (var chunk in changes.OrderBy(c => c.RecordId).Chunk(SetPrimariesChunkSize))
         {
@@ -309,7 +312,7 @@ internal static class DuplicateGroupPrimaries
                     .Where(lr => lr.RecordType == key && demote.Contains(lr.RecordId) && lr.IsPrimary)
                     .ExecuteUpdateAsync(s => s.SetProperty(lr => lr.IsPrimary, false), ct);
 
-            await DeriveFlagsAsync(ctx, recordType, ids, ct);
+            await DeriveAndRecomputeStreamsAsync(ctx, recordType, ids, ct);
         }
     }
 
@@ -323,8 +326,9 @@ internal static class DuplicateGroupPrimaries
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
     {
         RequireTransaction(ctx);
+        await LockStreamsAsync(ctx, recordType, ct);
         foreach (var chunk in recordIds.Order().Chunk(SetPrimariesChunkSize))
-            await DeriveFlagsAsync(ctx, recordType, chunk, ct);
+            await DeriveAndRecomputeStreamsAsync(ctx, recordType, chunk, ct);
     }
 
     /// <summary>
@@ -336,7 +340,10 @@ internal static class DuplicateGroupPrimaries
     /// The caller also holds the tenant's dedup write lock (<c>DeduplicationService.UnderWriteLockAsync</c>),
     /// under which every link is inserted. Without it a repair could clear a flag whose non-primary
     /// link another transaction is inserting: that transaction finds the flag already set and writes
-    /// nothing, and the repair does not see the uncommitted link.
+    /// nothing, and the repair does not see the uncommitted link. Locks are taken in the order
+    /// <see cref="GlucoseStreamFlags"/> states: dedup write lock, then for glucose the stream lock
+    /// (<see cref="GlucoseStreamFlags.LockAsync"/>), then the links. A glucose row the repair shows or
+    /// hides has its bucket's stream flags recomputed in the same transaction.
     /// </remarks>
     /// <returns>The rows whose flag was rewritten.</returns>
     /// <exception cref="InvalidOperationException">No transaction is open on a relational context.</exception>
@@ -344,12 +351,13 @@ internal static class DuplicateGroupPrimaries
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
     {
         RequireTransaction(ctx);
+        await LockStreamsAsync(ctx, recordType, ct);
         var key = RecordTypeKeys.Key(recordType);
         var repaired = 0;
         foreach (var chunk in recordIds.Order().Chunk(SetPrimariesChunkSize))
         {
             await LockLinksAsync(ctx, key, chunk, ct);
-            repaired += await DeriveFlagsAsync(ctx, recordType, chunk, ct);
+            repaired += await DeriveAndRecomputeStreamsAsync(ctx, recordType, chunk, ct);
         }
 
         return repaired;
@@ -372,6 +380,24 @@ internal static class DuplicateGroupPrimaries
             FOR UPDATE
             """, ct);
     }
+
+    /// <summary>
+    /// <see cref="DeriveFlagsAsync"/>, then, for glucose readings whose flag moved, their buckets' stream
+    /// flags: a duplicate hidden or shown changes which streams a bucket holds.
+    /// </summary>
+    /// <returns>The rows whose duplicate flag was rewritten.</returns>
+    private static async Task<int> DeriveAndRecomputeStreamsAsync(
+        NocturneDbContext ctx, RecordType recordType, Guid[] ids, CancellationToken ct)
+    {
+        var derived = await DeriveFlagsAsync(ctx, recordType, ids, ct);
+        if (derived > 0 && recordType == RecordType.SensorGlucose)
+            await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, ids, ct);
+        return derived;
+    }
+
+    /// <summary>The stream lock ahead of a glucose link or flag write (<see cref="GlucoseStreamFlags.LockAsync"/>).</summary>
+    private static Task LockStreamsAsync(NocturneDbContext ctx, RecordType recordType, CancellationToken ct) =>
+        recordType == RecordType.SensorGlucose ? GlucoseStreamFlags.LockAsync(ctx, ct) : Task.CompletedTask;
 
     private static void RequireTransaction(NocturneDbContext ctx)
     {

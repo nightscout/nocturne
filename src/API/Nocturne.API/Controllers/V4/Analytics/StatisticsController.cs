@@ -14,7 +14,6 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -72,7 +71,6 @@ public class StatisticsController : ControllerBase
     private readonly RangeAnalyticsReader _rangeAnalytics;
     private readonly InsulinDeliveryReader _insulinDelivery;
     private readonly IDeviceEventRepository _deviceEventRepository;
-    private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly TenantClockResolver _tenantClock;
     private readonly ITenantGlucoseUnits _glucoseUnits;
     private readonly TimeProvider _timeProvider;
@@ -89,7 +87,6 @@ public class StatisticsController : ControllerBase
         RangeAnalyticsReader rangeAnalytics,
         InsulinDeliveryReader insulinDelivery,
         IDeviceEventRepository deviceEventRepository,
-        ICanonicalGlucoseService canonicalGlucose,
         TenantClockResolver tenantClock,
         ITenantGlucoseUnits glucoseUnits,
         TimeProvider timeProvider,
@@ -106,7 +103,6 @@ public class StatisticsController : ControllerBase
         _rangeAnalytics = rangeAnalytics;
         _insulinDelivery = insulinDelivery;
         _deviceEventRepository = deviceEventRepository;
-        _canonicalGlucose = canonicalGlucose;
         _timeProvider = timeProvider;
         _tenantClock = tenantClock;
         _glucoseUnits = glucoseUnits;
@@ -460,8 +456,7 @@ public class StatisticsController : ControllerBase
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
         // Uncapped and canonicalised for the same reasons as RangeAnalyticsReader.
-        var rawGlucose = (await _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
-        var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
+        var entries = (await _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken, streams: GlucoseStreams.Canonical)).ToList();
 
         return Ok(new WeekdayAveragesResponse
         {
@@ -491,8 +486,7 @@ public class StatisticsController : ControllerBase
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
         // Uncapped and canonicalised for the same reasons as RangeAnalyticsReader.
-        var rawGlucose = (await _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
-        var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
+        var entries = (await _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken, streams: GlucoseStreams.Canonical)).ToList();
 
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
 
@@ -701,7 +695,7 @@ public class StatisticsController : ControllerBase
         // Every window ends at `now`, so the 90-day read contains every shorter window and the repositories'
         // inclusive lower bound on Timestamp is reproduced by the slices below.
         var widestStart = now.AddDays(-periods.Max());
-        var glucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(from: (DateTime?)widestStart, to: (DateTime?)now, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
+        var glucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(from: (DateTime?)widestStart, to: (DateTime?)now, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken, streams: GlucoseStreams.Canonical);
         var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)widestStart, to: (DateTime?)now, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
         var sessionTask = _deviceEventRepository.GetAllCopiesAsync(widestStart, now, SensorSessionInference.SessionEventTypes, cancellationToken);
         var insulin = await _insulinDelivery.ReadRecordsAsync(widestStart, now, cancellationToken, glucoseTask, carbTask, sessionTask);
@@ -722,7 +716,7 @@ public class StatisticsController : ControllerBase
             var algorithmBoluses = insulin.AlgorithmBoluses.Where(b => b.Timestamp >= startDate).ToList();
             var tempBasals       = insulin.TempBasals.Where(t => t.StartTimestamp >= tempBasalReadStart).ToList();
             var basalInjections  = insulin.BasalInjections.Where(i => i.Timestamp >= startDate).ToList();
-            var filteredEntries  = (await _canonicalGlucose.SelectAsync(allGlucose.Where(g => g.Timestamp >= startDate).ToList(), cancellationToken)).ToList();
+            var filteredEntries  = allGlucose.Where(g => g.Timestamp >= startDate).ToList();
             var filteredCarbs    = allCarbs.Where(c => c.Timestamp >= startDate).ToList();
 
             if (StatisticsService.HasSufficientPeriodData(filteredEntries.Count))
@@ -868,7 +862,7 @@ public class StatisticsController : ControllerBase
 
         var (startDt, endDt) = StatisticsService.PunchCardRange(startDate, endDate, tz);
 
-        var rawGlucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken);
+        var rawGlucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken, streams: GlucoseStreams.Canonical);
         var treatmentsAllowed = StatisticsReadScopeGuard.AllowsTreatmentAggregates(HttpContext.GetGrantedScopes());
         var carbTask = treatmentsAllowed
             ? _carbIntakeRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)
@@ -878,8 +872,7 @@ public class StatisticsController : ControllerBase
             ? await _insulinDelivery.ReadRecordsAsync(startDt, endDt, cancellationToken, rawGlucoseTask, carbTask)
             : new InsulinRecords([], [], [], []);
 
-        var rawGlucose  = (await rawGlucoseTask).ToList();
-        var glucoseData = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
+        var glucoseData = (await rawGlucoseTask).ToList();
         var carbs       = await carbTask;
 
         return Ok(_statisticsService.CalculatePunchCard(

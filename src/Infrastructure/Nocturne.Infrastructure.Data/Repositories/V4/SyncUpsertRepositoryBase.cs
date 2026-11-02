@@ -88,7 +88,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             {
                 var before = ToDomain(existing);
                 ApplySyncUpsert(existing, model);
-                await ctx.SaveChangesAsync(ct);
+                await SaveWriteAsync(ctx, existing, before.Timestamp, ct);
                 var upserted = ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
                 await RaiseBroadcastAsync([], [upserted], [], origin, ct, vacated: [before]);

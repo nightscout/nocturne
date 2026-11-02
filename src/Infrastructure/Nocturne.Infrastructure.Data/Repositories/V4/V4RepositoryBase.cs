@@ -585,7 +585,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         }
 
         ctx.Set<TEntity>().Add(entity);
-        await ctx.SaveChangesAsync(ct);
+        await SaveWriteAsync(ctx, entity, null, ct);
         await DedupCommittedAsync(ctx, [entity], origin, ct);
         var created = ToDomain(entity);
         await RaiseBroadcastAsync([created], [], [], origin, ct);
@@ -610,7 +610,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         var before = ToDomain(entity);
         ApplyUpdate(entity, model);
         var materiallyChanged = HasMaterialChange(ctx, entity);
-        await ctx.SaveChangesAsync(ct);
+        await SaveWriteAsync(ctx, entity, before.Timestamp, ct);
         var updated = ToDomain(entity);
         if (materiallyChanged)
             await RaiseBroadcastAsync([], [updated], [], origin, ct, vacated: [before]);
@@ -980,6 +980,30 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await PostCommitDedupAsync(ctx, inserted, origin, ct);
     }
 
+    /// <summary>
+    /// Saves a single-record write of <paramref name="written"/>; <paramref name="vacatedAt"/> is the
+    /// timestamp an updated row held before. The base saves alone; a type whose rows decide how other
+    /// rows read overrides it to settle them in the save's transaction, as <see cref="OnBulkSavedAsync"/>
+    /// does for the bulk path.
+    /// </summary>
+    protected virtual Task<int> SaveWriteAsync(
+        NocturneDbContext ctx, TEntity written, DateTime? vacatedAt, CancellationToken ct) =>
+        ctx.SaveChangesAsync(ct);
+
+    /// <summary>
+    /// Runs first inside the bulk write's transaction, before any row is written. Default nothing.
+    /// </summary>
+    protected virtual Task BeginBulkWriteAsync(NocturneDbContext ctx, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// Runs inside the bulk write's transaction once its rows are saved: <paramref name="written"/> the
+    /// rows inserted or updated in place, <paramref name="vacatedAt"/> the timestamps the materially
+    /// changed ones held before. Default nothing.
+    /// </summary>
+    protected virtual Task OnBulkSavedAsync(
+        NocturneDbContext ctx, IReadOnlyList<TEntity> written, IReadOnlyList<DateTime> vacatedAt, CancellationToken ct) =>
+        Task.CompletedTask;
+
     /// <summary>DeduplicationService participants override: link the just-inserted rows into canonical groups
     /// (runs AFTER commit). Default: no-op.</summary>
     protected virtual Task PostCommitDedupAsync(
@@ -1022,6 +1046,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         var written = await ctx.ExecuteInTransactionAsync(
             async token =>
             {
+                await BeginBulkWriteAsync(ctx, token);
                 var legacy = updateByLegacyId
                     ? await SplitLegacyIdUpdatesAsync(ctx, records, token)
                     : UpsertSplit.Empty(records.Select(ToEntity).ToList());
@@ -1034,6 +1059,12 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                     split.ToInsert,
                     e => e.LegacyId,
                     (_, t) => ctx.GetBlockingLegacyIdsAsync(split.ToInsert, t),
+                    token);
+
+                await OnBulkSavedAsync(
+                    ctx,
+                    [.. legacy.UpdatedInPlace, .. split.UpdatedInPlace, .. toInsert],
+                    [.. legacy.Vacated.Select(m => m.Timestamp), .. split.Vacated.Select(m => m.Timestamp)],
                     token);
 
                 var upserts = new UpsertSplit(

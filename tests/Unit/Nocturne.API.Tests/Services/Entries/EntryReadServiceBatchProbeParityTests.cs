@@ -52,7 +52,6 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
                 NullLogger<SensorGlucoseRepository>.Instance),
             new MeterGlucoseRepository(factory, audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(factory, audit, NullLogger<CalibrationRepository>.Instance),
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             demoMode.Object,
             NullLogger<EntryReadService>.Instance);
     }

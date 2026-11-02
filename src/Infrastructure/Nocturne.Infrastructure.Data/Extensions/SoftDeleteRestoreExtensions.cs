@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -170,6 +171,9 @@ public static class SoftDeleteRestoreExtensions
                 copies = candidates.Where((_, i) => clashes[restoring.Count + i] is null).ToList();
             }
 
+            using var wide = typeof(TEntity) == typeof(SensorGlucoseEntity)
+                ? await GlucoseStreamFlags.DeferIfWideAsync(ctx, restoring.Count + copies.Count, token)
+                : null;
             foreach (var entity in restoring.Concat(copies))
                 entity.DeletedAt = null;
             await ctx.SaveRestoreAsync(recordType, token);
@@ -179,6 +183,8 @@ public static class SoftDeleteRestoreExtensions
                     ctx, restoredType, [.. restoring.Concat(copies).Select(ctx.IdOf)],
                     NocturneDbContext.UtcNowAtStoredPrecision(), token)
                 : [];
+            if (typeof(TEntity) == typeof(SensorGlucoseEntity))
+                await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, [.. restoring.Concat(copies).Select(ctx.IdOf)], token);
 
             return new GroupRestore<TEntity>(restoring, conflicts, copies, promoted);
         }, ct: ct);

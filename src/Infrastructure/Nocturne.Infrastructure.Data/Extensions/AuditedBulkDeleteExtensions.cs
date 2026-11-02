@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -303,6 +304,9 @@ public static class AuditedBulkDeleteExtensions
         // the filtered, ordered read for every group would rescan the remaining set each time.
         var live = query.Where(e => e.DeletedAt == null);
         var ids = await live.Select(e => EF.Property<Guid>(e, "Id")).OrderBy(id => id).ToListAsync(ct);
+        using var wide = typeof(T) == typeof(SensorGlucoseEntity)
+            ? await GlucoseStreamFlags.DeferIfWideAsync(context, ids.Count, ct)
+            : null;
         var groups = ids.Chunk(NocturneDbContext.SystemTimestampGroupSize).ToList();
         var total = 0;
         foreach (var (group, index) in groups.Select((g, i) => (g, i)))
@@ -338,6 +342,8 @@ public static class AuditedBulkDeleteExtensions
             ? await DuplicateGroupPrimaries.RepointAwayFromAsync(
                 context, type, ids, deletedAt.AddMilliseconds(groups.Count), ct)
             : [];
+        if (typeof(T) == typeof(SensorGlucoseEntity))
+            await GlucoseStreamFlags.AfterRowsChangedAsync(context, ids, ct);
         return (total, promoted);
     }
 

@@ -130,8 +130,9 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
         }
 
         await using var jobs = conn.CreateCommand();
-        // The chain runs on past AddJobLedger, which moves the migration's pending_tenant_jobs rows there.
-        jobs.CommandText = "SELECT tenant_id, job FROM job_ledger WHERE next_due_at IS NOT NULL;";
+        // The chain runs on past AddJobLedger, which moves the migration's pending_tenant_jobs rows there,
+        // and past later migrations that request jobs of their own for every tenant.
+        jobs.CommandText = "SELECT tenant_id, job FROM job_ledger WHERE job = 'profile-versions-moved' AND next_due_at IS NOT NULL;";
         await using var reader = await jobs.ExecuteReaderAsync();
         while (await reader.ReadAsync())
             JobsAfterUp.Add((reader.GetGuid(0), reader.GetString(1)));

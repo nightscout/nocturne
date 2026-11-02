@@ -33,6 +33,10 @@ public class RangeAnalyticsReaderTests
             .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync("UTC");
         var statistics = new StatisticsService(TimeProvider.System);
+        _glucose
+            .Setup(r => r.CountByPatientDeviceAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         _insulinDelivery = new InsulinDeliveryReader(
             _boluses.Object,
@@ -49,7 +53,6 @@ public class RangeAnalyticsReaderTests
             _boluses.Object,
             _carbs.Object,
             Mock.Of<IPatientDeviceRepository>(),
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             statistics,
             new TenantClockResolver(therapy.Object, new CategoryReadContext(), Mock.Of<ILogger<TenantClockResolver>>()),
             Mock.Of<IActiveProfileResolver>(),

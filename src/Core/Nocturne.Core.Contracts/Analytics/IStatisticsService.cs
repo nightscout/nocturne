@@ -439,11 +439,12 @@ public interface IStatisticsService
         IEnumerable<BasalSegment>? profileBasalSegments = null);
 
     /// <summary>
-    /// The registered CGMs that contributed <paramref name="readings"/>, each with its reading count,
-    /// then a nameless entry with no device id when any reading has no device.
+    /// The registered CGMs among <paramref name="readingCounts"/> (readings per device, a null device
+    /// for the unattributed ones), each with its reading count, then a nameless entry with no device
+    /// id when any reading has no device.
     /// </summary>
     IEnumerable<ContributingDevice> CalculateContributingDevices(
-        IReadOnlyCollection<SensorGlucose> readings,
+        IReadOnlyCollection<(Guid? PatientDeviceId, int Count)> readingCounts,
         IEnumerable<PatientDevice> devices);
 
     /// <summary>
