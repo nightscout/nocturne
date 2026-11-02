@@ -39,8 +39,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     /// <summary>
     ///     The remote is another Nocturne instance, so a type with nothing stored takes everything
-    ///     it holds. <see cref="BaseConnectorService{TConfig}.CrawlAndPublishAsync{T}"/> spreads
-    ///     that over as many runs as it needs.
+    ///     it holds.
     /// </summary>
     protected override DateTime? InitialSyncFloor => null;
 
@@ -217,8 +216,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     SyncDataType.DeviceEvents => CrawlV4Async<DeviceEvent>(type, NocturneRemoteConstants.DeviceEvents, await TreatmentFromAsync(type), PublishDeviceEventDataAsync),
                     SyncDataType.StateSpans => SyncStateSpansAsync(await BoundAsync(() => CalculateStateSpanSinceTimestampAsync(config)), request.To, config, result, activeTypes, cancellationToken),
                     SyncDataType.Profiles => SyncProfilesAsync(config, result, activeTypes, cancellationToken),
-                    SyncDataType.DeviceStatus => SyncDeviceStatusAsync(await BoundAsync(async () => await CalculateDeviceStatusCatchUpSinceAsync(config) ?? request.From), request.To, config, result, cancellationToken),
-                    SyncDataType.Activity => SyncActivityAsync(await BoundAsync(async () => await CalculateActivityCatchUpSinceAsync(config) ?? request.From), request.To, config, result, activeTypes, cancellationToken),
+                    SyncDataType.DeviceStatus => SyncDeviceStatusAsync(await BoundAsync(() => CalculateDeviceStatusCatchUpSinceAsync(config)), request.To, config, result, cancellationToken),
+                    SyncDataType.Activity => SyncActivityAsync(await BoundAsync(() => CalculateActivityCatchUpSinceAsync(config)), request.To, config, result, activeTypes, cancellationToken),
                     SyncDataType.Food => SyncFoodAsync(config, result, activeTypes, cancellationToken),
                     _ => Task.CompletedTask
                 });
@@ -233,11 +232,10 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     }
 
     /// <summary>
-    ///     Crawls one type newest-first through
-    ///     <see cref="BaseConnectorService{TConfig}.CrawlAndPublishAsync{T}"/>, publishing each page as
-    ///     it lands so a run that times out keeps what it published and the next resumes below it.
+    ///     Crawls one type through <see cref="BaseConnectorService{TConfig}.CrawlAndPublishAsync{T}"/>,
+    ///     keyed by the type, and records its count.
     /// </summary>
-    private async Task CrawlAsync<T>(
+    private async Task<PagedCrawlOutcome> CrawlAsync<T>(
         SyncDataType type, DateTime? from, DateTime? to,
         Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
         Func<T[], DateTime?> oldestOf,
@@ -248,19 +246,22 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             type.ToString(), from, to, pages, oldestOf, page => publish(page.ToList()));
 
         RecordPublishOutcome(result, type, outcome.Count, outcome.Success);
+        return outcome;
     }
 
     private async Task SyncStateSpansAsync(
         DateTime? from, DateTime? to, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        await CrawlAsync(SyncDataType.StateSpans, from, to,
+        var spans = await CrawlAsync(SyncDataType.StateSpans, from, to,
             (pageFrom, pageTo) => FetchPagesAsync<StateSpan>(NocturneRemoteConstants.StateSpans, pageFrom, pageTo, config, ct),
             page => page.Min(s => s.StartTimestamp),
             page => PublishStateSpanDataAsync(page, config, ct),
             result);
 
-        if (await FetchAppliedProfileActivationsAsync(from, to, config, ct) is { } activations)
+        // A crawl that resumed below its bound replayed spans there, so the activations reach as far.
+        var activationsFrom = spans.Oldest < from ? spans.Oldest : from;
+        if (await FetchAppliedProfileActivationsAsync(activationsFrom, to, config, ct) is { } activations)
             await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
                 activations.Select(ToProfileActivation).ToList(), PublishProfileActivationDataAsync, config, ct,
                 "profile activations");
@@ -476,9 +477,10 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     /// <remarks>
     ///     Each page is fetched under the retry budget, so a raised failure means the page did not
     ///     survive <see cref="BaseConnectorConfiguration.MaxRetryAttempts"/> attempts rather than one
-    ///     unlucky moment. See <see cref="BaseConnectorService{TConfig}.FetchFailed"/>. Offset paging
-    ///     over a newest-first list is safe against records landing mid-crawl: they push older ones
-    ///     down a page, which repeats a record rather than skipping one.
+    ///     unlucky moment. See <see cref="BaseConnectorService{TConfig}.FetchFailed"/>. Offset paging over
+    ///     a newest-first list repeats a record for each one the remote stores in range mid-crawl, and
+    ///     skips one for each it deletes above the crawl's position; nothing re-reads a skipped record
+    ///     short of a cursor reset.
     /// </remarks>
     private async IAsyncEnumerable<T[]> FetchPagesAsync<T>(
         string endpoint, DateTime? from, DateTime? to,

@@ -274,7 +274,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var deviceStatusFrom = openEnded
-                    ? ResumeFrom(request, await CalculateDeviceStatusCatchUpSinceAsync(config) ?? request.From)
+                    ? ResumeFrom(request, await CalculateDeviceStatusCatchUpSinceAsync(config))
                     : request.From;
 
                 var recent = openEnded && deviceStatusFrom is { } crawlFrom
@@ -321,7 +321,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var activityFrom = openEnded
-                    ? ResumeFrom(request, await CalculateActivityCatchUpSinceAsync(config) ?? request.From)
+                    ? ResumeFrom(request, await CalculateActivityCatchUpSinceAsync(config))
                     : request.From;
 
                 var recent = openEnded && activityFrom is { } crawlFrom

@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -352,10 +353,9 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     }
 
     /// <summary>
-    ///     Calculate an independent catch-up "since" timestamp for device status.
-    ///     Returns the most recent device-status timestamp (minus a small overlap), or
-    ///     <c>null</c> when none exists — letting the caller decide its own fallback
-    ///     rather than forcing a full initial-window re-fetch of high-volume telemetry.
+    ///     The device-status family's resume point: the most recent stored device status (minus the
+    ///     catch-up overlap), or <c>null</c> — the whole history, whatever
+    ///     <see cref="InitialSyncFloor"/> says — when none is stored.
     /// </summary>
     protected async Task<DateTime?> CalculateDeviceStatusCatchUpSinceAsync(TConfig config)
     {
@@ -364,9 +364,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     }
 
     /// <summary>
-    ///     Calculate an independent catch-up "since" timestamp for activity.
-    ///     Returns the most recent activity timestamp (minus a small overlap), or
-    ///     <c>null</c> when none exists so the caller can choose its own fallback.
+    ///     The activity family's resume point, read as
+    ///     <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> reads device status.
     /// </summary>
     protected async Task<DateTime?> CalculateActivityCatchUpSinceAsync(TConfig config)
     {
@@ -422,14 +421,11 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     an explicit <c>from</c> with no <c>to</c> is the shape an admin repairing a gap sends, and
     ///     answering that from the watermark returns nothing and reports it as a success. The
     ///     caller's cannot narrow the resume point either, since a family whose last crawl failed
-    ///     still owes the range below it — a resume point left open by an unbounded
-    ///     <see cref="InitialSyncFloor"/> included, since that is a family with nothing stored at
-    ///     all asking for the source's whole history.
+    ///     still owes the range below it — an open resume point included, since that is a family
+    ///     with nothing stored asking for the source's whole history.
     ///     <para>
     ///     A caller that supplies no bound is not asking for everything: the tenant's own sync
-    ///     button sends none, and a family with a resume point still stands on it. A resume point
-    ///     that is absent rather than open is resolved by the caller before it gets here — see
-    ///     <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> for the two that answer that way.
+    ///     button sends none, and a family with a resume point still stands on it.
     ///     </para>
     /// </remarks>
     protected static DateTime? ResumeFrom(DateTime? requested, DateTime? resumePoint)
@@ -1329,6 +1325,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             "Starting background data sync for {ConnectorSource}",
             ConnectorSource
         );
+        _backfillDeadline = Clock.GetUtcNow() + ConnectorRunLimits.BackfillBudget;
         try
         {
             if (!await AuthenticateAsync())
@@ -1380,6 +1377,10 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                 Success = false,
                 Errors = { ex.Message }
             };
+        }
+        finally
+        {
+            _backfillDeadline = null;
         }
     }
 

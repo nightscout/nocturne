@@ -150,14 +150,18 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     }
 
     /// <summary>
-    /// A Nightscout instance is a full data export, so with no treatments stored the initial
-    /// backfill has no lower bound at all — and the glucose cursor <c>request.From</c> carries on a
-    /// background run must not narrow it to one. A treatments crawl that failed on the first sync
-    /// after glucose landed is exactly that state, and bounding its retry at the glucose cursor
-    /// puts the history below permanently out of reach.
+    /// A Nightscout instance is a full data export, so a family with nothing stored has no lower
+    /// bound at all — and the glucose cursor <c>request.From</c> carries on a background run must not
+    /// narrow it to one. A crawl that failed on the first sync after glucose landed is exactly that
+    /// state, and bounding its retry at the glucose cursor puts the history below permanently out of
+    /// reach.
     /// </summary>
-    [Fact]
-    public async Task SyncDataAsync_WhenNoTreatmentsAreStored_CrawlsTheFullHistory()
+    [Theory]
+    [InlineData(SyncDataType.Boluses, "treatments")]
+    [InlineData(SyncDataType.DeviceStatus, "devicestatus")]
+    [InlineData(SyncDataType.Activity, "activity")]
+    public async Task SyncDataAsync_WhenNothingIsStored_CrawlsTheFullHistory(
+        SyncDataType dataType, string collection)
     {
         var handler = new CollectingHandler();
         var service = NewService(handler, watermarks: null);
@@ -167,35 +171,12 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
             {
                 From = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
                 To = null,
-                DataTypes = [SyncDataType.Boluses],
+                DataTypes = [dataType],
             },
             NewConfig(),
             CancellationToken.None);
 
-        handler.CrawlOf("treatments").Should().NotContain("$gte");
-    }
-
-    /// <summary>
-    /// Device status and activity answer with no resume point rather than an open one, and take the
-    /// caller's bound instead: their initial window is high-volume telemetry that would otherwise
-    /// be re-fetched in full on every sync until the first page stored.
-    /// </summary>
-    [Theory]
-    [InlineData(SyncDataType.DeviceStatus, "devicestatus")]
-    [InlineData(SyncDataType.Activity, "activity")]
-    public async Task SyncDataAsync_WhenNoTelemetryIsStored_CrawlsFromTheCallersBound(
-        SyncDataType dataType, string collection)
-    {
-        var askedFrom = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-        var handler = new CollectingHandler();
-        var service = NewService(handler, watermarks: null);
-
-        await service.SyncDataAsync(
-            new SyncRequest { From = askedFrom, To = null, DataTypes = [dataType] },
-            NewConfig(),
-            CancellationToken.None);
-
-        handler.CrawlOf(collection).Should().Contain(LowerBound(askedFrom));
+        handler.CrawlOf(collection).Should().NotContain("$gte");
     }
 
     /// <summary>Overlap the shared catch-up calculation subtracts to absorb clock drift.</summary>

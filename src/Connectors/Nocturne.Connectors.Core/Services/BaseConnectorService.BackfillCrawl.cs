@@ -3,11 +3,22 @@ namespace Nocturne.Connectors.Core.Services;
 public abstract partial class BaseConnectorService<TConfig>
 {
     /// <summary>Outcome of one crawled collection, spanning every page of the crawl.</summary>
-    protected sealed record PagedCrawlOutcome(int Count, bool Success)
+    /// <param name="Count">
+    ///     The records handed to a publish, a refused page included, as
+    ///     <see cref="RecordPublishOutcome"/> counts them.
+    /// </param>
+    /// <param name="Oldest">The oldest published record time, or null when none had one.</param>
+    protected sealed record PagedCrawlOutcome(int Count, bool Success, DateTime? Oldest = null)
     {
         /// <summary>This outcome followed by <paramref name="next"/>, which ran only because this one succeeded.</summary>
-        public PagedCrawlOutcome Plus(PagedCrawlOutcome next) => new(Count + next.Count, next.Success);
+        public PagedCrawlOutcome Plus(PagedCrawlOutcome next) =>
+            new(Count + next.Count, next.Success, Oldest is { } a && next.Oldest is { } b ? (a < b ? a : b) : Oldest ?? next.Oldest);
     }
+
+    /// <summary>When a background run's backfill crawls stop taking pages; null outside one.</summary>
+    private DateTimeOffset? _backfillDeadline;
+
+    private bool BackfillBudgetSpent => _backfillDeadline is { } deadline && Clock.GetUtcNow() >= deadline;
 
     protected Task<DateTime?> GetBackfillLowWaterMarkAsync(string collection) =>
         _publisher is { IsAvailable: true } p
@@ -20,22 +31,28 @@ public abstract partial class BaseConnectorService<TConfig>
             : Task.CompletedTask;
 
     /// <summary>
-    ///     Crawls a collection newest-first, publishing each page as it lands, then — when an
-    ///     earlier crawl of the collection left a persisted low-water mark — resumes that
-    ///     incomplete backfill below the mark. Pages descend from "now", so anything a killed
-    ///     crawl never reached sits BELOW the newest stored record and an ordinary catch-up
-    ///     never returns for it; the mark is what carries "history below X is still missing"
-    ///     across runs that time out, process restarts and store failures.
+    ///     Crawls a collection newest-first, publishing each page as it lands, then crawls what earlier
+    ///     crawls of the collection left owed. Pages descend from the newest record, so whatever a
+    ///     crawl never reached sits below the newest stored record, where an ordinary catch-up never
+    ///     returns; two persisted records carry it across runs:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             The low-water mark, keyed by the collection: everything below it may be missing. A
+    ///             full crawl (open lower bound) leaves it. Its resume is deliberately unbounded below,
+    ///             so a raised or stale mark costs only redundant re-fetching, never a skipped region.
+    ///         </item>
+    ///         <item>
+    ///             The gap (<see cref="Gap"/>): a bounded range a catch-up did not finish. It is kept
+    ///             apart from the mark so a short failed catch-up neither costs a crawl of the whole
+    ///             history nor replaces a deeper mark.
+    ///         </item>
+    ///     </list>
     /// </summary>
     /// <remarks>
-    ///     The resume crawl is deliberately UNBOUNDED below the mark, and that is load-bearing:
-    ///     the mark's value only decides where re-crawling starts, never where it stops, so a
-    ///     raised or stale mark can only cost redundant (idempotent) re-fetching — every
-    ///     missing region below any surviving mark is eventually reached. Bounding the resume
-    ///     (e.g. stopping at a previous mark, or persisting gap floors) would turn those same
-    ///     states into data loss. The known cost: a failed bounded catch-up leaves a near-now
-    ///     mark whose resume re-crawls the full history for a minutes-wide gap — rare, safe,
-    ///     and preferred over a more fragile gap bookkeeping.
+    ///     On a background run every crawl but the catch-up stops taking pages once
+    ///     <see cref="Constants.ConnectorRunLimits.BackfillBudget"/> has passed, after at least one
+    ///     page, and reports success: the owed range stays recorded for the next run, and a run that
+    ///     timed out would fail the types after this one and back the connector off.
     /// </remarks>
     /// <param name="pages">The collection's pages between two optional bounds, newest first.</param>
     protected async Task<PagedCrawlOutcome> CrawlAndPublishAsync<T>(
@@ -46,91 +63,205 @@ public abstract partial class BaseConnectorService<TConfig>
         Func<T[], DateTime?> oldestOf,
         Func<T[], Task<bool>> publishAsync)
     {
+        var crawl = new PageCrawl<T>(pages, oldestOf, publishAsync);
         var mark = await GetBackfillLowWaterMarkAsync(collection);
+        var gap = await GetGapAsync(collection);
 
-        var primary = await CrawlRangeAsync(
-            collection, from, to, pages, oldestOf, publishAsync, fullCrawl: from is null);
+        if (from is not { } floor)
+        {
+            var full = await CrawlFullAsync(collection, to, mark, crawl);
+            if (full.Exhausted && gap is not null)
+                await SetGapAsync(collection, null);
+            return full.Outcome;
+        }
 
-        // Resume the incomplete backfill only when this cycle's primary crawl stored cleanly —
-        // a store that is failing right now shouldn't be hammered with the deep history too.
-        // A full primary crawl (open lower bound) already covers everything below the mark.
-        if (mark is null || !primary.Success || from is null)
-            return primary;
+        var outcome = await CatchUpAsync(collection, floor, to, gap, crawl);
 
-        var resume = await CrawlRangeAsync(
-            collection, null, mark.Value,
-            pages, oldestOf, publishAsync, fullCrawl: true);
+        // A store that is failing right now shouldn't be hammered with the deep history too.
+        if (outcome.Success && gap is not null)
+            outcome = outcome.Plus(await ResumeGapAsync(collection, gap, crawl));
+        if (outcome.Success && mark is not null)
+            outcome = outcome.Plus((await CrawlFullAsync(collection, mark, mark, crawl)).Outcome);
 
-        return new PagedCrawlOutcome(primary.Count + resume.Count, resume.Success);
+        return outcome;
     }
 
     /// <summary>
-    ///     One newest-first crawl over a range. A page publish failure stops the crawl (pages
-    ///     below a gap would strand it above the resume point) and records the low-water mark
-    ///     so the next sync resumes there. Full crawls (open lower bound) also advance the mark
-    ///     after every published page — crash protection for multi-hour histories — and clear
-    ///     it on reaching the source's beginning; bounded catch-up crawls only ever raise it.
+    ///     A crawl with an open lower bound. It moves the mark down after every page, so a run that
+    ///     ends anywhere leaves it on what it published, and clears it on reaching the source's
+    ///     beginning.
     /// </summary>
-    private async Task<PagedCrawlOutcome> CrawlRangeAsync<T>(
-        string collection,
-        DateTime? from,
-        DateTime? to,
-        Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
-        Func<T[], DateTime?> oldestOf,
-        Func<T[], Task<bool>> publishAsync,
-        bool fullCrawl)
+    private async Task<CrawlProgress> CrawlFullAsync<T>(
+        string collection, DateTime? to, DateTime? mark, PageCrawl<T> crawl)
     {
-        var count = 0;
-        DateTime? lowestPublished = null;
-        var success = true;
+        var progress = new CrawlProgress();
+        await PublishPagesAsync(crawl, null, to, progress, budgeted: true,
+            afterPage: () => progress.Lowest is { } lowest ? SetBackfillLowWaterMarkAsync(collection, lowest) : Task.CompletedTask);
+
+        if (progress.Exhausted && (mark is not null || progress.Lowest is not null))
+            await SetBackfillLowWaterMarkAsync(collection, null);
+
+        return progress;
+    }
+
+    /// <summary>
+    ///     The bounded catch-up. A crawl that stops short owes the range between its floor and what
+    ///     it published, merged into <paramref name="owed"/>. Once a second page arrives the same is
+    ///     written ahead, so a process killed mid-crawl has recorded it too, and restored on finishing;
+    ///     a catch-up of one page writes nothing.
+    /// </summary>
+    private async Task<PagedCrawlOutcome> CatchUpAsync<T>(
+        string collection, DateTime from, DateTime? to, Gap? owed, PageCrawl<T> crawl)
+    {
+        var progress = new CrawlProgress();
+        var wroteAhead = false;
+
+        Task OweAsync() =>
+            progress.Lowest is { } lowest
+                ? SetGapAsync(collection, new Gap(from, lowest).Hull(owed))
+                : Task.CompletedTask;
 
         try
         {
-            await foreach (var page in pages(from, to))
-            {
-                count += page.Length;
-
-                if (!await publishAsync(page))
+            await PublishPagesAsync(crawl, from, to, progress, budgeted: false,
+                beforeSecondPage: async () =>
                 {
-                    success = false;
-                    break;
-                }
-
-                var pageOldest = oldestOf(page);
-                if (pageOldest.HasValue)
-                    lowestPublished = pageOldest;
-
-                if (fullCrawl && lowestPublished.HasValue)
-                    await SetBackfillLowWaterMarkAsync(collection, lowestPublished);
-            }
+                    await OweAsync();
+                    wroteAhead = progress.Lowest is not null;
+                });
         }
         catch
         {
-            // A fetch failure or a cancelled run mid-crawl leaves the same gap a publish failure
-            // does: record the resume point for what already published before surfacing it.
-            await RaiseBackfillLowWaterMarkAsync(collection, lowestPublished);
+            await OweAsync();
             throw;
         }
 
-        if (success && fullCrawl)
-            await SetBackfillLowWaterMarkAsync(collection, null);
-        else if (!success)
-            await RaiseBackfillLowWaterMarkAsync(collection, lowestPublished);
+        if (progress.Refused)
+            await OweAsync();
+        else if (wroteAhead)
+            await SetGapAsync(collection, owed);
 
-        return new PagedCrawlOutcome(count, success);
+        return progress.Outcome;
     }
 
     /// <summary>
-    ///     Raises the collection's low-water mark to <paramref name="candidate"/> — never lowers
-    ///     it: a deeper mark from an earlier failure still describes missing history further down.
+    ///     Crawls an owed range, narrowing it to what is still unpublished when the crawl stops short
+    ///     and clearing it on reaching its floor.
     /// </summary>
-    private async Task RaiseBackfillLowWaterMarkAsync(string collection, DateTime? candidate)
+    private async Task<PagedCrawlOutcome> ResumeGapAsync<T>(string collection, Gap gap, PageCrawl<T> crawl)
     {
-        if (!candidate.HasValue)
-            return;
+        var progress = new CrawlProgress();
 
-        var existing = await GetBackfillLowWaterMarkAsync(collection);
-        if (existing is null || existing < candidate)
-            await SetBackfillLowWaterMarkAsync(collection, candidate);
+        Task NarrowAsync() =>
+            progress.Lowest is not { } lowest || lowest >= gap.To
+                ? Task.CompletedTask
+                : SetGapAsync(collection, lowest <= gap.From ? null : gap with { To = lowest });
+
+        try
+        {
+            await PublishPagesAsync(crawl, gap.From, gap.To, progress, budgeted: true);
+        }
+        catch
+        {
+            await NarrowAsync();
+            throw;
+        }
+
+        if (progress.Exhausted)
+            await SetGapAsync(collection, null);
+        else
+            await NarrowAsync();
+
+        return progress.Outcome;
+    }
+
+    /// <summary>
+    ///     Publishes pages until they run out, a publish is refused, or a budgeted crawl passes the
+    ///     run's backfill deadline.
+    /// </summary>
+    private async Task PublishPagesAsync<T>(
+        PageCrawl<T> crawl,
+        DateTime? from,
+        DateTime? to,
+        CrawlProgress progress,
+        bool budgeted,
+        Func<Task>? beforeSecondPage = null,
+        Func<Task>? afterPage = null)
+    {
+        await foreach (var page in crawl.Pages(from, to))
+        {
+            if (progress.Pages == 1 && beforeSecondPage is not null)
+                await beforeSecondPage();
+
+            progress.Count += page.Length;
+            if (!await crawl.PublishAsync(page))
+            {
+                progress.Refused = true;
+                return;
+            }
+
+            progress.Pages++;
+            if (crawl.OldestOf(page) is { } oldest)
+                progress.Lowest = oldest;
+
+            if (afterPage is not null)
+                await afterPage();
+
+            if (budgeted && BackfillBudgetSpent)
+            {
+                progress.Stopped = true;
+                return;
+            }
+        }
+    }
+
+    private sealed record PageCrawl<T>(
+        Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> Pages,
+        Func<T[], DateTime?> OldestOf,
+        Func<T[], Task<bool>> PublishAsync);
+
+    private sealed class CrawlProgress
+    {
+        public int Pages { get; set; }
+        public int Count { get; set; }
+
+        /// <summary>The oldest record time on the last published page; pages descend, so the crawl's lowest.</summary>
+        public DateTime? Lowest { get; set; }
+
+        public bool Refused { get; set; }
+        public bool Stopped { get; set; }
+        public bool Exhausted => !Refused && !Stopped;
+        public PagedCrawlOutcome Outcome => new(Count, !Refused, Lowest);
+    }
+
+    /// <summary>
+    ///     A range a bounded crawl owes, stored beside the collection's mark under two keys of the same
+    ///     per-collection map.
+    /// </summary>
+    private sealed record Gap(DateTime From, DateTime To)
+    {
+        /// <summary>The smallest range covering this and <paramref name="other"/>.</summary>
+        public Gap Hull(Gap? other) => other is null
+            ? this
+            : new(From < other.From ? From : other.From, To > other.To ? To : other.To);
+    }
+
+    private static string GapFromKey(string collection) => $"{collection}.GapFrom";
+    private static string GapToKey(string collection) => $"{collection}.GapTo";
+
+    private async Task<Gap?> GetGapAsync(string collection) =>
+        await GetBackfillLowWaterMarkAsync(GapToKey(collection)) is { } to
+        && await GetBackfillLowWaterMarkAsync(GapFromKey(collection)) is { } from
+            ? new Gap(from, to)
+            : null;
+
+    /// <remarks>
+    ///     The floor is written first: a write cut off between the two keys leaves a range at least as
+    ///     wide as the one either write described.
+    /// </remarks>
+    private async Task SetGapAsync(string collection, Gap? gap)
+    {
+        await SetBackfillLowWaterMarkAsync(GapFromKey(collection), gap?.From);
+        await SetBackfillLowWaterMarkAsync(GapToKey(collection), gap?.To);
     }
 }

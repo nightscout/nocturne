@@ -203,10 +203,10 @@ public class NightscoutPerTypeCursorTests
     }
 
     [Fact]
-    public async Task DeviceStatus_OpenEndedSync_NoWatermark_FallsBackToRequestFrom()
+    public async Task DeviceStatus_OpenEndedSync_NoWatermark_ImportsFullHistory()
     {
-        // No device-status watermark available → must fall back to request.From (current behaviour),
-        // never re-fetching the full initial window of high-volume telemetry every sync.
+        // No device status stored → the whole history, spread across runs by the low-water mark.
+        // Falling back to request.From would leave everything older than it out of reach for good.
         var from = DateTime.UtcNow.AddHours(-1);
         var handler = new SequentialMockHandler();
         handler.Enqueue(JsonResponse(Array.Empty<Entry>()));
@@ -219,8 +219,7 @@ public class NightscoutPerTypeCursorTests
 
         await service.SyncDataAsync(request, config, CancellationToken.None);
 
-        var cursor = ExtractCursor(DeviceStatusUrl(handler));
-        cursor.Should().BeCloseTo(from, TimeSpan.FromSeconds(1));
+        Uri.UnescapeDataString(DeviceStatusUrl(handler)).Should().NotContain("$gte");
     }
 
     private static HttpResponseMessage JsonResponse<T>(T data) =>

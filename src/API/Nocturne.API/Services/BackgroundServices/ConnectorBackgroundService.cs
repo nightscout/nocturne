@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -69,12 +70,9 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
 
     private static readonly TimeSpan NudgeDebounceWindow = TimeSpan.FromSeconds(10);
 
-    /// <summary>
-    /// Maximum wall-clock time a single tenant's sync may run before it is cancelled. Bounds how long
-    /// one stuck or failing tenant — e.g. a hung network call or an auth-retry storm against bad
-    /// credentials — can hold a scheduler slot and a budget slot. Overridable for tests.
-    /// </summary>
-    protected virtual TimeSpan PerTenantSyncTimeout => TimeSpan.FromMinutes(3);
+    /// <inheritdoc cref="ConnectorRunLimits.PerTenantSyncTimeout"/>
+    /// <remarks>Overridable for tests.</remarks>
+    protected virtual TimeSpan PerTenantSyncTimeout => ConnectorRunLimits.PerTenantSyncTimeout;
 
     private readonly ConnectorSyncBudget _budget;
     private readonly IJobLedger _ledger;
