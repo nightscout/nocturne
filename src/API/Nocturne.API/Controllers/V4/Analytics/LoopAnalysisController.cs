@@ -142,12 +142,15 @@ public class LoopAnalysisController(
 
         var served = await ServeAsync<SettingsEvidenceReport>(
             query,
-            withheld is { } reason
-                ? (filter, _, ct) => EnvelopeOnlyAsync(new SettingsEvidenceReport { WithheldReason = reason }, filter, ct)
-                : service.GetSettingsEvidenceAsync,
+            withheld is null
+                ? service.GetSettingsEvidenceAsync
+                : (filter, _, ct) => EnvelopeOnlyAsync(new SettingsEvidenceReport(), filter, ct),
             cancellationToken);
         if (served.Result is OkObjectResult { Value: SettingsEvidenceReport report })
+        {
+            report.WithheldReason = withheld;
             report.Rules = SettingsEvidenceCalculator.Rules();
+        }
         return served;
     }
 

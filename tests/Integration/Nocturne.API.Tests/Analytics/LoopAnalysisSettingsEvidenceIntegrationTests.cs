@@ -193,6 +193,18 @@ public class LoopAnalysisSettingsEvidenceIntegrationTests(ApiIntegrationTestFixt
         Absent(body, "primaryRange").Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Says_why_the_tab_is_withheld_without_a_tenant_timezone()
+    {
+        await SeedDaysAsync(WeekStart, 7);
+        using var client = await CreateTokenClientAsync(Scope.ReportsRead, Scope.TreatmentsRead, Scope.TherapyRead);
+
+        var body = await GetOkAsync(client, Query(Week));
+
+        body.GetProperty("timeZoneUnavailableReason").GetString().Should().Be("NotConfigured");
+        body.GetProperty("withheldReason").GetString().Should().Be("ReadScopes");
+    }
+
     /// <summary>
     /// <paramref name="days"/> days from <paramref name="start"/>, local midnight: a reading every
     /// five minutes at 110, at 200 from 13:00 and falling evenly from 14:00 to 120 at 18:00, under a
