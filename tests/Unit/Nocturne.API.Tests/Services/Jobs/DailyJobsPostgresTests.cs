@@ -17,6 +17,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -65,30 +66,32 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
             await provider.DisposeAsync();
     }
 
-    public static TheoryData<string> DailyPurges => [SoftDeleteCleanupJob.JobName, AuditRetentionJob.JobName];
+    public static TheoryData<string> DailyJobs =>
+        [SoftDeleteCleanupJob.JobName, AuditRetentionJob.JobName, DuplicateFlagAuditJob.JobName];
 
     [Theory]
-    [MemberData(nameof(DailyPurges))]
-    public async Task A_daily_purge_is_not_rerun_by_a_restart_and_runs_again_a_day_later(string job)
+    [MemberData(nameof(DailyJobs))]
+    public async Task A_daily_job_is_not_rerun_by_a_restart_and_runs_again_a_day_later(string job)
     {
         var tenant = await SeedTenantAsync();
-        await SeedExpiredAsync(job, tenant);
+        await SeedWorkAsync(job, tenant);
 
         var first = Scheduler(job);
         await first.EnrolAsync(default);
+        _clock.Advance(job == DuplicateFlagAuditJob.JobName ? DuplicateFlagAuditJob.Interval : TimeSpan.Zero); // past the job's spread
         (await RunDueAsync(first)).Should().Be(1);
-        (await ExpiredCountAsync(job, tenant)).Should().Be(0);
+        (await PendingCountAsync(job, tenant)).Should().Be(0);
 
-        await SeedExpiredAsync(job, tenant);
+        await SeedWorkAsync(job, tenant);
         _clock.Advance(TimeSpan.FromMinutes(10));
         var restarted = Scheduler(job);
         await restarted.EnrolAsync(default);
-        (await RunDueAsync(restarted)).Should().Be(0, "a restart does not rerun a purge that ran today");
-        (await ExpiredCountAsync(job, tenant)).Should().Be(1);
+        (await RunDueAsync(restarted)).Should().Be(0, "a restart does not rerun a job that ran today");
+        (await PendingCountAsync(job, tenant)).Should().Be(1);
 
         _clock.Advance(TimeSpan.FromDays(1));
         (await RunDueAsync(restarted)).Should().Be(1);
-        (await ExpiredCountAsync(job, tenant)).Should().Be(0);
+        (await PendingCountAsync(job, tenant)).Should().Be(0);
     }
 
     /// <summary>#2504: the cleanup reads each tenant's rows, so it deletes them under FORCE RLS.</summary>
@@ -133,34 +136,47 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
         ArchivedAt = archivedAt,
     };
 
-    /// <summary>A row the job purges: soft-deleted 40 days ago, or audited 100 days ago.</summary>
-    private async Task SeedExpiredAsync(string job, Guid tenant)
+    /// <summary>
+    /// A row the job deals with: soft-deleted 40 days ago, audited 100 days ago, or flagged as a
+    /// duplicate with no link.
+    /// </summary>
+    private async Task SeedWorkAsync(string job, Guid tenant)
     {
         await using var db = Context(tenant);
-        if (job == SoftDeleteCleanupJob.JobName)
+        switch (job)
         {
-            db.BodyWeights.Add(new BodyWeightEntity
-            {
-                Id = Guid.CreateVersion7(), TenantId = tenant, Mills = 0, WeightKg = 70, DeletedAt = DateTime.UtcNow.AddDays(-40),
-            });
-        }
-        else
-        {
-            db.ReadAccessLog.Add(new ReadAccessLogEntity
-            {
-                Id = Guid.CreateVersion7(), TenantId = tenant, Endpoint = "/test", StatusCode = 200, CreatedAt = DateTime.UtcNow.AddDays(-100),
-            });
+            case SoftDeleteCleanupJob.JobName:
+                db.BodyWeights.Add(new BodyWeightEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = tenant, Mills = 0, WeightKg = 70, DeletedAt = DateTime.UtcNow.AddDays(-40),
+                });
+                break;
+            case AuditRetentionJob.JobName:
+                db.ReadAccessLog.Add(new ReadAccessLogEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = tenant, Endpoint = "/test", StatusCode = 200, CreatedAt = DateTime.UtcNow.AddDays(-100),
+                });
+                break;
+            default:
+                var note = new NoteEntity { Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = DateTime.UtcNow, Text = "drift" };
+                db.Notes.Add(note);
+                await db.SaveChangesAsync();
+                await db.Database.ExecuteSqlAsync($"UPDATE notes SET is_duplicate = true WHERE id = {note.Id}");
+                return;
         }
 
         await db.SaveChangesAsync();
     }
 
-    private async Task<int> ExpiredCountAsync(string job, Guid tenant)
+    private async Task<int> PendingCountAsync(string job, Guid tenant)
     {
         await using var db = Context(tenant);
-        return job == SoftDeleteCleanupJob.JobName
-            ? await db.BodyWeights.IgnoreQueryFilters().CountAsync(b => b.TenantId == tenant)
-            : await db.ReadAccessLog.CountAsync();
+        return job switch
+        {
+            SoftDeleteCleanupJob.JobName => await db.BodyWeights.IgnoreQueryFilters().CountAsync(b => b.TenantId == tenant),
+            AuditRetentionJob.JobName => await db.ReadAccessLog.CountAsync(),
+            _ => await db.Notes.CountAsync(n => n.IsDuplicate),
+        };
     }
 
     private async Task<int> RunDueAsync(JobScheduler scheduler)
@@ -202,6 +218,7 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
         {
             SoftDeleteCleanupJob.JobName => new SoftDeleteCleanupJob(configuration, NullLogger<SoftDeleteCleanupJob>.Instance),
             AuditRetentionJob.JobName => new AuditRetentionJob(configuration, NullLogger<AuditRetentionJob>.Instance),
+            DuplicateFlagAuditJob.JobName => new DuplicateFlagAuditJob(NullLogger<DuplicateFlagAuditJob>.Instance),
             _ => new NotificationCleanupJob(NullLogger<NotificationCleanupJob>.Instance),
         };
 

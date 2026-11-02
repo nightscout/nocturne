@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -296,15 +298,7 @@ internal static class DuplicateGroupPrimaries
             var promote = chunk.Where(c => c.IsPrimary).Select(c => c.RecordId).ToArray();
             var demote = chunk.Where(c => !c.IsPrimary).Select(c => c.RecordId).ToArray();
 
-            if (ctx.Database.IsNpgsql())
-            {
-                await ctx.Database.ExecuteSqlAsync($"""
-                    SELECT id FROM linked_records
-                    WHERE tenant_id = {ctx.TenantId} AND record_type = {key} AND record_id = ANY ({ids})
-                    ORDER BY record_id
-                    FOR UPDATE
-                    """, ct);
-            }
+            await LockLinksAsync(ctx, key, ids, ct);
 
             if (promote.Length > 0)
                 await ctx.LinkedRecords
@@ -331,6 +325,52 @@ internal static class DuplicateGroupPrimaries
         RequireTransaction(ctx);
         foreach (var chunk in recordIds.Order().Chunk(SetPrimariesChunkSize))
             await DeriveFlagsAsync(ctx, recordType, chunk, ct);
+    }
+
+    /// <summary>
+    /// Sets the flag of each of <paramref name="recordIds"/> that disagrees with its link. The links
+    /// are locked first, as <see cref="SetPrimariesAsync"/> locks them, so a repair and a primary move
+    /// wait for each other and whichever runs second derives from what the first committed.
+    /// </summary>
+    /// <remarks>
+    /// The caller also holds the tenant's dedup write lock (<c>DeduplicationService.UnderWriteLockAsync</c>),
+    /// under which every link is inserted. Without it a repair could clear a flag whose non-primary
+    /// link another transaction is inserting: that transaction finds the flag already set and writes
+    /// nothing, and the repair does not see the uncommitted link.
+    /// </remarks>
+    /// <returns>The rows whose flag was rewritten.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open on a relational context.</exception>
+    public static async Task<int> RepairFlagsAsync(
+        NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
+    {
+        RequireTransaction(ctx);
+        var key = RecordTypeKeys.Key(recordType);
+        var repaired = 0;
+        foreach (var chunk in recordIds.Order().Chunk(SetPrimariesChunkSize))
+        {
+            await LockLinksAsync(ctx, key, chunk, ct);
+            repaired += await DeriveFlagsAsync(ctx, recordType, chunk, ct);
+        }
+
+        return repaired;
+    }
+
+    /// <summary>
+    /// Locks the links of <paramref name="recordIds"/> until the transaction ends, in record order, so
+    /// two lockers of overlapping sets queue rather than deadlock. SQLite takes no row locks; its write
+    /// transactions are serialised on the whole database.
+    /// </summary>
+    private static async Task LockLinksAsync(NocturneDbContext ctx, string key, Guid[] recordIds, CancellationToken ct)
+    {
+        if (!ctx.Database.IsNpgsql())
+            return;
+
+        await ctx.Database.ExecuteSqlAsync($"""
+            SELECT id FROM linked_records
+            WHERE tenant_id = {ctx.TenantId} AND record_type = {key} AND record_id = ANY ({recordIds})
+            ORDER BY record_id
+            FOR UPDATE
+            """, ct);
     }
 
     private static void RequireTransaction(NocturneDbContext ctx)
@@ -362,18 +402,143 @@ internal static class DuplicateGroupPrimaries
             _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, null),
         }, ct);
 
-    /// <remarks>Soft-deleted rows keep their links, so they keep their flag too.</remarks>
+    /// <remarks>
+    /// Soft-deleted rows keep their links, so they keep their flag too. The statement writes only rows
+    /// that disagree with their link, so negating the flag sets it to the link.
+    /// </remarks>
     private static Task<int> Derive<TEntity>(
         NocturneDbContext ctx, DbSet<TEntity> rows, RecordType recordType, Guid[] ids, CancellationToken ct)
+        where TEntity : class, IDuplicateFlagged =>
+        Disagreeing(ctx, rows.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]), recordType, ids)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.IsDuplicate, e => !e.IsDuplicate), ct);
+
+    /// <summary>
+    /// The rows of <paramref name="rows"/> among <paramref name="ids"/> whose
+    /// <see cref="IDuplicateFlagged.IsDuplicate"/> is not whether a non-primary link names them: the
+    /// flag's rule, stated once.
+    /// </summary>
+    /// <remarks>
+    /// The links are bounded by <paramref name="ids"/> as well as by the row. The planner may run the
+    /// <c>EXISTS</c> as one hashed lookup, and unbounded that reads every non-primary link of the
+    /// tenant for each statement.
+    /// </remarks>
+    private static IQueryable<TEntity> Disagreeing<TEntity>(
+        NocturneDbContext ctx, IQueryable<TEntity> rows, RecordType recordType, Guid[] ids)
         where TEntity : class, IDuplicateFlagged
     {
         var key = RecordTypeKeys.Key(recordType);
-        return rows.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
-            .Where(e => ids.Contains(e.Id)
-                && e.IsDuplicate != ctx.LinkedRecords.Any(lr => lr.RecordType == key && lr.RecordId == e.Id && !lr.IsPrimary))
-            .ExecuteUpdateAsync(s => s.SetProperty(
-                e => e.IsDuplicate,
-                e => ctx.LinkedRecords.Any(lr => lr.RecordType == key && lr.RecordId == e.Id && !lr.IsPrimary)), ct);
+        return rows.Where(e => ids.Contains(e.Id)
+            && e.IsDuplicate != ctx.LinkedRecords.Any(lr =>
+                lr.RecordType == key && ids.Contains(lr.RecordId) && lr.RecordId == e.Id && !lr.IsPrimary));
+    }
+
+    /// <summary>Rows <see cref="DisagreeingPagesAsync"/> reads per page.</summary>
+    internal const int AuditPageSize = 10_000;
+
+    /// <summary>
+    /// Every row of <paramref name="recordType"/>, soft-deleted included, whose flag disagrees with its
+    /// link, read <paramref name="pageSize"/> rows at a time and yielded a page at a time when the page
+    /// holds any. Each page is two statements in key order over a tenant-leading index, the page's keys
+    /// and then its disagreeing rows, each read whole, so no reader is open while the caller repairs a
+    /// page on the same context. A row whose key moves on during the walk is read again at its new
+    /// place. <c>sys_updated_at</c> is stamped from the API clock before the save commits, so a row
+    /// that commits after the walk has passed its stamp is missed by this walk and read by the next.
+    /// </summary>
+    /// <remarks>
+    /// The eight tables with a <c>sys_updated_at</c> are walked on their non-partial
+    /// <c>(tenant_id, sys_updated_at, id)</c> history index, and state spans, which have no such stamp,
+    /// on their <c>(tenant_id, id)</c> primary key. The flag's partial read indexes cannot serve the
+    /// walk: a wrongly flagged row is exactly one they leave out.
+    /// </remarks>
+    public static IAsyncEnumerable<DisagreeingRow[]> DisagreeingPagesAsync(
+        NocturneDbContext ctx, RecordType recordType, int pageSize, CancellationToken ct) => recordType switch
+    {
+        RecordType.SensorGlucose => ByUpdate(ctx, ctx.SensorGlucose, recordType, pageSize, ct),
+        RecordType.Bolus => ByUpdate(ctx, ctx.Boluses, recordType, pageSize, ct),
+        RecordType.CarbIntake => ByUpdate(ctx, ctx.CarbIntakes, recordType, pageSize, ct),
+        RecordType.BGCheck => ByUpdate(ctx, ctx.BGChecks, recordType, pageSize, ct),
+        RecordType.DeviceEvent => ByUpdate(ctx, ctx.DeviceEvents, recordType, pageSize, ct),
+        RecordType.Note => ByUpdate(ctx, ctx.Notes, recordType, pageSize, ct),
+        RecordType.BolusCalculation => ByUpdate(ctx, ctx.BolusCalculations, recordType, pageSize, ct),
+        RecordType.TempBasal => ByUpdate(ctx, ctx.TempBasals, recordType, pageSize, ct),
+        RecordType.StateSpan => ById(ctx, ctx.StateSpans, recordType, pageSize, ct),
+        _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, null),
+    };
+
+    private abstract record PageKey(Guid Id);
+
+    private sealed record UpdateKey(DateTime At, Guid Id) : PageKey(Id);
+
+    private sealed record IdKey(Guid Id) : PageKey(Id);
+
+    private static IAsyncEnumerable<DisagreeingRow[]> ByUpdate<TEntity>(
+        NocturneDbContext ctx, DbSet<TEntity> set, RecordType recordType, int pageSize, CancellationToken ct)
+        where TEntity : class, IDuplicateFlagged, ISystemTimestamped
+    {
+        var rows = set.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]).AsNoTracking();
+        return PagesAsync<TEntity, UpdateKey>(
+            ctx, recordType, pageSize,
+            after => (after is null
+                    ? rows
+                    // The redundant lower bound is what the planner ranges the index on; the
+                    // disjunction alone is not recognised as a range.
+                    : rows.Where(e => e.SysUpdatedAt >= after.At
+                        && (e.SysUpdatedAt > after.At || e.Id.CompareTo(after.Id) > 0)))
+                .OrderBy(e => e.SysUpdatedAt).ThenBy(e => e.Id),
+            (page, last) => page.Where(e => e.SysUpdatedAt <= last.At
+                && (e.SysUpdatedAt < last.At || e.Id.CompareTo(last.Id) <= 0)),
+            e => new UpdateKey(e.SysUpdatedAt, e.Id),
+            ct);
+    }
+
+    private static IAsyncEnumerable<DisagreeingRow[]> ById<TEntity>(
+        NocturneDbContext ctx, DbSet<TEntity> set, RecordType recordType, int pageSize, CancellationToken ct)
+        where TEntity : class, IDuplicateFlagged
+    {
+        var rows = set.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]).AsNoTracking();
+        return PagesAsync<TEntity, IdKey>(
+            ctx, recordType, pageSize,
+            after => (after is null ? rows : rows.Where(e => e.Id.CompareTo(after.Id) > 0)).OrderBy(e => e.Id),
+            (page, last) => page.Where(e => e.Id.CompareTo(last.Id) <= 0),
+            e => new IdKey(e.Id),
+            ct);
+    }
+
+    /// <summary>
+    /// The walk of <see cref="DisagreeingPagesAsync"/> over one key: <c>after</c> gives the rows
+    /// strictly after a key (every row for null) in key order, <c>upTo</c> narrows rows to those at or
+    /// before a key, so a page's second statement ranges the same index entries as its first, and
+    /// <c>keyOf</c> reads a row's key.
+    /// </summary>
+    private static async IAsyncEnumerable<DisagreeingRow[]> PagesAsync<TEntity, TKey>(
+        NocturneDbContext ctx,
+        RecordType recordType,
+        int pageSize,
+        Func<TKey?, IQueryable<TEntity>> after,
+        Func<IQueryable<TEntity>, TKey, IQueryable<TEntity>> upTo,
+        Expression<Func<TEntity, TKey>> keyOf,
+        [EnumeratorCancellation] CancellationToken ct)
+        where TEntity : class, IDuplicateFlagged
+        where TKey : PageKey
+    {
+        TKey? cursor = null;
+        while (true)
+        {
+            var keys = await after(cursor).Take(pageSize).Select(keyOf).ToListAsync(ct);
+            if (keys.Count == 0)
+                yield break;
+
+            var last = keys[^1];
+            var disagreeing = await Disagreeing(ctx, upTo(after(cursor), last), recordType, [.. keys.Select(k => k.Id)])
+                .Select(e => new DisagreeingRow(e.Id, e.IsDuplicate))
+                .ToArrayAsync(ct);
+            if (disagreeing.Length > 0)
+                yield return disagreeing;
+
+            if (keys.Count < pageSize)
+                yield break;
+            cursor = last;
+        }
     }
 
     private static Task<HashSet<Guid>> LiveIdsAsync(
@@ -437,3 +602,6 @@ internal static class DuplicateGroupPrimaries
 
 /// <summary>Whether a record's link is to be its duplicate group's primary.</summary>
 internal readonly record struct PrimaryChange(Guid RecordId, bool IsPrimary);
+
+/// <summary>A row whose flag disagrees with its link, and the flag it holds.</summary>
+internal readonly record struct DisagreeingRow(Guid Id, bool IsDuplicate);

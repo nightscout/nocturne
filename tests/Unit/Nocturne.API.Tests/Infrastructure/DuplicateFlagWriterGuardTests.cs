@@ -40,7 +40,7 @@ public partial class DuplicateFlagWriterGuardTests
         [$"{Data}/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.SetPrimariesAsync ({Primary})"] =
             "moves primaries, then derives the flags from the links",
         [$"{Data}/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.Derive ({Flag})"] =
-            "the flag statement: each flag from its record's link",
+            "the flag statement: each flag that disagrees with its record's link, set to the link, for a primary move, a link insert or the drift audit's repair",
         [$"{Data}/Services/DeduplicationService.cs: DeduplicationService.LinkChunkAsync ({Add})"] =
             "inserts links, then flags the new non-primary ones in the same transaction",
         [$"{Data}/Services/DeduplicationService.cs: DeduplicationService.Phase ({Add})"] =
