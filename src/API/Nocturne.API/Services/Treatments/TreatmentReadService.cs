@@ -215,45 +215,50 @@ internal class TreatmentReadService : ITreatmentStore
 
         var results = new List<Treatment>(treatments.Count);
         var rejected = Rejections(treatments, decomposition);
-        for (var i = 0; i < treatments.Count; i++)
+        var accepted = Enumerable.Range(0, treatments.Count).Where(i => !decomposition.Rejected.ContainsKey(i)).ToList();
+        IReadOnlyList<StoredTreatment> created;
+        try
         {
-            var treatment = treatments[i];
-            if (decomposition.Rejected.ContainsKey(i))
-                continue;
-
-            var of = decomposition.Of(i);
-            StoredTreatment created;
-            try
-            {
-                created = await _store.ToCreatedAsync(treatment, of, ct);
-            }
-            catch (Exception ex) when (Stops(ex))
-            {
-                _logger.LogError(ex, "Failed to read back treatment {Id}; ending the batch", treatment.Id);
-                _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
-                List<Treatment> unread = [treatment];
-                if (Wrote(of))
-                    stored?.Add(new StoredTreatment.Unnamed(treatment));
-                for (var j = i + 1; j < treatments.Count; j++)
-                {
-                    var later = decomposition.Of(j);
-                    if (later.StoredRecords.Any())
-                        unread.Add(treatments[j]);
-                    if (Wrote(later))
-                        stored?.Add(new StoredTreatment.Unnamed(treatments[j]));
-                }
-                throw new TreatmentBatchFailedException(
-                    new BulkWrite<Treatment>([.. results, .. unread], decomposition.SkippedDeleted) { Rejected = rejected },
-                    i, treatments.Count, failedOneStored: true, ex);
-            }
-
-            results.Add(created.Created);
-            if (Wrote(of))
-                stored?.Add(created);
+            created = await _store.ToCreatedAsync([.. accepted.Select(i => (treatments[i], decomposition.Of(i)))], ct);
         }
+        catch (Exception ex) when (Stops(ex))
+        {
+            var failedAt = accepted.First(i => LegacyTreatmentStore.NeedsRead(decomposition.Of(i)));
+            _logger.LogError(ex, "Failed to read back treatment {Id}; ending the batch", treatments[failedAt].Id);
+            _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
+            accepted = [.. accepted.TakeWhile(i => i < failedAt)];
+            created = await _store.ToCreatedAsync([.. accepted.Select(i => (treatments[i], decomposition.Of(i)))], ct);
+            Record();
+            List<Treatment> unread = [treatments[failedAt]];
+            if (Wrote(decomposition.Of(failedAt)))
+                stored?.Add(new StoredTreatment.Unnamed(treatments[failedAt]));
+            for (var j = failedAt + 1; j < treatments.Count; j++)
+            {
+                var later = decomposition.Of(j);
+                if (later.StoredRecords.Any())
+                    unread.Add(treatments[j]);
+                if (Wrote(later))
+                    stored?.Add(new StoredTreatment.Unnamed(treatments[j]));
+            }
+            throw new TreatmentBatchFailedException(
+                new BulkWrite<Treatment>([.. results, .. unread], decomposition.SkippedDeleted) { Rejected = rejected },
+                failedAt, treatments.Count, failedOneStored: true, ex);
+        }
+
+        Record();
 
         _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
         return new BulkWrite<Treatment>(results, decomposition.SkippedDeleted) { Rejected = rejected };
+
+        void Record()
+        {
+            for (var k = 0; k < accepted.Count; k++)
+            {
+                results.Add(created[k].Created);
+                if (Wrote(decomposition.Of(accepted[k])))
+                    stored?.Add(created[k]);
+            }
+        }
 
         TreatmentBatchFailedException Stopped(Exception ex, TreatmentDecomposition committed)
         {
@@ -290,21 +295,21 @@ internal class TreatmentReadService : ITreatmentStore
     private async Task ReportCommittedAsync(
         IReadOnlyList<Treatment> treatments, TreatmentDecomposition decomposition, ICollection<StoredTreatment> stored)
     {
-        for (var i = 0; i < Math.Min(treatments.Count, decomposition.Groups.Count); i++)
+        var wrote = Enumerable.Range(0, Math.Min(treatments.Count, decomposition.Groups.Count))
+            .Where(i => Wrote(decomposition.Of(i)))
+            .Select(i => (treatments[i], decomposition.Of(i)))
+            .ToList();
+        try
         {
-            var of = decomposition.Of(i);
-            if (!Wrote(of))
-                continue;
-            var treatment = treatments[i];
-            try
-            {
-                stored.Add(await _store.ToCreatedAsync(treatment, of, CancellationToken.None));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Stored treatment {Id} could not be read back", treatment.Id);
+            foreach (var created in await _store.ToCreatedAsync(wrote, CancellationToken.None))
+                stored.Add(created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex, "Stored treatments {Ids} could not be read back", wrote.Select(w => w.Item1.Id));
+            foreach (var (treatment, _) in wrote)
                 stored.Add(new StoredTreatment.Unnamed(treatment));
-            }
         }
     }
 

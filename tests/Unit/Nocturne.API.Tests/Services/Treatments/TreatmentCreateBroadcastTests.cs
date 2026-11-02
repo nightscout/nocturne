@@ -49,7 +49,7 @@ public class TreatmentCreateBroadcastTests
         _carbs.AnswersServedIdsPerKey<ICarbIntakeRepository, CarbIntake>();
         _notes.AnswersServedIdsPerKey<INoteRepository, Note>();
         _activations.AnswersServedIdsPerKey<IProfileActivationRepository, ProfileActivation>();
-        _projection.AnswersSpanIdsPerId();
+        _projection.AnswersSpanIdsPerId().AnswersProjectedSpansPerId();
         LegacyTreatmentRepositoryMockExtensions.AnswersCorrelationIdsPerId(_boluses, _carbs);
         var store = new TreatmentReadService(
             _projection.Object,

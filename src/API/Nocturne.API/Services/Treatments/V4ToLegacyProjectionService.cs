@@ -266,23 +266,47 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         return await FindStateSpanAsync(db, id, ct) is { } row ? ((StateSpanEntity)row.Record).OriginalId : null;
     }
 
-    /// <summary>Span ids <see cref="GetStateSpanTreatmentIdsAsync"/> reads in one statement.</summary>
+    /// <summary>
+    /// Span ids <see cref="GetStateSpanTreatmentIdsAsync"/> and <see cref="GetProjectedStateSpanTreatmentsAsync"/>
+    /// read in one statement.
+    /// </summary>
     internal const int SpanIdsPerStatement = 50;
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, string>> GetStateSpanTreatmentIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return new Dictionary<string, string>();
+
+        await using var db = await _contexts.CreateAsync(ct);
+        var found = await FindStateSpansAsync(db, ids, ct);
+        return found.ToDictionary(f => f.Key, f => ((StateSpanEntity)f.Value.Record).OriginalId!, StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, Treatment>> GetProjectedStateSpanTreatmentsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return new Dictionary<string, Treatment>();
+
+        await using var db = await _contexts.CreateAsync(ct);
+        var found = await FindStateSpansAsync(db, ids, ct);
+        var projected = (await AssembleAsync(db, [.. found.Values.DistinctBy(RecordId)], ct))
+            .ToDictionary(t => t.Id!, StringComparer.Ordinal);
+        return found.ToDictionary(f => f.Key, f => projected[RecordId(f.Value).ToString()], StringComparer.Ordinal);
+    }
+
     /// <remarks>
     /// Every statement matches exactly <see cref="SpanIdsPerStatement"/> ids, the last repeated to fill
     /// it, through <see cref="SpanIdBounds"/>, so every read has one shape whatever ids it is asked for.
     /// </remarks>
-    public async Task<IReadOnlyDictionary<string, string>> GetStateSpanTreatmentIdsAsync(
-        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    private static async Task<Dictionary<string, FetchedRecord>> FindStateSpansAsync(
+        NocturneDbContext db, IReadOnlyCollection<string> ids, CancellationToken ct)
     {
-        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        var found = new Dictionary<string, FetchedRecord>(StringComparer.Ordinal);
         var unresolved = ids.Distinct(StringComparer.Ordinal).ToList();
-        if (unresolved.Count == 0)
-            return keys;
-
-        await using var db = await _contexts.CreateAsync(ct);
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
             if (unresolved.Count == 0)
@@ -303,15 +327,15 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                     .OrderBy(s => s.OriginalId == id ? 0 : 1)
                     .ThenBy(s => s.Id.ToString("N"), StringComparer.Ordinal)
                     .FirstOrDefault();
-                if (span?.OriginalId is { } key)
+                if (span is not null)
                 {
-                    keys[id] = key;
+                    found[id] = table.Fetched(span);
                     unresolved.Remove(id);
                 }
             }
         }
 
-        return keys;
+        return found;
     }
 
     /// <summary>
