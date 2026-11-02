@@ -118,6 +118,8 @@ internal static class DuplicateGroupPrimaries
         if (canonicals.Length == 0)
             return [];
 
+        // Before the headless test, so it and the repick read one committed state (<see cref="LockGroupsAsync"/>).
+        await LockGroupsAsync(ctx, recordType, canonicals, ct);
         var primaries = await ctx.LinkedRecords.AsNoTracking()
             .Where(lr => lr.RecordType == key && lr.IsPrimary && canonicals.Contains(lr.CanonicalId))
             .Select(lr => new { lr.CanonicalId, lr.RecordId })
@@ -128,7 +130,7 @@ internal static class DuplicateGroupPrimaries
         if (headless.Length == 0)
             return [];
 
-        var promoted = await RepickAsync(ctx, recordType, headless, ct);
+        var promoted = await RepickLockedAsync(ctx, recordType, headless, ct);
         await TouchAsync(ctx, recordType, promoted, touchAt, ct);
         return promoted;
     }
@@ -226,6 +228,15 @@ internal static class DuplicateGroupPrimaries
     /// </summary>
     /// <returns>The ids of the live records made primary.</returns>
     public static async Task<IReadOnlyList<Guid>> RepickAsync(
+        NocturneDbContext ctx, RecordType recordType, Guid[] canonicalIds, CancellationToken ct)
+    {
+        // Before the read, so a copy deleted meanwhile is not promoted (<see cref="LockGroupsAsync"/>).
+        await LockGroupsAsync(ctx, recordType, canonicalIds, ct);
+        return await RepickLockedAsync(ctx, recordType, canonicalIds, ct);
+    }
+
+    /// <summary><see cref="RepickAsync"/> of groups whose links this transaction has locked.</summary>
+    private static async Task<IReadOnlyList<Guid>> RepickLockedAsync(
         NocturneDbContext ctx, RecordType recordType, Guid[] canonicalIds, CancellationToken ct)
     {
         var promotedLive = new List<Guid>();
@@ -384,9 +395,10 @@ internal static class DuplicateGroupPrimaries
     /// <summary>
     /// Locks every link of the groups <paramref name="canonicalIds"/> until the transaction ends, in
     /// record order, after the stream lock for glucose: the order <see cref="SetPrimariesAsync"/> takes
-    /// them in. A merge takes them before it reads the groups, so a primary another transaction moves
-    /// in one of them is committed before the read or waits for the merge, and the merge never leaves
-    /// a group with two primaries or none.
+    /// them in. A merge and a repick take them before they read the groups, so a primary another
+    /// transaction moves in one of them, or a copy a delete takes under <see cref="LockGroupsOfAsync"/>,
+    /// is committed before the read or waits for it: the merge never leaves a group with two primaries
+    /// or none, and the repick never promotes such a copy.
     /// </summary>
     public static async Task LockGroupsAsync(
         NocturneDbContext ctx, RecordType recordType, Guid[] canonicalIds, CancellationToken ct)
@@ -621,28 +633,37 @@ internal static class DuplicateGroupPrimaries
         }
     }
 
+    /// <summary>
+    /// Which of <paramref name="ids"/> are live, read with the history clamp lifted
+    /// (<see cref="HistoryClampLiftExtensions"/>): a copy older than a clamped caller's window is still
+    /// a survivor the repick may promote.
+    /// </summary>
     private static Task<HashSet<Guid>> LiveIdsAsync(
-        NocturneDbContext ctx, RecordType recordType, Guid[] ids, CancellationToken ct) => recordType switch
-    {
-        RecordType.SensorGlucose => Live(ctx.SensorGlucose, ids, ct),
-        RecordType.Bolus => Live(ctx.Boluses, ids, ct),
-        RecordType.CarbIntake => Live(ctx.CarbIntakes, ids, ct),
-        RecordType.BGCheck => Live(ctx.BGChecks, ids, ct),
-        RecordType.DeviceEvent => Live(ctx.DeviceEvents, ids, ct),
-        RecordType.Note => Live(ctx.Notes, ids, ct),
-        RecordType.BolusCalculation => Live(ctx.BolusCalculations, ids, ct),
-        RecordType.TempBasal => Live(ctx.TempBasals, ids, ct),
-        RecordType.StateSpan => Live(ctx.StateSpans, ids, ct),
-        _ => Task.FromResult(new HashSet<Guid>()),
-    };
+        NocturneDbContext ctx, RecordType recordType, Guid[] ids, CancellationToken ct) =>
+        ids.Length == 0 ? Task.FromResult(new HashSet<Guid>()) : ctx.WriteWithHistoryClampLiftedAsync(token => recordType switch
+        {
+            RecordType.SensorGlucose => Live(ctx.SensorGlucose, ids, token),
+            RecordType.Bolus => Live(ctx.Boluses, ids, token),
+            RecordType.CarbIntake => Live(ctx.CarbIntakes, ids, token),
+            RecordType.BGCheck => Live(ctx.BGChecks, ids, token),
+            RecordType.DeviceEvent => Live(ctx.DeviceEvents, ids, token),
+            RecordType.Note => Live(ctx.Notes, ids, token),
+            RecordType.BolusCalculation => Live(ctx.BolusCalculations, ids, token),
+            RecordType.TempBasal => Live(ctx.TempBasals, ids, token),
+            RecordType.StateSpan => Live(ctx.StateSpans, ids, token),
+            _ => Task.FromResult(new HashSet<Guid>()),
+        }, ct);
 
-    /// <summary>How each live state span among <paramref name="ids"/> ended, keyed by id.</summary>
+    /// <summary>
+    /// How each live state span among <paramref name="ids"/> ended, keyed by id, read with the history
+    /// clamp lifted as <see cref="LiveIdsAsync"/> is.
+    /// </summary>
     private static async Task<Dictionary<Guid, DuplicateMatching.SpanEnd>> LiveSpanEndsAsync(
         NocturneDbContext ctx, Guid[] ids, CancellationToken ct) =>
-        (await ctx.StateSpans.AsNoTracking()
+        (await ctx.WriteWithHistoryClampLiftedAsync(token => ctx.StateSpans.AsNoTracking()
             .Where(s => s.DeletedAt == null && ids.Contains(s.Id))
             .Select(s => new { s.Id, s.SupersededById, s.EndTimestamp })
-            .ToListAsync(ct))
+            .ToListAsync(token), ct))
         .ToDictionary(s => s.Id, s => new DuplicateMatching.SpanEnd(s.SupersededById, s.EndTimestamp));
 
     private static async Task<HashSet<Guid>> Live<TEntity>(IQueryable<TEntity> rows, Guid[] ids, CancellationToken ct)
@@ -650,33 +671,40 @@ internal static class DuplicateGroupPrimaries
         (await rows.AsNoTracking().Where(e => e.DeletedAt == null && ids.Contains(e.Id)).Select(e => e.Id).ToListAsync(ct))
         .ToHashSet();
 
+    /// <summary>
+    /// Stamps the promoted copies with the history clamp lifted (<see cref="HistoryClampLiftExtensions"/>):
+    /// a copy promoted from outside a clamped caller's window must still reach v3 history clients.
+    /// </summary>
     /// <remarks>State spans carry no <c>SysUpdatedAt</c> and no v3 history, so they are not touched.</remarks>
     private static Task TouchAsync(
         NocturneDbContext ctx, RecordType recordType, IReadOnlyList<Guid> ids, DateTime touchAt, CancellationToken ct) =>
-        ids.Count == 0 ? Task.CompletedTask : recordType switch
+        ids.Count == 0 || recordType == RecordType.StateSpan ? Task.CompletedTask : ctx.WriteWithHistoryClampLiftedAsync(token => recordType switch
         {
-            RecordType.SensorGlucose => Touch(ctx.SensorGlucose, ids, touchAt, ct),
-            RecordType.Bolus => Touch(ctx.Boluses, ids, touchAt, ct),
-            RecordType.CarbIntake => Touch(ctx.CarbIntakes, ids, touchAt, ct),
-            RecordType.BGCheck => Touch(ctx.BGChecks, ids, touchAt, ct),
-            RecordType.DeviceEvent => Touch(ctx.DeviceEvents, ids, touchAt, ct),
-            RecordType.Note => Touch(ctx.Notes, ids, touchAt, ct),
-            RecordType.BolusCalculation => Touch(ctx.BolusCalculations, ids, touchAt, ct),
-            RecordType.TempBasal => Touch(ctx.TempBasals, ids, touchAt, ct),
-            _ => Task.CompletedTask,
-        };
+            RecordType.SensorGlucose => Touch(ctx.SensorGlucose, ids, touchAt, token),
+            RecordType.Bolus => Touch(ctx.Boluses, ids, touchAt, token),
+            RecordType.CarbIntake => Touch(ctx.CarbIntakes, ids, touchAt, token),
+            RecordType.BGCheck => Touch(ctx.BGChecks, ids, touchAt, token),
+            RecordType.DeviceEvent => Touch(ctx.DeviceEvents, ids, touchAt, token),
+            RecordType.Note => Touch(ctx.Notes, ids, touchAt, token),
+            RecordType.BolusCalculation => Touch(ctx.BolusCalculations, ids, touchAt, token),
+            RecordType.TempBasal => Touch(ctx.TempBasals, ids, touchAt, token),
+            _ => Task.FromResult(0),
+        }, ct);
 
-    private static async Task Touch<TEntity>(
+    private static async Task<int> Touch<TEntity>(
         IQueryable<TEntity> rows, IReadOnlyList<Guid> ids, DateTime touchAt, CancellationToken ct)
         where TEntity : class, IIdentified, ISystemTimestamped
     {
+        var touched = 0;
         foreach (var (group, index) in ids.Order().Chunk(NocturneDbContext.SystemTimestampGroupSize).Select((g, i) => (g, i)))
         {
             var stamp = touchAt.AddMilliseconds(index);
-            await rows.Where(e => group.Contains(e.Id))
+            touched += await rows.Where(e => group.Contains(e.Id))
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(e => EF.Property<DateTime>(e, nameof(ISystemTimestamped.SysUpdatedAt)), stamp), ct);
         }
+
+        return touched;
     }
 }
 

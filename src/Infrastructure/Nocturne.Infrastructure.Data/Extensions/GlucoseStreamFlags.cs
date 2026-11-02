@@ -28,7 +28,7 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// stream lock, then readings and links. A write, the dedup link insert and merge, the audit repair
 /// and the history walk take the stream lock before their first write to a reading or a glucose
 /// link. A soft delete or a restore takes it only once its own rows are written (at its repoint's
-/// first link change or its recompute), so a delete stalled on a row never holds up the tenant's
+/// lock on the links or its recompute), so a delete stalled on a row never holds up the tenant's
 /// ingest; one too wide to recompute inline takes it never (<see cref="DeferIfWideAsync"/>). That
 /// leaves one cycle: a stream-lock holder (a write, the walk page, a merge's or link insert's
 /// derive, the audit repair) updates a reading a concurrent delete or restore holds, or links its

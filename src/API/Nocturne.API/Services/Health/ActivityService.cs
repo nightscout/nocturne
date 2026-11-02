@@ -303,30 +303,24 @@ public class ActivityService : IActivityService
             // Only a user tombstone is skipped here. Any other failure of the sensor and sleep writes
             // reaches the outer handler, which logs and rethrows it, so the uploader gets an error and
             // does not advance its sync marker past a record never stored. A re-send that changed
-            // nothing is answered as stored but not announced.
+            // nothing is answered as stored but not announced. A sleep activity is answered and
+            // announced as the session it was stored as, and always counts as written.
             var announced = new List<Activity>();
-            if (sensorDataActivities.Count > 0)
+            if (sensorDataActivities.Count + sleepActivities.Count > 0)
             {
-                var decomposed = await _activityDecomposer.DecomposeBatchAsync(sensorDataActivities, WriteOrigin.Live, cancellationToken);
+                // Sensor activities come first, so their indexes in the batch are their own.
+                var decomposed = await _activityDecomposer.DecomposeBatchAsync(
+                    [.. sensorDataActivities, .. sleepActivities], WriteOrigin.Live, cancellationToken);
                 var wrote = decomposed.Wrote;
+                var sleepGroups = decomposed.Groups.Skip(sensorDataActivities.Count).ToHashSet();
+                var storedSleep = decomposed.CreatedRecords
+                    .Where(r => decomposed.GroupOf(r) is { } group && sleepGroups.Contains(group))
+                    .Cast<Activity>()
+                    .ToList();
                 results.AddRange(sensorDataActivities.Where((_, index) => !decomposed.IsDeletedByUser(index)));
+                results.AddRange(storedSleep);
                 announced.AddRange(sensorDataActivities.Where((_, index) => wrote[index]));
-            }
-
-            foreach (var sleepActivity in sleepActivities)
-            {
-                try
-                {
-                    var session = ActivityStateSpanMapper.ToSleepSession(sleepActivity);
-                    var created = ActivityStateSpanMapper.SleepSessionToActivity(
-                        await _sleepService.UpsertSessionAsync(session, cancellationToken));
-                    results.Add(created);
-                    announced.Add(created);
-                }
-                catch (RecreationBlockedException)
-                {
-                    _logger.LogDebug("Skipped sleep activity {Id}: the user deleted it", sleepActivity.Id);
-                }
+                announced.AddRange(storedSleep);
             }
 
             // Process regular activities through existing StateSpan path
@@ -351,9 +345,10 @@ public class ActivityService : IActivityService
             }
 
             _logger.LogDebug(
-                "Successfully created {Count} activity records ({SensorCount} sensor, {RegularCount} regular)",
+                "Successfully created {Count} activity records ({SensorCount} sensor, {SleepCount} sleep, {RegularCount} regular)",
                 results.Count,
                 sensorDataActivities.Count,
+                sleepActivities.Count,
                 regularActivities.Count
             );
             return results;

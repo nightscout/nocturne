@@ -30,10 +30,11 @@ namespace Nocturne.API.Tests.Services.V4;
 /// </summary>
 /// <remarks>
 /// A mock-level count cannot see a store's own statements; the set-based reads are capped per call
-/// against PostgreSQL in <c>TreatmentBatchReadsTests</c>. Two writes are one per record, and no batch
-/// here makes them: the drops of a reclassified treatment's spans, since a resend that changes a
-/// treatment's kind is rare; and keying a meal's carbs stored with no legacy id to its bolus, which
-/// only a meal entered in Nocturne and backfilled needs.
+/// against PostgreSQL in <c>TreatmentBatchReadsTests</c>. The drops of a reclassified treatment's
+/// spans run on the decomposer's own context, so their statements are counted in
+/// <see cref="TreatmentDecomposerReclassificationTests"/>. One write is one per record, and no batch
+/// here makes it: keying a meal's carbs stored with no legacy id to its bolus, which only a meal
+/// entered in Nocturne and backfilled needs.
 /// </remarks>
 public class TreatmentDecomposerFixedQueryTests : IDisposable
 {

@@ -1,11 +1,15 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -13,6 +17,7 @@ public class ActivityDecomposerBatchTests : IDisposable
 {
     private readonly NocturneDbContext _context;
     private readonly Mock<IStateSpanRepository> _stateSpanRepoMock;
+    private readonly Mock<ISleepService> _sleepServiceMock;
     private readonly ActivityDecomposer _decomposer;
 
     public ActivityDecomposerBatchTests()
@@ -26,9 +31,19 @@ public class ActivityDecomposerBatchTests : IDisposable
                 It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<StateSpan> spans, CancellationToken _) => spans);
 
+        _sleepServiceMock = new Mock<ISleepService>();
+        _sleepServiceMock
+            .Setup(x => x.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SleepSession session, CancellationToken _) =>
+            {
+                session.Id = Guid.CreateVersion7().ToString();
+                return session;
+            });
+
         _decomposer = new ActivityDecomposer(
             _context.AsFactory(),
             _stateSpanRepoMock.Object,
+            _sleepServiceMock.Object,
             TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
     }
 
@@ -207,6 +222,60 @@ public class ActivityDecomposerBatchTests : IDisposable
 
         // All records produced in one decompose share a single non-empty correlation id
         result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
+    }
+
+    [Theory]
+    [InlineData("sleep", SleepSessionType.Overnight)]
+    [InlineData("nap", SleepSessionType.Nap)]
+    public async Task DecomposeBatchAsync_RoutesSleepToTheSleepServiceAsASession(string type, SleepSessionType expected)
+    {
+        var activity = CreateRegularActivity("sl1", type);
+        activity.Duration = 420;
+
+        var result = await _decomposer.DecomposeBatchAsync([activity], WriteOrigin.Backfill);
+
+        _sleepServiceMock.Verify(
+            x => x.UpsertSessionAsync(
+                It.Is<SleepSession>(s => s.OriginalId == "sl1" && s.Type == expected
+                    && s.Source == ActivityStateSpanMapper.SleepSessionSource),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _stateSpanRepoMock.Verify(
+            x => x.CreateActivitiesAsStateSpansAsync(
+                It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        var stored = result.CreatedRecords.Should().ContainSingle().Which.Should().BeOfType<Activity>().Subject;
+        stored.Type.Should().Be(type);
+        stored.Mills.Should().Be(activity.Mills);
+        result.Wrote.Should().Equal(true);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_SleepTheUserDeleted_IsSkippedAndTheRestOfTheBatchIsStored()
+    {
+        _sleepServiceMock
+            .Setup(x => x.UpsertSessionAsync(It.Is<SleepSession>(s => s.OriginalId == "deleted"), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RecreationBlockedException("sleep session", "original id 'deleted'"));
+        var activities = new List<Activity>
+        {
+            CreateHeartRateActivity("hr1", 72),
+            CreateRegularActivity("deleted", "sleep"),
+            CreateRegularActivity("kept", "sleep"),
+            CreateRegularActivity("ex1", "exercise"),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Backfill);
+
+        result.IsDeletedByUser(1).Should().BeTrue();
+        result.IsDeletedByUser(2).Should().BeFalse();
+        result.SkippedDeleted.Should().Be(1);
+        result.Wrote.Should().Equal(true, false, true, false);
+        result.CreatedRecords.OfType<Activity>().Select(a => a.Type).Should().Equal("sleep", "exercise");
+        _context.HeartRates.Should().ContainSingle();
+        _stateSpanRepoMock.Verify(
+            x => x.CreateActivitiesAsStateSpansAsync(
+                It.Is<IEnumerable<StateSpan>>(spans => spans.Count() == 1), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     #region NormalizeMills

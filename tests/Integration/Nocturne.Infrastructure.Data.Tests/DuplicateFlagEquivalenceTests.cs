@@ -107,17 +107,130 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         await IngestAsync(tenant, RecordType.StateSpan, [hidden, open]);
         (await FlaggedAsync(tenant, "state_spans")).Should().Equal(hidden.Id);
 
-        await using (var scope = Scope(tenant))
-        {
-            scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
-            await using var db = await Factory(scope).CreateAsync();
-            await db.AuditedSoftDeleteAsync(
-                db.StateSpans.Where(s => s.Id == open.Id), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
-        }
+        await ClampedDeleteAsync(tenant, RecordType.StateSpan, open.Id);
 
         (await FlaggedAsync(tenant, "state_spans")).Should().Equal(open.Id);
         (await MismatchesAsync(tenant)).Should().BeEmpty();
     }
+
+    /// <summary>
+    /// A history-clamped member deletes the primary of a group whose one live copy is older than its
+    /// window. A deleted copy sorts first, so a repick that reads the old copy as dead makes the deleted
+    /// one primary and the group shows nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(RecordType.CarbIntake)]
+    [InlineData(RecordType.StateSpan)]
+    public async Task AClampedCallersDeletePromotesALiveCopyOutsideItsWindow(RecordType type)
+    {
+        var tenant = await SeedTenantAsync();
+        var (primary, old) = await GroupWithACopyOutsideTheWindowAsync(tenant, type);
+
+        await ClampedDeleteAsync(tenant, type, primary);
+
+        (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
+            .Should().Equal(old.ToString());
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AClampedCallersDeleteStampsAPromotedCopyOutsideItsWindow()
+    {
+        var tenant = await SeedTenantAsync();
+        var (primary, old) = await GroupWithACopyOutsideTheWindowAsync(tenant, RecordType.CarbIntake);
+        var before = await CarbUpdatedAtAsync(tenant, old);
+
+        await ClampedDeleteAsync(tenant, RecordType.CarbIntake, primary);
+
+        (await CarbUpdatedAtAsync(tenant, old)).Should().BeAfter(before, "a v3 history client is sent the promoted copy");
+    }
+
+    [Fact]
+    public async Task AClampedUploadLinksToADuplicateOutsideItsWindow()
+    {
+        var tenant = await SeedTenantAsync();
+        var at = DateTime.UtcNow.AddDays(-3);
+        await IngestAsync(tenant, RecordType.CarbIntake, [Carb(tenant, "mylife-connector", at)]);
+        var upload = Carb(tenant, "glooko-connector", at.AddSeconds(10));
+
+        (await IngestAsync(tenant, RecordType.CarbIntake, [upload], clamped: true)).DuplicateGroups.Should().Be(1);
+
+        (await FlaggedAsync(tenant, "carb_intakes")).Should().Equal(upload.Id);
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AClampedUploadLinksToAPrunedSingletonOutsideItsWindow()
+    {
+        var tenant = await SeedTenantAsync();
+        var at = DateTime.UtcNow.AddDays(-3);
+        await IngestAsync(tenant, RecordType.CarbIntake, [Carb(tenant, "mylife-connector", at)]);
+        await ExecuteAsync(tenant, """
+            UPDATE carb_intakes SET sys_created_at = sys_created_at - interval '2 days';
+            DELETE FROM linked_records;
+            """);
+        var upload = Carb(tenant, "glooko-connector", at.AddSeconds(10));
+
+        (await IngestAsync(tenant, RecordType.CarbIntake, [upload], clamped: true)).DuplicateGroups.Should().Be(1);
+
+        (await FlaggedAsync(tenant, "carb_intakes")).Should().Equal(upload.Id);
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A three-copy group of one event: an in-window primary, a copy outside the window, and a deleted
+    /// copy that sorts first.
+    /// </summary>
+    private async Task<(Guid Primary, Guid Old)> GroupWithACopyOutsideTheWindowAsync(Guid tenant, RecordType type)
+    {
+        if (type == RecordType.StateSpan)
+        {
+            var start = DateTime.UtcNow.AddDays(-4);
+            var ended = DateTime.UtcNow.AddDays(-2);
+            var primarySpan = Span(tenant, start, end: null, "mylife-connector");
+            var deletedSpan = Span(tenant, start.AddSeconds(-5), ended, "glooko-connector");
+            var oldSpan = Span(tenant, start.AddSeconds(5), ended, "nightscout-connector");
+            await IngestAsync(tenant, type, [primarySpan, deletedSpan, oldSpan]);
+            await ExecuteAsync(tenant, $"UPDATE state_spans SET deleted_at = now() WHERE id = '{deletedSpan.Id}'");
+            return (primarySpan.Id, oldSpan.Id);
+        }
+
+        var at = DateTime.UtcNow.AddHours(-1);
+        var primary = Carb(tenant, "mylife-connector", at);
+        var deleted = Carb(tenant, "glooko-connector", at.AddSeconds(-5));
+        var old = Carb(tenant, "nightscout-connector", at.AddSeconds(5));
+        await IngestAsync(tenant, type, [primary, deleted, old]);
+        await ExecuteAsync(tenant, $"""
+            UPDATE carb_intakes SET deleted_at = now() WHERE id = '{deleted.Id}';
+            UPDATE carb_intakes SET timestamp = timestamp - interval '3 days' WHERE id = '{old.Id}';
+            """);
+        return (primary.Id, old.Id);
+    }
+
+    private async Task ClampedDeleteAsync(Guid tenant, RecordType type, Guid id)
+    {
+        await using var scope = Scope(tenant);
+        scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
+        await using var db = await Factory(scope).CreateAsync();
+        var deleted = type == RecordType.StateSpan
+            ? await db.AuditedSoftDeleteAsync(
+                db.StateSpans.Where(s => s.Id == id), Audit, "test", default, DuplicateDelete.PromoteSurvivor)
+            : await db.AuditedSoftDeleteAsync(
+                db.CarbIntakes.Where(c => c.Id == id), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
+        deleted.Should().Be(1, "the primary is inside the clamped caller's window");
+    }
+
+    private async Task<DateTime> CarbUpdatedAtAsync(Guid tenant, Guid id)
+    {
+        await using var scope = Scope(tenant);
+        await using var db = await Factory(scope).CreateAsync();
+        return await db.CarbIntakes.Where(c => c.Id == id).Select(c => c.SysUpdatedAt).SingleAsync();
+    }
+
+    private static CarbIntakeEntity Carb(Guid tenant, string source, DateTime at) => new()
+    {
+        Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = at, DataSource = source, Carbs = 40,
+    };
 
     /// <summary>
     /// A writer whose planned promotion is already in place changes no link, yet a second writer that
@@ -129,12 +242,8 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
     {
         var tenant = await SeedTenantAsync();
         var at = DateTime.UtcNow.AddHours(-1);
-        CarbIntakeEntity Carb(string source, DateTime when) => new()
-        {
-            Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = when, DataSource = source, Carbs = 40,
-        };
-        var primary = Carb("mylife-connector", at);
-        var copy = Carb("glooko-connector", at.AddSeconds(10));
+        var primary = Carb(tenant, "mylife-connector", at);
+        var copy = Carb(tenant, "glooko-connector", at.AddSeconds(10));
         await IngestAsync(tenant, RecordType.CarbIntake, [primary, copy]);
         await SetPrimariesAsync(Context(tenant), [new(copy.Id, true), new(primary.Id, false)]);
 
@@ -215,6 +324,85 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         await transaction.CommitAsync();
 
         (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(later.Copy);
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A repick of a group whose primary is gone, while a soft delete of its earliest live copy is open.
+    /// Read before the delete commits, the repick would promote the deleted copy and the group would
+    /// show nothing.
+    /// </summary>
+    [Fact]
+    public async Task ARepickWaitsForASoftDeleteOfTheCopyItWouldPromote()
+    {
+        var tenant = await SeedTenantAsync();
+        var at = DateTime.UtcNow.AddHours(-1);
+        var primary = Carb(tenant, "mylife-connector", at);
+        var earliest = Carb(tenant, "glooko-connector", at.AddSeconds(2));
+        var next = Carb(tenant, "nightscout-connector", at.AddSeconds(4));
+        await IngestAsync(tenant, RecordType.CarbIntake, [primary, earliest, next]);
+        await ExecuteAsync(tenant, $"UPDATE carb_intakes SET deleted_at = now() WHERE id = '{primary.Id}'");
+
+        await using var delete = Context(tenant);
+        await using var transaction = await delete.Database.BeginTransactionAsync();
+        await delete.AuditedSoftDeleteWithIdsAsync(
+            delete.CarbIntakes.Where(e => e.Id == earliest.Id), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
+
+        var repick = Task.Run(async () =>
+        {
+            await using var db = Context(tenant);
+            await using var repickTransaction = await db.Database.BeginTransactionAsync();
+            var canonical = await db.LinkedRecords.Where(l => l.RecordId == primary.Id).Select(l => l.CanonicalId).SingleAsync();
+            var promoted = await DuplicateGroupPrimaries.RepickAsync(db, RecordType.CarbIntake, [canonical], default);
+            await repickTransaction.CommitAsync();
+            return promoted;
+        });
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, repick);
+
+        await transaction.CommitAsync();
+
+        (await repick.WaitAsync(TimeSpan.FromSeconds(30))).Should().Equal(next.Id);
+        (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
+            .Should().Equal(next.Id.ToString());
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A glucose restore while a delete of its group's primary is open. A glucose delete locks no link
+    /// before it writes its rows (<see cref="GlucoseStreamFlags"/>), so a restore that read the
+    /// primary as live before the delete committed would keep it, and the group would show nothing.
+    /// </summary>
+    [Fact]
+    public async Task AGlucoseRestoreWaitsForADeleteOfItsGroupsPrimary()
+    {
+        var tenant = await SeedTenantAsync();
+        var at = DateTime.UtcNow.AddHours(-1);
+        SensorGlucoseEntity Glucose(string source, DateTime when) => new()
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = when, DataSource = source, Mgdl = 120,
+        };
+        var primary = Glucose("mylife-connector", at);
+        var copy = Glucose("glooko-connector", at.AddSeconds(2));
+        await IngestAsync(tenant, RecordType.SensorGlucose, [primary, copy]);
+        await ExecuteAsync(tenant, $"UPDATE sensor_glucose SET deleted_at = now() WHERE id = '{copy.Id}'");
+
+        await using var delete = Context(tenant);
+        await using var transaction = await delete.Database.BeginTransactionAsync();
+        await delete.AuditedSoftDeleteWithIdsAsync(
+            delete.SensorGlucose.Where(e => e.Id == primary.Id), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
+
+        var restore = Task.Run(async () =>
+        {
+            await using var db = Context(tenant);
+            return await db.RestoreDeletedGroupAsync<SensorGlucoseEntity>(copy.Id, "glucose");
+        });
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, restore);
+
+        await transaction.CommitAsync();
+
+        (await restore.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(copy.Id);
+        (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
+            .Should().Equal(copy.Id.ToString());
         (await MismatchesAsync(tenant)).Should().BeEmpty();
     }
 
@@ -601,9 +789,12 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         private T Pick<T>(params T[] options) => options[random.Next(options.Length)];
     }
 
-    private async Task<DeduplicationBatchResult> IngestAsync(Guid tenant, RecordType type, IReadOnlyList<object> rows)
+    private async Task<DeduplicationBatchResult> IngestAsync(
+        Guid tenant, RecordType type, IReadOnlyList<object> rows, bool clamped = false)
     {
         await using var scope = Scope(tenant);
+        if (clamped)
+            scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
         await using (var db = await Factory(scope).CreateAsync())
         {
             db.AddRange(rows);

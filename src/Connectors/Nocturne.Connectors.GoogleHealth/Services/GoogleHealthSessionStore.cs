@@ -69,11 +69,9 @@ public sealed class GoogleHealthSessionStore(
             var secrets = await configurations.GetSecretsAsync(GoogleHealthConnectorService.ConnectorName, ct);
             secrets[RefreshTokenKey] = session.RefreshToken;
             secrets[GrantedScopesKey] = scopes;
-            await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, ct: ct);
+            await configurations.SaveRuntimeSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, ct);
             configuration.RefreshToken = session.RefreshToken;
             configuration.GrantedScopes = scopes;
-            // Saving the secrets invalidated the cached access token.
-            await oauth.StoreSessionAsync(session);
         }
         return session;
     }
