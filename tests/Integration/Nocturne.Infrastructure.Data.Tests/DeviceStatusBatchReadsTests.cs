@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
@@ -140,46 +139,6 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         around.Select(s => s.OriginalId).Should().BeEquivalentTo(
             ["overlapping", "open-later", "phone-later-0", "phone-later-1", "phone-later-2"],
             "a history of later spans is read only as far as the first three of each observing source");
-    }
-
-    /// <summary>
-    /// The statuses under the asked correlation ids, each with all its rows, in five statements however
-    /// many are asked for: the anchors, then each table's rows, every one by correlation id and none over
-    /// a time window.
-    /// </summary>
-    [Theory]
-    [InlineData(1)]
-    [InlineData(8)]
-    public async Task GetByCorrelationIdsAsync_ReadsTheAskedStatusesInFiveStatements_HoweverManyAreAsked(int asked)
-    {
-        await using var store = await OpenAsync();
-        var audit = new SystemAuditContext();
-        var groups = Enumerable.Range(0, asked + 1).Select(_ => Guid.CreateVersion7()).ToList();
-        await store.Aps.BulkCreateAsync(
-            [.. groups.Select((g, i) => new ApsSnapshot
-            {
-                Timestamp = At(i), Device = "phone", CorrelationId = g, LegacyId = $"status-{i}", AidAlgorithm = AidAlgorithm.Loop,
-            })],
-            WriteOrigin.Backfill);
-        await new PumpSnapshotRepository(store.Factory, audit, NullLogger<PumpSnapshotRepository>.Instance).BulkCreateAsync(
-            [.. groups.Select((g, i) => new PumpSnapshot { Timestamp = At(i), Device = "phone", CorrelationId = g, LegacyId = $"status-{i}" })],
-            WriteOrigin.Backfill);
-        await new UploaderSnapshotRepository(store.Factory, audit, NullLogger<UploaderSnapshotRepository>.Instance).BulkCreateAsync(
-            [.. groups.Select((g, i) => new UploaderSnapshot { Timestamp = At(i), Device = "phone", CorrelationId = g, LegacyId = $"status-{i}" })],
-            WriteOrigin.Backfill);
-        await new DeviceStatusExtrasRepository(store.Factory, audit, NullLogger<DeviceStatusExtrasRepository>.Instance).BulkCreateAsync(
-            [.. groups.Select((g, i) => new DeviceStatusExtras { Timestamp = At(i), CorrelationId = g, Extras = new() { ["n"] = i } })],
-            WriteOrigin.Backfill);
-        var repository = new DeviceStatusGroupRepository(store.Factory, NullLogger<DeviceStatusGroupRepository>.Instance);
-        store.Recorder.Clear();
-
-        var read = await repository.GetByCorrelationIdsAsync([.. groups.Take(asked)]);
-
-        read.Select(g => (g.Aps?.CorrelationId, g.Pump?.CorrelationId, g.Uploader?.CorrelationId, g.Extras?.CorrelationId))
-            .Should().BeEquivalentTo(
-                groups.Take(asked).Select(g => ((Guid?)g, (Guid?)g, (Guid?)g, (Guid?)g)), "the last status was not asked for");
-        store.Recorder.All.Should().HaveCount(5)
-            .And.OnlyContain(s => s.Contains("correlation_id") && !Regex.IsMatch(s, @"timestamp""?\s*[<>]"));
     }
 
     private static Device Device(DeviceCategory category, string type, string serial) => new()

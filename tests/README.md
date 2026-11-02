@@ -56,7 +56,7 @@ build context holding only `src/Web/packages`, so a member outside it breaks the
 
 | Service | Image | Limits | Notes |
 |---|---|---|---|
-| `postgres` | `postgres:17.6-alpine` | 256 MB, 1 CPU | the production role bootstrap (`docs/postgres/container-init/00-init.sh`); tmpfs data directory, fsync, synchronous commit and full-page writes off |
+| `postgres` | `postgres:17.6-alpine` | 1 GB, 1 CPU | the production role bootstrap (`docs/postgres/container-init/00-init.sh`); tmpfs data directory, fsync, synchronous commit and full-page writes off |
 | `mocks` | `node:24-alpine` + `e2e/mocks` | 96 MB | fake third-party vendors |
 | `api` | `nocturne-api:e2e` | 512 MB, 2 CPUs | the SDK container build, as released; `NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS=true` |
 | `web` | `nocturne-web:e2e` | 320 MB, 1 CPU | `Dockerfile.web`, as released |
