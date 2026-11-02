@@ -12,6 +12,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -21,7 +22,7 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class StateSpanRepository : IStateSpanRepository
 {
     private readonly INocturneDbContextFactory _contexts;
-    private readonly IDeduplicationService _deduplicationService;
+    private readonly IDuplicateLinker _linker;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<StateSpanRepository> _logger;
     private readonly ILegacyReadCacheInvalidation? _legacyReads;
@@ -69,20 +70,20 @@ public class StateSpanRepository : IStateSpanRepository
     /// <summary>
     /// Initializes a new instance of the StateSpanRepository class
     /// </summary>
-    /// <param name="deduplicationService">Service for deduplicating records</param>
+    /// <param name="linker">Links committed inserts into their duplicate groups</param>
     /// <param name="auditContext">The audit context for tracking mutations</param>
     /// <param name="logger">Logger instance</param>
     /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
     public StateSpanRepository(
         INocturneDbContextFactory contexts,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<StateSpanRepository> logger,
         ILegacyReadCacheInvalidation? legacyReads = null
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
-        _deduplicationService = deduplicationService;
+        _linker = linker;
         _auditContext = auditContext;
         _logger = logger;
         _legacyReads = legacyReads;
@@ -403,15 +404,8 @@ public class StateSpanRepository : IStateSpanRepository
         {
             try
             {
-                var dedupInputs = inserted
-                    .Select(entity => new DeduplicationInput(
-                        RecordId: entity.Id,
-                        Mills: entity.StartTimestamp.ToMills(),
-                        DataSource: entity.Source ?? DeduplicationInput.UnknownDataSource,
-                        Criteria: MatchCriteriaMapper.From(entity)))
-                    .ToList();
-
-                await _deduplicationService.DeduplicateBatchAsync(RecordType.StateSpan, dedupInputs, cancellationToken);
+                await _linker.DeduplicateBatchAsync(
+                    RecordType.StateSpan, LinkedRecordTypes.InputsOf(RecordType.StateSpan, inserted), cancellationToken);
             }
             catch (Exception ex)
             {

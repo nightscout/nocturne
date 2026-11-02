@@ -30,7 +30,7 @@ public class LegacyReadReportingTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly TestNocturneDbContextFactory _factory;
     private readonly RecordingLegacyReads _written = new();
-    private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
+    private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
     private readonly IAuditContext _audit = new SystemAuditContext();
 
     public LegacyReadReportingTests()

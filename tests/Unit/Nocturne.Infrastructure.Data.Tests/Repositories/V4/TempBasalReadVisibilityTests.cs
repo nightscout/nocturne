@@ -32,7 +32,7 @@ public class TempBasalReadVisibilityTests : IDisposable
 
         _repo = new TempBasalRepository(
             new TestNocturneDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<TempBasalRepository>.Instance);
     }

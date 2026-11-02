@@ -103,7 +103,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         var audit = _audit;
         var events = new Mock<IDataEventSink<Entry>>();
         var sensorGlucose = new SensorGlucoseRepository(
-            factory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance,
+            factory, Mock.Of<IDuplicateLinker>(), audit, NullLogger<SensorGlucoseRepository>.Instance,
             entrySink: events.Object);
         var meterGlucose = new MeterGlucoseRepository(
             factory, audit, NullLogger<MeterGlucoseRepository>.Instance, entrySink: events.Object);

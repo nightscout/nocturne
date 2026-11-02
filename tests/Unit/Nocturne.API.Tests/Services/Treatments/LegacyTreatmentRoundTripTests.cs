@@ -57,7 +57,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
             Endpoint = "POST /api/v1/treatments",
         };
 
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var ctxFactory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = _bolusRepo = new BolusRepository(ctxFactory, dedup, caller, NullLogger<BolusRepository>.Instance);
         var carbRepo = new CarbIntakeRepository(ctxFactory, dedup, caller, NullLogger<CarbIntakeRepository>.Instance);

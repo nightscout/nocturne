@@ -38,6 +38,9 @@ public class HistoryClampLiftPremiseTests
         // inserts do nothing on conflict.
         "src/API/Nocturne.API/Services/Notifications/OwnerNoticeLedger.cs",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyCheck.cs",
+        // dedup_reconcile_state has no recency column, so no clamp reads it, and its insert does nothing
+        // on conflict as a plain command.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/DuplicateReconciler.cs",
         // job_ledger is a platform table no policy covers, and its upserts run as plain commands.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/JobLedgerRepository.cs",
         // A migration runs as the migrator, outside any reader's clamp, and upserts job_ledger rows.

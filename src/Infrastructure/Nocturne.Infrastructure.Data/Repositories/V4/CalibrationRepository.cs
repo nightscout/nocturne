@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing calibration records. A LegacyId-only type (no SyncId-upsert, no
-/// DeduplicationService participation), so it uses the shared <see cref="V4RepositoryBase{TModel,TEntity}"/>
+/// deduplication), so it uses the shared <see cref="V4RepositoryBase{TModel,TEntity}"/>
 /// behaviour unchanged plus the calibration-specific queries below.
 /// </summary>
 public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEntity>, ICalibrationRepository

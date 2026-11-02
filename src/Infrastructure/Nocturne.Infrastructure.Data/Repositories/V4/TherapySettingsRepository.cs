@@ -14,7 +14,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing therapy settings in the database. A LegacyId-only type (no SyncId-upsert,
-/// no DeduplicationService participation), so it uses the shared
+/// no deduplication), so it uses the shared
 /// <see cref="V4RepositoryBase{TModel,TEntity}"/> behaviour unchanged plus the therapy-settings-specific
 /// queries below.
 /// </summary>

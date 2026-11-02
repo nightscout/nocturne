@@ -51,7 +51,7 @@ public class TreatmentsPostUpsertTests : IDisposable
         _context = _db.CreateContext();
 
         var audit = Mock.Of<IAuditContext>();
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var ctxFactory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = new BolusRepository(ctxFactory, dedup, audit, NullLogger<BolusRepository>.Instance);
         var carbRepo = new CarbIntakeRepository(ctxFactory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance);

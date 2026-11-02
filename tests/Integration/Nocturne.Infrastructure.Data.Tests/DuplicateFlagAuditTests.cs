@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -12,7 +13,7 @@ using Npgsql;
 namespace Nocturne.Infrastructure.Data.Tests;
 
 /// <summary>
-/// The drift audit (<see cref="DeduplicationService.AuditDuplicateFlagsAsync(CancellationToken)"/>) on
+/// The drift audit (<see cref="DuplicateReconciler.AuditDuplicateFlagsAsync(CancellationToken)"/>) on
 /// PostgreSQL under the runtime role and Row Level Security. Drift is written by raw SQL, as no writer
 /// may leave any.
 /// </summary>
@@ -223,7 +224,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
     private async Task<IReadOnlyList<DuplicateFlagDrift>> AuditAsync(Guid tenant)
     {
         await using var scope = Scope(tenant);
-        return await scope.ServiceProvider.GetRequiredService<IDeduplicationService>().AuditDuplicateFlagsAsync();
+        return await scope.ServiceProvider.GetRequiredService<IDuplicateReconciler>().AuditDuplicateFlagsAsync();
     }
 
     private AsyncServiceScope Scope(Guid tenant)
@@ -233,8 +234,8 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         return scope;
     }
 
-    private static DeduplicationService Dedup(AsyncServiceScope scope) =>
-        (DeduplicationService)scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
+    private static DuplicateReconciler Dedup(AsyncServiceScope scope) =>
+        scope.ServiceProvider.GetRequiredService<DuplicateReconciler>();
 
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()

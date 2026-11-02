@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
@@ -13,7 +14,7 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// <summary>
 /// The tenant merge lock against PostgreSQL under the runtime role and Row Level Security: two
 /// contexts stand in for two instances merging one tenant, through
-/// <see cref="DeduplicationService.ReconcileNewLinksAsync"/> and <see cref="DeduplicationService.DeduplicateAllAsync"/>.
+/// <see cref="DuplicateReconciler.ReconcileNewLinksAsync"/> and <see cref="DeduplicationAdmin.RunAsync"/>.
 /// </summary>
 [Trait("Category", "Integration")]
 public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
@@ -79,9 +80,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
             .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
             .Options) { TenantId = tenant };
 
-    private static DeduplicationService Service(NocturneDbContext context) =>
-        new(context.AsFactory(), new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<DeduplicationService>.Instance);
+    private static DuplicateReconciler Service(NocturneDbContext context) => DeduplicationModules.Reconciler(context.AsFactory());
 
     [Fact]
     public async Task Concurrent_passes_over_one_tenant_merge_a_duplicate_pair_once()
@@ -110,6 +109,37 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         later.Should().Be(new ReconcileResult(0, true), "the lock went with the winning pass's commit");
     }
 
+    /// <summary>
+    /// A tenant's first reconcile and its first full run both create its state row. The run's start waits
+    /// for the reconcile's uncommitted insert and then uses the row, instead of failing on the key.
+    /// </summary>
+    [Fact]
+    public async Task A_first_full_run_started_during_a_first_reconcile_uses_the_row_the_reconcile_inserts()
+    {
+        var tenant = await SeedTenantAsync();
+        var cursor = new ReconcileCursor(DateTime.UtcNow.AddHours(-1), Guid.CreateVersion7());
+
+        // A context without the retrying strategy, which refuses a transaction held open by hand.
+        await using var reconcile = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(database.AppConnectionString)
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options) { TenantId = tenant };
+        await using var transaction = await reconcile.Database.BeginTransactionAsync();
+        await DuplicateReconciler.SetCursorAsync(reconcile, cursor, default);
+
+        await using var admin = Context(tenant);
+        var start = Task.Run(() => DeduplicationModules.Admin(admin.AsFactory(), tenant).StartRunAsync());
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, start);
+
+        await transaction.CommitAsync();
+        var runId = await start.WaitAsync(TimeSpan.FromSeconds(30));
+
+        await using var check = Context(tenant);
+        var state = await check.DedupReconcileState.AsNoTracking().SingleAsync();
+        state.LastReconciledLinkId.Should().Be(cursor.Id, "the start left the reconcile's cursor as it was");
+        state.Run.Should().Contain(runId.ToString());
+    }
+
     [Fact]
     public async Task The_full_job_and_a_reconcile_pass_over_one_tenant_merge_a_duplicate_pair_once()
     {
@@ -122,7 +152,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         await using var full = Context(tenant, MeetAfterFullCarbMergeRead(rendezvous));
         await using var reconcile = Context(tenant, MeetAfterCursorRead(rendezvous));
 
-        var job = Task.Run(() => Service(full).DeduplicateAllAsync());
+        var job = Task.Run(() => DeduplicationModules.Admin(full.AsFactory(), tenant).RunFullAsync());
         var pass = Task.Run(() => Service(reconcile).ReconcileNewLinksAsync(5000, 4));
         await Task.WhenAll(job, pass);
 

@@ -48,7 +48,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
 
         _sut = new EntryReadService(
             new SensorGlucoseRepository(
-                factory, new Mock<IDeduplicationService>().Object, audit,
+                factory, new Mock<IDuplicateLinker>().Object, audit,
                 NullLogger<SensorGlucoseRepository>.Instance),
             new MeterGlucoseRepository(factory, audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(factory, audit, NullLogger<CalibrationRepository>.Instance),

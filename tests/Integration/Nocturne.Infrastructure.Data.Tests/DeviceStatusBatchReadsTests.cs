@@ -164,7 +164,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
     };
 
     private static StateSpanRepository Spans(INocturneDbContextFactory factory) =>
-        new(factory, new Mock<IDeduplicationService>().Object, new SystemAuditContext(), NullLogger<StateSpanRepository>.Instance);
+        new(factory, new Mock<IDuplicateLinker>().Object, new SystemAuditContext(), NullLogger<StateSpanRepository>.Instance);
 
     private static async Task<Dictionary<DateTime, Guid>> SeedApsAsync(ApsSnapshotRepository aps, string device, int[] minutes)
     {

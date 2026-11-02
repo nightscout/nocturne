@@ -19,15 +19,14 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing sensor glucose (CGM) records in the database. A DeduplicationService
+/// Repository for managing sensor glucose (CGM) records in the database. A deduplication
 /// participant on top of the sync-key upsert and keyed delete of
 /// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
 /// (duplicate filter + keyset cursor), the legacy entries projection, the tenant
-/// last-reading watermark, the post-commit dedup linking, and the source/time-range deletes.
+/// last-reading watermark and the source/time-range deletes.
 /// </summary>
 public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
     private readonly IGlucoseReadingBroadcaster? _readingBroadcaster;
 
     /// <summary>
@@ -35,7 +34,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// </summary>
     public SensorGlucoseRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger,
         IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
@@ -43,9 +42,8 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         IGlucoseReadingBroadcaster? readingBroadcaster = null,
         ILegacyReadCacheInvalidation? legacyReads = null
     )
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads, linker)
     {
-        _deduplicationService = deduplicationService;
         _readingBroadcaster = readingBroadcaster;
     }
 
@@ -219,9 +217,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <inheritdoc />
     protected override void ApplyUpdate(SensorGlucoseEntity target, SensorGlucose source) => SensorGlucoseMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.SensorGlucose;
-
     /// <summary>
     /// Routes the base 7-arg form through the extended sensor-glucose query (duplicate
     /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
@@ -235,7 +230,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 
     /// <summary>
     /// Gets sensor glucose records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -479,34 +474,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Insert-time deduplication: link newly inserted records to canonical groups. Feeds inserts-only
-    /// (matching Bolus/CarbIntake). Since dedup runs after commit (D4), upserted rows are reached as
-    /// committed canonicals via their committed value, so re-feeding them is redundant — already-linked
-    /// rows skip self-relinking and add no match candidates.
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<SensorGlucoseEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0) return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", inserted.Count);
-        }
     }
 
     /// <summary>

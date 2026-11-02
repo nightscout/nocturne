@@ -22,6 +22,7 @@ using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -152,8 +153,10 @@ public static class ServiceCollectionExtensions
         services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
         services.AddScoped<IReaderCachePartition, ReaderCachePartition>();
 
-        // Register deduplication service (required by repositories)
-        services.AddScoped<IDeduplicationService, DeduplicationService>();
+        services.AddScoped<IDuplicateLinker, DuplicateLinker>();
+        services.AddScoped<DuplicateReconciler>();
+        services.AddScoped<IDuplicateReconciler>(sp => sp.GetRequiredService<DuplicateReconciler>());
+        services.AddScoped<IDeduplicationAdmin, DeduplicationAdmin>();
 
         // Register all repositories via their port interfaces
         services.AddScoped<IFoodRepository, FoodRepository>();

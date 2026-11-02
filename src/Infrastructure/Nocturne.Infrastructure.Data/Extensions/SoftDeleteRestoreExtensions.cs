@@ -166,6 +166,7 @@ public static class SoftDeleteRestoreExtensions
             List<TEntity> copies = [];
             if (dedup is { } type && restoring.Count > 0)
             {
+                await DuplicateGroupPrimaries.LockGroupsOfAsync(ctx, type, [.. restoring.Select(ctx.IdOf)], token);
                 var candidates = await ctx.CoDeletedCopiesAsync(type, restoring, token);
                 var clashes = await ctx.FindLiveKeyClashesAsync([.. restoring, .. candidates], token);
                 copies = candidates.Where((_, i) => clashes[restoring.Count + i] is null).ToList();

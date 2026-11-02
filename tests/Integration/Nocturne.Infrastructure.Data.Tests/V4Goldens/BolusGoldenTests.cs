@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
 /// <summary>
 /// Golden tests pinning the CURRENT dedup behaviour of <c>BolusRepository</c> (the hardest case:
-/// SyncId-upsert + DeduplicationService + value-tolerance MatchCriteria). Held identical across the
+/// SyncId-upsert + deduplication + value-tolerance MatchCriteria). Held identical across the
 /// V4RepositoryBase refactor; intentional deltas (D1–D8) are re-baselined explicitly.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -39,7 +39,7 @@ public class BolusGoldenTests
         var rowCount = await _fx.QueryAsync(tenant, ctx => ctx.Boluses.AsNoTracking().CountAsync());
         rowCount.Should().Be(2);
 
-        // Within ±30s and within the 0.05 U insulin tolerance, so the DeduplicationService groups
+        // Within ±30s and within the 0.05 U insulin tolerance, so the duplicate linker groups
         // the two under a single canonical id with exactly one primary.
         var links = await _fx.QueryAsync(tenant, ctx =>
             ctx.LinkedRecords.AsNoTracking().Where(lr => lr.RecordType == "bolus").ToListAsync());

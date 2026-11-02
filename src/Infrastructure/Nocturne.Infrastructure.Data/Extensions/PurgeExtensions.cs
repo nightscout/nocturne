@@ -41,7 +41,7 @@ public static class PurgeExtensions
 
         // A deduplicated row's links go first: a purge that stops between the two statements then
         // leaves a record with no link, which matching reads as a group of its own, rather than a
-        // link with no record (see Services.DeduplicationService.DeleteOrphanedLinksAsync).
+        // link with no record (see LinkedRecordTypes.DeleteOrphanedLinksAsync).
         if (DuplicateGroupPrimaries.RecordTypeOf<TEntity>() is { } recordType)
         {
             var key = RecordTypeKeys.Key(recordType);

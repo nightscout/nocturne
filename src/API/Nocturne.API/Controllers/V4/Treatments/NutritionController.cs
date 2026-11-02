@@ -452,7 +452,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
             await GuardRecreationAsync(request.DataSource, request.SyncIdentifier, ct);
 
         // No transaction (see GuardRecreationAsync): one on this context would hold only the links
-        // the scoped DeduplicationService writes here, and a later failure would roll them back.
+        // the duplicate linker writes here, and a later failure would roll them back.
 
         // Peek at an existing bolus with the same (DataSource, SyncIdentifier) BEFORE
         // the upsert. If one exists, its CorrelationId is authoritative and must be

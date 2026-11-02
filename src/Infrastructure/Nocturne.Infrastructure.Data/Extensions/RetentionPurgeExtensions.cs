@@ -60,7 +60,7 @@ public static partial class RetentionPurgeExtensions
     /// The <see cref="Core.Models.RecordTypeKeys"/> key the table's rows are linked under in
     /// <c>linked_records</c>, or null for a table deduplication does not cover. When given, each
     /// batch deletes the purged rows' links in the same statement, so a hard delete leaves no link
-    /// behind for a sweep to find (<see cref="DeduplicationService.DeleteOrphanedLinksAsync"/>).
+    /// behind for a sweep to find (<see cref="Services.Deduplication.LinkedRecordTypes.DeleteOrphanedLinksAsync"/>).
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total number of rows deleted, links not counted.</returns>

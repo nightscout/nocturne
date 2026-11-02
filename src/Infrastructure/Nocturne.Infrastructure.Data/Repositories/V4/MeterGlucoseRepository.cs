@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing meter glucose (fingerstick) records in the database. A LegacyId-only type
-/// (no SyncId-upsert, no DeduplicationService participation), so it uses the shared
+/// (no SyncId-upsert, no deduplication), so it uses the shared
 /// <see cref="V4RepositoryBase{TModel,TEntity}"/> behaviour unchanged plus the meter-glucose-specific
 /// queries below.
 /// </summary>

@@ -136,7 +136,7 @@ public class EntryAndProfileBatchReadsTests(RlsCompletenessFixture fx)
     }
 
     private static SensorGlucoseRepository Readings(Store store) =>
-        new(store.Factory, Mock.Of<IDeduplicationService>(), new SystemAuditContext(), NullLogger<SensorGlucoseRepository>.Instance);
+        new(store.Factory, Mock.Of<IDuplicateLinker>(), new SystemAuditContext(), NullLogger<SensorGlucoseRepository>.Instance);
 
     private static SensorGlucose Reading(string? legacyId, int minute, double mgdl = 100, Guid? correlationId = null) => new()
     {

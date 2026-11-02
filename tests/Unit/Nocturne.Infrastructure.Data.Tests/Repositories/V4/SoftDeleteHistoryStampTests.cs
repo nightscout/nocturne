@@ -370,7 +370,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.ChangeTracker.Clear();
 
         var repository = new StateSpanRepository(
-            _context.AsFactory(), Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
+            _context.AsFactory(), Mock.Of<Core.Contracts.Infrastructure.IDuplicateLinker>(),
             new SystemAuditContext(), NullLogger<StateSpanRepository>.Instance);
 
         var deleted = activity
@@ -402,7 +402,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
     }
 
     private NoteRepository NotesAs(IAuditContext audit) => new(
-        new AuditedFactory(_db, audit), Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
+        new AuditedFactory(_db, audit), Mock.Of<Core.Contracts.Infrastructure.IDuplicateLinker>(),
         audit, NullLogger<NoteRepository>.Instance);
 
     /// <summary>One group per row: source A's reading leads, source B's is its duplicate.</summary>

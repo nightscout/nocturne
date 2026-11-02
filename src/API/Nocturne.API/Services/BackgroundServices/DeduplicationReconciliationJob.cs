@@ -5,9 +5,9 @@ namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
 /// Every <see cref="Interval"/>, merges an active tenant's duplicate canonical groups created since its
-/// reconcile cursor (<see cref="IDeduplicationService.ReconcileNewLinksAsync(int, int, CancellationToken)"/>),
-/// then runs <see cref="IDeduplicationService.RepairStateSpanPrimariesAsync(CancellationToken)"/> and
-/// <see cref="IDeduplicationService.PruneSingletonLinksAsync(int, int, CancellationToken)"/>.
+/// reconcile cursor (<see cref="IDuplicateReconciler.ReconcileNewLinksAsync(int, int, CancellationToken)"/>),
+/// then runs <see cref="IDuplicateReconciler.RepairStateSpanPrimariesAsync(CancellationToken)"/> and
+/// <see cref="IDuplicateReconciler.PruneSingletonLinksAsync(int, int, CancellationToken)"/>.
 /// </summary>
 /// <remarks>
 /// Both cursors are kept in <c>dedup_reconcile_state</c>, not in the ledger, so the run's
@@ -37,7 +37,7 @@ internal sealed class DeduplicationReconciliationJob(ILogger<DeduplicationReconc
         if (!run.Tenant!.IsActive)
             return JobOutcome.Resume(null, run.StartedAt + IScheduledJob.InactiveTenantRecheck);
 
-        var dedup = run.Services.GetRequiredService<IDeduplicationService>();
+        var dedup = run.Services.GetRequiredService<IDuplicateReconciler>();
         var result = await dedup.ReconcileNewLinksAsync(BatchSize, MaxBatchesPerRun, ct);
         var repaired = await dedup.RepairStateSpanPrimariesAsync(ct);
         var pruned = await dedup.PruneSingletonLinksAsync(PruneBatchSize, MaxPruneBatchesPerRun, ct);

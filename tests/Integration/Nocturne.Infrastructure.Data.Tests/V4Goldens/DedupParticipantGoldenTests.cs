@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
 /// <summary>
 /// Goldens pinning the CURRENT cross-connector dedup behaviour of the remaining
-/// DeduplicationService participants (Bolus is covered in <see cref="BolusGoldenTests"/>). Each type
+/// Deduplication participants (Bolus is covered in <see cref="BolusGoldenTests"/>). Each type
 /// links two within-window records that match its per-type MatchCriteria into a single canonical
 /// group; the SyncId-upsert types also upsert in place on replay. Held identical across the
 /// V4RepositoryBase refactor; intentional deltas (D1–D8) are re-baselined explicitly.

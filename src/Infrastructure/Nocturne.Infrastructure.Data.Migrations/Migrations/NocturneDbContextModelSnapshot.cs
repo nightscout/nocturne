@@ -1678,6 +1678,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("prune_cursor_reset_at");
 
+                    b.Property<string>("Run")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("run");
+
+                    b.Property<DateTime?>("RunCancelRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("run_cancel_requested_at");
+
                     b.HasKey("TenantId");
 
                     b.ToTable("dedup_reconcile_state");

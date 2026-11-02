@@ -16,7 +16,7 @@ public class DeduplicationReconciliationJobTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly Mock<IDeduplicationService> _dedup = new();
+    private readonly Mock<IDuplicateReconciler> _dedup = new();
     private readonly List<string> _calls = [];
 
     public DeduplicationReconciliationJobTests()

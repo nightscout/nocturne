@@ -111,7 +111,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
 
         var stateSpanRepository = new StateSpanRepository(
             _context.AsFactory(),
-            Mock.Of<IDeduplicationService>(),
+            Mock.Of<IDuplicateLinker>(),
             Mock.Of<IAuditContext>(),
             NullLogger<StateSpanRepository>.Instance);
 

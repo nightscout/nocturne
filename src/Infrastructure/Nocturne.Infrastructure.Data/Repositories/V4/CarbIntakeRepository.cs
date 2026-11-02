@@ -16,29 +16,26 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing carbohydrate intake records in the database. A DeduplicationService
+/// Repository for managing carbohydrate intake records in the database. A deduplication
 /// participant on top of the sync-key upsert and keyed delete of
 /// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
-/// (duplicate filter + keyset cursor), the read-visibility filter behind
-/// <c>CountAsync</c>, and the post-commit dedup linking.
+/// (duplicate filter + keyset cursor) and the read-visibility filter behind
+/// <c>CountAsync</c>.
 /// </summary>
 public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbIntakeEntity>, ICarbIntakeRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="CarbIntakeRepository"/> class.
     /// </summary>
     public CarbIntakeRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<CarbIntakeRepository> logger,
         IV4RecordBroadcaster<CarbIntake>? broadcaster = null,
         ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
     }
 
     /// <inheritdoc />
@@ -49,9 +46,6 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
 
     /// <inheritdoc />
     protected override void ApplyUpdate(CarbIntakeEntity target, CarbIntake source) => CarbIntakeMapper.UpdateEntity(target, source);
-
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.CarbIntake;
 
     /// <summary>
     /// Routes the base 7-arg form through the extended carb-intake query (duplicate
@@ -66,7 +60,7 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
 
     /// <summary>
     /// Gets carbohydrate intake records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -161,35 +155,5 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
             .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
             .ToListAsync(ct);
         return entities.Select(CarbIntakeMapper.ToDomainModel).ToList();
-    }
-
-    /// <summary>
-    /// Insert-time deduplication runs AFTER commit: the ingested rows are durably persisted first, and
-    /// dedup linking is best-effort (a failure is logged, not allowed to roll back the insert). A row
-    /// missed here is never reconciled, which reads only links, but once older than
-    /// <see cref="DeduplicationService.SingletonLinkRetention"/> later records match it as a group of
-    /// its own. Only runs on newly inserted entities — updated-in-place rows were already linked when first inserted.
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<CarbIntakeEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.CarbIntake, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "CarbIntake", inserted.Count);
-        }
     }
 }

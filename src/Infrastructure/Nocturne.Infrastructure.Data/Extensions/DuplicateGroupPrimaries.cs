@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -32,7 +32,7 @@ public enum DuplicateDelete
 /// its primary (<see cref="ReadVisibilityFilter.ExcludeDuplicates{TEntity}"/>), so a deleted
 /// primary hides every other source's copy with it; and the promoted copy's own row did not
 /// change, so a v3 history client would never be sent it. Every primary move, here or in
-/// <see cref="DeduplicationService"/>, is written by <see cref="SetPrimariesAsync"/>.
+/// <see cref="DuplicateLinker"/> and <see cref="DuplicateReconciler"/>, is written by <see cref="SetPrimariesAsync"/>.
 /// </summary>
 /// <remarks>
 /// The repoint writes by statement and tracks nothing, so the context may be the caller's scope
@@ -220,7 +220,7 @@ internal static class DuplicateGroupPrimaries
 
     /// <summary>
     /// Moves each group's <see cref="LinkedRecordEntity.IsPrimary"/> onto
-    /// <see cref="DeduplicationService.PickSurvivor(IEnumerable{LinkedRecordEntity}, Func{Guid, bool}, Func{Guid, DeduplicationService.SpanEnd})"/>,
+    /// <see cref="DuplicateMatching.PickSurvivor(IEnumerable{LinkedRecordEntity}, Func{Guid, bool}, Func{Guid, DuplicateMatching.SpanEnd})"/>,
     /// <see cref="RepickChunkSize"/> groups at a time. A group with no primary at all renders as
     /// nothing, so it is given one here too.
     /// </summary>
@@ -251,7 +251,7 @@ internal static class DuplicateGroupPrimaries
         var promotedLive = new List<Guid>();
         foreach (var group in rows.GroupBy(r => r.CanonicalId))
         {
-            var survivor = DeduplicationService.PickSurvivor(group, live.Contains, spanEnds.GetValueOrDefault);
+            var survivor = DuplicateMatching.PickSurvivor(group, live.Contains, spanEnds.GetValueOrDefault);
             if (survivor.IsPrimary)
                 continue;
 
@@ -337,7 +337,7 @@ internal static class DuplicateGroupPrimaries
     /// wait for each other and whichever runs second derives from what the first committed.
     /// </summary>
     /// <remarks>
-    /// The caller also holds the tenant's dedup write lock (<c>DeduplicationService.UnderWriteLockAsync</c>),
+    /// The caller also holds the tenant's dedup write lock (<see cref="LinkedRecordTypes.UnderWriteLockAsync{T}"/>),
     /// under which every link is inserted. Without it a repair could clear a flag whose non-primary
     /// link another transaction is inserting: that transaction finds the flag already set and writes
     /// nothing, and the repair does not see the uncommitted link. Locks are taken in the order
@@ -376,6 +376,60 @@ internal static class DuplicateGroupPrimaries
         await ctx.Database.ExecuteSqlAsync($"""
             SELECT id FROM linked_records
             WHERE tenant_id = {ctx.TenantId} AND record_type = {key} AND record_id = ANY ({recordIds})
+            ORDER BY record_id
+            FOR UPDATE
+            """, ct);
+    }
+
+    /// <summary>
+    /// Locks every link of the groups <paramref name="canonicalIds"/> until the transaction ends, in
+    /// record order, after the stream lock for glucose: the order <see cref="SetPrimariesAsync"/> takes
+    /// them in. A merge takes them before it reads the groups, so a primary another transaction moves
+    /// in one of them is committed before the read or waits for the merge, and the merge never leaves
+    /// a group with two primaries or none.
+    /// </summary>
+    public static async Task LockGroupsAsync(
+        NocturneDbContext ctx, RecordType recordType, Guid[] canonicalIds, CancellationToken ct)
+    {
+        await LockStreamsAsync(ctx, recordType, ct);
+        if (!ctx.Database.IsNpgsql() || canonicalIds.Length == 0)
+            return;
+
+        var key = RecordTypeKeys.Key(recordType);
+        await ctx.Database.ExecuteSqlAsync($"""
+            SELECT id FROM linked_records
+            WHERE tenant_id = {ctx.TenantId} AND record_type = {key} AND canonical_id = ANY ({canonicalIds})
+            ORDER BY record_id
+            FOR UPDATE
+            """, ct);
+    }
+
+    /// <summary>
+    /// Locks every link of the groups <paramref name="recordIds"/> are linked into, in record order, for a
+    /// soft delete or restore that is about to write those records and then move their groups' primaries.
+    /// A merge and the audit's repair lock links before they write the records they flag; locking the
+    /// whole groups first keeps a delete in that order too, so it cannot deadlock with them over the same
+    /// group. The insert-time linker flags the rows it has just linked before its repick locks their
+    /// groups' links, so a delete covering both such a copy and a committed member of its group can still
+    /// meet it; PostgreSQL breaks that as a deadlock and the aborted transaction retries. Glucose takes
+    /// nothing here: its delete takes the stream lock only after
+    /// its rows are written (<see cref="GlucoseStreamFlags"/> says why), and a link lock ahead of the stream
+    /// lock would invert the order the other glucose writers take them in.
+    /// </summary>
+    public static async Task LockGroupsOfAsync(
+        NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
+    {
+        if (recordType == RecordType.SensorGlucose || !ctx.Database.IsNpgsql() || recordIds.Count == 0)
+            return;
+
+        var key = RecordTypeKeys.Key(recordType);
+        var ids = recordIds.ToArray();
+        await ctx.Database.ExecuteSqlAsync($"""
+            SELECT id FROM linked_records
+            WHERE tenant_id = {ctx.TenantId} AND record_type = {key}
+              AND canonical_id IN (
+                  SELECT canonical_id FROM linked_records
+                  WHERE tenant_id = {ctx.TenantId} AND record_type = {key} AND record_id = ANY ({ids}))
             ORDER BY record_id
             FOR UPDATE
             """, ct);
@@ -583,13 +637,13 @@ internal static class DuplicateGroupPrimaries
     };
 
     /// <summary>How each live state span among <paramref name="ids"/> ended, keyed by id.</summary>
-    private static async Task<Dictionary<Guid, DeduplicationService.SpanEnd>> LiveSpanEndsAsync(
+    private static async Task<Dictionary<Guid, DuplicateMatching.SpanEnd>> LiveSpanEndsAsync(
         NocturneDbContext ctx, Guid[] ids, CancellationToken ct) =>
         (await ctx.StateSpans.AsNoTracking()
             .Where(s => s.DeletedAt == null && ids.Contains(s.Id))
             .Select(s => new { s.Id, s.SupersededById, s.EndTimestamp })
             .ToListAsync(ct))
-        .ToDictionary(s => s.Id, s => new DeduplicationService.SpanEnd(s.SupersededById, s.EndTimestamp));
+        .ToDictionary(s => s.Id, s => new DuplicateMatching.SpanEnd(s.SupersededById, s.EndTimestamp));
 
     private static async Task<HashSet<Guid>> Live<TEntity>(IQueryable<TEntity> rows, Guid[] ids, CancellationToken ct)
         where TEntity : class, IIdentified, ISoftDeletable =>

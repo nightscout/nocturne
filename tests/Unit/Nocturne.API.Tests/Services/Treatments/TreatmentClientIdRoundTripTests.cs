@@ -70,7 +70,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             Endpoint = "DELETE /api/v1/treatments",
         };
 
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var ctxFactory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = new BolusRepository(ctxFactory, dedup, apiSecretCaller, NullLogger<BolusRepository>.Instance);
         var carbRepo = _carbRepo = new CarbIntakeRepository(ctxFactory, dedup, apiSecretCaller, NullLogger<CarbIntakeRepository>.Instance);
