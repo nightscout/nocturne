@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -78,7 +79,7 @@ public class ActivityDecomposerFixedQueryTests : IDisposable
         _contextOpens = 0;
         var decomposer = new ActivityDecomposer(
             new CountingContexts(new TestNocturneDbContextFactory(_context), () => _contextOpens++),
-            _spans.Object, TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+            _spans.Object, Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
         await decomposer.DecomposeBatchAsync(activities, WriteOrigin.Live);
         return _spans.Invocations.Count + _contextOpens;
     }

@@ -6,16 +6,17 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Health;
 
 /// <summary>
-/// Decomposes legacy Activity records into dedicated v4 models (HeartRate, StepCount), routed
-/// per <see cref="Classify"/>. Other activities pass through unchanged to StateSpan storage.
+/// Decomposes legacy Activity records into dedicated v4 models (HeartRate, StepCount, SleepSession),
+/// routed per <see cref="Classify"/>. Other activities pass through unchanged to StateSpan storage.
 /// </summary>
 /// <seealso cref="IHeartRateService"/>
 /// <seealso cref="IStepCountService"/>
 public interface IActivityDecomposer
 {
     /// <summary>
-    /// Decomposes a batch of legacy Activities with a fixed number of queries whatever its size:
-    /// heart rates into heart_rates, step counts into step_counts, and the rest as StateSpans.
+    /// Decomposes a batch of legacy Activities. Heart rates into heart_rates, step counts into
+    /// step_counts and the rest as StateSpans are written with a fixed number of queries whatever the
+    /// batch's size. Sleep is upserted into sleep_sessions per record.
     /// </summary>
     /// <param name="activities">The activities, in arrival order.</param>
     /// <param name="origin">Write classification of the written records.</param>

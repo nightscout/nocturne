@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -26,7 +27,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TenantId;
         _decomposer = new ActivityDecomposer(
-            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
     }
 
     public void Dispose()

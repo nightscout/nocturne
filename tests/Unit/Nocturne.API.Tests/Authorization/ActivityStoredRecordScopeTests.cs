@@ -36,15 +36,17 @@ public class ActivityStoredRecordScopeTests
     private readonly Mock<ISleepService> _sleep = new();
     private readonly Mock<IHeartRateService> _heartRates = new();
     private readonly Mock<IStepCountService> _stepCounts = new();
-    private readonly ActivityDecomposer _decomposer = new(
-        Mock.Of<INocturneDbContextFactory>(),
-        Mock.Of<IStateSpanRepository>(),
-        TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+    private readonly ActivityDecomposer _decomposer;
     private readonly ActivityService _service;
     private readonly DefaultHttpContext _httpContext = new();
 
     public ActivityStoredRecordScopeTests()
     {
+        _decomposer = new(
+            Mock.Of<INocturneDbContextFactory>(),
+            Mock.Of<IStateSpanRepository>(),
+            _sleep.Object,
+            TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
         var documents = new Mock<IDocumentProcessingService>();
         documents.Setup(d => d.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns((IEnumerable<Activity> a) => a);
