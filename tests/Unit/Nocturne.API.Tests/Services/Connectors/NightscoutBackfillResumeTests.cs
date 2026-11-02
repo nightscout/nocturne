@@ -38,16 +38,15 @@ public class NightscoutBackfillResumeTests
             // Bound to the exact connector source: a wrong source string must read as "no
             // mark store" in these tests, not silently work.
             var mock = new Mock<IMetadataPublisher>();
-            mock.Setup(m => m.GetBackfillLowWaterMarkAsync(
-                    "nightscout-connector", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((string _, string collection, CancellationToken _) =>
-                    Marks.TryGetValue(collection, out var mark) ? mark : null);
-            mock.Setup(m => m.SetBackfillLowWaterMarkAsync(
-                    "nightscout-connector", It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-                .Returns((string _, string collection, DateTime? mark, CancellationToken _) =>
+            mock.Setup(m => m.GetBackfillLowWaterMarksAsync("nightscout-connector", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Dictionary<string, DateTime>(Marks));
+            mock.Setup(m => m.SetBackfillLowWaterMarksAsync(
+                    "nightscout-connector", It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
+                .Returns((string _, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken _) =>
                 {
-                    if (mark is null) Marks.Remove(collection);
-                    else Marks[collection] = mark.Value;
+                    foreach (var (collection, mark) in changes)
+                        if (mark is null) Marks.Remove(collection);
+                        else Marks[collection] = mark.Value;
                     return Task.CompletedTask;
                 });
             return mock;

@@ -10,9 +10,10 @@ public static class ConnectorRunLimits
     public static readonly TimeSpan PerTenantSyncTimeout = TimeSpan.FromMinutes(3);
 
     /// <summary>
-    ///     How far into a background run a backfill crawl may still publish another page. A run cut off
-    ///     by <see cref="PerTenantSyncTimeout"/> fails, and the scheduler backs a failing connector off,
-    ///     so backfill stops at half the timeout and leaves the rest to the types not yet crawled.
+    ///     How far into a background run held to <paramref name="timeout"/> a backfill crawl may still
+    ///     publish another page. A run the timeout cuts off fails, and the scheduler backs a failing
+    ///     connector off, so backfill stops at half of it and leaves the rest to the types not yet
+    ///     crawled.
     /// </summary>
-    public static readonly TimeSpan BackfillBudget = PerTenantSyncTimeout / 2;
+    public static TimeSpan BackfillBudgetFor(TimeSpan timeout) => timeout / 2;
 }

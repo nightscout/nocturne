@@ -175,7 +175,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         var openEnded = request.To is null;
 
         // Glucose keeps request.From — for background syncs the framework already derived
-        // it from the latest glucose entry, so it is glucose's own independent cursor.
+        // it from the latest glucose entry, so it is glucose's own independent cursor
+        // (see GlucoseFromAsync).
         //
         // Each data type below streams fetch-page → publish-page rather than accumulating
         // the whole range first: a multi-year backfill of a high-volume collection held in
@@ -187,18 +188,20 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         {
             try
             {
-                var recent = openEnded && request.From is { } crawlFrom
+                var glucoseFrom = await GlucoseFromAsync(request, "Glucose");
+                var recent = openEnded && glucoseFrom is { } crawlFrom
                     ? new RecentRecords<Entry>(crawlFrom - RecentReconcileWindow, Full: false, EntryTime)
                     : null;
 
                 var outcome = await CrawlAndPublishAsync(
-                    "Glucose", request.From, request.To,
+                    "Glucose", glucoseFrom, request.To,
                     (from, to) => FetchGlucosePagesAsync(from, to, recent),
-                    oldestOf: OldestEntryTime,
-                    publishAsync: p => PublishGlucoseDataInBatchesAsync(p, config, cancellationToken));
+                    timeOf: EntryTime,
+                    publishAsync: p => PublishGlucoseDataInBatchesAsync(p, config, cancellationToken),
+                    config.MaxCount);
 
                 if (recent is not null && outcome.Success)
-                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, request.From!.Value,
+                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, glucoseFrom!.Value,
                         async (p, uncrawled) => await p.Glucose.PublishRecentEntriesAsync(
                             uncrawled, ConnectorSource, await GlucosePublishOriginAsync(), cancellationToken)));
 
@@ -224,7 +227,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 // The treatment cursor resolves to a bound rather than to an absent resume point:
                 // with none stored it is this connector's own open InitialSyncFloor.
                 var treatmentFrom = openEnded
-                    ? ResumeFrom(request, await CalculateTreatmentSinceTimestampAsync(config))
+                    ? ResumeFrom(request, await ResumePointAsync("Treatments", await CalculateTreatmentSinceTimestampAsync(config)))
                     : request.From;
 
                 var now = Clock.GetUtcNow().UtcDateTime;
@@ -235,8 +238,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "Treatments", treatmentFrom, request.To,
                     (from, to) => FetchTreatmentPagesAsync(from, to, recent),
-                    oldestOf: p => OldestCreatedAt(p, t => t.CreatedAt),
-                    publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken));
+                    timeOf: t => ParseCreatedAt(t.CreatedAt)?.UtcDateTime,
+                    publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken),
+                    config.MaxCount);
 
                 if (recent is not null && outcome.Success)
                 {
@@ -274,7 +278,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var deviceStatusFrom = openEnded
-                    ? ResumeFrom(request, await CalculateDeviceStatusCatchUpSinceAsync(config))
+                    ? ResumeFrom(request, await ResumePointAsync("DeviceStatus", await CalculateDeviceStatusCatchUpSinceAsync(config)))
                     : request.From;
 
                 var recent = openEnded && deviceStatusFrom is { } crawlFrom
@@ -286,8 +290,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     "DeviceStatus", deviceStatusFrom, request.To,
                     (from, to) => FetchCreatedAtPagesAsync<DeviceStatus>(
                         from, to, "devicestatus", d => d.CreatedAt, "FetchDeviceStatus", observe: page => recent?.Collect(page)),
-                    oldestOf: p => OldestCreatedAt(p, d => d.CreatedAt),
-                    publishAsync: p => PublishDeviceStatusAsync(p, config, cancellationToken));
+                    timeOf: d => ParseCreatedAt(d.CreatedAt)?.UtcDateTime,
+                    publishAsync: p => PublishDeviceStatusAsync(p, config, cancellationToken),
+                    config.MaxCount);
 
                 if (recent is not null && outcome.Success)
                     outcome = outcome.Plus(await PublishUncrawledAsync(recent, deviceStatusFrom!.Value,
@@ -321,7 +326,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var activityFrom = openEnded
-                    ? ResumeFrom(request, await CalculateActivityCatchUpSinceAsync(config))
+                    ? ResumeFrom(request, await ResumePointAsync("Activity", await CalculateActivityCatchUpSinceAsync(config)))
                     : request.From;
 
                 var recent = openEnded && activityFrom is { } crawlFrom
@@ -333,8 +338,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     "Activity", activityFrom, request.To,
                     (from, to) => FetchCreatedAtPagesAsync<Activity>(
                         from, to, "activity", a => a.CreatedAt, "FetchActivity", observe: page => recent?.Collect(page)),
-                    oldestOf: p => OldestCreatedAt(p, a => a.CreatedAt),
-                    publishAsync: p => PublishActivityDataAsync(p, config, cancellationToken));
+                    timeOf: a => ParseCreatedAt(a.CreatedAt)?.UtcDateTime,
+                    publishAsync: p => PublishActivityDataAsync(p, config, cancellationToken),
+                    config.MaxCount);
 
                 if (recent is not null && outcome.Success)
                     outcome = outcome.Plus(await PublishUncrawledAsync(recent, activityFrom!.Value,
@@ -428,13 +434,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
     private static DateTimeOffset? ParseCreatedAt(string? createdAt) =>
         UploaderTimestamp.TryParse(createdAt, out var parsed) ? parsed : null;
-
-    /// <summary>
-    ///     Oldest created_at on a page. Uses DateTimeOffset for consistent UTC comparison
-    ///     regardless of system timezone.
-    /// </summary>
-    private static DateTime? OldestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf) =>
-        page.Select(item => ParseCreatedAt(createdAtOf(item))?.UtcDateTime).Min();
 
     /// <summary>
     ///     Pages a created_at collection inside the <see cref="BackwardTimePager.CreatedAtOffsetEnvelope"/>.

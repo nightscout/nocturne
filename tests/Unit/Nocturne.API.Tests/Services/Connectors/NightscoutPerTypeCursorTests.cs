@@ -56,6 +56,17 @@ public class NightscoutPerTypeCursorTests
         var metadata = new Mock<IMetadataPublisher>();
         metadata.Setup(p => p.GetLatestActivityTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(latestActivity);
+        var marks = new Dictionary<string, DateTime>();
+        metadata.Setup(p => p.GetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new Dictionary<string, DateTime>(marks));
+        metadata.Setup(p => p.SetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, IReadOnlyDictionary<string, DateTime?>, CancellationToken>((_, changes, _) =>
+            {
+                foreach (var (key, mark) in changes)
+                    if (mark is { } at) marks[key] = at;
+                    else marks.Remove(key);
+            })
+            .Returns(Task.CompletedTask);
 
         var publisher = new Mock<IConnectorPublisher>();
         publisher.Setup(p => p.IsAvailable).Returns(true);
@@ -104,7 +115,7 @@ public class NightscoutPerTypeCursorTests
         handler.RequestUrls.First(u => u.Contains("treatments.json"));
 
     private static string DeviceStatusUrl(SequentialMockHandler handler) =>
-        handler.RequestUrls.Single(u => u.Contains("devicestatus.json"));
+        handler.RequestUrls.First(u => u.Contains("devicestatus.json"));
 
     [Fact]
     public async Task Treatments_OpenEndedSync_NoPriorTreatments_ImportsFullHistory_NotGlucoseCursor()
@@ -203,14 +214,17 @@ public class NightscoutPerTypeCursorTests
     }
 
     [Fact]
-    public async Task DeviceStatus_OpenEndedSync_NoWatermark_ImportsFullHistory()
+    public async Task DeviceStatus_OpenEndedSync_NoWatermark_ImportsFullHistoryThenResumesFromWhereItReached()
     {
         // No device status stored → the whole history, spread across runs by the low-water mark.
         // Falling back to request.From would leave everything older than it out of reach for good.
+        // A status with no APS, pump or uploader fields leaves no stored watermark, so the next run
+        // resumes from the newest status the crawl published rather than crawling it all again.
         var from = DateTime.UtcNow.AddHours(-1);
+        var newest = DateTime.UtcNow.AddHours(-2);
         var handler = new SequentialMockHandler();
         handler.Enqueue(JsonResponse(Array.Empty<Entry>()));
-        handler.Enqueue(JsonResponse(Array.Empty<DeviceStatus>()));
+        handler.Enqueue(JsonResponse(new[] { new DeviceStatus { Id = "xdrip", CreatedAt = newest.ToString("O") } }));
 
         var config = Config();
         var service = CreateService(handler, config, latestDeviceStatus: null);
@@ -218,8 +232,12 @@ public class NightscoutPerTypeCursorTests
         var request = new SyncRequest { From = from, To = null, DataTypes = [SyncDataType.DeviceStatus] };
 
         await service.SyncDataAsync(request, config, CancellationToken.None);
-
         Uri.UnescapeDataString(DeviceStatusUrl(handler)).Should().NotContain("$gte");
+
+        handler.RequestUrls.Clear();
+        await service.SyncDataAsync(request, config, CancellationToken.None);
+        ExtractCursor(handler.RequestUrls.First(u => u.Contains("devicestatus.json")))
+            .Should().BeCloseTo(newest.AddMinutes(-5), TimeSpan.FromSeconds(1));
     }
 
     private static HttpResponseMessage JsonResponse<T>(T data) =>

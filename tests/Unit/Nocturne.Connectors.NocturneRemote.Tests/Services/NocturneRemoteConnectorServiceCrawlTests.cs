@@ -4,7 +4,6 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.NocturneRemote.Configurations;
@@ -638,27 +637,30 @@ public class NocturneRemoteConnectorServiceCrawlTests
     }
 
     /// <summary>
-    /// A catch-up longer than a page records what it owes as soon as it knows there is more than a
-    /// page, so a process killed mid-crawl does not strand the range below what it published. A
-    /// catch-up of one page, the common case, writes nothing.
+    /// A catch-up whose first page is full records what it owes before it asks for the next, so a
+    /// process killed during that fetch does not strand the range below what it published. A
+    /// catch-up of one short page, the common case, writes nothing.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_ACatchUpRecordsItsRangeOnlyWhileItSpansSeveralPages()
+    public async Task SyncDataAsync_ACatchUpRecordsItsRangeBeforeFetchingPastAFullPage()
     {
         var latestStatus = new DateTime(2026, 1, 3, 7, 0, 0, DateTimeKind.Utc);
         var handler = new RemoteFakeHandler()
             .Serve(RemoteFakeHandler.V1DeviceStatus,
                 RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"),
                 RemoteFakeHandler.DeviceStatusPage("2026-01-03T07:30:00Z"));
-        Dictionary<string, DateTime>? duringSecondPage = null;
-        ServiceFixture fixture = null!;
-        fixture = new ServiceFixture(handler, latestDeviceStatus: latestStatus,
-            onDeviceStatusPublished: () => duringSecondPage = fixture.PublishedStatuses.Count == 3 ? new(fixture.Marks) : duringSecondPage);
+        var fixture = new ServiceFixture(handler, latestDeviceStatus: latestStatus);
+        Dictionary<string, DateTime>? atSecondFetch = null;
+        handler.OnRequest = url =>
+        {
+            if (url.Contains(RemoteFakeHandler.V1DeviceStatus) && fixture.PublishedStatuses.Count == 2)
+                atSecondFetch ??= new(fixture.Marks);
+        };
 
         await fixture.Service.SyncDataAsync(
             new SyncRequest { DataTypes = [SyncDataType.DeviceStatus] }, fixture.Config, CancellationToken.None);
 
-        duringSecondPage.Should().ContainKey("DeviceStatus.GapTo");
+        atSecondFetch.Should().ContainKey("DeviceStatus.GapTo");
         fixture.Marks.Should().BeEmpty();
 
         var single = new ServiceFixture(
@@ -701,8 +703,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
             .Serve(RemoteFakeHandler.V1DeviceStatus,
                 RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"),
                 RemoteFakeHandler.DeviceStatusPage("2026-01-03T07:55:00Z", "2026-01-03T07:50:00Z"));
-        var fixture = new ServiceFixture(handler, time: time,
-            onDeviceStatusPublished: () => time.Advance(ConnectorRunLimits.BackfillBudget));
+        var budget = TimeSpan.FromSeconds(30);
+        var fixture = new ServiceFixture(handler, time: time, onDeviceStatusPublished: () => time.Advance(budget));
+        fixture.Service.BackfillBudget = budget;
 
         var result = await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
 
@@ -712,6 +715,72 @@ public class NocturneRemoteConnectorServiceCrawlTests
         handler.Requests.Should().Contain(u => u.Contains(NocturneRemoteConstants.Foods),
             "the types after the backfill still sync");
     }
+
+    /// <summary>
+    /// A type can publish without leaving the stored watermark its resume point reads — a device
+    /// status with no APS, pump or uploader fields writes no snapshot. Its next run resumes from the
+    /// newest record its full crawl published rather than crawling the whole history again; a cursor
+    /// reset still crawls everything.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AfterAFullCrawlOfATypeThatStoresNoWatermark_ResumesFromWhereItReached()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(RemoteFakeHandler.V1DeviceStatus,
+                RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"));
+        var fixture = new ServiceFixture(handler);
+        var request = new SyncRequest { DataTypes = [SyncDataType.DeviceStatus] };
+
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        DeviceStatusCrawls(handler).First().Should().NotContain("$gte");
+
+        handler.Requests.Clear();
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        DeviceStatusCrawls(handler).First().Should()
+            .Contain($"find[created_at][$gte]={new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc):o}");
+
+        handler.Requests.Clear();
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { To = new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc), DataTypes = [SyncDataType.DeviceStatus] },
+            fixture.Config, CancellationToken.None);
+        DeviceStatusCrawls(handler).First().Should().NotContain("$gte");
+    }
+
+    private static List<string> DeviceStatusCrawls(RemoteFakeHandler handler) =>
+        handler.Requests.Where(u => u.Contains(RemoteFakeHandler.V1DeviceStatus)).ToList();
+
+    /// <summary>
+    /// A V4 list refuses a range wider than its span limit, so an owed range wider than that is read
+    /// a window at a time. Asked for in one request, every run's first page of it would fail and the
+    /// deep backfill behind it would never be reached.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AnOwedRangeWiderThanTheV4SpanLimit_IsCrawledInWindows()
+    {
+        var gapFrom = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var gapTo = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(handler, latestTreatment: new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
+        fixture.Marks["Boluses.GapFrom"] = gapFrom;
+        fixture.Marks["Boluses.GapTo"] = gapTo;
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Boluses] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var windows = handler.Requests
+            .Where(u => u.Contains(NocturneRemoteConstants.Boluses) && u.Contains("&to="))
+            .Select(u => (From: DateTime.Parse(Query(u, "from")).ToUniversalTime(), To: DateTime.Parse(Query(u, "to")).ToUniversalTime()))
+            .ToList();
+        windows.Should().HaveCountGreaterThan(1);
+        windows.Should().OnlyContain(w => (w.To - w.From).TotalDays <= V4ApiLimits.MaxDateSpanDays);
+        windows.Max(w => w.To).Should().Be(gapTo);
+        windows.Min(w => w.From).Should().Be(gapFrom);
+        fixture.Marks.Should().BeEmpty();
+    }
+
+    private static string Query(string url, string name) =>
+        Uri.UnescapeDataString(System.Text.RegularExpressions.Regex.Match(url, $"[?&]{name}=([^&]+)").Groups[1].Value);
 
     /// <summary>A full crawl of a type the remote holds nothing of writes no mark, on every run.</summary>
     [Fact]
@@ -1098,17 +1167,17 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
             var metadata = new Mock<IMetadataPublisher>();
             metadata
-                .Setup(p => p.GetBackfillLowWaterMarkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((string _, string collection, CancellationToken _) =>
-                    Marks.TryGetValue(collection, out var mark) ? mark : (DateTime?)null);
+                .Setup(p => p.GetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Dictionary<string, DateTime>(Marks));
             metadata
-                .Setup(p => p.SetBackfillLowWaterMarkAsync(
-                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-                .Callback<string, string, DateTime?, CancellationToken>((_, collection, mark, _) =>
+                .Setup(p => p.SetBackfillLowWaterMarksAsync(
+                    It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, IReadOnlyDictionary<string, DateTime?>, CancellationToken>((_, changes, _) =>
                 {
                     MarkWrites++;
-                    if (mark is { } at) Marks[collection] = at;
-                    else Marks.Remove(collection);
+                    foreach (var (key, mark) in changes)
+                        if (mark is { } at) Marks[key] = at;
+                        else Marks.Remove(key);
                 })
                 .Returns(Task.CompletedTask);
             metadata
@@ -1178,6 +1247,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
         /// <summary>Every request made, so a test can assert on the range each crawl asked for.</summary>
         internal List<string> Requests { get; } = [];
 
+        internal Action<string>? OnRequest { get; set; }
+
         /// <summary>
         /// The Authorization header each request carried, positionally aligned with
         /// <see cref="Requests"/>.
@@ -1239,6 +1310,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
         {
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(request.RequestUri.ToString());
+            OnRequest?.Invoke(request.RequestUri.ToString());
             Tokens.Add(request.Headers.TryGetValues("Authorization", out var authorization)
                 ? authorization.FirstOrDefault()
                 : null);

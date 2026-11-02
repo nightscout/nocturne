@@ -621,7 +621,11 @@ public class ConnectorBackgroundService<TService, TConfig>(
         IServiceProvider scopeProvider,
         TConfig config,
         CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null) =>
-        scopeProvider.GetRequiredService<TService>()
-            .SyncDataAsync(config, cancellationToken, since: null, progressReporter);
+        ISyncProgressReporter? progressReporter = null)
+    {
+        var service = scopeProvider.GetRequiredService<TService>();
+        if (service is IBackfillBudgeted budgeted)
+            budgeted.BackfillBudget = ConnectorRunLimits.BackfillBudgetFor(PerTenantSyncTimeout);
+        return service.SyncDataAsync(config, cancellationToken, since: null, progressReporter);
+    }
 }

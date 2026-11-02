@@ -2,7 +2,6 @@ using System.Net;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -153,6 +152,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     )
     {
         _progressReporter = progressReporter;
+        _marks = null;
         var skippedBefore = _publisher?.SkippedDeleted ?? 0;
         var refusedBefore = _publisher?.Refused ?? 0;
         try
@@ -1325,7 +1325,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             "Starting background data sync for {ConnectorSource}",
             ConnectorSource
         );
-        _backfillDeadline = Clock.GetUtcNow() + ConnectorRunLimits.BackfillBudget;
+        _backfillDeadline = Clock.GetUtcNow() + BackfillBudget;
         try
         {
             if (!await AuthenticateAsync())
