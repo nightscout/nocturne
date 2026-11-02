@@ -198,7 +198,7 @@ public class LegacyReadCacheInvalidationTests : IDisposable
             StartTimestamp = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc),
         });
 
-        _written.Models.Should().Equal(typeof(StateSpan));
+        _written.Models.Should().NotBeEmpty().And.OnlyContain(written => written == typeof(StateSpan));
     }
 
     [Fact]

@@ -400,6 +400,10 @@ public class StateSpanRepository : IStateSpanRepository
 
         await db.SaveChangesAsync(cancellationToken);
 
+        IReadOnlyList<StateSpanUpsert> committed =
+            [.. written.Select(w => new StateSpanUpsert(StateSpanMapper.ToDomainModel(w.Row), w.Outcome))];
+        await ReportCommittedAsync(committed);
+
         if (inserted.Count > 0)
         {
             try
@@ -407,16 +411,19 @@ public class StateSpanRepository : IStateSpanRepository
                 await _linker.DeduplicateBatchAsync(
                     RecordType.StateSpan, LinkedRecordTypes.InputsOf(RecordType.StateSpan, inserted), cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Don't fail the insert if deduplication fails
                 _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "StateSpan", inserted.Count);
             }
+            catch (OperationCanceledException ex)
+            {
+                CommittedWrite.Attach(ex, committed);
+                throw;
+            }
+
+            await ReportCommittedAsync(committed);
         }
 
-        IReadOnlyList<StateSpanUpsert> committed =
-            [.. written.Select(w => new StateSpanUpsert(StateSpanMapper.ToDomainModel(w.Row), w.Outcome))];
-        await ReportCommittedAsync(committed);
         return [.. committed];
     }
 
