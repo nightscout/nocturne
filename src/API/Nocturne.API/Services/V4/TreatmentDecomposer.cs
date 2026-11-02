@@ -1001,8 +1001,16 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                         dropped.Count, table.Kind);
                 }
 
-                foreach (var id in spanDrops)
-                    await _stateSpanService.DeleteStateSpanAsync(id, ct);
+                if (spanDrops.Count > 0)
+                {
+                    var droppedSpans = await db.AuditedSoftDeleteAsync(
+                        StoredTreatmentSpans(db, [.. spanDrops]), _auditContext, "treatment_reclassified", ct,
+                        DuplicateDelete.EveryCopy);
+                    committed.Add(typeof(StateSpan));
+                    Logger.LogDebug(
+                        "Removed {Count} {RecordType} rows a reclassified treatment no longer writes",
+                        droppedSpans, nameof(StateSpan));
+                }
             }
         }
         finally
@@ -1026,6 +1034,14 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         nameof(StateSpanCategory.Override),
         nameof(StateSpanCategory.TemporaryTarget),
     ];
+
+    /// <summary>The live spans of <see cref="TreatmentSpanCategories"/> stored under <paramref name="legacyIds"/>.</summary>
+    private static IQueryable<StateSpanEntity> StoredTreatmentSpans(NocturneDbContext db, string[] legacyIds)
+    {
+        var categories = TreatmentSpanCategories;
+        return db.StateSpans.Where(s =>
+            s.OriginalId != null && legacyIds.Contains(s.OriginalId) && categories.Contains(s.Category));
+    }
 
     /// <summary>The tables of <see cref="DecomposedTables"/> a classification writes to.</summary>
     private static HashSet<DecomposedKind> TablesWrittenBy(TreatmentClassification c)
@@ -1498,12 +1514,10 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (ids.Length == 0)
             return new StoredRows([], [], [], [], [], [], [], [], new Dictionary<string, HashSet<string>>());
 
-        var spanCategories = TreatmentSpanCategories;
         Dictionary<string, HashSet<string>> spanKeys;
         await using (var db = await _contexts.CreateAsync(ct))
         {
-            spanKeys = (await db.StateSpans.AsNoTracking()
-                    .Where(s => s.OriginalId != null && ids.Contains(s.OriginalId) && spanCategories.Contains(s.Category))
+            spanKeys = (await StoredTreatmentSpans(db, ids).AsNoTracking()
                     .Select(s => new { s.OriginalId, s.Category })
                     .ToListAsync(ct))
                 .GroupBy(s => s.OriginalId!)

@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
@@ -47,10 +48,11 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
     private readonly Mock<IStateSpanService> _stateSpans = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
     private readonly RecordingLegacyReads _legacyReads = new();
+    private readonly StatementRecorder _statements = new();
 
     public TreatmentDecomposerReclassificationTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _statements);
         _context = _db.CreateContext();
         _factory = new TestNocturneDbContextFactory(_context);
 
@@ -60,16 +62,6 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             {
                 StoreSpan(span);
                 return span;
-            });
-        _stateSpans
-            .Setup(s => s.DeleteStateSpanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string id, CancellationToken _) =>
-            {
-                var entity = _context.StateSpans.Single(s => s.OriginalId == id);
-                entity.DeletedAt = DateTime.UtcNow;
-                _context.SaveChanges();
-                _context.Entry(entity).State = EntityState.Detached;
-                return true;
             });
     }
 
@@ -194,9 +186,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             State = "Custom",
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
         });
-        _stateSpans
-            .Setup(s => s.DeleteStateSpanAsync("aaps-1", It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("span store down"));
+        _statements.FailOn(s => s.StartsWith("UPDATE \"state_spans\"", StringComparison.Ordinal));
         _legacyReads.Models.Clear();
 
         var reupload = () => DecomposeAsync(
@@ -205,7 +195,90 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         await reupload.Should().ThrowAsync<InvalidOperationException>();
         (await _context.Notes.CountAsync()).Should().Be(0, "the note's drop committed before the span drop failed");
         _legacyReads.Models.Should().Contain(typeof(Nocturne.Core.Models.V4.Note));
+        _legacyReads.Models.Should().NotContain(typeof(StateSpan), "the span drop did not commit");
     }
+
+    [Fact]
+    public async Task Reclassified_spans_are_dropped_with_their_copies_and_supersession_and_reported_without_audit_rows()
+    {
+        var copyOfFirst = SeedSpan("copy-of-first", "other-source");
+        var first = SeedSpan("span-1");
+        var second = SeedSpan("span-2");
+        var survivor = SeedSpan("unrelated");
+        var pointsAtFirst = SeedSpan("points-at-first", supersededBy: first.Id);
+        var canonical = Guid.CreateVersion7();
+        _context.LinkedRecords.AddRange(Link(canonical, first.Id, isPrimary: true), Link(canonical, copyOfFirst.Id, isPrimary: false));
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+        _legacyReads.Models.Clear();
+
+        await Decomposer().DecomposeBatchAsync(
+            [Reclassified("span-1"), Reclassified("span-2")], WriteOrigin.Live);
+
+        var spans = await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().ToDictionaryAsync(s => s.Id);
+        var deletedByUser = await _context.StateSpans.IgnoreQueryFilters()
+            .CountAsync(s => s.DeletedAt != null && EF.Property<bool>(s, "DeletedByUser"));
+        spans[first.Id].DeletedAt.Should().NotBeNull();
+        spans[second.Id].DeletedAt.Should().NotBeNull();
+        spans[copyOfFirst.Id].DeletedAt.Should().NotBeNull("every copy in a dropped span's duplicate group goes with it");
+        deletedByUser.Should().Be(0, "a reclassification is not the user deleting the span");
+        spans[survivor.Id].DeletedAt.Should().BeNull();
+        spans[pointsAtFirst.Id].DeletedAt.Should().BeNull();
+        spans[pointsAtFirst.Id].SupersededById.Should().BeNull("a live span no longer points at a deleted one");
+        (await _context.MutationAuditLog.CountAsync()).Should().Be(0, "the drop is system-attributed");
+        _legacyReads.Models.Should().Contain(typeof(StateSpan));
+    }
+
+    [Fact]
+    public async Task Dropping_the_spans_of_a_batch_costs_the_statements_of_dropping_one()
+    {
+        var one = await SpanDropStatementsAsync(1);
+        var many = await SpanDropStatementsAsync(30);
+
+        many.Should().Be(one, "the spans a batch reclassifies are dropped as one set");
+        one.Should().BeGreaterThan(0);
+    }
+
+    private async Task<int> SpanDropStatementsAsync(int count)
+    {
+        var ids = Enumerable.Range(0, count).Select(i => $"batch-{count}-{i}").ToList();
+        foreach (var id in ids)
+            SeedSpan(id);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+        _statements.Clear();
+
+        await Decomposer().DecomposeBatchAsync([.. ids.Select(Reclassified)], WriteOrigin.Live);
+        var statements = _statements.All.Count(s => s.Contains("\"state_spans\"") || s.Contains("\"linked_records\""));
+
+        (await _context.StateSpans.IgnoreQueryFilters().AsNoTracking()
+                .Where(s => ids.Contains(s.OriginalId!) && s.DeletedAt == null).CountAsync())
+            .Should().Be(0, "every reclassified span is dropped");
+        return statements;
+    }
+
+    private StateSpanEntity SeedSpan(string originalId, string source = "aaps", Guid? supersededBy = null)
+    {
+        var span = new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = originalId, Source = source,
+            Category = nameof(StateSpanCategory.Override), State = "Custom",
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
+            SupersededById = supersededBy,
+        };
+        _context.StateSpans.Add(span);
+        return span;
+    }
+
+    private static LinkedRecordEntity Link(Guid canonical, Guid recordId, bool isPrimary) => new()
+    {
+        Id = Guid.CreateVersion7(), TenantId = TenantId, CanonicalId = canonical,
+        RecordType = RecordTypeKeys.Key(RecordType.StateSpan), RecordId = recordId,
+        SourceTimestamp = At, DataSource = "aaps", IsPrimary = isPrimary, SysCreatedAt = DateTime.UtcNow,
+    };
+
+    private static Treatment Reclassified(string id) =>
+        new() { Id = id, EventType = "Correction Bolus", Mills = At, Insulin = 1 };
 
     [Fact]
     public async Task The_removed_note_does_not_hold_off_a_later_upload_that_writes_it_again()
@@ -269,7 +342,6 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         await DecomposeAsync(EffectiveSwitch());
 
         (await DeletedRowsAsync()).Should().Be(0);
-        _stateSpans.Verify(s => s.DeleteStateSpanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
