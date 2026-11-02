@@ -632,8 +632,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 ["lastFullWalkAt"] = config.LastFullWalkAt,
             };
 
-            if (await _configService.MergeSecretsAsync(
-                    "MyFitnessPal", updates, "connector-runtime", _logger, cancellationToken))
+            if (await _configService.MergeSecretsAsync("MyFitnessPal", updates, _logger, cancellationToken))
                 _logger.LogInformation("[{ConnectorSource}] Persisted updated connector state", ConnectorSource);
         }
         catch (OperationCanceledException) { throw; }

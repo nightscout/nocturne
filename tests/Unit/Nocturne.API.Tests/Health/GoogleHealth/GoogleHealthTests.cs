@@ -772,7 +772,7 @@ public class GoogleHealthTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Preview_preserves_refreshed_tokens_after_configuration_invalidates_cache(bool expireCachedToken)
+    public async Task Preview_preserves_refreshed_tokens_without_a_second_refresh(bool expireCachedToken)
     {
         var tokenCalls = 0;
         var oldTokenCalls = 0;
@@ -1872,17 +1872,24 @@ public class GoogleHealthTests : IDisposable
                     ct.ThrowIfCancellationRequested();
                     return Task.FromResult(new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
                 });
+            void RecordSecrets(Dictionary<string, string> values, CancellationToken ct, bool invalidatesCaches)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (FailTokenSaves && values.ContainsKey("refreshToken"))
+                    throw new InvalidOperationException("secret store unavailable");
+                secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
+                if (invalidatesCaches) OnSave?.Invoke();
+            }
             configurations.Setup(value => value.SaveSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, ct) =>
-                {
-                    ct.ThrowIfCancellationRequested();
-                    if (FailTokenSaves && values.ContainsKey("refreshToken"))
-                        throw new InvalidOperationException("secret store unavailable");
-                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
-                    OnSave?.Invoke();
-                })
+                .Callback<string, Dictionary<string, string>, string?, CancellationToken>(
+                    (_, values, _, ct) => RecordSecrets(values, ct, invalidatesCaches: true))
+                .Returns(Task.CompletedTask);
+            configurations.Setup(value => value.SaveRuntimeSecretsAsync(
+                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, CancellationToken>(
+                    (_, values, ct) => RecordSecrets(values, ct, invalidatesCaches: false))
                 .Returns(Task.CompletedTask);
             configurations.Setup(value => value.UpdateHealthStateAsync(
                     "GoogleHealth", It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),

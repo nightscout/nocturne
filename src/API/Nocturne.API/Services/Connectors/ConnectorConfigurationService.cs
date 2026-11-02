@@ -110,11 +110,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// country here after a Medtronic sign-in: a real person's health-account identifier, handed
     /// to every later visitor, with their CGM data pulled into the shared tenant. Anything that
     /// writes connector configuration in future is covered without needing to remember an
-    /// attribute. Applied to all four write methods on
+    /// attribute. Applied to every write method on
     /// <see cref="Nocturne.Core.Contracts.Connectors.IConnectorConfigurationService"/> —
-    /// <c>SaveConfigurationAsync</c>, <c>SaveSecretsAsync</c>, <c>SetActiveAsync</c> and
-    /// <c>DeleteConfigurationAsync</c>. Enabling a connector or deleting its configuration are as
-    /// much a shared-account concern as writing a URL is.
+    /// <c>SaveConfigurationAsync</c>, <c>SaveSecretsAsync</c>, <c>SaveRuntimeSecretsAsync</c>,
+    /// <c>SetActiveAsync</c> and <c>DeleteConfigurationAsync</c>. Enabling a connector or deleting its
+    /// configuration are as much a shared-account concern as writing a URL is.
     /// <para>
     /// The subject comes from <see cref="IAuditContext"/>, which
     /// <c>AuditContextMiddleware</c> populates from the request's auth context. A caller with no
@@ -180,20 +180,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
-        await EnsureNotDemoSubjectAsync(connectorName, ct);
-
-        if (!_encryptionService.IsConfigured)
-        {
-            throw new InvalidOperationException(
-                "Secret encryption is not configured. Ensure api-secret is set in configuration.");
-        }
-
-        var canonicalName = ConnectorNames.Canonical(connectorName);
-        var encryptedSecrets = _encryptionService.EncryptSecrets(secrets);
-        var secretsJson = JsonSerializer.Serialize(encryptedSecrets, _jsonOptions);
-
-        var entity = await _configurations.SaveSecretsAsync(canonicalName, secretsJson, modifiedBy, ct);
-        _logger.LogInformation("Saved secrets for connector {ConnectorName}", connectorName);
+        var entity = await StoreSecretsAsync(connectorName, secrets, modifiedBy, ct);
         InvalidateCaches(entity);
 
         // When saving Nightscout connector secrets that include an API secret,
@@ -203,10 +190,42 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         // Broadcast secrets update (note: doesn't reveal actual secrets)
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
         {
-            ConnectorName = canonicalName,
+            ConnectorName = entity.ConnectorName,
             ChangeType = "secrets_updated",
             ModifiedBy = modifiedBy
         });
+    }
+
+    /// <inheritdoc />
+    public async Task SaveRuntimeSecretsAsync(
+        string connectorName,
+        Dictionary<string, string> secrets,
+        CancellationToken ct = default)
+    {
+        await StoreSecretsAsync(connectorName, secrets, IConnectorConfigurationService.RuntimeModifiedBy, ct);
+    }
+
+    private async Task<ConnectorConfigurationRecord> StoreSecretsAsync(
+        string connectorName,
+        Dictionary<string, string> secrets,
+        string? modifiedBy,
+        CancellationToken ct)
+    {
+        await EnsureNotDemoSubjectAsync(connectorName, ct);
+
+        if (!_encryptionService.IsConfigured)
+        {
+            throw new InvalidOperationException(
+                "Secret encryption is not configured. Ensure api-secret is set in configuration.");
+        }
+
+        var encryptedSecrets = _encryptionService.EncryptSecrets(secrets);
+        var secretsJson = JsonSerializer.Serialize(encryptedSecrets, _jsonOptions);
+
+        var entity = await _configurations.SaveSecretsAsync(
+            ConnectorNames.Canonical(connectorName), secretsJson, modifiedBy, ct);
+        _logger.LogInformation("Saved secrets for connector {ConnectorName}", connectorName);
+        return entity;
     }
 
     /// <summary>

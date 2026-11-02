@@ -6,12 +6,13 @@ namespace Nocturne.Connectors.Core.Extensions;
 public static class ConnectorSecretExtensions
 {
     /// <summary>
-    ///     Merges updates into a connector's stored secrets.
+    ///     Merges updates into a connector's stored secrets, for a connector's own write during a run
+    ///     (<see cref="IConnectorConfigurationService.SaveRuntimeSecretsAsync"/>).
     /// </summary>
     /// <remarks>
-    ///     <see cref="IConnectorConfigurationService.SaveSecretsAsync"/> replaces the whole secrets
-    ///     document, so a connector that saves only the keys it rotates at runtime would drop the
-    ///     credentials the user configured. Reading first and writing the merged result keeps them.
+    ///     Saving replaces the whole secrets document, so a connector that saves only the keys it
+    ///     rotates at runtime would drop the credentials the user configured. Reading first and
+    ///     writing the merged result keeps them.
     /// </remarks>
     /// <param name="updates">
     ///     Keys to write. A null or empty value removes the key rather than storing a blank.
@@ -21,7 +22,6 @@ public static class ConnectorSecretExtensions
         this IConnectorConfigurationService configService,
         string connectorName,
         IReadOnlyDictionary<string, string?> updates,
-        string? modifiedBy = null,
         ILogger? logger = null,
         CancellationToken ct = default)
     {
@@ -57,7 +57,7 @@ public static class ConnectorSecretExtensions
         if (!changed)
             return false;
 
-        await configService.SaveSecretsAsync(connectorName, stored, modifiedBy, ct);
+        await configService.SaveRuntimeSecretsAsync(connectorName, stored, ct);
         return true;
     }
 

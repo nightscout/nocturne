@@ -440,6 +440,31 @@ public class CareLinkConnectorServiceTests
         result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
+    /// <summary>
+    /// A refresh token CareLink rotates during a sync is the connector's own write: it must take the
+    /// runtime path, which empties no cache, and the cached session already holds the rotated token,
+    /// so the next sync signs in without a second refresh.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_StoresARotatedRefreshTokenAsARuntimeWrite_AndTheNextSyncReusesTheSession()
+    {
+        var handler = new CareLinkFakeHandler { MonitorDataJson = """{"currentServerTime":1767261600000,"lastSG":{}}""" };
+        var fixture = new ServiceFixture(handler);
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose] };
+
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        fixture.ConfigService.Verify(s => s.SaveRuntimeSecretsAsync(
+            "CareLink",
+            It.Is<Dictionary<string, string>>(secrets => secrets["refresh_token"] == "rotated-refresh-token"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        fixture.ConfigService.Verify(s => s.SaveSecretsAsync(
+            It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
+            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        handler.Requests.Count(r => r.Url == CareLinkFakeHandler.TokenUrl).Should().Be(1);
+    }
+
     /// <summary>Leaves only the alarm step able to publish, so its failure cannot be confused for another step's.</summary>
     private static CareLinkConnectorConfiguration AlarmOnlyConfiguration() => new()
     {
@@ -458,6 +483,7 @@ public class CareLinkConnectorServiceTests
         internal CareLinkConnectorService Service { get; }
         internal CareLinkAuthTokenProvider TokenProvider { get; }
         internal CareLinkConnectorConfiguration Config { get; }
+        internal Mock<IConnectorConfigurationService> ConfigService { get; } = new();
         internal List<SensorGlucose> PublishedGlucose { get; } = [];
         internal List<Nocturne.Core.Models.DeviceStatus> PublishedDeviceStatuses { get; } = [];
 
@@ -476,10 +502,17 @@ public class CareLinkConnectorServiceTests
             tenantAccessor.Setup(t => t.IsResolved).Returns(true);
             tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
 
-            var configService = new Mock<IConnectorConfigurationService>();
+            var stored = new Dictionary<string, string> { ["refresh_token"] = "stored-refresh-token" };
+            var configService = ConfigService;
             configService
                 .Setup(s => s.GetSecretsAsync("CareLink", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new Dictionary<string, string> { ["refresh_token"] = "stored-refresh-token" });
+                .ReturnsAsync(() => new Dictionary<string, string>(stored));
+            configService
+                .Setup(s => s.SaveRuntimeSecretsAsync(
+                    "CareLink", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, CancellationToken>(
+                    (_, secrets, _) => stored = new Dictionary<string, string>(secrets))
+                .Returns(Task.CompletedTask);
 
             var serverResolver = new ConnectorServerResolver<CareLinkConnectorConfiguration>(
                 null, null, CareLinkConstants.Servers.Eu);
