@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -15,7 +16,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
 /// <summary>
-/// Tests for dedup reconciliation in <see cref="DeduplicationService"/>: the reusable
+/// Tests for dedup reconciliation in <see cref="DuplicateReconciler"/>: the reusable
 /// per-record criteria + deleted-status loader (<see cref="MatchCriteria"/> plus soft-deleted
 /// status keyed by record id), merging duplicate canonical groups (full and candidate-bounded,
 /// including transitive chains), the per-tenant reconciliation cursor round-trip, and the
@@ -33,7 +34,7 @@ public class DeduplicationReconcileTests : IDisposable
     private static readonly ReadCounter Reads = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly DeduplicationService _service;
+    private readonly DuplicateReconciler _service;
 
     public DeduplicationReconcileTests()
     {
@@ -43,22 +44,19 @@ public class DeduplicationReconcileTests : IDisposable
         _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
-        _service = new DeduplicationService(
-            _context.AsFactory(),
-            new Mock<IServiceScopeFactory>().Object,
-            NullLogger<DeduplicationService>.Instance);
+        _service = DeduplicationModules.Reconciler(_context.AsFactory());
     }
 
     private async Task<ReconcileCursor?> CursorAsync()
     {
         await using var db = await _context.AsFactory().CreateAsync();
-        return await DeduplicationService.GetCursorAsync(db, CancellationToken.None);
+        return await DuplicateReconciler.GetCursorAsync(db, CancellationToken.None);
     }
 
     private async Task SetCursorAsync(ReconcileCursor cursor)
     {
         await using var db = await _context.AsFactory().CreateAsync();
-        await DeduplicationService.SetCursorAsync(db, cursor, CancellationToken.None);
+        await DuplicateReconciler.SetCursorAsync(db, cursor, CancellationToken.None);
     }
 
     public void Dispose()
@@ -77,7 +75,7 @@ public class DeduplicationReconcileTests : IDisposable
         _context.CarbIntakes.Add(new CarbIntakeEntity { Id = gone, TenantId = TestTenantId, Carbs = 42, Timestamp = DateTime.UtcNow, DeletedAt = DateTime.UtcNow });
         await _context.SaveChangesAsync();
 
-        var info = await DeduplicationService.LoadRecordInfoForTestAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { live, gone });
+        var info = await LinkedRecordTypes.LoadRecordInfoAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { live, gone }, default);
 
         info[live].Criteria.Carbs.Should().Be(42);
         info[live].IsDeleted.Should().BeFalse();
@@ -102,7 +100,7 @@ public class DeduplicationReconcileTests : IDisposable
         });
         await _context.SaveChangesAsync();
 
-        var info = await DeduplicationService.LoadRecordInfoForTestAsync(_context, RecordType.StateSpan, new HashSet<Guid> { live, gone });
+        var info = await LinkedRecordTypes.LoadRecordInfoAsync(_context, RecordType.StateSpan, new HashSet<Guid> { live, gone }, default);
 
         info[live].Criteria.Category.Should().Be(StateSpanCategory.Exercise);
         info[live].Criteria.State.Should().Be("Running");
@@ -121,7 +119,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        await DeduplicationService.LoadRecordInfoForTestAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { id });
+        await LinkedRecordTypes.LoadRecordInfoAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { id }, default);
 
         _context.ChangeTracker.Entries<CarbIntakeEntity>().Should().BeEmpty(
             "dedup reads are read-only and must not change-track loaded entities");
@@ -150,7 +148,7 @@ public class DeduplicationReconcileTests : IDisposable
         _context.CarbIntakes.Add(new CarbIntakeEntity { Id = theirs, TenantId = otherTenant, Carbs = 99, Timestamp = DateTime.UtcNow });
         await _context.SaveChangesAsync();
 
-        var info = await DeduplicationService.LoadRecordInfoForTestAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { mine, theirs });
+        var info = await LinkedRecordTypes.LoadRecordInfoAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { mine, theirs }, default);
 
         info.Should().ContainKey(mine);
         info.Should().NotContainKey(theirs);
@@ -215,7 +213,7 @@ public class DeduplicationReconcileTests : IDisposable
 
         foreach (var span in inputs)
         {
-            await _service.DeduplicateBatchAsync(RecordType.StateSpan,
+            await DeduplicationModules.Linker(_context.AsFactory()).DeduplicateBatchAsync(RecordType.StateSpan,
                 [new DeduplicationInput(span.Id, span.StartTimestamp.ToMills(), span.Source!, MatchCriteriaMapper.From(span))]);
         }
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.StateSpan, null, CancellationToken.None);
@@ -355,9 +353,9 @@ public class DeduplicationReconcileTests : IDisposable
         // the choice must not fall out of whichever row the database returned first.
         var info = Promotable(LowerRecordId, HigherRecordId);
 
-        DeduplicationService.PickSurvivor(TiedRows(LowerRecordId, HigherRecordId), info)
+        DuplicateMatching.PickSurvivor(TiedRows(LowerRecordId, HigherRecordId), info)
             .RecordId.Should().Be(LowerRecordId);
-        DeduplicationService.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), info)
+        DuplicateMatching.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), info)
             .RecordId.Should().Be(LowerRecordId);
     }
 
@@ -366,7 +364,7 @@ public class DeduplicationReconcileTests : IDisposable
     {
         // An orphaned link reads exactly as a deleted record, so promoting it would render the
         // whole canonical group as nothing.
-        DeduplicationService.PickSurvivor(
+        DuplicateMatching.PickSurvivor(
                 TiedRows(LowerRecordId, HigherRecordId), Promotable(HigherRecordId))
             .RecordId.Should().Be(HigherRecordId);
     }
@@ -374,13 +372,13 @@ public class DeduplicationReconcileTests : IDisposable
     [Fact]
     public void PickSurvivor_FallsBackToTheEarliestWhenNothingIsPromotable()
     {
-        var deleted = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var deleted = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: true),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
         };
 
-        DeduplicationService.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), deleted)
+        DuplicateMatching.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), deleted)
             .RecordId.Should().Be(LowerRecordId);
     }
 
@@ -393,13 +391,13 @@ public class DeduplicationReconcileTests : IDisposable
             new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000, IsPrimary = true },
             new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
         ];
-        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var info = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(outsider, Closed.AddHours(1)))
         };
 
-        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(HigherRecordId);
+        DuplicateMatching.PickSurvivor(rows, info).RecordId.Should().Be(HigherRecordId);
     }
 
     [Fact]
@@ -410,19 +408,19 @@ public class DeduplicationReconcileTests : IDisposable
             new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000, IsPrimary = true },
             new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
         ];
-        var endedFirst = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var endedFirst = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed)),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed.AddHours(1)))
         };
-        var stillRunning = new Dictionary<Guid, DeduplicationService.RecordInfo>(endedFirst)
+        var stillRunning = new Dictionary<Guid, DuplicateMatching.RecordInfo>(endedFirst)
         {
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, null))
         };
 
-        DeduplicationService.PickSurvivor(rows, endedFirst).RecordId.Should().Be(
+        DuplicateMatching.PickSurvivor(rows, endedFirst).RecordId.Should().Be(
             LowerRecordId, "a later planned end must not displace an earlier observed one");
-        DeduplicationService.PickSurvivor(rows, stillRunning).RecordId.Should().Be(HigherRecordId);
+        DuplicateMatching.PickSurvivor(rows, stillRunning).RecordId.Should().Be(HigherRecordId);
     }
 
     [Fact]
@@ -435,14 +433,14 @@ public class DeduplicationReconcileTests : IDisposable
             new() { RecordId = middle, SourceTimestamp = 1_700_000_005_000 },
             new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
         ];
-        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var info = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
             [middle] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed.AddHours(1))),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
         };
 
-        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
+        DuplicateMatching.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
     }
 
     private static readonly DateTime Closed = new(2023, 11, 14, 23, 0, 0, DateTimeKind.Utc);
@@ -455,13 +453,13 @@ public class DeduplicationReconcileTests : IDisposable
             new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000 },
             new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000, IsPrimary = true }
         ];
-        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var info = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
         };
 
-        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
+        DuplicateMatching.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
     }
 
     /// <summary>
@@ -476,8 +474,8 @@ public class DeduplicationReconcileTests : IDisposable
     /// <summary>
     /// Record info marking every listed id as present and not deleted.
     /// </summary>
-    private static Dictionary<Guid, DeduplicationService.RecordInfo> Promotable(params Guid[] ids) =>
-        ids.ToDictionary(id => id, _ => new DeduplicationService.RecordInfo(new MatchCriteria(), IsDeleted: false));
+    private static Dictionary<Guid, DuplicateMatching.RecordInfo> Promotable(params Guid[] ids) =>
+        ids.ToDictionary(id => id, _ => new DuplicateMatching.RecordInfo(new MatchCriteria(), IsDeleted: false));
 
     [Fact]
     public async Task MergeDuplicateGroupsAsync_MergesTransitiveThreeGroupChain()
@@ -987,8 +985,8 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now.AddMinutes(-5));
 
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(_context.AsFactory(), new Mock<IServiceScopeFactory>().Object, logger.Object);
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
         FailingReadsInterceptor.FailWhen = sql => sql.Contains("carb_intakes");
         try
         {
@@ -1260,7 +1258,7 @@ public class DeduplicationReconcileTests : IDisposable
         using var context = OfflineDbContext.Create();
         var cursor = new ReconcileCursor(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), Guid.CreateVersion7());
 
-        var sql = DeduplicationService.LinksAfter(context, cursor, cursor.CreatedAt.AddHours(1)).Take(5000).ToQueryString();
+        var sql = DuplicateReconciler.LinksAfter(context, cursor, cursor.CreatedAt.AddHours(1)).Take(5000).ToQueryString();
 
         sql.Should().MatchRegex(@"l\.sys_created_at >= @\w+ AND \(l\.sys_created_at > @\w+ OR l\.id > @\w+\)",
             "the lower bound ranges the creation index and the keyset continues inside an instant");
@@ -1274,7 +1272,7 @@ public class DeduplicationReconcileTests : IDisposable
         using var context = OfflineDbContext.Create();
         IReadOnlySet<Guid> candidates = new HashSet<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
 
-        var sql = DeduplicationService.PrimariesOf(context, "carbintake", candidates).ToQueryString();
+        var sql = DuplicateReconciler.PrimariesOf(context, "carbintake", candidates).ToQueryString();
 
         sql.Should().MatchRegex(@"l\.canonical_id = ANY \(@\w+\)",
             "one uuid[] parameter keeps one statement for every candidate count");
@@ -1344,7 +1342,7 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_PagesPastTheBatchSizeWithoutSkippingOrRereadingARow()
+    public async Task AFullRun_PagesPastTheBatchSizeWithoutSkippingOrRereadingARow()
     {
         // 503 readings in 251 groups, spaced far enough apart that only same-timestamp readings
         // match. The 250th group holds three, so the 500-row page boundary lands inside it and the
@@ -1371,7 +1369,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        var result = await _service.DeduplicateAllAsync();
+        var result = await DeduplicationModules.Admin(_context.AsFactory(), TestTenantId).RunFullAsync();
 
         result.Success.Should().BeTrue();
         result.SensorGlucoseProcessed.Should().Be(readings.Count);
@@ -1389,7 +1387,7 @@ public class DeduplicationReconcileTests : IDisposable
             Guid.CreateVersion7(), isPrimary: true);
         await _context.SaveChangesAsync();
 
-        var deleted = await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        var deleted = await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         deleted.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
@@ -1402,7 +1400,7 @@ public class DeduplicationReconcileTests : IDisposable
     {
         using var context = OfflineDbContext.Create();
 
-        var sql = DeduplicationService.OrphanedLinksOf(context, recordType).ToQueryString();
+        var sql = LinkedRecordTypes.OrphanedLinksOf(context, recordType).ToQueryString();
 
         sql.Should().MatchRegex(
             @"NOT EXISTS \(\s*SELECT 1\s*FROM \w+ AS (\w+)\s*WHERE \1\.tenant_id = @ef_filter__TenantId AND \1\.id = l\.record_id\)",
@@ -1416,7 +1414,7 @@ public class DeduplicationReconcileTests : IDisposable
     /// <see cref="AddRecord"/> fails these theories rather than going untested.
     /// </summary>
     public static TheoryData<RecordType> DeduplicatedRecordTypes =>
-        [.. DeduplicationService.DeduplicatedRecordTypes];
+        [.. LinkedRecordTypes.DeduplicatedRecordTypes];
 
     [Theory]
     [MemberData(nameof(DeduplicatedRecordTypes))]
@@ -1429,7 +1427,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(recordType, recordId, WideBase.ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         links.Should().ContainSingle().Which.RecordId.Should().Be(recordId);
@@ -1478,7 +1476,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddRawLink(recordType, TestTenantId);
         await _context.SaveChangesAsync();
 
-        var deleted = await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        var deleted = await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         deleted.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
@@ -1518,7 +1516,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, recordId, WideBase.ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         links.Should().ContainSingle().Which.RecordId.Should().Be(recordId);
@@ -1546,7 +1544,7 @@ public class DeduplicationReconcileTests : IDisposable
             await seedContext.SaveChangesAsync();
         }
 
-        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         links.Should().ContainSingle().Which.TenantId.Should().Be(otherTenant);
@@ -1588,7 +1586,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, theirRecordId, WideBase.ToMills(), "mylife-connector");
         await _context.SaveChangesAsync();
 
-        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         links.Should().ContainSingle().Which.Id.Should().Be(theirLinkId);

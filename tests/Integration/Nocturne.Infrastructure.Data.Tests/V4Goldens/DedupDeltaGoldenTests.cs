@@ -20,7 +20,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 ///   - Bolus:          both upsert (the consistent reference).
 /// D2 pins the new-insert-plus-upserted-sibling collapse for SensorGlucose and Bolus. After delta D4
 /// moved Bolus's dedup to run post-commit, BOTH now collapse C with the upserted B into ONE canonical
-/// group (the DeduplicationService runs on a separate connection and sees B's upserted physical value
+/// group (the duplicate linker runs on a separate connection and sees B's upserted physical value
 /// only once committed):
 ///   D2_SensorGlucose_PostCommitDedup_NewPlusUpsertedSibling_CollapseIntoOneGroup     → ONE canonical group.
 ///   D2_Bolus_PostCommitDedup_NewPlusUpsertedSibling_CollapseIntoOneGroup       → ONE canonical group.
@@ -73,7 +73,7 @@ public class DedupDeltaGoldenTests
         (await _fx.QueryAsync(tenant, ctx => ctx.BasalInjections.AsNoTracking().CountAsync()))
             .Should().Be(2, "intra-batch LegacyId dedup collapses the duplicate");
         (await _fx.QueryAsync(tenant, ctx => ctx.LinkedRecords.AsNoTracking().CountAsync()))
-            .Should().Be(0, "BasalInjection is not a DeduplicationService participant");
+            .Should().Be(0, "BasalInjection is not a deduplication participant");
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class DedupDeltaGoldenTests
     // which is inside C's ±30s window — so B is always a candidate for C. Whether C collapses with B
     // turns on whether the dedup engine, when value-matching, sees B's UPSERTED physical value.
     //
-    // The DeduplicationService runs on a context of its own (a separate connection from
+    // The duplicate linker runs on a context of its own (a separate connection from
     // the repository's BulkCreate transaction). So it sees B's upserted physical row only once that
     // row is COMMITTED:
     //   - SensorGlucose has always committed before running dedup → B's new value is visible →

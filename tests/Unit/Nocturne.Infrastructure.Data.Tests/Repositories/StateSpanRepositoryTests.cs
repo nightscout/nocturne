@@ -26,7 +26,7 @@ public class StateSpanRepositoryTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly Mock<IDeduplicationService> _mockDedup;
+    private readonly Mock<IDuplicateLinker> _mockDedup;
     private readonly StateSpanRepository _repository;
     private readonly Mock<ILogger<StateSpanRepository>> _logger = new();
     private readonly SaveCounter _saves = new();
@@ -55,7 +55,7 @@ public class StateSpanRepositoryTests : IDisposable
 
         _context = _db.CreateContext();
         _context.AttributedTo(_auditContext);
-        _mockDedup = new Mock<IDeduplicationService>();
+        _mockDedup = new Mock<IDuplicateLinker>();
         _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _repository = new StateSpanRepository(
             _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object);

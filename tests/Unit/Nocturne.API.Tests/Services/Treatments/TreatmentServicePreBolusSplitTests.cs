@@ -59,7 +59,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
             Endpoint = "POST /api/v1/treatments",
         };
 
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var factory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = new BolusRepository(factory, dedup, caller, NullLogger<BolusRepository>.Instance);
         var carbRepo = new CarbIntakeRepository(factory, dedup, caller, NullLogger<CarbIntakeRepository>.Instance);

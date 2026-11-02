@@ -16,28 +16,25 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing note records in the database. A DeduplicationService participant on top of
+/// Repository for managing note records in the database. A deduplication participant on top of
 /// the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the
-/// extended <c>GetAsync</c> (duplicate filter), the read-visibility filter behind
-/// <c>CountAsync</c>, and the post-commit dedup linking.
+/// extended <c>GetAsync</c> (duplicate filter) and the read-visibility filter behind
+/// <c>CountAsync</c>.
 /// </summary>
 public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="NoteRepository"/> class.
     /// </summary>
     public NoteRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<NoteRepository> logger,
         IV4RecordBroadcaster<Note>? broadcaster = null,
         ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
     }
 
     /// <inheritdoc />
@@ -49,12 +46,9 @@ public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteR
     /// <inheritdoc />
     protected override void ApplyUpdate(NoteEntity target, Note source) => NoteMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.Note;
-
     /// <summary>
     /// Gets note records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -111,31 +105,5 @@ public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteR
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(NoteMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<NoteEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.Note, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", inserted.Count);
-        }
     }
 }

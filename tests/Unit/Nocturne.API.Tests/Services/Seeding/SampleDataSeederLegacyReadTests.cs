@@ -100,11 +100,11 @@ public class SampleDataSeederLegacyReadTests : IDisposable
             Mock.Of<ICompressionLowRepository>(),
             new TreatmentFoodRepository(contexts, _written),
             new StateSpanRepository(
-                contexts, Mock.Of<IDeduplicationService>(), audit, NullLogger<StateSpanRepository>.Instance, _written),
+                contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<StateSpanRepository>.Instance, _written),
             new ProfileActivationRepository(
                 contexts, audit, NullLogger<ProfileActivationRepository>.Instance, legacyReads: _written),
             new TempBasalRepository(
-                contexts, Mock.Of<IDeduplicationService>(), audit, NullLogger<TempBasalRepository>.Instance, legacyReads: _written),
+                contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance, legacyReads: _written),
             _time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

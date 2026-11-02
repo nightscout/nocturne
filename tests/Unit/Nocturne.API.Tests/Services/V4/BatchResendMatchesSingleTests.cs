@@ -38,7 +38,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly TestNocturneDbContextFactory _factory;
     private readonly IAuditContext _audit = Mock.Of<IAuditContext>();
-    private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
+    private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
 
     public BatchResendMatchesSingleTests()
     {

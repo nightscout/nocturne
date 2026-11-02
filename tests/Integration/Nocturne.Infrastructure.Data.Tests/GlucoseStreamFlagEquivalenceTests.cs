@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -140,7 +141,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
 
         await using (var scope = Scope(tenant))
         {
-            var drift = await scope.ServiceProvider.GetRequiredService<IDeduplicationService>().AuditDuplicateFlagsAsync();
+            var drift = await scope.ServiceProvider.GetRequiredService<IDuplicateReconciler>().AuditDuplicateFlagsAsync();
             drift.Should().ContainSingle(d => d.RecordType == RecordType.SensorGlucose).Which.Repaired.Should().Be(1);
         }
 
@@ -255,7 +256,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
         await GlucoseStreamFlags.LockAsync(holder, default);
 
         await using var scope = Scope(tenant);
-        var dedup = (DeduplicationService)scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
+        var dedup = scope.ServiceProvider.GetRequiredService<DuplicateReconciler>();
         var merge = Task.Run(() => dedup.MergeDuplicateGroupsAsync(RecordType.SensorGlucose, null, default));
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, merge);
 
@@ -847,7 +848,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
         scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
 
     private static SensorGlucoseRepository Repository(AsyncServiceScope scope, IDataEventSink<Entry>? sink = null) =>
-        new(Factory(scope), scope.ServiceProvider.GetRequiredService<IDeduplicationService>(), Audit,
+        new(Factory(scope), scope.ServiceProvider.GetRequiredService<IDuplicateLinker>(), Audit,
             NullLogger<SensorGlucoseRepository>.Instance, entrySink: sink);
 
     private static PatientDeviceRepository Devices(AsyncServiceScope scope) =>

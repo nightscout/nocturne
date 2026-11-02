@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -81,6 +82,13 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
             (await GroupsWithTwoPrimariesAsync(tenant)).Should().BeEmpty($"step {step} ({operation}) of seed {seed}");
         }
 
+        foreach (var type in new[] { RecordType.CarbIntake, RecordType.SensorGlucose, RecordType.StateSpan })
+        {
+            var operation = await run.SplitThenMergeAsync(type);
+            (await MismatchesAsync(tenant)).Should().BeEmpty($"{operation} of seed {seed}");
+            (await GroupsWithTwoPrimariesAsync(tenant)).Should().BeEmpty($"{operation} of seed {seed}");
+        }
+
         run.Exercised.Should().Contain(["duplicate linked", "merged", "promoted on delete", "restored"],
             "the run must reach every writer that moves a primary");
     }
@@ -145,6 +153,91 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         (await MismatchesAsync(tenant)).Should().BeEmpty();
     }
 
+    /// <summary>
+    /// A merge of two groups while a soft delete is promoting a copy in one of them. Read before the
+    /// delete commits, the merge would keep the deleted primary's group's old plan and leave the
+    /// promoted copy primary beside the merge's survivor; locked first, it reads what the delete left.
+    /// </summary>
+    [Fact]
+    public async Task AMergeWaitsForASoftDeleteMovingAPrimaryInOneOfItsGroups()
+    {
+        var tenant = await SeedTenantAsync();
+        var (earlier, later) = await SplitCarbGroupsAsync(tenant);
+
+        await using var delete = Context(tenant);
+        await using var transaction = await delete.Database.BeginTransactionAsync();
+        var deleted = await delete.AuditedSoftDeleteWithIdsAsync(
+            delete.CarbIntakes.Where(e => e.Id == later.Primary), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
+        deleted.Promoted.Should().Equal(later.Copy);
+
+        await using var scope = Scope(tenant);
+        var merge = Task.Run(() => Dedup(scope).MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, default));
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, merge);
+
+        await transaction.CommitAsync();
+        (await merge.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(1);
+
+        (await GroupsWithTwoPrimariesAsync(tenant)).Should().BeEmpty();
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+        await using var check = Context(tenant);
+        (await check.LinkedRecords.Where(l => l.IsPrimary).Select(l => l.RecordId).ToListAsync())
+            .Should().Equal(earlier.Primary);
+    }
+
+    /// <summary>
+    /// A soft delete that promotes a copy takes its groups' links before it writes its rows, as a merge
+    /// does, so a merge holding the links and about to rewrite the rows' flags does not deadlock with it.
+    /// </summary>
+    [Fact]
+    public async Task ASoftDeleteWaitsForTheLinksBeforeItWritesItsRows()
+    {
+        var tenant = await SeedTenantAsync();
+        var (_, later) = await SplitCarbGroupsAsync(tenant);
+
+        await using var merge = Context(tenant);
+        await using var transaction = await merge.Database.BeginTransactionAsync();
+        var canonical = await merge.LinkedRecords.Where(l => l.RecordId == later.Primary).Select(l => l.CanonicalId).SingleAsync();
+        await DuplicateGroupPrimaries.LockGroupsAsync(merge, RecordType.CarbIntake, [canonical], default);
+
+        var delete = Task.Run(async () =>
+        {
+            await using var db = Context(tenant);
+            return await db.AuditedSoftDeleteWithIdsAsync(
+                db.CarbIntakes.Where(e => e.Id == later.Primary), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
+        });
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, delete);
+
+        var rowWrite = merge.Database.ExecuteSqlAsync(
+            $"UPDATE carb_intakes SET is_duplicate = is_duplicate WHERE id = {later.Primary}");
+        (await Task.WhenAny(rowWrite, Task.Delay(TimeSpan.FromSeconds(10)))).Should().Be(rowWrite,
+            "the waiting delete holds none of the rows yet");
+        await rowWrite;
+        await transaction.CommitAsync();
+
+        (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(later.Copy);
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Two two-source groups of one meal, kept apart by a value the later group then has corrected to
+    /// the earlier's, so a merge joins them. Four sources, as a group takes one record per source.
+    /// </summary>
+    private async Task<((Guid Primary, Guid Copy) Earlier, (Guid Primary, Guid Copy) Later)> SplitCarbGroupsAsync(Guid tenant)
+    {
+        var at = DateTime.UtcNow.AddHours(-1);
+        CarbIntakeEntity Carb(string source, DateTime when, double carbs) => new()
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = when, DataSource = source, Carbs = carbs,
+        };
+        var earlier = (Primary: Carb("a-connector", at, 40), Copy: Carb("b-connector", at.AddSeconds(2), 40));
+        var later = (Primary: Carb("c-connector", at.AddSeconds(10), 90), Copy: Carb("d-connector", at.AddSeconds(12), 90));
+        await IngestAsync(tenant, RecordType.CarbIntake, [earlier.Primary, earlier.Copy]);
+        await IngestAsync(tenant, RecordType.CarbIntake, [later.Primary, later.Copy]);
+        await ExecuteAsync(tenant,
+            $"UPDATE carb_intakes SET carbs = 40 WHERE id IN ('{later.Primary.Id}', '{later.Copy.Id}')");
+        return ((earlier.Primary.Id, earlier.Copy.Id), (later.Primary.Id, later.Copy.Id));
+    }
+
     private static async Task SetPrimariesAsync(NocturneDbContext db, PrimaryChange[] changes)
     {
         await using (db)
@@ -192,7 +285,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         var at = DateTime.UtcNow.AddHours(-2);
         await using var scope = Scope(tenant);
         var repository = new CarbIntakeRepository(
-            Factory(scope), scope.ServiceProvider.GetRequiredService<IDeduplicationService>(), Audit,
+            Factory(scope), scope.ServiceProvider.GetRequiredService<IDuplicateLinker>(), Audit,
             NullLogger<CarbIntakeRepository>.Instance);
 
         await repository.BulkCreateAsync(
@@ -220,7 +313,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         var start = DateTime.UtcNow.AddHours(-2);
         await using var scope = Scope(tenant);
         var repository = new StateSpanRepository(
-            Factory(scope), scope.ServiceProvider.GetRequiredService<IDeduplicationService>(), Audit,
+            Factory(scope), scope.ServiceProvider.GetRequiredService<IDuplicateLinker>(), Audit,
             NullLogger<StateSpanRepository>.Instance);
 
         await repository.BulkUpsertAsync(
@@ -297,6 +390,46 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
                 Exercised.Add("duplicate linked");
             return $"ingest {count} {type}";
         }
+
+        /// <summary>
+        /// Splits one event of <paramref name="type"/> across two groups and merges them: two connectors'
+        /// copies ingested with different values, the second then corrected to the first's. Whether a
+        /// random merge finds a split depends on ids drawn from the clock, so every run ends on one that
+        /// must, on a day no random step writes to.
+        /// </summary>
+        public async Task<string> SplitThenMergeAsync(RecordType type)
+        {
+            var at = Base.AddDays(1).AddHours(12).AddMinutes(10 * (int)type);
+            var (first, second, correct) = type switch
+            {
+                RecordType.CarbIntake => Pair(
+                    new CarbIntakeEntity { Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = at, DataSource = Sources[0], Carbs = 20 },
+                    new CarbIntakeEntity { Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = at.AddSeconds(5), DataSource = Sources[1], Carbs = 99 },
+                    id => $"UPDATE carb_intakes SET carbs = 20 WHERE id = '{id}'"),
+                RecordType.SensorGlucose => Pair(
+                    new SensorGlucoseEntity { Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = at, DataSource = Sources[0], Mgdl = 120 },
+                    new SensorGlucoseEntity { Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = at.AddSeconds(5), DataSource = Sources[1], Mgdl = 199 },
+                    id => $"UPDATE sensor_glucose SET mgdl = 120 WHERE id = '{id}'"),
+                _ => Pair(
+                    Span(tenant, at, null, Sources[0]),
+                    Span(tenant, at.AddSeconds(5), null, Sources[1], "Manual"),
+                    id => $"UPDATE state_spans SET state = 'Automatic' WHERE id = '{id}'"),
+            };
+
+            await test.IngestAsync(tenant, type, [first.Row]);
+            await test.IngestAsync(tenant, type, [second.Row]);
+            await test.ExecuteAsync(tenant, correct(second.Id));
+
+            await using var scope = test.Scope(tenant);
+            var merged = await Dedup(scope).MergeDuplicateGroupsAsync(type, null, default);
+            merged.Should().BePositive($"the corrected copy of {type} matches the first");
+            Exercised.Add("merged");
+            return $"split then merge {type}: {merged}";
+        }
+
+        private static ((object Row, Guid Id) First, (object Row, Guid Id) Second, Func<Guid, string> Correct) Pair<T>(
+            T first, T second, Func<Guid, string> correct) where T : class, IIdentified =>
+            ((first, first.Id), (second, second.Id), correct);
 
         private async Task<string> EditAsync()
         {
@@ -413,7 +546,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
                 """);
             await using var scope = test.Scope(tenant);
             await using (var db = await Factory(scope).CreateAsync())
-                await DeduplicationService.SetCursorAsync(db, new ReconcileCursor(DateTime.UtcNow, Guid.Empty), default);
+                await DuplicateReconciler.SetCursorAsync(db, new ReconcileCursor(DateTime.UtcNow, Guid.Empty), default);
             return $"prune {await Dedup(scope).PruneSingletonLinksAsync(1000, 10)}";
         }
 
@@ -428,7 +561,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
                 RecordType.SensorGlucose => await db.SensorGlucose.Where(e => ids.Contains(e.Id)).ExecuteDeleteAsync(),
                 _ => await db.StateSpans.Where(e => ids.Contains(e.Id)).ExecuteDeleteAsync(),
             };
-            return $"orphan sweep after removing {removed} {type}: {await DeduplicationService.DeleteOrphanedLinksAsync(db)}";
+            return $"orphan sweep after removing {removed} {type}: {await LinkedRecordTypes.DeleteOrphanedLinksAsync(db)}";
         }
 
         private static IQueryable<Guid> LiveIds(NocturneDbContext db, RecordType type) => type switch
@@ -484,7 +617,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
             StateSpanEntity s => new DeduplicationInput(s.Id, s.StartTimestamp.ToMills(), s.Source!, MatchCriteriaMapper.From(s)),
             _ => throw new ArgumentOutOfRangeException(nameof(rows)),
         }).ToList();
-        return await Dedup(scope).DeduplicateBatchAsync(type, inputs);
+        return await scope.ServiceProvider.GetRequiredService<IDuplicateLinker>().DeduplicateBatchAsync(type, inputs);
     }
 
     private AsyncServiceScope Scope(Guid tenant)
@@ -497,8 +630,8 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
     private static INocturneDbContextFactory Factory(AsyncServiceScope scope) =>
         scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
 
-    private static DeduplicationService Dedup(AsyncServiceScope scope) =>
-        (DeduplicationService)scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
+    private static DuplicateReconciler Dedup(AsyncServiceScope scope) =>
+        scope.ServiceProvider.GetRequiredService<DuplicateReconciler>();
 
     private static StateSpanEntity Span(Guid tenant, DateTime start, DateTime? end, string source, string state = "Automatic") => new()
     {

@@ -16,7 +16,7 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing bolus calculation records in the database. A DeduplicationService
+/// Repository for managing bolus calculation records in the database. A deduplication
 /// participant, so it inherits the shared CRUD/soft-delete surface from
 /// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
 /// overrides (the <c>GetAsync</c> with the duplicate filter, dedup
@@ -24,22 +24,19 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, BolusCalculationEntity>, IBolusCalculationRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="BolusCalculationRepository"/> class.
     /// </summary>
     public BolusCalculationRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<BolusCalculationRepository> logger,
         IV4RecordBroadcaster<BolusCalculation>? broadcaster = null,
         ILegacyReadCacheInvalidation? legacyReads = null
     )
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
     }
 
     /// <inheritdoc />
@@ -51,12 +48,9 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
     /// <inheritdoc />
     protected override void ApplyUpdate(BolusCalculationEntity target, BolusCalculation source) => BolusCalculationMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.BolusCalculation;
-
     /// <summary>
     /// Gets bolus calculation records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// Overrides the base 7-arg form to add the duplicate filter.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
@@ -114,31 +108,5 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(BolusCalculationMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<BolusCalculationEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.BolusCalculation, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BolusCalculation", inserted.Count);
-        }
     }
 }

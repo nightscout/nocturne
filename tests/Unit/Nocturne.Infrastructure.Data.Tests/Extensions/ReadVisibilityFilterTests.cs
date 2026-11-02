@@ -53,7 +53,7 @@ public class ReadVisibilityFilterTests : IDisposable
             .Should().BeEquivalentTo(expected);
 
         var history = await new NoteRepository(
-                context.AsFactory(), Mock.Of<IDeduplicationService>(), Mock.Of<IAuditContext>(),
+                context.AsFactory(), Mock.Of<IDuplicateLinker>(), Mock.Of<IAuditContext>(),
                 NullLogger<NoteRepository>.Instance)
             .GetModifiedSinceAsync(0, 100);
         history.Select(h => (h.Record.Id, h.Deleted)).Should().BeEquivalentTo(

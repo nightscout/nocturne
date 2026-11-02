@@ -83,7 +83,7 @@ public sealed class DeviceStatusServicePostCommitFailureTests : IDisposable
             .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
             .Returns(() => cancelled ? Task.FromException(new OperationCanceledException("the client went away")) : Task.CompletedTask);
         var spans = new StateSpanService(
-            new StateSpanRepository(_context.AsFactory(), Mock.Of<IDeduplicationService>(), new SystemAuditContext(),
+            new StateSpanRepository(_context.AsFactory(), Mock.Of<IDuplicateLinker>(), new SystemAuditContext(),
                 NullLogger<StateSpanRepository>.Instance, legacyReads.Object),
             NullLogger<StateSpanService>.Instance);
         var service = Service(Decomposer(uploaderBroadcaster: null, spans: spans));

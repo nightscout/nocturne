@@ -72,8 +72,8 @@ public class TreatmentBatchReadsTests(RlsCompletenessFixture fx)
     public async Task GetByCorrelationIdsAsync_ReadsEveryMealHalfInOneStatement()
     {
         await using var store = await OpenAsync();
-        var boluses = new BolusRepository(store.Factory, Mock.Of<IDeduplicationService>(), new SystemAuditContext(), NullLogger<BolusRepository>.Instance);
-        var carbs = new CarbIntakeRepository(store.Factory, Mock.Of<IDeduplicationService>(), new SystemAuditContext(), NullLogger<CarbIntakeRepository>.Instance);
+        var boluses = new BolusRepository(store.Factory, Mock.Of<IDuplicateLinker>(), new SystemAuditContext(), NullLogger<BolusRepository>.Instance);
+        var carbs = new CarbIntakeRepository(store.Factory, Mock.Of<IDuplicateLinker>(), new SystemAuditContext(), NullLogger<CarbIntakeRepository>.Instance);
         var groups = Enumerable.Range(0, 30).Select(_ => Guid.CreateVersion7()).ToList();
         await boluses.BulkCreateAsync([.. groups.Select((g, i) => new Bolus { Timestamp = Start.AddMinutes(i), Insulin = 1, CorrelationId = g })], WriteOrigin.Live);
         await carbs.BulkCreateAsync([.. groups.Select((g, i) => new CarbIntake { Timestamp = Start.AddMinutes(i), Carbs = 10, CorrelationId = g })], WriteOrigin.Live);
@@ -107,7 +107,7 @@ public class TreatmentBatchReadsTests(RlsCompletenessFixture fx)
     }
 
     private static NoteRepository Notes(Store store) =>
-        new(store.Factory, Mock.Of<IDeduplicationService>(), new SystemAuditContext(), NullLogger<NoteRepository>.Instance);
+        new(store.Factory, Mock.Of<IDuplicateLinker>(), new SystemAuditContext(), NullLogger<NoteRepository>.Instance);
 
     private static Note Note(string legacyId, int minute) => new()
     {

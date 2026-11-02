@@ -5,7 +5,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
 /// Once a day, repairs an active tenant's stored duplicate flags that disagree with their links
-/// (<see cref="IDeduplicationService.AuditDuplicateFlagsAsync(CancellationToken)"/>) and logs a
+/// (<see cref="IDuplicateReconciler.AuditDuplicateFlagsAsync(CancellationToken)"/>) and logs a
 /// warning per record type that had any, since every disagreement is a writer's bug.
 /// </summary>
 /// <remarks>
@@ -30,7 +30,7 @@ internal sealed class DuplicateFlagAuditJob(ILogger<DuplicateFlagAuditJob> logge
         if (!run.Tenant!.IsActive)
             return JobOutcome.Resume(null, run.StartedAt + IScheduledJob.InactiveTenantRecheck);
 
-        var drift = await run.Services.GetRequiredService<IDeduplicationService>().AuditDuplicateFlagsAsync(ct);
+        var drift = await run.Services.GetRequiredService<IDuplicateReconciler>().AuditDuplicateFlagsAsync(ct);
         foreach (var table in drift)
         {
             logger.LogWarning(

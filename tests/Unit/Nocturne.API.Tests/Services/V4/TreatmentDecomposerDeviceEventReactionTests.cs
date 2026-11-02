@@ -46,7 +46,7 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
         _context = _db.CreateContext();
         var factory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
-        var dedup = Mock.Of<IDeduplicationService>();
+        var dedup = Mock.Of<IDuplicateLinker>();
 
         var reactor = new Mock<IDeviceEventReactor>();
         reactor

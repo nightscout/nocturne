@@ -224,7 +224,7 @@ public class ClientIdRekeyTests : IDisposable
     {
         var ctxFactory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
-        var dedup = Mock.Of<IDeduplicationService>();
+        var dedup = Mock.Of<IDuplicateLinker>();
         var bolus = new BolusRepository(ctxFactory, dedup, audit, NullLogger<BolusRepository>.Instance);
         var carbs = new CarbIntakeRepository(ctxFactory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance);
         var bgChecks = new BGCheckRepository(ctxFactory, dedup, audit, NullLogger<BGCheckRepository>.Instance);

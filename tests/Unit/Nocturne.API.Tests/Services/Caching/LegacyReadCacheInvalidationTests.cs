@@ -95,7 +95,7 @@ public class LegacyReadCacheInvalidationTests : IDisposable
         services
             .AddLogging()
             .AddSingleton<INocturneDbContextFactory>(new TestNocturneDbContextFactory(_context))
-            .AddSingleton(Mock.Of<IDeduplicationService>())
+            .AddSingleton(Mock.Of<IDuplicateLinker>())
             .AddSingleton<IAuditContext>(new SystemAuditContext())
             .AddSingleton(cache.Object);
         await using var provider = services.BuildServiceProvider();
@@ -235,7 +235,7 @@ public class LegacyReadCacheInvalidationTests : IDisposable
         new ServiceCollection()
             .AddLogging()
             .AddSingleton<INocturneDbContextFactory>(new TestNocturneDbContextFactory(_context))
-            .AddSingleton(Mock.Of<IDeduplicationService>())
+            .AddSingleton(Mock.Of<IDuplicateLinker>())
             .AddSingleton<IAuditContext>(new SystemAuditContext())
             .AddSingleton<ILegacyReadCacheInvalidation>(_written)
             .BuildServiceProvider();

@@ -17,7 +17,7 @@ public class DuplicateFlagAuditJobTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 2, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly Mock<IDeduplicationService> _dedup = new();
+    private readonly Mock<IDuplicateReconciler> _dedup = new();
     private readonly ListLogger<DuplicateFlagAuditJob> _logger = new();
 
     [Fact]

@@ -16,21 +16,20 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing device event records in the database. A DeduplicationService participant on
+/// Repository for managing device event records in the database. A deduplication participant on
 /// top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
 /// the extended <c>GetAsync</c> (duplicate filter), the read-visibility filter behind
-/// <c>CountAsync</c>, the post-commit dedup linking, and the event-type query helpers.
+/// <c>CountAsync</c> and the event-type query helpers.
 /// </summary>
 public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
     private readonly IDeviceEventReactor? _reactor;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceEventRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
+    /// <param name="linker">Links committed inserts into their duplicate groups.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="broadcaster">Optional realtime broadcaster for native V4 record shapes.</param>
@@ -39,15 +38,14 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
     public DeviceEventRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<DeviceEventRepository> logger,
         IV4RecordBroadcaster<DeviceEvent>? broadcaster = null,
         IDeviceEventReactor? reactor = null,
         ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
         _reactor = reactor;
     }
 
@@ -136,9 +134,6 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <inheritdoc />
     protected override void ApplyUpdate(DeviceEventEntity target, DeviceEvent source) => DeviceEventMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.DeviceEvent;
-
     /// <summary>
     /// Routes the base 7-arg form through the extended device-event query (duplicate
     /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
@@ -151,7 +146,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
 
     /// <summary>
     /// Gets device event records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -212,32 +207,6 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(DeviceEventMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<DeviceEventEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.DeviceEvent, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", inserted.Count);
-        }
     }
 
     /// <summary>

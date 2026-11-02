@@ -44,7 +44,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         SubjectName = "owner@example.com",
         AuthType = "SessionCookie",
     };
-    private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
+    private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
     private readonly Mock<IStateSpanService> _stateSpans = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
     private readonly RecordingLegacyReads _legacyReads = new();
 

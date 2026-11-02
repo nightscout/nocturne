@@ -34,7 +34,7 @@ public class TempBasalRepositoryTests : IDisposable
         _context = _db.CreateContext();
         _repository = new TempBasalRepository(
             new TestNocturneDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<TempBasalRepository>.Instance);
     }

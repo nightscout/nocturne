@@ -33,7 +33,7 @@ public class V4ListSortIndexPlanTests(RlsCompletenessFixture fx)
             {
                 var repository = new SensorGlucoseRepository(
                     factory,
-                    new Mock<IDeduplicationService>().Object,
+                    new Mock<IDuplicateLinker>().Object,
                     new Mock<IAuditContext>().Object,
                     NullLogger<SensorGlucoseRepository>.Instance);
                 (await repository.GetAsync(null, null, null, null, Limit, 0, descending: true))

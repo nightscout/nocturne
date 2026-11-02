@@ -11,7 +11,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing basal schedules in the database. A LegacyId-only type (no SyncId-upsert,
-/// no DeduplicationService participation), so it uses the shared
+/// no deduplication), so it uses the shared
 /// <see cref="ProfileScopedRepositoryBase{TModel,TEntity}"/> behaviour unchanged.
 /// </summary>
 public class BasalScheduleRepository : ProfileScopedRepositoryBase<BasalSchedule, BasalScheduleEntity>, IBasalScheduleRepository

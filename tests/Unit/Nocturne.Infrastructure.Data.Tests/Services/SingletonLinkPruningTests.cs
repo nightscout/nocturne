@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -12,7 +13,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
 /// <summary>
-/// <see cref="DeduplicationService.PruneSingletonLinksAsync"/> deletes links that are alone in their
+/// <see cref="DuplicateReconciler.PruneSingletonLinksAsync"/> deletes links that are alone in their
 /// group, and every pass reads an old record with no link as the group it was. So pruning must be
 /// invisible: each scenario builds one history in two databases, prunes only one, applies the same
 /// next event to both, and requires the same duplicate groups with the same primaries.
@@ -133,7 +134,7 @@ public class SingletonLinkPruningTests
         (await world.Service.PruneSingletonLinksAsync(100, 10)).Should().Be(1);
         await world.Ctx.LinkedRecords.Where(l => !l.IsPrimary).ExecuteDeleteAsync();
 
-        var lastReset = DateTime.UtcNow - DeduplicationService.SingletonLinkRetention - TimeSpan.FromMinutes(1);
+        var lastReset = DateTime.UtcNow - LinkedRecordTypes.SingletonLinkRetention - TimeSpan.FromMinutes(1);
         await world.Ctx.DedupReconcileState.ExecuteUpdateAsync(s => s.SetProperty(e => e.PruneCursorResetAt, lastReset));
         var restartedAfter = DateTime.UtcNow;
 
@@ -147,7 +148,7 @@ public class SingletonLinkPruningTests
     {
         using var context = OfflineDbContext.Create();
 
-        var sql = DeduplicationService.SingletonsAmong(context, [Guid.NewGuid(), Guid.NewGuid()]).ToQueryString();
+        var sql = DuplicateReconciler.SingletonsAmong(context, [Guid.NewGuid(), Guid.NewGuid()]).ToQueryString();
 
         sql.Should().MatchRegex(@"l\.id = ANY \(@\w+\)", "one uuid[] parameter keeps one statement for every page size");
         sql.Should().Contain("NOT EXISTS (");
@@ -264,7 +265,7 @@ public class SingletonLinkPruningTests
                 await w.AddBolus(copy, Event.AddMinutes(5), "glooko-connector", 2.0);
                 await w.AddSingletonLink(RecordType.Bolus, copy, Event.AddMinutes(5), "glooko-connector");
             },
-            async w => (await w.Service.DeduplicateAllAsync()).Success.Should().BeTrue());
+            async w => (await DeduplicationModules.Admin(w.Ctx.AsFactory(), TenantId).RunFullAsync()).Success.Should().BeTrue());
 
         groups.Should().ContainSingle().Which.Should().Be(Group(dose, copy));
     }
@@ -295,7 +296,7 @@ public class SingletonLinkPruningTests
 
     /// <summary>
     /// Runs <paramref name="history"/> in two databases, ages both past
-    /// <see cref="DeduplicationService.SingletonLinkRetention"/> and the reconcile cursor, prunes one,
+    /// <see cref="LinkedRecordTypes.SingletonLinkRetention"/> and the reconcile cursor, prunes one,
     /// runs <paramref name="next"/> in both and requires the same groups.
     /// </summary>
     /// <returns>The groups of more than one record, as <see cref="Group"/> renders them.</returns>
@@ -335,18 +336,20 @@ public class SingletonLinkPruningTests
         {
             Ctx = _db.CreateContext();
             Ctx.TenantId = TenantId;
-            Service = new DeduplicationService(
-                Ctx.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+            Service = DeduplicationModules.Reconciler(Ctx.AsFactory());
+            Linker = DeduplicationModules.Linker(Ctx.AsFactory());
         }
 
         public NocturneDbContext Ctx { get; }
 
-        public DeduplicationService Service { get; }
+        public DuplicateReconciler Service { get; }
+
+        public DuplicateLinker Linker { get; }
 
         public async Task<Guid> IngestGlucose(Guid id, DateTime at, string source, double mgdl)
         {
             var entity = await AddGlucose(id, at, source, mgdl);
-            await Service.DeduplicateBatchAsync(
+            await Linker.DeduplicateBatchAsync(
                 RecordType.SensorGlucose, [new DeduplicationInput(id, Mills(at), source, MatchCriteriaMapper.From(entity))]);
             return id;
         }
@@ -354,7 +357,7 @@ public class SingletonLinkPruningTests
         public async Task<Guid> IngestBolus(Guid id, DateTime at, string source, double insulin)
         {
             var entity = await AddBolus(id, at, source, insulin);
-            await Service.DeduplicateBatchAsync(
+            await Linker.DeduplicateBatchAsync(
                 RecordType.Bolus, [new DeduplicationInput(id, Mills(at), source, MatchCriteriaMapper.From(entity))]);
             return id;
         }
@@ -417,7 +420,7 @@ public class SingletonLinkPruningTests
 
             if (withCursor)
             {
-                await DeduplicationService.SetCursorAsync(
+                await DuplicateReconciler.SetCursorAsync(
                     Ctx, new ReconcileCursor(cursorAt ?? DateTime.UtcNow.AddHours(-1), Guid.Empty), CancellationToken.None);
             }
             Ctx.ChangeTracker.Clear();

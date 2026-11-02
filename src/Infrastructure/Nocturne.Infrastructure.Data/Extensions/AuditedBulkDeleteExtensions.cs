@@ -266,7 +266,9 @@ public static class AuditedBulkDeleteExtensions
     /// re-creation, a system sweep leaves the row re-creatable (<see cref="SoftDeleteDedupExtensions"/>).
     /// Runs whether or not an audit row is written. Then, under
     /// <see cref="DuplicateDelete.PromoteSurvivor"/>, repoints the duplicate groups whose primary it
-    /// deleted, stamping each promoted copy after the deletes.
+    /// deleted, stamping each promoted copy after the deletes; their links are locked before the rows
+    /// are written (<see cref="DuplicateGroupPrimaries.LockGroupsOfAsync"/>), except for glucose, whose
+    /// lock order <see cref="GlucoseStreamFlags"/> states.
     /// </summary>
     /// <remarks>
     /// A delete is a write a v3 history client has to be told of, so it moves the row's update stamp
@@ -307,6 +309,8 @@ public static class AuditedBulkDeleteExtensions
         using var wide = typeof(T) == typeof(SensorGlucoseEntity)
             ? await GlucoseStreamFlags.DeferIfWideAsync(context, ids.Count, ct)
             : null;
+        if (recordType is { } linked && duplicates == DuplicateDelete.PromoteSurvivor)
+            await DuplicateGroupPrimaries.LockGroupsOfAsync(context, linked, ids, ct);
         var groups = ids.Chunk(NocturneDbContext.SystemTimestampGroupSize).ToList();
         var total = 0;
         foreach (var (group, index) in groups.Select((g, i) => (g, i)))

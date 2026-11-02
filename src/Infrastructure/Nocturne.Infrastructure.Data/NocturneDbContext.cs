@@ -1631,7 +1631,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .IsUnique()
             .HasDatabaseName("ix_linked_records_tenant_type_id");
 
-        // DeduplicationService.ReconcileNewLinksAsync pages the tenant's links by creation order.
+        // DuplicateReconciler.ReconcileNewLinksAsync pages the tenant's links by creation order.
         // The unique index above leads with tenant_id but then record_type, so it can only supply
         // the tenant and the rest is a filter plus a sort of everything that tenant owns.
         modelBuilder
@@ -1889,7 +1889,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_sensor_glucose_patient_device_id")
             .HasFilter("patient_device_id IS NOT NULL");
 
-        // These also serve the dedup unlinked read in DeduplicationService, which ranges on timestamp
+        // These also serve the dedup unlinked read in LinkedRecordTypes, which ranges on timestamp
         // over soft-deleted rows too and so cannot use the partial list indexes.
         modelBuilder
             .Entity<SensorGlucoseEntity>()

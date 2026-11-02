@@ -32,8 +32,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// ingest; one too wide to recompute inline takes it never (<see cref="DeferIfWideAsync"/>). That
 /// leaves one cycle: a stream-lock holder (a write, the walk page, a merge's or link insert's
 /// derive, the audit repair) updates a reading a concurrent delete or restore holds, or links its
-/// repoint then waits for. PostgreSQL breaks it as a deadlock, and the retrying transaction it
-/// aborts runs again. A deleted or duplicate row keeps
+/// repoint then waits for. Locking a delete's links first, as the other record types do
+/// (<see cref="DuplicateGroupPrimaries.LockGroupsOfAsync"/>), would only swap it for a cycle on the
+/// links. PostgreSQL breaks it as a deadlock, and the retrying transaction it aborts runs again. A
+/// deleted or duplicate row keeps
 /// whatever flag it had; it is recomputed when it becomes visible again. The clamp is lifted
 /// (<see cref="HistoryClampLiftExtensions"/>): a clamped member's write reaches buckets the clamp
 /// would show only in part.

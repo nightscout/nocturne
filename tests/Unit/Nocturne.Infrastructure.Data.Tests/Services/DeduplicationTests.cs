@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -9,47 +10,32 @@ using Nocturne.Tests.Shared.Infrastructure;
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
 /// <summary>
-/// Unit tests for the DeduplicationService focusing on basal type deduplication.
+/// Unit tests for deduplication (the linker and the admin full run), focusing on basal type deduplication.
 /// When a Basal and Temp Basal occur at the same time, the deduplication service
 /// should group them together and prefer Temp Basal as the merged type.
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Category", "Deduplication")]
-public class DeduplicationServiceTests : IDisposable
+public class DeduplicationTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private readonly SqliteTestDatabase _db;
-    private readonly ServiceProvider _serviceProvider;
 
-    public DeduplicationServiceTests()
+    public DeduplicationTests()
     {
         // Create in-memory SQLite database for testing
         _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
-
-        // Set up DI container for IServiceScopeFactory
-        var services = new ServiceCollection();
-        services.AddScoped(sp =>
-        {
-            var ctx = _db.CreateContext();
-            ctx.TenantId = TestTenantId;
-            return ctx;
-        });
-        services.AddScoped<IDeduplicationService, DeduplicationService>();
-        services.AddLogging();
-        _serviceProvider = services.BuildServiceProvider();
     }
 
     #region StateSpan Deduplication Tests
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldDeduplicateStateSpansAcrossBucketBoundaries()
+    public async Task AFullRun_ShouldDeduplicateStateSpansAcrossBucketBoundaries()
     {
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         // Create timestamps that straddle a 30-second bucket boundary
         // Bucket size is 30,000ms, so bucket boundaries are at multiples of 30,000
@@ -81,7 +67,7 @@ public class DeduplicationServiceTests : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.DeduplicateAllAsync();
+        var result = await service.RunFullAsync();
 
         // Assert
         result.Success.Should().BeTrue();
@@ -101,23 +87,15 @@ public class DeduplicationServiceTests : IDisposable
         linkedRecords.Select(lr => lr.DataSource).Should().BeEquivalentTo(
             new[] { "glooko-connector", "mylife-connector" },
             "the two linked records should be from different sources");
-
-        // Verify we can get a unified state span
-        var canonicalId = linkedRecords.First().CanonicalId;
-        var unified = await service.GetUnifiedStateSpanAsync(canonicalId);
-        unified.Should().NotBeNull();
-        unified!.Sources.Should().BeEquivalentTo(new[] { "glooko-connector", "mylife-connector" });
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldNotDeduplicateStateSpansWithDifferentStates()
+    public async Task AFullRun_ShouldNotDeduplicateStateSpansWithDifferentStates()
     {
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
@@ -142,7 +120,7 @@ public class DeduplicationServiceTests : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.DeduplicateAllAsync();
+        var result = await service.RunFullAsync();
 
         // Assert
         result.Success.Should().BeTrue();
@@ -163,14 +141,12 @@ public class DeduplicationServiceTests : IDisposable
     #region TempBasal Deduplication Tests
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldGroupTempBasals_FromDifferentConnectors()
+    public async Task AFullRun_ShouldGroupTempBasals_FromDifferentConnectors()
     {
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var timestamp = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -194,7 +170,7 @@ public class DeduplicationServiceTests : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.DeduplicateAllAsync();
+        var result = await service.RunFullAsync();
 
         // Assert
         result.Success.Should().BeTrue();
@@ -213,14 +189,12 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldNotGroupTempBasals_WithDifferentRates()
+    public async Task AFullRun_ShouldNotGroupTempBasals_WithDifferentRates()
     {
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var timestamp = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -241,7 +215,7 @@ public class DeduplicationServiceTests : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.DeduplicateAllAsync();
+        var result = await service.RunFullAsync();
 
         // Assert
         result.Success.Should().BeTrue();
@@ -256,14 +230,12 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldGroupTempBasals_WithDifferentOrigins()
+    public async Task AFullRun_ShouldGroupTempBasals_WithDifferentOrigins()
     {
         // Arrange — origin should NOT prevent cross-connector deduplication
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var timestamp = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -284,7 +256,7 @@ public class DeduplicationServiceTests : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.DeduplicateAllAsync();
+        var result = await service.RunFullAsync();
 
         // Assert
         result.Success.Should().BeTrue();
@@ -298,14 +270,12 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldNotGroupTempBasals_OutsideTimeWindow()
+    public async Task AFullRun_ShouldNotGroupTempBasals_OutsideTimeWindow()
     {
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var timestamp = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -326,7 +296,7 @@ public class DeduplicationServiceTests : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.DeduplicateAllAsync();
+        var result = await service.RunFullAsync();
 
         // Assert
         result.Success.Should().BeTrue();
@@ -340,14 +310,12 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldHandleSingleTempBasalEntity_WithoutError()
+    public async Task AFullRun_ShouldHandleSingleTempBasalEntity_WithoutError()
     {
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var tempBasal = CreateTestTempBasalEntity(
             startTimestamp: new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc),
@@ -360,7 +328,7 @@ public class DeduplicationServiceTests : IDisposable
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.DeduplicateAllAsync();
+        var result = await service.RunFullAsync();
 
         // Assert
         result.Success.Should().BeTrue();
@@ -382,9 +350,7 @@ public class DeduplicationServiceTests : IDisposable
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -421,9 +387,7 @@ public class DeduplicationServiceTests : IDisposable
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -462,9 +426,7 @@ public class DeduplicationServiceTests : IDisposable
         // re-reads the earlier chunk's freshly-written link.
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -523,9 +485,7 @@ public class DeduplicationServiceTests : IDisposable
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
         var tb = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.2, origin: "Scheduled", dataSource: "test-connector");
@@ -566,9 +526,7 @@ public class DeduplicationServiceTests : IDisposable
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -603,9 +561,7 @@ public class DeduplicationServiceTests : IDisposable
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -639,9 +595,7 @@ public class DeduplicationServiceTests : IDisposable
     {
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -668,9 +622,7 @@ public class DeduplicationServiceTests : IDisposable
     {
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -727,9 +679,7 @@ public class DeduplicationServiceTests : IDisposable
         // Arrange
         await using var context = _db.CreateContext();
         context.TenantId = TestTenantId;
-        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new Modules(context.AsFactory());
 
         // Act
         var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput>());
@@ -817,7 +767,7 @@ public class DeduplicationServiceTests : IDisposable
         // Both records carry the same source, so the wide window can never rescue the just-past
         // case: only the tight window's inclusive bound decides the outcome. That pair is Tidepool
         // carbs because it is the one source and record type whose same-source pairs may
-        // tight-merge at all (DeduplicationService.EmitsDuplicateEvents). Separate batches so the
+        // tight-merge at all (DuplicateMatching.EmitsDuplicateEvents). Separate batches so the
         // second record matches through the persisted link rather than intra-batch state.
         // laterFirst flips which end of the window the second record has to reach across.
         await using var context = NewContext();
@@ -1364,7 +1314,7 @@ public class DeduplicationServiceTests : IDisposable
         var a = new MatchCriteria { GlucoseValue = 120, GlucoseTolerance = 1.0 };
         var b = new MatchCriteria { GlucoseValue = 120, GlucoseTolerance = 1.0 };
 
-        DeduplicationService.CriteriaMatch(RecordType.SensorGlucose, a, b, exact).Should().Be(expected);
+        DuplicateMatching.CriteriaMatch(RecordType.SensorGlucose, a, b, exact).Should().Be(expected);
     }
 
     [Fact]
@@ -1423,7 +1373,7 @@ public class DeduplicationServiceTests : IDisposable
         var a = TempBasalCriteria(TimeSpan.FromSeconds(aSeconds));
         var b = TempBasalCriteria(TimeSpan.FromSeconds(bSeconds));
 
-        DeduplicationService.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().Be(expected);
+        DuplicateMatching.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().Be(expected);
     }
 
     /// <summary>
@@ -1439,7 +1389,7 @@ public class DeduplicationServiceTests : IDisposable
         var a = TempBasalCriteria(aKnown ? TimeSpan.FromSeconds(650) : null);
         var b = TempBasalCriteria(bKnown ? TimeSpan.FromSeconds(650) : null);
 
-        DeduplicationService.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().BeFalse();
+        DuplicateMatching.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().BeFalse();
     }
 
     /// <summary>
@@ -1452,7 +1402,7 @@ public class DeduplicationServiceTests : IDisposable
         var a = TempBasalCriteria(TimeSpan.FromSeconds(650), rate: 0.8);
         var b = TempBasalCriteria(TimeSpan.FromSeconds(654), rate: 1.2);
 
-        DeduplicationService.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().BeFalse();
+        DuplicateMatching.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().BeFalse();
     }
 
     private static MatchCriteria TempBasalCriteria(TimeSpan? duration, double rate = 0.8) =>
@@ -1464,8 +1414,8 @@ public class DeduplicationServiceTests : IDisposable
         // The event type is the whole value, so two events that carry none compare equal on nothing.
         var blank = new MatchCriteria { EventType = "" };
 
-        DeduplicationService.CriteriaMatch(RecordType.DeviceEvent, blank, blank).Should().BeFalse();
-        DeduplicationService.CriteriaMatch(
+        DuplicateMatching.CriteriaMatch(RecordType.DeviceEvent, blank, blank).Should().BeFalse();
+        DuplicateMatching.CriteriaMatch(
             RecordType.DeviceEvent,
             new MatchCriteria { EventType = "Site Change" },
             new MatchCriteria { EventType = "site change" }).Should().BeTrue();
@@ -1484,8 +1434,8 @@ public class DeduplicationServiceTests : IDisposable
         var stored = new MatchCriteria { Category = StateSpanCategory.PumpMode, State = storedState };
         var incoming = new MatchCriteria { Category = StateSpanCategory.PumpMode, State = incomingState };
 
-        DeduplicationService.CriteriaMatch(RecordType.StateSpan, stored, incoming).Should().Be(expected);
-        DeduplicationService.CriteriaMatch(RecordType.StateSpan, incoming, stored).Should().Be(
+        DuplicateMatching.CriteriaMatch(RecordType.StateSpan, stored, incoming).Should().Be(expected);
+        DuplicateMatching.CriteriaMatch(RecordType.StateSpan, incoming, stored).Should().Be(
             expected, "the merge pass compares stored spans in both orders");
     }
 
@@ -1510,8 +1460,8 @@ public class DeduplicationServiceTests : IDisposable
         // span in the window would compare equal to every other and collapse into one group.
         var unreadable = new MatchCriteria { Category = null, State = "active" };
 
-        DeduplicationService.CriteriaMatch(RecordType.StateSpan, unreadable, unreadable).Should().BeFalse();
-        DeduplicationService.CriteriaMatch(
+        DuplicateMatching.CriteriaMatch(RecordType.StateSpan, unreadable, unreadable).Should().BeFalse();
+        DuplicateMatching.CriteriaMatch(
             RecordType.StateSpan,
             new MatchCriteria { Category = StateSpanCategory.Exercise, State = "active" },
             new MatchCriteria { Category = StateSpanCategory.Exercise, State = "active" }).Should().BeTrue();
@@ -1546,7 +1496,7 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_HealsPreExistingCrossSourceGroups()
+    public async Task AFullRun_HealsPreExistingCrossSourceGroups()
     {
         await using var context = NewContext();
         var service = CreateService(context);
@@ -1561,7 +1511,7 @@ public class DeduplicationServiceTests : IDisposable
         AddPrimaryLink(context, RecordType.Bolus, glooko.Id, WideBase + 64_000, "glooko-connector");
         await context.SaveChangesAsync();
 
-        var result = await service.DeduplicateAllAsync();
+        var result = await service.RunFullAsync();
 
         result.Success.Should().BeTrue();
         var links = await context.LinkedRecords.AsNoTracking().Where(lr => lr.RecordType == "bolus").ToListAsync();
@@ -1622,10 +1572,23 @@ public class DeduplicationServiceTests : IDisposable
         return context;
     }
 
-    private DeduplicationService CreateService(NocturneDbContext context) =>
-        new(context.AsFactory(),
-            _serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            new Mock<ILogger<DeduplicationService>>().Object);
+    private static Modules CreateService(NocturneDbContext context) => new(context.AsFactory());
+
+    /// <summary>The linker and the admin full run over one context.</summary>
+    private sealed class Modules(INocturneDbContextFactory contexts)
+    {
+        private readonly DuplicateLinker _linker = DeduplicationModules.Linker(contexts);
+        private readonly DeduplicationAdmin _admin = DeduplicationModules.Admin(contexts, TestTenantId);
+
+        public Task<DeduplicationBatchResult> DeduplicateBatchAsync(
+            RecordType recordType, IReadOnlyList<DeduplicationInput> records) =>
+            _linker.DeduplicateBatchAsync(recordType, records);
+
+        public Task<DeduplicationResult> RunFullAsync() => _admin.RunFullAsync();
+
+        public Task<IEnumerable<LinkedRecord>> GetLinkedRecordsAsync(Guid canonicalId) =>
+            _admin.GetLinkedRecordsAsync(canonicalId);
+    }
 
     private static DateTime ToUtc(long mills) =>
         DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
@@ -1803,7 +1766,6 @@ public class DeduplicationServiceTests : IDisposable
 
     public void Dispose()
     {
-        _serviceProvider?.Dispose();
         _db?.Dispose();
     }
 }

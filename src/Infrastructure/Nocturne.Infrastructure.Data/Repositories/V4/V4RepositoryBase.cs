@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -28,7 +29,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <remarks>
 /// Behaviour is intentionally identical to the pre-refactor per-type repositories (the golden suite
 /// holds it constant). Per-type strategy points that some types diverge on — SyncId-upsert,
-/// DeduplicationService participation, non-primary-excluding counts — are exposed as
+/// non-primary-excluding counts — are exposed as
 /// <see langword="virtual"/> members (<see cref="BulkCreateAsync"/>, <see cref="CountAsync"/>) for
 /// the dedup participants to override; the base implements the LegacyId-only path.
 /// </remarks>
@@ -70,8 +71,15 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     private readonly ILegacyReadCacheInvalidation? _legacyReads;
 
     /// <summary>
+    /// Links committed inserts into their duplicate groups. Null for a type deduplication does not
+    /// cover (<see cref="DuplicateGroupPrimaries.RecordTypeOf{TEntity}"/>), or a repo constructed without it.
+    /// </summary>
+    private readonly IDuplicateLinker? _linker;
+
+    /// <summary>
     /// Initializes the base with the tenant-scoped context factory, audit context, logger, (optional)
-    /// broadcaster, (optional) legacy entry sink, and (optional) legacy read cache invalidation.
+    /// broadcaster, (optional) legacy entry sink, (optional) legacy read cache invalidation and
+    /// (optional) duplicate linker.
     /// </summary>
     protected V4RepositoryBase(
         INocturneDbContextFactory contextFactory,
@@ -79,7 +87,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         ILogger logger,
         IV4RecordBroadcaster<TModel>? broadcaster = null,
         IDataEventSink<Entry>? entrySink = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
+        ILegacyReadCacheInvalidation? legacyReads = null,
+        IDuplicateLinker? linker = null)
     {
         ContextFactory = contextFactory;
         AuditContext = auditContext;
@@ -87,6 +96,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         _broadcaster = broadcaster;
         _entrySink = entrySink;
         _legacyReads = legacyReads;
+        _linker = linker;
     }
 
     /// <summary>
@@ -586,7 +596,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
         ctx.Set<TEntity>().Add(entity);
         await SaveWriteAsync(ctx, entity, null, ct);
-        await DedupCommittedAsync(ctx, [entity], origin, ct);
+        await DedupCommittedAsync([entity], ct);
         var created = ToDomain(entity);
         await RaiseBroadcastAsync([created], [], [], origin, ct);
         return created;
@@ -628,8 +638,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <see cref="UpsertSplit.Classify"/>. Change detection runs once over the batch and stays off
     /// through the save, the contract
     /// <see cref="NocturneDbContext.SaveChangesAsync(CancellationToken)"/> honours for a caller that
-    /// has already detected. Inserted rows go through <see cref="PostCommitDedupAsync"/> as
-    /// <see cref="BulkCreateAsync"/>'s do, so the dedup participants keyed by legacy id alone link
+    /// has already detected. Inserted rows are linked into their duplicate groups as
+    /// <see cref="BulkCreateAsync"/>'s are, so the dedup participants keyed by legacy id alone link
     /// their canonical groups on this path too.
     /// </remarks>
     public virtual async Task<LegacyUpsertBatch<TModel>> BulkUpsertByLegacyIdAsync(
@@ -717,7 +727,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
         if (inserted.Count > 0 || split.UpdatedInPlace.Count > 0)
         {
-            await DedupCommittedAsync(ctx, inserted.Select(i => i.Entity).ToList(), origin, ct);
+            await DedupCommittedAsync(inserted.Select(i => i.Entity).ToList(), ct);
             await RaiseBroadcastAsync(
                 inserted.Select(i => outcomes[i.LegacyId].Record).ToList(),
                 split.MateriallyChanged.Select(ToDomain).ToList(),
@@ -738,7 +748,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
-        var (_, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DedupRecordType, ct);
+        var (_, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DuplicateGroupPrimaries.RecordTypeOf<TEntity>(), ct);
         await RaiseBroadcastAsync([], [], [ToDomain(entity), .. copies.Select(ToDomain)], origin, ct);
     }
 
@@ -805,12 +815,6 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.CountDeletedAsync<TEntity>(ct);
     }
-
-    /// <summary>
-    /// The <see cref="RecordType"/> this repository's rows are linked under, or null for a type that
-    /// does not participate in deduplication.
-    /// </summary>
-    protected internal virtual RecordType? DedupRecordType => null;
 
     /// <summary>The live records of <paramref name="ids"/>.</summary>
     private async Task<IReadOnlyList<TModel>> LoadAsync(
@@ -968,16 +972,29 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         => Task.FromResult(UpsertSplit.Empty(entities));
 
     /// <summary>
-    /// Reports the committed write, then runs <see cref="PostCommitDedupAsync"/>, whose overrides swallow
-    /// every failure but cancellation, so a cancellation after the commit cannot leave a legacy read cache
-    /// serving the rows as they were. The write reports again in <see cref="RaiseBroadcastAsync"/>, which
-    /// the paths without dedup reach straight from their commit.
+    /// Reports the committed write, then links <paramref name="inserted"/> into their duplicate groups.
+    /// A failed link is logged and swallowed, as the write has committed; only a cancellation
+    /// propagates, after the report, so it cannot leave a legacy read cache serving the rows as they were.
+    /// A record missed here is never reconciled, which reads only links, but once older than
+    /// <see cref="LinkedRecordTypes.SingletonLinkRetention"/> later records match it as a group of its
+    /// own. Only inserts are linked: a row updated in place was linked when it was first inserted.
+    /// The write reports again in <see cref="RaiseBroadcastAsync"/>, which the paths without dedup
+    /// reach straight from their commit.
     /// </summary>
-    private async Task DedupCommittedAsync(
-        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, WriteOrigin origin, CancellationToken ct)
+    private async Task DedupCommittedAsync(IReadOnlyList<TEntity> inserted, CancellationToken ct)
     {
         await ReportWrittenAsync();
-        await PostCommitDedupAsync(ctx, inserted, origin, ct);
+        if (inserted.Count == 0 || _linker is null || DuplicateGroupPrimaries.RecordTypeOf<TEntity>() is not { } recordType)
+            return;
+
+        try
+        {
+            await _linker.DeduplicateBatchAsync(recordType, LinkedRecordTypes.InputsOf(recordType, inserted), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", recordType, inserted.Count);
+        }
     }
 
     /// <summary>
@@ -1004,19 +1021,12 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         NocturneDbContext ctx, IReadOnlyList<TEntity> written, IReadOnlyList<DateTime> vacatedAt, CancellationToken ct) =>
         Task.CompletedTask;
 
-    /// <summary>DeduplicationService participants override: link the just-inserted rows into canonical groups
-    /// (runs AFTER commit). Default: no-op.</summary>
-    protected virtual Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, WriteOrigin origin, CancellationToken ct)
-        => Task.CompletedTask;
-
     /// <summary>
     /// Bulk write in one transaction: <see cref="SplitUpsertsAsync"/> separates the rows upserted in
     /// place from the rows still to insert, the insert set is deduplicated by LegacyId (batch- then
     /// DB-level) and inserted in chunks, and the commit is followed by dedup linking and the
-    /// broadcast. The base implements the LegacyId-only path; SyncId-upsert / DeduplicationService
-    /// participants override the <see cref="SplitUpsertsAsync"/> / <see cref="PostCommitDedupAsync"/>
-    /// hooks rather than the whole method. A record whose legacy id a live row already carries is
+    /// broadcast. The base implements the LegacyId-only path; SyncId-upsert participants override the
+    /// <see cref="SplitUpsertsAsync"/> hook rather than the whole method. A record whose legacy id a live row already carries is
     /// skipped; <see cref="BulkUpsertAsync"/> updates that row instead.
     /// </summary>
     public Task<BulkWrite<TModel>> BulkCreateAsync(
@@ -1095,7 +1105,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         {
             if (inserted.Count > 0 || upserts.UpdatedInPlace.Count > 0)
             {
-                await DedupCommittedAsync(ctx, inserted, origin, ct);
+                await DedupCommittedAsync(inserted, ct);
                 await RaiseBroadcastAsync(
                     inserted.Select(ToDomain).ToList(),
                     upserts.MateriallyChanged.Select(ToDomain).ToList(),

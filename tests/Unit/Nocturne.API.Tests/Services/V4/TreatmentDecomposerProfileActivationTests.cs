@@ -51,7 +51,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TestTenantCache.DefaultTenantId;
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var audit = new Mock<IAuditContext>().Object;
         var factory = new TestNocturneDbContextFactory(_context);
 

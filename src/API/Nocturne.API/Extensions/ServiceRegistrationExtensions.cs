@@ -1175,6 +1175,7 @@ public static class ServiceRegistrationExtensions
         services.AddScheduledJob<AlertSweepJob>();
         services.AddScheduledJob<DeduplicationReconciliationJob>();
         services.AddScheduledJob<DuplicateFlagAuditJob>();
+        services.AddScheduledJob<DeduplicationRunJob>();
         services.AddScheduledJob<GlucoseStreamRecomputeJob>();
 
         return services;
@@ -1190,7 +1191,6 @@ public static class ServiceRegistrationExtensions
     )
     {
         services.AddScoped<IDataSourceService, DataSourceService>();
-        services.AddScoped<IDeduplicationService, DeduplicationService>();
         services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
         services.AddScoped<IConnectorSyncCursorStore, ConnectorSyncCursorStore>();

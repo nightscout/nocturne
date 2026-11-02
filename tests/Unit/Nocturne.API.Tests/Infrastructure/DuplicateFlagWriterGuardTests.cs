@@ -41,15 +41,15 @@ public partial class DuplicateFlagWriterGuardTests
             "moves primaries, then derives the flags from the links",
         [$"{Data}/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.Derive ({Flag})"] =
             "the flag statement: each flag that disagrees with its record's link, set to the link, for a primary move, a link insert or the drift audit's repair",
-        [$"{Data}/Services/DeduplicationService.cs: DeduplicationService.LinkChunkAsync ({Add})"] =
+        [$"{Data}/Services/Deduplication/DuplicateLinker.cs: DuplicateLinker.LinkChunkAsync ({Add})"] =
             "inserts links, then flags the new non-primary ones in the same transaction",
-        [$"{Data}/Services/DeduplicationService.cs: DeduplicationService.Phase ({Add})"] =
+        [$"{Data}/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.Phase ({Add})"] =
             "builds a pruned singleton's link as the primary of a group of its own: its record stays unflagged",
-        [$"{Data}/Services/DeduplicationService.cs: DeduplicationService.MergePrimariesAsync ({Add})"] =
+        [$"{Data}/Services/Deduplication/DuplicateReconciler.cs: DuplicateReconciler.MergePrimariesAsync ({Add})"] =
             "stores those primary links, then moves the merged primaries through SetPrimariesAsync",
-        [$"{Data}/Services/DeduplicationService.cs: DeduplicationService.PruneNextPageAsync ({Delete})"] =
+        [$"{Data}/Services/Deduplication/DuplicateReconciler.cs: DuplicateReconciler.PruneNextPageAsync ({Delete})"] =
             "deletes only primary links alone in their group: the record is unflagged before and after",
-        [$"{Data}/Services/DeduplicationService.cs: DeduplicationService.DeleteOrphanedLinksAsync ({Delete})"] =
+        [$"{Data}/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.DeleteOrphanedLinksAsync ({Delete})"] =
             "deletes only links whose record is gone, so no flag is left behind",
         [$"{Data}/Extensions/PurgeExtensions.cs: PurgeExtensions.PurgeAsync ({Delete})"] =
             "deletes a purged row's own link with the row",
@@ -60,7 +60,10 @@ public partial class DuplicateFlagWriterGuardTests
     /// <summary>The deduplication module, whose members may query the links freely.</summary>
     private static readonly string[] Module =
     [
-        $"{Data}/Services/DeduplicationService.cs",
+        $"{Data}/Services/Deduplication/DuplicateLinker.cs",
+        $"{Data}/Services/Deduplication/DuplicateReconciler.cs",
+        $"{Data}/Services/Deduplication/LinkedRecordTypes.cs",
+        $"{Data}/Services/Deduplication/DeduplicationAdmin.cs",
         $"{Data}/Extensions/DuplicateGroupPrimaries.cs",
     ];
 
