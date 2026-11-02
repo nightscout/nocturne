@@ -889,7 +889,7 @@ public class DataSourceService : IDataSourceService
     /// <remarks>
     /// The connector's crawl state goes with its data: a resume point it kept would answer the next
     /// sync's re-import with only what arrived since, and report that as a success. It is cleared
-/// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import.
+    /// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import.
     /// </remarks>
     private async Task<Dictionary<string, long>> DeleteConnectorSourceDataAsync(
         ConnectorMetadataService.ConnectorDisplayInfo metadata,
