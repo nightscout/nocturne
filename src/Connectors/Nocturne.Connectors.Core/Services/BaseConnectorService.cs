@@ -12,7 +12,7 @@ using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Core.Services;
 
-public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
+public abstract partial class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     where TConfig : BaseConnectorConfiguration
 {
     protected readonly HttpClient _httpClient;
@@ -421,16 +421,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Neither bound may narrow the other. The resume point cannot narrow the caller's, because
     ///     an explicit <c>from</c> with no <c>to</c> is the shape an admin repairing a gap sends, and
     ///     answering that from the watermark returns nothing and reports it as a success. The
-    ///     caller's cannot narrow the resume point either, because on a background catch-up the
-    ///     caller's bound is the glucose watermark, and honouring it alone is what strands the other
-    ///     families behind glucose — a resume point left open by an unbounded
+    ///     caller's cannot narrow the resume point either, since a family whose last crawl failed
+    ///     still owes the range below it — a resume point left open by an unbounded
     ///     <see cref="InitialSyncFloor"/> included, since that is a family with nothing stored at
     ///     all asking for the source's whole history.
     ///     <para>
-    ///     A caller that supplies no bound is not asking for everything: a background cycle whose
-    ///     glucose watermark is null reaches here, as does the tenant's own sync button, and a
-    ///     family with a resume point still stands on it. A resume point that is absent rather than
-    ///     open is resolved by the caller before it gets here — see
+    ///     A caller that supplies no bound is not asking for everything: the tenant's own sync
+    ///     button sends none, and a family with a resume point still stands on it. A resume point
+    ///     that is absent rather than open is resolved by the caller before it gets here — see
     ///     <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> for the two that answer that way.
     ///     </para>
     /// </remarks>
@@ -452,6 +450,19 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </summary>
     protected static DateTime ResumeFrom(DateTime? requested, DateTime resumePoint) =>
         ResumeFrom(requested, (DateTime?)resumePoint) ?? resumePoint;
+
+    /// <summary>
+    ///     The lower bound a family other than glucose crawls from on an open-ended request: as
+    ///     <see cref="ResumeFrom(DateTime?, DateTime?)"/>, except that a background run's derived
+    ///     glucose resume point is no bound at all.
+    /// </summary>
+    /// <remarks>
+    ///     Widening a family to the glucose resume point ties it to glucose succeeding: a glucose
+    ///     endpoint that fails every run, or nothing stored for glucose, keeps that point at the
+    ///     initial floor, and every other family re-crawls everything above it on every run.
+    /// </remarks>
+    protected static DateTime? ResumeFrom(SyncRequest request, DateTime? resumePoint) =>
+        request.FromIsGlucoseResumePoint ? resumePoint : ResumeFrom(request.From, resumePoint);
 
     /// <summary>
     ///     The lower bound a whole request crawls from, for a source that cannot crawl from an open
@@ -1326,9 +1337,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                 return AuthenticationFailedResult();
             }
 
-            var sinceTimestamp = since ?? await CalculateSinceTimestampAsync(config);
-
-            var request = CreateBackgroundSyncRequest(sinceTimestamp);
+            var request = CreateBackgroundSyncRequest(since ?? await CalculateSinceTimestampAsync(config));
+            request.FromIsGlucoseResumePoint = since is null;
 
             var result = await PerformSyncInternalAsync(request, config, cancellationToken);
 

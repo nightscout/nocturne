@@ -69,6 +69,28 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     }
 
     /// <summary>
+    /// A background run's lower bound is glucose's resume point, which says nothing about any other
+    /// family. Widening them to a stale one — an entries read that has failed for months — re-crawls
+    /// every family from there on every run.
+    /// </summary>
+    [Theory]
+    [InlineData("treatments")]
+    [InlineData("devicestatus")]
+    [InlineData("activity")]
+    public async Task SyncDataAsync_OnABackgroundRunWithAStaleGlucoseCursor_ResumesFromTheFamilysWatermark(
+        string collection)
+    {
+        var watermark = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: watermark,
+            latestGlucose: new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        await service.SyncDataAsync(NewConfig(), CancellationToken.None);
+
+        handler.CrawlOf(collection).Should().Contain(LowerBound(watermark - CatchUpOverlap));
+    }
+
+    /// <summary>
     /// A caller supplying no lower bound is not asking for everything, and each family stands on
     /// its own resume point. This connector's glucose floor is open, so a background cycle for a
     /// tenant with glucose switched off — or with none published yet — carries a null <c>from</c>
@@ -196,8 +218,14 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
 
     private static NightscoutConnectorService NewService(
         CollectingHandler handler,
-        DateTime? watermarks)
+        DateTime? watermarks,
+        DateTime? latestGlucose = null)
     {
+        var glucose = new Mock<IGlucosePublisher>();
+        glucose
+            .Setup(p => p.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(latestGlucose);
+
         var treatments = new Mock<ITreatmentPublisher>();
         treatments
             .Setup(p => p.GetLatestTreatmentTimestampAsync(
@@ -218,7 +246,7 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
 
         var publisher = new Mock<IConnectorPublisher>();
         publisher.Setup(p => p.IsAvailable).Returns(true);
-        publisher.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
         publisher.Setup(p => p.Treatments).Returns(treatments.Object);
         publisher.Setup(p => p.Device).Returns(device.Object);
         publisher.Setup(p => p.Metadata).Returns(metadata.Object);

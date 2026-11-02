@@ -335,6 +335,18 @@ public class ConnectorConfigurationRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ALowWaterMarkReachesAConnectorWhoseSourceNameIsHyphenated()
+    {
+        Seed("nocturneremote");
+        var mark = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        (await Configurations().SetBackfillLowWaterMarkAsync("nocturne-remote-connector", "DeviceStatus", mark, CancellationToken.None))
+            .Should().BeTrue();
+        (await Configurations().GetBackfillLowWaterMarkAsync("nocturne-remote-connector", "DeviceStatus", CancellationToken.None))
+            .Should().Be(mark);
+    }
+
+    [Fact]
     public async Task ALowWaterMarkForASourceWithNoConfigurationReportsIt()
     {
         (await Configurations().SetBackfillLowWaterMarkAsync("dexcom-connector", "Glucose", DateTime.UtcNow, CancellationToken.None))

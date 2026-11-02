@@ -399,16 +399,17 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
     }
 
     /// <summary>
-    /// Sources are named <c>{connector}-connector</c> while rows carry the bare connector name, so
-    /// the suffix is stripped, with an exact match as fallback.
+    /// Sources are named <c>{connector}-connector</c>, hyphenating a connector name of several
+    /// words (<c>nocturne-remote-connector</c>), while rows carry the bare connector name
+    /// (<c>nocturneremote</c>), so the suffix and hyphens are stripped, with an exact match as fallback.
     /// </summary>
     private static Task<ConnectorConfigurationEntity?> FindBySourceAsync(
         NocturneDbContext db, string source, bool tracked, CancellationToken ct)
     {
         var canonicalSource = ConnectorNames.Canonical(source);
-        var name = canonicalSource.EndsWith(ConnectorSourceSuffix, StringComparison.Ordinal)
+        var name = (canonicalSource.EndsWith(ConnectorSourceSuffix, StringComparison.Ordinal)
             ? canonicalSource[..^ConnectorSourceSuffix.Length]
-            : canonicalSource;
+            : canonicalSource).Replace("-", "", StringComparison.Ordinal);
 
         var query = tracked ? db.ConnectorConfigurations : db.ConnectorConfigurations.AsNoTracking();
         return query.FirstOrDefaultAsync(c => c.ConnectorName == name || c.ConnectorName == canonicalSource, ct);
