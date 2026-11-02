@@ -27,6 +27,13 @@ public interface IDeviceStatusGroupRepository
     Task<long> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default);
 
     /// <summary>
+    /// The live statuses whose rows carry one of <paramref name="correlationIds"/>, in no set order,
+    /// read in a fixed number of queries however many are asked for.
+    /// </summary>
+    Task<IReadOnlyList<DeviceStatusGroup>> GetByCorrelationIdsAsync(
+        IReadOnlyCollection<Guid> correlationIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Statuses with a row modified after <paramref name="cursorMills"/>, oldest
     /// <see cref="DeviceStatusGroup.ModifiedAt"/> first, paged as
     /// <see cref="ILegacyKeyedRepository{TRecord}.GetModifiedSinceAsync"/> pages one table. A status is

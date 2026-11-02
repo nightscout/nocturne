@@ -61,7 +61,7 @@ internal sealed class DeviceStatusService(
         finally
         {
             if (announce)
-                served = await AnnounceCreatedAsync(statuses, result.Wrote, source);
+                served = await AnnounceCreatedAsync(statuses, result, source);
         }
 
         return new BulkWrite<DeviceStatus>(announce ? served : statuses, result.SkippedDeleted);
@@ -128,19 +128,21 @@ internal sealed class DeviceStatusService(
     }
 
     /// <summary>
-    /// Reads each status back as reads serve it, and announces those that wrote a record, which before
+    /// Reads the statuses back as reads serve them, and announces those that wrote a record, which before
     /// the batch resolved its groups is none. A read carries no data source, so each is stamped with
     /// <paramref name="source"/> for the write-back to skip on.
     /// </summary>
     /// <returns>Every status, as read back or else as given.</returns>
     private async Task<IReadOnlyList<DeviceStatus>> AnnounceCreatedAsync(
-        IReadOnlyList<DeviceStatus> statuses, IReadOnlyList<bool> wrote, string? source)
+        IReadOnlyList<DeviceStatus> statuses, DeviceStatusDecomposition result, string? source)
     {
+        var wrote = result.Wrote;
+        var stored = await ReadBackAsync(statuses, result.Groups);
         var served = new List<DeviceStatus>(statuses.Count);
         var announced = new List<DeviceStatus>(statuses.Count);
         for (var i = 0; i < statuses.Count; i++)
         {
-            var read = await ReadBackAsync(statuses[i]) ?? statuses[i];
+            var read = statuses[i].Id is { } id && stored.TryGetValue(id, out var found) ? found : statuses[i];
             read.DataSource = source;
             served.Add(read);
             if (wrote.Count == statuses.Count && wrote[i])
@@ -157,22 +159,29 @@ internal sealed class DeviceStatusService(
     }
 
     /// <returns>
-    /// The status as stored, or <see langword="null"/> when it has no id or could not be read back; the
-    /// caller then serves it as given.
+    /// The statuses as stored, by id: none for a status with no id, and none at all before the batch
+    /// resolved its groups or when the read fails, as the caller then serves each as given.
     /// </returns>
-    private async Task<DeviceStatus?> ReadBackAsync(DeviceStatus status)
+    private async Task<IReadOnlyDictionary<string, DeviceStatus>> ReadBackAsync(
+        IReadOnlyList<DeviceStatus> statuses, IReadOnlyList<Guid> groups)
     {
-        if (string.IsNullOrEmpty(status.Id))
-            return null;
+        var named = groups.Count == statuses.Count
+            ? groups.Where((_, i) => !string.IsNullOrEmpty(statuses[i].Id)).ToList()
+            : [];
+        if (named.Count == 0)
+            return new Dictionary<string, DeviceStatus>();
 
         try
         {
-            return await store.GetByIdAsync(status.Id, CancellationToken.None);
+            return (await store.GetByGroupsAsync(named, CancellationToken.None))
+                .Where(status => status.Id is not null)
+                .DistinctBy(status => status.Id)
+                .ToDictionary(status => status.Id!, StringComparer.Ordinal);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Created device status {Id} could not be read back", status.Id);
-            return null;
+            logger.LogWarning(ex, "{Count} created device statuses could not be read back", named.Count);
+            return new Dictionary<string, DeviceStatus>();
         }
     }
 }
