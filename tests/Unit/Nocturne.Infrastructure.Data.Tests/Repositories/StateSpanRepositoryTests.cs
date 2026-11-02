@@ -1622,6 +1622,68 @@ public class StateSpanRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task BulkUpsertAsync_ACancelledDedup_PropagatesAfterReportingTheCommittedWrite()
+    {
+        var legacyReads = new Mock<ILegacyReadCacheInvalidation>();
+        legacyReads.Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>())).Returns(Task.CompletedTask);
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+        var repository = new StateSpanRepository(
+            _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object, legacyReads.Object);
+
+        var act = () => repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-cancelled")]);
+
+        var thrown = (await act.Should().ThrowAsync<OperationCanceledException>()).Which;
+        legacyReads.Verify(r => r.WrittenAsync(It.Is<IReadOnlyCollection<Type>>(t => t.Contains(typeof(StateSpan)))), Times.Once);
+        CommittedWrite.TryGet<IReadOnlyList<StateSpanUpsert>>(thrown, out var committed).Should().BeTrue();
+        committed!.Should().ContainSingle().Which.Span.OriginalId.Should().Be("ov-cancelled");
+        (await LiveRowsAsync()).Should().ContainKey("ov-cancelled");
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ALinkedWrite_TellsTheLegacyReadCacheAgainAfterTheLink()
+    {
+        var order = new List<string>();
+        var legacyReads = new Mock<ILegacyReadCacheInvalidation>();
+        legacyReads
+            .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
+            .Callback(() => order.Add("reported"))
+            .Returns(Task.CompletedTask);
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("linked"))
+            .ReturnsAsync(new DeduplicationBatchResult(0, 0, 0, 0));
+        var repository = new StateSpanRepository(
+            _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object, legacyReads.Object);
+
+        await repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-linked")]);
+
+        order.Should().Equal("reported", "linked", "reported");
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ADedupThatFails_IsLoggedAndTheUpsertReturns()
+    {
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("dedup failed"));
+
+        var written = await _repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-failed")]);
+
+        written.Should().ContainSingle().Which.Outcome.Should().Be(UpsertOutcome.Created);
+        _logger.Verify(l => l.Log(
+            LogLevel.Warning,
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            It.IsAny<InvalidOperationException>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+    }
+
+    [Fact]
     public async Task CreateActivitiesAsStateSpansAsync_DoesNotReturnASpanTheUserDeleted()
     {
         await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Exercise, "Running", 8, "act-deleted"));
