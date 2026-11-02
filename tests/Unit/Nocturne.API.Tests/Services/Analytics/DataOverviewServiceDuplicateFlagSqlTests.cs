@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
@@ -24,21 +23,17 @@ using Nocturne.API.Services.Caching;
 namespace Nocturne.API.Tests.Services.Analytics;
 
 [Trait("Category", "Unit")]
-public class DataOverviewServiceNonPrimarySqlTests : IDisposable
+public class DataOverviewServiceDuplicateFlagSqlTests : IDisposable
 {
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly DateTime Nov10_2025_Noon = new(2025, 11, 10, 12, 0, 0, DateTimeKind.Utc);
-
-    private static readonly Regex InSubqueryOverLinkedRecords = new(
-        @"\bIN\s*\(\s*SELECT\b[^()]*\bFROM\s+""linked_records""",
-        RegexOptions.IgnoreCase);
 
     private readonly StatementRecorder _statements = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly DataOverviewService _service;
 
-    public DataOverviewServiceNonPrimarySqlTests()
+    public DataOverviewServiceDuplicateFlagSqlTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(
             TenantId,
@@ -70,9 +65,9 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
     }
 
     [Fact]
-    public async Task GetDailySummaryAsync_ExcludesNonPrimaryThroughNotExists()
+    public async Task GetDailySummaryAsync_ExcludesDuplicatesByTheirFlag()
     {
-        SeedPrimaryAndDuplicate();
+        await SeedPrimaryAndDuplicateAsync();
 
         var result = await _service.GetDailySummaryAsync(2025);
 
@@ -82,13 +77,13 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
         day.TotalCarbs.Should().Be(30.0);
         day.AverageGlucoseMgdl.Should().Be(100.0);
         day.Counts["Glucose"].Should().Be(1);
-        AssertExclusionIsCorrelated();
+        AssertExclusionReadsTheFlag();
     }
 
     [Fact]
-    public async Task GetGriTimelineAsync_ExcludesNonPrimaryThroughNotExists()
+    public async Task GetGriTimelineAsync_ExcludesDuplicatesByTheirFlag()
     {
-        SeedPrimaryAndDuplicate(primaryGlucoseReadings: 72);
+        await SeedPrimaryAndDuplicateAsync(primaryGlucoseReadings: 72);
 
         var result = await _service.GetGriTimelineAsync(2025);
 
@@ -98,31 +93,27 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
         // (4 U bolus + 1 U basal) and 30 g carbs over November's 30 days.
         month.TotalDailyDose.Should().Be(0.17);
         month.AverageDailyCarbs.Should().Be(1.0);
-        AssertExclusionIsCorrelated();
+        AssertExclusionReadsTheFlag();
     }
 
     [Fact]
-    public async Task GetEHbA1cTimelineAsync_ExcludesNonPrimaryThroughNotExists()
+    public async Task GetEHbA1cTimelineAsync_ExcludesDuplicatesByTheirFlag()
     {
-        SeedPrimaryAndDuplicate();
+        await SeedPrimaryAndDuplicateAsync();
 
         await _service.GetEHbA1cTimelineAsync(2025);
 
-        AssertExclusionIsCorrelated();
+        AssertExclusionReadsTheFlag();
     }
 
-    private void AssertExclusionIsCorrelated()
+    private void AssertExclusionReadsTheFlag()
     {
-        var linked = _statements.All
-            .Where(s => s.Contains("\"linked_records\"", StringComparison.Ordinal))
-            .ToList();
-
-        linked.Should().Contain(s => s.Contains("\"mgdl\"", StringComparison.Ordinal));
-        linked.Should().OnlyContain(s => s.Contains("NOT EXISTS", StringComparison.OrdinalIgnoreCase));
-        linked.Should().NotContain(s => InSubqueryOverLinkedRecords.IsMatch(s));
+        _statements.All.Should().NotContain(s => s.Contains("linked_records", StringComparison.Ordinal));
+        _statements.All.Should().Contain(s =>
+            s.Contains("\"mgdl\"", StringComparison.Ordinal) && s.Contains("\"is_duplicate\"", StringComparison.Ordinal));
     }
 
-    private void SeedPrimaryAndDuplicate(int primaryGlucoseReadings = 1)
+    private async Task SeedPrimaryAndDuplicateAsync(int primaryGlucoseReadings = 1)
     {
         var sensorDuplicate = Guid.NewGuid();
         var bolusDuplicate = Guid.NewGuid();
@@ -177,26 +168,12 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
                 Carbs = 45.0, DataSource = "glooko",
             });
 
-        AddNonPrimaryLink(RecordType.SensorGlucose, sensorDuplicate);
-        AddNonPrimaryLink(RecordType.Bolus, bolusDuplicate);
-        AddNonPrimaryLink(RecordType.TempBasal, tempBasalDuplicate);
-        AddNonPrimaryLink(RecordType.CarbIntake, carbDuplicate);
-        _context.SaveChanges();
+        await DuplicateGroups.LinkAsync(_context, RecordType.SensorGlucose, primary: null, sensorDuplicate);
+        await DuplicateGroups.LinkAsync(_context, RecordType.Bolus, primary: null, bolusDuplicate);
+        await DuplicateGroups.LinkAsync(_context, RecordType.TempBasal, primary: null, tempBasalDuplicate);
+        await DuplicateGroups.LinkAsync(_context, RecordType.CarbIntake, primary: null, carbDuplicate);
         _statements.Clear();
     }
-
-    private void AddNonPrimaryLink(RecordType recordType, Guid recordId) =>
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = TenantId,
-            CanonicalId = Guid.NewGuid(),
-            RecordType = RecordTypeKeys.Key(recordType),
-            RecordId = recordId,
-            SourceTimestamp = new DateTimeOffset(Nov10_2025_Noon).ToUnixTimeMilliseconds(),
-            DataSource = "glooko",
-            IsPrimary = false,
-        });
 
     /// <summary>
     /// SQLite has no translation for <see cref="double.IsNaN(double)"/>, so without this the

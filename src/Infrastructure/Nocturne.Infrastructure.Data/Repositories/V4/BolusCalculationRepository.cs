@@ -19,7 +19,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// Repository for managing bolus calculation records in the database. A DeduplicationService
 /// participant, so it inherits the shared CRUD/soft-delete surface from
 /// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
-/// overrides (the <c>GetAsync</c> with the non-primary LinkedRecords filter, dedup
+/// overrides (the <c>GetAsync</c> with the duplicate filter, dedup
 /// <c>BulkCreateAsync</c>, audited soft-deletes).
 /// </summary>
 public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, BolusCalculationEntity>, IBolusCalculationRepository
@@ -57,7 +57,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
     /// <summary>
     /// Gets bolus calculation records based on filter criteria.
     /// Deduplicates records using the <see cref="IDeduplicationService"/>.
-    /// Overrides the base 7-arg form to add the non-primary LinkedRecords exclusion.
+    /// Overrides the base 7-arg form to add the duplicate filter.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -90,7 +90,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);

@@ -19,6 +19,12 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// updating or deleting from <c>linked_records</c> or setting the flag. <c>patient_insulins</c> has an
 /// <c>IsPrimary</c> of its own, so a member assignment of <c>IsPrimary</c> counts only in a source that
 /// names <c>LinkedRecord</c>. Migrations are exempt: the backfill sets the flags once, as a migration.
+/// <para>
+/// Reads are held to the module too: a read decides what it shows by the flag
+/// (<c>ReadVisibilityFilter</c>), so a query of the links anywhere else is either a second visibility
+/// rule or group bookkeeping the module owns. A read is a member access of <c>LinkedRecords</c>, a
+/// <c>Set&lt;LinkedRecordEntity&gt;()</c>, or SQL selecting from or joining <c>linked_records</c>.
+/// </para>
 /// </remarks>
 [Trait("Category", "Unit")]
 public partial class DuplicateFlagWriterGuardTests
@@ -51,9 +57,34 @@ public partial class DuplicateFlagWriterGuardTests
             "deletes an aged-out row's own link in the row's statement",
     };
 
-    private static readonly IReadOnlyList<string> Found = RepoSources.Src
+    /// <summary>The deduplication module, whose members may query the links freely.</summary>
+    private static readonly string[] Module =
+    [
+        $"{Data}/Services/DeduplicationService.cs",
+        $"{Data}/Extensions/DuplicateGroupPrimaries.cs",
+    ];
+
+    private static readonly Dictionary<string, string> Readers = new()
+    {
+        [$"{Data}/Extensions/PurgeExtensions.cs: PurgeExtensions.PurgeAsync"] =
+            "selects the purged rows' own links to delete them",
+        [$"{Data}/Extensions/SoftDeleteRestoreExtensions.cs: SoftDeleteRestoreExtensions.CoDeletedCopiesAsync"] =
+            "finds the group mates a restore brings back with a row, which is group bookkeeping, not visibility",
+    };
+
+    private static readonly IReadOnlyList<(string Path, SyntaxTree Tree, string Text)> Sources = RepoSources.Src
         .Where(s => !s.Path.StartsWith("src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/", StringComparison.Ordinal))
+        .Select(s => (s.Path, s.Tree, s.Text))
+        .ToList();
+
+    private static readonly IReadOnlyList<string> Found = Sources
         .SelectMany(s => Writes(s.Tree, s.Text).Select(w => $"{s.Path}: {EnclosingMember.Of(w.Node)} ({w.Kind})"))
+        .Distinct()
+        .ToList();
+
+    private static readonly IReadOnlyList<string> FoundReads = Sources
+        .Where(s => !Module.Contains(s.Path))
+        .SelectMany(s => Reads(s.Tree).Select(node => $"{s.Path}: {EnclosingMember.Of(node)}"))
         .Distinct()
         .ToList();
 
@@ -68,6 +99,47 @@ public partial class DuplicateFlagWriterGuardTests
     public void EveryListedMemberStillWrites()
     {
         Writers.Keys.Except(Found).Should().BeEmpty("a stale entry would cover a future writer in that member");
+    }
+
+    [Fact]
+    public void OnlyTheModuleAndTheListedMembersQueryLinks()
+    {
+        FoundReads.Except(Readers.Keys).Should().BeEmpty(
+            "a read hides duplicates by is_duplicate through ReadVisibilityFilter, never by querying linked_records");
+    }
+
+    [Fact]
+    public void EveryListedReaderStillQueriesLinks()
+    {
+        Readers.Keys.Except(FoundReads).Should().BeEmpty("a stale entry would cover a future reader in that member");
+        Module.Should().OnlyContain(path => Sources.Any(s => s.Path == path), "a moved module file would exempt nothing");
+    }
+
+    [Theory]
+    [InlineData("class C { object M(Db db) => db.Notes.Where(n => !db.LinkedRecords.Any(l => l.RecordId == n.Id)); }", true)]
+    [InlineData("class C { object M(Db db) => db.Set<LinkedRecordEntity>().Count(); }", true)]
+    [InlineData("class C { string Sql => \"SELECT n.* FROM notes n JOIN linked_records l ON l.record_id = n.id\"; }", true)]
+    [InlineData("class C { string Sql => \"SELECT 1 FROM public.linked_records WHERE NOT is_primary\"; }", true)]
+    [InlineData("class C { string Sql => \"DELETE FROM linked_records WHERE record_id = @id\"; }", false)]
+    [InlineData("class C { object M(List<LinkedRecord> all) => new Response { LinkedRecords = all }; }", false)]
+    [InlineData("class C { object M(Db db) => db.Notes.Where(n => !n.IsDuplicate); }", false)]
+    public void RecognisesARead(string source, bool read) =>
+        Reads(CSharpSyntaxTree.ParseText(source)).Any().Should().Be(read);
+
+    private static IEnumerable<SyntaxNode> Reads(SyntaxTree tree)
+    {
+        foreach (var node in tree.GetRoot().DescendantNodes())
+        {
+            if (node is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax { Identifier.ValueText: "LinkedRecords" } }
+                || (node is GenericNameSyntax generic && IsLinkSetName(generic)))
+                yield return node;
+        }
+
+        foreach (var (node, sql) in SqlLiterals.In(tree))
+        {
+            if (LinkRead().IsMatch(sql))
+                yield return node;
+        }
     }
 
     [Theory]
@@ -296,4 +368,7 @@ public partial class DuplicateFlagWriterGuardTests
 
     [GeneratedRegex(@"\bset\b[^;]*\bis_duplicate\s*=", RegexOptions.IgnoreCase)]
     private static partial Regex FlagWrite();
+
+    [GeneratedRegex(@"(?<!\bdelete\s+)\b(from|join)\s+(""?public""?\.)?""?linked_records\b", RegexOptions.IgnoreCase)]
+    private static partial Regex LinkRead();
 }

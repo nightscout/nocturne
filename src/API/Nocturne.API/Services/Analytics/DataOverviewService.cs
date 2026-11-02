@@ -377,7 +377,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.SensorGlucose)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Mgdl }),
             r => r.Timestamp, r => (r.Timestamp, r.Mgdl), allGlucoseByMonth, tz,
             "Failed to collect SensorGlucose for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.Sensor);
@@ -402,7 +402,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0)
                 .Where(e => e.BolusKind != "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.Bolus)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Insulin }),
             r => r.Timestamp, r => r.Insulin, manualBolusByMonth, tz,
             "Failed to collect manual bolus totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.ManualBolus);
@@ -414,7 +414,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0)
                 .Where(e => e.BolusKind == "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.Bolus)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Insulin }),
             r => r.Timestamp, r => r.Insulin, algorithmBolusByMonth, tz,
             "Failed to collect algorithm bolus totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.AlgorithmBolus);
@@ -425,7 +425,7 @@ public class DataOverviewService : IDataOverviewService
             context.TempBasals
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Rate > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.TempBasal)
+                .ExcludeDuplicates()
                 .Select(e => new { StartTimestamp = e.Timestamp, Rate = e.Rate ?? 0, e.EndTimestamp }),
             r => r.StartTimestamp,
             r => r.Rate * (r.EndTimestamp.HasValue
@@ -440,7 +440,7 @@ public class DataOverviewService : IDataOverviewService
             context.CarbIntakes
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Carbs > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.CarbIntake)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Carbs }),
             r => r.Timestamp, r => r.Carbs, carbsByMonth, tz,
             "Failed to collect carb totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.Carbs);
@@ -571,7 +571,7 @@ public class DataOverviewService : IDataOverviewService
             .SensorGlucose.Where(e => e.Timestamp >= lookbackStartUtc && e.Timestamp < yearEndUtc)
             .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
             .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-            .ExcludeNonPrimary(context, RecordType.SensorGlucose)
+            .ExcludeDuplicates()
             .Select(e => new { e.Timestamp, e.Mgdl })
             .ToListAsync(cancellationToken);
         allReadings.AddRange(sensorReadings.Select(r => (r.Timestamp, r.Mgdl)));
@@ -981,7 +981,7 @@ public class DataOverviewService : IDataOverviewService
                 .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.SensorGlucose)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Mgdl })
                 .ReadMetricRowsAsync(reads, YearMetricSource.Sensor, cancellationToken);
 
@@ -1073,7 +1073,7 @@ public class DataOverviewService : IDataOverviewService
                 )
                 .Where(e => e.BolusKind != "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.Bolus)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Insulin })
                 .ReadMetricRowsAsync(reads, YearMetricSource.ManualBolus, cancellationToken);
 
@@ -1110,7 +1110,7 @@ public class DataOverviewService : IDataOverviewService
                 )
                 .Where(e => e.BolusKind == "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.Bolus)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Insulin })
                 .ReadMetricRowsAsync(reads, YearMetricSource.AlgorithmBolus, cancellationToken);
 
@@ -1148,7 +1148,7 @@ public class DataOverviewService : IDataOverviewService
                     e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Rate > 0
                 )
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.TempBasal)
+                .ExcludeDuplicates()
                 .Select(e => new
                 {
                     StartTimestamp = e.Timestamp,
@@ -1223,7 +1223,7 @@ public class DataOverviewService : IDataOverviewService
                     e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Carbs > 0
                 )
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.CarbIntake)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Carbs })
                 .ReadMetricRowsAsync(reads, YearMetricSource.Carbs, cancellationToken);
 

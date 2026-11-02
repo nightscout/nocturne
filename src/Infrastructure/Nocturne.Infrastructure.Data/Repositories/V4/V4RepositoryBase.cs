@@ -283,8 +283,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetAsync" />
     /// <remarks>
-    /// Virtual so dedup participants (which expose an extended overload with a non-primary
-    /// LinkedRecords filter + keyset cursor) can override this 7-arg form to route through their
+    /// Virtual so dedup participants (which expose an extended overload with the duplicate
+    /// filter + keyset cursor) can override this 7-arg form to route through their
     /// filtered overload, preserving the pre-base default-interface bridge behaviour.
     /// </remarks>
     public virtual async Task<IEnumerable<TModel>> GetAsync(
@@ -779,7 +779,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     {
         var restored = restore.Restored.Concat(restore.Copies).ToList();
         Guid[] candidates = [.. restored.Select(e => e.Id), .. restore.Promoted];
-        var visible = (await ApplyReadVisibility(ctx.Set<TEntity>().AsNoTracking(), ctx)
+        var visible = (await ctx.Set<TEntity>().AsNoTracking().ExcludeDuplicatesWhereFlagged()
                 .Where(e => candidates.Contains(e.Id))
                 .Select(e => e.Id)
                 .ToListAsync(ct))
@@ -820,19 +820,11 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             : (await ctx.Set<TEntity>().AsNoTracking().Where(e => ids.Contains(e.Id)).ToListAsync(ct))
                 .Select(ToDomain).ToList();
 
-    /// <summary>
-    /// Applies <see cref="ReadVisibilityFilter.ExcludeNonPrimary{TEntity}"/> for
-    /// <see cref="DedupRecordType"/>. Every read path of a dedup participant routes through this so
-    /// its counts and its rows agree.
-    /// </summary>
-    protected IQueryable<TEntity> ApplyReadVisibility(IQueryable<TEntity> query, NocturneDbContext ctx) =>
-        DedupRecordType is { } recordType ? query.ExcludeNonPrimary(ctx, recordType) : query;
-
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CountAsync" />
     public virtual async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ApplyReadVisibility(ctx.Set<TEntity>().AsNoTracking(), ctx);
+        var query = ctx.Set<TEntity>().AsNoTracking().ExcludeDuplicatesWhereFlagged();
         if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
         return await query.CountAsync(ct);
@@ -882,7 +874,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <remarks>
     /// Pages on <c>sys_updated_at</c>, the column <see cref="ToDomain"/> reports as
     /// <see cref="IV4Record.ModifiedAt"/>, through <see cref="HistoryPage"/>, with the soft-delete
-    /// filter lifted. Live rows observe the same <see cref="ApplyReadVisibility"/> every other read
+    /// filter lifted. Live rows observe the same <see cref="ReadVisibilityFilter"/> every other read
     /// of this type does; deleted rows are all delivered.
     /// </remarks>
     public async Task<IReadOnlyList<HistoryRecord<TModel>>> GetModifiedSinceAsync(
@@ -891,9 +883,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await HistoryPage.GetAsync(
             ctx,
-            DedupRecordType is { } recordType
-                ? ctx.Set<TEntity>().IncludingDeleted().AsNoTracking().ExcludeNonPrimaryKeepingDeleted(ctx, recordType)
-                : ctx.Set<TEntity>().IncludingDeleted().AsNoTracking(),
+            ctx.Set<TEntity>().IncludingDeleted().AsNoTracking().ExcludeDuplicatesWhereFlaggedKeepingDeleted(),
             e => e.SysUpdatedAt,
             e => e.Id,
             cursorMills,

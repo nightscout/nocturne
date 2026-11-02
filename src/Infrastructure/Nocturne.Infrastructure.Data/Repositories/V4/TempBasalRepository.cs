@@ -58,7 +58,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     protected internal override RecordType? DedupRecordType => RecordType.TempBasal;
 
     /// <summary>
-    /// The base query with the non-primary LinkedRecords exclusion, which
+    /// The base query with the duplicate filter, which
     /// <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/> applies too.
     /// </summary>
     public override async Task<IEnumerable<TempBasal>> GetAsync(
@@ -77,7 +77,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
@@ -251,7 +251,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
         var entity = await ctx.TempBasals
             .AsNoTracking()
             .Where(t => t.Timestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
-            .ExcludeNonPrimary(ctx, RecordType.TempBasal)
+            .ExcludeDuplicates()
             .OrderByDescending(t => t.Timestamp)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);

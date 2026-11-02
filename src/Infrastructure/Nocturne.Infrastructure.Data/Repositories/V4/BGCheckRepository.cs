@@ -19,7 +19,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// Repository for managing blood glucose check records in the database. A DeduplicationService
 /// participant on top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>,
 /// so it keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
-/// non-primary LinkedRecords filter, post-commit dedup linking).
+/// duplicate filter, post-commit dedup linking).
 /// </summary>
 public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
 {
@@ -87,7 +87,7 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);

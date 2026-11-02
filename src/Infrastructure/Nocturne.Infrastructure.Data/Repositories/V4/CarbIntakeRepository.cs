@@ -19,7 +19,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// Repository for managing carbohydrate intake records in the database. A DeduplicationService
 /// participant on top of the sync-key upsert and keyed delete of
 /// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
-/// (non-primary LinkedRecords filter + keyset cursor), the read-visibility filter behind
+/// (duplicate filter + keyset cursor), the read-visibility filter behind
 /// <c>CountAsync</c>, and the post-commit dedup linking.
 /// </summary>
 public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbIntakeEntity>, ICarbIntakeRepository
@@ -54,8 +54,8 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
     protected internal override RecordType? DedupRecordType => RecordType.CarbIntake;
 
     /// <summary>
-    /// Routes the base 7-arg form through the extended carb-intake query (non-primary LinkedRecords
-    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// Routes the base 7-arg form through the extended carb-intake query (duplicate
+    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>
     public override Task<IEnumerable<CarbIntake>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
@@ -103,7 +103,7 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
         // that seeks directly to the cursor position. O(limit) vs O(offset + limit).

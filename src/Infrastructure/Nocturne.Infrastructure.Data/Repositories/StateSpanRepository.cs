@@ -233,7 +233,7 @@ public class StateSpanRepository : IStateSpanRepository
                 query = query.Where(s => s.EndTimestamp != null);
         }
 
-        query = query.ExcludeNonPrimary(db, RecordType.StateSpan);
+        query = query.ExcludeDuplicates();
 
         return query;
     }
@@ -909,7 +909,7 @@ public class StateSpanRepository : IStateSpanRepository
 
         var latest = await db.StateSpans.AsNoTracking()
             .Where(s => s.Category == pumpModeCategory && s.EndTimestamp == null)
-            .ExcludeNonPrimary(db, RecordType.StateSpan)
+            .ExcludeDuplicates()
             .OrderByDescending(s => s.StartTimestamp)
             .ThenByDescending(s => s.Id)
             .Select(s => s.State)
@@ -955,7 +955,7 @@ public class StateSpanRepository : IStateSpanRepository
                         && (state == null || s.State == state)
                         && s.StartTimestamp <= at
                         && (s.EndTimestamp == null || s.EndTimestamp > at))
-            .ExcludeNonPrimary(db, RecordType.StateSpan)
+            .ExcludeDuplicates()
             .OrderByDescending(s => s.StartTimestamp)
             .FirstOrDefaultAsync(cancellationToken);
         return entity is null ? null : StateSpanMapper.ToDomainModel(entity);
@@ -982,7 +982,7 @@ public class StateSpanRepository : IStateSpanRepository
 
         var query = db.StateSpans.AsNoTracking()
             .Where(s => categoryStrings.Contains(s.Category))
-            .ExcludeNonPrimary(db, RecordType.StateSpan);
+            .ExcludeDuplicates();
 
         if (to.HasValue)
             query = query.Where(s => s.StartTimestamp <= to.Value);
@@ -1083,7 +1083,7 @@ public class StateSpanRepository : IStateSpanRepository
         if (to is { } toValue)
             query = query.Where(s => s.StartTimestamp <= toValue);
 
-        query = query.ExcludeNonPrimary(db, RecordType.StateSpan);
+        query = query.ExcludeDuplicates();
 
         var entities = await query
             .OrderByDescending(s => s.StartTimestamp)

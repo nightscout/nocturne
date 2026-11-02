@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <summary>
 /// Repository for managing bolus records. A DeduplicationService participant on top of the sync-key
 /// upsert and keyed delete of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
-/// the extended <c>GetAsync</c> (non-primary LinkedRecords filter + keyset cursor), the read-visibility
+/// the extended <c>GetAsync</c> (duplicate filter + keyset cursor), the read-visibility
 /// filter behind <c>CountAsync</c>, and the post-commit dedup linking.
 /// </summary>
 public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBolusRepository
@@ -53,8 +53,8 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     protected internal override RecordType? DedupRecordType => RecordType.Bolus;
 
     /// <summary>
-    /// Routes the base 7-arg form through the extended bolus query (non-primary LinkedRecords
-    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// Routes the base 7-arg form through the extended bolus query (duplicate
+    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>
     public override Task<IEnumerable<Bolus>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
@@ -106,7 +106,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         if (kind.HasValue)
             query = query.Where(e => e.BolusKind == kind.Value.ToString());
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
         // that seeks directly to the cursor position. O(limit) vs O(offset + limit).

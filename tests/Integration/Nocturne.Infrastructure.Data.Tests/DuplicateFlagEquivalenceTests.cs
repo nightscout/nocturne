@@ -23,8 +23,8 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// <summary>
 /// <c>is_duplicate</c> agrees with <c>linked_records</c> on PostgreSQL under the runtime role and
 /// Row Level Security, whatever the deduplication module does: after every step of a random run of
-/// its operations, every linked record table flags exactly the rows the
-/// <see cref="ReadVisibilityFilter"/> anti-join hides.
+/// its operations, every linked record table flags exactly the rows a non-primary link names, which
+/// <see cref="ReadVisibilityFilter"/> hides.
 /// </summary>
 [Trait("Category", "Integration")]
 public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Database database)

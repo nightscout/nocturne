@@ -116,6 +116,20 @@ public class ModelConventionTests
                 && i.GetFilter() == "deleted_at IS NULL");
 
     [Fact]
+    public void EveryDeduplicatedListTable_HasTheTenantLeadingSortIndexOverTheRowsReadsShow() =>
+        AssertFamily(
+            NocturneDbContext.V4VisibleSortedListEntities,
+            "_tenant_visible_timestamp_id",
+            i => Columns(i).SequenceEqual([
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.Timestamp),
+                    nameof(IIdentified.Id)])
+                && !i.IsUnique
+                && i.IsDescending is not null
+                && i.IsDescending.SequenceEqual([false, true, true])
+                && i.GetFilter() == "deleted_at IS NULL AND NOT is_duplicate");
+
+    [Fact]
     public void EveryCorrelatedTable_HasACorrelationIdIndex() =>
         AssertFamily(
             NocturneDbContext.V4CorrelationIndexedEntities,

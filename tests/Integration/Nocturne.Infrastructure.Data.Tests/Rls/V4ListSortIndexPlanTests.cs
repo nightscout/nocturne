@@ -9,10 +9,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
 /// <summary>
 /// The dashboard's first read of sensor glucose is a newest-first list with no range, which
-/// <c>ix_sensor_glucose_tenant_timestamp_id</c> answers by reading n index entries. The latest-before
-/// read on a snapshot table walks <c>ix_pump_snapshots_tenant_timestamp_id</c> the same way. The
-/// query the repository sends is captured and explained as <c>nocturne_app</c>. The pump tenant is
-/// older than four others, so walking the cross-tenant timestamp index would skip their rows.
+/// <c>ix_sensor_glucose_tenant_visible_timestamp_id</c> answers by reading n index entries. The
+/// latest-before read on a snapshot table walks <c>ix_pump_snapshots_tenant_timestamp_id</c> the same
+/// way. The query the repository sends is captured and explained as <c>nocturne_app</c>. The pump
+/// tenant is older than four others, so walking the cross-tenant timestamp index would skip their rows.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -28,7 +28,7 @@ public class V4ListSortIndexPlanTests(RlsCompletenessFixture fx)
             "sensor_glucose",
             "(id, tenant_id, timestamp, mgdl, data_source, sys_created_at, sys_updated_at)",
             "gen_random_uuid(), @tid, now() - make_interval(mins => g), 100, 'dexcom', now(), now()",
-            "ix_sensor_glucose_tenant_timestamp_id",
+            "ix_sensor_glucose_tenant_visible_timestamp_id",
             async (factory, now) =>
             {
                 var repository = new SensorGlucoseRepository(

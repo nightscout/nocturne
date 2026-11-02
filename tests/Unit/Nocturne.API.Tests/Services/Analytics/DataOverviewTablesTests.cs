@@ -1,5 +1,6 @@
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -12,9 +13,9 @@ public class DataOverviewTablesTests
         var expected = Enum.GetValues<RecordType>();
         expected.Should().NotBeEmpty();
 
-        var covered = DataOverviewTables
-            .All.Where(t => t.DedupRecordType.HasValue)
-            .Select(t => t.DedupRecordType!.Value);
+        var covered = DataOverviewTables.All
+            .Select(t => DuplicateGroupPrimaries.RecordTypeOf(t.GetType().GetGenericArguments()[0]))
+            .OfType<RecordType>();
 
         covered.Should().BeEquivalentTo(expected);
     }

@@ -136,7 +136,7 @@ public static class SoftDeleteRestoreExtensions
     /// group they belong to reads as it did before the delete. A user's delete of one record deleted
     /// every copy in its group at one <see cref="ISoftDeletable.DeletedAt"/>
     /// (<see cref="DuplicateDelete.EveryCopy"/>), and reads show a group only through its primary
-    /// (<see cref="ReadVisibilityFilter.ExcludeNonPrimary{TEntity}"/>); restoring one non-primary copy
+    /// (<see cref="ReadVisibilityFilter.ExcludeDuplicates{TEntity}"/>); restoring one non-primary copy
     /// alone would bring back a row no read shows, so a dose would not count in IOB/COB. The group's
     /// copies deleted at the restored row's instant come back with it, unless a live row holds a
     /// unique key one would take. A group still left without a live primary, because its primary was

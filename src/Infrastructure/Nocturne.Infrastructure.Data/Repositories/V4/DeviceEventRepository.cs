@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <summary>
 /// Repository for managing device event records in the database. A DeduplicationService participant on
 /// top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
-/// the extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
+/// the extended <c>GetAsync</c> (duplicate filter), the read-visibility filter behind
 /// <c>CountAsync</c>, the post-commit dedup linking, and the event-type query helpers.
 /// </summary>
 public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
@@ -140,8 +140,8 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     protected internal override RecordType? DedupRecordType => RecordType.DeviceEvent;
 
     /// <summary>
-    /// Routes the base 7-arg form through the extended device-event query (non-primary LinkedRecords
-    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// Routes the base 7-arg form through the extended device-event query (duplicate
+    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>
     public override Task<IEnumerable<DeviceEvent>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
@@ -188,7 +188,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         if (patientDeviceId.HasValue)
             query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
@@ -257,7 +257,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         if (asOf is { } cutoff)
             query = query.Where(e => e.Timestamp <= cutoff);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         var entity = await query
             .OrderByDescending(e => e.Timestamp)
@@ -278,7 +278,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         if (asOf is { } cutoff)
             query = query.Where(e => e.Timestamp <= cutoff);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         var entity = await query
             .OrderByDescending(e => e.Timestamp)
