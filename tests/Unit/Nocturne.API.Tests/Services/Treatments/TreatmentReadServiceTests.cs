@@ -33,7 +33,7 @@ public class TreatmentReadServiceTests
     {
         LegacyTreatmentRepositoryMockExtensions.AnswerServedIdsPerKey(
             _tempBasalRepo, _bolusRepo, _carbIntakeRepo, _bgCheckRepo, _noteRepo, _deviceEventRepo, _bolusCalcRepo);
-        _projection.AnswersSpanIdsPerId();
+        _projection.AnswersSpanIdsPerId().AnswersProjectedSpansPerId();
         _service = new TreatmentReadService(
             _projection.Object,
             _decomposer.Object,
@@ -501,6 +501,42 @@ public class TreatmentReadServiceTests
         failed.Written.Select(t => t.Id).Should().Equal("t1", "t2");
         failed.Message.Should().Contain("was stored but could not be read back");
         failed.FailedIndex.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenASpanCannotBeReadBack_NamesTheStoredTreatmentsBeforeItWithoutReading()
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var span = new Treatment { Id = "t2", Mills = 2000, EventType = "Temporary Target" };
+        var last = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        DecomposeAll(writes: true);
+        var noteId = Guid.CreateVersion7();
+        var spanResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        spanResult.CreatedRecords.Add(new StateSpan { OriginalId = "t2", Category = StateSpanCategory.TemporaryTarget });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(first, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                var written = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+                written.CreatedRecords.Add(new Note { Id = noteId, CorrelationId = written.CorrelationId });
+                return written;
+            });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(span, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spanResult);
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+        var stored = new List<StoredTreatment>();
+
+        var act = () => _service.CreateAsync([first, span, last], WriteOrigin.Live, CancellationToken.None, stored);
+
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.FailedIndex.Should().Be(1);
+        failed.Written.Select(t => t.Id).Should().Equal(noteId.ToString(), "t2", "t3");
+        stored.Should().HaveCount(3);
+        stored[0].Should().BeOfType<StoredTreatment.Named>().Which.Created.Id.Should().Be(noteId.ToString());
+        stored.Skip(1).Should().AllBeOfType<StoredTreatment.Unnamed>();
     }
 
     /// <param name="writes">Whether each treatment writes a record, so a batch that fails after it carries it as stored.</param>
