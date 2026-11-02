@@ -776,6 +776,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
         windows.Should().OnlyContain(w => (w.To - w.From).TotalDays <= V4ApiLimits.MaxDateSpanDays);
         windows.Max(w => w.To).Should().Be(gapTo);
         windows.Min(w => w.From).Should().Be(gapFrom);
+        windows.Zip(windows.Skip(1)).Should().OnlyContain(pair => pair.Second.To < pair.First.From,
+            "a record on a boundary is read in one window only");
         fixture.Marks.Should().BeEmpty();
     }
 

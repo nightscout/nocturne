@@ -43,6 +43,9 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
             return;
 
         var marks = await MarksAsync();
+        if (_publisher is { IsAvailable: true } p)
+            await p.Metadata.SetBackfillLowWaterMarksAsync(ConnectorSource, changes);
+
         foreach (var (key, mark) in changes)
         {
             if (mark is { } at)
@@ -50,9 +53,6 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
             else
                 marks.Remove(key);
         }
-
-        if (_publisher is { IsAvailable: true } p)
-            await p.Metadata.SetBackfillLowWaterMarksAsync(ConnectorSource, changes);
     }
 
     protected async Task<DateTime?> GetBackfillLowWaterMarkAsync(string key) =>
@@ -103,7 +103,7 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
     ///         <item>
     ///             How far the crawls reached, read by <see cref="ResumePointAsync"/>. An open-ended
     ///             full crawl sets it from its first page; a catch-up moves it on only while it is what
-    ///             the catch-up resumed from, so a family with a stored watermark stops paying for it.
+    ///             the catch-up resumed from.
     ///         </item>
     ///     </list>
     /// </summary>

@@ -169,15 +169,12 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         var activeTypes = ResolveActiveTypes(request, config);
 
-        // On an open-ended catch-up (no explicit upper bound) each data type below resolves its
-        // bound through ResumeFrom, from the request and its own resume point. Explicit ranged
-        // syncs (request.To set, e.g. a manual re-import) honour request.From/To as-is.
+        // On an open-ended catch-up (no explicit upper bound) glucose resolves its bound through
+        // GlucoseFromAsync, and each other data type through ResumeFrom, from the request and its
+        // own resume point. Explicit ranged syncs (request.To set, e.g. a manual re-import) honour
+        // request.From/To as-is.
         var openEnded = request.To is null;
 
-        // Glucose keeps request.From — for background syncs the framework already derived
-        // it from the latest glucose entry, so it is glucose's own independent cursor
-        // (see GlucoseFromAsync).
-        //
         // Each data type below streams fetch-page → publish-page rather than accumulating
         // the whole range first: a multi-year backfill of a high-volume collection held in
         // one list has taken the process out with OutOfMemory, failing unrelated tenants'

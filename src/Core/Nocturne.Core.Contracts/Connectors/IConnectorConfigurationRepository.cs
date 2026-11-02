@@ -93,4 +93,10 @@ public interface IConnectorConfigurationRepository
     /// </summary>
     Task<bool> SetBackfillLowWaterMarksAsync(
         string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct);
+
+    /// <summary>
+    /// Removes the whole map; false when the source, matched as
+    /// <see cref="GetBackfillLowWaterMarksAsync"/> says, has no configuration.
+    /// </summary>
+    Task<bool> ClearBackfillLowWaterMarksAsync(string source, CancellationToken ct);
 }

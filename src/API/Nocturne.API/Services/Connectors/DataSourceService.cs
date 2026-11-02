@@ -886,6 +886,10 @@ public class DataSourceService : IDataSourceService
         };
     }
 
+    /// <remarks>
+    /// The connector's crawl state goes with its data: a resume point it kept would answer the next
+    /// sync's re-import with only what arrived since, and report that as a success.
+    /// </remarks>
     private async Task<Dictionary<string, long>> DeleteConnectorSourceDataAsync(
         ConnectorMetadataService.ConnectorDisplayInfo metadata,
         bool allowReimport,
@@ -899,6 +903,7 @@ public class DataSourceService : IDataSourceService
                 deletedCounts[type] = deletedCounts.GetValueOrDefault(type) + count;
         }
 
+        await _configurations.ClearBackfillLowWaterMarksAsync(metadata.DataSourceId, cancellationToken);
         return deletedCounts;
     }
 

@@ -246,6 +246,19 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
         return true;
     }
 
+    /// <inheritdoc/>
+    public virtual async Task<bool> ClearBackfillLowWaterMarksAsync(string source, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var config = await FindBySourceAsync(db, source, tracked: true, ct);
+        if (config is null)
+            return false;
+
+        config.BackfillLowWaterMarks = null;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     private static IReadOnlyDictionary<string, DateTime> ReadMarks(string? json) =>
         json is null
             ? new Dictionary<string, DateTime>()

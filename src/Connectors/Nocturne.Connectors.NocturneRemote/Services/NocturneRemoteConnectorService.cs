@@ -173,11 +173,10 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         var activeTypes = ResolveActiveTypes(request, config);
 
-        // Glucose keeps request.From: the framework derived it from the newest stored glucose
-        // record, so it already is glucose's own cursor. Every other type resolves its bound
-        // through ResumeFrom from the request and its own resume point, because each is fetched
-        // from its own endpoint. An explicit range (request.To set, as a cursor reset sends)
-        // bypasses the catch-up bounds entirely.
+        // Glucose resolves its bound through GlucoseFromAsync, and every other type through
+        // ResumeFrom from the request and its own resume point, because each is fetched from its
+        // own endpoint. An explicit range (request.To set, as a cursor reset sends) bypasses the
+        // catch-up bounds entirely.
         //
         // Each bound is resolved inside the loop's error boundary, so a watermark the publisher
         // cannot answer fails only the type whose bound it was.
@@ -484,7 +483,10 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     ///     short of a cursor reset.
     ///     <para>
     ///     A V4 list refuses a range wider than <see cref="V4ApiLimits.MaxDateSpanDays"/>, so a wider
-    ///     one is read a window at a time, newest window first.
+    ///     one is read a window at a time, newest window first. Both bounds are inclusive, so each
+    ///     window ends a microsecond below the one above it: the remote stores times to the
+    ///     microsecond, and a record on the boundary is read once, in the newer window, whichever way
+    ///     its store rounds a bound finer than that.
     ///     </para>
     /// </remarks>
     private async IAsyncEnumerable<T[]> FetchPagesAsync<T>(
@@ -498,7 +500,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         {
             await foreach (var page in FetchWindowAsync<T>(endpoint, windowTop - widest, windowTop, config, ct))
                 yield return page;
-            top = windowTop - widest;
+            top = windowTop - widest - TimeSpan.FromMicroseconds(1);
         }
 
         await foreach (var page in FetchWindowAsync<T>(endpoint, from, top, config, ct))
