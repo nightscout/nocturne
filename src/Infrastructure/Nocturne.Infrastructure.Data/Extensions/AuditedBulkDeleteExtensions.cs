@@ -267,8 +267,8 @@ public static class AuditedBulkDeleteExtensions
     /// Runs whether or not an audit row is written. Then, under
     /// <see cref="DuplicateDelete.PromoteSurvivor"/>, repoints the duplicate groups whose primary it
     /// deleted, stamping each promoted copy after the deletes; their links are locked before the rows
-    /// are written (<see cref="DuplicateGroupPrimaries.LockGroupsOfAsync"/>), except for glucose, whose
-    /// lock order <see cref="GlucoseStreamFlags"/> states.
+    /// are written (<see cref="DuplicateGroupPrimaries.LockGroupsOfAsync"/>), except for a glucose delete
+    /// that recomputes inline, whose lock order <see cref="GlucoseStreamFlags"/> states.
     /// </summary>
     /// <remarks>
     /// A delete is a write a v3 history client has to be told of, so it moves the row's update stamp

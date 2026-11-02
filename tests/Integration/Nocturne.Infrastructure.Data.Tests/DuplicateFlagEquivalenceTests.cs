@@ -232,6 +232,11 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = at, DataSource = source, Carbs = 40,
     };
 
+    private static SensorGlucoseEntity Glucose(Guid tenant, string source, DateTime at) => new()
+    {
+        Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = at, DataSource = source, Mgdl = 120,
+    };
+
     /// <summary>
     /// A writer whose planned promotion is already in place changes no link, yet a second writer that
     /// demotes the same record must still wait for it: otherwise the first, resuming after the second
@@ -377,12 +382,8 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
     {
         var tenant = await SeedTenantAsync();
         var at = DateTime.UtcNow.AddHours(-1);
-        SensorGlucoseEntity Glucose(string source, DateTime when) => new()
-        {
-            Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = when, DataSource = source, Mgdl = 120,
-        };
-        var primary = Glucose("mylife-connector", at);
-        var copy = Glucose("glooko-connector", at.AddSeconds(2));
+        var primary = Glucose(tenant, "mylife-connector", at);
+        var copy = Glucose(tenant, "glooko-connector", at.AddSeconds(2));
         await IngestAsync(tenant, RecordType.SensorGlucose, [primary, copy]);
         await ExecuteAsync(tenant, $"UPDATE sensor_glucose SET deleted_at = now() WHERE id = '{copy.Id}'");
 
@@ -403,6 +404,66 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         (await restore.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(copy.Id);
         (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
             .Should().Equal(copy.Id.ToString());
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A glucose delete too wide to recompute inline, which takes no stream lock, while a repick holds
+    /// the group of one of its readings. A repick that read the reading as live before the delete
+    /// committed would promote it after, and the group would show nothing.
+    /// </summary>
+    [Fact]
+    public async Task ADeferredGlucoseDeleteLeavesNoDeletedReadingAPrimary()
+    {
+        var tenant = await SeedTenantAsync();
+        var at = DateTime.UtcNow.AddHours(-1);
+        var primary = Glucose(tenant, "mylife-connector", at);
+        var earliest = Glucose(tenant, "glooko-connector", at.AddSeconds(2));
+        var next = Glucose(tenant, "nightscout-connector", at.AddSeconds(4));
+        await IngestAsync(tenant, RecordType.SensorGlucose, [primary, earliest, next]);
+        await ExecuteAsync(tenant, $"UPDATE sensor_glucose SET deleted_at = now() WHERE id = '{primary.Id}'");
+        await using (var seed = Context(tenant))
+        {
+            seed.SensorGlucose.AddRange(Enumerable.Range(1, GlucoseStreamFlags.InlineRowLimit)
+                .Select(i => Glucose(tenant, "glooko-connector", at.AddDays(-30).AddMinutes(-5 * i))));
+            await seed.SaveChangesAsync();
+        }
+
+        await using var repick = Context(tenant);
+        await using var repickTransaction = await repick.Database.BeginTransactionAsync();
+        var canonical = await repick.LinkedRecords.Where(l => l.RecordId == primary.Id).Select(l => l.CanonicalId).SingleAsync();
+        await DuplicateGroupPrimaries.LockGroupsAsync(repick, RecordType.SensorGlucose, [canonical], default);
+
+        var written = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Released once the repick has read, so a delete that does not wait for it is still open then.
+        var commit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delete = Task.Run(async () =>
+        {
+            await using var db = Context(tenant);
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            await db.AuditedSoftDeleteAsync(
+                db.SensorGlucose.Where(e => e.DataSource == "glooko-connector"), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
+            written.SetResult();
+            await commit.Task;
+            await transaction.CommitAsync();
+        });
+        await Task.WhenAny(written.Task, PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, delete));
+
+        var promote = Task.Run(async () =>
+        {
+            await DuplicateGroupPrimaries.RepickAsync(repick, RecordType.SensorGlucose, [canonical], default);
+            await repickTransaction.CommitAsync();
+        });
+        await Task.WhenAny(promote, PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, promote));
+        commit.SetResult();
+        await Task.WhenAll(delete, promote).WaitAsync(TimeSpan.FromSeconds(30));
+
+        (await QueryAsync(tenant, """
+            SELECT lr.record_id::text FROM linked_records lr JOIN sensor_glucose g ON g.id = lr.record_id
+            WHERE lr.is_primary AND g.deleted_at IS NOT NULL
+            """)).Should().BeEmpty();
+        (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
+            .Should().Equal(next.Id.ToString());
         (await MismatchesAsync(tenant)).Should().BeEmpty();
     }
 

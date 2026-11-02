@@ -424,14 +424,17 @@ internal static class DuplicateGroupPrimaries
     /// group. The insert-time linker flags the rows it has just linked before its repick locks their
     /// groups' links, so a delete covering both such a copy and a committed member of its group can still
     /// meet it; PostgreSQL breaks that as a deadlock and the aborted transaction retries. Glucose takes
-    /// nothing here: its delete takes the stream lock only after
-    /// its rows are written (<see cref="GlucoseStreamFlags"/> says why), and a link lock ahead of the stream
-    /// lock would invert the order the other glucose writers take them in.
+    /// nothing here unless its stream locks are deferred (<see cref="GlucoseStreamFlags.IsDeferred"/>): its
+    /// delete takes the stream lock only after its rows are written, and a link lock ahead of the stream
+    /// lock would invert the order the other glucose writers take them in (<see cref="GlucoseStreamFlags"/>
+    /// says why, and why a deferred delete locks).
     /// </summary>
     public static async Task LockGroupsOfAsync(
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
     {
-        if (recordType == RecordType.SensorGlucose || !ctx.Database.IsNpgsql() || recordIds.Count == 0)
+        if (recordType == RecordType.SensorGlucose && !GlucoseStreamFlags.IsDeferred(ctx))
+            return;
+        if (!ctx.Database.IsNpgsql() || recordIds.Count == 0)
             return;
 
         var key = RecordTypeKeys.Key(recordType);
