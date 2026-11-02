@@ -21,7 +21,8 @@ namespace Nocturne.API.Tests.Integration;
 /// </summary>
 /// <remarks>
 /// Only sensor data is generated: a regular activity goes to the state spans through the activity
-/// service, not the decomposer, and a sleep activity to the sleep sessions.
+/// service, not the decomposer. A sleep activity goes to the sleep sessions
+/// (<see cref="Backfilled_SleepActivities_AreStoredAsSleepSessionsAndNeverAsStateSpans"/>).
 /// </remarks>
 [Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
@@ -100,6 +101,56 @@ public class ActivityBatchEquivalenceTests : ApiIntegrationTestBase
                     await decomposer.DecomposeBatchAsync([activity], WriteOrigin.Live);
                 return [];
             });
+    }
+
+    [Fact]
+    public async Task Backfilled_SleepActivities_AreStoredAsSleepSessionsAndNeverAsStateSpans()
+    {
+        string[] tables = ["sleep_sessions", "state_spans", "heart_rates"];
+        const string deletedId = "5b00000000000000000000d1";
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        await DecomposedRows.TruncateAsync(conn, tables);
+        await SeedDeletedSleepSessionAsync(deletedId);
+        var start = XDripMills(1, 0);
+        List<Activity> batch =
+        [
+            new() { Id = "5b00000000000000000000a1", Type = "sleep", Mills = start, Duration = 420, EnteredBy = "watch" },
+            new() { Id = deletedId, Type = "sleep", Mills = start + 1, Duration = 420, EnteredBy = "watch" },
+            new() { Id = "5b00000000000000000000a2", Type = "nap", Mills = start + 2, Duration = 30, EnteredBy = "watch" },
+            new()
+            {
+                Id = "5b00000000000000000000a3", Type = "heartrate", Mills = start + 3, EnteredBy = "watch",
+                AdditionalProperties = new() { ["bpm"] = JsonSerializer.SerializeToElement(70) },
+            },
+        ];
+
+        var decomposition = await WithTenantScopeAsync(
+            async services => await services.GetRequiredService<IActivityDecomposer>().DecomposeBatchAsync(batch, WriteOrigin.Backfill));
+
+        var rows = await DecomposedRows.ReadAsync(conn, Fixture.TenantId, tables, liveOnly: true);
+        rows["sleep_sessions"].Select(r => ((string?)r["original_id"], (string?)r["type"]))
+            .Should().BeEquivalentTo([("5b00000000000000000000a1", "Overnight"), ("5b00000000000000000000a2", "Nap")]);
+        rows["state_spans"].Should().BeEmpty();
+        rows["heart_rates"].Should().ContainSingle();
+        decomposition.IsDeletedByUser(1).Should().BeTrue();
+        decomposition.Wrote.Should().Equal(true, false, true, true);
+        decomposition.SkippedDeleted.Should().Be(1);
+    }
+
+    private async Task SeedDeletedSleepSessionAsync(string originalId)
+    {
+        var at = Start(1).AddDays(-1);
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        var session = new SleepSessionEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = Fixture.TenantId, OriginalId = originalId,
+            Source = ActivityStateSpanMapper.StoredSleepSessionSource, Type = "Overnight", DetectionMethod = "Manual",
+            StartTime = at, EndTime = at.AddHours(8), DeletedAt = at,
+        };
+        db.Add(session);
+        db.Entry(session).Property("DeletedByUser").CurrentValue = true;
+        await db.SaveChangesAsync();
     }
 
     private async Task AssertEquivalentAsync(

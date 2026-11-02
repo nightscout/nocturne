@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -57,7 +58,7 @@ public class ActivityBatchStatementsTests(ApiIntegrationTestFixture fixture, ITe
             .AddInterceptors(recorder)
             .Options) { TenantId = Fixture.TenantId };
         var decomposer = new ActivityDecomposer(
-            new TestNocturneDbContextFactory(context), Mock.Of<IStateSpanRepository>(), TimeProvider.System,
+            new TestNocturneDbContextFactory(context), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System,
             NullLogger<ActivityDecomposer>.Instance);
 
         if (resend)

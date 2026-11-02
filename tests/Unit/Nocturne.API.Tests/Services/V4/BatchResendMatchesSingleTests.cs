@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -287,7 +288,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     public async Task Activity_BatchResend_UpdatesTheHeartRateRow()
     {
         var decomposer = new ActivityDecomposer(
-            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
 
         Activity HeartRate(int bpm) => new()
         {

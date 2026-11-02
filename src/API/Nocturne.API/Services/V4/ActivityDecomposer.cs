@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Health;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -16,8 +18,8 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Services.V4;
 
 /// <summary>
-/// Decomposes legacy <see cref="Activity"/> records into typed v4 models (<see cref="HeartRate"/> or
-/// <see cref="StepCount"/>) as <see cref="Classify"/> routes them. Supports idempotent
+/// Decomposes legacy <see cref="Activity"/> records into typed v4 models (<see cref="HeartRate"/>,
+/// <see cref="StepCount"/> or <see cref="SleepSession"/>) as <see cref="Classify"/> routes them. Supports idempotent
 /// create-or-update via <c>OriginalId</c> matching.
 /// </summary>
 /// <seealso cref="IActivityDecomposer"/>
@@ -27,21 +29,25 @@ public class ActivityDecomposer : IActivityDecomposer
 
     private readonly INocturneDbContextFactory _contexts;
     private readonly IStateSpanRepository _stateSpanRepository;
+    private readonly ISleepService _sleepService;
     private readonly TimeProvider _time;
     private readonly ILogger<ActivityDecomposer> _logger;
 
     /// <param name="contexts">Opens the context heart rates and step counts are read and written through.</param>
     /// <param name="stateSpanRepository">Repository for bulk-creating regular activities as StateSpans.</param>
+    /// <param name="sleepService">Upserts each sleep activity as a sleep session.</param>
     /// <param name="timeProvider">Clock that stamps soft deletes.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ActivityDecomposer(
         INocturneDbContextFactory contexts,
         IStateSpanRepository stateSpanRepository,
+        ISleepService sleepService,
         TimeProvider timeProvider,
         ILogger<ActivityDecomposer> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _stateSpanRepository = stateSpanRepository;
+        _sleepService = sleepService;
         _time = timeProvider;
         _logger = logger;
     }
@@ -123,7 +129,8 @@ public class ActivityDecomposer : IActivityDecomposer
     /// classified and mapped; the rows their ids and sync keys name are read
     /// (<see cref="ResolveAsync{TModel,TEntity}"/>); each record is planned onto its row in memory
     /// (<see cref="Plan{TModel,TEntity}"/>); and both tables are saved together, then the regular
-    /// activities written as state spans.
+    /// activities written as state spans. Sleep activities are written one by one, each upserted as a
+    /// sleep session, and are always reported as created.
     /// <para>
     /// <paramref name="origin"/> is unused, since none of the writes made here takes one; it stays for
     /// the shape every decomposer's batch shares.
@@ -142,6 +149,7 @@ public class ActivityDecomposer : IActivityDecomposer
 
         var heartRates = new List<(int Index, HeartRate Model)>();
         var stepCounts = new List<(int Index, StepCount Model)>();
+        var sleep = new List<(int Index, Activity Activity)>();
         var regular = new List<Activity>();
         for (var i = 0; i < activities.Count; i++)
         {
@@ -154,6 +162,9 @@ public class ActivityDecomposer : IActivityDecomposer
                     break;
                 case ActivityDestination.StepCount:
                     stepCounts.Add((i, MapToStepCount(activity)));
+                    break;
+                case ActivityDestination.SleepSession:
+                    sleep.Add((i, activity));
                     break;
                 default:
                     regular.Add(activity);
@@ -173,6 +184,8 @@ public class ActivityDecomposer : IActivityDecomposer
         heartRatePlan.Report(result, groups, HeartRateMapper.ToDomainModel);
         stepCountPlan.Report(result, groups, StepCountMapper.ToDomainModel);
 
+        await WriteSleepAsync(sleep, groups, result, ct);
+
         if (regular.Count > 0)
         {
             var stateSpans = regular.Select(ActivityStateSpanMapper.ToStateSpan).ToList();
@@ -181,10 +194,34 @@ public class ActivityDecomposer : IActivityDecomposer
         }
 
         _logger.LogDebug(
-            "Batch-decomposed {Count} activities ({HeartRate} HR, {StepCount} steps, {Regular} regular)",
-            activities.Count, heartRates.Count, stepCounts.Count, regular.Count);
+            "Batch-decomposed {Count} activities ({HeartRate} HR, {StepCount} steps, {Sleep} sleep, {Regular} regular)",
+            activities.Count, heartRates.Count, stepCounts.Count, sleep.Count, regular.Count);
 
         return result;
+    }
+
+    /// <summary>
+    /// Upserts each sleep activity as a <see cref="SleepSession"/>. A session the user deleted is
+    /// reported through <see cref="ActivityDecomposition.DeletedByUser"/> and does not fail the batch.
+    /// </summary>
+    private async Task WriteSleepAsync(
+        List<(int Index, Activity Activity)> sleep, IReadOnlyList<Guid> groups, ActivityDecomposition result,
+        CancellationToken ct)
+    {
+        foreach (var (index, activity) in sleep)
+        {
+            try
+            {
+                var session = await _sleepService.UpsertSessionAsync(ActivityStateSpanMapper.ToSleepSession(activity), ct);
+                var created = ActivityStateSpanMapper.SleepSessionToActivity(session);
+                result.RecordOwners[created] = groups[index];
+                result.CreatedRecords.Add(created);
+            }
+            catch (RecreationBlockedException)
+            {
+                result.DeletedByUser(index);
+            }
+        }
     }
 
     private static readonly List<string> ActivityCategoryNames =
