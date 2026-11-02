@@ -914,6 +914,39 @@ public class DeduplicationService : IDeduplicationService
             .Distinct();
     }
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<DuplicateFlagDrift>> AuditDuplicateFlagsAsync(CancellationToken cancellationToken = default) =>
+        AuditDuplicateFlagsAsync(DuplicateGroupPrimaries.AuditPageSize, cancellationToken);
+
+    /// <inheritdoc cref="AuditDuplicateFlagsAsync(CancellationToken)"/>
+    /// <remarks>
+    /// Each page found disagreeing is repaired in a transaction of its own under the write lock
+    /// (<see cref="DuplicateGroupPrimaries.RepairFlagsAsync"/> says why), so the lock is held for one
+    /// page's repair at a time and a tenant with no drift takes it never.
+    /// </remarks>
+    internal async Task<IReadOnlyList<DuplicateFlagDrift>> AuditDuplicateFlagsAsync(int pageSize, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var drift = new List<DuplicateFlagDrift>();
+        foreach (var recordType in DeduplicatedRecordTypes)
+        {
+            int flagged = 0, unflagged = 0, repaired = 0;
+            await foreach (var page in DuplicateGroupPrimaries.DisagreeingPagesAsync(db, recordType, pageSize, ct))
+            {
+                flagged += page.Count(r => r.IsDuplicate);
+                unflagged += page.Count(r => !r.IsDuplicate);
+                var ids = page.Select(r => r.Id).ToArray();
+                repaired += await UnderWriteLockAsync(
+                    db, token => DuplicateGroupPrimaries.RepairFlagsAsync(db, recordType, ids, token), ct);
+            }
+
+            if (flagged + unflagged > 0)
+                drift.Add(new DuplicateFlagDrift(recordType, flagged, unflagged, repaired));
+        }
+
+        return drift;
+    }
+
     /// <summary>
     /// Collapses duplicate canonical groups for a record type within the current tenant.
     /// Two groups merge when their primary records fall within <see cref="MatchingWindowMillis"/>

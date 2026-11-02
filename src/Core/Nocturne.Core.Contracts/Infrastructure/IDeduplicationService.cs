@@ -88,4 +88,14 @@ public interface IDeduplicationService
     /// primary moved.
     /// </summary>
     Task<int> RepairStateSpanPrimariesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads the current tenant's linked record tables, soft-deleted rows included, for a
+    /// stored duplicate flag that disagrees with the row's links, and rewrites each such flag from the
+    /// links. Any disagreement is a bug in a writer. The read is paged, and only a page that found any
+    /// opens a transaction. A row that commits while the read passes it is left to the next run. The
+    /// caller's reads must not be history-clamped, or older rows go unread.
+    /// </summary>
+    /// <returns>One entry per record type that had any.</returns>
+    Task<IReadOnlyList<DuplicateFlagDrift>> AuditDuplicateFlagsAsync(CancellationToken cancellationToken = default);
 }
