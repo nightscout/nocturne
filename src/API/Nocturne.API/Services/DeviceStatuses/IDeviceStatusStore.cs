@@ -32,6 +32,13 @@ internal interface IDeviceStatusStore
     Task<DeviceStatus?> GetByIdAsync(string id, CancellationToken ct);
 
     /// <summary>
+    /// The live statuses stored under <paramref name="groups"/>, the correlation ids a write stored them
+    /// under, as <see cref="GetMatchingAsync"/> serves them, in no set order and in a fixed number of
+    /// queries however many there are.
+    /// </summary>
+    Task<IReadOnlyList<DeviceStatus>> GetByGroupsAsync(IReadOnlyCollection<Guid> groups, CancellationToken ct);
+
+    /// <summary>
     /// Returns <see cref="DeviceStatus"/> documents modified since the given Unix millisecond
     /// threshold. Used for AAPS incremental sync. A deleted status projects with <c>isValid: false</c>.
     /// </summary>
