@@ -23,6 +23,8 @@ public class HistoryClampLiftAllowlistTests
     [
         "src/Infrastructure/Nocturne.Infrastructure.Data/NocturneDbContext.cs: NocturneDbContext.SaveChangesAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.DeriveFlagsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/GlucoseStreamFlags.cs: GlucoseStreamFlags.AfterRowsChangedAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/GlucoseStreamFlags.cs: GlucoseStreamFlags.RecomputeAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/StateSpanSupersessionExtensions.cs: StateSpanSupersessionExtensions.ClearSupersededByAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TrackerRepository.cs: TrackerRepository.CompleteInstanceAsync",
     ];

@@ -1175,6 +1175,7 @@ public static class ServiceRegistrationExtensions
         services.AddScheduledJob<AlertSweepJob>();
         services.AddScheduledJob<DeduplicationReconciliationJob>();
         services.AddScheduledJob<DuplicateFlagAuditJob>();
+        services.AddScheduledJob<GlucoseStreamRecomputeJob>();
 
         return services;
     }

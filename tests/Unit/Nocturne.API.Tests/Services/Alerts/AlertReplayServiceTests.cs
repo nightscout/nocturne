@@ -92,7 +92,6 @@ public class AlertReplayServiceTests
         _sut = new AlertReplayService(
             _alertRepository.Object,
             _glucoseRepository.Object,
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             _enricher,
             _tenantAccessor.Object,
             Options.Create(new AlertEvaluationOptions()),
@@ -158,7 +157,7 @@ public class AlertReplayServiceTests
         };
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -185,7 +184,7 @@ public class AlertReplayServiceTests
             .ToArray();
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -219,7 +218,7 @@ public class AlertReplayServiceTests
             .ToArray();
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -255,7 +254,7 @@ public class AlertReplayServiceTests
             .ToArray();
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -291,7 +290,7 @@ public class AlertReplayServiceTests
         // The leaf needs no glucose; replay still walks the day on no-data ticks.
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -326,7 +325,7 @@ public class AlertReplayServiceTests
 
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[] { Reading(dayStart.AddHours(3), 60) });
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -367,7 +366,7 @@ public class AlertReplayServiceTests
         // assertion locks the same-tick pair in isolation.
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[]
             {
                 Reading(dayStart.AddHours(3), 75),
@@ -415,7 +414,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         // The enricher uses GetLatestTimestampAsync(asOf) — pinned to each replay tick. We
@@ -453,7 +452,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
@@ -507,7 +506,7 @@ public class AlertReplayServiceTests
         };
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -535,7 +534,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
         _reservoirEstimation.Setup(s => s.GetEstimateAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Nocturne.API.Services.Devices.ReservoirEstimate(
@@ -560,7 +559,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { ThresholdRule(ruleId, "below", 70m) });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[] { Reading(dayStart.AddHours(1), 90) });
         var ruleOverride = new ReplayRuleOverride(
             ruleId, "tightened", AlertConditionType.Threshold, """{"direction":"below","value":100}""",

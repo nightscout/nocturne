@@ -88,7 +88,6 @@ public class AlertReplayServiceLeafLogTests
         _sut = new AlertReplayService(
             _alertRepository.Object,
             _glucoseRepository.Object,
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             enricher,
             _tenantAccessor.Object,
             Options.Create(new AlertEvaluationOptions()),
@@ -149,7 +148,7 @@ public class AlertReplayServiceLeafLogTests
         _glucoseRepository.Setup(g => g.GetAsync(
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), null, null,
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -191,7 +190,7 @@ public class AlertReplayServiceLeafLogTests
         _glucoseRepository.Setup(g => g.GetAsync(
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), null, null,
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -230,7 +229,7 @@ public class AlertReplayServiceLeafLogTests
         _glucoseRepository.Setup(g => g.GetAsync(
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), null, null,
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);

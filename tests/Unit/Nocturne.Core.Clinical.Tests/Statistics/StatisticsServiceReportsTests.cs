@@ -59,7 +59,7 @@ public class StatisticsServiceReportsTests
         var pump = new PatientDevice { Id = Guid.NewGuid(), DeviceCategory = DeviceCategory.InsulinPump, Model = "P" };
 
         var result = _service.CalculateContributingDevices(
-            [Reading(June1, 100, a.Id), Reading(June1, 100, a.Id), Reading(June1, 100), Reading(June1, 100, pump.Id)],
+            [(a.Id, 2), (null, 1), (pump.Id, 1)],
             [a, idle, pump]);
 
         result.Select(d => (d.PatientDeviceId, d.Name, d.ReadingCount))

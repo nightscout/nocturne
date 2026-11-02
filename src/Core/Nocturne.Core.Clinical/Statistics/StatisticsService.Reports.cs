@@ -17,17 +17,17 @@ public partial class StatisticsService
 
     /// <inheritdoc />
     public IEnumerable<ContributingDevice> CalculateContributingDevices(
-        IReadOnlyCollection<SensorGlucose> readings,
+        IReadOnlyCollection<(Guid? PatientDeviceId, int Count)> readingCounts,
         IEnumerable<PatientDevice> devices)
     {
         var countByDevice = new Dictionary<Guid, int>();
         var unattributedCount = 0;
-        foreach (var r in readings)
+        foreach (var (deviceId, count) in readingCounts)
         {
-            if (r.PatientDeviceId is { } id)
-                countByDevice[id] = countByDevice.GetValueOrDefault(id) + 1;
+            if (deviceId is { } id)
+                countByDevice[id] = countByDevice.GetValueOrDefault(id) + count;
             else
-                unattributedCount++;
+                unattributedCount += count;
         }
 
         foreach (var d in devices.Where(d => d.DeviceCategory == DeviceCategory.CGM))

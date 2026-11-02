@@ -17,8 +17,9 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// inserts, or targets rows the clamp already shows its caller, and reads back only the rows it
 /// wrote. The exceptions are writes that must reach hidden rows, set one bookkeeping column and
 /// return only a count: a referential clean-up
-/// (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>) and the duplicate flag
-/// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>). Its callers are pinned by
+/// (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>), the duplicate flag
+/// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>) and the stream flag
+/// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides. Its callers are pinned by
 /// <c>HistoryClampLiftAllowlistTests</c>.
 /// <para>
 /// The transaction it opens is retried with no <c>verifySucceeded</c>: a commit that reported failure

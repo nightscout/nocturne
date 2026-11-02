@@ -8906,6 +8906,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_duplicate");
 
+                    b.Property<bool>("IsSecondaryStream")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_secondary_stream");
+
                     b.Property<string>("LegacyId")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")

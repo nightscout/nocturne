@@ -2510,6 +2510,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             flag.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
         }
 
+        var secondary = modelBuilder.Entity<SensorGlucoseEntity>().Property(e => e.IsSecondaryStream);
+        secondary.HasDefaultValue(false).ValueGeneratedNever();
+        secondary.Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+        secondary.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+
         // One row per tenant, keyed on the tenant id rather than an Id of its own.
         modelBuilder.Entity<DedupReconcileStateEntity>(entity =>
         {

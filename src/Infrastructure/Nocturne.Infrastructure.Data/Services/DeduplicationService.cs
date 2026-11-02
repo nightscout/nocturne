@@ -513,7 +513,11 @@ public class DeduplicationService : IDeduplicationService
             return new DeduplicationBatchResult(0, 0, 0, 0);
 
         await using var db = await _contexts.CreateAsync(ct);
-        return await UnderWriteLockAsync(db, token => LinkChunkAsync(db, recordType, records, token), ct);
+        return await UnderWriteLockAsync(db, async token =>
+        {
+            await LockGlucoseStreamsAsync(db, recordType, token);
+            return await LinkChunkAsync(db, recordType, records, token);
+        }, ct);
     }
 
     /// <summary>The body of <see cref="DeduplicateChunkAsync"/>, run under its write lock.</summary>
@@ -1465,6 +1469,7 @@ public class DeduplicationService : IDeduplicationService
 
         return await UnderWriteLockAsync(db, async token =>
         {
+            await LockGlucoseStreamsAsync(db, recordType, token);
             var merged = 0;
             var changes = new List<PrimaryChange>();
             foreach (var canonicals in mergedGroups)
@@ -1514,6 +1519,13 @@ public class DeduplicationService : IDeduplicationService
             return merged;
         }, ct);
     }
+
+    /// <summary>
+    /// The stream lock, for glucose, ahead of the first link the write lock's body writes: the order
+    /// <see cref="GlucoseStreamFlags"/> states.
+    /// </summary>
+    private static Task LockGlucoseStreamsAsync(NocturneDbContext db, RecordType recordType, CancellationToken ct) =>
+        recordType == RecordType.SensorGlucose ? GlucoseStreamFlags.LockAsync(db, ct) : Task.CompletedTask;
 
     private const int MergeLockClass = 0x4E44_5550;
 

@@ -123,7 +123,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
         }
 
         /// <summary>A UUIDv7 built in SQL: PostgreSQL 17 has no <c>uuidv7()</c>.</summary>
-        private const string UuidV7 = """
+        internal const string UuidV7 = """
             encode(set_bit(set_bit(
                 overlay(uuid_send(gen_random_uuid())
                         placing substring(int8send((extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
