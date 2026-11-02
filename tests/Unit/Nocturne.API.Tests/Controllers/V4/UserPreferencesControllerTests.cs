@@ -56,6 +56,20 @@ public class UserPreferencesControllerTests
     }
 
     [Fact]
+    public async Task UpdatePreferences_acceptsCzechLanguage()
+    {
+        var (controller, _) = NewController();
+
+        var result = await controller.UpdatePreferences(new UpdateUserPreferencesRequest
+        {
+            PreferredLanguage = "cs",
+        });
+
+        OkValue(result).PreferredLanguage.Should().Be("cs");
+        OkValue(await controller.GetPreferences()).PreferredLanguage.Should().Be("cs");
+    }
+
+    [Fact]
     public async Task UpdatePreferences_mergesPartial_withoutClobberingUnsetFields()
     {
         var (controller, _) = NewController();
