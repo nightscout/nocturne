@@ -142,8 +142,9 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
             move, RecordType.CarbIntake, [new(copy.Id, true), new(primary.Id, false)], default);
 
         var audit = Task.Run(() => AuditAsync(tenant));
-        (await Task.WhenAny(audit, Task.Delay(TimeSpan.FromSeconds(1)))).Should().NotBe(audit,
-            "the move holds the copy's link until it commits");
+        // Blocked means the audit has read the drift and waits on the copy's link the move holds: a
+        // fixed delay let a slow start read the drift only after the commit, and find none.
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, audit);
 
         await transaction.CommitAsync();
         var drift = await audit.WaitAsync(TimeSpan.FromSeconds(30));
