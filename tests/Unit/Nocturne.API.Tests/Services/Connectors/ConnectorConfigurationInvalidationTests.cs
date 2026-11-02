@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Connectors.Core.Interfaces;
@@ -33,6 +34,8 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly List<(string Connector, Guid Tenant)> _invalidated = [];
+    private readonly List<Guid> _nudged = [];
+    private readonly ConnectorConfigurationRepository _configurations;
     private readonly ConnectorConfigurationService _service;
 
     public ConnectorConfigurationInvalidationTests()
@@ -53,9 +56,16 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
         encryption
             .Setup(e => e.EncryptSecrets(It.IsAny<Dictionary<string, string>>()))
             .Returns<Dictionary<string, string>>(d => d);
+        encryption
+            .Setup(e => e.DecryptSecrets(It.IsAny<Dictionary<string, string>>()))
+            .Returns<Dictionary<string, string>>(d => d);
 
+        var nudge = new ConnectorPollerNudge();
+        nudge.Subscribe(CanonicalName, _nudged.Add);
+
+        _configurations = new ConnectorConfigurationRepository(_dbContext.AsFactory());
         _service = new ConnectorConfigurationService(
-            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            _configurations,
             new SubjectRepository(_dbContext.AsFactory()),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
@@ -63,7 +73,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
             Mock.Of<IAuditContext>(),
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
-            [new RecordingInvalidator(_invalidated)],
+            [new RecordingInvalidator(_invalidated), nudge],
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 
@@ -88,6 +98,19 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
         await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["password"] = "x" });
 
         _invalidated.Should().ContainSingle().Which.Should().Be((CanonicalName, _tenantId));
+        _nudged.Should().ContainSingle().Which.Should().Be(_tenantId);
+    }
+
+    [Fact]
+    public async Task SaveRuntimeSecretsAsync_StoresTheSecretsAndEmptiesNoCacheNorNudgesThePoller()
+    {
+        await _service.SaveRuntimeSecretsAsync(ConnectorName, new Dictionary<string, string> { ["refresh_token"] = "rotated" });
+
+        (await _service.GetSecretsAsync(ConnectorName)).Should().Contain("refresh_token", "rotated");
+        (await _configurations.FindAsync(CanonicalName, default))!.ModifiedBy
+            .Should().Be(IConnectorConfigurationService.RuntimeModifiedBy);
+        _invalidated.Should().BeEmpty();
+        _nudged.Should().BeEmpty();
     }
 
     [Fact]

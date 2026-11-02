@@ -79,6 +79,10 @@ public class GoogleHealthSessionStoreTests : IDisposable
                 "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) => secrets = values)
             .Returns(Task.CompletedTask);
+        configurations.Setup(service => service.SaveRuntimeSecretsAsync(
+                "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Dictionary<string, string>, CancellationToken>((_, values, _) => secrets = values)
+            .Returns(Task.CompletedTask);
         configurations.Setup(service => service.GetConfigurationAsync("GoogleHealth", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ConnectorConfigurationResponse
             {
