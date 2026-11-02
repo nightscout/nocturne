@@ -395,9 +395,11 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
             Logger.LogWarning(
                 "{ConnectorName} sync for tenant {TenantSlug} exceeded {Timeout} and was cancelled",
                 ConnectorName, tenant.Slug, PerTenantSyncTimeout);
-            throw new TimeoutException($"The {ConnectorName} sync exceeded {PerTenantSyncTimeout}.");
+            throw new TimeoutException(TimeoutMessage);
         }
     }
+
+    private string TimeoutMessage => $"The {ConnectorName} sync exceeded {PerTenantSyncTimeout}.";
 
     /// <summary>
     /// How long a tenant may queue for a budget slot before the wait is reported. A saturated budget
@@ -467,19 +469,28 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
         {
             result = await PerformSyncAsync(run.Services, config, stoppingToken, progressReporter);
         }
-        catch (OperationCanceledException)
+        catch (Exception ex)
         {
+            var shuttingDown = shutdownToken.IsCancellationRequested;
+            var timedOut = ex is OperationCanceledException && !shuttingDown && stoppingToken.IsCancellationRequested;
+
             _metrics?.RecordSyncDuration(
                 ConnectorName,
-                shutdownToken.IsCancellationRequested ? "cancelled"
-                    : stoppingToken.IsCancellationRequested ? "timeout"
+                ex is OperationCanceledException && shuttingDown ? "cancelled"
+                    : timedOut ? "timeout"
                     : "failure",
                 Stopwatch.GetElapsedTime(started));
-            throw;
-        }
-        catch (Exception)
-        {
-            _metrics?.RecordSyncDuration(ConnectorName, "failure", Stopwatch.GetElapsedTime(started));
+
+            if (!shuttingDown)
+            {
+                await UpdateHealthStateAsync(
+                    run.Services,
+                    isHealthy: false,
+                    lastErrorMessage: timedOut ? TimeoutMessage : $"{ex.GetType().Name}: {ex.Message}",
+                    lastErrorAt: UtcNow,
+                    cancellationToken: shutdownToken);
+            }
+
             throw;
         }
 
