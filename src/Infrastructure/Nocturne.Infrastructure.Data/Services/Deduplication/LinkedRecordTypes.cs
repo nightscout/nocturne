@@ -31,12 +31,15 @@ public static class LinkedRecordTypes
     /// <summary>
     /// The records of <paramref name="recordType"/> with no link that are old enough to have been a
     /// pruned singleton, event time within the optional bounds, each as a primary link of a group of
-    /// its own that is not yet stored. A caller that puts one into a group stores it.
+    /// its own that is not yet stored. A caller that puts one into a group stores it. Read with the
+    /// history clamp lifted as <see cref="LoadRecordInfoAsync"/> is: such a record was written more than
+    /// a day ago, so its event is nearly always before a clamped caller's window.
     /// </summary>
     internal static Task<List<LinkedRecordEntity>> UnlinkedAsync(
         NocturneDbContext db, RecordType recordType, long? fromMills, long? toMills, CancellationToken ct) =>
         TypePhases.SingleOrDefault(p => p.RecordType == recordType) is { } phase
-            ? phase.Unlinked(db, fromMills, toMills, DateTime.UtcNow - SingletonLinkRetention, ct)
+            ? db.WriteWithHistoryClampLiftedAsync(
+                token => phase.Unlinked(db, fromMills, toMills, DateTime.UtcNow - SingletonLinkRetention, token), ct)
             : Task.FromResult(new List<LinkedRecordEntity>());
 
     /// <summary>
@@ -138,6 +141,10 @@ public static class LinkedRecordTypes
     /// both. To bypass only the soft-delete filter, each query re-applies the tenant predicate
     /// (<c>e.TenantId == db.TenantId</c>) explicitly so cross-tenant rows can never leak in.
     /// </para>
+    /// <para>
+    /// Read with the history clamp lifted (<see cref="HistoryClampLiftExtensions"/>): a clamped
+    /// caller's upload must still match a copy older than its window.
+    /// </para>
     /// </summary>
     internal static async Task<Dictionary<Guid, RecordInfo>> LoadRecordInfoAsync(
         NocturneDbContext db,
@@ -146,19 +153,19 @@ public static class LinkedRecordTypes
         if (ids.Count == 0)
             return new Dictionary<Guid, RecordInfo>();
 
-        return recordType switch
+        return await db.WriteWithHistoryClampLiftedAsync(token => recordType switch
         {
-            RecordType.SensorGlucose => await LoadAsync<SensorGlucoseEntity>(db, MatchCriteriaMapper.From, ids, ct),
-            RecordType.Bolus => await LoadAsync<BolusEntity>(db, MatchCriteriaMapper.From, ids, ct),
-            RecordType.CarbIntake => await LoadAsync<CarbIntakeEntity>(db, MatchCriteriaMapper.From, ids, ct),
-            RecordType.BGCheck => await LoadAsync<BGCheckEntity>(db, MatchCriteriaMapper.From, ids, ct),
-            RecordType.DeviceEvent => await LoadAsync<DeviceEventEntity>(db, MatchCriteriaMapper.From, ids, ct),
-            RecordType.Note => await LoadAsync<NoteEntity>(db, MatchCriteriaMapper.From, ids, ct),
-            RecordType.BolusCalculation => await LoadAsync<BolusCalculationEntity>(db, MatchCriteriaMapper.From, ids, ct),
-            RecordType.TempBasal => await LoadAsync<TempBasalEntity>(db, MatchCriteriaMapper.From, ids, ct),
-            RecordType.StateSpan => await LoadStateSpanInfoAsync(db, ids, ct),
-            _ => new Dictionary<Guid, RecordInfo>()
-        };
+            RecordType.SensorGlucose => LoadAsync<SensorGlucoseEntity>(db, MatchCriteriaMapper.From, ids, token),
+            RecordType.Bolus => LoadAsync<BolusEntity>(db, MatchCriteriaMapper.From, ids, token),
+            RecordType.CarbIntake => LoadAsync<CarbIntakeEntity>(db, MatchCriteriaMapper.From, ids, token),
+            RecordType.BGCheck => LoadAsync<BGCheckEntity>(db, MatchCriteriaMapper.From, ids, token),
+            RecordType.DeviceEvent => LoadAsync<DeviceEventEntity>(db, MatchCriteriaMapper.From, ids, token),
+            RecordType.Note => LoadAsync<NoteEntity>(db, MatchCriteriaMapper.From, ids, token),
+            RecordType.BolusCalculation => LoadAsync<BolusCalculationEntity>(db, MatchCriteriaMapper.From, ids, token),
+            RecordType.TempBasal => LoadAsync<TempBasalEntity>(db, MatchCriteriaMapper.From, ids, token),
+            RecordType.StateSpan => LoadStateSpanInfoAsync(db, ids, token),
+            _ => Task.FromResult(new Dictionary<Guid, RecordInfo>()),
+        }, ct);
     }
 
     /// <summary>
