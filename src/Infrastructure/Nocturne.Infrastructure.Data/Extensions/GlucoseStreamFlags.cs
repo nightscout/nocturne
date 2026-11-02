@@ -35,10 +35,13 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// repoint then waits for. Locking a delete's links first, as the other record types do
 /// (<see cref="DuplicateGroupPrimaries.LockGroupsOfAsync"/>), would only swap it for a cycle on the
 /// links. PostgreSQL breaks it as a deadlock, and the retrying transaction it aborts runs again. A
-/// deleted or duplicate row keeps
-/// whatever flag it had; it is recomputed when it becomes visible again. The clamp is lifted
-/// (<see cref="HistoryClampLiftExtensions"/>): a clamped member's write reaches buckets the clamp
-/// would show only in part.
+/// deferred delete holds no stream lock to invert, so it locks its readings' groups' links before it
+/// writes them: a repick holding a group that read one of its readings as live would otherwise wait
+/// on that reading, unseen by the delete's repoint, and commit it as the group's primary after the
+/// delete. A delete that recomputes inline meets that repick in the cycle above. A deleted or
+/// duplicate row keeps whatever flag it had; it is recomputed when it becomes visible again. The
+/// clamp is lifted (<see cref="HistoryClampLiftExtensions"/>): a clamped member's write reaches
+/// buckets the clamp would show only in part.
 /// </para>
 /// </remarks>
 internal static class GlucoseStreamFlags
@@ -75,7 +78,7 @@ internal static class GlucoseStreamFlags
     public static Task<IDisposable?> DeferIfWideAsync(
         NocturneDbContext ctx, int rowCount, CancellationToken ct)
     {
-        if (rowCount <= InlineRowLimit || Deferred.Value == ctx)
+        if (rowCount <= InlineRowLimit || IsDeferred(ctx))
             return Task.FromResult<IDisposable?>(null);
 
         var previous = Deferred.Value;
@@ -94,6 +97,9 @@ internal static class GlucoseStreamFlags
         public void Dispose() => restore();
     }
 
+    /// <summary>Whether <see cref="DeferIfWideAsync"/> has handed this context's stream flags to the walk.</summary>
+    public static bool IsDeferred(NocturneDbContext ctx) => Deferred.Value == ctx;
+
     /// <summary>
     /// Recomputes the buckets of the rows <paramref name="ids"/> name, deleted or not, or requests the
     /// tenant's history walk when they are more than <see cref="InlineRowLimit"/>.
@@ -102,7 +108,7 @@ internal static class GlucoseStreamFlags
     public static async Task AfterRowsChangedAsync(
         NocturneDbContext ctx, IReadOnlyCollection<Guid> ids, CancellationToken ct)
     {
-        if (ids.Count == 0 || Deferred.Value == ctx)
+        if (ids.Count == 0 || IsDeferred(ctx))
             return;
         if (ids.Count > InlineRowLimit)
         {
@@ -133,7 +139,7 @@ internal static class GlucoseStreamFlags
                 "Stream flags change in the transaction of the write that moved them; none is open.");
 
         var runs = Runs(timestamps.Select(t => t.Ticks / BucketTicks));
-        if (runs.Count == 0 || Deferred.Value == ctx)
+        if (runs.Count == 0 || IsDeferred(ctx))
             return Task.FromResult(0);
 
         return ctx.WriteWithHistoryClampLiftedAsync(async token =>
@@ -199,7 +205,7 @@ internal static class GlucoseStreamFlags
     /// </summary>
     /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
     public static Task LockAsync(NocturneDbContext ctx, CancellationToken ct) =>
-        Deferred.Value == ctx ? Task.CompletedTask : ctx.LockForTransactionAsync(StreamLockClass, ctx.TenantId, ct);
+        IsDeferred(ctx) ? Task.CompletedTask : ctx.LockForTransactionAsync(StreamLockClass, ctx.TenantId, ct);
 
     /// <summary>Requests the tenant's history walk in the caller's transaction. PostgreSQL only.</summary>
     public static Task RequestHistoryAsync(NocturneDbContext ctx, CancellationToken ct) =>
