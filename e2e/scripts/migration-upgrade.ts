@@ -39,6 +39,7 @@ interface Snapshot {
   alertRules: string[];
   share: { enabled: boolean; fullHistory: boolean; scopes: string[] } | null;
   connectorUrl: unknown;
+  connectorActive: boolean;
   labResults: number | null;
 }
 
@@ -88,7 +89,7 @@ async function snapshot(slug: string, auth: { token?: string; secret?: string })
   const treatments = await call<Array<{ eventType: string; created_at: string }>>("GET", "/api/v1/treatments.json?count=5000", h);
   const rules = await call<Array<{ name: string }>>("GET", "/api/v4/alert-rules", h);
   const share = await optional(() => call<NonNullable<Snapshot["share"]>>("GET", "/api/v4/share", h));
-  const connector = await call<{ configuration: { url?: unknown } }>("GET", "/api/v4/connectors/config/nightscout", h);
+  const connector = await call<{ configuration: { url?: unknown }; isActive: boolean }>("GET", "/api/v4/connectors/config/nightscout", h);
   const labs = await optional(() => call<unknown[]>("GET", "/api/v4/lab-results/hba1c", h));
   return {
     entries: entries.map((e) => e.date).sort((a, b) => a - b),
@@ -96,6 +97,7 @@ async function snapshot(slug: string, auth: { token?: string; secret?: string })
     alertRules: rules.map((r) => r.name).sort(),
     share: share && { enabled: share.enabled, fullHistory: share.fullHistory, scopes: [...share.scopes].sort() },
     connectorUrl: connector.configuration.url,
+    connectorActive: connector.isActive,
     labResults: labs && labs.length,
   };
 }
@@ -122,7 +124,10 @@ async function seedTenant(i: number): Promise<Omit<Seeded, "expected">> {
   if (await optional(() => call("POST", "/api/v4/share/rotate", h)) && i % 2 === 0) {
     await call("PUT", "/api/v4/share/full-history", { ...h, body: { fullHistory: true } });
   }
-  await call("PUT", "/api/v4/connectors/config/nightscout", { ...h, body: { url: "http://mocks:8080/nightscout", isActive: false } });
+  // An enabled connector would sync from the mock, whose records move with the clock, and the
+  // tenant would gain them between the snapshots.
+  const connector = await call<{ isActive: boolean }>("PUT", "/api/v4/connectors/config/nightscout", { ...h, body: { url: "http://mocks:8080/nightscout", enabled: false } });
+  if (connector.isActive !== false) throw new Error(`${slug}: the Nightscout connector was not saved disabled`);
   await call("PUT", "/api/v4/connectors/config/nightscout/secrets", { ...h, body: { apiSecret: "e2e-fake-nightscout-secret" } });
   const grant = await call<{ token: string }>("POST", "/api/auth/direct-grants", { ...h, body: { label: "upgrade", scopes: ["*"] } });
   return { slug, accessToken: seeded.accessToken, apiToken: grant.token };
