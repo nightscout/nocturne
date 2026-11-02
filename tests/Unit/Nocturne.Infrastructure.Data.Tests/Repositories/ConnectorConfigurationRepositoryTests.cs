@@ -317,28 +317,46 @@ public class ConnectorConfigurationRepositoryTests : IDisposable
         var glucose = new DateTime(2024, 6, 1, 12, 30, 15, DateTimeKind.Utc);
         var treatments = new DateTime(2024, 5, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        (await Configurations().SetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", glucose, CancellationToken.None))
+        (await SetMarkAsync(Configurations(), "nightscout-connector", "Glucose", glucose))
             .Should().BeTrue();
-        await Configurations().SetBackfillLowWaterMarkAsync("Nightscout", "Treatments", treatments, CancellationToken.None);
+        await SetMarkAsync(Configurations(), "Nightscout", "Treatments", treatments);
 
-        var read = await Configurations().GetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", CancellationToken.None);
+        var read = await GetMarkAsync(Configurations(), "nightscout-connector", "Glucose");
         read.Should().Be(glucose);
         read!.Value.Kind.Should().Be(DateTimeKind.Utc);
-        (await Configurations().GetBackfillLowWaterMarkAsync("nightscout", "Treatments", CancellationToken.None)).Should().Be(treatments);
+        (await GetMarkAsync(Configurations(), "nightscout", "Treatments")).Should().Be(treatments);
 
-        await Configurations().SetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", null, CancellationToken.None);
-        (await Configurations().GetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", CancellationToken.None)).Should().BeNull();
-        (await Configurations().GetBackfillLowWaterMarkAsync("nightscout-connector", "Treatments", CancellationToken.None)).Should().Be(treatments);
+        await SetMarkAsync(Configurations(), "nightscout-connector", "Glucose", null);
+        (await GetMarkAsync(Configurations(), "nightscout-connector", "Glucose")).Should().BeNull();
+        (await GetMarkAsync(Configurations(), "nightscout-connector", "Treatments")).Should().Be(treatments);
 
-        await Configurations().SetBackfillLowWaterMarkAsync("nightscout-connector", "Treatments", null, CancellationToken.None);
+        await SetMarkAsync(Configurations(), "nightscout-connector", "Treatments", null);
         Row("nightscout").BackfillLowWaterMarks.Should().BeNull("the last mark removed leaves no map");
+    }
+
+    [Fact]
+    public async Task ALowWaterMarkReachesAConnectorWhoseSourceNameIsHyphenated()
+    {
+        Seed("nocturneremote");
+        var mark = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        (await SetMarkAsync(Configurations(), "nocturne-remote-connector", "DeviceStatus", mark))
+            .Should().BeTrue();
+        (await GetMarkAsync(Configurations(), "nocturne-remote-connector", "DeviceStatus"))
+            .Should().Be(mark);
     }
 
     [Fact]
     public async Task ALowWaterMarkForASourceWithNoConfigurationReportsIt()
     {
-        (await Configurations().SetBackfillLowWaterMarkAsync("dexcom-connector", "Glucose", DateTime.UtcNow, CancellationToken.None))
+        (await SetMarkAsync(Configurations(), "dexcom-connector", "Glucose", DateTime.UtcNow))
             .Should().BeFalse();
-        (await Configurations().GetBackfillLowWaterMarkAsync("dexcom-connector", "Glucose", CancellationToken.None)).Should().BeNull();
+        (await GetMarkAsync(Configurations(), "dexcom-connector", "Glucose")).Should().BeNull();
     }
+
+    private static Task<bool> SetMarkAsync(ConnectorConfigurationRepository configurations, string source, string key, DateTime? mark) =>
+        configurations.SetBackfillLowWaterMarksAsync(source, new Dictionary<string, DateTime?> { [key] = mark }, CancellationToken.None);
+
+    private static async Task<DateTime?> GetMarkAsync(ConnectorConfigurationRepository configurations, string source, string key) =>
+        (await configurations.GetBackfillLowWaterMarksAsync(source, CancellationToken.None)).TryGetValue(key, out var mark) ? mark : null;
 }

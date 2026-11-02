@@ -7,6 +7,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
@@ -69,6 +71,28 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     }
 
     /// <summary>
+    /// A background run's lower bound is glucose's resume point, which says nothing about any other
+    /// family. Widening them to a stale one — an entries read that has failed for months — re-crawls
+    /// every family from there on every run.
+    /// </summary>
+    [Theory]
+    [InlineData("treatments")]
+    [InlineData("devicestatus")]
+    [InlineData("activity")]
+    public async Task SyncDataAsync_OnABackgroundRunWithAStaleGlucoseCursor_ResumesFromTheFamilysWatermark(
+        string collection)
+    {
+        var watermark = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: watermark,
+            latestGlucose: new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        await service.SyncDataAsync(NewConfig(), CancellationToken.None);
+
+        handler.CrawlOf(collection).Should().Contain(LowerBound(watermark - CatchUpOverlap));
+    }
+
+    /// <summary>
     /// A caller supplying no lower bound is not asking for everything, and each family stands on
     /// its own resume point. This connector's glucose floor is open, so a background cycle for a
     /// tenant with glucose switched off — or with none published yet — carries a null <c>from</c>
@@ -128,52 +152,36 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     }
 
     /// <summary>
-    /// A Nightscout instance is a full data export, so with no treatments stored the initial
-    /// backfill has no lower bound at all — and the glucose cursor <c>request.From</c> carries on a
-    /// background run must not narrow it to one. A treatments crawl that failed on the first sync
-    /// after glucose landed is exactly that state, and bounding its retry at the glucose cursor
-    /// puts the history below permanently out of reach.
-    /// </summary>
-    [Fact]
-    public async Task SyncDataAsync_WhenNoTreatmentsAreStored_CrawlsTheFullHistory()
-    {
-        var handler = new CollectingHandler();
-        var service = NewService(handler, watermarks: null);
-
-        await service.SyncDataAsync(
-            new SyncRequest
-            {
-                From = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
-                To = null,
-                DataTypes = [SyncDataType.Boluses],
-            },
-            NewConfig(),
-            CancellationToken.None);
-
-        handler.CrawlOf("treatments").Should().NotContain("$gte");
-    }
-
-    /// <summary>
-    /// Device status and activity answer with no resume point rather than an open one, and take the
-    /// caller's bound instead: their initial window is high-volume telemetry that would otherwise
-    /// be re-fetched in full on every sync until the first page stored.
+    /// A Nightscout instance is a full data export, so a family with nothing stored has no lower
+    /// bound at all — and the glucose cursor <c>request.From</c> carries on a background run must not
+    /// narrow it to one. A crawl that failed on the first sync after glucose landed is exactly that
+    /// state, and bounding its retry at the glucose cursor puts the history below permanently out of
+    /// reach. The next run resumes from the newest record that crawl published, even when nothing it
+    /// published left a stored watermark — a device status with no APS, pump or uploader fields.
     /// </summary>
     [Theory]
+    [InlineData(SyncDataType.Boluses, "treatments")]
     [InlineData(SyncDataType.DeviceStatus, "devicestatus")]
     [InlineData(SyncDataType.Activity, "activity")]
-    public async Task SyncDataAsync_WhenNoTelemetryIsStored_CrawlsFromTheCallersBound(
+    public async Task SyncDataAsync_WhenNothingIsStored_CrawlsTheFullHistoryThenResumesFromWhereItReached(
         SyncDataType dataType, string collection)
     {
-        var askedFrom = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-        var handler = new CollectingHandler();
+        var newest = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new CollectingHandler().Seed(collection, newest);
         var service = NewService(handler, watermarks: null);
+        var request = new SyncRequest
+        {
+            From = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            To = null,
+            DataTypes = [dataType],
+        };
 
-        await service.SyncDataAsync(
-            new SyncRequest { From = askedFrom, To = null, DataTypes = [dataType] },
-            NewConfig(),
-            CancellationToken.None);
+        await service.SyncDataAsync(request, NewConfig(), CancellationToken.None);
+        handler.CrawlOf(collection).Should().NotContain("$gte");
 
-        handler.CrawlOf(collection).Should().Contain(LowerBound(askedFrom));
+        handler.Clear();
+        await service.SyncDataAsync(request, NewConfig(), CancellationToken.None);
+        handler.CrawlOf(collection).Should().Contain(LowerBound(newest - CatchUpOverlap));
     }
 
     /// <summary>Overlap the shared catch-up calculation subtracts to absorb clock drift.</summary>
@@ -196,8 +204,14 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
 
     private static NightscoutConnectorService NewService(
         CollectingHandler handler,
-        DateTime? watermarks)
+        DateTime? watermarks,
+        DateTime? latestGlucose = null)
     {
+        var glucose = new Mock<IGlucosePublisher>();
+        glucose
+            .Setup(p => p.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(latestGlucose);
+
         var treatments = new Mock<ITreatmentPublisher>();
         treatments
             .Setup(p => p.GetLatestTreatmentTimestampAsync(
@@ -210,15 +224,42 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
                 It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(watermarks);
 
+        device
+            .Setup(p => p.PublishDeviceStatusAsync(
+                It.IsAny<IEnumerable<DeviceStatus>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        treatments
+            .Setup(p => p.PublishTreatmentsAsync(
+                It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var marks = new Dictionary<string, DateTime>();
         var metadata = new Mock<IMetadataPublisher>();
         metadata
             .Setup(p => p.GetLatestActivityTimestampAsync(
                 It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(watermarks);
+        metadata
+            .Setup(p => p.PublishActivityAsync(
+                It.IsAny<IEnumerable<Activity>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        metadata
+            .Setup(p => p.GetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new Dictionary<string, DateTime>(marks));
+        metadata
+            .Setup(p => p.SetBackfillLowWaterMarksAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, IReadOnlyDictionary<string, DateTime?>, CancellationToken>((_, changes, _) =>
+            {
+                foreach (var (key, mark) in changes)
+                    if (mark is { } at) marks[key] = at;
+                    else marks.Remove(key);
+            })
+            .Returns(Task.CompletedTask);
 
         var publisher = new Mock<IConnectorPublisher>();
         publisher.Setup(p => p.IsAvailable).Returns(true);
-        publisher.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
         publisher.Setup(p => p.Treatments).Returns(treatments.Object);
         publisher.Setup(p => p.Device).Returns(device.Object);
         publisher.Setup(p => p.Metadata).Returns(metadata.Object);
@@ -238,11 +279,21 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
 
     /// <summary>
     /// Records every request and answers each with an empty collection, so a crawl asks once per
-    /// collection and the range it asked for is what the test reads.
+    /// collection and the range it asked for is what the test reads. A seeded collection answers its
+    /// first request with one record instead.
     /// </summary>
     private sealed class CollectingHandler : HttpMessageHandler
     {
         private readonly List<string> _requests = [];
+        private readonly Dictionary<string, DateTime> _seeded = [];
+
+        internal CollectingHandler Seed(string collection, DateTime createdAt)
+        {
+            _seeded[collection] = createdAt;
+            return this;
+        }
+
+        internal void Clear() => _requests.Clear();
 
         /// <summary>
         /// The crawl request for <paramref name="collection"/>, as the source reads it. A treatments
@@ -257,9 +308,19 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
             // The bracket syntax Nightscout filters by is escaped on the wire.
             _requests.Add(Uri.UnescapeDataString(request.RequestUri!.ToString()));
 
+            var body = "[]";
+            foreach (var (collection, createdAt) in _seeded)
+            {
+                if (!request.RequestUri.AbsolutePath.EndsWith($"/{collection}.json", StringComparison.Ordinal))
+                    continue;
+                body = $$"""[{"_id":"seeded-{{collection}}","created_at":"{{createdAt:yyyy-MM-dd'T'HH:mm:ss.fff'Z'}}"}]""";
+                _seeded.Remove(collection);
+                break;
+            }
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("[]", Encoding.UTF8, "application/json"),
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
             });
         }
     }

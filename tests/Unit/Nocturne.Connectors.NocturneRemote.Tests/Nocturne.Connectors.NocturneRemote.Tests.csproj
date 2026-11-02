@@ -19,6 +19,7 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Moq" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/Connectors/Nocturne.Connectors.NocturneRemote/Nocturne.Connectors.NocturneRemote.csproj" />

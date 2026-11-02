@@ -80,17 +80,23 @@ public interface IConnectorConfigurationRepository
     Task<bool> RemoveSyncCursorAsync(string connectorName, string resource, CancellationToken ct);
 
     /// <summary>
-    /// The low-water mark of <paramref name="collection"/>, or null when none is held. The
-    /// configuration is found by <paramref name="source"/>, a connector data source
-    /// (<c>{connector}-connector</c>) or a bare connector name.
+    /// The backfill low-water-mark map, empty when none is held. The configuration is found by
+    /// <paramref name="source"/>, a connector data source (<c>{connector}-connector</c>) or a bare
+    /// connector name.
     /// </summary>
-    Task<DateTime?> GetBackfillLowWaterMarkAsync(string source, string collection, CancellationToken ct);
+    Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(string source, CancellationToken ct);
 
     /// <summary>
-    /// Stores <paramref name="lowWaterMark"/> as the low-water mark of <paramref name="collection"/>,
-    /// or removes it when null, leaving the other collections' marks; false when the source has no
-    /// configuration. The source is matched as <see cref="GetBackfillLowWaterMarkAsync"/> says.
+    /// Applies <paramref name="changes"/> to the map in one statement: a key with a time is stored,
+    /// a key with null removed, and every other key kept. False when the source, matched as
+    /// <see cref="GetBackfillLowWaterMarksAsync"/> says, has no configuration.
     /// </summary>
-    Task<bool> SetBackfillLowWaterMarkAsync(
-        string source, string collection, DateTime? lowWaterMark, CancellationToken ct);
+    Task<bool> SetBackfillLowWaterMarksAsync(
+        string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct);
+
+    /// <summary>
+    /// Removes the whole map; false when the source, matched as
+    /// <see cref="GetBackfillLowWaterMarksAsync"/> says, has no configuration.
+    /// </summary>
+    Task<bool> ClearBackfillLowWaterMarksAsync(string source, CancellationToken ct);
 }

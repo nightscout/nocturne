@@ -865,9 +865,9 @@ public class TandemE2eSyncTests
             Task.FromResult<DateTime?>(null);
         public Task<DateTime?> GetLatestStateSpanTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult<DateTime?>(null);
-        public Task<DateTime?> GetBackfillLowWaterMarkAsync(string source, string collection, CancellationToken ct = default) =>
-            Task.FromResult<DateTime?>(null);
-        public Task SetBackfillLowWaterMarkAsync(string source, string collection, DateTime? lowWaterMark, CancellationToken ct = default) =>
+        public Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(string source, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
+        public Task SetBackfillLowWaterMarksAsync(string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct = default) =>
             Task.CompletedTask;
     }
 

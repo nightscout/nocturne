@@ -194,23 +194,17 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
     }
 
     /// <inheritdoc/>
-    public virtual async Task<DateTime?> GetBackfillLowWaterMarkAsync(
-        string source, string collection, CancellationToken ct)
+    public virtual async Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(
+        string source, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var config = await FindBySourceAsync(db, source, tracked: false, ct);
-        if (config?.BackfillLowWaterMarks is null)
-            return null;
-
-        var marks = JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks);
-        return marks is not null && marks.TryGetValue(collection, out var mark)
-            ? DateTime.SpecifyKind(mark, DateTimeKind.Utc)
-            : null;
+        return ReadMarks(config?.BackfillLowWaterMarks);
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> SetBackfillLowWaterMarkAsync(
-        string source, string collection, DateTime? lowWaterMark, CancellationToken ct)
+    public virtual async Task<bool> SetBackfillLowWaterMarksAsync(
+        string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var isNpgsql = db.Database.IsNpgsql();
@@ -220,48 +214,56 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
 
         if (isNpgsql)
         {
-            if (lowWaterMark is null)
-            {
-                await db.Database.ExecuteSqlAsync(
-                    $"""
-                     UPDATE connector_configurations
-                     SET backfill_low_water_marks =
-                         NULLIF(coalesce(backfill_low_water_marks, jsonb_build_object()) - {collection}, jsonb_build_object())
-                     WHERE id = {config.Id}
-                     """,
-                    ct);
-            }
-            else
-            {
-                // ISO-8601 UTC ("...Z"), as System.Text.Json writes it, so the read round-trips
-                // without a timezone shift.
-                var value = lowWaterMark.Value.ToString("O");
-                await db.Database.ExecuteSqlAsync(
-                    $"""
-                     UPDATE connector_configurations
-                     SET backfill_low_water_marks =
-                         jsonb_set(coalesce(backfill_low_water_marks, jsonb_build_object()), ARRAY[{collection}], to_jsonb({value}::text))
-                     WHERE id = {config.Id}
-                     """,
-                    ct);
-            }
-
+            var removed = changes.Where(c => c.Value is null).Select(c => c.Key).ToArray();
+            // ISO-8601 UTC ("...Z"), as System.Text.Json writes it, so the read round-trips without
+            // a timezone shift.
+            var stored = JsonSerializer.Serialize(changes
+                .Where(c => c.Value is not null)
+                .ToDictionary(c => c.Key, c => c.Value!.Value.ToString("O")));
+            await db.Database.ExecuteSqlAsync(
+                $"""
+                 UPDATE connector_configurations
+                 SET backfill_low_water_marks = NULLIF(
+                     (coalesce(backfill_low_water_marks, jsonb_build_object()) - {removed}::text[]) || {stored}::jsonb,
+                     jsonb_build_object())
+                 WHERE id = {config.Id}
+                 """,
+                ct);
             return true;
         }
 
-        var marks = config.BackfillLowWaterMarks is null
-            ? []
-            : JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks) ?? [];
-
-        if (lowWaterMark is null)
-            marks.Remove(collection);
-        else
-            marks[collection] = lowWaterMark.Value;
+        var marks = new Dictionary<string, DateTime>(ReadMarks(config.BackfillLowWaterMarks));
+        foreach (var (key, mark) in changes)
+        {
+            if (mark is { } at)
+                marks[key] = at;
+            else
+                marks.Remove(key);
+        }
 
         config.BackfillLowWaterMarks = marks.Count == 0 ? null : JsonSerializer.Serialize(marks);
         await db.SaveChangesAsync(ct);
         return true;
     }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> ClearBackfillLowWaterMarksAsync(string source, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var config = await FindBySourceAsync(db, source, tracked: true, ct);
+        if (config is null)
+            return false;
+
+        config.BackfillLowWaterMarks = null;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    private static IReadOnlyDictionary<string, DateTime> ReadMarks(string? json) =>
+        json is null
+            ? new Dictionary<string, DateTime>()
+            : (JsonSerializer.Deserialize<Dictionary<string, DateTime>>(json) ?? [])
+                .ToDictionary(m => m.Key, m => DateTime.SpecifyKind(m.Value, DateTimeKind.Utc));
 
     /// <summary>
     /// Writes the <c>enabled</c> key alone on PostgreSQL, dropping any spelling of it that differs in
@@ -399,16 +401,17 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
     }
 
     /// <summary>
-    /// Sources are named <c>{connector}-connector</c> while rows carry the bare connector name, so
-    /// the suffix is stripped, with an exact match as fallback.
+    /// Sources are named <c>{connector}-connector</c>, hyphenating a connector name of several
+    /// words (<c>nocturne-remote-connector</c>), while rows carry the bare connector name
+    /// (<c>nocturneremote</c>), so the suffix and hyphens are stripped, with an exact match as fallback.
     /// </summary>
     private static Task<ConnectorConfigurationEntity?> FindBySourceAsync(
         NocturneDbContext db, string source, bool tracked, CancellationToken ct)
     {
         var canonicalSource = ConnectorNames.Canonical(source);
-        var name = canonicalSource.EndsWith(ConnectorSourceSuffix, StringComparison.Ordinal)
+        var name = (canonicalSource.EndsWith(ConnectorSourceSuffix, StringComparison.Ordinal)
             ? canonicalSource[..^ConnectorSourceSuffix.Length]
-            : canonicalSource;
+            : canonicalSource).Replace("-", "", StringComparison.Ordinal);
 
         var query = tracked ? db.ConnectorConfigurations : db.ConnectorConfigurations.AsNoTracking();
         return query.FirstOrDefaultAsync(c => c.ConnectorName == name || c.ConnectorName == canonicalSource, ct);
