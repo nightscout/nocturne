@@ -84,6 +84,14 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
             },
     };
 
+    /// <summary>A snapshot whose override restates its full duration from the status time.</summary>
+    private static DeviceStatus Restating(int slot, double duration)
+    {
+        var ds = Snapshot(slot, "Exercise", duration);
+        ds.Override!.Timestamp = At(slot).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        return ds;
+    }
+
     private static List<DeviceStatus> ExerciseThenSleep() =>
     [
         Snapshot(0, "Exercise"), Snapshot(1, "Exercise"), Snapshot(2, "Exercise"), Snapshot(3, "Exercise"),
@@ -251,6 +259,149 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
         await _decomposer.DecomposeBatchAsync([Snapshot(3, null)], null, WriteOrigin.Live);
 
         (await OverrideSpansAsync()).Should().ContainSingle().Which.EndTimestamp.Should().Be(At(3));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [InlineData(null)]
+    public async Task DecomposeAsync_RestatedWithMovingStart_EndsAtLastDeclaredEnd(bool? newestFirst)
+    {
+        var statuses = Enumerable.Range(0, 4).Select(i => Restating(i, 1800)).ToList();
+
+        if (newestFirst is null)
+            await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
+        else
+            await DecomposeEachAsync(Ordered(statuses, newestFirst.Value));
+
+        var span = (await OverrideSpansAsync()).Should().ContainSingle().Subject;
+        span.StartTimestamp.Should().Be(At(0));
+        span.EndTimestamp.Should().Be(At(3).AddMinutes(30));
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_RestatedWithEarlierDeclaredEnd_DoesNotShortenSpan()
+    {
+        await DecomposeEachAsync([Restating(0, 3600), Restating(1, 600)]);
+
+        var span = (await OverrideSpansAsync()).Should().ContainSingle().Subject;
+        span.EndTimestamp.Should().Be(At(0).AddHours(1));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecomposeAsync_RestatedWithoutDuration_LeavesSpanOpen(bool batch)
+    {
+        var restated = Restating(1, 0);
+        restated.Override!.Duration = null;
+        List<DeviceStatus> statuses = [Restating(0, 1800), restated];
+
+        if (batch)
+            await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
+        else
+            await DecomposeEachAsync(statuses);
+
+        var span = (await OverrideSpansAsync()).Should().ContainSingle().Subject;
+        span.StartTimestamp.Should().Be(At(0));
+        span.EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_RestatedPastContraryStatus_ExtendsOnlyToIt()
+    {
+        await _decomposer.DecomposeBatchAsync([Snapshot(3, null)], null, WriteOrigin.Live);
+
+        await DecomposeEachAsync([Restating(0, 600), Restating(1, 3600)]);
+
+        var span = (await OverrideSpansAsync()).Should().ContainSingle().Subject;
+        span.EndTimestamp.Should().Be(At(3));
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_RestatedPastNextSpan_ExtendsOnlyToItsStart()
+    {
+        _context.StateSpans.Add(StateSpanMapper.ToEntity(new StateSpan
+        {
+            Category = StateSpanCategory.Override,
+            State = OverrideState.Custom.ToString(),
+            StartTimestamp = At(3),
+            Source = "loop://iPhone",
+            OriginalId = "later",
+            Metadata = new Dictionary<string, object> { ["name"] = "Other" },
+        }));
+        await _context.SaveChangesAsync();
+
+        await DecomposeEachAsync([Restating(0, 600), Restating(1, 3600)]);
+
+        (await OverrideSpansAsync()).Single(s => s.Metadata.TryReadString("name") == "Exercise")
+            .EndTimestamp.Should().Be(At(3));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecomposeAsync_RestatedPastOtherDevicesSpan_ExtendsToDeclaredEnd(bool batch)
+    {
+        _context.StateSpans.Add(StateSpanMapper.ToEntity(new StateSpan
+        {
+            Category = StateSpanCategory.Override,
+            State = OverrideState.Custom.ToString(),
+            StartTimestamp = At(3),
+            EndTimestamp = At(4),
+            Source = "loop://iPad",
+            OriginalId = "other-device",
+            Metadata = new Dictionary<string, object> { ["name"] = "Other" },
+        }));
+        await _context.SaveChangesAsync();
+
+        List<DeviceStatus> statuses = [Restating(0, 600), Restating(1, 3600)];
+
+        if (batch)
+            await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
+        else
+            await DecomposeEachAsync(statuses);
+
+        (await OverrideSpansAsync()).Single(s => s.Metadata.TryReadString("name") == "Exercise")
+            .EndTimestamp.Should().Be(At(1).AddHours(1));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecomposeAsync_RestatedPastTreatmentOfSameOverride_ExtendsToDeclaredEnd(bool batch)
+    {
+        await TreatmentOverrideAsync(3, "Exercise", 0.8);
+        List<DeviceStatus> statuses = [Restating(0, 600), Restating(1, 3600), Restating(4, 3600)];
+
+        if (batch)
+            await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
+        else
+            await DecomposeEachAsync(statuses);
+
+        var spans = await OverrideSpansAsync();
+        var uploader = spans.Should().ContainSingle(s => s.Source == "loop://iPhone").Subject;
+        uploader.StartTimestamp.Should().Be(At(0));
+        uploader.EndTimestamp.Should().Be(At(4).AddHours(1));
+        spans.Single(s => s.Source == "Loop").EndTimestamp.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecomposeAsync_RestatedBehindConflictAtSameInstant_DoesNotCrossIt(bool batch)
+    {
+        var restated = Restating(1, 3600);
+        restated.Id = "ds-1b";
+        List<DeviceStatus> statuses = [Restating(0, 1800), Snapshot(1, "Sleep"), restated];
+
+        if (batch)
+            await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
+        else
+            await DecomposeEachAsync(statuses);
+
+        (await OverrideSpansAsync()).Select(s => (s.Metadata.TryReadString("name"), s.StartTimestamp, s.EndTimestamp))
+            .Should().Equal(("Exercise", At(0), (DateTime?)At(1)), ("Sleep", At(1), (DateTime?)null));
     }
 
     [Theory]
