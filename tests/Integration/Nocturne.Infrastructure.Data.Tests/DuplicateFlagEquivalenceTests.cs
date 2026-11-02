@@ -328,6 +328,85 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
     }
 
     /// <summary>
+    /// A repick of a group whose primary is gone, while a soft delete of its earliest live copy is open.
+    /// Read before the delete commits, the repick would promote the deleted copy and the group would
+    /// show nothing.
+    /// </summary>
+    [Fact]
+    public async Task ARepickWaitsForASoftDeleteOfTheCopyItWouldPromote()
+    {
+        var tenant = await SeedTenantAsync();
+        var at = DateTime.UtcNow.AddHours(-1);
+        var primary = Carb(tenant, "mylife-connector", at);
+        var earliest = Carb(tenant, "glooko-connector", at.AddSeconds(2));
+        var next = Carb(tenant, "nightscout-connector", at.AddSeconds(4));
+        await IngestAsync(tenant, RecordType.CarbIntake, [primary, earliest, next]);
+        await ExecuteAsync(tenant, $"UPDATE carb_intakes SET deleted_at = now() WHERE id = '{primary.Id}'");
+
+        await using var delete = Context(tenant);
+        await using var transaction = await delete.Database.BeginTransactionAsync();
+        await delete.AuditedSoftDeleteWithIdsAsync(
+            delete.CarbIntakes.Where(e => e.Id == earliest.Id), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
+
+        var repick = Task.Run(async () =>
+        {
+            await using var db = Context(tenant);
+            await using var repickTransaction = await db.Database.BeginTransactionAsync();
+            var canonical = await db.LinkedRecords.Where(l => l.RecordId == primary.Id).Select(l => l.CanonicalId).SingleAsync();
+            var promoted = await DuplicateGroupPrimaries.RepickAsync(db, RecordType.CarbIntake, [canonical], default);
+            await repickTransaction.CommitAsync();
+            return promoted;
+        });
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, repick);
+
+        await transaction.CommitAsync();
+
+        (await repick.WaitAsync(TimeSpan.FromSeconds(30))).Should().Equal(next.Id);
+        (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
+            .Should().Equal(next.Id.ToString());
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A glucose restore while a delete of its group's primary is open. A glucose delete locks no link
+    /// before it writes its rows (<see cref="GlucoseStreamFlags"/>), so a restore that read the
+    /// primary as live before the delete committed would keep it, and the group would show nothing.
+    /// </summary>
+    [Fact]
+    public async Task AGlucoseRestoreWaitsForADeleteOfItsGroupsPrimary()
+    {
+        var tenant = await SeedTenantAsync();
+        var at = DateTime.UtcNow.AddHours(-1);
+        SensorGlucoseEntity Glucose(string source, DateTime when) => new()
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = when, DataSource = source, Mgdl = 120,
+        };
+        var primary = Glucose("mylife-connector", at);
+        var copy = Glucose("glooko-connector", at.AddSeconds(2));
+        await IngestAsync(tenant, RecordType.SensorGlucose, [primary, copy]);
+        await ExecuteAsync(tenant, $"UPDATE sensor_glucose SET deleted_at = now() WHERE id = '{copy.Id}'");
+
+        await using var delete = Context(tenant);
+        await using var transaction = await delete.Database.BeginTransactionAsync();
+        await delete.AuditedSoftDeleteWithIdsAsync(
+            delete.SensorGlucose.Where(e => e.Id == primary.Id), Audit, "test", default, DuplicateDelete.PromoteSurvivor);
+
+        var restore = Task.Run(async () =>
+        {
+            await using var db = Context(tenant);
+            return await db.RestoreDeletedGroupAsync<SensorGlucoseEntity>(copy.Id, "glucose");
+        });
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, restore);
+
+        await transaction.CommitAsync();
+
+        (await restore.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(copy.Id);
+        (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
+            .Should().Equal(copy.Id.ToString());
+        (await MismatchesAsync(tenant)).Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Two two-source groups of one meal, kept apart by a value the later group then has corrected to
     /// the earlier's, so a merge joins them. Four sources, as a group takes one record per source.
     /// </summary>
