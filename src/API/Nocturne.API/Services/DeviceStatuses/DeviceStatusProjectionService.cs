@@ -290,6 +290,10 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceStatus>> GetByGroupsAsync(IReadOnlyCollection<Guid> groups, CancellationToken ct) =>
+        await ProjectAsync(await _groupRepo.GetByCorrelationIdsAsync(groups, ct), ct);
+
+    /// <inheritdoc />
     public async Task<IEnumerable<DeviceStatus>> GetModifiedSinceAsync(
         long lastModified, int limit, CancellationToken ct)
     {
