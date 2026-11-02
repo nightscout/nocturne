@@ -72,20 +72,6 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<DeviceStatusGroup>> GetByCorrelationIdsAsync(
-        IReadOnlyCollection<Guid> correlationIds, CancellationToken ct = default)
-    {
-        if (correlationIds.Count == 0)
-            return [];
-
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var rows = Rows.Live(ctx);
-        var anchors = await AnchorsOfAsync(rows, [.. correlationIds.Distinct()], ids: [], ct);
-        var members = await Members.LoadAsync(rows, anchors, ct);
-        return members.GroupsOf(anchors).Select(g => g.Group).ToList();
-    }
-
-    /// <inheritdoc />
     /// <remarks>
     /// A status is stamped by the newest <c>sys_updated_at</c> of any of its rows, deleted ones
     /// included, so a change that moves its anchor to an older row (an APS removed from under a live
@@ -135,7 +121,14 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
                 .ToArray();
             var ids = keys.Where(r => r.CorrelationId is null).Select(r => r.Id).ToArray();
 
-            List<AnchorRow> anchors = keys.Count == 0 ? [] : await AnchorsOfAsync(rows, correlationIds, ids, ct);
+            List<AnchorRow> anchors = keys.Count == 0
+                ? []
+                : await Arms(rows, from: null, to: null, device: null)
+                    .Select(arm => arm.Where(a =>
+                        (a.CorrelationId != null && correlationIds.Contains(a.CorrelationId.Value))
+                        || ids.Contains(a.Id)))
+                    .Aggregate(Queryable.Concat)
+                    .ToListAsync(ct);
             var members = await Members.LoadAsync(rows, anchors, ct);
             var settled = members.GroupsOf(anchors)
                 .Where(s => s.Group.ModifiedAt < settledBefore)
@@ -151,18 +144,6 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
             }
         }
     }
-
-    /// <summary>
-    /// The anchors of the statuses under <paramref name="correlationIds"/> and of the uncorrelated
-    /// rows <paramref name="ids"/>, in one query.
-    /// </summary>
-    private static Task<List<AnchorRow>> AnchorsOfAsync(Rows rows, Guid[] correlationIds, Guid[] ids, CancellationToken ct) =>
-        Arms(rows, from: null, to: null, device: null)
-            .Select(arm => arm.Where(a =>
-                (a.CorrelationId != null && correlationIds.Contains(a.CorrelationId.Value))
-                || ids.Contains(a.Id)))
-            .Aggregate(Queryable.Concat)
-            .ToListAsync(ct);
 
     private static Task<List<ChangedRow>> ChangedAsync<T>(
         IQueryable<T> rows, DateTime since, DateTime horizon, int scan, CancellationToken ct)

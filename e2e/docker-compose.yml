@@ -39,9 +39,10 @@ services:
     shm_size: 64mb
     ports:
       - "127.0.0.1:${E2E_POSTGRES_PORT:-1633}:5432"
-    # Each idle API pool connection is a backend of about 20 MB, charged to this limit together
-    # with the tmpfs data directory.
-    mem_limit: 512m
+    # The tmpfs is charged to this limit as it fills: the database (about 51 MB after a full
+    # run) and up to max_wal_size of WAL, about 310 MB. With 32 MB of shared_buffers that
+    # leaves about 680 MB, room for some 30 backends of about 20 MB each.
+    mem_limit: 1g
     cpus: 1.0
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d nocturne -h 127.0.0.1"]
