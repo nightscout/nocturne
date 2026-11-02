@@ -381,7 +381,9 @@ The clamp limits reads, not writes, but PostgreSQL checks the rows an `INSERT â€
 an `UPDATE â€¦ WHERE` writes against SELECT policies, so a clamped member recording a row dated
 before the window would be refused (42501). `NocturneDbContext.SaveChangesAsync` lifts the
 clamp, local to the save's transaction, for a save that only inserts; any other lifted write goes
-through `HistoryClampLiftExtensions`, whose callers `HistoryClampLiftAllowlistTests` pins.
+through `HistoryClampLiftExtensions`, whose callers `HistoryClampLiftAllowlistTests` pins. It also
+lifts reads whose rows feed only an internal decision (the dedup repick and matching) and never
+reach the caller.
 
 Four extra GUCs carry the reader's state to the connection (written by
 `TenantConnectionInterceptor` on every open, unconditionally, from the tenant read context):

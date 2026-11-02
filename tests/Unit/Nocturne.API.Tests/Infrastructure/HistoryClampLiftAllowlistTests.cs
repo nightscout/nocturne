@@ -23,10 +23,15 @@ public class HistoryClampLiftAllowlistTests
     [
         "src/Infrastructure/Nocturne.Infrastructure.Data/NocturneDbContext.cs: NocturneDbContext.SaveChangesAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.DeriveFlagsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.LiveIdsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.LiveSpanEndsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.TouchAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/GlucoseStreamFlags.cs: GlucoseStreamFlags.AfterRowsChangedAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/GlucoseStreamFlags.cs: GlucoseStreamFlags.RecomputeAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/StateSpanSupersessionExtensions.cs: StateSpanSupersessionExtensions.ClearSupersededByAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TrackerRepository.cs: TrackerRepository.CompleteInstanceAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.LoadRecordInfoAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.UnlinkedAsync",
     ];
 
     private static readonly IReadOnlyList<string> Callers = Scan();

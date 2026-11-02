@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -19,8 +20,12 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// return only a count: a referential clean-up
 /// (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>), the duplicate flag
 /// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>) and the stream flag
-/// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides. Its callers are pinned by
-/// <c>HistoryClampLiftAllowlistTests</c>.
+/// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, and the stamp of a
+/// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>). A lifted statement may also be a read
+/// whose rows feed only an internal decision and never reach the caller: the repick's reads
+/// (<see cref="DuplicateGroupPrimaries.LiveIdsAsync"/>, <see cref="DuplicateGroupPrimaries.LiveSpanEndsAsync"/>)
+/// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>).
+/// Its callers are pinned by <c>HistoryClampLiftAllowlistTests</c>.
 /// <para>
 /// The transaction it opens is retried with no <c>verifySucceeded</c>: a commit that reported failure
 /// but landed is replayed, and its client-generated keys then fail with 23505 rather than writing
