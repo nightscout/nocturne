@@ -888,7 +888,8 @@ public class DataSourceService : IDataSourceService
 
     /// <remarks>
     /// The connector's crawl state goes with its data: a resume point it kept would answer the next
-    /// sync's re-import with only what arrived since, and report that as a success.
+    /// sync's re-import with only what arrived since, and report that as a success. It is cleared
+/// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import.
     /// </remarks>
     private async Task<Dictionary<string, long>> DeleteConnectorSourceDataAsync(
         ConnectorMetadataService.ConnectorDisplayInfo metadata,
@@ -896,6 +897,8 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken
     )
     {
+        await _configurations.ClearBackfillLowWaterMarksAsync(metadata.DataSourceId, cancellationToken);
+
         var deletedCounts = await DeleteAllSourceDataAsync(metadata.DataSourceId, allowReimport, cancellationToken);
         foreach (var purge in PurgesOf(metadata))
         {
@@ -903,7 +906,6 @@ public class DataSourceService : IDataSourceService
                 deletedCounts[type] = deletedCounts.GetValueOrDefault(type) + count;
         }
 
-        await _configurations.ClearBackfillLowWaterMarksAsync(metadata.DataSourceId, cancellationToken);
         return deletedCounts;
     }
 
