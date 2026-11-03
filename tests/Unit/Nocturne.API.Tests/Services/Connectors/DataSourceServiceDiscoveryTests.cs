@@ -289,6 +289,22 @@ public class DataSourceServiceDiscoveryTests : IDisposable
     }
 
     [Fact]
+    public async Task Discovery_DoesNotGiveASharedBucketToADeviceThatWentQuiet()
+    {
+        // RigA sorts first but stopped writing a week ago, a retired sensor still inside the window;
+        // RigB is live. The connector's treatment bucket belongs on the live card.
+        SeedSensorGlucose(Connector, RigA, DateTime.UtcNow.AddDays(-7));
+        SeedSensorGlucose(Connector, RigB, DateTime.UtcNow);
+        SeedBolus(Connector, null, DateTime.UtcNow);
+
+        var sources = await DiscoverAsync();
+
+        sources.Should().ContainSingle(s => s.DeviceId == RigA).Which.TotalEntries.Should().Be(1);
+        sources.Should().ContainSingle(s => s.DeviceId == RigB).Which.TotalEntries.Should().Be(2);
+        sources.Should().ContainSingle(s => s.DeviceId == RigB).Which.EntriesLast24Hours.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Discovery_CountsASharedBucketOnceAcrossTheList()
     {
         // Two rigs whose rows were imported by the same connector: both entries resolve their merge
