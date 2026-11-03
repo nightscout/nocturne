@@ -177,7 +177,7 @@ public class MfpServingSize
 
 /// <summary>
 /// The logged food. <c>__typename</c> is either IndividualFood or MealIngredient;
-/// <see cref="MealFoodId"/> and <see cref="MealIngredientId"/> are only set for the latter.
+/// <see cref="MealFoodId"/> is only set for the latter.
 /// </summary>
 public class MfpFood
 {
@@ -198,9 +198,6 @@ public class MfpFood
 
     [JsonPropertyName("mealFoodId")]
     public string? MealFoodId { get; set; }
-
-    [JsonPropertyName("mealIngredientId")]
-    public string? MealIngredientId { get; set; }
 
     [JsonPropertyName("nutrientSet")]
     public MfpNutrientSet? NutrientSet { get; set; }
