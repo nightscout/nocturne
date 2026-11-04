@@ -99,9 +99,8 @@ const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | 
 
 /**
  * Normalize a V4 SensorGlucose DTO (REST shape: `id` + `mgdl`, no `_id`/`sgv`) into the Entry
- * shape the store uses. `_id` is the reading's uuid, which is not the ObjectId-form `_id` the
- * realtime broadcast carries, so REST-backfilled and live-pushed copies pair up through
- * {@link isSameEntry}.
+ * shape the store uses. `_id` is the id the reading is served under on the legacy surfaces, which
+ * is the one the realtime broadcast carries, so REST-backfilled and live-pushed copies pair by id.
  */
 export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
   // `trend` is dropped: SensorGlucose names it (GlucoseTrend) where Entry holds
@@ -110,7 +109,7 @@ export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
   return {
     ...rest,
     createdAt: toIsoString(createdAt) ?? undefined,
-    _id: sg.id,
+    _id: sg.legacyApiId,
     type: "sgv",
     sgv: sg.mgdl,
     data_source: sg.dataSource,
@@ -810,7 +809,7 @@ export class RealtimeStore {
     if (colName === "treatments") this.treatmentRevision++;
 
     if (colName === "entries" && this.isEntry(doc)) {
-      const index = this.entries.findIndex(namedEntry(this.entries, doc));
+      const index = this.entries.findIndex(namedEntry(doc));
       if (index !== -1) {
         this.entries = [
           ...this.entries.slice(0, index),
@@ -836,7 +835,7 @@ export class RealtimeStore {
 
     if (colName === "entries" && isEntryDocument(doc)) {
       this.pendingEntryCreates.delete(entryIdentity(doc));
-      const named = namedEntry(this.entries, doc);
+      const named = namedEntry(doc);
       this.entries = this.entries.filter((entry) => !named(entry));
     }
   }
