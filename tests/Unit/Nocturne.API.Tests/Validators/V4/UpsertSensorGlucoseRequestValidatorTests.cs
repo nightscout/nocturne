@@ -68,4 +68,29 @@ public class UpsertSensorGlucoseRequestValidatorTests
         var result = _validator.TestValidate(request);
         result.ShouldNotHaveValidationErrorFor(x => x.Direction);
     }
+
+    [Fact]
+    public void Quality_and_sensor_status_pass()
+    {
+        var request = ValidRequest();
+        request.Quality = SensorGlucoseQuality.Invalid;
+        request.SensorStatus = "G7:Errors/info2";
+        _validator.TestValidate(request).ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Undefined_quality_fails()
+    {
+        var request = ValidRequest();
+        request.Quality = (SensorGlucoseQuality)999;
+        _validator.TestValidate(request).ShouldHaveValidationErrorFor(x => x.Quality);
+    }
+
+    [Fact]
+    public void Sensor_status_longer_than_its_column_fails()
+    {
+        var request = ValidRequest();
+        request.SensorStatus = new string('x', 65);
+        _validator.TestValidate(request).ShouldHaveValidationErrorFor(x => x.SensorStatus);
+    }
 }

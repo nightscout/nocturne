@@ -25,4 +25,23 @@ public class SensorGlucoseSerializationTests
 
         JsonDocument.Parse(json).RootElement.GetProperty("rssi").GetInt32().Should().Be(-70);
     }
+
+    [Fact]
+    public void NullQualityAndSensorStatus_AreOmitted()
+    {
+        var root = JsonDocument.Parse(JsonSerializer.Serialize(new SensorGlucose { Mgdl = 120 }, Options)).RootElement;
+
+        root.TryGetProperty("quality", out _).Should().BeFalse();
+        root.TryGetProperty("sensorStatus", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void QualityAndSensorStatus_AreWrittenWhenSet()
+    {
+        var reading = new SensorGlucose { Mgdl = 76, Quality = SensorGlucoseQuality.Invalid, SensorStatus = "G7:Errors/info2" };
+        var root = JsonDocument.Parse(JsonSerializer.Serialize(reading, Options)).RootElement;
+
+        root.GetProperty("quality").GetString().Should().Be("Invalid");
+        root.GetProperty("sensorStatus").GetString().Should().Be("G7:Errors/info2");
+    }
 }
