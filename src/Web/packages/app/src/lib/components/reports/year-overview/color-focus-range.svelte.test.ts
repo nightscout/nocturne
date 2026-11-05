@@ -20,12 +20,16 @@ const minimumSlider = (metric = "TDD") =>
   page.getByRole("slider", { name: `${metric} focus minimum` });
 const maximumSlider = (metric = "TDD") =>
   page.getByRole("slider", { name: `${metric} focus maximum` });
+const rangeInput = (end: "low" | "high", metric = "TDD") =>
+  page.getByRole("spinbutton", { name: `${metric} ${end} color position` });
+const rangeSlider = (end: "low" | "high", metric = "TDD") =>
+  page.getByRole("slider", { name: `${metric} ${end} color position` });
 const boundaryInput = (n: number, metric = "TDD") =>
   page.getByRole("spinbutton", { name: `${metric} color boundary ${n}`, exact: true });
 const boundarySlider = (n: number, metric = "TDD") =>
   page.getByRole("slider", { name: `${metric} color boundary ${n}`, exact: true });
 const addBoundary = () => page.getByRole("button", { name: "Color boundary", exact: true });
-const selected = (what: "window" | "boundaries" | "ends") => page.getByTestId(`selected-${what}`);
+const selected = (what: "window" | "range" | "boundaries" | "ends") => page.getByTestId(`selected-${what}`);
 function pick(label: string, hex: string) {
   const input = elementOf(page.getByLabelText(label, { exact: true }), HTMLInputElement);
   input.value = hex;
@@ -39,7 +43,7 @@ describe("year overview color focus", () => {
     render(Harness);
     await expect.element(minimumInput()).toHaveValue(0);
     await expect.element(maximumInput()).toHaveValue(500);
-    expect(page.getByRole("slider").elements()).toHaveLength(2);
+    expect(page.getByRole("slider").elements()).toHaveLength(4);
     await expect.element(selected("window")).toHaveTextContent("null");
   });
 
@@ -65,15 +69,16 @@ describe("year overview color focus", () => {
     }
   });
 
-  it("spans the ramp across the window within an outlier-sized axis", async () => {
+  it("spans the ramp across the color range within an outlier-sized axis", async () => {
     render(Harness);
-    await minimumInput().fill("10");
-    await maximumInput().fill("70");
+    await rangeInput("low").fill("10");
+    await rangeInput("high").fill("70");
 
-    await expect.element(selected("window")).toHaveTextContent("[10,70]");
-    await expect.element(minimumSlider()).toHaveAttribute("aria-valuenow", "10");
-    await expect.element(maximumSlider()).toHaveAttribute("aria-valuenow", "70");
-    await expect.element(maximumSlider()).toHaveAttribute("aria-valuemax", "500");
+    await expect.element(selected("range")).toHaveTextContent("[10,70]");
+    await expect.element(selected("window")).toHaveTextContent("null");
+    await expect.element(rangeSlider("low")).toHaveAttribute("aria-valuenow", "10");
+    await expect.element(rangeSlider("high")).toHaveAttribute("aria-valuenow", "70");
+    await expect.element(rangeSlider("high")).toHaveAttribute("aria-valuemax", "500");
     expect(gradient()).toContain("2.000%");
     expect(gradient()).toContain("14.000%");
   });
@@ -90,7 +95,7 @@ describe("year overview color focus", () => {
   });
 
   it("adds a boundary that pins the color already there, then warps the ramp when moved", async () => {
-    render(Harness, { initialWindow: [10, 70] });
+    render(Harness, { initialWindow: [10, 70], initialRange: [10, 70] });
     const before = gradient();
     await addBoundary().click();
 
@@ -104,7 +109,7 @@ describe("year overview color focus", () => {
 
     await addBoundary().click();
     await expect.element(boundaryInput(2)).toHaveValue(45);
-    expect(page.getByRole("slider").elements()).toHaveLength(4);
+    expect(page.getByRole("slider").elements()).toHaveLength(6);
   });
 
   it("leaves an automatic window automatic when a boundary is added, so later data is not dimmed", async () => {
@@ -154,7 +159,7 @@ describe("year overview color focus", () => {
     render(Harness, { initialWindow: [10, 70], initialBoundaries: [{ value: 20, position: 0.3 }] });
     await page.getByRole("button", { name: "Remove TDD color boundary 1" }).click();
     await expect.element(selected("boundaries")).toHaveTextContent("null");
-    expect(page.getByRole("slider").elements()).toHaveLength(2);
+    expect(page.getByRole("slider").elements()).toHaveLength(4);
   });
 
   it("moves handles by keyboard without crossing or collapsing the window", async () => {
@@ -182,7 +187,10 @@ describe("year overview color focus", () => {
       expect(bounds.width).toBeGreaterThan(300);
 
       await page.screenshot({ path: "test-results/color-focus-mobile.png" });
+      // The window was saved without a color range, so the high color dot covers the handle's
+      // middle; the handle is grabbed above the bar.
       await userEvent.dragAndDrop(maximumSlider(), track, {
+        sourcePosition: { x: 5, y: 3 },
         targetPosition: { x: bounds.width * 0.6, y: bounds.height / 2 },
       });
 
@@ -193,6 +201,64 @@ describe("year overview color focus", () => {
     } finally {
       await page.viewport(originalSize[0], originalSize[1]);
     }
+  });
+
+  it("moves the end colors with the outer dots and leaves the dimming window alone", async () => {
+    render(Harness, { initialWindow: [10, 70], initialRange: [0, 500] });
+    const fill = (element: Element) => getComputedStyle(element).backgroundColor;
+    const swatch = (end: "low" | "high") =>
+      elementOf(page.getByLabelText(`TDD ${end} end color`, { exact: true }), HTMLInputElement)
+        .parentElement!;
+    await expect.element(page.getByTestId("color-range-low-handle")).toBeVisible();
+    expect(fill(page.getByTestId("color-range-low-handle").element())).toBe(fill(swatch("low")));
+    expect(fill(page.getByTestId("color-range-high-handle").element())).toBe(fill(swatch("high")));
+    const before = gradient();
+
+    const track = page.getByTestId("color-focus-track");
+    const bounds = elementOf(track, HTMLElement).getBoundingClientRect();
+    await userEvent.dragAndDrop(rangeSlider("low"), track, {
+      targetPosition: { x: bounds.width * 0.2, y: bounds.height / 2 },
+    });
+
+    const low = elementOf(rangeInput("low"), HTMLInputElement).valueAsNumber;
+    expect(low).toBeGreaterThan(90);
+    expect(low).toBeLessThan(110);
+    await expect.element(selected("window")).toHaveTextContent("[10,70]");
+    expect(gradient()).not.toBe(before);
+  });
+
+  it("orders the row as the bar does and shows a saved boundary color outside the color range", async () => {
+    render(Harness, {
+      initialRange: [100, 300],
+      initialBoundaries: [
+        { value: 50, position: 0.3, color: "#ff0000" },
+        { value: 200, position: 0.5 },
+      ],
+    });
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const outside = boundaryInput(1).element();
+    const low = rangeInput("low").element();
+    const inside = boundaryInput(2).element();
+    const high = rangeInput("high").element();
+    expect(follows(outside, low)).toBe(true);
+    expect(follows(low, inside)).toBe(true);
+    expect(follows(inside, high)).toBe(true);
+    const swatch = elementOf(page.getByLabelText("TDD color boundary 1 color", { exact: true }), HTMLInputElement);
+    expect(getComputedStyle(swatch.parentElement!).backgroundColor).toBe("rgb(255, 0, 0)");
+    await expect.element(addBoundary()).toBeEnabled();
+    await addBoundary().click();
+    await expect.element(selected("boundaries")).toHaveTextContent('"value":50');
+    expect(JSON.parse(selected("boundaries").element().textContent!)).toHaveLength(3);
+  });
+
+  it("moves the dimming window without moving the colors", async () => {
+    render(Harness, { initialWindow: [10, 70] });
+    const before = gradient();
+    await minimumInput().fill("20");
+    await expect.element(selected("window")).toHaveTextContent("[20,70]");
+    await expect.element(selected("range")).toHaveTextContent("[10,70]");
+    expect(gradient()).toBe(before);
   });
 
   it("lays the controls out in one row on a wide container", async () => {
@@ -241,19 +307,19 @@ describe("year overview color focus", () => {
     await expect.element(selected("boundaries")).toHaveTextContent("null");
   });
 
-  it("edits glucose in mmol/L while storing mg/dL, with the ramp fixed to its own domain", async () => {
+  it("edits glucose in mmol/L while storing mg/dL, the ramp following the color range", async () => {
     render(Harness, { glucose: true, units: "mmol", metricLabel: "Avg Glucose" });
     await expect.element(minimumInput("Avg Glucose")).toHaveValue(2.2);
     await expect.element(maximumInput("Avg Glucose")).toHaveValue(19.4);
     const before = gradient("glucose-color-track");
 
-    await minimumInput("Avg Glucose").fill("3.9");
-    await expect.element(selected("window")).toHaveTextContent("[70,350]");
-    expect(gradient("glucose-color-track")).toBe(before);
+    await rangeInput("low", "Avg Glucose").fill("3.9");
+    await expect.element(selected("range")).toHaveTextContent("[70,350]");
+    expect(gradient("glucose-color-track")).not.toBe(before);
 
     await addBoundary().click();
     await expect.element(boundaryInput(1, "Avg Glucose")).toHaveValue(11.7);
-    await expect.element(selected("window")).toHaveTextContent("[70,350]");
+    await expect.element(selected("range")).toHaveTextContent("[70,350]");
     await expect.element(boundaryInput(1, "Avg Glucose")).toHaveAttribute("step", "0.1");
   });
 
@@ -269,18 +335,18 @@ describe("year overview color focus", () => {
     expect(gradient()).toContain("#00ff00");
   });
 
-  it("swaps the end colors of a dose scale", async () => {
-    render(Harness);
-    pick("TDD low end color", "#000000");
-    pick("TDD high end color", "#ffffff");
-    await page.getByRole("button", { name: "Swap TDD end colors" }).click();
-    await expect.element(selected("ends")).toHaveTextContent('{"low":"#ffffff","high":"#000000"}');
-  });
-
-  it("offers no swap on the glucose ramp", async () => {
-    render(Harness, { glucose: true, metricLabel: "Avg Glucose" });
-    await expect.element(minimumInput("Avg Glucose")).toBeInTheDocument();
+  it("offers no swap, and puts the labeled add button and the unit in the color row", async () => {
+    render(Harness, { initialWindow: [10, 70], initialRange: [10, 70], initialBoundaries: [{ value: 20, position: 0.3 }] });
+    await expect.element(minimumInput()).toBeInTheDocument();
     expect(page.getByRole("button", { name: /Swap/ }).elements()).toHaveLength(0);
+    const add = addBoundary().element();
+    const boundary = boundaryInput(1).element();
+    // The widest gap is 20 to 70, so the next boundary follows the existing one.
+    expect(boundary.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const highEnd = page.getByRole("spinbutton", { name: "TDD high color position" }).element();
+    expect(add.compareDocumentPosition(highEnd) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(add.textContent).toContain("Color boundary");
+    expect(highEnd.parentElement?.textContent).toContain("U");
   });
 
   it("clears chosen colors on reset", async () => {
