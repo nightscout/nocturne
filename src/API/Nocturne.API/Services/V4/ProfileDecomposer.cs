@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -30,6 +31,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepo;
     private readonly ITempBasalRateReresolver _tempBasalRates;
     private readonly ILoopClosedLoopStamper _closedLoop;
+    private readonly IAuditContext _auditContext;
 
     /// <param name="therapySettingsRepo">Repository for <see cref="V4Models.TherapySettings"/> records.</param>
     /// <param name="basalScheduleRepo">Repository for <see cref="V4Models.BasalSchedule"/> records.</param>
@@ -38,6 +40,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
     /// <param name="targetRangeScheduleRepo">Repository for <see cref="V4Models.TargetRangeSchedule"/> records.</param>
     /// <param name="tempBasalRates">Re-resolves the percent temp basals a written basal schedule covers.</param>
     /// <param name="closedLoop">Restamps the Loop snapshots written Loop settings govern.</param>
+    /// <param name="auditContext">Mutation audit context used for reconciliation deletes.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ProfileDecomposer(
         ITherapySettingsRepository therapySettingsRepo,
@@ -47,6 +50,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         ITargetRangeScheduleRepository targetRangeScheduleRepo,
         ITempBasalRateReresolver tempBasalRates,
         ILoopClosedLoopStamper closedLoop,
+        IAuditContext auditContext,
         ILogger<ProfileDecomposer> logger)
         : base(logger)
     {
@@ -57,6 +61,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         _targetRangeScheduleRepo = targetRangeScheduleRepo;
         _tempBasalRates = tempBasalRates;
         _closedLoop = closedLoop;
+        _auditContext = auditContext;
     }
 
     /// <inheritdoc />
@@ -91,7 +96,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
     /// <paramref name="into"/> to follow them itself with what else it changed.
     /// </summary>
     /// <remarks>
-    /// No system attribution here (see <see cref="DecomposerBase.SystemAttributedBatchWrites"/>).
+    /// Store removal during document replacement is system-attributed; ordinary writes retain the caller's attribution.
     /// <para>
     /// The therapy settings row anchors each group's correlation id, and the four schedules are
     /// stamped with whatever it resolves to. Reading it back rather than reusing the minted id is
@@ -636,14 +641,17 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         }
 
         var carried = stores.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
-        foreach (var dropped in stored.Where(row => !carried.Contains(row.LegacyId)))
+        using (SystemAttributedBatchWrites(_auditContext))
         {
-            await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            await _basalScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            await _carbRatioScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            await _sensitivityScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            await _targetRangeScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            changes.Versions.Add((dropped.ProfileName, dropped.Start));
+            foreach (var dropped in stored.Where(row => !carried.Contains(row.LegacyId)))
+            {
+                await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                await _basalScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                await _carbRatioScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                await _sensitivityScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                await _targetRangeScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                changes.Versions.Add((dropped.ProfileName, dropped.Start));
+            }
         }
 
         await FollowAsync(changes, ct);
