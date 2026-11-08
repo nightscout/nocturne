@@ -60,7 +60,7 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.Server,
         DefaultValue = GlookoConstants.RegionUS,
-        AllowedValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
+        AllowedValues = [GlookoConstants.RegionCA, GlookoConstants.RegionDEFR, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public string Server { get; init; } = GlookoConstants.RegionUS;
 
     /// <summary>
