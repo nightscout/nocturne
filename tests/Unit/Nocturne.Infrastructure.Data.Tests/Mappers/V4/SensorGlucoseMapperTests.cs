@@ -297,6 +297,8 @@ public class SensorGlucoseMapperTests
             Unfiltered = 2,
             Delta = 0,
             Rssi = 55,
+            Quality = SensorGlucoseQuality.Invalid,
+            SensorStatus = "G7:Errors/info2",
             Device = "dexcom",
             App = "xdrip",
             UtcOffset = -300,
@@ -320,6 +322,8 @@ public class SensorGlucoseMapperTests
         roundTripped.Unfiltered.Should().Be(original.Unfiltered);
         roundTripped.Delta.Should().Be(original.Delta);
         roundTripped.Rssi.Should().Be(original.Rssi);
+        roundTripped.Quality.Should().Be(SensorGlucoseQuality.Invalid);
+        roundTripped.SensorStatus.Should().Be("G7:Errors/info2");
         roundTripped.Device.Should().Be(original.Device);
         roundTripped.App.Should().Be(original.App);
         roundTripped.UtcOffset.Should().Be(original.UtcOffset);
