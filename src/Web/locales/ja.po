@@ -36559,14 +36559,11 @@ msgstr ""
 msgid "{0} low end color"
 msgstr ""
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Swap {0} end colors"
-msgstr ""
+#~ msgid "Swap {0} end colors"
+#~ msgstr ""
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "<0/> Swap colors"
-msgstr ""
+#~ msgid "<0/> Swap colors"
+#~ msgstr ""
 
 #. 0: metricLabel
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
@@ -38513,4 +38510,32 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/admin/+page.svelte
 msgid "<0/> Jobs"
+msgstr ""
+
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Add a color boundary here"
+msgstr ""
+
+#. 0: metricLabel
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} low color position"
+msgstr ""
+
+#. 0: metricLabel
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} high color position"
+msgstr ""
+
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} focus window"
+msgstr ""
+
+#. 0: Number.isFinite(limits[1]) ? `, between ${formatted(limits[0])} and ${formatted(limits[1])} ${unitLabel}` \\: ""
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Enter a color range with its low end below its high end{0}."
 msgstr ""
