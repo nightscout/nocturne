@@ -237,8 +237,12 @@ public class DataSourceService : IDataSourceService
 
         // Sibling devices sharing a data source both resolve to its single non-glucose bucket, and only
         // the first of them claims it. The reader returns them in device order, so which one that is
-        // is the same on every refresh instead of whatever the grouping happened to return.
-        var entryDevices = await _sourceData.GlucoseDevicesAsync(windowStart, last24HoursDate, cancellationToken);
+        // is the same on every refresh instead of whatever the grouping happened to return. A device
+        // with no glucose in the last 24 hours goes after the live ones, so a retired sensor cannot
+        // hold a bucket whose live counts would then show on hardware nobody uses.
+        var entryDevices = (await _sourceData.GlucoseDevicesAsync(windowStart, last24HoursDate, cancellationToken))
+            .OrderByDescending(d => d.CountLast24Hours > 0)
+            .ToList();
 
         // Also check APS snapshots for devices that might not have entries. Discovery keys on Device,
         // not DataSource: an entry's identity here is the uploader string that CreateDataSourceInfo
