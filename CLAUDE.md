@@ -184,14 +184,19 @@ skips it, and a fresh database runs it and then every later migration.
 
 That release is the oldest one the current build upgrades from. An instance
 migrated by an older one has neither the baseline nor the migrations it replaced,
-so `EnsureReachesBaselineAsync` refuses it at startup and names the release to run
-first. The squashed migrations, and their tests, are still readable at the tag.
+so `EnsureReachesBaselineAsync` refuses it at startup, before applying anything,
+and names the release (and its image tag) to run first. The squashed migrations,
+and their tests, are still readable at the tag.
 
-After tagging release N, squash to the last migration of release N-1, never to one
-only `main` has: an instance on that release has to hold the id the baseline reuses.
+Each release upgrades only from the release before it. Once release N is tagged,
+squash `main` to N's last migration, so N+1 upgrades from N or later; never squash
+to a migration only `main` has, since an instance on the release has to hold the id
+the baseline reuses. N+1's release notes state that minimum. An instance that
+cannot finish N's migrations cannot be rescued by a later release either: the fix
+has to ship as a patch release of N.
 
 ```bash
-dotnet run scripts/squash-migrations.cs -- squash <last-migration-id-of-N-1> <vN-1>
+dotnet run scripts/squash-migrations.cs -- squash <last-migration-id-of-N> <vN>
 dotnet run scripts/squash-migrations.cs -- verify   # dumps a fresh baseline database and diffs it
 ```
 
@@ -234,11 +239,12 @@ Know what it actually checks before trusting it:
   matched — the rule above is deliberately broader than the guard; and a cleanup
   that cannot run, e.g. wrapped in `IF false`.
 - **Most of its detection paths redden nothing if they break.** Only the
-  `ConcurrentIndexBuilder.BuildUnique` path fires on a live migration. The fluent
-  `unique: true` `CreateIndex`, raw-SQL `CREATE UNIQUE INDEX`,
-  `AddUniqueConstraint`/`AddPrimaryKey` and `ALTER TABLE … ADD CONSTRAINT … UNIQUE`
-  have no live example in an `Up` since the baseline, so breaking their regex leaves
-  the suite green. Treat them as unexercised.
+  `ConcurrentIndexBuilder.BuildUnique` path fires on a live migration the guard
+  judges. The fluent `unique: true` `CreateIndex` fires only on a table created in
+  the same migration (`AddJobLedger`), which is exempt, and raw-SQL `CREATE UNIQUE
+  INDEX`, `AddUniqueConstraint`/`AddPrimaryKey` and `ALTER TABLE … ADD CONSTRAINT …
+  UNIQUE` have no live example in an `Up` since the baseline. Breaking any of those
+  regexes leaves the suite green. Treat them as unexercised.
 - **A concurrent unique index goes through `ConcurrentIndexBuilder.BuildUnique`**
   (`ConcurrentIndexBuildGuardTests` forbids writing `CREATE UNIQUE INDEX CONCURRENTLY` in a
   migration). The guard reads its table off the `ON <table>` in the definition, and

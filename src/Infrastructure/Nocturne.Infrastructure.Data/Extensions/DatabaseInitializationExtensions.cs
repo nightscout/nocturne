@@ -222,11 +222,12 @@ public static class DatabaseInitializationExtensions
                 "Downgrading is not supported: run that release or a later one.");
         }
 
+        // Image tags drop the release's leading "v".
         throw new InvalidOperationException(
             $"This database was last migrated by a Nocturne release older than {marker.Release} " +
             $"(its last migration is {last}). This release upgrades only from {marker.Release} or later. " +
-            $"Run {marker.Release} against this database once so that it applies its migrations, " +
-            "then start this release.");
+            $"Run {marker.Release} (image tag {marker.Release.TrimStart('v')}) against this database once " +
+            "so that it applies its migrations, then start this release. Nothing was changed.");
     }
 
     /// <summary>

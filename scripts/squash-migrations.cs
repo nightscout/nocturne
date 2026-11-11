@@ -14,8 +14,9 @@
 //   dotnet run scripts/squash-migrations.cs -- squash <migration-id> <release>
 //   dotnet run scripts/squash-migrations.cs -- verify
 //
-//   squash   migrates a scratch database to <migration-id> with the current chain, writes the
-//            baseline from its dump and deletes the migrations it replaces.
+//   squash   migrates a scratch database to <migration-id> with the current chain and dumps it,
+//            builds a second one from the cleaned dump and stops, changing nothing, unless the
+//            two dump identically; then writes the baseline and deletes the migrations it replaces.
 //   verify   migrates a scratch database to the baseline with the current chain and fails
 //            unless its dump matches the baseline's script. Run it after squash.
 //
@@ -23,7 +24,7 @@
 //   dotnet run scripts/squash-migrations.cs -- squash 20261026195407_AddReleaseNotices v0.3.0
 //   dotnet run scripts/squash-migrations.cs -- verify
 //
-// Requires: .NET 10 SDK, Docker
+// Requires: .NET 11 SDK, Docker
 
 #:project Shared/Shared.csproj
 #:project ../src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Nocturne.Infrastructure.Data.Migrations.csproj
@@ -76,15 +77,26 @@ async Task<int> Squash(string floor, string release)
         return 1;
     }
 
-    var dump = await DumpAt(floor);
+    // The script is checked by what it builds rather than by reading it: a database it builds has to
+    // dump exactly as the chain's does, so a line Clean removed from inside a literal or a body
+    // shows up as a difference. Nothing is deleted until it matches.
+    var chain = await ScratchDumpAsync(MigrateTo(floor));
+    var dump = Clean(chain);
+    var rebuilt = await ScratchDumpAsync(Apply(dump));
+    if (!Same(chain.Split('\n'), rebuilt.Split('\n'), "A database built from the cleaned script dumps differently from the chain's; nothing was changed."))
+        return 1;
 
     var designerText = File.ReadAllText(designer);
     var oldClass = Regex.Match(designerText, @"partial class (\w+)").Groups[1].Value;
     designerText = Regex.Replace(designerText, $@"partial class {oldClass}\b", "partial class Baseline");
 
-    var replaced = Directory.GetFiles(migrationsDir)
-        .Where(f => Regex.IsMatch(Path.GetFileName(f), @"^\d{14}_")
-            && string.CompareOrdinal(Path.GetFileName(f)[..14], timestamp) <= 0)
+    // By the id each Designer declares, not the file name: a baseline's files are named for its
+    // timestamp but keep the id of the migration it replaced.
+    var replaced = Directory.GetFiles(migrationsDir, "*.Designer.cs")
+        .Where(f => DesignerId(File.ReadAllText(f)) is { } id && string.CompareOrdinal(id, floor) <= 0)
+        .Select(f => f[..^".Designer.cs".Length])
+        .SelectMany(stem => new[] { stem + ".cs", stem + ".Designer.cs", stem + ".sql" })
+        .Where(File.Exists)
         .ToList();
     foreach (var file in replaced)
         File.Delete(file);
@@ -108,31 +120,75 @@ async Task<int> Verify()
         ?? throw new InvalidOperationException($"{designer} has no [Migration] id.");
 
     var expected = (await File.ReadAllTextAsync(script)).Split('\n');
-    var actual = (await DumpAt(baseline)).Split('\n');
+    var actual = Clean(await ScratchDumpAsync(MigrateTo(baseline))).Split('\n');
 
-    var missing = expected.Except(actual).ToList();
-    var extra = actual.Except(expected).ToList();
-    if (missing.Count == 0 && extra.Count == 0 && expected.SequenceEqual(actual))
+    if (Same(expected, actual, $"The dump differs from {Path.GetFileName(script)}."))
     {
         Console.WriteLine($"[verify] A database migrated to {baseline} dumps identically to the baseline's script.");
         return 0;
     }
 
-    Console.Error.WriteLine($"[verify] The dump differs from {Path.GetFileName(script)}.");
+    return 1;
+}
+
+/// <summary>Whether two dumps match line for line; when they do not, prints what differs.</summary>
+static bool Same(string[] expected, string[] actual, string heading)
+{
+    if (expected.SequenceEqual(actual))
+        return true;
+
+    var missing = expected.Except(actual).ToList();
+    var extra = actual.Except(expected).ToList();
+    Console.Error.WriteLine($"[squash] {heading}");
     foreach (var line in missing.Take(40))
         Console.Error.WriteLine($"  - {line}");
     foreach (var line in extra.Take(40))
         Console.Error.WriteLine($"  + {line}");
     if (missing.Count == 0 && extra.Count == 0)
         Console.Error.WriteLine("  (same lines, different order)");
-    return 1;
+    return false;
 }
 
+/// <summary>Migrates a scratch database to <paramref name="target"/> with the current chain.</summary>
+static Func<string, Task> MigrateTo(string target) => async migrator =>
+{
+    Console.WriteLine($"[squash] Migrating a scratch database to {target}...");
+    var options = new DbContextOptionsBuilder<NocturneDbContext>()
+        .UseNpgsql(migrator, npgsql => npgsql
+            .CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds)
+            .UseNocturneMigrations())
+        .AddInterceptors(new TenantConnectionInterceptor())
+        .Options;
+    await using var context = new NocturneDbContext(options);
+    if (!context.Database.GetMigrations().Contains(target))
+        throw new InvalidOperationException($"{target} is not a migration of the current chain.");
+    await context.GetService<IMigrator>().MigrateAsync(target);
+};
+
 /// <summary>
-/// The cleaned dump of a scratch database migrated to <paramref name="target"/> by the current
-/// chain, under the production role bootstrap.
+/// Runs <paramref name="script"/> as the migrator in one transaction, as the baseline's single
+/// <c>Sql</c> operation runs.
 /// </summary>
-async Task<string> DumpAt(string target)
+static Func<string, Task> Apply(string script) => async migrator =>
+{
+    Console.WriteLine("[squash] Applying the cleaned script to a second scratch database...");
+    await using var connection = new NpgsqlConnection(migrator);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using var command = new NpgsqlCommand(script, connection, transaction)
+    {
+        CommandTimeout = (int)TimeSpan.FromHours(1).TotalSeconds,
+    };
+    await command.ExecuteNonQueryAsync();
+    await transaction.CommitAsync();
+};
+
+/// <summary>
+/// The raw pg_dump of a scratch database that <paramref name="prepare"/> has built under the
+/// production role bootstrap, with only the psql <c>\restrict</c> lines removed: they carry a
+/// random key, and they are the one part of two dumps of equal databases that differs.
+/// </summary>
+async Task<string> ScratchDumpAsync(Func<string, Task> prepare)
 {
     var container = $"nocturne-squash-{Guid.NewGuid():N}"[..28];
     Run("docker", [
@@ -161,21 +217,7 @@ async Task<string> DumpAt(string target)
         }.ConnectionString;
 
         await WaitForConnectable(migrator);
-
-        Console.WriteLine($"[squash] Migrating a scratch database to {target}...");
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(migrator, npgsql => npgsql
-                .CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds)
-                .UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
-        await using (var context = new NocturneDbContext(options))
-        {
-            if (!context.Database.GetMigrations().Contains(target))
-                throw new InvalidOperationException($"{target} is not a migration of the current chain.");
-            await context.GetService<IMigrator>().MigrateAsync(target);
-        }
-
+        await prepare(migrator);
         await RefuseObjectsTheCleanupDropsAsync(migrator);
 
         // Copied out as a file: captured stdout would be decoded with the console's code page.
@@ -191,7 +233,9 @@ async Task<string> DumpAt(string target)
         Run("docker", ["cp", $"{container}:/tmp/dump.sql", local]);
         try
         {
-            return Clean(await File.ReadAllTextAsync(local));
+            var lines = (await File.ReadAllTextAsync(local)).Replace("\r\n", "\n").Split('\n')
+                .Where(line => !DumpLines.Restrict.IsMatch(line));
+            return string.Join('\n', lines);
         }
         finally
         {
@@ -257,17 +301,14 @@ static async Task RefuseObjectsTheCleanupDropsAsync(string connectionString)
 
 /// <summary>
 /// The dump as one migration's SQL. EF runs it on its own connection, so session settings would
-/// outlive it: <c>SET</c> lines go, and so does the <c>set_config</c> that empties
-/// <c>search_path</c>, after which EF's unqualified history insert fails. The <c>\restrict</c>
-/// lines pg_dump 17.6 adds are psql meta-commands, and comments only add size.
+/// outlive it: pg_dump's <c>SET</c> lines go, and so does the <c>set_config</c> that empties
+/// <c>search_path</c>, after which EF's unqualified history insert fails. pg_dump's comments only
+/// add size. Only the exact lines pg_dump writes are removed; the round trip in <c>Squash</c>
+/// catches one that turns up inside a literal or a body anyway.
 /// </summary>
 static string Clean(string dump)
 {
-    var kept = dump.Replace("\r\n", "\n").Split('\n')
-        .Where(line => !line.StartsWith("SET ", StringComparison.Ordinal)
-            && !line.StartsWith("SELECT pg_catalog.set_config(", StringComparison.Ordinal)
-            && !line.StartsWith('\\')
-            && !line.StartsWith("--", StringComparison.Ordinal));
+    var kept = dump.Replace("\r\n", "\n").Split('\n').Where(line => !DumpLines.Boilerplate.IsMatch(line));
 
     return Regex.Replace(string.Join('\n', kept), @"\n{3,}", "\n\n").Trim() + "\n";
 }
@@ -308,3 +349,21 @@ static string BaselineSource(string floor, string release) => $$"""
     }
 
     """;
+
+static class DumpLines
+{
+    /// <summary>The lines pg_dump writes around and between the statements.</summary>
+    public static readonly Regex Boilerplate = new(
+        @"^(SET [a-z_]+ = .*;"
+        + @"|SELECT pg_catalog\.set_config\('search_path', '', false\);"
+        + @"|--"
+        + @"|-- (Name|Data for Name): .*"
+        + @"|-- PostgreSQL database dump( complete)?"
+        + @"|-- \*not\* creating schema, since initdb creates it"
+        + @"|-- Dumped (from database version|by pg_dump version) .*"
+        + @"|\\(restrict|unrestrict) \w+)$",
+        RegexOptions.Compiled);
+
+    /// <summary>The psql meta-commands pg_dump 17.6 and later write around a dump, with a random key.</summary>
+    public static readonly Regex Restrict = new(@"^\\(restrict|unrestrict) \w+$", RegexOptions.Compiled);
+}

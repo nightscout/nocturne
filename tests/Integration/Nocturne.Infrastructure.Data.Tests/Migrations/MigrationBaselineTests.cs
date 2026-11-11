@@ -16,32 +16,52 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// schema, so startup refuses it before applying anything.
 /// </summary>
 [Trait("Category", "Integration")]
-public class MigrationBaselineTests
+public class MigrationBaselineTests(MigrationBaselineTests.Databases databases)
+    : IClassFixture<MigrationBaselineTests.Databases>
 {
+    private const string OlderMigration = "20250725065111_InitialCreate";
+
     private static readonly (string Id, MigrationBaselineAttribute Marker) Baseline = ReadBaseline();
+
+    /// <summary>
+    /// One database per test: an unmigrated one whose history names a migration older than the
+    /// baseline, one whose history names only a newer one, and a fresh install.
+    /// </summary>
+    public sealed class Databases : IAsyncLifetime
+    {
+        public string Older { get; private set; } = string.Empty;
+        public string Newer { get; private set; } = string.Empty;
+        public string Fresh { get; private set; } = string.Empty;
+
+        public async Task InitializeAsync()
+        {
+            Older = (await SharedPostgres.CreateEmptyDatabaseAsync("baseline_older")).MigratorConnectionString;
+            await RecordHistoryAsync(Older, OlderMigration);
+            Newer = (await SharedPostgres.CreateEmptyDatabaseAsync("baseline_newer")).MigratorConnectionString;
+            await RecordHistoryAsync(Newer, "29991231000000_FromTheFuture");
+            Fresh = (await SharedPostgres.CreateMigratedDatabaseAsync("baseline_fresh")).MigratorConnectionString;
+        }
+
+        public Task DisposeAsync() => Task.CompletedTask;
+    }
 
     [Fact]
     public async Task A_database_migrated_by_an_older_release_is_refused_and_left_untouched()
     {
-        var database = await SharedPostgres.CreateEmptyDatabaseAsync("baseline_older");
-        await RecordHistoryAsync(database.MigratorConnectionString, "20250725065111_InitialCreate");
-
         var migrate = () => DatabaseInitializationExtensions.RunMigrationsAsync(
-            database.MigratorConnectionString, NullLogger.Instance, new TenantConnectionInterceptor());
+            databases.Older, NullLogger.Instance, new TenantConnectionInterceptor());
 
         await migrate.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage($"*older than {Baseline.Marker.Release}*20250725065111_InitialCreate*");
-        (await HistoryAsync(database.MigratorConnectionString)).Should().Equal("20250725065111_InitialCreate");
+            .WithMessage($"*older than {Baseline.Marker.Release}*{OlderMigration}*"
+                + $"image tag {Baseline.Marker.Release.TrimStart('v')})*");
+        (await HistoryAsync(databases.Older)).Should().Equal(OlderMigration);
     }
 
     [Fact]
     public async Task A_database_migrated_by_a_newer_release_is_refused_as_a_downgrade()
     {
-        var database = await SharedPostgres.CreateEmptyDatabaseAsync("baseline_newer");
-        await RecordHistoryAsync(database.MigratorConnectionString, "29991231000000_FromTheFuture");
-
         var migrate = () => DatabaseInitializationExtensions.RunMigrationsAsync(
-            database.MigratorConnectionString, NullLogger.Instance, new TenantConnectionInterceptor());
+            databases.Newer, NullLogger.Instance, new TenantConnectionInterceptor());
 
         await migrate.Should().ThrowAsync<InvalidOperationException>().WithMessage("*newer*");
     }
@@ -49,12 +69,10 @@ public class MigrationBaselineTests
     [Fact]
     public async Task A_fresh_database_records_the_baseline_under_the_id_it_replaces_and_migrates_again_cleanly()
     {
-        var database = await SharedPostgres.CreateMigratedDatabaseAsync("baseline_fresh");
-
-        (await HistoryAsync(database.MigratorConnectionString)).First().Should().Be(Baseline.Id);
+        (await HistoryAsync(databases.Fresh)).First().Should().Be(Baseline.Id);
 
         var migrate = () => DatabaseInitializationExtensions.RunMigrationsAsync(
-            database.MigratorConnectionString, NullLogger.Instance, new TenantConnectionInterceptor());
+            databases.Fresh, NullLogger.Instance, new TenantConnectionInterceptor());
         await migrate.Should().NotThrowAsync();
     }
 
