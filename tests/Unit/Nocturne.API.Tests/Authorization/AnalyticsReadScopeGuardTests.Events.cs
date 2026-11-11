@@ -133,6 +133,12 @@ public partial class AnalyticsReadScopeGuardTests
         { EventAnchorKind.LowStart, [Scope.GlucoseRead], true },
         { EventAnchorKind.LowStart, [Scope.TreatmentsRead], false },
         { EventAnchorKind.HighStart, [Scope.GlucoseRead], true },
+        { EventAnchorKind.SiteChange, [Scope.GlucoseRead, Scope.TreatmentsRead], false },
+        { EventAnchorKind.SiteChange, [Scope.GlucoseRead, Scope.DevicesRead], true },
+        { EventAnchorKind.SleepStart, [Scope.GlucoseRead, Scope.TreatmentsRead], false },
+        { EventAnchorKind.Wake, [Scope.GlucoseRead, Scope.SleepRead], true },
+        { EventAnchorKind.LowTreatment, [Scope.GlucoseRead], false },
+        { EventAnchorKind.AnyBolus, [Scope.GlucoseRead, Scope.TreatmentsRead], true },
     };
 
     [Theory]

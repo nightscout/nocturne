@@ -341,7 +341,7 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         cohort.GetProperty("anchor").GetProperty("x-enumLabels").EnumerateArray().Select(l => l.GetString())
             .Should().Contain("Correction bolus");
         cohort.GetProperty("dayOfWeek").GetProperty("maxItems").GetInt32().Should().Be(7);
-        Property("event_response", "cohorts").GetProperty("maxItems").GetInt32().Should().Be(EventResponseDefinition.MaxCohorts);
+        Property("event_response", "cohorts").GetProperty("maxItems").GetInt32().Should().Be(EventResponseParameters.MaxGroups);
 
         Property("period_comparison", "preset").GetProperty("x-enumLabels").EnumerateArray().Select(l => l.GetString())
             .Should().Contain("Last 14 days and the 14 days before");

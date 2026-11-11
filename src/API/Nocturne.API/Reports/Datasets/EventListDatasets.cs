@@ -42,6 +42,47 @@ internal sealed record EventOutcomeInfo(EventOutcome Outcome, string Label, stri
 }
 
 /// <summary>
+/// Which events each per-event figure is worked out for, as the catalogue states it
+/// (<c>x-eventFigures</c> on every event dataset's parameters), so a builder reads it rather than
+/// copying the engine's rules: the rise figures for a rise anchor and the fall figures for a fall
+/// one (<see cref="EventAnchors.ResponseOf"/>), a meal's grams and its carbs per unit for meals only.
+/// </summary>
+internal static class EventFigures
+{
+    private static readonly IReadOnlyDictionary<string, Func<EventAnchorKind, bool>> AppliesTo =
+        new Dictionary<string, Func<EventAnchorKind, bool>>
+        {
+            ["peakRise"] = Rise, ["minutesToPeak"] = Rise, ["minutesBackToStart"] = Rise,
+            ["drop"] = Fall, ["nadir"] = Fall, ["minutesToNadir"] = Fall,
+            ["glucoseAt2Hours"] = Any, ["startGlucose"] = Any, ["netInsulin"] = Any,
+            ["gramsPerUnit"] = Meal, ["grams"] = Meal,
+            ["minutesSinceMeal"] = Any, ["iobAtEvent"] = Any, ["timeOfDay"] = Any,
+        };
+
+    private static bool Rise(EventAnchorKind a) => EventAnchors.ResponseOf(a) == EventResponseKind.Rise;
+    private static bool Fall(EventAnchorKind a) => EventAnchors.ResponseOf(a) == EventResponseKind.Fall;
+    private static bool Any(EventAnchorKind a) => true;
+    private static bool Meal(EventAnchorKind a) => a == EventAnchorKind.Meal;
+
+    /// <summary>
+    /// <c>responses</c>: each anchor's kind, <c>rise</c> or <c>fall</c>; <c>figures</c>: each figure's
+    /// field name (and <see cref="EventOutcome"/> wire name) with the anchors it is worked out for.
+    /// </summary>
+    public static System.Text.Json.Nodes.JsonObject Node()
+    {
+        var anchors = Enum.GetValues<EventAnchorKind>();
+        return new System.Text.Json.Nodes.JsonObject
+        {
+            ["responses"] = new System.Text.Json.Nodes.JsonObject(anchors.Select(a =>
+                KeyValuePair.Create(a.ToString(), (System.Text.Json.Nodes.JsonNode?)(Rise(a) ? "rise" : "fall")))),
+            ["figures"] = new System.Text.Json.Nodes.JsonObject(AppliesTo.Select(f =>
+                KeyValuePair.Create(f.Key, (System.Text.Json.Nodes.JsonNode?)new System.Text.Json.Nodes.JsonArray(
+                    [.. anchors.Where(f.Value).Select(a => (System.Text.Json.Nodes.JsonNode?)a.ToString())])))),
+        };
+    }
+}
+
+/// <summary>
 /// A dataset that draws the events of the Meals and events groups one by one, from the event list
 /// (<see cref="EventResponseDataset.ComputeAsync"/>). The list places meals, boluses and starts in
 /// time, so the endpoint lists it only with <c>treatments.read</c>; without it these datasets draw nothing.
@@ -77,9 +118,9 @@ internal abstract class EventListDataset : IReportDataset
     internal static string EventsField(int group) => $"events{group}";
 
     internal static IEnumerable<ReportField> EventCountFields(string what) =>
-        Enumerable.Range(1, EventResponseDefinition.MaxCohorts).Select(n => new ReportField(
+        Enumerable.Range(1, EventResponseParameters.MaxGroups).Select(n => new ReportField(
             EventsField(n), $"Group {n}", ReportFieldKind.Number, null, $"Events of group {n} {what}; empty for a group not asked for.",
-            Scope.TreatmentsRead, Aggregate: ReportAggregate.Sum));
+            Scope.TreatmentsRead, EventResponseDataset.GroupHue(n), Aggregate: ReportAggregate.Sum));
 
     public virtual IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters)
     {
@@ -234,7 +275,10 @@ internal sealed class EventOutcomesDataset : EventListDataset
             lines.Add($"The chart shows the first {EventResponseDataset.MaxEvents} of {events.Count} events.");
 
         return Output(run, [.. rows], Summary(run, useMmol, lines), facts,
-            fitSentence ?? $"{ReportFacts.Plural(events.Count, "event")}, each drawn as a point.", Fields, events.Count);
+            fitSentence ?? $"{ReportFacts.Plural(events.Count, "event")}, each drawn as a point.", Fields, events.Count) with
+        {
+            Color = parameters.Group is { } only ? EventResponseDataset.GroupHue(only) : null,
+        };
     }
 
     private static Dictionary<string, object?> Row(EventResponseEvent e, IReadOnlyList<int> groups, bool useMmol)
@@ -318,7 +362,7 @@ internal sealed class EventOutcomeSpreadDataset : EventListDataset
 
     public override ReportLayerBindings? DefaultBindings(ReportMark mark) =>
         mark == ReportMark.Bars
-            ? new ReportLayerBindings { X = "range", Y = [.. Enumerable.Range(1, EventResponseDefinition.MaxCohorts).Select(EventsField)] }
+            ? new ReportLayerBindings { X = "range", Y = [.. Enumerable.Range(1, EventResponseParameters.MaxGroups).Select(EventsField)] }
             : null;
 
     public override async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
@@ -432,7 +476,7 @@ internal sealed class EventOccurrenceDataset : EventListDataset
 
     public override ReportLayerBindings? DefaultBindings(ReportMark mark) =>
         mark == ReportMark.Bars
-            ? new ReportLayerBindings { X = "hour", Y = [.. Enumerable.Range(1, EventResponseDefinition.MaxCohorts).Select(EventsField)] }
+            ? new ReportLayerBindings { X = "hour", Y = [.. Enumerable.Range(1, EventResponseParameters.MaxGroups).Select(EventsField)] }
             : null;
 
     public override async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)

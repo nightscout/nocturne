@@ -16,6 +16,12 @@ public sealed record EventResponseInputs
 
     public IReadOnlyList<long> SensorStarts { get; init; } = [];
 
+    /// <summary>Site, cannula and pod changes and pod activations; read only when a cohort asks for site changes.</summary>
+    public IReadOnlyList<long> SiteChanges { get; init; } = [];
+
+    /// <summary>Sleep sessions; read only when a cohort asks for sleep starts or wake-ups.</summary>
+    public IReadOnlyList<MillsInterval> SleepSessions { get; init; } = [];
+
     /// <inheritdoc cref="LoopAnalysisFilter.HistoryVisibleFrom"/>
     public long? HistoryVisibleFrom { get; init; }
 
@@ -443,6 +449,12 @@ public static class EventResponseCalculator
                 EventAnchorKind.UnannouncedRise => Rises().Anchors,
                 EventAnchorKind.LowStart => Excursions().Lows,
                 EventAnchorKind.HighStart => Excursions().Highs,
+                EventAnchorKind.SiteChange => EventAnchors.Merged(inputs.SiteChanges, EventAnchorKind.SiteChange),
+                EventAnchorKind.SleepStart => EventAnchors.Starts(inputs.SleepSessions, kind),
+                EventAnchorKind.Wake => [.. inputs.SleepSessions.Select(s => s.End).Distinct().Order().Select(m => new EventAnchor(m, kind))],
+                EventAnchorKind.LowTreatment => EventAnchors.LowTreatments(DayConditions.Lows(series.Readings), carbs),
+                EventAnchorKind.AnyBolus => [.. series.Insulin.Doses.Where(d => !d.Automatic && d.Units > 0).Select(d => d.Mills)
+                    .Distinct().Order().Select(m => new EventAnchor(m, kind))],
                 _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
             };
         }

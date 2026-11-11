@@ -42,12 +42,12 @@ internal sealed class DailyProfileDataset : IReportDataset
     public IReadOnlyList<ReportField> Fields { get; } =
     [
         new("minuteOfDay", "Time of day", ReportFieldKind.TimeOfDay, "min", "Start of the slot, minutes after local midnight."),
-        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of the slot's readings, pooled across days.", Aggregate: ReportAggregate.Mean),
-        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the slot's readings.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of the slot's readings, pooled across days.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the slot's readings.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
         new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median of the slot's readings.",
             Color: ChartColor.GlucoseInRange, GlucoseScale: true, Aggregate: ReportAggregate.Mean),
-        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the slot's readings.", Aggregate: ReportAggregate.Mean),
-        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the slot's readings.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the slot's readings.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the slot's readings.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
         new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the slot across the range.", Aggregate: ReportAggregate.Sum),
         new("scheduledBasal", "Scheduled basal", ReportFieldKind.Number, "U/h", "Median scheduled basal, including any override's scale.",
             Scope.TherapyRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
@@ -94,14 +94,22 @@ internal sealed class DailyProfileDataset : IReportDataset
             yield return ("profileName", $"Use {LoopAnalysisDatasetParameters.MaxProfileNameLength} characters or fewer.");
         if (p.DayOfWeek is { } days && days.Distinct().Count() != days.Count)
             yield return ("dayOfWeek", "A weekday is named twice.");
+        foreach (var error in p.Days?.Validate("days") ?? [])
+            yield return error;
     }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var parameters = (DailyProfileParameters)request.Parameters;
+        var dayFilter = parameters.Days;
+        if (dayFilter is { NeedsTreatments: true } && !request.HasScope(Scope.TreatmentsRead))
+            return DayFilterWithheld("Daily profile", dayFilter);
         var resolved = await ResolveAsync(request, parameters, null, cancellationToken);
+        var service = request.Services.GetRequiredService<ILoopAnalysisService>();
         var report = resolved.Filter is { } filter && resolved.Zone is { } zone
-            ? await request.Services.GetRequiredService<ILoopAnalysisService>().GetDailyProfileAsync(filter, zone, cancellationToken)
+            ? dayFilter is null
+                ? await service.GetDailyProfileAsync(filter, zone, cancellationToken)
+                : await service.GetDailyProfileForDaysAsync(filter, zone, dayFilter.ToCondition(), cancellationToken)
             : new DailyProfileResponse();
         report = Serve(resolved, report, request);
 
@@ -141,17 +149,31 @@ internal sealed class DailyProfileDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(report, useMmol),
+            Summary = dayFilter is null ? Summarise(report, useMmol) : $"{dayFilter.Summary(report.Primary.DaySelection)}\n{Summarise(report, useMmol)}",
             Facts = FactsOf(report, useMmol),
             Sentence = NoTimeZone(report, "Daily profile") ?? SentenceOf(report),
             SentenceAbout = NoTimeZone(report, "Daily profile") is null ? SentenceAboutOf(report) : null,
             OtherSentences = NoTimeZone(report, "Daily profile") is null ? [new ReportSentence(PooledSentence, GlucoseFields)] : [],
             SentenceComparesSettings = NoTimeZone(report, "Daily profile") is null && report.Primary.Summary.DeliveredToScheduledRatio is not null
                 && report.Primary.Slots.Any(s => s.Glucose is not null),
-            Context = ContextLine(report, ReportFacts.Plural(readings, "reading")),
+            Context = dayFilter is null
+                ? ContextLine(report, ReportFacts.Plural(readings, "reading"))
+                : $"{dayFilter.Summary(report.Primary.DaySelection)} {ContextLine(report, ReportFacts.Plural(readings, "reading"))}",
             Omitted = Omitted(report, FieldSeries),
             Window = Window(report),
+            FieldLabels = DayFieldLabels(Fields, dayFilter),
         };
+    }
+
+    /// <summary>Each number field's label with the days kept, so two layers of one dataset read apart: "Glucose median, days with exercise".</summary>
+    internal static IReadOnlyDictionary<string, string>? DayFieldLabels(IEnumerable<ReportField> fields, ReportDayFilter? days) =>
+        days is null ? null : fields.Where(f => f.IsNumber && !f.Companion).ToDictionary(f => f.Name, f => $"{f.Label}, {days.Words()}");
+
+    /// <summary>The panel of a day filter the token cannot read: no data, never every day.</summary>
+    internal static ReportDatasetOutput DayFilterWithheld(string what, ReportDayFilter days)
+    {
+        var text = $"{what}: not shown. Keeping only {days.Words()} needs the treatments.read scope, which this token does not hold.";
+        return new ReportDatasetOutput { Rows = [], Summary = text, Sentence = text };
     }
 
     /// <summary>Days with data, the highest and lowest median and the widest spread by time of day, and the insulin figures served.</summary>

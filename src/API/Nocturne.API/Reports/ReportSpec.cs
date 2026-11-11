@@ -346,6 +346,9 @@ internal static class ReportWire
 [JsonDerivedType(typeof(DeviceStatusParameters), DeviceStatusParameters.Name)]
 [JsonDerivedType(typeof(GlucoseDistributionParameters), GlucoseDistributionParameters.Name)]
 [JsonDerivedType(typeof(DailySummaryParameters), DailySummaryParameters.Name)]
+[JsonDerivedType(typeof(HeartRateParameters), HeartRateParameters.Name)]
+[JsonDerivedType(typeof(StepsParameters), StepsParameters.Name)]
+[JsonDerivedType(typeof(SleepParameters), SleepParameters.Name)]
 [JsonDerivedType(typeof(PeriodComparisonParameters), PeriodComparisonParameters.Name)]
 [JsonDerivedType(typeof(StateSpansParameters), StateSpansParameters.Name)]
 internal abstract record ReportDatasetParameters

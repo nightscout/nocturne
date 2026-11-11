@@ -9,6 +9,8 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.LoopAnalysis;
+using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Reports.Datasets;
 
@@ -70,12 +72,16 @@ internal sealed class DailySummaryDataset : IReportDataset
 
     public int PointBudget => V4ReadLimits.MaxAnalyticsSpanDays + 1;
 
-    public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
+    public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) =>
+        ((DailySummaryParameters)parameters).Days?.Validate("days") ?? [];
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var services = request.Services;
         var treatments = request.HasScope(Scope.TreatmentsRead);
+        var dayFilter = ((DailySummaryParameters)request.Parameters).Days;
+        if (dayFilter is { NeedsTreatments: true } && !treatments)
+            return DailyProfileDataset.DayFilterWithheld("Daily summary", dayFilter);
         IReadOnlyList<ReportOmittedField> omitted = treatments
             ? []
             : [.. TreatmentFields.Select(f => new ReportOmittedField(f, Scope.TreatmentsRead))];
@@ -111,6 +117,13 @@ internal sealed class DailySummaryDataset : IReportDataset
 
         var useMmol = request.UseMmol;
         var days = card.Months.SelectMany(m => m.Days).OrderBy(d => d.Timestamp).ToList();
+        DaySelection? selection = null;
+        if (dayFilter is not null && days.Count > 0)
+        {
+            selection = await SelectDaysAsync(dayFilter, days, glucose, records, zone, request, cancellationToken);
+            var kept = selection.Kept.Select(d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).ToHashSet();
+            days = [.. days.Where(d => kept.Contains(d.Date))];
+        }
         var rows = days.Select(d =>
         {
             var any = d.TotalReadings > 0;
@@ -139,17 +152,49 @@ internal sealed class DailySummaryDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(rows, startDate, endDate, useMmol, [.. omitted.Select(o => o.Field)],
-                request.HistoryClamped ? request.From : null),
+            Summary = (dayFilter is null ? "" : dayFilter.Summary(selection) + "\n")
+                + Summarise(rows, startDate, endDate, useMmol, [.. omitted.Select(o => o.Field)], request.HistoryClamped ? request.From : null),
             Facts = FactsOf(rows, useMmol, omitted.Count == 0),
             Sentence = rows.Any(r => r["readings"] is int n && n > 0)
                 ? "One row per local day; no figure is averaged across days."
                 : "No glucose readings in this period.",
-            Context = string.Create(CultureInfo.InvariantCulture,
+            Context = (dayFilter is null ? "" : dayFilter.Summary(selection) + " ") + string.Create(CultureInfo.InvariantCulture,
                 $"Local days {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}. {rows.Count(r => r["readings"] is int n && n > 0)} of {rows.Count} days with readings."),
+            FieldLabels = DailyProfileDataset.DayFieldLabels(Fields, dayFilter),
             Omitted = omitted,
             Window = days.Count == 0 ? null : new ReportWindow(days[0].Timestamp, days[^1].EndTimestamp),
         };
+    }
+
+    /// <summary>
+    /// The days a day filter keeps, from the readings and records already read; exercise and illness are
+    /// read as spans once for the range. A day that starts before what a history-clamped token reads is
+    /// in neither group (<see cref="DayConditions"/>).
+    /// </summary>
+    private static async Task<DaySelection> SelectDaysAsync(
+        ReportDayFilter filter, IReadOnlyList<Core.Models.PunchCardDay> days, IReadOnlyList<Core.Models.V4.SensorGlucose> glucose,
+        InsulinRecords records, TimeZoneInfo zone, ReportDatasetRequest request, CancellationToken cancellationToken)
+    {
+        var starts = days.Select(d => d.Timestamp).Append(days[^1].EndTimestamp).ToList();
+        var firstDay = DateOnly.ParseExact(days[0].Date, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var end = starts[^1];
+        List<MillsInterval> exercise = [], illness = [];
+        if (filter.Kind is ReportDayKind.Exercise or ReportDayKind.Illness)
+        {
+            var category = filter.Kind == ReportDayKind.Exercise ? StateSpanCategory.Exercise : StateSpanCategory.Illness;
+            var spans = await request.Services.GetRequiredService<IStateSpanRepository>().GetByCategories(
+                [category], DateTimeOffset.FromUnixTimeMilliseconds(starts[0]).UtcDateTime,
+                DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime, cancellationToken);
+            var intervals = spans.GetValueOrDefault(category, []).Select(s => new MillsInterval(s.StartMills, s.EndMills ?? end)).ToList();
+            request.ReadLog.Record("state_spans", intervals.Count);
+            (filter.Kind == ReportDayKind.Exercise ? exercise : illness).AddRange(intervals);
+        }
+        return DayConditions.Select(
+            filter.ToCondition(), firstDay, starts, zone,
+            [.. glucose.Select(g => new GlucoseSample(g.Mills, g.Mgdl)).OrderBy(g => g.Mills)],
+            records.Carbs.Select(c => new CarbEvent(c.Mills, c.Carbs)),
+            exercise, illness,
+            request.HistoryClamped ? request.From.ToUnixTimeMilliseconds() : null);
     }
 
     /// <summary>The extremes across the days, each with its date as the note.</summary>

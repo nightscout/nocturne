@@ -139,6 +139,39 @@ internal sealed record DailySummaryParameters : ReportDatasetParameters
 
     [JsonIgnore]
     public override string DatasetName => Name;
+
+    [Description("Only the days that had something, or every other day. Optional; every day when missing.")]
+    public ReportDayFilter? Days { get; init; }
+}
+
+[Description("heart_rate: heart rate over time: the mean of the minute averages in each slot, with the lowest and highest. Needs the heart rate permission.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record HeartRateParameters : ReportDatasetParameters
+{
+    public const string Name = "heart_rate";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
+}
+
+[Description("steps: steps over time, added up in each slot. Needs the step count permission.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record StepsParameters : ReportDatasetParameters
+{
+    public const string Name = "steps";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
+}
+
+[Description("sleep: each sleep session, as a span in a lane or as hours of sleep on the night it ended. Needs the sleep permission.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record SleepParameters : ReportDatasetParameters
+{
+    public const string Name = "sleep";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
 }
 
 /// <summary>A pair of periods the comparison report offers, as the web report names them: the later period is B.</summary>

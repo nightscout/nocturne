@@ -72,7 +72,7 @@ public class EventListDatasetTests
     {
         var spread = Layer("""{ "name": "event_outcome_spread", "outcome": "nadir", "cohorts": [ { "anchor": "LowStart" } ] }""", "bars");
         spread.Errors.Should().BeEmpty();
-        spread.Spec!.Panels[0].Tracks![0].Layers[0].Bindings.Y.Should().Equal("events1", "events2", "events3");
+        spread.Spec!.Panels[0].Tracks![0].Layers[0].Bindings.Y.Should().Equal("events1", "events2", "events3", "events4", "events5", "events6");
         spread.Spec.Panels[0].Tracks![0].Layers[0].XKind.Should().Be(ReportXKind.Category);
 
         var hours = Layer("""{ "name": "event_occurrence" }""", "bars");
@@ -172,5 +172,61 @@ public class EventListDatasetTests
         catalogue.Datasets.Single(d => d.Name == "event_outcome_spread").Parameters.GetProperty("properties").GetProperty("outcome")
             .GetProperty("x-enumLabels").EnumerateArray().Select(l => l.GetString()).Should().Contain(["Peak rise", "Lowest reading"]);
         catalogue.Datasets.Single(d => d.Name == "event_occurrence").XKinds.Should().BeEquivalentTo(["time_of_day", "category"]);
+    }
+
+    [Fact]
+    public void Each_group_has_the_hue_the_event_curves_draw_it_in_and_the_counts_carry_it()
+    {
+        EventResponseDataset.GroupHue(1).Should().Be(ChartColor.Profile);
+        EventResponseDataset.GroupHue(2).Should().Be(ChartColor.Chart3);
+        EventResponseDataset.GroupHue(3).Should().Be(ChartColor.Override);
+        EventResponseDataset.GroupHue(4).Should().Be(ChartColor.Profile, "the charts' cohort hues repeat after three");
+        foreach (var dataset in new IReportDataset[] { new EventOutcomeSpreadDataset(), new EventOccurrenceDataset() })
+            dataset.Fields.Where(f => f.Name.StartsWith("events", StringComparison.Ordinal))
+                .Select(f => f.Color).Should().Equal(ChartColor.Profile, ChartColor.Chart3, ChartColor.Override, ChartColor.Profile, ChartColor.Chart3, ChartColor.Override);
+    }
+
+    [Fact]
+    public void A_layer_of_one_groups_events_takes_the_groups_hue_and_keeps_it_on_a_shared_track()
+    {
+        ReportLayerResult Layer(string id, ChartColor? color) => new()
+        {
+            Id = id, Title = id, XKind = ReportXKind.Value, Side = ReportAxisSide.None, Mark = ReportMark.Points, Bindings = new ReportLayerBindings { X = "startGlucose", Y = ["peakRise"] },
+            Fields = [new ReportField("peakRise", "Peak rise", ReportFieldKind.Number, "mg/dL", "")],
+            Status = ReportPanelStatus.Ok, Summary = "", Window = new ReportWindow(0, 1), Color = color,
+        };
+
+        var hued = ReportSpecRunner.Hue([Layer("g1", ChartColor.Profile), Layer("g2", ChartColor.Chart3)]);
+
+        hued.Select(l => l.Color).Should().Equal(ChartColor.Profile, ChartColor.Chart3);
+    }
+
+    [Fact]
+    public void The_glucose_percentiles_of_event_groups_and_the_typical_day_carry_the_glucose_color()
+    {
+        new EventResponseDataset().Fields.Where(f => f.Name.StartsWith("glucoseP", StringComparison.Ordinal) || f.Name.StartsWith("deltaP", StringComparison.Ordinal))
+            .Should().HaveCount(10).And.OnlyContain(f => f.Color == ChartColor.GlucoseInRange);
+        new DailyProfileDataset().Fields.Where(f => f.Name.StartsWith("glucoseP", StringComparison.Ordinal))
+            .Should().HaveCount(5).And.OnlyContain(f => f.Color == ChartColor.GlucoseInRange);
+    }
+
+    [Fact]
+    public void The_catalogue_states_which_events_each_figure_is_worked_out_for()
+    {
+        foreach (var name in new[] { "event_response", "event_outcomes", "event_outcome_spread", "event_occurrence" })
+        {
+            var figures = ReportCatalogueTests.Catalogue().Datasets.Single(d => d.Name == name).Parameters.GetProperty("x-eventFigures");
+            var responses = figures.GetProperty("responses");
+            responses.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(Enum.GetNames<EventAnchorKind>());
+            foreach (var anchor in Enum.GetValues<EventAnchorKind>())
+                responses.GetProperty(anchor.ToString()).GetString().Should().Be(
+                    Nocturne.Core.Clinical.LoopAnalysis.EventAnchors.ResponseOf(anchor) == EventResponseKind.Rise ? "rise" : "fall");
+            string[] For(string figure) => [.. figures.GetProperty("figures").GetProperty(figure).EnumerateArray().Select(a => a.GetString()!)];
+            For("peakRise").Should().Contain(["Meal", "UnannouncedRise", "SensorStart", "HighStart"]).And.NotContain("LowStart");
+            For("nadir").Should().Contain(["CorrectionBolus", "LowStart", "AnyBolus"]).And.NotContain("Meal");
+            For("grams").Should().Equal("Meal");
+            For("gramsPerUnit").Should().Equal("Meal");
+            For("startGlucose").Should().HaveCount(Enum.GetValues<EventAnchorKind>().Length);
+        }
     }
 }

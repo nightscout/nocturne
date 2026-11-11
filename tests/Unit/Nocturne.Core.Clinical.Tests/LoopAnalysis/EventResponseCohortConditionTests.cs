@@ -371,4 +371,30 @@ public class EventResponseCohortConditionTests
         range.Cohorts.Single().Events.Should().Be(counted ? 1 : 0);
         range.Cohorts.Single().MissingAnchorIob.Should().Be(0);
     }
+
+    [Fact]
+    public void ALowTreatment_IsTheFirstCarbsLoggedDuringALow_OnePerLow()
+    {
+        var low = Local(11, 3);
+        var noCarbs = Local(12, 3);
+        CarbEvent[] carbs = [new(low - 10 * Minute, 20), new(low + 10 * Minute, 15), new(low + 20 * Minute, 15), new(Local(11, 8), 40)];
+
+        var range = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.LowTreatment }],
+            glucose: Readings(Low(low, 40, Low(noCarbs, 40, InRange))), carbs: carbs);
+
+        range.Events.Should().ContainSingle().Which.At.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(low + 10 * Minute).UtcDateTime,
+            "carbs before the low are not its treatment, the second entry is not the first, and the second low had none");
+        range.Events.Single().Grams.Should().BeNull("a treatment is not a meal, so it has no grams per unit");
+    }
+
+    [Fact]
+    public void SiteChangesWithinTwoHours_AreOneChange()
+    {
+        var pod = Local(11, 9);
+
+        var anchors = EventAnchors.Merged([pod, pod + 10 * Minute, pod + 3 * Hour], EventAnchorKind.SiteChange);
+
+        anchors.Select(a => a.Mills).Should().Equal(pod, pod + 3 * Hour);
+    }
 }

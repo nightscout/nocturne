@@ -124,7 +124,8 @@ public class LoopAnalysisLoopHealthZoneTests
             aidSystemMetrics: reader,
             deviceDates: deviceDates,
             deviceEventRepository: Mock.Of<IDeviceEventRepository>(),
-            treatmentFoodRepository: Mock.Of<ITreatmentFoodRepository>());
+            treatmentFoodRepository: Mock.Of<ITreatmentFoodRepository>(),
+            sleepSessionRepository: Mock.Of<ISleepSessionRepository>());
 
         await service.GetLoopHealthAsync(
             new LoopAnalysisFilter

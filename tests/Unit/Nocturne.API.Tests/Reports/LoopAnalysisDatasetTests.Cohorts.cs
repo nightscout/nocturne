@@ -231,4 +231,39 @@ public partial class LoopAnalysisDatasetTests
         ReportLinks.For("https://x", Panel(new ReportEventCohort { Anchor = EventAnchorKind.LowStart }), result, "UTC")
             .Should().Contain("anchor2=LowStart");
     }
+
+    [Theory]
+    [InlineData(EventAnchorKind.SiteChange, "Site change", "device_events")]
+    [InlineData(EventAnchorKind.SleepStart, "Sleep start", "sleep_sessions")]
+    [InlineData(EventAnchorKind.Wake, "Wake-up", "sleep_sessions")]
+    [InlineData(EventAnchorKind.LowTreatment, "Low treatment", "treatments")]
+    [InlineData(EventAnchorKind.AnyBolus, "Bolus", "treatments")]
+    public void A_new_anchor_has_words_and_is_audited_as_the_category_it_is_read_from(EventAnchorKind anchor, string words, string category)
+    {
+        EventResponseDataset.AnchorWords(anchor).Should().Be(words);
+        EventResponseDataset.AnchorCategory(anchor).Should().Be(category);
+        CohortErrors($$"""[ { "anchor": "{{anchor}}" } ]""").Should().BeEmpty();
+        EventResponseDataset.SlotSentence($"{words}: all", anchor, 30, false, null, false)
+            .Should().Be($"{words}: all, 30 minutes after the {words.ToLowerInvariant()}: no readings.");
+    }
+
+    [Fact]
+    public void A_report_asks_for_up_to_six_groups_each_read_as_the_endpoint_reads_one()
+    {
+        var six = string.Join(", ", Enumerable.Repeat("""{ "anchor": "Meal" }""", 5).Append("""{ "anchor": "Meal", "grams": { "min": 80, "max": 20 } }"""));
+        CohortErrors($"[ {six} ]").Should().BeEmpty();
+        CohortErrors($$"""[ {{six}}, { "anchor": "LowStart" } ]""").Should().ContainSingle()
+            .Which.Message.Should().Be("Use 1 to 6 groups, or none for every meal.");
+
+        var parameters = new EventResponseParameters
+        {
+            Cohorts = [.. Enumerable.Range(0, 5).Select(_ => new ReportEventCohort { Anchor = EventAnchorKind.LowStart }),
+                new ReportEventCohort { Anchor = EventAnchorKind.Meal, Grams = new ReportGrams { Min = 80, Max = 20 } }],
+        };
+        var definition = parameters.ToDefinition(parameters.AppliedCohorts);
+
+        definition.Cohorts.Select(c => c.Cohort).Should().Equal(1, 2, 3, 4, 5, 6);
+        (definition.Cohorts[5].MinGrams, definition.Cohorts[5].MaxGrams).Should().Be((20, 80), "grams the wrong way round are swapped, as on the endpoint");
+        parameters.HasReportOnlyCohorts.Should().BeTrue("the Meals and events page shows at most three groups");
+    }
 }

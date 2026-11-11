@@ -115,7 +115,8 @@ public class LoopAnalysisServiceReadTests
             aidSystemMetrics: null!,
             deviceDates: DeviceDateClockDoubles.Utc(),
             deviceEventRepository: Mock.Of<IDeviceEventRepository>(),
-            treatmentFoodRepository: Mock.Of<ITreatmentFoodRepository>());
+            treatmentFoodRepository: Mock.Of<ITreatmentFoodRepository>(),
+            sleepSessionRepository: Mock.Of<ISleepSessionRepository>());
     }
 
     [Fact]

@@ -40,7 +40,9 @@ public class EventResponseCalculatorTests
         long? to = null,
         long? now = null,
         IReadOnlyDictionary<long, IReadOnlyList<MealFood>>? mealFoods = null,
-        bool includeTraces = false)
+        bool includeTraces = false,
+        IReadOnlyList<long>? siteChanges = null,
+        IReadOnlyList<MillsInterval>? sleep = null)
     {
         var definition = new EventResponseDefinition
         {
@@ -61,6 +63,8 @@ public class EventResponseCalculatorTests
             },
             Sources = sources ?? new LoopAnalysisMaskSources(),
             SensorStarts = sensorStarts ?? [],
+            SiteChanges = siteChanges ?? [],
+            SleepSessions = sleep ?? [],
             Now = now ?? long.MaxValue,
             MealFoods = mealFoods ?? new Dictionary<long, IReadOnlyList<MealFood>>(),
         };
@@ -587,6 +591,11 @@ public class EventResponseCalculatorTests
         { EventAnchorKind.TemporaryTargetStart, EventResponseKind.Fall },
         { EventAnchorKind.LowStart, EventResponseKind.Fall },
         { EventAnchorKind.HighStart, EventResponseKind.Rise },
+        { EventAnchorKind.SiteChange, EventResponseKind.Rise },
+        { EventAnchorKind.SleepStart, EventResponseKind.Rise },
+        { EventAnchorKind.Wake, EventResponseKind.Rise },
+        { EventAnchorKind.LowTreatment, EventResponseKind.Rise },
+        { EventAnchorKind.AnyBolus, EventResponseKind.Fall },
     };
 
     [Fact]
@@ -606,18 +615,21 @@ public class EventResponseCalculatorTests
             glucose: Readings(From, To, anchor switch
             {
                 EventAnchorKind.LowStart => t => t >= at && t < at + 30 * Minute ? 60 : 120,
+                EventAnchorKind.LowTreatment => t => t >= at - 20 * Minute && t < at + 20 * Minute ? 60 : 120,
                 EventAnchorKind.HighStart => t => t >= at && t < at + 2 * Hour ? 200 : 120,
                 _ => t => t <= at + 25 * Minute ? 120 : Math.Min(200, 120 + 3 * (t - at - 25 * Minute) / (double)Minute),
             }),
-            carbs: anchor == EventAnchorKind.Meal ? [new(at, 40)] : [],
-            doses: anchor == EventAnchorKind.CorrectionBolus ? [new(at, 2, false)] : [],
+            carbs: anchor is EventAnchorKind.Meal or EventAnchorKind.LowTreatment ? [new(at, 15)] : [],
+            doses: anchor is EventAnchorKind.CorrectionBolus or EventAnchorKind.AnyBolus ? [new(at, 2, false)] : [],
             sources: new LoopAnalysisMaskSources
             {
                 Exercise = anchor == EventAnchorKind.ExerciseStart ? [new(at, at + Hour)] : [],
                 Overrides = anchor == EventAnchorKind.OverrideStart ? [new(at, at + Hour)] : [],
                 TemporaryTargets = anchor == EventAnchorKind.TemporaryTargetStart ? [new(at, at + Hour)] : [],
             },
-            sensorStarts: anchor == EventAnchorKind.SensorStart ? [at] : []);
+            sensorStarts: anchor == EventAnchorKind.SensorStart ? [at] : [],
+            siteChanges: anchor == EventAnchorKind.SiteChange ? [at] : [],
+            sleep: anchor == EventAnchorKind.SleepStart ? [new(at, at + 7 * Hour)] : anchor == EventAnchorKind.Wake ? [new(at - 7 * Hour, at)] : []);
 
         EventAnchors.ResponseOf(anchor).Should().Be(expected);
         var cohort = range.Cohorts.Single();

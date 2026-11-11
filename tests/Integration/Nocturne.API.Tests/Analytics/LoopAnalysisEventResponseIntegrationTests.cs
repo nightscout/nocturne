@@ -424,6 +424,51 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
     }
 
     /// <summary>
+    /// Over the seeded week: the days filtered by their carbs, every lunch bolus as an event, and six
+    /// groups in one report panel.
+    /// </summary>
+    [Fact]
+    public async Task Report_day_filters_new_anchors_and_six_groups_run_over_the_seeded_week()
+    {
+        await SeedProfileAsync("Australia/Sydney");
+        await SeedWeekAsync(WeekStart);
+        object Panel(string id, object dataset, string kind = "table") => new { id, kind, dataset };
+        var range = new { from = WeekStart.ToString("o"), to = WeekStart.AddDays(7).ToString("o") };
+        var spec = new
+        {
+            version = 1,
+            range,
+            panels = new[]
+            {
+                Panel("carbDays", new { name = "daily_summary", days = new { kind = "carbs", minCarbs = 40 } }),
+                Panel("otherDays", new { name = "daily_summary", days = new { kind = "carbs", minCarbs = 40, others = true } }),
+                Panel("boluses", new { name = "event_response", cohorts = new[] { new { anchor = "AnyBolus" } } }),
+                Panel("six", new
+                {
+                    name = "event_response",
+                    cohorts = new object[]
+                    {
+                        new { anchor = "Meal" }, new { anchor = "UnannouncedRise" }, new { anchor = "AnyBolus" },
+                        new { anchor = "HighStart" }, new { anchor = "LowTreatment" }, new { anchor = "CorrectionBolus" },
+                    },
+                }),
+            },
+        };
+
+        var response = await AuthenticatedClient.PostAsJsonAsync("/api/v4/reports/custom/run", new { spec });
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        body.GetProperty("errors").GetArrayLength().Should().Be(0, body.ToString());
+        var panels = body.GetProperty("result").GetProperty("panels").EnumerateArray().ToDictionary(p => p.GetProperty("id").GetString()!);
+        panels["carbDays"].GetProperty("rows").GetArrayLength().Should().Be(7, panels["carbDays"].GetProperty("summary").GetString());
+        panels["carbDays"].GetProperty("summary").GetString().Should().StartWith("Only days with 40 g of carbs or more: 7 of 7 days.");
+        panels["otherDays"].GetProperty("rows").GetArrayLength().Should().Be(0);
+        panels["boluses"].GetProperty("facts")[0].GetProperty("value").GetString().Should().Be("7", panels["boluses"].GetProperty("summary").GetString());
+        panels["six"].GetProperty("cohorts").GetArrayLength().Should().Be(6);
+        panels["six"].GetProperty("summary").GetString().Should().Contain("Cohort 6 (Correction bolus: all)");
+    }
+
+    /// <summary>
     /// Seven days from <paramref name="start"/>, local midnight: glucose every five minutes at 110,
     /// up 80 an hour after a 45 g lunch with a 4.5 U bolus at 12:00 and back by 15:00, and climbing
     /// 3 mg/dL a minute from 19:00 to 200 with no carbs, answered by six 0.3 U automatic boluses;

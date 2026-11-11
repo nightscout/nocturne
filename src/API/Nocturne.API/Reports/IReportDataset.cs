@@ -296,8 +296,8 @@ internal sealed record ReportDatasetOutput
     /// <summary>The one sentence the view prints under the facts; the summary carries every detail.</summary>
     public string? Sentence { get; init; }
 
+    /// <summary>
     /// The fields <see cref="Sentence"/> is about (<see cref="ReportAbout"/>): a chart layer prints it only when it draws them all.
-    /// The fields <see cref="Sentence"/> is about: a chart layer prints it only when it draws one of them.
     /// Null for a sentence about the whole dataset; empty for one about a table's rows, which no chart prints.
     /// </summary>
     public IReadOnlyList<string>? SentenceAbout { get; init; }
@@ -325,6 +325,9 @@ internal sealed record ReportDatasetOutput
 
     /// <summary>Labels that replace a field's catalogue label for this run: a comparison's period names, say.</summary>
     public IReadOnlyDictionary<string, string>? FieldLabels { get; init; }
+
+    /// <summary>The hue a chart layer of these rows is drawn in, where the data names one: an event group's own hue.</summary>
+    public ChartColor? Color { get; init; }
 
     /// <summary>The query the panel's web report opens with, in place of the range's days; null for the range's days.</summary>
     public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
@@ -360,7 +363,7 @@ internal sealed record ReportBandSpan(string Label, string Low, string High)
     }
 }
 
-/// <summary>An event cohort a panel asked for: its number (1 to 3, in the order sent) and the label that names its filter.</summary>
+/// <summary>An event cohort a panel asked for: its number (1 to 6, in the order sent) and the label that names its filter.</summary>
 internal sealed record ReportCohort(int Number, string Label);
 
 internal sealed record ReportOmittedField(string Field, string Scope);

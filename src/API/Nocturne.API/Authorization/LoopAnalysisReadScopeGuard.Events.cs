@@ -6,8 +6,9 @@ namespace Nocturne.API.Authorization;
 /// <summary>
 /// The Meals and events page. An anchor is drawn from a category as a series is: meals, correction
 /// boluses and the starts of exercise, overrides and temporary targets are treatments, sensor
-/// starts are devices, an unannounced rise is read off glucose and the carbs and loop
-/// correction around it, and the start of a low or a high off glucose alone. Every event is also read off glucose, since one counts only with a start
+/// starts and site changes are devices, sleep starts and wake-ups are sleep sessions, an unannounced
+/// rise is read off glucose and the carbs and loop correction around it, a low treatment off glucose
+/// and carbs, any bolus off boluses, and the start of a low or a high off glucose alone. Every event is also read off glucose, since one counts only with a start
 /// glucose, so every anchor needs <c>glucose.read</c> as well: otherwise the counts would say where
 /// CGM data existed. A caller may ask only for anchors it could read, since the curves and counts
 /// aligned on an anchor would otherwise place each one in time; the controller drops the rest
@@ -30,6 +31,11 @@ internal static partial class LoopAnalysisReadScopeGuard
             [EventAnchorKind.UnannouncedRise] = [Scope.GlucoseRead, Scope.TreatmentsRead],
             [EventAnchorKind.LowStart] = [Scope.GlucoseRead],
             [EventAnchorKind.HighStart] = [Scope.GlucoseRead],
+            [EventAnchorKind.SiteChange] = [Scope.GlucoseRead, Scope.DevicesRead],
+            [EventAnchorKind.SleepStart] = [Scope.GlucoseRead, Scope.SleepRead],
+            [EventAnchorKind.Wake] = [Scope.GlucoseRead, Scope.SleepRead],
+            [EventAnchorKind.LowTreatment] = [Scope.GlucoseRead, Scope.TreatmentsRead],
+            [EventAnchorKind.AnyBolus] = [Scope.GlucoseRead, Scope.TreatmentsRead],
         };
 
     /// <summary>The options beside the cohorts, by query parameter, and how to drop each.</summary>

@@ -105,6 +105,123 @@ internal static class ReportWeekdays
     };
 }
 
+/// <summary>What a local day had, as a day filter names it.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportDayKind>))]
+internal enum ReportDayKind
+{
+    [JsonStringEnumMemberName("exercise")] Exercise,
+    [JsonStringEnumMemberName("illness")] Illness,
+    [JsonStringEnumMemberName("low")] [Description("A low")] Low,
+    [JsonStringEnumMemberName("lowOvernight")] [Description("A low between 00:00 and 06:00")] LowOvernight,
+    [JsonStringEnumMemberName("carbs")] [Description("Carbs in a range")] Carbs,
+}
+
+[Description(
+    "Keep only the local days that had something, or with 'others' every other day, so two layers can set them side by side. "
+    + "A day the token cannot read whole is in neither group.")]
+[DisplayName("Days")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ReportDayFilter
+{
+    public const double CarbsLimit = 2000;
+
+    [Description(
+        "What the day had: exercise (an exercise span on the day), illness (an illness span on the day), low (a low on the day, "
+        + "as the glucose statistics count lows: at least 15 minutes under 70 mg/dL), lowOvernight (such a low between 00:00 and "
+        + "06:00 local time), or carbs (the day's carbs in the range of minCarbs and maxCarbs). Exercise, illness and carbs need the "
+        + "treatments permission.")]
+    [DisplayName("The day had")]
+    [JsonRequired]
+    public ReportDayKind Kind { get; init; }
+
+    [Description("Carbs only: least carbs in the day, g, 0 to 2000. Optional.")]
+    [Range(0, CarbsLimit)]
+    public double? MinCarbs { get; init; }
+
+    [Description("Carbs only: most carbs in the day, g, 0 to 2000. Optional.")]
+    [Range(0, CarbsLimit)]
+    public double? MaxCarbs { get; init; }
+
+    [Description("Keep every other day: the days that did not have it.")]
+    [DisplayName("All other days")]
+    public bool Others { get; init; }
+
+    [JsonIgnore]
+    public bool NeedsTreatments => Kind is ReportDayKind.Exercise or ReportDayKind.Illness or ReportDayKind.Carbs;
+
+    public DayCondition ToCondition() => new()
+    {
+        Kind = Kind switch
+        {
+            ReportDayKind.Exercise => DayConditionKind.Exercise,
+            ReportDayKind.Illness => DayConditionKind.Illness,
+            ReportDayKind.Low => DayConditionKind.Low,
+            ReportDayKind.LowOvernight => DayConditionKind.LowOvernight,
+            ReportDayKind.Carbs => DayConditionKind.Carbs,
+            _ => throw new ArgumentOutOfRangeException(nameof(Kind), Kind, null),
+        },
+        MinCarbs = MinCarbs,
+        MaxCarbs = MaxCarbs,
+        Others = Others,
+    };
+
+    /// <summary>The days kept, in words: "days with exercise", "days without a low", "days with less than 150 g of carbs".</summary>
+    public string Words()
+    {
+        static string G(double grams) => grams.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+        if (Kind == ReportDayKind.Carbs)
+            return (MinCarbs, MaxCarbs, Others) switch
+            {
+                ({ } low, { } high, false) => $"days with {G(low)} to {G(high)} g of carbs",
+                ({ } low, { } high, true) => $"days with less than {G(low)} or more than {G(high)} g of carbs",
+                ({ } low, null, false) => $"days with {G(low)} g of carbs or more",
+                ({ } low, null, true) => $"days with less than {G(low)} g of carbs",
+                (null, { } high, false) => $"days with {G(high)} g of carbs or less",
+                (null, { } high, true) => $"days with more than {G(high)} g of carbs",
+                _ => "every day",
+            };
+        var what = Kind switch
+        {
+            ReportDayKind.Exercise => "exercise",
+            ReportDayKind.Illness => "illness",
+            ReportDayKind.Low => "a low",
+            _ => "a low between 00:00 and 06:00",
+        };
+        return Others ? $"days without {what}" : $"days with {what}";
+    }
+
+    /// <summary>
+    /// How the days fell, as a summary line: "Only days with exercise: 6 of 28 days; 22 did not have it. 1 day the
+    /// token cannot read whole is in neither group."
+    /// </summary>
+    public string Summary(DaySelection? selection)
+    {
+        if (selection is null)
+            return $"Only {Words()}.";
+        var decided = selection.Matching + selection.NotMatching;
+        var line = $"Only {Words()}: {selection.Kept.Count} of {(decided == 1 ? "1 day" : $"{decided} days")}.";
+        if (selection.Undecided > 0)
+            line += $" {(selection.Undecided == 1 ? "1 day starts" : $"{selection.Undecided} days start")} before the history this token reads, "
+                + "so it is in neither group.";
+        return line;
+    }
+
+    public IEnumerable<(string Field, string Message)> Validate(string at)
+    {
+        if (!Enum.IsDefined(Kind))
+            yield return ($"{at}.kind", "Send one of: exercise, illness, low, lowOvernight, carbs.");
+        var carbs = Kind == ReportDayKind.Carbs;
+        if (!carbs && (MinCarbs ?? MaxCarbs) is not null)
+            yield return ($"{at}.minCarbs", "Only a filter of carbs has carb limits. Remove them, or send kind carbs.");
+        if (carbs && MinCarbs is null && MaxCarbs is null)
+            yield return ($"{at}.minCarbs", "Send minCarbs, maxCarbs, or both.");
+        if (MinCarbs is < 0 or > CarbsLimit || MaxCarbs is < 0 or > CarbsLimit)
+            yield return ($"{at}.minCarbs", $"Send grams from 0 to {CarbsLimit}.");
+        else if (MinCarbs > MaxCarbs)
+            yield return ($"{at}.minCarbs", "Send a lowest that is not above the highest.");
+    }
+}
+
 [Description("A local time-of-day window, minutes after midnight. With 'toMinute' before 'fromMinute' it wraps past midnight.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportTimeOfDay
@@ -206,7 +323,9 @@ internal sealed record ReportEventCohort
     [Description(
         "What the events are aligned on: Meal (a carb entry), CorrectionBolus (a manual bolus with no meal near it), "
         + "SensorStart, ExerciseStart, OverrideStart, TemporaryTargetStart, UnannouncedRise (a meal-like rise with no carbs logged), "
-        + "LowStart or HighStart. LowStart is the first reading of a low and HighStart the first reading of a high, by the rule "
+        + "LowStart, HighStart, SiteChange (a site, cannula or pod change), SleepStart and Wake (the start and end of a sleep "
+        + "session, naps included; need the sleep permission), LowTreatment (the first carbs logged during a low) or AnyBolus "
+        + "(every manual bolus, for a meal or not). LowStart is the first reading of a low and HighStart the first reading of a high, by the rule "
         + "the glucose statistics count lows and highs by: a low starts after at least 15 minutes of readings below 70 mg/dL "
         + "(3.9 mmol/L), a high after at least 15 minutes above 180 mg/dL (10.0 mmol/L), and each ends after at least "
         + "15 minutes back in range or at a gap in the readings. These limits are the same for everyone, not the profile's target.")]
@@ -288,7 +407,7 @@ internal sealed record ReportDateRange
 }
 
 [Description(
-    "event_response: glucose, glucose change, IOB, COB and net loop correction aligned on up to three cohorts of events "
+    "event_response: glucose, glucose change, IOB, COB and net loop correction aligned on up to six cohorts of events "
     + "(meals, correction boluses, sensor starts, exercise, overrides, temporary targets, unannounced rises, the starts of "
     + "lows and highs), each spread across its events as percentiles in five-minute slots from the event; and each event "
     + "with its figures.")]
@@ -300,8 +419,15 @@ internal record EventResponseParameters : LoopAnalysisDatasetParameters
     [JsonIgnore]
     public override string DatasetName => Name;
 
-    [Description("The cohorts, 1 to 3. Optional; every meal when missing.")]
-    [Length(1, EventResponseDefinition.MaxCohorts)]
+    /// <summary>
+    /// The most groups a report asks for. The Meals and events endpoint takes three
+    /// (<see cref="EventResponseDefinition.MaxCohorts"/>, its numbered query); a report builds each
+    /// group by that query alone (<see cref="ToDefinition"/>), so it is held only by the cost of a read.
+    /// </summary>
+    public const int MaxGroups = 6;
+
+    [Description("The cohorts, 1 to 6. Optional; every meal when missing. The Meals and events page shows at most 3.")]
+    [Length(1, MaxGroups)]
     [DisplayName("Event groups")]
     public IReadOnlyList<ReportEventCohort>? Cohorts { get; init; }
 
@@ -337,7 +463,7 @@ internal record EventResponseParameters : LoopAnalysisDatasetParameters
 
     /// <summary>A group the Meals and events page cannot show: all others, or a condition on the state at the event.</summary>
     [JsonIgnore]
-    public bool HasReportOnlyCohorts => AppliedCohorts.Any(c =>
+    public bool HasReportOnlyCohorts => AppliedCohorts.Count > EventResponseDefinition.MaxCohorts || AppliedCohorts.Any(c =>
         c.Others || c.MinutesSinceMeal is { IsSet: true } || c.StartGlucose is { IsSet: true } || c.InsulinOnBoard is { IsSet: true });
 
     /// <summary>
@@ -346,7 +472,16 @@ internal record EventResponseParameters : LoopAnalysisDatasetParameters
     /// </summary>
     public EventResponseDefinition ToDefinition(IReadOnlyList<ReportEventCohort> cohorts)
     {
-        var definition = ToEventQuery(cohorts).ToDefinition();
+        var definition = ToEventQuery(cohorts.Take(1).ToList()).ToDefinition();
+        definition.Cohorts =
+        [
+            .. cohorts.Select((asked, i) =>
+            {
+                var cohort = ToEventQuery([asked]).ToDefinition().Cohorts.Single();
+                cohort.Cohort = i + 1;
+                return cohort;
+            }),
+        ];
         foreach (var cohort in definition.Cohorts)
         {
             var asked = cohorts[cohort.Cohort - 1];
@@ -414,12 +549,12 @@ internal abstract record EventListParameters : EventResponseParameters
         "Only the events of this group, by its number in the list of groups. Optional; the events of every group when missing. "
         + "To set two groups side by side, draw a layer for each.")]
     [DisplayName("Group")]
-    [Range(1, EventResponseDefinition.MaxCohorts)]
+    [Range(1, MaxGroups)]
     public int? Group { get; init; }
 }
 
 [Description(
-    "event_outcomes: each event of up to three groups as one row: its figures (peak rise, drop, lowest reading, minutes to "
+    "event_outcomes: each event of up to six groups as one row: its figures (peak rise, drop, lowest reading, minutes to "
     + "them, net insulin) and the state at the event (glucose, carbs, minutes since the last carbs, IOB, time of day), "
     + "with the least-squares line of each figure against the value the chart lies along.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -519,6 +654,9 @@ internal sealed record DailyProfileParameters : LoopAnalysisDatasetParameters
 
     [JsonIgnore]
     public override IReadOnlyList<ReportWeekday>? Weekdays => DayOfWeek;
+
+    [Description("Only the days that had something, or every other day. Optional; every day when missing.")]
+    public ReportDayFilter? Days { get; init; }
 }
 
 [Description(

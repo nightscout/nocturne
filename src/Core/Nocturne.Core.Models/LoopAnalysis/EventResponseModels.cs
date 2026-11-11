@@ -33,6 +33,21 @@ public enum EventAnchorKind
 
     /// <summary>The first reading of a high: an episode above range, at least 15 minutes above 180 mg/dL; see <see cref="LowStart"/>.</summary>
     HighStart,
+
+    /// <summary>An infusion site change: a site, cannula or pod change, or a pod activated; records within two hours are one change.</summary>
+    SiteChange,
+
+    /// <summary>The start of a sleep session, a nap included.</summary>
+    SleepStart,
+
+    /// <summary>The end of a sleep session.</summary>
+    Wake,
+
+    /// <summary>The first carb entry during a low (<see cref="LowStart"/>'s episode).</summary>
+    LowTreatment,
+
+    /// <summary>Every manual bolus, for a meal or not; the algorithm's automatic boluses are not.</summary>
+    AnyBolus,
 }
 
 /// <summary>Which way glucose is expected to go after an anchor, and so which figures describe it.</summary>

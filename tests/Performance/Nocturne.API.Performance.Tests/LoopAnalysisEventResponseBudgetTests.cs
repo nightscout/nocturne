@@ -30,9 +30,11 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
     /// </param>
     [Theory]
     [Trait("Category", "Performance")]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void NinetyDaysOfMealsAndRises_ComputeWithinBudget(bool excursions)
+    /// <param name="sixGroups">Instead: six groups, the most a custom report asks for, over the longest window both ways.</param>
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void NinetyDaysOfMealsAndRises_ComputeWithinBudget(bool excursions, bool sixGroups)
     {
         var to = new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.FromHours(10)).ToUnixTimeMilliseconds();
         var from = to - 90 * Day;
@@ -73,7 +75,20 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
         var timeline = new TherapyTimeline([new TherapySegment(compareFrom - Day, end + 1, snapshot)]);
         var iob = new IobCalculator(null!, null!, null!, null!, null!, null!);
         var cob = new CobCalculator(NullLogger<CobCalculator>.Instance, iob, null!, null!, null!, null!);
-        var definition = excursions ? new EventResponseDefinition
+        var definition = sixGroups ? new EventResponseDefinition
+        {
+            MinutesBefore = EventResponseDefinition.MinutesBeforeChoices[^1],
+            MinutesAfter = EventResponseDefinition.MinutesAfterChoices[^1],
+            Cohorts =
+            [
+                new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FromMinute = 5 * 60, ToMinute = 10 * 60 },
+                new EventCohortDefinition { Cohort = 2, Anchor = EventAnchorKind.Meal, FromMinute = 11 * 60, ToMinute = 14 * 60 },
+                new EventCohortDefinition { Cohort = 3, Anchor = EventAnchorKind.Meal, Others = true },
+                new EventCohortDefinition { Cohort = 4, Anchor = EventAnchorKind.UnannouncedRise },
+                new EventCohortDefinition { Cohort = 5, Anchor = EventAnchorKind.HighStart, MinMinutesSinceMeal = 240 },
+                new EventCohortDefinition { Cohort = 6, Anchor = EventAnchorKind.AnyBolus },
+            ],
+        } : excursions ? new EventResponseDefinition
         {
             MinutesBefore = EventResponseDefinition.MinutesBeforeChoices[^1],
             MinutesAfter = EventResponseDefinition.MinutesAfterChoices[^1],
@@ -135,7 +150,7 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
 
         Assert.True(primary.Cohorts[1].Events > 0);
         Assert.True(primary.Cohorts[2].Events > 0, "the unannounced midnight rise is found every day");
-        Assert.Equal(excursions ? 144 : 108, primary.Cohorts[0].Slots.Count);
+        Assert.Equal(excursions || sixGroups ? 144 : 108, primary.Cohorts[0].Slots.Count);
         if (excursions)
             Assert.True(primary.Cohorts[0].Events >= 89, "a low a day");
         Assert.True(stopwatch.Elapsed < Budget, $"took {stopwatch.Elapsed}, budget {Budget}");

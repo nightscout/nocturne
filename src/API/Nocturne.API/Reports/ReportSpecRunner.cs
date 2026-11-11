@@ -398,7 +398,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             }
             var lead = (layer.Bindings.Y ?? []).Concat(layer.Bindings.Edges ?? [])
                 .Select(name => layer.Fields.FirstOrDefault(f => f.Name == name)).OfType<ReportField>().FirstOrDefault();
-            var key = lead is null ? "foreground" : lead.GlucoseScale ? "glucose" : lead.Color is { } c ? ReportWire.Name(c) : "foreground";
+            var key = layer.Color is { } own ? ReportWire.Name(own)
+                : lead is null ? "foreground" : lead.GlucoseScale ? "glucose" : lead.Color is { } c ? ReportWire.Name(c) : "foreground";
             if (used.Add(key))
             {
                 hued.Add(layer);
@@ -563,6 +564,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Markers = markers,
             Cohorts = output.Cohorts,
             Omitted = output.Omitted,
+            Color = output.Color,
             Resolution = output.Resolution,
         }, output);
     }

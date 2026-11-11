@@ -23,11 +23,19 @@ internal sealed class EventResponseDataset : IReportDataset
     /// <summary>The most events a table carries; the summary counts every one.</summary>
     public const int MaxEvents = 2000;
 
+    /// <summary>
+    /// Each group's hue, by its number from 1, in the order the event curves draw groups in (the
+    /// charts' cohort hues), so a group reads the same in every chart of it.
+    /// </summary>
+    internal static readonly IReadOnlyList<ChartColor> GroupHues = [ChartColor.Profile, ChartColor.Chart3, ChartColor.Override];
+
+    internal static ChartColor GroupHue(int group) => GroupHues[(group - 1) % GroupHues.Count];
+
     public string Name => EventResponseParameters.Name;
 
     public string Label => "Meals and events";
 
-    public string Description => "Glucose after meals and other events, in up to three groups that you filter.";
+    public string Description => "Glucose after meals and other events, in up to six groups that you filter.";
 
     public Type ParametersType => typeof(EventResponseParameters);
 
@@ -36,19 +44,19 @@ internal sealed class EventResponseDataset : IReportDataset
     private static readonly IReadOnlyList<ReportField> SlotFields =
     [
         new("series", "Series", ReportFieldKind.Category, null, "The cohort and range the row belongs to, as a label."),
-        new("cohort", "Cohort", ReportFieldKind.Number, null, "The cohort's number, 1 to 3, in the order the cohorts were sent.", Companion: true),
+        new("cohort", "Cohort", ReportFieldKind.Number, null, "The cohort's number, 1 to 6, in the order the cohorts were sent.", Companion: true),
         new("range", "Range", ReportFieldKind.Category, null, "primary, or comparison for the comparison range.", Companion: true),
         new("minute", "Minutes from event", ReportFieldKind.Offset, "min", "Start of the five-minute slot, minutes from the event; negative before it."),
-        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose across the cohort's events in the slot.", Aggregate: ReportAggregate.Mean),
-        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of glucose.", Aggregate: ReportAggregate.Mean),
-        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median glucose.", GlucoseScale: true, Aggregate: ReportAggregate.Mean),
-        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of glucose.", Aggregate: ReportAggregate.Mean),
-        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of glucose.", Aggregate: ReportAggregate.Mean),
-        new("deltaP10", "Change P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose minus the glucose at the event.", Aggregate: ReportAggregate.Mean),
-        new("deltaP25", "Change P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the change from the event.", Aggregate: ReportAggregate.Mean),
-        new("deltaP50", "Change median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median change from the event.", Aggregate: ReportAggregate.Mean),
-        new("deltaP75", "Change P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the change from the event.", Aggregate: ReportAggregate.Mean),
-        new("deltaP90", "Change P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the change from the event.", Aggregate: ReportAggregate.Mean),
+        new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose across the cohort's events in the slot.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of glucose.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median glucose.", Color: ChartColor.GlucoseInRange, GlucoseScale: true, Aggregate: ReportAggregate.Mean),
+        new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of glucose.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of glucose.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("deltaP10", "Change P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose minus the glucose at the event.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("deltaP25", "Change P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the change from the event.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("deltaP50", "Change median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median change from the event.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("deltaP75", "Change P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the change from the event.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
+        new("deltaP90", "Change P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the change from the event.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
         new("iobP50", "IOB median", ReportFieldKind.Number, "U", "Median insulin on board.", Scope.TreatmentsRead, ChartColor.InsulinBolus, Aggregate: ReportAggregate.Mean),
         new("cobP50", "COB median", ReportFieldKind.Number, "g", "Median carbs on board.", Scope.TreatmentsRead, ChartColor.Carbs, Aggregate: ReportAggregate.Mean),
         new("netLoopCorrectionP50", "Net loop correction median", ReportFieldKind.Number, "U/h",
@@ -120,8 +128,8 @@ internal sealed class EventResponseDataset : IReportDataset
     public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters)
     {
         var p = (EventResponseParameters)parameters;
-        if (p.Cohorts is { Count: 0 or > EventResponseDefinition.MaxCohorts })
-            yield return ("cohorts", $"Use 1 to {EventResponseDefinition.MaxCohorts} groups, or none for every meal.");
+        if (p.Cohorts is { Count: 0 or > EventResponseParameters.MaxGroups })
+            yield return ("cohorts", $"Use 1 to {EventResponseParameters.MaxGroups} groups, or none for every meal.");
         if (!EventResponseDefinition.MinutesBeforeChoices.Contains(p.MinutesBefore))
             yield return ("minutesBefore", $"Send one of: {string.Join(", ", EventResponseDefinition.MinutesBeforeChoices)}.");
         if (!EventResponseDefinition.MinutesAfterChoices.Contains(p.MinutesAfter))
@@ -139,7 +147,7 @@ internal sealed class EventResponseDataset : IReportDataset
         var cohorts = p.Cohorts ?? [];
         if (cohorts.Count(c => c.Others) > 1)
             yield return ("cohorts", "Only one group can be all others. Turn off all others in the other groups.");
-        for (var i = 0; i < cohorts.Count && i < EventResponseDefinition.MaxCohorts; i++)
+        for (var i = 0; i < cohorts.Count && i < EventResponseParameters.MaxGroups; i++)
         {
             var c = cohorts[i];
             var at = $"cohorts[{i}]";
@@ -332,7 +340,8 @@ internal sealed class EventResponseDataset : IReportDataset
     /// <summary>The category each anchor's events are records of, as the read audit names it.</summary>
     internal static string AnchorCategory(EventAnchorKind anchor) => anchor switch
     {
-        EventAnchorKind.SensorStart => "device_events",
+        EventAnchorKind.SensorStart or EventAnchorKind.SiteChange => "device_events",
+        EventAnchorKind.SleepStart or EventAnchorKind.Wake => "sleep_sessions",
         EventAnchorKind.LowStart or EventAnchorKind.HighStart => "glucose",
         _ => "treatments",
     };
@@ -453,6 +462,11 @@ internal sealed class EventResponseDataset : IReportDataset
         EventAnchorKind.UnannouncedRise => "Unannounced rise",
         EventAnchorKind.LowStart => "Low start",
         EventAnchorKind.HighStart => "High start",
+        EventAnchorKind.SiteChange => "Site change",
+        EventAnchorKind.SleepStart => "Sleep start",
+        EventAnchorKind.Wake => "Wake-up",
+        EventAnchorKind.LowTreatment => "Low treatment",
+        EventAnchorKind.AnyBolus => "Bolus",
         _ => anchor.ToString(),
     };
 
