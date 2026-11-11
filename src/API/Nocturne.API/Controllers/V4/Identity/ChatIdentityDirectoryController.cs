@@ -26,6 +26,7 @@ public class ChatIdentityDirectoryController : ControllerBase
     private readonly ChatIdentityDirectoryService _directory;
     private readonly ChatIdentityPendingLinkService _pending;
     private readonly INocturneDbContextFactory _contextFactory;
+    private readonly ITenantRepository _tenants;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertAcknowledgementService _acknowledgementService;
 
@@ -35,18 +36,21 @@ public class ChatIdentityDirectoryController : ControllerBase
     /// <param name="directory">Service for cross-tenant directory candidate lookups.</param>
     /// <param name="pending">Service for pending link token generation and resolution.</param>
     /// <param name="contextFactory">Factory for creating database context instances.</param>
+    /// <param name="tenants">Repository for looking up the slug of each candidate's tenant.</param>
     /// <param name="tenantAccessor">Accessor for the request's resolved tenant.</param>
     /// <param name="acknowledgementService">The one alert acknowledgement decision.</param>
     public ChatIdentityDirectoryController(
         ChatIdentityDirectoryService directory,
         ChatIdentityPendingLinkService pending,
         INocturneDbContextFactory contextFactory,
+        ITenantRepository tenants,
         ITenantAccessor tenantAccessor,
         IAlertAcknowledgementService acknowledgementService)
     {
         _directory = directory;
         _pending = pending;
         _contextFactory = contextFactory;
+        _tenants = tenants;
         _tenantAccessor = tenantAccessor;
         _acknowledgementService = acknowledgementService;
     }
@@ -72,12 +76,8 @@ public class ChatIdentityDirectoryController : ControllerBase
         var rows = await _directory.GetCandidatesAsync(platform, platformUserId, ct);
         if (rows.Count == 0) return NotFound();
 
-        await using var db = await _contextFactory.CreatePlatformAsync(ct);
-        var tenantIds = rows.Select(r => r.TenantId).ToList();
-        var tenants = await db.Tenants.AsNoTracking()
-            .Where(t => tenantIds.Contains(t.Id))
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(ct);
+        var tenantIds = rows.Select(r => r.TenantId).Distinct().ToList();
+        var tenants = await _tenants.GetManyAsync(tenantIds, ct);
         var slugByTenant = tenants.ToDictionary(t => t.Id, t => t.Slug);
 
         return Ok(new DirectoryCandidatesResponse
@@ -132,6 +132,8 @@ public class ChatIdentityDirectoryController : ControllerBase
     /// chat user acknowledge for everyone. The authority carries the linked subject and no scopes
     /// of its own, so the decision rests on that member's membership: with <c>alerts.readwrite</c>
     /// the excursion is acknowledged for everyone, otherwise it is muted for that member alone.
+    /// Must be called on the link's tenant host. Without an excursion ID, the decision applies to every active excursion of the tenant, and the outcome is <c>muted</c> if any was muted, else <c>acknowledged</c> if any was, else <c>closed</c>.
+    /// If someone else had already acknowledged the excursion, the response names them rather than the chat user.
     /// </summary>
     /// <remarks>
     /// Must be called on the link's tenant host, because the acknowledgement's realtime broadcasts

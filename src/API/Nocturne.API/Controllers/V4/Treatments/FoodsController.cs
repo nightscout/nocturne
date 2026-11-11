@@ -93,6 +93,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// <summary>
     /// List foods with optional filtering and pagination.
     /// This is a V4 endpoint (not Nightscout-legacy) used by the meal attribution UI.
+    /// Without <c>count</c>, returns at most the maximum page size of records. <c>find</c> is free text matched against name, category and subcategory.
     /// </summary>
     /// <remarks>
     /// The picker and the food page ask for no <c>count</c> and render the whole catalog, so an

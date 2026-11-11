@@ -74,9 +74,9 @@ internal sealed class ReportRunCache
             return cached;
 
         var services = request.Services;
-        var raw = await services.GetRequiredService<ISensorGlucoseRepository>().GetForAnalyticsAsync(
-            request.From.UtcDateTime, request.To.UtcDateTime, null, null, int.MaxValue, descending: false, ct: cancellationToken);
-        var entries = await services.GetRequiredService<ICanonicalGlucoseService>().SelectAsync(raw.ToList(), cancellationToken);
+        IReadOnlyList<SensorGlucose> entries = (await services.GetRequiredService<ISensorGlucoseRepository>().GetForAnalyticsAsync(
+            request.From.UtcDateTime, request.To.UtcDateTime, null, null, int.MaxValue, descending: false, ct: cancellationToken,
+            streams: GlucoseStreams.Canonical)).ToList();
         if (entries.Count > 0)
             request.ReadLog.Record("glucose", entries.Count);
         _glucose[key] = entries;

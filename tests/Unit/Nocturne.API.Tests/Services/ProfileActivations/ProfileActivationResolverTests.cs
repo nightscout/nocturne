@@ -125,6 +125,32 @@ public sealed class ProfileActivationResolverTests : IDisposable
         Targets = everyKind ? [new TargetRangeEntry { Time = "00:00", TimeAsSeconds = 0, Low = 90, High = 110 }] : null,
     };
 
+    /// <summary>
+    /// A read of the activations spanning many times holds at most its cap, newest first; times whose
+    /// read would reach it are read apart, so the oldest still resolve to the activation running then.
+    /// </summary>
+    [Fact]
+    public async Task TimesSpanningMoreActivationsThanOneReadHoldsEachResolveToTheirOwn()
+    {
+        _repository
+            .Setup(r => r.GetOverlappingAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime from, DateTime to, int limit, CancellationToken _) => _stored
+                .Where(a => a.StartTimestamp <= to && (a.EndTimestamp is null || a.EndTimestamp > from))
+                .OrderByDescending(a => a.StartTimestamp)
+                .Take(limit)
+                .Reverse()
+                .ToList());
+        var running = Store(0, "Rhys");
+        const long Minute = 60_000;
+        for (var i = 0; i < 5_001; i++)
+            Store(Hour + i * Minute, "Brief", durationMs: Minute / 2);
+
+        var resolved = await Resolver().GetAtAsync([T0 + Hour / 2, T0 + Hour + 5_000 * Minute + 1]);
+
+        resolved[0]!.Activation.Id.Should().Be(running.Id);
+        resolved[1]!.ProfileName.Should().Be("Brief");
+    }
+
     [Fact]
     public async Task TheNewestStartWinsAmongTheActivationsRunning()
     {
@@ -256,6 +282,50 @@ public sealed class ProfileActivationResolverTests : IDisposable
         active.Scaling.Should().BeNull();
         (await BasalRates(Resolver()).GetBasalRateAsync(T0 + Hour)).Should().Be(1.5,
             "150% is already applied to the snapshot, so 2.25 would apply it twice");
+    }
+
+    /// <summary>
+    /// The basal rates of many times read what the rate at each time reads, on both sides of a schedule
+    /// boundary and of an activation boundary: a customized snapshot as uploaded, its timeshift already
+    /// applied, then the store's schedule shifted and scaled by the activation after it.
+    /// </summary>
+    [Fact]
+    public async Task TheRatesOfManyTimesAreTheRateAtEachTime()
+    {
+        _basal.Setup(r => r.GetByProfileNameAsync("Rhys", It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new BasalSchedule
+            {
+                ProfileName = "Rhys",
+                Timestamp = At(-24 * Hour),
+                Entries =
+                [
+                    new ScheduleEntry { Time = "00:00", TimeAsSeconds = 0, Value = 1.0 },
+                    new ScheduleEntry { Time = "14:00", TimeAsSeconds = 14 * 3600, Value = 2.0 },
+                ],
+            },
+        ]);
+        var customized = Snapshot(0);
+        customized.Basal =
+        [
+            new ScheduleEntry { Time = "00:00", TimeAsSeconds = 0, Value = 0.6 },
+            new ScheduleEntry { Time = "10:00", TimeAsSeconds = 10 * 3600, Value = 0.9 },
+        ];
+        Store(-4 * Hour, "Rhys", ProfileActivationPhase.Effective, end: 0, percentage: 150, snapshot: customized,
+            customized: true, enteredBy: "openaps://AndroidAPS").TimeshiftMs = 3 * Hour;
+        Store(0, "Rhys", ProfileActivationPhase.Effective, percentage: 150, enteredBy: "openaps://AndroidAPS")
+            .TimeshiftMs = 2 * Hour;
+        long[] times = [T0 - 6 * Hour, T0 - 3 * Hour, T0 - Hour, T0 + Hour, T0 + 3 * Hour, T0 + 11 * Hour];
+        var rates = BasalRates(Resolver());
+
+        var many = await rates.FindBasalRatesAsync(times);
+        var each = new List<double>();
+        foreach (var time in times)
+            each.Add(await rates.GetBasalRateAsync(time));
+
+        double[] expected = [0.5, 0.6, 0.9, 3.0, 3.0, 1.5];
+        many.Select(r => r ?? 1.0).Should().Equal(expected, (a, b) => Math.Abs(a - b) < 1e-9);
+        each.Should().Equal(expected, (a, b) => Math.Abs(a - b) < 1e-9);
     }
 
     [Fact]
@@ -467,10 +537,11 @@ public sealed class ProfileActivationResolverTests : IDisposable
             snapshot: new ProfileActivationSnapshot { Insulin = new TreatmentInsulinContext { InsulinName = "Fiasp", Dia = 5, Peak = 55 } });
         var effective = Store(Hour, "Rhys", ProfileActivationPhase.Effective, enteredBy: "openaps://AndroidAPS");
         effective.RequestedActivationId = requested.Id;
-        _repository.Setup(r => r.GetByIdAsync(requested.Id, It.IsAny<CancellationToken>())).ReturnsAsync(requested);
+        _repository.Setup(r => r.GetByIdsAsync(It.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(requested.Id)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([requested]);
 
-        var insulin = await new ActiveProfileResolver(Resolver(), _repository.Object, new ProfileStoreTimelineSource(_therapy.Object)).GetActiveInsulinContextAsync(T0 + 2 * Hour);
+        var insulin = await new ActiveProfileResolver(Resolver(), _repository.Object, new ProfileStoreTimelineSource(_therapy.Object)).GetActiveInsulinContextsAsync([T0 + 2 * Hour]);
 
-        insulin!.InsulinName.Should().Be("Fiasp");
+        insulin[0]!.InsulinName.Should().Be("Fiasp");
     }
 }

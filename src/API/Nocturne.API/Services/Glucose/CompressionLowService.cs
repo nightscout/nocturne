@@ -2,7 +2,6 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -10,13 +9,14 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Services.Glucose;
 
 /// <summary>
 /// Domain service for compression low suggestion management. Provides retrieval, review, and
 /// dismissal of <see cref="CompressionLowSuggestion"/> records detected by
-/// <see cref="BackgroundServices.CompressionLowDetectionService"/>, including enrichment of
+/// <see cref="CompressionLowDetectionService"/>, including enrichment of
 /// suggestions with surrounding CGM entries for user review.
 /// </summary>
 /// <seealso cref="ICompressionLowService"/>

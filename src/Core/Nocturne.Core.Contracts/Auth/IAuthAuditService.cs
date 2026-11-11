@@ -51,13 +51,23 @@ public sealed record AuthAuditActor(Guid? SubjectId, string? Credential)
 /// <summary>
 /// Service for recording authentication and authorization audit events.
 /// </summary>
+/// <remarks>
+/// The three audit tables (<c>auth_audit_log</c>, <c>mutation_audit_log</c>, <c>read_access_log</c>)
+/// share one vocabulary, so a query across them reads the same. The actor is the caller who
+/// performed the action: <c>actor_subject_id</c> in all three, with <c>actor_credential</c> in
+/// <c>auth_audit_log</c> for a caller that has no subject. <c>mutation_audit_log</c> and
+/// <c>read_access_log</c> also hold the caller's display name in <c>actor_name</c>. The target is
+/// the subject the action was performed on, and only <c>auth_audit_log</c> has one:
+/// <c>target_subject_id</c>. An actor and a target that are the same subject mean the subject acted
+/// for themselves, and <c>actor_subject_id</c> then repeats <c>target_subject_id</c>.
+/// </remarks>
 public interface IAuthAuditService
 {
     /// <summary>
     /// Log an authentication or authorization event.
     /// </summary>
-    /// <param name="eventType">One of the <c>AuthAuditEventType</c> constants.</param>
-    /// <param name="subjectId">The subject the event happened to, if known.</param>
+    /// <param name="eventType">One of the <see cref="AuthAuditEventType"/> constants.</param>
+    /// <param name="targetSubjectId">The subject the event happened to, if known.</param>
     /// <param name="success">Whether the event succeeded.</param>
     /// <param name="ipAddress">Client IP address.</param>
     /// <param name="userAgent">Client user-agent string.</param>
@@ -65,7 +75,7 @@ public interface IAuthAuditService
     /// <param name="detailsJson">Additional details as a JSON string (stored as jsonb).</param>
     /// <param name="refreshTokenId">Related refresh token, if applicable.</param>
     /// <param name="actor">
-    /// Who performed the action, when that is someone other than <paramref name="subjectId"/>.
+    /// Who performed the action, when that is someone other than <paramref name="targetSubjectId"/>.
     /// Defaults to the caller on the current request per
     /// <see cref="AuthAuditActor.FromCallerOtherThan"/>; pass one explicitly only where the actor
     /// is not that caller.
@@ -74,7 +84,7 @@ public interface IAuthAuditService
     /// The tenant the action targeted. Defaults to the tenant the request is pinned to; pass one
     /// explicitly for an action against a tenant other than the caller's own.
     /// </param>
-    Task LogAsync(string eventType, Guid? subjectId, bool success,
+    Task LogAsync(string eventType, Guid? targetSubjectId, bool success,
         string? ipAddress = null, string? userAgent = null,
         string? errorMessage = null, string? detailsJson = null,
         Guid? refreshTokenId = null,

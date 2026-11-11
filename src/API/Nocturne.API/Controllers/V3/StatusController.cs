@@ -30,6 +30,7 @@ public class StatusController : ControllerBase
 
     /// <summary>
     /// Get the current system status with extended V3 information.
+    /// On an internal error it still returns 200, with <c>status</c> set to <c>error</c>.
     /// </summary>
     /// <returns>A <see cref="V3StatusResponse"/> containing authorization, permissions, and API version details.</returns>
     /// <remarks>

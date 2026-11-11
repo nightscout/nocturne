@@ -64,14 +64,6 @@ public interface IStateSpanService
         bool? active,
         CancellationToken cancellationToken = default);
 
-    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetStateSpansStartingFromAsync"/>
-    Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
-        StateSpanCategory category,
-        string? source,
-        DateTime from,
-        int count,
-        CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Returns the current pump operational mode, derived from the most recently started
     /// open-ended <see cref="StateSpanCategory.PumpMode"/> span.
@@ -109,6 +101,25 @@ public interface IStateSpanService
     /// <returns>Created or updated state span</returns>
     Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.BulkUpsertAsync"/>
+    Task<IReadOnlyList<Nocturne.Core.Contracts.Repositories.StateSpanUpsert>> UpsertStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.UpdateStateSpansAsync"/>
+    Task<IReadOnlyList<StateSpan?>> UpdateStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetStateSpansAroundAsync"/>
+    Task<IReadOnlyList<StateSpan>> GetStateSpansAroundAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime through,
+        IReadOnlyCollection<string?> followingSources,
+        int following,
         CancellationToken cancellationToken = default);
 
     /// <returns>True if deleted successfully, false otherwise</returns>

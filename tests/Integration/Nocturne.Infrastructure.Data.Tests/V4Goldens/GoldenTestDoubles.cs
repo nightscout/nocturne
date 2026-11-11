@@ -122,8 +122,20 @@ public sealed class EntryCapture
     /// <summary>Record a single legacy-entry projection fan-out.</summary>
     public void Add(EntryProjectionEvent ev) => _events.Enqueue(ev);
 
+    private readonly ConcurrentQueue<IReadOnlyList<Entry>> _written = new();
+
+    /// <summary>Record one <see cref="IDataEventSink{T}.OnWrittenAsync"/> report.</summary>
+    public void AddWritten(IReadOnlyList<Entry> entries) => _written.Enqueue(entries);
+
+    /// <summary>The <see cref="IDataEventSink{T}.OnWrittenAsync"/> reports, apart from the projections.</summary>
+    public IReadOnlyList<IReadOnlyList<Entry>> Written() => _written.ToArray();
+
     /// <summary>Drop all captured events — call at the start of each scenario.</summary>
-    public void Clear() => _events.Clear();
+    public void Clear()
+    {
+        _events.Clear();
+        _written.Clear();
+    }
 
     /// <summary>Point-in-time snapshot of the captured events in fire order.</summary>
     public IReadOnlyList<EntryProjectionEvent> Snapshot() => _events.ToArray();
@@ -147,6 +159,12 @@ internal sealed class CapturingEntrySink(EntryCapture capture) : IDataEventSink<
     public Task OnUpdatedAsync(Entry item, CancellationToken ct = default)
     {
         capture.Add(new EntryProjectionEvent("updated", [item]));
+        return Task.CompletedTask;
+    }
+
+    public Task OnWrittenAsync(IReadOnlyList<Entry> items, CancellationToken ct = default)
+    {
+        capture.AddWritten(items);
         return Task.CompletedTask;
     }
 
@@ -186,4 +204,24 @@ internal sealed class CapturingGlucoseReadingBroadcaster(GlucoseReadingCapture c
         capture.Add(readings);
         return Task.CompletedTask;
     }
+}
+
+/// <summary>
+/// Records the model types each committed write reports to the legacy read caches, in place of the
+/// API's cache clear.
+/// </summary>
+public sealed class CacheInvalidationCapture : Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation
+{
+    private readonly ConcurrentQueue<Type> _written = new();
+
+    public Task WrittenAsync(IReadOnlyCollection<Type> models)
+    {
+        foreach (var model in models)
+            _written.Enqueue(model);
+        return Task.CompletedTask;
+    }
+
+    public void Clear() => _written.Clear();
+
+    public IReadOnlyList<Type> Snapshot() => _written.ToArray();
 }

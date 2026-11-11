@@ -1,12 +1,11 @@
 using Microsoft.AspNetCore.WebUtilities;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
 
 namespace Nocturne.API.Services.Platform;
 
@@ -21,14 +20,14 @@ public class TimeQueryService : ITimeQueryService
 {
     private readonly IEntryService _entries;
     private readonly ITreatmentService _treatments;
-    private readonly DeviceStatusProjectionService _deviceStatuses;
+    private readonly IDeviceStatusService _deviceStatuses;
     private readonly IBraceExpansionService _braceExpansionService;
     private readonly ILogger<TimeQueryService> _logger;
 
     public TimeQueryService(
         IEntryService entries,
         ITreatmentService treatments,
-        DeviceStatusProjectionService deviceStatuses,
+        IDeviceStatusService deviceStatuses,
         IBraceExpansionService braceExpansionService,
         ILogger<TimeQueryService> logger
     )
@@ -76,8 +75,8 @@ public class TimeQueryService : ITimeQueryService
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
-                await _deviceStatuses.GetMatchingAsync(
-                    DeviceStatusProjectionService.ParseFind(findQuery),
+                await _deviceStatuses.GetDeviceStatusesAsync(
+                    FindQuery.ParseDeviceStatus(findQuery),
                     count: 1000,
                     skip: 0,
                     cancellationToken
@@ -125,8 +124,8 @@ public class TimeQueryService : ITimeQueryService
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
-                await _deviceStatuses.GetMatchingAsync(
-                    DeviceStatusProjectionService.ParseFind(findQuery),
+                await _deviceStatuses.GetDeviceStatusesAsync(
+                    FindQuery.ParseDeviceStatus(findQuery),
                     count: 1000,
                     skip: 0,
                     cancellationToken

@@ -207,7 +207,7 @@ public class MutationAuditInterceptorTests : IDisposable
         log.EntityId.Should().Be(entity.Id);
         log.TenantId.Should().Be(_tenantId);
         log.AuthType.Should().Be("SessionCookie");
-        log.SubjectName.Should().Be("tester");
+        log.ActorName.Should().Be("tester");
         log.Endpoint.Should().Be("POST /api/v4/treatments");
     }
 
@@ -515,7 +515,7 @@ public class MutationAuditInterceptorTests : IDisposable
         var log = context.ChangeTracker.Entries<MutationAuditLogEntity>()
             .Select(e => e.Entity).Single();
         log.AuthType.Should().Be("SessionCookie");
-        log.SubjectName.Should().Be("clicker");
+        log.ActorName.Should().Be("clicker");
     }
 
     [Fact]

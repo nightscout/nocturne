@@ -1,6 +1,5 @@
 using System.Linq.Expressions;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -17,8 +16,6 @@ internal interface IDataOverviewTable
 {
     string CountsKey { get; }
 
-    RecordType? DedupRecordType { get; }
-
     /// <summary>
     /// Every row's timestamp, with neither a source filter nor duplicate exclusion applied — the
     /// overview's year range spans whatever the tenant holds.
@@ -29,9 +26,9 @@ internal interface IDataOverviewTable
     IQueryable<string>? Sources(NocturneDbContext context);
 
     /// <summary>
-    /// Timestamps within the half-open UTC interval, less the rows <see cref="DedupRecordType"/>'s
-    /// links mark non-primary. Null when <paramref name="dataSources"/> constrains a table the
-    /// overview does not attribute to a data source.
+    /// Timestamps within the half-open UTC interval, less the duplicate copies
+    /// <see cref="ReadVisibilityFilter"/> drops. Null when <paramref name="dataSources"/> constrains a
+    /// table the overview does not attribute to a data source.
     /// </summary>
     IQueryable<DateTime>? TimestampsInRange(
         NocturneDbContext context,
@@ -46,16 +43,12 @@ internal sealed class DataOverviewTable<TEntity>(
     SyncDataType countsKey,
     Func<NocturneDbContext, IQueryable<TEntity>> table,
     Expression<Func<TEntity, DateTime>> timestamp,
-    Expression<Func<TEntity, string?>>? source,
-    RecordType? dedupRecordType = null
+    Expression<Func<TEntity, string?>>? source
 ) : IDataOverviewTable
     where TEntity : class, IIdentified
 {
     /// <inheritdoc />
     public string CountsKey { get; } = countsKey.ToString();
-
-    /// <inheritdoc />
-    public RecordType? DedupRecordType { get; } = dedupRecordType;
 
     /// <inheritdoc />
     public IQueryable<DateTime?> Timestamps(NocturneDbContext context) =>
@@ -87,10 +80,7 @@ internal sealed class DataOverviewTable<TEntity>(
             query = query.Where(Compose(source, s => wanted.Contains(s!)));
         }
 
-        if (DedupRecordType is { } recordType)
-            query = query.ExcludeNonPrimary(context, recordType);
-
-        return query.Select(timestamp);
+        return query.ExcludeDuplicatesWhereFlagged().Select(timestamp);
     }
 
     /// <summary>
@@ -141,35 +131,28 @@ internal static class DataOverviewTables
     [
         new DataOverviewTable<SensorGlucoseEntity>(
             SyncDataType.Glucose,
-            c => c.SensorGlucose, e => e.Timestamp, e => e.DataSource,
-            RecordType.SensorGlucose),
+            c => c.SensorGlucose, e => e.Timestamp, e => e.DataSource),
         new DataOverviewTable<MeterGlucoseEntity>(
             SyncDataType.ManualBG,
             c => c.MeterGlucose, e => e.Timestamp, e => e.DataSource),
         new DataOverviewTable<BolusEntity>(
             SyncDataType.Boluses,
-            c => c.Boluses, e => e.Timestamp, e => e.DataSource,
-            RecordType.Bolus),
+            c => c.Boluses, e => e.Timestamp, e => e.DataSource),
         new DataOverviewTable<CarbIntakeEntity>(
             SyncDataType.CarbIntake,
-            c => c.CarbIntakes, e => e.Timestamp, e => e.DataSource,
-            RecordType.CarbIntake),
+            c => c.CarbIntakes, e => e.Timestamp, e => e.DataSource),
         new DataOverviewTable<BolusCalculationEntity>(
             SyncDataType.BolusCalculations,
-            c => c.BolusCalculations, e => e.Timestamp, e => e.DataSource,
-            RecordType.BolusCalculation),
+            c => c.BolusCalculations, e => e.Timestamp, e => e.DataSource),
         new DataOverviewTable<NoteEntity>(
             SyncDataType.Notes,
-            c => c.Notes, e => e.Timestamp, e => e.DataSource,
-            RecordType.Note),
+            c => c.Notes, e => e.Timestamp, e => e.DataSource),
         new DataOverviewTable<DeviceEventEntity>(
             SyncDataType.DeviceEvents,
-            c => c.DeviceEvents, e => e.Timestamp, e => e.DataSource,
-            RecordType.DeviceEvent),
+            c => c.DeviceEvents, e => e.Timestamp, e => e.DataSource),
         new DataOverviewTable<StateSpanEntity>(
             SyncDataType.StateSpans,
-            c => c.StateSpans, e => e.StartTimestamp, e => e.Source,
-            RecordType.StateSpan),
+            c => c.StateSpans, e => e.StartTimestamp, e => e.Source),
         // ApsSnapshots carries a DataSource column the overview does not surface, so a source
         // filter drops the table rather than narrowing it.
         new DataOverviewTable<ApsSnapshotEntity>(
@@ -177,11 +160,9 @@ internal static class DataOverviewTables
             c => c.ApsSnapshots, e => e.Timestamp, source: null),
         new DataOverviewTable<BGCheckEntity>(
             SyncDataType.BGChecks,
-            c => c.BGChecks, e => e.Timestamp, e => e.DataSource,
-            RecordType.BGCheck),
+            c => c.BGChecks, e => e.Timestamp, e => e.DataSource),
         new DataOverviewTable<TempBasalEntity>(
             SyncDataType.TempBasals,
-            c => c.TempBasals, e => e.Timestamp, e => e.DataSource,
-            RecordType.TempBasal),
+            c => c.TempBasals, e => e.Timestamp, e => e.DataSource),
     ];
 }

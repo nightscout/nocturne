@@ -9,6 +9,7 @@ using Nocturne.API.Controllers.V1;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
@@ -202,12 +203,11 @@ public class AlexaControllerTests
     public async Task OpenSessionResponse_KeepsShouldEndSessionFalseOnTheNightscoutWire(string kind)
     {
         var service = new AlexaService(
-            Mock.Of<IEntryStore>(),
+            Mock.Of<IEntryService>(),
             Mock.Of<IPropertiesService>(),
             Mock.Of<IDDataService>(),
             new HttpContextAccessor(),
-            Mock.Of<ITenantAppearanceReader>(),
-            Mock.Of<ITenantAccessor>(),
+            Mock.Of<ITenantGlucoseUnits>(),
             TimeProvider.System,
             Mock.Of<ILogger<AlexaService>>()
         );

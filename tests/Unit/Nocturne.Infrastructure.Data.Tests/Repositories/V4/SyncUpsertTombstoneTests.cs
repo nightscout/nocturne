@@ -87,7 +87,7 @@ public class SyncUpsertTombstoneTests : IDisposable
 
     private BolusRepository NewBolusRepository(RecordingV4RecordBroadcaster<Bolus> broadcaster) =>
         new(new TestNocturneDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
             broadcaster);
@@ -170,7 +170,7 @@ public class SyncUpsertTombstoneTests : IDisposable
         var broadcaster = new RecordingV4RecordBroadcaster<SensorGlucose>();
         var repo = new SensorGlucoseRepository(
             new TestNocturneDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<SensorGlucoseRepository>.Instance,
             broadcaster);

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -19,6 +19,7 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Moq" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/Connectors/Nocturne.Connectors.NocturneRemote/Nocturne.Connectors.NocturneRemote.csproj" />

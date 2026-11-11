@@ -169,31 +169,67 @@ public class NightscoutWriteBackSinkEndpointTests
         handler.RequestCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task DeviceStatusSink_SkipsRecordsSourcedFromTheNightscoutConnector()
+    {
+        var handler = new RecordingHttpMessageHandler();
+
+        await DeviceStatusSink(handler).OnCreatedAsync(
+            new DeviceStatus { Id = "1", Device = "pump", DataSource = DataSources.NightscoutConnector });
+
+        handler.RequestCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DeviceStatusSink_SkipsAnUpdateSourcedFromTheNightscoutConnector()
+    {
+        var handler = new RecordingHttpMessageHandler();
+
+        await DeviceStatusSink(handler).OnUpdatedAsync(
+            new DeviceStatus { Id = "1", Device = "pump", DataSource = DataSources.NightscoutConnector });
+
+        handler.RequestCount.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(DataSources.DexcomConnector)]
+    public async Task DeviceStatusSink_WritesBackAnUploadAndAnotherConnectorsRecords(string? dataSource)
+    {
+        var handler = new RecordingHttpMessageHandler();
+
+        await DeviceStatusSink(handler).OnCreatedAsync(new[]
+        {
+            new DeviceStatus { Id = "1", Device = "pump", DataSource = dataSource },
+            new DeviceStatus { Id = "2", Device = "pump", DataSource = DataSources.NightscoutConnector },
+        });
+
+        handler.RequestCount.Should().Be(1);
+        handler.Bodies.Should().ContainSingle().Which.Should().Contain("\"_id\":\"1\"").And.NotContain("\"_id\":\"2\"");
+    }
+
     /// <summary>
-    /// Pins current behaviour: only entries and treatments carry a DataSource, so the
-    /// remaining four sinks have no loop guard. Records the connector just pulled from
+    /// Pins current behaviour: only entries, treatments and device statuses carry a DataSource, so the
+    /// remaining three sinks have no loop guard. Records the connector just pulled from
     /// the tenant's Nightscout are written straight back to it.
     /// </summary>
     [Fact]
-    public async Task DeviceStatusProfileFoodAndActivitySinks_HaveNoLoopPreventionFilter()
+    public async Task ProfileFoodAndActivitySinks_HaveNoLoopPreventionFilter()
     {
-        var deviceStatus = new RecordingHttpMessageHandler();
         var profile = new RecordingHttpMessageHandler();
         var food = new RecordingHttpMessageHandler();
         var activity = new RecordingHttpMessageHandler();
 
-        await DeviceStatusSink(deviceStatus).OnCreatedAsync(new DeviceStatus { Id = "1", Device = "pump" });
         await ProfileSink(profile).OnCreatedAsync(new Profile { Id = "1", DefaultProfile = "Default" });
         await FoodSink(food).OnCreatedAsync(new Food { Id = "1", Name = "Apple" });
         await ActivitySink(activity).OnCreatedAsync(new Activity { Id = "1", Type = "Exercise" });
 
         const string because =
-            "this pins CURRENT behaviour, not desired behaviour: only Entry and Treatment "
-            + "carry a DataSource, so these four sinks have no loop guard and echo "
+            "this pins CURRENT behaviour, not desired behaviour: only Entry, Treatment and "
+            + "DeviceStatus carry a DataSource, so these three sinks have no loop guard and echo "
             + "connector-pulled records straight back to the instance they came from. "
             + "Invert once these models can be attributed to a source";
 
-        deviceStatus.RequestCount.Should().Be(1, because);
         profile.RequestCount.Should().Be(1, because);
         food.RequestCount.Should().Be(1, because);
         activity.RequestCount.Should().Be(1, because);

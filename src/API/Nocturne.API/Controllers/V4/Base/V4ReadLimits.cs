@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Clinical.LoopAnalysis;
@@ -54,15 +55,8 @@ public static class V4ReadLimits
     /// </remarks>
     public const int MaxOrdinalPageSize = 100;
 
-    /// <summary>
-    /// Maximum span, in days, between the <c>from</c> and <c>to</c> bounds of a V4 range read.
-    /// </summary>
-    /// <remarks>
-    /// The widest range the report pages offer is 90 days, but their date picker also takes an
-    /// arbitrary custom range, so the ceiling sits far enough above the presets to leave the picker
-    /// usable. A range with only one bound set is not spanned and is left alone.
-    /// </remarks>
-    public const int MaxDateSpanDays = 366;
+    /// <inheritdoc cref="V4ApiLimits.MaxDateSpanDays"/>
+    public const int MaxDateSpanDays = V4ApiLimits.MaxDateSpanDays;
 
     /// <summary>
     /// Maximum local calendar days a CGM comparison or sleep trends window may cover.

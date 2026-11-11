@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -5,21 +6,17 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Helpers;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Core.Models.V4;
+using Nocturne.Core.Models.Queries;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V1;
@@ -305,46 +302,32 @@ public class LegacyReadCountCapTests
     [Theory]
     [InlineData(AtMergedCap, AtMergedCap)]
     [InlineData(AboveMergedCap, AtMergedCap)]
-    public async Task DeviceStatus_ClampsCountPassedToTheStatusRepository(
+    public async Task DeviceStatus_ClampsCountPassedToTheDeviceStatusRead(
         int requested,
         int expected
     )
     {
-        var groupRepo = new Mock<IDeviceStatusGroupRepository>();
+        var deviceStatuses = new Mock<IDeviceStatusService>();
         int? observedLimit = null;
-        groupRepo
+        deviceStatuses
             .Setup(x =>
-                x.GetAsync(
-                    It.IsAny<DateTime?>(),
-                    It.IsAny<DateTime?>(),
-                    It.IsAny<string?>(),
+                x.GetDeviceStatusesAsync(
+                    It.IsAny<FindQuery>(),
                     It.IsAny<int>(),
-                    It.IsAny<int>(), It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<ReadSortField>()
                 )
             )
             .Callback(
-                (DateTime? _, DateTime? _, string? _, int limit, int _, bool _, CancellationToken _) =>
+                (FindQuery _, int limit, int _, CancellationToken _, bool _, ReadSortField _) =>
                     observedLimit = limit
             )
-            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
-
-        var projection = new DeviceStatusProjectionService(
-            groupRepo.Object,
-            Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(),
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IStateSpanRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            TimeProvider.System,
-            Mock.Of<ILogger<DeviceStatusProjectionService>>()
-        );
+            .ReturnsAsync([]);
 
         var controller = new DeviceStatusController(
-            projection,
-            Mock.Of<IDeviceStatusDecomposer>(),
-            Mock.Of<IWriteSideEffects>(),
-            Mock.Of<IDataEventSink<DeviceStatus>>(),
+            deviceStatuses.Object,
             TimeProvider.System,
             Mock.Of<ILogger<DeviceStatusController>>()
         )

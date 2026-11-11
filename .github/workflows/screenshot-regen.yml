@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: "10.0"
+  DOTNET_VERSION: "11.0"
   NODE_VERSION: "24"
   PNPM_VERSION: "11.5.0"
   APPHOST_LOG: apphost.log
@@ -53,6 +53,19 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # The AppHost takes DCP and the dashboard from the Aspire CLI (AspireUseCliBundle), which has
+      # to match the Aspire packages it is built with.
+      - name: Install the Aspire CLI
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/.*<PackageVersion Include="Aspire.Hosting" Version="\([^"]*\)".*/\1/p' Directory.Packages.props)
+          if [ -z "$version" ]; then
+            echo "::error::Directory.Packages.props has no Aspire.Hosting version."
+            exit 1
+          fi
+          curl -fsSL https://aspire.dev/install.sh | bash -s -- --version "$version"
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5

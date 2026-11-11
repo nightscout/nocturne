@@ -17,7 +17,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="UploaderSnapshot"/>
 /// <seealso cref="Device"/>
 [JsonSchemaFlatten]
-public class PumpSnapshot : V4RecordBase
+public class PumpSnapshot : V4RecordBase, IPatientDeviceLinked
 {
     /// <summary>
     /// Stable per-source identifier. Records matched on (DataSource, SyncIdentifier) are updated in

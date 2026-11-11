@@ -64,4 +64,10 @@ public interface ICarbIntakeRepository
         Guid correlationId,
         CancellationToken ct = default
     );
+
+    /// <summary>Every <see cref="CarbIntake"/> sharing one of <paramref name="correlationIds"/>, in one query.</summary>
+    Task<IEnumerable<CarbIntake>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds,
+        CancellationToken ct = default
+    );
 }

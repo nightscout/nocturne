@@ -39,7 +39,7 @@ public class LabHbA1cResultRepository : ILabHbA1cResultRepository
         var entity = new LabHbA1cResultEntity
         {
             Id = Guid.CreateVersion7(),
-            MeasuredAt = result.MeasuredAt,
+            MeasuredAt = result.MeasuredAt.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
             ValuePercent = result.ValuePercent,
             Note = result.Note,
             CreatedAt = DateTime.UtcNow,
@@ -65,7 +65,7 @@ public class LabHbA1cResultRepository : ILabHbA1cResultRepository
     private static LabHbA1cResult ToDomain(LabHbA1cResultEntity entity) => new()
     {
         Id = entity.Id,
-        MeasuredAt = entity.MeasuredAt,
+        MeasuredAt = DateOnly.FromDateTime(entity.MeasuredAt),
         ValuePercent = entity.ValuePercent,
         Note = entity.Note,
         CreatedAt = entity.CreatedAt,

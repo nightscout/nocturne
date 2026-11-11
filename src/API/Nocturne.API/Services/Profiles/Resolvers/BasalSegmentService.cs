@@ -158,6 +158,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
 
     /// <param name="Schedules">The profile's schedule versions, newest first.</param>
     /// <param name="Settings">The profile's settings versions, newest first.</param>
+    /// <param name="PatientTimezone">The patient's own timezone, which takes precedence over a switch's and the settings'.</param>
     private sealed record ProfileResources(BasalSchedule[] Schedules, TherapySettings[] Settings, string? PatientTimezone)
     {
         public string? TimeZoneAt(long mills, string? switchTimezone = null) =>

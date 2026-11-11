@@ -68,8 +68,8 @@ internal static class ReportReadAudit
         {
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
-            SubjectId = audit.SubjectId,
-            SubjectName = audit.SubjectName,
+            ActorSubjectId = audit.SubjectId,
+            ActorName = audit.SubjectName,
             AuthType = audit.AuthType,
             TokenId = audit.TokenId,
             CredentialFingerprint = httpContext.GetAuthContext()?.CredentialFingerprint,

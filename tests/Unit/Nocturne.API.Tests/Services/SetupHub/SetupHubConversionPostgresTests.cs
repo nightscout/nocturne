@@ -98,6 +98,7 @@ public class SetupHubConversionPostgresTests(SetupHubConversionPostgresTests.Dat
 
             var hub = new DeviceSetupService(
                 factory,
+                new ConnectorConfigurationRepository(factory),
                 patientDevices,
                 new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
                 Mock.Of<IDeviceReattributionService>(),

@@ -1,6 +1,8 @@
+import type {} from "@vitest/browser-playwright";
 import { render } from "vitest-browser-svelte";
-import { page, userEvent } from "vitest/browser";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cdp, page, userEvent } from "vitest/browser";
+import { resetLocalTimeZone } from "@internationalized/date";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const createLab = vi.hoisted(() => vi.fn(() => undefined));
@@ -27,21 +29,21 @@ const timelinePoints = [
 const labResults = [
   {
     id: "lab-result-1",
-    measuredAt: "2025-01-03T12:00:00",
+    measuredAt: "2025-01-03",
     valuePercent: 6.6,
     a1cDisplay: { percent: 6.6, mmolMol: 48.63405 },
     note: "Annual lab test",
   },
   {
     id: "lab-result-2",
-    measuredAt: "2025-01-05T12:00:00",
+    measuredAt: "2025-01-05",
     valuePercent: 6.4,
     a1cDisplay: { percent: 6.4, mmolMol: 46.44825 },
     note: "Same-day lab test",
   },
   {
     id: "lab-result-before-first-estimate",
-    measuredAt: "2024-12-30T12:00:00",
+    measuredAt: "2024-12-30",
     valuePercent: 6.1,
     a1cDisplay: { percent: 6.1, mmolMol: 43.16955 },
     note: "Before glucose history",
@@ -64,13 +66,16 @@ vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", () => ({
     })),
 }));
 
+const createdLabResults: typeof labResults = [];
+
 vi.mock("#lib/api/generated/labHbA1cs.generated.remote.js", () => ({
-  getAll: () => remoteQuery(() => labResults),
+  getAll: () => remoteQuery(() => [...labResults, ...createdLabResults]),
   create: remoteCommand(createLab),
   remove: remoteCommand(() => undefined),
 }));
 
 import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
+import { formatLocale } from "#lib/utils/formatting.js";
 
 import EHbA1cPage from "./+page.svelte";
 
@@ -137,7 +142,7 @@ describe("eHbA1c chart tooltips", () => {
     await expect
       .element(page.getByLabelText("Result (mmol/mol)"))
       .toBeVisible();
-    await expect.element(page.getByTestId("lab-marker").first()).toHaveTextContent("49 mmol/mol");
+    await expect.element(page.getByTestId("lab-marker").first()).toHaveTextContent("48.6 mmol/mol");
     await expect.element(page.getByRole("group", { name: /A1c units/i })).not.toBeInTheDocument();
   });
 
@@ -175,4 +180,121 @@ describe("eHbA1c chart tooltips", () => {
 
     expect(screenLineStart.x).toBeGreaterThan(markerBounds.right);
   });
+});
+
+describe("eHbA1c lab tooltip on a dense timeline", () => {
+  const sparseLength = timelinePoints.length;
+
+  beforeEach(() => {
+    for (let day = 6; day <= 95; day++) {
+      const date = new Date(Date.UTC(2025, 0, day));
+      timelinePoints.push({
+        date: date.toISOString().slice(0, 10),
+        estimatedA1cPercent: 6.3,
+        a1cDisplay: { percent: 6.3, mmolMol: 45.35535 },
+        weightedAverageGlucoseMgdl: 180,
+        readingCount: 100,
+        daysWithData: 30,
+      });
+    }
+    applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+    render(EHbA1cPage, {});
+    return () => {
+      timelinePoints.length = sparseLength;
+    };
+  });
+
+  it("shows a lab result only when the pointer is close to its marker", async () => {
+    await expect.element(page.getByTestId("lab-marker").first()).toBeVisible();
+    const chart = page.getByTestId("ehba1c-chart");
+    const chartBounds = ((await chart.elements())[0] as HTMLElement).getBoundingClientRect();
+    const markers = (await page.getByTestId("lab-marker").elements()) as SVGPolygonElement[];
+    const center = (marker: SVGPolygonElement) => {
+      const bounds = marker.getBoundingClientRect();
+      return {
+        x: bounds.x + bounds.width / 2 - chartBounds.x,
+        y: bounds.y + bounds.height / 2 - chartBounds.y,
+      };
+    };
+    const dayWidth = (center(markers[1]).x - center(markers[0]).x) / 2;
+    expect(dayWidth).toBeLessThan(9);
+    const tooltip = page.getByTestId("ehba1c-tooltip");
+    const tooltipText = async () => (await tooltip.elements())[0].textContent ?? "";
+
+    const marker = center(markers[1]);
+    await userEvent.hover(chart, { position: { x: marker.x + 10, y: marker.y } });
+    await expect.element(tooltip).toBeVisible();
+    expect(await tooltipText()).toContain("Same-day lab test");
+
+    // Two days to the side, the tooltip reads that day's estimate rather than the lab draw.
+    await userEvent.hover(chart, { position: { x: marker.x + 2 * dayWidth + 10, y: marker.y } });
+    await expect.poll(tooltipText).not.toContain("Lab result");
+
+    // Low in the chart, by the date axis, the lab draw above does not take over.
+    await userEvent.hover(chart, { position: { x: marker.x + 4, y: chartBounds.height - 24 } });
+    await expect.poll(tooltipText).not.toContain("Lab result");
+
+    // On the lab draw's own day but far from its marker, the tooltip shows only the estimate.
+    await userEvent.hover(chart, { position: { x: marker.x, y: marker.y } });
+    await expect.poll(tooltipText).toContain("Same-day lab test");
+    await userEvent.hover(chart, { position: { x: marker.x, y: chartBounds.height - 24 } });
+    await expect.poll(tooltipText).not.toContain("Lab result");
+  });
+});
+
+describe("lab result day", () => {
+  async function viewFrom(timeZone: string) {
+    await cdp().send("Emulation.setTimezoneOverride", { timezoneId: timeZone });
+    resetLocalTimeZone();
+  }
+
+  const longDate = (year: number, month: number, day: number) =>
+    new Intl.DateTimeFormat(formatLocale(), {
+      timeZone: "UTC",
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(Date.UTC(year, month - 1, day));
+
+  beforeEach(() => {
+    createdLabResults.length = 0;
+    createLab.mockClear();
+    createLab.mockImplementation(((request: { measuredAt: string; value: number }) => {
+      createdLabResults.push({
+        id: "lab-result-new",
+        measuredAt: request.measuredAt,
+        valuePercent: request.value,
+        a1cDisplay: { percent: request.value, mmolMol: 0 },
+        note: "Entered lab test",
+      });
+    }) as () => undefined);
+    applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+  });
+
+  afterEach(async () => {
+    await cdp().send("Emulation.setTimezoneOverride", { timezoneId: "" });
+    resetLocalTimeZone();
+  });
+
+  it.each(["America/Toronto", "Pacific/Auckland"])(
+    "shows the day entered, and the day the server stored, for a viewer in %s",
+    async (timeZone) => {
+      await viewFrom(timeZone);
+      render(EHbA1cPage, {});
+      await expect.element(page.getByTestId("lab-marker").first()).toBeVisible();
+      await expect.element(page.getByText(longDate(2025, 1, 3), { exact: true })).toBeVisible();
+
+      await page.getByLabelText("Date of blood draw").fill("2025-01-04");
+      await page.getByLabelText("Result (%)").fill("6.8");
+      await page.getByRole("button", { name: "Add lab result" }).click();
+
+      expect(createLab).toHaveBeenCalledWith(expect.objectContaining({ measuredAt: "2025-01-04" }));
+      await expect.element(page.getByText(longDate(2025, 1, 4), { exact: true })).toBeVisible();
+      const markerTitles = (await page.getByTestId("lab-marker").elements()).map(
+        (marker) => marker.querySelector("title")?.textContent ?? ""
+      );
+      expect(markerTitles.some((title) => title.includes(longDate(2025, 1, 4)))).toBe(true);
+    }
+  );
 });

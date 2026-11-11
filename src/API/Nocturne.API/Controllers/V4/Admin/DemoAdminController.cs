@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Models.Identity;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Controllers.V4.Admin;
 
@@ -30,19 +30,22 @@ public class DemoAdminController : ControllerBase
 {
     private readonly ITenantService _tenantService;
     private readonly DemoTenantService _demoTenantService;
-    private readonly INocturneDbContextFactory _factory;
-    private readonly TimeProvider _time;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
+    private readonly IDemoDataPurge _purge;
 
     public DemoAdminController(
         ITenantService tenantService,
         DemoTenantService demoTenantService,
-        INocturneDbContextFactory factory,
-        TimeProvider time)
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
+        IDemoDataPurge purge)
     {
         _tenantService = tenantService;
         _demoTenantService = demoTenantService;
-        _factory = factory;
-        _time = time;
+        _tenants = tenants;
+        _members = members;
+        _purge = purge;
     }
 
     /// <summary>
@@ -54,48 +57,39 @@ public class DemoAdminController : ControllerBase
         [FromServices] IMemoryCache cache,
         CancellationToken ct)
     {
-        await using var db = await _factory.CreatePlatformAsync(ct);
-
-        var existing = await db.Set<TenantEntity>()
-            .Include(t => t.DemoConfig)
-            .FirstOrDefaultAsync(t => t.IsDemo, ct);
+        var existing = await _tenants.FindDemoTenantAsync(ct);
 
         if (existing is not null)
         {
             // Re-apply the tenant defaults and the access grants: this runs on every demo
             // service start, so it repairs a tenant left without roles or a demo member by a
             // reset that failed between wiping and re-seeding.
-            _demoTenantService.ApplyTenantDefaults(existing);
-            await db.SaveChangesAsync(ct);
+            await _tenants.UpdateAsync(existing.Id, _demoTenantService.TenantDefaults(existing), ct);
             await _demoTenantService.ConfigureAccessAsync(existing.Id, ct);
-            return Ok(ToDto(existing, alreadyExisted: true));
+            TenantCacheEviction.Evict(cache, existing.Slug, existing.ShareTokenHash);
+            return Ok(ToDto((await _tenants.GetAsync(existing.Id, ct))!, alreadyExisted: true));
         }
 
         var created = await _tenantService.CreateWithoutOwnerAsync("demo", "Nocturne Demo", ct);
 
-        var tenant = await db.Set<TenantEntity>()
-            .FirstAsync(t => t.Id == created.Id, ct);
-
-        tenant.IsDemo = true;
-        _demoTenantService.ApplyTenantDefaults(tenant);
-
-        var config = new TenantDemoConfigEntity { TenantId = tenant.Id };
-        db.Set<TenantDemoConfigEntity>().Add(config);
-
-        await db.SaveChangesAsync(ct);
-
-        // TenantResolutionMiddleware caches the resolved context, IsDemo included, and
-        // CreateWithoutOwnerAsync may already have populated it. IsDemo gates the demo sign-in
-        // endpoint and the status field the login page keys off, so without this the tenant is
-        // non-demo for the cache lifetime — a login page with no passkey and no way in.
-        TenantResolutionMiddleware.EvictTenant(cache, tenant.Slug);
+        // The demo flag and its config row are one tenant edit, so they land together.
+        var createdTenant = (await _tenants.GetAsync(created.Id, ct))!;
+        await _tenants.UpdateAsync(
+            created.Id,
+            _demoTenantService.TenantDefaults(createdTenant) with { IsDemo = true, DemoConfig = new DemoConfigEdit() },
+            ct);
 
         // Open the Public subject's share grant and create the demo member visitors are
         // signed in as.
         await _demoTenantService.ConfigureAccessAsync(created.Id, ct);
 
-        tenant.DemoConfig = config;
-        return Ok(ToDto(tenant, alreadyExisted: false));
+        // TenantResolutionMiddleware caches the resolved context, IsDemo included, and
+        // CreateWithoutOwnerAsync may already have populated it. IsDemo gates the demo sign-in
+        // endpoint and the status field the login page keys off, so without this the tenant is
+        // non-demo for the cache lifetime: a login page with no passkey and no way in.
+        TenantCacheEviction.Evict(cache, created.Slug);
+
+        return Ok(ToDto((await _tenants.GetAsync(created.Id, ct))!, alreadyExisted: false));
     }
 
     /// <summary>
@@ -109,35 +103,24 @@ public class DemoAdminController : ControllerBase
         [FromServices] IMemoryCache cache,
         CancellationToken ct)
     {
-        await using var db = await _factory.CreatePlatformAsync(ct);
+        var tenant = await _tenants.FindDemoTenantAsync(ct);
 
-        var tenant = await db.Set<TenantEntity>()
-            .Include(t => t.DemoConfig)
-            .FirstOrDefaultAsync(t => t.IsDemo, ct);
-
-        if (tenant is null)
+        if (tenant is null || tenant.DemoConfig is null)
             return NotFound();
-
-        var config = tenant.DemoConfig;
-        if (config is null)
-            return NotFound();
-
-        if (patch.NextResetAt.HasValue)
-            config.NextResetAt = patch.NextResetAt.Value;
-
-        if (patch.LastResetAt.HasValue)
-            config.LastResetAt = patch.LastResetAt.Value;
 
         var activeChanged = patch.IsActive.HasValue && patch.IsActive.Value != tenant.IsActive;
-        if (patch.IsActive.HasValue)
-            tenant.IsActive = patch.IsActive.Value;
 
-        await db.SaveChangesAsync(ct);
+        await _tenants.UpdateAsync(
+            tenant.Id,
+            new TenantEdit(IsActive: patch.IsActive, DemoConfig: new DemoConfigEdit(patch.NextResetAt, patch.LastResetAt)),
+            ct);
+
+        tenant = (await _tenants.GetAsync(tenant.Id, ct))!;
 
         // IsActive is carried on the cached tenant context, same as IsDemo — so without evicting,
         // a deactivated demo keeps being served for the cache lifetime.
         if (activeChanged)
-            TenantResolutionMiddleware.EvictTenant(cache, tenant.Slug);
+            TenantCacheEviction.Evict(cache, tenant.Slug, tenant.ShareTokenHash);
 
         return Ok(ToDto(tenant, alreadyExisted: true));
     }
@@ -150,11 +133,7 @@ public class DemoAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetStatus(CancellationToken ct)
     {
-        await using var db = await _factory.CreatePlatformAsync(ct);
-
-        var tenant = await db.Set<TenantEntity>()
-            .Include(t => t.DemoConfig)
-            .FirstOrDefaultAsync(t => t.IsDemo, ct);
+        var tenant = await _tenants.FindDemoTenantAsync(ct);
 
         if (tenant is null)
             return NotFound();
@@ -174,10 +153,7 @@ public class DemoAdminController : ControllerBase
         if (tenant is null)
             return NotFound();
 
-        await using var db = await _factory.CreateForTenantAsync(tenant.Id, ct);
-
-        var deleted = await DemoDataPurge.PurgeEntriesAsync(db, ct);
-
+        var deleted = await _purge.PurgeEntriesAsync(TenantContextOf(tenant), ct);
         return Ok(new DemoDeleteResultDto(deleted));
     }
 
@@ -193,11 +169,7 @@ public class DemoAdminController : ControllerBase
         if (tenant is null)
             return NotFound();
 
-        await using var db = await _factory.CreateForTenantAsync(tenant.Id, ct);
-
-        var deleted = await DemoDataPurge.PurgeTreatmentsAsync(db, _time, ct)
-            + await DemoDataPurge.PurgeDeviceStatusAsync(db, ct);
-
+        var deleted = await _purge.PurgeTreatmentsAsync(TenantContextOf(tenant), ct);
         return Ok(new DemoDeleteResultDto(deleted));
     }
 
@@ -242,15 +214,11 @@ public class DemoAdminController : ControllerBase
         if (tenant is null)
             return NotFound();
 
-        await using var db = await _factory.CreateForTenantAsync(tenant.Id, ct);
-        var publicSubjectId = await db.TenantMembers
-            .Where(m => m.TenantId == tenant.Id && m.Subject!.IsSystemSubject && m.Subject.Name == "Public")
-            .Select(m => (Guid?)m.SubjectId)
-            .FirstOrDefaultAsync(ct);
+        var publicSubjectId = (await _members.FindPublicMemberAsync(tenant.Id, ct))?.SubjectId;
 
         var seeded = await SampleDataSeeder.SeedInTenantScopeAsync(
             HttpContext.RequestServices,
-            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
+            TenantContextOf(tenant),
             request?.Days ?? 7,
             publicSubjectId,
             DataSources.DemoService,
@@ -260,13 +228,12 @@ public class DemoAdminController : ControllerBase
         return Ok(seeded);
     }
 
-    private async Task<TenantEntity?> FindDemoTenantAsync(CancellationToken ct)
-    {
-        await using var db = await _factory.CreatePlatformAsync(ct);
-        return await db.Set<TenantEntity>().AsNoTracking().FirstOrDefaultAsync(t => t.IsDemo, ct);
-    }
+    private Task<TenantRecord?> FindDemoTenantAsync(CancellationToken ct) => _tenants.FindDemoTenantAsync(ct);
 
-    private static DemoStateDto ToDto(TenantEntity tenant, bool alreadyExisted) => new(
+    private static TenantContext TenantContextOf(TenantRecord tenant) =>
+        new(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
+
+    private static DemoStateDto ToDto(TenantRecord tenant, bool alreadyExisted) => new(
         TenantId: tenant.Id,
         Slug: tenant.Slug,
         IsActive: tenant.IsActive,

@@ -21,10 +21,12 @@
     hasData?: boolean;
     /** Whether a new value is loading while the previous one is still shown */
     refreshing?: boolean;
-    /** Title for error card */
+    /** Title for error card. Not shown when `compact`. */
     errorTitle?: string;
     /** Function to call for retry */
     onRetry?: () => void;
+    /** Accessible name of the retry button, for a page with more than one guard or retry */
+    retryLabel?: string;
     /** Use compact inline error display instead of full-page card */
     compact?: boolean;
     /** Content to render when loaded successfully */
@@ -42,6 +44,7 @@
     refreshing = false,
     errorTitle = "Error loading data",
     onRetry,
+    retryLabel,
     compact = false,
     children,
     loadingSnippet,
@@ -109,6 +112,7 @@
             variant="outline"
             size="sm"
             class="mt-3"
+            aria-label={retryLabel}
             onclick={onRetry}
           >
             <RefreshCw class="mr-2 h-4 w-4" />
@@ -132,6 +136,7 @@
             <Button
               variant="outline"
               class="mt-4"
+              aria-label={retryLabel}
               onclick={onRetry}
             >
               Try again

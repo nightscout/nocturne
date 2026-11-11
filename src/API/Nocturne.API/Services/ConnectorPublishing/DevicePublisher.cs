@@ -3,6 +3,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -13,12 +14,12 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 
 /// <summary>
 /// Publishes device status and device event data received from connectors into
-/// the Nocturne domain via <see cref="IDeviceStatusDecomposer"/> and <see cref="IDeviceEventRepository"/>.
+/// the Nocturne domain via <see cref="IDeviceStatusService"/> and <see cref="IDeviceEventRepository"/>.
 /// </summary>
 /// <seealso cref="IDevicePublisher"/>
 internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
 {
-    private readonly IDeviceStatusDecomposer _decomposer;
+    private readonly IDeviceStatusService _deviceStatuses;
     private readonly IDeviceEventRepository _deviceEventRepository;
     private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly IApsSnapshotRepository _apsSnapshotRepository;
@@ -27,7 +28,7 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
     private readonly IUploaderSnapshotRepository _uploaderSnapshotRepository;
 
     public DevicePublisher(
-        IDeviceStatusDecomposer decomposer,
+        IDeviceStatusService deviceStatuses,
         IDeviceEventRepository deviceEventRepository,
         IPatientDeviceStamper patientDeviceStamper,
         IAuditContext auditContext,
@@ -40,7 +41,7 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
         ILogger<DevicePublisher> logger)
         : base(auditContext, skips, tenantAccessor, logger)
     {
-        _decomposer = decomposer ?? throw new ArgumentNullException(nameof(decomposer));
+        _deviceStatuses = deviceStatuses ?? throw new ArgumentNullException(nameof(deviceStatuses));
         _deviceEventRepository = deviceEventRepository ?? throw new ArgumentNullException(nameof(deviceEventRepository));
         _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
         _apsSnapshotRepository = apsSnapshotRepository ?? throw new ArgumentNullException(nameof(apsSnapshotRepository));
@@ -90,11 +91,8 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
     {
         try
         {
-            var skippedDeleted = 0;
-            foreach (var ds in deviceStatuses)
-            {
-                skippedDeleted += (await _decomposer.DecomposeAsync(ds, source, origin, cancellationToken)).SkippedDeleted;
-            }
+            var skippedDeleted = (await _deviceStatuses.CreateDeviceStatusesAsync(
+                [.. deviceStatuses], source, origin, cancellationToken)).SkippedDeleted;
 
             Logger.LogSkippedDeleted(nameof(DeviceStatus), skippedDeleted);
             RecordSkippedDeleted(skippedDeleted);
@@ -116,7 +114,7 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            deviceStatuses.Where(_decomposer.HasLegacyKeyedSnapshot), d => d.Id,
+            deviceStatuses.Where(_deviceStatuses.HasLegacyKeyedSnapshot), d => d.Id,
             unheld => PublishDeviceStatusAsync(unheld, source, origin, cancellationToken),
             source,
             ids => _apsSnapshotRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),

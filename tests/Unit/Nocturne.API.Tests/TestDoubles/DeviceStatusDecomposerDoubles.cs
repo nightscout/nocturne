@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
@@ -19,7 +20,7 @@ internal static class DeviceStatusDecomposerDoubles
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IDeviceStatusExtrasRepository>(),
             Mock.Of<IStateSpanService>(),
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IAuditContext>(),
             Mock.Of<ILoopClosedLoopStamper>(),
             time ?? TimeProvider.System,

@@ -2,6 +2,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Services.Identity;
 
 namespace Nocturne.API.Reports;
 
@@ -14,6 +15,7 @@ internal sealed class ReportRenderer(
     IServiceProvider services,
     ITenantAppearanceReader appearance,
     ITenantAccessor tenant,
+    ITenantGlucoseUnits glucoseUnits,
     ReportReadLog readLog,
     TenantClockResolver tenantClock)
 {
@@ -47,5 +49,5 @@ internal sealed class ReportRenderer(
 
     /// <summary>Whether the tenant shows glucose in mmol/L.</summary>
     public Task<bool> UsesMmolAsync(CancellationToken cancellationToken) =>
-        GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken);
+        glucoseUnits.UsesMmolAsync(cancellationToken);
 }

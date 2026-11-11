@@ -274,10 +274,9 @@ public class EntryDecomposerBatchTests : IDisposable
     {
         var unkeyed = new SensorGlucose { Id = Guid.Parse("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f"), LegacyId = null };
         var unkeyedWireId = MongoObjectId.FromGuid(unkeyed.Id);
-        MongoObjectId.TryGetGuidPrefixRange(unkeyedWireId, out var low, out var high);
         _sgRepoMock
-            .Setup(x => x.GetByGuidRangeAsync(low, high, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(unkeyed);
+            .Setup(x => x.GetByServedIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([unkeyed]);
         List<SensorGlucose>? written = null;
         _sgRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -297,7 +296,7 @@ public class EntryDecomposerBatchTests : IDisposable
     }
 
     /// <summary>
-    /// An id the server minted for an id-less upload names no stored uuid, so it costs no range lookup.
+    /// An id the server minted for an id-less upload names no stored uuid, so it costs no served-id lookup.
     /// </summary>
     [Fact]
     public async Task DecomposeBatchAsync_SkipsTheEchoLookupForAServerMintedId()
@@ -311,7 +310,7 @@ public class EntryDecomposerBatchTests : IDisposable
             WriteOrigin.Live);
 
         _sgRepoMock.Verify(
-            x => x.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            x => x.GetByServedIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 }

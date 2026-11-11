@@ -17,10 +17,10 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
-/// Domain service implementation for <see cref="Treatment"/> operations using Store/Cache/EventSink ports.
-/// Reads are served through <see cref="ITreatmentCache"/> with fallback to <see cref="ITreatmentStore"/>,
-/// writes go through <see cref="ITreatmentStore"/> or <see cref="ITreatmentDecomposer"/> with event
-/// notification via <see cref="IDataEventSink{T}"/>.
+/// <see cref="ITreatmentService"/>, the legacy treatment module's one public face. Reads are served through <see cref="ITreatmentCache"/>
+/// with fallback to <see cref="ITreatmentStore"/>; every legacy treatment write goes through here, to
+/// <see cref="ITreatmentStore"/> or <see cref="ITreatmentDecomposer"/>, with event notification via
+/// <see cref="IDataEventSink{T}"/>.
 /// </summary>
 /// <remarks>
 /// On creation, bolus and basal treatments are automatically enriched with
@@ -32,7 +32,7 @@ namespace Nocturne.API.Services.Treatments;
 /// <seealso cref="ITreatmentDecomposer"/>
 /// <seealso cref="IobCalculator"/>
 /// <seealso cref="CobCalculator"/>
-public class TreatmentService : ITreatmentService
+internal class TreatmentService : ITreatmentService
 {
     private const int DefaultCount = 100;
     private const int DefaultFindCount = 1000;
@@ -173,13 +173,12 @@ public class TreatmentService : ITreatmentService
     /// <remarks>
     /// Before persisting, each treatment is enriched with <see cref="TreatmentInsulinContext"/>
     /// via <see cref="PopulateInsulinContextAsync"/> if its <see cref="Treatment.EventType"/>
-    /// matches a known bolus or basal type and no context is already set. After creation,
-    /// the <see cref="ITreatmentCache"/> is invalidated and events are fired via
-    /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/>.
+    /// matches a known bolus or basal type and no context is already set.
     /// </remarks>
     public Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
-        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default) =>
-        CreateAsync(treatments, splitPreBolus: false, cancellationToken);
+        IEnumerable<Treatment> treatments, WriteOrigin origin = WriteOrigin.Live,
+        CancellationToken cancellationToken = default) =>
+        CreateAsync(treatments, splitPreBolus: false, origin, cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>
@@ -187,11 +186,44 @@ public class TreatmentService : ITreatmentService
     /// after its insulin context is set, so the carbs take none.
     /// </remarks>
     public Task<BulkWrite<Treatment>> CreateV1TreatmentsAsync(
-        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default) =>
-        CreateAsync(treatments, splitPreBolus: true, cancellationToken);
+        IEnumerable<Treatment> treatments, WriteOrigin origin = WriteOrigin.Live,
+        CancellationToken cancellationToken = default) =>
+        CreateAsync(treatments, splitPreBolus: true, origin, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<DecompositionResult> ImportTreatmentsAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default)
+    {
+        await PopulateInsulinContextAsync(treatments, cancellationToken);
+        return await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Backfill, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<long> CountTreatmentsAsync(string? find = null, CancellationToken cancellationToken = default) =>
+        _store.CountAsync(find, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<string, DateTime>> GetStoredIdsFromSourceAsync(
+        string source, DateTime from, DateTime to, CancellationToken cancellationToken = default) =>
+        _decomposer.GetLegacyIdsFromSourceAsync(source, from, to, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<int> DeleteFromSourceAsync(
+        string source, IReadOnlySet<string> legacyIds, CancellationToken cancellationToken = default) =>
+        _decomposer.DeleteFromSourceAsync(source, legacyIds, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<int> RekeyClientIdRecordsAsync(
+        string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        _decomposer.RekeyClientIdRecordsAsync(source, treatments, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+        string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        _decomposer.SelectForRepublishAsync(source, treatments, cancellationToken);
 
     private async Task<BulkWrite<Treatment>> CreateAsync(
-        IEnumerable<Treatment> treatments, bool splitPreBolus, CancellationToken cancellationToken)
+        IEnumerable<Treatment> treatments, bool splitPreBolus, WriteOrigin origin, CancellationToken cancellationToken)
     {
         var treatmentList = treatments.ToList();
 
@@ -199,20 +231,15 @@ public class TreatmentService : ITreatmentService
         if (splitPreBolus)
             treatmentList = await SplitPreBolusAsync(treatmentList, cancellationToken);
 
-        BulkWrite<Treatment> created;
-        var stored = new List<Treatment>();
-        var completed = false;
+        var stored = new List<StoredTreatment>();
         try
         {
-            created = await _store.CreateAsync(treatmentList, cancellationToken, stored);
-            completed = true;
+            var created = await _store.CreateAsync(treatmentList, origin, cancellationToken, stored);
+            await RecordRejectedAsync(created);
+            return created;
         }
         catch (TreatmentBatchFailedException failed)
         {
-            // The treatments before the failing one are stored, so reads and write-back must see them.
-            await _cache.InvalidateAsync(CancellationToken.None);
-            completed = true;
-            await _events.OnCreatedAsync(failed.Written, CancellationToken.None);
             await RecordRejectedAsync(failed.Written);
             if (failed.InnerException is OperationCanceledException canceled && cancellationToken.IsCancellationRequested)
                 ExceptionDispatchInfo.Throw(canceled);
@@ -220,20 +247,52 @@ public class TreatmentService : ITreatmentService
         }
         finally
         {
-            // An exception the store does not expect still leaves what it stored before it.
-            if (!completed)
-            {
-                await _cache.InvalidateAsync(CancellationToken.None);
-                if (stored.Count > 0)
-                    await _events.OnCreatedAsync(stored, CancellationToken.None);
-            }
+            // Announce what committed, whatever ended the batch.
+            if (origin == WriteOrigin.Live)
+                await AnnounceCreatedAsync(stored);
+        }
+    }
+
+    /// <summary>
+    /// Announces stored treatments as reads serve them, for the reason <see cref="PatchTreatmentAsync"/>
+    /// reads its record back: a create returns the id of the record it wrote, and a carb intake paired
+    /// into a meal is served under its bolus's. Treatments served as one are announced once.
+    /// </summary>
+    private async Task AnnounceCreatedAsync(IReadOnlyList<StoredTreatment> stored)
+    {
+        if (stored.Count == 0)
+            return;
+
+        var readBack = await ReadBackAsync(stored);
+        var served = new List<Treatment>(stored.Count);
+        for (var i = 0; i < stored.Count; i++)
+        {
+            var created = stored[i].Created;
+            if (readBack is not null && readBack[i] is null)
+                _logger.LogWarning("Created treatment {Id} did not read back", created.Id);
+
+            var announced = readBack?[i] ?? created;
+            // A state span keeps no data source, and the write-back sink tells a connector's own treatments by it.
+            announced.DataSource ??= created.DataSource;
+            served.Add(announced);
         }
 
-        await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnCreatedAsync(created, cancellationToken);
-        await RecordRejectedAsync(created);
+        await _events.OnCreatedAsync([.. served.DistinctBy(t => t.Id)], CancellationToken.None);
+    }
 
-        return created;
+    /// <returns><c>null</c> when the read failed.</returns>
+    /// <remarks>The write has committed, so a failed read-back announces the treatments as written.</remarks>
+    private async Task<IReadOnlyList<Treatment?>?> ReadBackAsync(IReadOnlyList<StoredTreatment> stored)
+    {
+        try
+        {
+            return await _store.ReadBackAsync(stored, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "{Count} created treatments could not be read back", stored.Count);
+            return null;
+        }
     }
 
     /// <summary>
@@ -277,11 +336,9 @@ public class TreatmentService : ITreatmentService
         string id, Treatment treatment, CancellationToken cancellationToken = default)
     {
         Treatment? updated;
-        var completed = false;
         try
         {
             updated = await _store.UpdateAsync(id, treatment, cancellationToken);
-            completed = true;
         }
         catch (DbUpdateException ex) when (StoreRefusal.ReasonFor(ex) is { } reason)
         {
@@ -291,16 +348,9 @@ public class TreatmentService : ITreatmentService
         {
             throw await RefuseAsync(treatment, ex.Message, ex);
         }
-        finally
-        {
-            // A failed update may have committed some of its records, and cached reads would keep serving the old treatment.
-            if (!completed)
-                await _cache.InvalidateAsync(CancellationToken.None);
-        }
 
         if (updated is null) return null;
 
-        await _cache.InvalidateAsync(cancellationToken);
         await _events.OnUpdatedAsync(updated, cancellationToken);
 
         return updated;
@@ -317,10 +367,7 @@ public class TreatmentService : ITreatmentService
         // Apply patch fields to existing treatment
         ApplyJsonPatch(existing, patchData);
 
-        // Re-decompose (idempotent upsert via LegacyId matching)
-        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
-
-        await _cache.InvalidateAsync(cancellationToken);
+        (await _decomposer.DecomposeBatchAsync([existing], WriteOrigin.Live, cancellationToken)).ThrowIfRejected(0);
 
         // The merged record carries the upsert key, which the wire would coerce to a different
         // identifier than the create returned; AAPS stores the identifier from every response and
@@ -360,7 +407,6 @@ public class TreatmentService : ITreatmentService
         if (await _store.DeleteAsync(id, cancellationToken) is not { } deletion)
             return false;
 
-        await _cache.InvalidateAsync(cancellationToken);
         if (deletion.Served is not null)
             await _events.OnDeletedAsync(deletion.Served, cancellationToken);
 
@@ -379,10 +425,7 @@ public class TreatmentService : ITreatmentService
         if (FindQuery.Parse(find).HasFieldFilters)
             return await DeleteMatchingTreatmentsAsync(find, cancellationToken);
 
-        var count = await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
-        if (count > 0)
-            await _cache.InvalidateAsync(cancellationToken);
-        return count;
+        return await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
     }
 
     private async Task<long> DeleteMatchingTreatmentsAsync(string? find, CancellationToken ct)
@@ -400,8 +443,6 @@ public class TreatmentService : ITreatmentService
             }
         }
 
-        if (deleted > 0)
-            await _cache.InvalidateAsync(ct);
         return deleted;
     }
 
@@ -418,7 +459,7 @@ public class TreatmentService : ITreatmentService
     /// <param name="treatments">The treatments to enrich.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     private async Task PopulateInsulinContextAsync(
-        List<Treatment> treatments, CancellationToken cancellationToken)
+        IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken)
     {
         // Determine which lookups we need so we only hit the repo once per type
         var needsBolus = treatments.Any(t =>

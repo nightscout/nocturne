@@ -84,14 +84,14 @@ public class LegacyFallbackServiceTests
                 It.IsAny<Func<ITrackerRepository, It.IsAnyType, CancellationToken, Task<bool>>?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(new InvocationFunc(invocation => Invoke(
-                nameof(RunUnderConsumableLockAsync), invocation, invocation.Arguments[0], invocation.Arguments[2])));
+                nameof(RunUnderConsumableLockAsync), invocation, invocation.Arguments[0]!, invocation.Arguments[2]!)));
         _trackers.Setup(t => t.ExecuteUnderDefinitionLockAsync(
                 It.IsAny<Guid>(),
                 It.IsAny<Func<ITrackerRepository, CancellationToken, Task<It.IsAnyType>>>(),
                 It.IsAny<Func<ITrackerRepository, It.IsAnyType, CancellationToken, Task<bool>>?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(new InvocationFunc(invocation => Invoke(
-                nameof(RunUnderDefinitionLockAsync), invocation, invocation.Arguments[1], invocation.Arguments[3])));
+                nameof(RunUnderDefinitionLockAsync), invocation, invocation.Arguments[1]!, invocation.Arguments[3]!)));
 
         _deviceEvents.Setup(r => r.GetLatestByEventTypesAsync(
                 It.IsAny<DeviceEventType[]>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
@@ -399,8 +399,8 @@ public class LegacyFallbackServiceTests
                 It.IsAny<CancellationToken>()))
             .Returns(new InvocationFunc(invocation =>
             {
-                verify = (Delegate)invocation.Arguments[1];
-                return Invoke(nameof(RunUnderConsumableLockAsync), invocation, invocation.Arguments[0], invocation.Arguments[2]);
+                verify = (Delegate)invocation.Arguments[1]!;
+                return Invoke(nameof(RunUnderConsumableLockAsync), invocation, invocation.Arguments[0]!, invocation.Arguments[2]!);
             }));
         await _service.CreateTrackersAsync([LegacyConsumableKind.Site], UserId);
         var check = (Func<ITrackerRepository, CreatedConsumableTracker?, CancellationToken, Task<bool>>)verify!;

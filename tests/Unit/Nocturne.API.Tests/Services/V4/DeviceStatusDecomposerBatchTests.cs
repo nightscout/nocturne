@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -26,6 +27,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
     private readonly Mock<IUploaderSnapshotRepository> _uploaderRepoMock;
     private readonly Mock<IDeviceStatusExtrasRepository> _extrasRepoMock;
     private readonly Mock<IStateSpanService> _stateSpanServiceMock;
+    private readonly List<StateSpan> _spans;
     private readonly Mock<IDeviceService> _deviceServiceMock;
     private readonly DeviceStatusDecomposer _decomposer;
 
@@ -39,7 +41,8 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         _uploaderRepoMock = new Mock<IUploaderSnapshotRepository>();
         _extrasRepoMock = new Mock<IDeviceStatusExtrasRepository>();
         _stateSpanServiceMock = new Mock<IStateSpanService>();
-        _deviceServiceMock = new Mock<IDeviceService>();
+        _spans = _stateSpanServiceMock.BacksWith([]);
+        _deviceServiceMock = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
 
         // BulkUpsertAsync returns the input records
         _apsRepoMock
@@ -51,6 +54,16 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         _uploaderRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.UploaderSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<V4Models.UploaderSnapshot> records, WriteOrigin origin, CancellationToken _) => [.. records]);
+        _pumpRepoMock
+            .Setup(x => x.GetTimelineAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _apsRepoMock
+            .Setup(x => x.GetMarksAsync(It.IsAny<IReadOnlyCollection<string?>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _extrasRepoMock
+            .Setup(x => x.FindStoredAsync(It.IsAny<IReadOnlyList<V4Models.DeviceStatusExtras>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<V4Models.DeviceStatusExtras> candidates, CancellationToken _) =>
+                [.. candidates.Select(_ => (V4Models.DeviceStatusExtras?)null)]);
         _extrasRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceStatusExtras>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin origin, CancellationToken _) => [.. records]);
@@ -358,18 +371,6 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
     [Fact]
     public async Task DecomposeBatchAsync_CollectsOverrideStateSpans()
     {
-        // Arrange - status with active override
-        var expectedStateSpan = new StateSpan
-        {
-            Id = "ss-override-batch",
-            Category = StateSpanCategory.Override,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
-        };
-
-        _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
-
         var statuses = new List<DeviceStatus>
         {
             new()
@@ -387,20 +388,159 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
             }
         };
 
-        // Act
         var result = await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
 
-        // Assert
-        _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
-                It.Is<StateSpan>(ss =>
-                    ss.Category == StateSpanCategory.Override
-                    && ss.State == "Custom"
-                    && ss.OriginalId == "ds-override"
-                    && ss.EndTimestamp == DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime.AddHours(1)),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+        _spans.Should().ContainSingle(ss =>
+            ss.Category == StateSpanCategory.Override
+            && ss.State == "Custom"
+            && ss.OriginalId == "ds-override"
+            && ss.EndTimestamp == DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime.AddHours(1));
 
         result.CreatedRecords.Should().Contain(x => x is StateSpan);
+    }
+
+    /// <summary>
+    /// The span preload reads around the batch's observations: from the earliest to the latest, and
+    /// the first spans after them from each observing device.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_ReadsTheOverrideSpansAroundItsObservations()
+    {
+        DeviceStatus Observation(string id, long mills) => new()
+        {
+            Id = id, Mills = mills, Device = "loop://iPhone",
+            Override = new OverrideStatus { Active = true, Name = "Exercise" },
+        };
+
+        await _decomposer.DecomposeBatchAsync(
+            [Observation("ds-around-2", 1_700_000_600_000), Observation("ds-around-1", 1_700_000_000_000)],
+            source: null, WriteOrigin.Live);
+
+        _stateSpanServiceMock.Verify(s => s.GetStateSpansAroundAsync(
+            StateSpanCategory.Override,
+            DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000).UtcDateTime,
+            DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_600_000).UtcDateTime,
+            It.Is<IReadOnlyCollection<string?>>(sources => sources.SequenceEqual(new[] { "loop://iPhone" })),
+            10,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A batch costs a fixed set of repository and service calls whatever its size: one stored
+    /// correlation-id read per snapshot table, one device resolution, one patient-device read, one
+    /// span read per category, one bulk write per table, one stored-extras read for the statuses that
+    /// write no snapshot, one pump timeline and one APS marks read, one span update and one span upsert.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_CostsTheSameCallsForOneStatusAsForFifty()
+    {
+        var one = await CountCallsAsync(1);
+        var fifty = await CountCallsAsync(50);
+
+        fifty.Should().Equal(one);
+        one.Should().Equal(new Dictionary<string, int>
+        {
+            ["aps.GetCorrelationIdsByLegacyIdAsync"] = 1,
+            ["aps.BulkUpsertAsync"] = 1,
+            ["aps.GetMarksAsync"] = 1,
+            ["pump.GetCorrelationIdsByLegacyIdAsync"] = 1,
+            ["pump.BulkUpsertAsync"] = 1,
+            ["pump.GetTimelineAsync"] = 1,
+            ["uploader.GetCorrelationIdsByLegacyIdAsync"] = 1,
+            ["uploader.BulkUpsertAsync"] = 1,
+            ["extras.FindStoredAsync"] = 1,
+            ["extras.BulkCreateAsync"] = 1,
+            ["devices.ResolveManyAsync"] = 1,
+            ["devices.GetPatientDeviceLinksAsync"] = 1,
+            ["spans.GetStateSpansAroundAsync"] = 2,
+            ["spans.UpdateStateSpansAsync"] = 1,
+            ["spans.UpsertStateSpansAsync"] = 1,
+            ["loop.AfterSnapshotsWrittenAsync"] = 1,
+        });
+    }
+
+    /// <summary>
+    /// Decomposes a status with no snapshot and <paramref name="count"/> Loop statuses, each switching
+    /// the override and the pump's suspension, against a stored open override, and counts the calls
+    /// each dependency took.
+    /// </summary>
+    private static async Task<Dictionary<string, int>> CountCallsAsync(int count)
+    {
+        var aps = new Mock<IApsSnapshotRepository>();
+        var pump = new Mock<IPumpSnapshotRepository>();
+        var uploader = new Mock<IUploaderSnapshotRepository>();
+        var extras = new Mock<IDeviceStatusExtrasRepository>();
+        var spans = new Mock<IStateSpanService>();
+        var devices = new Mock<IDeviceService>();
+        var loop = new Mock<ILoopClosedLoopStamper>();
+
+        aps.Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.ApsSnapshot> records, WriteOrigin _, CancellationToken _) => [.. records]);
+        pump.Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.PumpSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.PumpSnapshot> records, WriteOrigin _, CancellationToken _) =>
+                [.. records.Select(r => { r.Id = Guid.NewGuid(); return r; })]);
+        uploader.Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.UploaderSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.UploaderSnapshot> records, WriteOrigin _, CancellationToken _) => [.. records]);
+        extras.Setup(x => x.FindStoredAsync(It.IsAny<IReadOnlyList<V4Models.DeviceStatusExtras>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<V4Models.DeviceStatusExtras> candidates, CancellationToken _) =>
+                [.. candidates.Select(_ => (V4Models.DeviceStatusExtras?)null)]);
+        extras.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceStatusExtras>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin _, CancellationToken _) => [.. records]);
+        pump.Setup(x => x.GetTimelineAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        aps.Setup(x => x.GetMarksAsync(It.IsAny<IReadOnlyCollection<string?>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        devices.Setup(x => x.ResolveManyAsync(It.IsAny<IReadOnlyList<DeviceSighting>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<DeviceSighting> sightings, CancellationToken _) =>
+                [.. sightings.Select(_ => (Guid?)Guid.NewGuid())]);
+        devices.Setup(x => x.GetPatientDeviceLinksAsync(It.IsAny<IEnumerable<Guid?>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Mock.Of<IPatientDeviceLinks>());
+        spans.BacksWith(
+        [
+            new StateSpan
+            {
+                Id = "stored-override", OriginalId = "stored-override", Category = StateSpanCategory.Override,
+                State = "Custom", StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_690_000_000_000).UtcDateTime,
+                Source = "loop://iPhone", Metadata = new() { ["name"] = "Sleep" },
+            },
+        ]);
+
+        var decomposer = new DeviceStatusDecomposer(
+            aps.Object, pump.Object, uploader.Object, extras.Object, spans.Object, devices.Object,
+            Mock.Of<IAuditContext>(), loop.Object, TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+
+        var statuses = Enumerable.Range(0, count).Select(i => new DeviceStatus
+        {
+            Id = $"ds-count-{i}",
+            Mills = 1_700_000_000_000 + i * 300_000L,
+            Device = "loop://iPhone",
+            Loop = new LoopStatus { Iob = new LoopIob { Iob = 1 } },
+            Pump = new PumpStatus
+            {
+                Manufacturer = "Insulet", Model = "Omnipod DASH",
+                Status = new PumpStatusDetails { Suspended = i % 2 == 0 },
+            },
+            Uploader = new UploaderStatus { Name = "iPhone", Type = "phone", Battery = 50 },
+            Cgm = new CgmStatus { Manufacturer = "Dexcom", Serial = "SN" },
+            XDripJs = new XDripJsStatus { State = 1 },
+            Override = new OverrideStatus { Active = i % 2 == 0, Name = "Exercise", Multiplier = 0.5 },
+        }).Prepend(new DeviceStatus
+        {
+            Id = "ds-count-snapshotless",
+            Mills = 1_699_999_000_000,
+            Device = "loop://iPhone",
+            XDripJs = new XDripJsStatus { State = 1 },
+        }).ToList();
+
+        await decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
+
+        return new (string Name, Mock Mock)[]
+            {
+                ("aps", aps), ("pump", pump), ("uploader", uploader), ("extras", extras),
+                ("spans", spans), ("devices", devices), ("loop", loop),
+            }
+            .SelectMany(m => m.Mock.Invocations.Select(call => $"{m.Name}.{call.Method.Name}"))
+            .GroupBy(name => name)
+            .ToDictionary(g => g.Key, g => g.Count());
     }
 }

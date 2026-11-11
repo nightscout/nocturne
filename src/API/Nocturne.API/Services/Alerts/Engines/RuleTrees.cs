@@ -129,6 +129,8 @@ internal static class RuleTrees
     /// <summary>Drops every kept description.</summary>
     internal static void ClearCache() => Descriptions.Clear();
 
+    /// <param name="type">The condition type <paramref name="conditionParams"/> is stored for.</param>
+    /// <param name="conditionParams">The rule's body as stored.</param>
     /// <param name="autoResolveParams">The auto-resolve tree to describe too, or null for none.</param>
     private static Description Describe(AlertConditionType type, string conditionParams, string? autoResolveParams)
     {
@@ -164,7 +166,7 @@ internal static class RuleTrees
         if (node.TryGetProperty("leaf_id", out _))
         {
             var kind = node.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String
-                ? AlertConditionTypeNames.FromWireString(k.GetString())
+                ? AlertConditionTypeNames.FromWireString(k.GetString()!)
                 : null;
             var operands = node.TryGetProperty("params", out var p) ? p.Clone() : default;
             leaves.Add(new ConditionLeaf(kind, operands));

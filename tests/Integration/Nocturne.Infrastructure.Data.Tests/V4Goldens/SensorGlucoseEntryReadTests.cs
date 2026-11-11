@@ -47,6 +47,12 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
             .Be(LegacyJson(CanonicalGlucoseStream.Select(full, [primary])));
         slim.Should().OnlyContain(r => r.AdditionalProperties == null && r.SmoothedMgdl == null);
 
+        // The stored stream decision reads back as the rule over the whole window.
+        var canonical = await repo.GetForEntriesAsync(start, start.AddMinutes(25), null, null, 100,
+            descending: descending, streams: GlucoseStreams.Canonical);
+        LegacyJson(canonical).Should().Be(LegacyJson(CanonicalGlucoseStream.Select(full, [primary])));
+        canonical.Should().HaveCount(6);
+
         var expected = await repo.GetAsync(start.AddMinutes(5), start.AddMinutes(20), "a", "entry-projection-test",
             2, 1, descending, patientDeviceId: primary.Id);
         var actual = await repo.GetForEntriesAsync(start.AddMinutes(5), start.AddMinutes(20), "a", "entry-projection-test",
@@ -111,6 +117,28 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
         var slim = (await repo.GetForEntriesAsync(null, null, null, null, 100)).ToList();
         slim.Should().ContainSingle();
         LegacyJson(slim).Should().Be(LegacyJson(full));
+    }
+
+    /// <summary>
+    /// The v3 history page is the canonical stream: a live reading another stream outranks is held
+    /// back, and once deleted it is delivered as a delete.
+    /// </summary>
+    [Fact]
+    public async Task CanonicalHistoryWithholdsALosingStream_AndDeliversItsDelete()
+    {
+        using var scope = await fixture.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var at = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        var winner = new SensorGlucose { Id = Guid.CreateVersion7(), Timestamp = at, Mgdl = 110, DataSource = "a-cgm", Device = "sensor" };
+        var loser = new SensorGlucose { Id = Guid.CreateVersion7(), Timestamp = at.AddMinutes(1), Mgdl = 180, DataSource = "b-cgm", Device = "sensor" };
+        await repo.BulkCreateAsync([winner, loser], WriteOrigin.Live);
+
+        (await repo.GetCanonicalModifiedSinceAsync(0, 100))
+            .Select(h => (h.Record.Id, h.Deleted)).Should().Equal((winner.Id, false));
+
+        await repo.DeleteAsync(loser.Id, WriteOrigin.Live);
+        (await repo.GetCanonicalModifiedSinceAsync(0, 100))
+            .Select(h => (h.Record.Id, h.Deleted)).Should().BeEquivalentTo(new[] { (winner.Id, false), (loser.Id, true) });
     }
 
     private static string LegacyJson(IEnumerable<SensorGlucose> readings) =>

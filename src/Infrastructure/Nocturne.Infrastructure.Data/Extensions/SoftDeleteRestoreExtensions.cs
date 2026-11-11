@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -136,7 +137,7 @@ public static class SoftDeleteRestoreExtensions
     /// group they belong to reads as it did before the delete. A user's delete of one record deleted
     /// every copy in its group at one <see cref="ISoftDeletable.DeletedAt"/>
     /// (<see cref="DuplicateDelete.EveryCopy"/>), and reads show a group only through its primary
-    /// (<see cref="ReadVisibilityFilter.ExcludeNonPrimary{TEntity}"/>); restoring one non-primary copy
+    /// (<see cref="ReadVisibilityFilter.ExcludeDuplicates{TEntity}"/>); restoring one non-primary copy
     /// alone would bring back a row no read shows, so a dose would not count in IOB/COB. The group's
     /// copies deleted at the restored row's instant come back with it, unless a live row holds a
     /// unique key one would take. A group still left without a live primary, because its primary was
@@ -165,11 +166,15 @@ public static class SoftDeleteRestoreExtensions
             List<TEntity> copies = [];
             if (dedup is { } type && restoring.Count > 0)
             {
+                await DuplicateGroupPrimaries.LockGroupsOfAsync(ctx, type, [.. restoring.Select(ctx.IdOf)], token);
                 var candidates = await ctx.CoDeletedCopiesAsync(type, restoring, token);
                 var clashes = await ctx.FindLiveKeyClashesAsync([.. restoring, .. candidates], token);
                 copies = candidates.Where((_, i) => clashes[restoring.Count + i] is null).ToList();
             }
 
+            using var wide = typeof(TEntity) == typeof(SensorGlucoseEntity)
+                ? await GlucoseStreamFlags.DeferIfWideAsync(ctx, restoring.Count + copies.Count, token)
+                : null;
             foreach (var entity in restoring.Concat(copies))
                 entity.DeletedAt = null;
             await ctx.SaveRestoreAsync(recordType, token);
@@ -179,6 +184,8 @@ public static class SoftDeleteRestoreExtensions
                     ctx, restoredType, [.. restoring.Concat(copies).Select(ctx.IdOf)],
                     NocturneDbContext.UtcNowAtStoredPrecision(), token)
                 : [];
+            if (typeof(TEntity) == typeof(SensorGlucoseEntity))
+                await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, [.. restoring.Concat(copies).Select(ctx.IdOf)], token);
 
             return new GroupRestore<TEntity>(restoring, conflicts, copies, promoted);
         }, ct: ct);

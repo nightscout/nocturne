@@ -3,7 +3,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.Core.Contracts.Devices;
 
 /// <summary>
-/// Stamps <see cref="IDeviceAttributed.PatientDeviceId"/> on ingested records by matching each
+/// Stamps <see cref="IPatientDeviceLinked.PatientDeviceId"/> on ingested records by matching each
 /// record's timestamp against the usage windows of the patient's registered devices.
 /// </summary>
 /// <seealso cref="IDeviceAttributed"/>

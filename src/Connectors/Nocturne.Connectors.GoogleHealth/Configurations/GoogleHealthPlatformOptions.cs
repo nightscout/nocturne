@@ -6,9 +6,6 @@ namespace Nocturne.Connectors.GoogleHealth.Configurations;
 /// </summary>
 public sealed class GoogleHealthPlatformOptions
 {
-    public const string ClientIdKey = "GOOGLE_HEALTH_CLIENT_ID";
-    public const string ClientSecretKey = "GOOGLE_HEALTH_CLIENT_SECRET";
-    public const string RedirectUriKey = "GOOGLE_HEALTH_REDIRECT_URI";
     public const string CallbackPath = "/api/v4/google-health/oauth/callback";
 
     public string ClientId { get; set; } = "";

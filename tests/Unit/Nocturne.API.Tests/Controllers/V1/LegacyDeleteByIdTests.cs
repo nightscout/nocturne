@@ -7,15 +7,12 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Helpers;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Core.Models.V4;
+using Nocturne.Core.Models.Queries;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V1;
@@ -165,55 +162,38 @@ public class LegacyDeleteByIdTests
         AssertDeleteStatus(result, 2);
     }
 
-    [Fact]
-    public async Task DeleteDeviceStatus_Found_AnswersOkWithOneDeleted()
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public async Task DeleteDeviceStatus_AnswersOkWithTheDeleteStatus_FoundOrNot(bool deleted, long count)
     {
-        var aps = new Mock<IApsSnapshotRepository>();
-        aps.Setup(r => r.GetByLegacyIdAsync(StoredId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = StoredId });
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
-        decomposer
-            .Setup(d => d.DeleteStoredAsync(StoredId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(2);
+        var service = new Mock<IDeviceStatusService>();
+        service.Setup(s => s.DeleteDeviceStatusAsync(StoredId, It.IsAny<CancellationToken>())).ReturnsAsync(deleted);
 
-        var result = await NewDeviceStatusController(aps, decomposer.Object, "", Scope.DevicesReadWrite)
+        var result = await NewDeviceStatusController(service.Object, "", Scope.DevicesReadWrite)
             .DeleteDeviceStatus(StoredId);
 
-        AssertDeleteStatus(result, 1);
-    }
-
-    [Fact]
-    public async Task DeleteDeviceStatus_Unknown_AnswersOkWithNoneDeleted()
-    {
-        var decomposer = new Mock<IDeviceStatusDecomposer>(MockBehavior.Strict);
-
-        var result = await NewDeviceStatusController(
-                new Mock<IApsSnapshotRepository>(), decomposer.Object, "", Scope.DevicesReadWrite)
-            .DeleteDeviceStatus(StoredId);
-
-        AssertDeleteStatus(result, 0);
+        AssertDeleteStatus(result, count);
     }
 
     [Theory]
-    [InlineData("?find[created_at][$lte]=2020-01-02", true)]
-    [InlineData("?find[device]=openaps://rig&token=x", false)]
-    public async Task DeleteDeviceStatus_AnyIdWithFind_DeletesTheMatches(string queryString, bool old)
+    [InlineData("?find[created_at][$lte]=2020-01-02", false)]
+    [InlineData("?find[device]=openaps://rig&token=x", true)]
+    public async Task DeleteDeviceStatus_AnyIdWithFind_DeletesTheMatches(string queryString, bool windowed)
     {
-        var at = old ? new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-        var aps = new Mock<IApsSnapshotRepository>();
-        var groups = ReturningGroups(
-            new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = StoredId, Timestamp = at, Device = "openaps://rig" },
-            new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = "5f8d0c1e8a7b4c3d9e5f0002", Timestamp = at, Device = "openaps://rig" });
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
-        decomposer
-            .Setup(d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1);
+        FindQuery? find = null;
+        var service = new Mock<IDeviceStatusService>();
+        service
+            .Setup(s => s.DeleteDeviceStatusesAsync(It.IsAny<FindQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<FindQuery, CancellationToken>((f, _) => find = f)
+            .ReturnsAsync(2);
 
-        var result = await NewDeviceStatusController(aps, decomposer.Object, queryString, Scope.FullAccess, groups)
+        var result = await NewDeviceStatusController(service.Object, queryString, Scope.FullAccess)
             .DeleteDeviceStatus(LegacyDeleteStatus.AnyId);
 
         AssertDeleteStatus(result, 2);
-        aps.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        find!.FromMills.HasValue.Should().Be(windowed, "Nightscout windows a delete that names no created_at or _id");
+        service.Verify(s => s.DeleteDeviceStatusAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -225,26 +205,24 @@ public class LegacyDeleteByIdTests
     public async Task DeleteDeviceStatus_AnyIdWithFieldConditions_DeletesOnlyTheStatusesTheyMatch(
         string queryString, string expected)
     {
-        var groups = ReturningGroups(
-            new ApsSnapshot
+        var now = DateTimeOffset.UtcNow;
+        DeviceStatus[] stored =
+        [
+            new() { Id = StoredId, Device = "openaps://rig", Mills = now.ToUnixTimeMilliseconds(), CreatedAt = now.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") },
+            new()
             {
-                Id = Guid.CreateVersion7(), LegacyId = StoredId, Timestamp = DateTime.UtcNow,
-                Device = "openaps://rig", AidAlgorithm = AidAlgorithm.OpenAps,
+                Id = "5f8d0c1e8a7b4c3d9e5f0002", Device = "loop://iPhone", Mills = now.ToUnixTimeMilliseconds(),
+                CreatedAt = now.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"), Loop = new LoopStatus(),
             },
-            new ApsSnapshot
-            {
-                Id = Guid.CreateVersion7(), LegacyId = "5f8d0c1e8a7b4c3d9e5f0002", Timestamp = DateTime.UtcNow,
-                Device = "loop://iPhone", AidAlgorithm = AidAlgorithm.Loop, LoopJson = "{}",
-            });
+        ];
         var deleted = new List<string>();
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
-        decomposer
-            .Setup(d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback((string id, WriteOrigin _, CancellationToken _) => deleted.Add(id))
-            .ReturnsAsync(1);
+        var service = new Mock<IDeviceStatusService>();
+        service
+            .Setup(s => s.DeleteDeviceStatusesAsync(It.IsAny<FindQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<FindQuery, CancellationToken>((find, _) => deleted.AddRange(stored.Where(find.Matches).Select(s => s.Id!)))
+            .ReturnsAsync(() => deleted.Count);
 
-        await NewDeviceStatusController(
-                new Mock<IApsSnapshotRepository>(), decomposer.Object, queryString, Scope.FullAccess, groups)
+        await NewDeviceStatusController(service.Object, queryString, Scope.FullAccess)
             .DeleteDeviceStatus(LegacyDeleteStatus.AnyId);
 
         deleted.Should().Equal(expected.Split(',', StringSplitOptions.RemoveEmptyEntries));
@@ -253,21 +231,18 @@ public class LegacyDeleteByIdTests
     [Fact]
     public async Task DeleteDeviceStatus_AnyIdWithAnIdFind_DeletesThatStatusOnly()
     {
-        var aps = new Mock<IApsSnapshotRepository>();
-        aps.Setup(r => r.GetByLegacyIdAsync(StoredId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = StoredId, Timestamp = DateTime.UtcNow });
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
-        decomposer.Setup(d => d.DeleteStoredAsync(StoredId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+        FindQuery? find = null;
+        var service = new Mock<IDeviceStatusService>();
+        service
+            .Setup(s => s.DeleteDeviceStatusesAsync(It.IsAny<FindQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<FindQuery, CancellationToken>((f, _) => find = f)
             .ReturnsAsync(1);
 
-        var result = await NewDeviceStatusController(
-                aps, decomposer.Object, $"?find[_id]={StoredId}", Scope.FullAccess)
+        var result = await NewDeviceStatusController(service.Object, $"?find[_id]={StoredId}", Scope.FullAccess)
             .DeleteDeviceStatus(LegacyDeleteStatus.AnyId);
 
         AssertDeleteStatus(result, 1);
-        decomposer.Verify(
-            d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+        find!.GetEqualityValues("_id").Should().Equal(StoredId);
     }
 
     [Theory]
@@ -288,16 +263,12 @@ public class LegacyDeleteByIdTests
     [InlineData("?find[device]=openaps://rig&find[loop][$exists]=")]
     public async Task DeleteDeviceStatus_AnyIdWithoutAFindItCanApply_IsRefused(string queryString)
     {
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
+        var service = new Mock<IDeviceStatusService>(MockBehavior.Strict);
 
-        var result = await NewDeviceStatusController(
-                new Mock<IApsSnapshotRepository>(), decomposer.Object, queryString, Scope.FullAccess)
+        var result = await NewDeviceStatusController(service.Object, queryString, Scope.FullAccess)
             .DeleteDeviceStatus(LegacyDeleteStatus.AnyId);
 
         result.Should().BeOfType<BadRequestObjectResult>();
-        decomposer.Verify(
-            d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     [Theory]
@@ -307,26 +278,21 @@ public class LegacyDeleteByIdTests
     [InlineData("?token=x")]
     public async Task BulkDeleteDeviceStatus_WithoutAFindItCanApply_IsRefused(string queryString)
     {
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
+        var service = new Mock<IDeviceStatusService>(MockBehavior.Strict);
 
-        var result = await NewDeviceStatusController(
-                new Mock<IApsSnapshotRepository>(), decomposer.Object, queryString, Scope.FullAccess)
+        var result = await NewDeviceStatusController(service.Object, queryString, Scope.FullAccess)
             .BulkDeleteDeviceStatus();
 
         result.Should().BeOfType<BadRequestObjectResult>();
-        decomposer.Verify(
-            d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     [Fact]
     public async Task DeleteDeviceStatus_AnyId_NeedsTheBulkDeleteScope()
     {
-        var decomposer = new Mock<IDeviceStatusDecomposer>(MockBehavior.Strict);
+        var service = new Mock<IDeviceStatusService>(MockBehavior.Strict);
 
         var result = await NewDeviceStatusController(
-                new Mock<IApsSnapshotRepository>(), decomposer.Object,
-                "?find[created_at][$lte]=2020-01-02", Scope.DevicesReadWrite)
+                service.Object, "?find[created_at][$lte]=2020-01-02", Scope.DevicesReadWrite)
             .DeleteDeviceStatus(LegacyDeleteStatus.AnyId);
 
         result.Should().BeOfType<ForbidResult>();
@@ -338,16 +304,6 @@ public class LegacyDeleteByIdTests
         body.GetProperty("acknowledged").GetBoolean().Should().BeTrue();
         body.GetProperty("deletedCount").GetInt64().Should().Be(count);
         body.GetProperty("n").GetInt64().Should().Be(count);
-    }
-
-    private static Mock<IDeviceStatusGroupRepository> ReturningGroups(params ApsSnapshot[] statuses)
-    {
-        var groups = new Mock<IDeviceStatusGroupRepository>();
-        groups.Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(statuses.Select(aps => new DeviceStatusGroup(aps, null, null, null, aps.Timestamp)).ToList());
-        return groups;
     }
 
     private static DefaultHttpContext NewHttpContext(string queryString, string scope)
@@ -367,11 +323,8 @@ public class LegacyDeleteByIdTests
         };
 
     private static DeviceStatusController NewDeviceStatusController(
-        Mock<IApsSnapshotRepository> aps, IDeviceStatusDecomposer decomposer, string queryString, string scope,
-        Mock<IDeviceStatusGroupRepository>? groups = null) =>
-        new(CountControllerTests.DeviceStatusProjection(groups ?? new Mock<IDeviceStatusGroupRepository>(), aps),
-            decomposer, Mock.Of<IWriteSideEffects>(), Mock.Of<IDataEventSink<DeviceStatus>>(),
-            TimeProvider.System, NullLogger<DeviceStatusController>.Instance)
+        IDeviceStatusService service, string queryString, string scope) =>
+        new(service, TimeProvider.System, NullLogger<DeviceStatusController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = NewHttpContext(queryString, scope) },
         };

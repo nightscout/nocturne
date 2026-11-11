@@ -63,8 +63,6 @@
   const dayData = $derived(dayDataResource.current);
 
   // Short aliases for deeply-nested backend data
-  // Note: analysis, insulinDelivery, and treatmentSummary are currently null
-  // until the statistics client is migrated to use summary/retrospective clients
   const analysis = $derived(dayData?.analysis);
   const basicStats = $derived(analysis?.basicStats);
   const delivery = $derived(dayData?.insulinDelivery);
@@ -369,7 +367,7 @@
 
             <div>
               <div class="text-muted-foreground">Readings</div>
-              <div class="font-medium tabular-nums">{basicStats?.count ?? dayData?.entries?.length ?? 0}</div>
+              <div class="font-medium tabular-nums">{basicStats?.count ?? '–'}</div>
             </div>
           </div>
 

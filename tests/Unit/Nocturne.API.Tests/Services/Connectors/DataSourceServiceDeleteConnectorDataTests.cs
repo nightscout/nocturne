@@ -1,10 +1,12 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.V4;
@@ -33,6 +35,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -90,7 +93,10 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         NocturneDbContext context,
         IEnumerable<IConnectorDataPurge> dataPurges,
         params IConnectorPurgeGuard[] purgeGuards) => new(
-        context.AsFactory(),
+        new SourceOwnedDataRepository(context.AsFactory(), _auditContext),
+        new SourceOwnedDataRepository(context.AsFactory(), _auditContext),
+        new DemoDataPurgeRepository(context.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+        new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
@@ -402,7 +408,10 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             var writer = new ProfileActivationWriter(
                 ProfileActivationTestDeps.Repository(ctx), TestTenantCache.Create(), reresolver.Object);
             var service = new DataSourceService(
-                ctx.AsFactory(), _sensorGlucose.Object, _meterGlucose.Object, _calibrations.Object, _auditContext,
+                new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
+                new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
+                new DemoDataPurgeRepository(ctx.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+                new ConnectorConfigurationRepository(ctx.AsFactory()), _sensorGlucose.Object, _meterGlucose.Object, _calibrations.Object, _auditContext,
                 _connectorConfig.Object, writer, [], [], TimeProvider.System, NullLogger<DataSourceService>.Instance);
             (await service.DeleteConnectorDataAsync(ConnectorId)).Success.Should().BeTrue();
         }
@@ -534,6 +543,90 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             ConnectorId, false, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
         _connectorConfig.Verify(c => c.SetActiveAsync(
             ConnectorId, true, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A connector keeps crawl state beside its configuration — among it how far its crawls reached,
+    /// which outranks an empty store as a resume point. Left behind by a purge, it would answer the
+    /// promised re-import with only what arrived since.
+    /// </summary>
+    [Fact]
+    public async Task DeleteConnectorData_AllowingReimport_LeavesTheNextSyncToCrawlTheWholeHistory()
+    {
+        await using (var seed = NewContext())
+        {
+            seed.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                ConnectorName = ConnectorId,
+                BackfillLowWaterMarks = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, DateTime>
+                {
+                    ["DeviceStatus.Through"] = DateTime.UtcNow.AddHours(-1),
+                    ["DeviceStatus"] = DateTime.UtcNow.AddYears(-1),
+                }),
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        (await DeviceStatusCrawlAsync()).Should().Contain("$gte", "before the purge the sync resumes");
+
+        await using (var ctx = NewContext())
+            (await CreateService(ctx).DeleteConnectorDataAsync(ConnectorId, allowReimport: true))
+                .Success.Should().BeTrue();
+
+        (await DeviceStatusCrawlAsync()).Should().NotContain("$gte");
+    }
+
+    /// <summary>The device-status request a Nightscout sync makes over the crawl state stored here.</summary>
+    private async Task<string> DeviceStatusCrawlAsync()
+    {
+        var metadata = new Mock<IMetadataPublisher>();
+        metadata
+            .Setup(m => m.GetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string source, CancellationToken ct) =>
+            {
+                await using var ctx = NewContext();
+                return await new ConnectorConfigurationRepository(ctx.AsFactory()).GetBackfillLowWaterMarksAsync(source, ct);
+            });
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+        publisher.Setup(p => p.Treatments).Returns(Mock.Of<ITreatmentPublisher>());
+        publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
+        publisher.Setup(p => p.Metadata).Returns(metadata.Object);
+
+        var config = new NightscoutConnectorConfiguration { Url = "https://ns.example", ApiSecret = "secret" };
+        var handler = new RecordingHandler();
+        var service = new Nocturne.Connectors.Nightscout.Services.NightscoutConnectorService(
+            new HttpClient(handler),
+            Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
+            NullLogger<Nocturne.Connectors.Nightscout.Services.NightscoutConnectorService>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
+            Mock.Of<IRateLimitingStrategy>(),
+            new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            publisher.Object);
+
+        await service.SyncDataAsync(
+            new Nocturne.Connectors.Core.Models.SyncRequest { DataTypes = [Nocturne.Connectors.Core.Models.SyncDataType.DeviceStatus] },
+            config,
+            CancellationToken.None);
+
+        return handler.Requests.First(u => u.Contains("devicestatus.json"));
+    }
+
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public List<string> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(Uri.UnescapeDataString(request.RequestUri!.ToString()));
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", System.Text.Encoding.UTF8, "application/json"),
+            });
+        }
     }
 
     [Fact]

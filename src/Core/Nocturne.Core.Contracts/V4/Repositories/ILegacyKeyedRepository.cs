@@ -38,8 +38,9 @@ public interface IBulkUpsertRepository<TRecord>
     /// an update whose record carries none.
     /// </summary>
     /// <returns>
-    /// The written records, with <see cref="BulkWrite{TRecord}.Updated"/> naming those that updated
-    /// a stored row, and how many were withheld because the user had deleted them.
+    /// The stored records, with <see cref="BulkWrite{TRecord}.Updated"/> naming those that updated
+    /// a stored row and <see cref="BulkWrite{TRecord}.Unchanged"/> those whose row already held them,
+    /// and how many were withheld because the user had deleted them.
     /// </returns>
     Task<BulkWrite<TRecord>> BulkUpsertAsync(
         IEnumerable<TRecord> records, WriteOrigin origin, CancellationToken ct = default);
@@ -47,10 +48,23 @@ public interface IBulkUpsertRepository<TRecord>
 
 /// <summary>
 /// One record's outcome from <see cref="ILegacyKeyedRepository{TRecord}.BulkUpsertByLegacyIdAsync"/>:
-/// the persisted record and whether it was inserted rather than updated in place.
+/// the persisted record and what the write did to its row.
 /// </summary>
 /// <typeparam name="TRecord">The V4 record type.</typeparam>
-public sealed record LegacyUpsert<TRecord>(TRecord Record, bool Created);
+public sealed record LegacyUpsert<TRecord>(TRecord Record, UpsertOutcome Outcome);
+
+/// <summary>What an upsert did to a record's row.</summary>
+public enum UpsertOutcome
+{
+    /// <summary>No stored row carried the record, so one was inserted.</summary>
+    Created,
+
+    /// <summary>The stored row was rewritten with what the record carries.</summary>
+    Updated,
+
+    /// <summary>The stored row already held what the record carries, so nothing was written.</summary>
+    Unchanged,
+}
 
 /// <summary>
 /// A stored row's legacy id and the correlation id it carries, from
@@ -60,10 +74,8 @@ public sealed record LegacyCorrelation(string LegacyId, Guid CorrelationId);
 
 /// <summary>
 /// A V4 repository addressable by the legacy MongoDB <c>_id</c> its records were decomposed from.
-/// This is the surface the decomposers upsert through, so their create-or-update body can live in
-/// one generic place (<c>DecomposerBase.UpsertByLegacyIdAsync</c> per record,
-/// <see cref="BulkUpsertByLegacyIdAsync"/> or <see cref="IBulkUpsertRepository{TRecord}.BulkUpsertAsync"/>
-/// per batch).
+/// This is the surface the decomposers upsert through, a batch at a time
+/// (<see cref="BulkUpsertByLegacyIdAsync"/> or <see cref="IBulkUpsertRepository{TRecord}.BulkUpsertAsync"/>).
 /// </summary>
 /// <typeparam name="TRecord">The V4 record type stored by this repository.</typeparam>
 public interface ILegacyKeyedRepository<TRecord>
@@ -100,6 +112,12 @@ public interface ILegacyKeyedRepository<TRecord>
     Task<TRecord?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
     /// <summary>
+    /// Every record stored under any of <paramref name="legacyIds"/>, in one query, under the same
+    /// soft-delete visibility as <see cref="GetByLegacyIdAsync"/>.
+    /// </summary>
+    Task<IEnumerable<TRecord>> GetByLegacyIdsAsync(IEnumerable<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
     /// The record whose UUID <see cref="IV4Record.LegacyId"/> <see cref="Nocturne.Core.Models.MongoObjectId.Coerce"/>
     /// turns into <paramref name="objectId"/>, its 24-hex prefix: the id a legacy create echoed
     /// before it returned the stored record's own, which clients such as Loop cache and send back
@@ -110,6 +128,14 @@ public interface ILegacyKeyedRepository<TRecord>
     /// stored in mixed case is not found.
     /// </remarks>
     Task<TRecord?> GetByLegacyIdUuidPrefixAsync(string objectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every record one of <paramref name="objectIds"/> names by <see cref="GetByLegacyIdAsync"/>,
+    /// <see cref="IV4Repository{T}.GetByGuidRangeAsync"/> over the uuids its prefix covers, or
+    /// <see cref="GetByLegacyIdUuidPrefixAsync"/>, in one query per <c>ServedIdsPerStatement</c> ids.
+    /// Which record each id resolves to is left to the caller.
+    /// </summary>
+    Task<IReadOnlyList<TRecord>> GetByServedIdsAsync(IReadOnlyCollection<string> objectIds, CancellationToken ct = default);
 
     /// <summary>
     /// The record whose non-UUID <see cref="IV4Record.LegacyId"/> <see cref="Nocturne.Core.Models.MongoObjectId.Coerce"/>

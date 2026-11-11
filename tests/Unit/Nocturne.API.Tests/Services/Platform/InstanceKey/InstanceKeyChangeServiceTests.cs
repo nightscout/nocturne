@@ -11,6 +11,7 @@ using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -25,6 +26,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.API.Tests.Services.Platform.InstanceKey;
 
@@ -35,7 +37,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
     private readonly ISecretEncryptionService _oldKey = Encryption("the-old-instance-key");
     private readonly ISecretEncryptionService _newKey = Encryption("the-new-instance-key");
-    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero));
+    private readonly ScanClock _clock = new(new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero));
     private readonly SqliteTestDatabase _database = TestDbContextFactory.CreateSqlite();
     private readonly List<Sent> _sent = [];
     private readonly List<InAppNotificationEntity> _active = [];
@@ -69,6 +71,8 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         services.AddScoped<IInAppNotificationService>(sp =>
             new RecordingNotifications(sp.GetRequiredService<ITenantAccessor>(), this));
         services.AddTransient(_ => _key);
+        services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
+        services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddTransient<UndecryptableSecretScanner>();
         _provider = services.BuildServiceProvider();
     }
@@ -137,8 +141,9 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await StoreWebhookChannelAsync(Affected, "Bare", "hooks/token-in-the-path", _oldKey);
         await StoreWebhookChannelAsync(Affected, "Mixed", "https://a.example.com/x, not a url", _oldKey);
 
+        var affected = _database.ContextFactory.AsNocturneFactory(Affected);
         var found = await new UndecryptableSecretScanner(
-            _database.ContextFactory.AsNocturneFactory(Affected), _newKey).ScanTenantAsync(CancellationToken.None);
+            affected, new ConnectorConfigurationRepository(affected), new AlertRuleRepository(affected), _newKey).ScanTenantAsync(CancellationToken.None);
 
         found.AlertChannels.Select(c => (c.RuleName, c.Destination)).Should().Equal(
             ("Bare", ""), ("Mixed", "a.example.com"));
@@ -202,8 +207,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         var admin = await SeedPlatformAdminAsync(Affected);
 
         var service = CreateService();
-        await service.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _sent.Count == OwnersOf(Affected).Length + 1);
+        await StartAndAwaitPassAsync(service);
         var generation = (await CheckAsync())!.Generation.ToString();
 
         await StoreConnectorAsync(Affected, "dexcom", _newKey);
@@ -248,8 +252,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await StoreConnectorAsync(Unaffected, "dexcom", _oldKey);
 
         var first = CreateService();
-        await first.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _sent.Count == 4);
+        await StartAndAwaitPassAsync(first);
         var firstChange = (await CheckAsync())!.Generation.ToString();
         await StoreConnectorAsync(Affected, "dexcom", _newKey);
         await AdvanceUntilAsync(() => _archived.Count == 2);
@@ -259,8 +262,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         _key = third;
         var second = CreateService();
-        await second.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _sent.Count == 4);
+        await StartAndAwaitPassAsync(second);
         await second.StopAsync(CancellationToken.None);
 
         var secondChange = (await CheckAsync())!.Generation.ToString();
@@ -365,10 +367,9 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         return new InstanceKeyChangeService(
             _provider,
             new InstanceKeyCheck(root, _key),
-            new UndecryptableSecretScanner(root, _key),
             new OwnerNoticeLedger(root),
-            new ActiveTenantSnapshot(snapshotContexts ?? root, _clock, NullLogger<ActiveTenantSnapshot>.Instance),
-            root,
+            new ActiveTenantSnapshot(new TenantRepository(snapshotContexts ?? root), _clock, NullLogger<ActiveTenantSnapshot>.Instance),
+            new TenantMembershipRepository(root),
             _clock,
             _log);
     }
@@ -377,6 +378,17 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     {
         await service.StartAsync(CancellationToken.None);
         await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>
+    /// Returns once the service has finished a pass and is waiting for the next scan, so the test
+    /// thread opens no context while the pass has one on the shared connection.
+    /// </summary>
+    private async Task StartAndAwaitPassAsync(InstanceKeyChangeService service)
+    {
+        var scans = _clock.Scans;
+        await service.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => _clock.Scans > scans || service.ExecuteTask!.IsCompleted);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
@@ -504,6 +516,22 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     {
         _provider.Dispose();
         _database.Dispose();
+    }
+
+    /// <summary>Counts the scan waits the service starts, one for each pass that ends without clearing the change.</summary>
+    private sealed class ScanClock(DateTimeOffset start) : FakeTimeProvider(start)
+    {
+        private int _scans;
+
+        public int Scans => Volatile.Read(ref _scans);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = base.CreateTimer(callback, state, dueTime, period);
+            if (dueTime == InstanceKeyChangeService.RescanInterval)
+                Interlocked.Increment(ref _scans);
+            return timer;
+        }
     }
 
     private sealed record Sent(

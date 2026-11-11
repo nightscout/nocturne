@@ -72,11 +72,9 @@ public class RecordDatasetTests
                 Mgdl = 50 + i % 30 * 10,
             }).ToList();
             Glucose.Setup(g => g.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), It.IsAny<int>(),
-                    It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
-                .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, DateTime? _, Guid? _, CancellationToken _, Guid? _) =>
+                    It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()))
+                .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, DateTime? _, Guid? _, CancellationToken _, Guid? _, GlucoseStreams _) =>
                     readings.Where(r => r.Timestamp >= from && r.Timestamp < to).OrderBy(r => r.Timestamp).ToList());
-            Canonical.Setup(c => c.SelectAsync(It.IsAny<IReadOnlyList<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((IReadOnlyList<SensorGlucose> r, CancellationToken _) => r);
             Therapy.Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(zone);
             StateSpans.Setup(s => s.GetByCategories(It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Dictionary<StateSpanCategory, List<StateSpan>>());
@@ -88,8 +86,8 @@ public class RecordDatasetTests
             var readings = Enumerable.Range(0, 15 * 288).Select(i => Now.AddMinutes(-5 * i))
                 .Select(at => new SensorGlucose { Timestamp = at.UtcDateTime, Mgdl = mgdl(at) }).ToList();
             Glucose.Setup(g => g.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), It.IsAny<int>(),
-                    It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
-                .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, DateTime? _, Guid? _, CancellationToken _, Guid? _) =>
+                    It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()))
+                .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, DateTime? _, Guid? _, CancellationToken _, Guid? _, GlucoseStreams _) =>
                     readings.Where(r => r.Timestamp >= from && r.Timestamp < to).OrderBy(r => r.Timestamp).ToList());
         }
 

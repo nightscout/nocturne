@@ -7,7 +7,13 @@ public class SleepTrendsSummary
     public int DaysInRange { get; set; }
     /// <summary>NightCount / DaysInRange as a percentage, clamped to 100. 0 when DaysInRange is 0.</summary>
     public double CoveragePct { get; set; }
+    /// <summary>Nights with a sleep score, the nights <see cref="MeanScore"/> averages.</summary>
+    public int ScoredNightCount { get; set; }
+    /// <summary>Whether any of the scored nights carries a score Nocturne estimated rather than one the device reported.</summary>
+    public bool IncludesEstimatedScore { get; set; }
     public double? MeanScore { get; set; }
+    /// <summary>Nights with an overnight time in range, the nights <see cref="MeanTirPct"/> averages.</summary>
+    public int TirNightCount { get; set; }
     public double? MeanTirPct { get; set; }
     public double MeanAsleepMinutes { get; set; }
     public double MeanDeepPct { get; set; }

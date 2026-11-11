@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using System.Reflection;
 using FluentAssertions;
 using Moq;
@@ -11,12 +12,12 @@ using Xunit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.API.Tests.Controllers.V1;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -168,7 +169,7 @@ public class ActivityReadScopeGuardTests
         httpContext.Items["GrantedScopes"] = Scope.Normalize(granted);
 
         var controller = new CountController(
-            Mock.Of<IEntryStore>(), Mock.Of<ITreatmentStore>(), CountControllerTests.DeviceStatusProjection(new Mock<IDeviceStatusGroupRepository>()),
+            Mock.Of<IEntryService>(), Mock.Of<ITreatmentService>(), Mock.Of<IDeviceStatusService>(),
             Mock.Of<IProfileProjectionService>(), Mock.Of<IFoodRepository>(),
             activityService.Object, TimeProvider.System, NullLogger<CountController>.Instance)
         {

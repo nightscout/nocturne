@@ -588,7 +588,7 @@ public class OAuthController : ControllerBase
 
     /// <summary>
     /// Token revocation endpoint (RFC 7009). Per the specification, always returns <c>200 OK</c>
-    /// regardless of whether the token was found or already revoked.
+    /// regardless of whether the token was found or already revoked. Requires no authentication.
     /// </summary>
     /// <remarks>
     /// Anonymous, unlike the introspection endpoint below: the response carries nothing about the
@@ -884,6 +884,7 @@ public class OAuthController : ControllerBase
     /// Token introspection endpoint (RFC 7662).
     /// Returns metadata about a token including its active status, scopes, and subject.
     /// Per RFC 7662, an authenticated caller always gets 200 OK; invalid tokens get <c>active=false</c>.
+    /// A request with no identity is refused. A token issued to another subject reads as inactive.
     /// </summary>
     /// <remarks>
     /// RFC 7662 section 2.1 requires the endpoint to authenticate its caller. Every client here is

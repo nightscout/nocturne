@@ -16,27 +16,25 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing blood glucose check records in the database. A DeduplicationService
+/// Repository for managing blood glucose check records in the database. A deduplication
 /// participant on top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>,
-/// so it keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
-/// non-primary LinkedRecords filter, post-commit dedup linking).
+/// so it keeps only the dedup-specific behaviour as overrides (<c>GetAsync</c> extended
+/// with the duplicate filter).
 /// </summary>
 public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="BGCheckRepository"/> class.
     /// </summary>
     public BGCheckRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<BGCheckRepository> logger,
-        IV4RecordBroadcaster<BGCheck>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<BGCheck>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
     }
 
     /// <inheritdoc />
@@ -48,12 +46,9 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
     /// <inheritdoc />
     protected override void ApplyUpdate(BGCheckEntity target, BGCheck source) => BGCheckMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.BGCheck;
-
     /// <summary>
     /// Gets blood glucose check records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -86,9 +81,9 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
+        query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(BGCheckMapper.ToDomainModel);
     }
@@ -110,31 +105,5 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(BGCheckMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<BGCheckEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.BGCheck, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BGCheck", inserted.Count);
-        }
     }
 }

@@ -10,7 +10,7 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// Outside Infrastructure every <c>NocturneDbContext</c> is opened from
 /// <see cref="INocturneDbContextFactory"/> in the method that uses it, or handed to it by a caller
 /// that opened one; none is injected, resolved from a scope, constructed or registered, and the raw
-/// EF factory is not used.
+/// EF factory is not used. No Infrastructure repository uses the raw factory either.
 /// <see cref="ICategoryReadContext.IsHistoryClamped"/> is read only where a caller's history ceiling
 /// is decided or carried, never to gate a cache.
 /// </summary>
@@ -72,6 +72,15 @@ public class PerOperationContextGuardTests
     {
         OutsideInfrastructure().Where(s => UsesRawFactory(s.Tree)).Select(s => s.Path)
             .Should().BeEmpty("the raw factory's contexts read no scope; use INocturneDbContextFactory");
+    }
+
+    [Fact]
+    public void NoRepositoryUsesTheRawContextFactory()
+    {
+        Sources
+            .Where(s => s.Path.StartsWith("src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/", StringComparison.Ordinal))
+            .Where(s => UsesRawFactory(s.Tree)).Select(s => s.Path)
+            .Should().BeEmpty("a repository reads as its scope's reader, or pins a tenant, through INocturneDbContextFactory");
     }
 
     [Fact]
@@ -234,40 +243,10 @@ public class PerOperationContextGuardTests
             .Distinct()
             .ToList();
 
-    private static List<(string, SyntaxTree)> Load()
-    {
-        var root = RepositoryRoot();
-        var sources = new List<(string, SyntaxTree)>();
-
-        foreach (var path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
-        {
-            if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                || path.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}"))
-                continue;
-
-            var text = File.ReadAllText(path);
-            if (!text.Contains(Context, StringComparison.Ordinal) && !text.Contains(Clamp, StringComparison.Ordinal))
-                continue;
-
-            sources.Add((Path.GetRelativePath(root, path).Replace('\\', '/'), CSharpSyntaxTree.ParseText(text)));
-        }
-
-        return sources;
-    }
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-                return directory.FullName;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
-    }
+    private static List<(string, SyntaxTree)> Load() =>
+        RepoSources.Src
+            .Where(s => !s.Path.Contains("/Migrations/", StringComparison.Ordinal)
+                && (s.Text.Contains(Context, StringComparison.Ordinal) || s.Text.Contains(Clamp, StringComparison.Ordinal)))
+            .Select(s => (s.Path, s.Tree))
+            .ToList();
 }

@@ -205,7 +205,7 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
     private FoodRepository Foods(Guid tenant) => new(Tenant(tenant).AsFactory(), NullLogger<FoodRepository>.Instance);
 
     private StateSpanRepository StateSpans(Guid tenant) => new(
-        Tenant(tenant).AsFactory(), Mock.Of<IDeduplicationService>(), Mock.Of<IAuditContext>(),
+        Tenant(tenant).AsFactory(), Mock.Of<IDuplicateLinker>(), Mock.Of<IAuditContext>(),
         NullLogger<StateSpanRepository>.Instance);
 
     private BodyWeightService BodyWeights(Guid tenant) => new(

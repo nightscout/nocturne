@@ -183,7 +183,7 @@ public class ConfigurationController : ControllerBase
     private static bool SetsEnabled(JsonDocument configuration) =>
         configuration.RootElement.ValueKind == JsonValueKind.Object &&
         configuration.RootElement.EnumerateObject()
-            .Any(property => property.Name.Equals("enabled", StringComparison.OrdinalIgnoreCase));
+            .Any(property => ConnectorEnabledKey.Matches(property.Name));
 
     private ObjectResult RefuseGrantDrivenEnabled() =>
         Problem(
@@ -254,12 +254,6 @@ public class ConfigurationController : ControllerBase
         // Validate each property in the configuration
         foreach (var configProp in configRoot.EnumerateObject())
         {
-            // Skip 'enabled' field - it's always valid
-            if (configProp.Name.Equals("enabled", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
             // Check if the property exists in the schema
             if (!schemaProperties.TryGetProperty(configProp.Name, out var propSchema))
             {

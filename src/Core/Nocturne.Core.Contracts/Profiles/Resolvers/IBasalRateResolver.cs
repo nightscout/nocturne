@@ -13,10 +13,12 @@ public interface IBasalRateResolver
     Task<double> GetBasalRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
 
     /// <summary>
-    /// The scheduled rate in force at the time, as <see cref="GetBasalRateAsync"/> resolves it, or null
-    /// where that would answer its default because no schedule is in force.
+    /// The scheduled rate in force at each of <paramref name="timesMills"/>, in order, as
+    /// <see cref="GetBasalRateAsync"/> resolves it, or null where that would answer its default because
+    /// no schedule is in force: one read of the activations spanning them, and the schedules of the
+    /// profiles they select.
     /// </summary>
-    Task<double?> FindBasalRateAsync(long timeMills, CancellationToken ct = default);
+    Task<IReadOnlyList<double?>> FindBasalRatesAsync(IReadOnlyList<long> timesMills, CancellationToken ct = default);
 
     /// <summary>
     /// Pre-fetches all profile data for [fromMs, toMs) in a fixed number of DB queries

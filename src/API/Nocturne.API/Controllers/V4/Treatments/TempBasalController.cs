@@ -30,19 +30,28 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Tags("Treatments")]
 [Route("api/v4/insulin/temp-basals")]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
+[ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class TempBasalController(
     ITempBasalRepository repo,
     IPatientDeviceStamper deviceStamper) : ControllerBase
 {
     /// <summary>
     /// Lists temp basal spans, newest-first by default.
+    /// Responses are never cached, so a just-started or just-cancelled span appears at once.
     /// </summary>
     /// <remarks>
     /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-started
     /// or just-cancelled span must not be invisible until a cached list body expires.
     /// </remarks>
+    /// <param name="from">Start of the time range to list. Unbounded when omitted.</param>
+    /// <param name="to">End of the time range to list. Unbounded when omitted.</param>
+    /// <param name="limit">Maximum number of spans to return. Defaults to `100`.</param>
+    /// <param name="offset">Number of spans to skip before the first one returned. Defaults to `0`.</param>
+    /// <param name="sort">Order by span time: `timestamp_desc` or `timestamp_asc`. Defaults to `timestamp_desc`.</param>
+    /// <param name="device">Return only spans from this device.</param>
+    /// <param name="source">Return only spans from this data source.</param>
     /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RequireScope(Scope.TreatmentsRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -83,6 +92,10 @@ public class TempBasalController(
 
     /// <summary>
     /// Write temp basal spans and cancels in bulk (max 1000).
+    /// Items are processed in timestamp order, so a batch may start a temp basal and cancel it later in the same request. Processing is per item, not all-or-nothing.
+    /// A regular item with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other item is inserted. A regular item whose pair belongs to a span the owner deleted is skipped and left out of the response, even in a one-item array, which returns `201 Created` with an empty array.
+    /// A cancel (`isCancel: true`) ends the temp basal active at its timestamp at that instant; with none active it does nothing.
+    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing. The response lists every record written or truncated, in processing order.
     /// </summary>
     /// <remarks>
     /// Items are processed in timestamp order, one at a time, so a batch may start a temp basal

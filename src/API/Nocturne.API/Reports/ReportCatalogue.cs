@@ -7,6 +7,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using MvcJsonOptions = Microsoft.AspNetCore.Mvc.JsonOptions;
+using Nocturne.API.Services.Identity;
 
 namespace Nocturne.API.Reports;
 
@@ -208,8 +209,7 @@ internal sealed class ReportCatalogue(
     IReportDatasetRegistry registry,
     ReportSpecValidator validator,
     IHttpContextAccessor httpContextAccessor,
-    ITenantAppearanceReader appearance,
-    ITenantAccessor tenant,
+    ITenantGlucoseUnits glucoseUnits,
     IOptions<MvcJsonOptions> jsonOptions) : ICustomReportCatalogue
 {
     private static readonly IReadOnlyList<CustomReportChoice> Orientations =
@@ -218,11 +218,11 @@ internal sealed class ReportCatalogue(
     public async Task<CustomReportCatalogue> CatalogueAsync(CancellationToken cancellationToken) =>
         Build(
             httpContextAccessor.HttpContext?.GetGrantedScopes() ?? new HashSet<string>(),
-            await GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken));
+            await glucoseUnits.UsesMmolAsync(cancellationToken));
 
     public async Task<IReadOnlyList<CustomReportTemplate>> TemplatesAsync(CancellationToken cancellationToken)
     {
-        var useMmol = await GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken);
+        var useMmol = await glucoseUnits.UsesMmolAsync(cancellationToken);
         return [.. ReportTemplates.Normalised(validator, useMmol).Select(t => new CustomReportTemplate(
             t.Template.Id,
             t.Template.Name,

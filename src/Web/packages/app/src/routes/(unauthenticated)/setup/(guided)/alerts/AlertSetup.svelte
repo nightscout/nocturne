@@ -24,6 +24,7 @@
   import { getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
   import {
     AlertRouting,
+    AlertThresholdSource,
     ChannelType,
     StarterAlertKind,
     type AlertSetupStatus,
@@ -185,7 +186,13 @@
     <section class="flex flex-col gap-3">
       <h2 class="text-base font-medium">When to alert</h2>
       <p class="text-sm text-muted-foreground" data-testid="alerts-starting-points">
-        {#if voice.kind === "named"}
+        {#if status.thresholdsFrom === AlertThresholdSource.Nightscout && voice.kind === "named"}
+          These are the thresholds from {voice.name}'s Nightscout site. Check that they are still right.
+        {:else if status.thresholdsFrom === AlertThresholdSource.Nightscout && caregiver}
+          These are the thresholds from the Nightscout site. Check that they are still right.
+        {:else if status.thresholdsFrom === AlertThresholdSource.Nightscout}
+          These are the thresholds from your Nightscout site. Check that they are still right.
+        {:else if voice.kind === "named"}
           These are common starting points. Set them to what you and {voice.name}'s care team agreed.
         {:else if caregiver}
           These are common starting points. Set them to what you and the care team agreed.

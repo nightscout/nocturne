@@ -38,7 +38,7 @@ public class AuthAuditService : IAuthAuditService
     }
 
     /// <inheritdoc />
-    public async Task LogAsync(string eventType, Guid? subjectId, bool success,
+    public async Task LogAsync(string eventType, Guid? targetSubjectId, bool success,
         string? ipAddress = null, string? userAgent = null,
         string? errorMessage = null, string? detailsJson = null,
         Guid? refreshTokenId = null,
@@ -46,7 +46,7 @@ public class AuthAuditService : IAuthAuditService
         Guid? tenantId = null)
     {
         actor ??= AuthAuditActor.FromCallerOtherThan(
-            _httpContextAccessor.HttpContext?.GetAuthContext(), subjectId);
+            _httpContextAccessor.HttpContext?.GetAuthContext(), targetSubjectId);
 
         try
         {
@@ -55,9 +55,9 @@ public class AuthAuditService : IAuthAuditService
             {
                 Id = Guid.CreateVersion7(),
                 EventType = eventType,
-                SubjectId = subjectId,
+                TargetSubjectId = targetSubjectId,
                 // No actor to distinguish means the subject acted for themselves.
-                ActorSubjectId = actor is null ? subjectId : actor.SubjectId,
+                ActorSubjectId = actor is null ? targetSubjectId : actor.SubjectId,
                 ActorCredential = actor?.Credential,
                 TenantId = tenantId ?? db.TenantIdOrNull,
                 Success = success,

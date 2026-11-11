@@ -31,7 +31,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [Route("api/v4/glucose/meter")]
 [RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Entries, TenantCacheFamily.EHbA1c)]
+[ClearsTenantCache(TenantCacheFamily.EHbA1c)]
 public class MeterGlucoseController(
     IMeterGlucoseRepository repo,
     IPatientDeviceRepository patientDevices,

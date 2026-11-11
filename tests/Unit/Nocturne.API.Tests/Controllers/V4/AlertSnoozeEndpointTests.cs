@@ -61,6 +61,7 @@ public class AlertSnoozeEndpointTests
             (new InMemoryFactory(_options)).AsNocturneFactory(_tenantId),
             tenantAccessor.Object,
             Mock.Of<IAlertRepository>(),
+            Mock.Of<IAlertRuleRepository>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<ISensorContextEnricher>(),
             Mock.Of<ICanonicalGlucoseService>(),

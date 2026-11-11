@@ -1,6 +1,6 @@
 ## Project Overview
 
-Nocturne is a .NET 10 rewrite of the Nightscout diabetes management API with 1:1 API compatibility with the legacy JavaScript implementation. v1, v2, and v3 are all earmarked for keeping with the original API.
+Nocturne is a .NET 11 rewrite of the Nightscout diabetes management API with 1:1 API compatibility with the legacy JavaScript implementation. v1, v2, and v3 are all earmarked for keeping with the original API.
 
 ## Running the application
 
@@ -79,8 +79,8 @@ tests/
 Services are defined in `Core.Contracts` and registered as scoped:
 
 ```csharp
-// Interface: src/Core/Nocturne.Core.Contracts/IEntryService.cs
-// Implementation: src/API/Nocturne.API/Services/EntryService.cs
+// Interface: src/Core/Nocturne.Core.Contracts/Entries/IEntryService.cs
+// Implementation: src/API/Nocturne.API/Services/Entries/EntryService.cs
 builder.Services.AddScoped<IEntryService, EntryService>();
 ```
 

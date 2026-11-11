@@ -33,7 +33,7 @@ public static class LegacyFallbackRules
 
     /// <summary>
     /// Whether <paramref name="definition"/> already stands for <paramref name="kind"/>: a Duration
-    /// tracker whose hardware provides the kind's capability (<see cref="TrackerCoverage.Of"/>), or,
+    /// tracker whose hardware provides the kind's capability (<see cref="TrackerCoverage.Of(TrackerDefinitionEntity)"/>), or,
     /// when that is not known, one restarted by one of the kind's events, whatever its category,
     /// dashboard visibility or notes filter, or a Duration sensor, cannula or reservoir tracker of
     /// the kind's category that restarts on nothing, run by hand. A definition hidden from the
@@ -106,8 +106,12 @@ public static class LegacyFallbackRules
     /// Whether the latest event of <paramref name="kind"/>, at <paramref name="latestAt"/>, is
     /// trusted as the age of a consumable still worn.
     /// </summary>
+    /// <param name="kind">The consumable the event is of; decides whether repeated events are required.</param>
+    /// <param name="spec">The tracker whose lifespan decides when the event is stale.</param>
+    /// <param name="latestAt">When the latest event of the kind happened.</param>
     /// <param name="recentCount">Events of the kind within <see cref="RepeatWindow"/>; read only
     /// for a kind that <see cref="RequiresRepeatedEvents"/>.</param>
+    /// <param name="now">The moment the event's age is measured from.</param>
     public static bool IsConfident(
         LegacyConsumableKind kind,
         ConsumableTrackerSpec spec,

@@ -46,8 +46,7 @@ public static class RealtimeCategories
     /// <see cref="ShareDataCategories.GoverningScopes"/>, which covers only the share-reachable
     /// categories — <c>profiles</c>/<c>therapy</c> here answer to <see cref="Scope.TherapyRead"/>,
     /// which no share link can hold. <c>care</c> and <c>treatments</c> are the treatment family, so
-    /// they answer to <see cref="Scope.TreatmentsRead"/> as a whole even though a BG check inside
-    /// <c>care</c> is governed by glucose.read for share links.
+    /// they answer to <see cref="Scope.TreatmentsRead"/>.
     /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> GoverningScopes =
         new Dictionary<string, string>(StringComparer.Ordinal)

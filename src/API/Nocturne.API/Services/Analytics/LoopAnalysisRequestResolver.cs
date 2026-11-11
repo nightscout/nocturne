@@ -13,6 +13,14 @@ namespace Nocturne.API.Services.Analytics;
 /// Null when there is nothing to analyse: when <see cref="Zone"/> is null, since without a zone the
 /// dates cannot be placed, and when <see cref="RangeOutsideHistory"/>.
 /// </param>
+/// <param name="Zone">The tenant's time zone; null when it has none to resolve.</param>
+/// <param name="Reason">Why there is no zone; null when there is one.</param>
+/// <param name="PrimaryRange">The range analysed; null without a zone.</param>
+/// <param name="ComparisonRange">The range compared against; null without a zone, when none was asked for, and for a history-clamped caller.</param>
+/// <param name="Masks">The masks left once those the caller may not use are dropped.</param>
+/// <param name="IgnoredFilters">The query parameters the caller passed that were dropped or overridden.</param>
+/// <param name="UnavailableFilters">The filters the caller's scopes do not allow.</param>
+/// <param name="HistoryClamped">Whether the caller is history-clamped.</param>
 /// <param name="RangeOutsideHistory">See <see cref="LoopAnalysisResponse.RangeOutsideHistory"/>.</param>
 /// <param name="NarrowerThanHistoryWindow">See <see cref="LoopAnalysisResponse.NarrowerThanHistoryWindow"/>.</param>
 internal sealed record LoopAnalysisRequest(

@@ -199,6 +199,20 @@ public static class TimeZoneHelper
         return DateTime.SpecifyKind(wall - offset, DateTimeKind.Utc);
     }
 
+    /// <summary>
+    /// <see cref="TimeZoneInfo.ConvertTimeToUtc(DateTime, TimeZoneInfo)"/>, which reads an ambiguous
+    /// time as standard time, except that a time the clock skipped resolves to the first instant
+    /// after the gap. The framework throws for one, on Linux only from .NET 11, and a zone whose
+    /// clocks go forward at midnight (America/Asuncion, Asia/Amman) skips the start of a local day.
+    /// </summary>
+    public static DateTime ConvertTimeToUtc(DateTime local, TimeZoneInfo timeZone)
+    {
+        var wall = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+        return timeZone.IsInvalidTime(wall)
+            ? DateTime.SpecifyKind(GapEnd(wall, timeZone), DateTimeKind.Utc)
+            : TimeZoneInfo.ConvertTimeToUtc(wall, timeZone);
+    }
+
     private static DateTime GapEnd(DateTime wall, TimeZoneInfo timeZone)
     {
         var before = timeZone.GetUtcOffset(wall.AddDays(-1));

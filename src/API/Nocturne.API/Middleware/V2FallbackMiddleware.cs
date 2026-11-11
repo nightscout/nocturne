@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.AspNetCore.Routing.Template;
+using Nocturne.API.Helpers;
 
 namespace Nocturne.API.Middleware;
 
@@ -73,11 +74,10 @@ public class V2FallbackMiddleware
 
             if (_logger.IsEnabled(LogLevel.Debug))
             {
-                // Strip line breaks so a path the caller controls cannot forge log lines.
                 _logger.LogDebug(
                     "V2FallbackMiddleware: no v2 route for '{OriginalPath}', serving it as '{NewPath}'",
-                    path.ToString().Replace("\r", "").Replace("\n", ""),
-                    rewritten.ToString().Replace("\r", "").Replace("\n", "")
+                    LogText.Sanitize(path.ToString()),
+                    LogText.Sanitize(rewritten.ToString())
                 );
             }
         }

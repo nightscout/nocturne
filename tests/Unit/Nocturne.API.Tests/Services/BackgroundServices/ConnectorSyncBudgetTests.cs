@@ -1,9 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Nocturne.API.Services.BackgroundServices;
-using Nocturne.Connectors.Core.Extensions;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
@@ -70,26 +67,11 @@ public class ConnectorSyncBudgetTests
     }
 
     [Fact]
-    public void NextStartupOffset_DividesThePollIntervalAmongThePollers_InStartOrder()
-    {
-        var budget = new ConnectorSyncBudget(pollerCount: 4);
-        var interval = TimeSpan.FromSeconds(60);
-
-        budget.NextStartupOffset(interval).Should().Be(TimeSpan.Zero);
-        budget.NextStartupOffset(interval).Should().Be(TimeSpan.FromSeconds(15));
-        budget.NextStartupOffset(interval).Should().Be(TimeSpan.FromSeconds(30));
-        budget.NextStartupOffset(interval).Should().Be(TimeSpan.FromSeconds(45));
-        budget.NextStartupOffset(interval).Should().Be(TimeSpan.Zero, "a poller beyond the count wraps");
-    }
-
-    [Fact]
     public void FromConfiguration_WithNothingSet_RunsOnTheDefault()
     {
-        var budget = ConnectorSyncBudget.FromConfiguration(
-            new ConfigurationBuilder().Build(), new ServiceCollection());
+        var budget = ConnectorSyncBudget.FromConfiguration(new ConfigurationBuilder().Build());
 
         budget.Slots.Should().Be(ConnectorSyncBudget.DefaultSlots);
-        budget.PollerCount.Should().Be(1, "a host with no pollers still needs a valid budget");
     }
 
     [Theory]
@@ -101,33 +83,8 @@ public class ConnectorSyncBudgetTests
             .AddInMemoryCollection([new KeyValuePair<string, string?>(key, "6")])
             .Build();
 
-        var budget = ConnectorSyncBudget.FromConfiguration(configuration, new ServiceCollection());
+        var budget = ConnectorSyncBudget.FromConfiguration(configuration);
 
         budget.Slots.Should().Be(6);
-    }
-
-    /// <summary>
-    /// The phase count has to be the pollers actually scheduled, so a connector that is added or
-    /// disabled changes the stagger without anyone editing a constant.
-    /// </summary>
-    [Fact]
-    public void FromConfiguration_CountsTheRegisteredPollers()
-    {
-        var configuration = new ConfigurationBuilder().Build();
-        var services = new ServiceCollection();
-        services.AddConnectors(configuration, typeof(ConnectorBackgroundService<,>));
-        services.AddHostedService<UnrelatedHostedService>();
-
-        var budget = ConnectorSyncBudget.FromConfiguration(configuration, services);
-
-        var pollers = services.Count(d =>
-            d.ServiceType == typeof(IHostedService) && d.ImplementationType != typeof(UnrelatedHostedService));
-        pollers.Should().BeGreaterThan(1);
-        budget.PollerCount.Should().Be(pollers);
-    }
-
-    private sealed class UnrelatedHostedService : BackgroundService
-    {
-        protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
     }
 }

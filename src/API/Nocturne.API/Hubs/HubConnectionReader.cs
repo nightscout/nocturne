@@ -21,7 +21,7 @@ public static class HubConnectionReader
     /// <summary>The connection's reader, or null when its request recorded none.</summary>
     public static TenantReader? Of(HubCallerContext connection)
     {
-        if (connection.Items.TryGetValue(ItemKey, out var held) && held is TenantReader reader)
+        if (Held(connection) is { } reader)
             return reader;
 
         if (connection.GetHttpContext()?.GetRecordedReader() is not { } recorded)
@@ -30,6 +30,17 @@ public static class HubConnectionReader
         connection.Items[ItemKey] = recorded;
         return recorded;
     }
+
+    /// <summary>
+    /// The reader the connection holds, or null. Unlike <see cref="Of"/> it never reads the upgrade
+    /// request, so work off the connection's own calls (<see cref="HubConnectionRevalidator"/>) can use it.
+    /// </summary>
+    /// <remarks>
+    /// A connection holds its reader from admission on: <see cref="TenantHubFilter"/> reads
+    /// <see cref="Of"/> when it connects.
+    /// </remarks>
+    public static TenantReader? Held(HubCallerContext connection) =>
+        connection.Items.TryGetValue(ItemKey, out var held) ? held as TenantReader : null;
 
     /// <summary>Limits the connection to the last 24 hours from its next scope on.</summary>
     public static void ClampToDay(HubCallerContext connection)

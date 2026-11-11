@@ -84,9 +84,9 @@ public class ModelConventionTests
     /// to be skipped a heap fetch at a time, which costs the index-only scan.
     /// </summary>
     [Fact]
-    public void EveryV4RecordTable_HasTheTenantSourceWatermarkIndex() =>
+    public void EveryWatermarkedTable_HasTheTenantSourceWatermarkIndex() =>
         AssertFamily(
-            NocturneDbContext.V4TimeSeriesRecordEntities,
+            NocturneDbContext.V4WatermarkedEntities,
             "_tenant_source_timestamp",
             i => Columns(i).SequenceEqual([
                     nameof(ITenantScoped.TenantId),
@@ -98,7 +98,7 @@ public class ModelConventionTests
                 && i.GetFilter() == "deleted_at IS NULL");
 
     /// <summary>
-    /// GetLatestAsync and GetLatestBeforeAsync pin no data source, so the watermark index above
+    /// GetLatestAsync and the pump GetTimelineAsync pin no data source, so the watermark index above
     /// cannot serve them.
     /// </summary>
     [Fact]
@@ -114,6 +114,20 @@ public class ModelConventionTests
                 && i.IsDescending is not null
                 && i.IsDescending.SequenceEqual([false, true, true])
                 && i.GetFilter() == "deleted_at IS NULL");
+
+    [Fact]
+    public void EveryDeduplicatedListTable_HasTheTenantLeadingSortIndexOverTheRowsReadsShow() =>
+        AssertFamily(
+            NocturneDbContext.V4VisibleSortedListEntities,
+            "_tenant_visible_timestamp_id",
+            i => Columns(i).SequenceEqual([
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.Timestamp),
+                    nameof(IIdentified.Id)])
+                && !i.IsUnique
+                && i.IsDescending is not null
+                && i.IsDescending.SequenceEqual([false, true, true])
+                && i.GetFilter() == "deleted_at IS NULL AND NOT is_duplicate");
 
     [Fact]
     public void EveryCorrelatedTable_HasACorrelationIdIndex() =>

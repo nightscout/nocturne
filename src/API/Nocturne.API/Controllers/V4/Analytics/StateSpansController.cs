@@ -56,7 +56,9 @@ public class StateSpansController : ControllerBase
     }
 
     /// <summary>
-    /// Query all state spans with optional filtering
+    /// Query all state spans with optional filtering. Returns only categories the caller may read:
+    /// asking for one it may not read is refused, and omitting the category returns every one it may
+    /// read. The response is never cached.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -261,7 +263,9 @@ public class StateSpansController : ControllerBase
     }
 
     /// <summary>
-    /// Get all activity state spans (exercise, illness, travel)
+    /// Get all activity state spans (exercise, illness, travel). The three categories are merged
+    /// before paging, so <c>offset</c> plus <c>limit</c> is capped at a lower ceiling than on other
+    /// lists, and a page near it can hold fewer spans than asked for.
     /// </summary>
     /// <remarks>
     /// This read merges three categories in memory before it paginates, so the page is bounded by
@@ -443,7 +447,9 @@ public class StateSpansController : ControllerBase
     }
 
     /// <summary>
-    /// Restore a soft-deleted state span by the ID reads return for it
+    /// Restore a soft-deleted state span by the ID reads return for it. Returns <c>404 Not Found</c>
+    /// when no soft-deleted span has the ID, and <c>409 Conflict</c> (the span stays deleted) when a
+    /// live span holds its original id.
     /// </summary>
     /// <remarks>
     /// Returns <c>404 Not Found</c> when no soft-deleted span has the ID. A span is refused with
@@ -481,7 +487,10 @@ public class StateSpansController : ControllerBase
     }
 
     /// <summary>
-    /// Restore soft-deleted state spans by the IDs reads return for them
+    /// Restore soft-deleted state spans by the IDs reads return for them. IDs that match no
+    /// soft-deleted span are ignored. A span left deleted because a live span holds its original id
+    /// is listed in <c>conflicts</c> by the ID sent; the rest of the batch is still restored. Needs
+    /// write access to the category of every span restored.
     /// </summary>
     /// <remarks>
     /// IDs that match no soft-deleted span are ignored. A span left deleted because a live span holds

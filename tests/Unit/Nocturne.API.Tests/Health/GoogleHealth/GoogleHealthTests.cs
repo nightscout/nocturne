@@ -68,6 +68,7 @@ public class GoogleHealthTests : IDisposable
         await db.SaveChangesAsync();
         var services = new ServiceCollection();
         services.AddSingleton(db.AsFactory());
+        services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddSingleton(Mock.Of<ITenantAccessor>());
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
@@ -586,6 +587,32 @@ public class GoogleHealthTests : IDisposable
         Assert.Equal("expired_signin", error.Message);
     }
 
+    [Theory]
+    [InlineData("replacement.apps.googleusercontent.com", null)]
+    [InlineData(null, "https://other.test/api/v4/google-health/oauth/callback")]
+    public async Task A_client_changed_during_consent_restarts_the_signin_without_calling_google(
+        string? clientId, string? redirectUri)
+    {
+        var store = new TestConnectorStore();
+        var tenant = Guid.NewGuid();
+        var subject = Guid.NewGuid();
+        var handler = new StubHandler(_ => throw new InvalidOperationException("No Google request expected"));
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
+        var first = Service(store, handler, tenant, coordinator);
+        await first.SaveAsync(Options(), subject, default);
+        var authorization = await first.StartAsync(subject, null, default);
+        var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
+
+        var changed = Platform(clientId ?? "synthetic.apps.googleusercontent.com");
+        if (redirectUri is not null) changed.RedirectUri = redirectUri;
+        var afterChange = Service(store, handler, tenant, coordinator, platform: changed);
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => afterChange.CompleteAsync(
+            new GoogleHealthCallback { State = state, Code = "code" }, subject, default));
+        Assert.Equal("expired_signin", error.Message);
+        Assert.False(store.Secrets.ContainsKey("oauthFlow"));
+        Assert.Contains("https://accounts.google.com/", (await afterChange.StartAsync(subject, null, default)).Url);
+    }
+
     [Fact]
     public async Task Purge_invalidates_a_pending_oauth_flow_and_allows_a_fresh_signin()
     {
@@ -771,7 +798,7 @@ public class GoogleHealthTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Preview_preserves_refreshed_tokens_after_configuration_invalidates_cache(bool expireCachedToken)
+    public async Task Preview_preserves_refreshed_tokens_without_a_second_refresh(bool expireCachedToken)
     {
         var tokenCalls = 0;
         var oldTokenCalls = 0;
@@ -1305,11 +1332,11 @@ public class GoogleHealthTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Leaving_a_connection_drops_a_former_tenant_client_secret_and_the_stale_enabled_flag(bool purge)
+    public async Task Leaving_a_connection_drops_a_former_tenant_client_secret(bool purge)
     {
         var store = new TestConnectorStore();
         var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
-        store.SetConfiguration("""{"enabled":true,"clientId":"synthetic.apps.googleusercontent.com","callbackUrl":"https://tenant.example/settings/connectors/google-health/callback"}""");
+        store.SetConfiguration("""{"clientId":"synthetic.apps.googleusercontent.com","callbackUrl":"https://tenant.example/settings/connectors/google-health/callback"}""");
         await store.Configurations.SaveSecretsAsync("GoogleHealth", new Dictionary<string, string>
         {
             ["refreshToken"] = "refresh",
@@ -1322,7 +1349,38 @@ public class GoogleHealthTests : IDisposable
 
         Assert.False(store.Secrets.ContainsKey("clientSecret"));
         Assert.False(store.Configuration.TryGetProperty("callbackUrl", out _));
-        Assert.False(store.Configuration.TryGetProperty("enabled", out _));
+    }
+
+    [Theory]
+    [InlineData("enabled")]
+    [InlineData("Enabled")]
+    public async Task Saving_options_enables_a_connector_whose_stored_flag_is_off(string spelling)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        store.SetConfiguration($$"""{"{{spelling}}":false,"callbackUrl":"https://tenant.example/settings/connectors/google-health/callback"}""");
+
+        await service.SaveAsync(Options(), Guid.NewGuid(), default);
+
+        Assert.True(ConnectorEnabledKey.IsEnabled(store.Configuration.GetRawText()));
+        Assert.False(store.Configuration.TryGetProperty("callbackUrl", out _));
+    }
+
+    [Theory]
+    [InlineData("enabled")]
+    [InlineData("Enabled")]
+    public async Task Reconnecting_enables_a_connector_whose_stored_flag_is_off(string spelling)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, Google([], _ => "account"), Guid.NewGuid());
+        store.SetConfiguration($$"""{"{{spelling}}":false,"lookbackDays":7}""");
+        var subject = Guid.NewGuid();
+
+        var authorization = await service.StartAsync(subject, null, default);
+        var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
+        await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
+
+        Assert.True(ConnectorEnabledKey.IsEnabled(store.Configuration.GetRawText()));
     }
 
     [Fact]
@@ -1733,7 +1791,7 @@ public class GoogleHealthTests : IDisposable
         IGoogleHealthGrantHolders? holders = null,
         TimeProvider? time = null)
     {
-        var platformOptions = Microsoft.Extensions.Options.Options.Create(platform ?? Platform());
+        var platformOptions = new FixedGoogleHealthPlatformSettings(platform ?? Platform());
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(value => value.IsResolved).Returns(true);
         tenant.SetupGet(value => value.TenantId).Returns(tenantId);
@@ -1823,18 +1881,16 @@ public class GoogleHealthTests : IDisposable
                 .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
                 {
                     if (FailConfigurationSaves) throw new InvalidOperationException("configuration store unavailable");
-                    configuration?.Dispose();
-                    configuration = JsonDocument.Parse(document.RootElement.GetRawText());
-                    response ??= new ConnectorConfigurationResponse
-                    {
-                        ConnectorName = "GoogleHealth",
-                        IsActive = true
-                    };
-                    response.Configuration = configuration;
-                    response.IsActive = !configuration.RootElement.TryGetProperty("enabled", out var enabled) || enabled.GetBoolean();
+                    Store(ConnectorEnabledKey.CarryOver(
+                        document.RootElement.GetRawText(), configuration?.RootElement.GetRawText() ?? "{}"));
                     OnSave?.Invoke();
                 })
                 .ReturnsAsync(() => response!);
+            configurations.Setup(value => value.SetActiveAsync(
+                    "GoogleHealth", It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .Callback<string, bool, string?, CancellationToken>((_, isActive, _, _) =>
+                    Store(ConnectorEnabledKey.With(configuration?.RootElement.GetRawText() ?? "{}", isActive)))
+                .Returns(Task.CompletedTask);
             configurations.Setup(value => value.GetSecretsAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
                 .Returns<string, CancellationToken>((_, ct) =>
@@ -1842,17 +1898,24 @@ public class GoogleHealthTests : IDisposable
                     ct.ThrowIfCancellationRequested();
                     return Task.FromResult(new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
                 });
+            void RecordSecrets(Dictionary<string, string> values, CancellationToken ct, bool invalidatesCaches)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (FailTokenSaves && values.ContainsKey("refreshToken"))
+                    throw new InvalidOperationException("secret store unavailable");
+                secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
+                if (invalidatesCaches) OnSave?.Invoke();
+            }
             configurations.Setup(value => value.SaveSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, ct) =>
-                {
-                    ct.ThrowIfCancellationRequested();
-                    if (FailTokenSaves && values.ContainsKey("refreshToken"))
-                        throw new InvalidOperationException("secret store unavailable");
-                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
-                    OnSave?.Invoke();
-                })
+                .Callback<string, Dictionary<string, string>, string?, CancellationToken>(
+                    (_, values, _, ct) => RecordSecrets(values, ct, invalidatesCaches: true))
+                .Returns(Task.CompletedTask);
+            configurations.Setup(value => value.SaveRuntimeSecretsAsync(
+                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, CancellationToken>(
+                    (_, values, ct) => RecordSecrets(values, ct, invalidatesCaches: false))
                 .Returns(Task.CompletedTask);
             configurations.Setup(value => value.UpdateHealthStateAsync(
                     "GoogleHealth", It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
@@ -1878,13 +1941,22 @@ public class GoogleHealthTests : IDisposable
                     Configurations,
                     NullLogger<ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>.Instance,
                     TimeProvider.System),
-                Microsoft.Extensions.Options.Options.Create(Platform()));
+                new FixedGoogleHealthPlatformSettings(Platform()));
         }
 
         public IConnectorConfigurationService Configurations { get; }
         public IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> Loader { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
         public JsonElement Configuration => configuration!.RootElement;
+
+        private void Store(string value)
+        {
+            configuration?.Dispose();
+            configuration = JsonDocument.Parse(value);
+            response ??= new ConnectorConfigurationResponse { ConnectorName = "GoogleHealth" };
+            response.Configuration = configuration;
+            response.IsActive = ConnectorEnabledKey.IsEnabled(value);
+        }
 
         public void SetConfiguration(string value)
         {

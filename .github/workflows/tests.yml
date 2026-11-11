@@ -32,6 +32,7 @@ jobs:
       migrations: ${{ steps.filter.outputs.migrations == 'true' || github.event_name != 'pull_request' }}
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
+      composeBundle: ${{ steps.filter.outputs.composeBundle == 'true' || github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -88,6 +89,15 @@ jobs:
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
+            composeBundle:
+              - *shared
+              - 'src/Aspire/**'
+              - 'src/Core/Nocturne.Core.Constants/**'
+              - 'scripts/publish-release.cs'
+              - 'scripts/Shared/**'
+              - 'deploy/**'
+              - 'docs/diagrams/**'
+              - 'docs/postgres/container-init/**'
 
   # Compiles every test project once and runs the API client codegen (NSwag, then the
   # Zod schemas and remote functions through pnpm) as the API build's post-build step. The test jobs
@@ -160,6 +170,8 @@ jobs:
       # Unit and Integration each hold a Nocturne.API.Tests and a Nocturne.Infrastructure.Data.Tests,
       # and `dotnet sln add` silently skips a second project of the same name in one folder, hence
       # a folder each and the check that every test project produced its assembly.
+      # From the .NET 11 SDK `dotnet sln add` also adds each project's references, and fails on the
+      # second one of a name; the build finds them through the test projects.
       - name: Build
         run: |
           set -euo pipefail
@@ -169,14 +181,14 @@ jobs:
           fi
           sln="$RUNNER_TEMP/ci/ci.slnx"
           dotnet new sln -n ci -o "$RUNNER_TEMP/ci" --format slnx
-          dotnet sln "$sln" add --solution-folder Unit tests/Unit/*/*.csproj
-          dotnet sln "$sln" add --solution-folder Integration tests/Integration/*/*.csproj
-          dotnet sln "$sln" add --solution-folder Parity \
+          dotnet sln "$sln" add --include-references false --solution-folder Unit tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Integration tests/Integration/*/*.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Parity \
             tests/Parity/Nocturne.Alerts.Corpus/Nocturne.Alerts.Corpus.csproj
           dotnet build "$sln" -p:GenerateNSwagClient=true
           missing=0
           for project in tests/Unit/*/*.csproj tests/Integration/*/*.csproj tests/Parity/*/*.csproj; do
-            dll="$(dirname "$project")/bin/Debug/net10.0/$(basename "$project" .csproj).dll"
+            dll="$(dirname "$project")/bin/Debug/net11.0/$(basename "$project" .csproj).dll"
             if [ ! -f "$dll" ]; then
               echo "::error file=$project::was not built ($dll is missing)"
               missing=1
@@ -192,7 +204,7 @@ jobs:
         if: env.BUILD_TESTS == 'true'
         run: |
           set -euo pipefail
-          mapfile -t roots < <(jq -r '.ContentRoots[]' tests/*/*/bin/Debug/net10.0/*.staticwebassets.runtime.json | sort -u)
+          mapfile -t roots < <(jq -r '.ContentRoots[]' tests/*/*/bin/Debug/net11.0/*.staticwebassets.runtime.json | sort -u)
           paths=()
           for root in "${roots[@]}"; do
             case "$root" in
@@ -242,7 +254,7 @@ jobs:
           set -euo pipefail
           sln="$RUNNER_TEMP/unit/unit.slnx"
           dotnet new sln -n unit -o "$RUNNER_TEMP/unit" --format slnx
-          dotnet sln "$sln" add tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --include-references false tests/Unit/*/*.csproj
           dotnet test "$sln" --no-build \
             --filter "Category!=Integration" \
             --logger "trx;LogFileName=unit.trx" \
@@ -468,7 +480,7 @@ jobs:
           set -euo pipefail
           sln="$RUNNER_TEMP/integration/integration.slnx"
           dotnet new sln -n integration -o "$RUNNER_TEMP/integration" --format slnx
-          dotnet sln "$sln" add \
+          dotnet sln "$sln" add --include-references false \
             tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
             tests/Integration/Nocturne.Connectors.Tests/Nocturne.Connectors.Tests.csproj
           dotnet test "$sln" --no-build \
@@ -507,7 +519,7 @@ jobs:
   web-app-tests:
     needs: [changes, build]
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
@@ -625,7 +637,7 @@ jobs:
   e2e:
     needs: [changes, images]
     if: needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -730,7 +742,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "10.0"
+          dotnet-version: "11.0"
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
@@ -825,6 +837,66 @@ jobs:
           echo "::error::No coverage report was produced (see the Report step)."
           exit 1
 
+  # The committed deploy/ bundle is what the portal and the release notes link on main, so it
+  # stays tracked.
+  compose-bundle-drift:
+    needs: changes
+    if: needs.changes.outputs.composeBundle == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          nuget-cache-key: nuget-compose-bundle
+      # The CLI has to match the Aspire packages the AppHost is built with.
+      - name: Install the Aspire CLI
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/.*<PackageVersion Include="Aspire.Hosting" Version="\([^"]*\)".*/\1/p' Directory.Packages.props)
+          if [ -z "$version" ]; then
+            echo "::error::Directory.Packages.props has no Aspire.Hosting version."
+            exit 1
+          fi
+          curl -fsSL https://aspire.dev/install.sh | bash -s -- --version "$version"
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+      # The script publishes with --no-build, so the AppHost has to be built first.
+      - name: Build the AppHost
+        run: dotnet build src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj -p:GenerateNSwagClient=false
+      - name: Regenerate the bundle
+        run: dotnet run scripts/publish-release.cs
+      - name: The bundle matches the tree
+        run: |
+          set -euo pipefail
+          git add --intent-to-add -- deploy docs/diagrams
+          if git diff --quiet -- deploy docs/diagrams; then
+            exit 0
+          fi
+          {
+            echo '## The compose bundle is out of date'
+            echo
+            echo 'Run `dotnet run scripts/publish-release.cs` and commit the changes under `deploy/` and `docs/diagrams/`.'
+            echo
+            echo '```diff'
+            git diff -- deploy docs/diagrams | head -n 400 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat -- deploy docs/diagrams
+          echo "::error::The compose bundle is out of date. Run 'dotnet run scripts/publish-release.cs' and commit deploy/ and docs/diagrams/."
+          exit 1
+      - name: Postgres keeps its data volume
+        run: |
+          set -euo pipefail
+          service=$(awk '/^  nocturne-postgres-server:/{f=1;next} f&&/^  [^ ]/{exit} f' deploy/docker-compose/docker-compose.yaml)
+          if [ -z "$service" ]; then
+            echo "::error::deploy/docker-compose/docker-compose.yaml has no nocturne-postgres-server service."
+            exit 1
+          fi
+          if grep -Eq '^    volumes: \[\]' <<<"$service" || ! grep -q 'source: "nocturne-postgres-data"' <<<"$service"; then
+            echo "::error::The Postgres service has no nocturne-postgres-data volume, so its data would be lost on recreate."
+            exit 1
+          fi
+
   # The single check to require on the branch: green when every job it needs passed or was
   # skipped for want of relevant changes.
   tests-passed:
@@ -842,6 +914,7 @@ jobs:
       - images
       - e2e
       - migration-upgrade
+      - compose-bundle-drift
       - coverage
     if: always()
     runs-on: ubuntu-latest

@@ -10,6 +10,8 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -132,14 +134,18 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
 
     private Task<bool> EnsureFirstOwnerAsync(Guid subjectId) =>
         new PlatformAdminBootstrapService(
-            _sqlite.ContextFactory.AsNocturneFactory(),
+            new TenantRepository(_sqlite.ContextFactory.AsNocturneFactory()),
+            new TenantMembershipRepository(_sqlite.ContextFactory.AsNocturneFactory()),
+            new SubjectRepository(_sqlite.ContextFactory.AsNocturneFactory()),
             Options.Create(new PlatformOptions { AdminSubjectIds = [] }),
             NullLogger<PlatformAdminBootstrapService>.Instance)
             .EnsureFirstOwnerIsPlatformAdminAsync(subjectId, CancellationToken.None);
 
     private Task BootstrapAsync(List<Guid>? adminSubjectIds = null) =>
         new PlatformAdminBootstrapService(
-            _sqlite.ContextFactory.AsNocturneFactory(),
+            new TenantRepository(_sqlite.ContextFactory.AsNocturneFactory()),
+            new TenantMembershipRepository(_sqlite.ContextFactory.AsNocturneFactory()),
+            new SubjectRepository(_sqlite.ContextFactory.AsNocturneFactory()),
             Options.Create(new PlatformOptions { AdminSubjectIds = adminSubjectIds ?? [] }),
             NullLogger<PlatformAdminBootstrapService>.Instance)
             .BootstrapAsync(CancellationToken.None);

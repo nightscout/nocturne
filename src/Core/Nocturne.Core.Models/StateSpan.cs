@@ -88,18 +88,4 @@ public class StateSpan
     /// </summary>
     [JsonPropertyName("supersededById")]
     public string? SupersededById { get; set; }
-
-    /// <summary>
-    /// Canonical group ID for deduplication.
-    /// Records with the same CanonicalId represent the same underlying event from different sources.
-    /// </summary>
-    [JsonPropertyName("canonicalId")]
-    public Guid? CanonicalId { get; set; }
-
-    /// <summary>
-    /// List of data sources that contributed to this unified record.
-    /// Only populated when returning merged/unified DTOs.
-    /// </summary>
-    [JsonPropertyName("sources")]
-    public string[]? Sources { get; set; }
 }

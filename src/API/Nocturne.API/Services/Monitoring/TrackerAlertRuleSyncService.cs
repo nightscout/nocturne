@@ -2,10 +2,13 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
+using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Monitoring;
@@ -72,7 +75,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         _logger = logger;
     }
 
-    /// <summary>The <see cref="AlertRuleEntity.ManagedBy"/> tag for a tracker definition's rules.</summary>
+    /// <summary>The <see cref="AlertRuleRecord.ManagedBy"/> tag for a tracker definition's rules.</summary>
     public static string ManagedByTag(Guid definitionId) => $"tracker:{definitionId}";
 
     /// <inheritdoc />
@@ -86,7 +89,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     public async Task CreateRulesAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct = default)
     {
         var tag = ManagedByTag(definitionId);
-        if (await unit.Context.AlertRules.AnyAsync(r => r.ManagedBy == tag, ct))
+        if ((await new AlertRuleRepository(unit, _time).GetManagedRulesAsync(tag, ct)).Count > 0)
             throw new InvalidOperationException($"Tracker definition {definitionId} already has managed rules");
 
         await SyncAsync(unit, definitionId, ct);
@@ -107,15 +110,14 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         }
 
         var tag = ManagedByTag(definitionId);
-        var managedRules = await db.AlertRules
-            .Where(r => r.ManagedBy == tag)
-            .ToDictionaryAsync(r => r.Id, ct);
+        var rules = new AlertRuleRepository(unit, _time);
+        var managedRules = await rules.GetManagedRulesAsync(tag, ct);
         if (managedRules.Count == 0
             && definition.NotificationThresholds.Count == 0
             && !(definition.LowReservoirUnits is not null && TrackerCoverage.HoldsInsulin(definition)))
             return;
 
-        var recipient = await InAppRecipientOfAsync(db, tenantId, definition, ct);
+        var recipient = await InAppRecipientOfAsync(new TenantMembershipRepository(unit), tenantId, definition, ct);
 
         // The threshold editor replaces the whole threshold list (new row ids), which
         // clears the AlertRuleId links. Adopt orphaned managed rules so a threshold keeps
@@ -134,7 +136,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             .Select(p => p.Threshold.AlertRuleId!.Value)
             .ToHashSet();
         var adoptable = managedRules.Values
-            .Where(r => !claimedRuleIds.Contains(r.Id))
+            .Where(r => !claimedRuleIds.Contains(r.Rule.Id))
             .Select(r => (Rule: r, Minutes: RuleMinutes(r)))
             .Where(r => r.Minutes is not null)
             .OrderBy(r => r.Minutes)
@@ -145,14 +147,14 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             if (threshold.AlertRuleId is not null || minutes is null) continue;
             var index = adoptable.FindIndex(a => a.Minutes == minutes);
             if (index < 0) continue;
-            threshold.AlertRuleId = adoptable[index].Rule.Id;
+            threshold.AlertRuleId = adoptable[index].Rule.Rule.Id;
             adoptable.RemoveAt(index);
         }
         foreach (var (threshold, minutes) in pending.OrderBy(p => p.Minutes))
         {
             if (threshold.AlertRuleId is not null || minutes is null) continue;
             if (adoptable.Count == 0) break;
-            threshold.AlertRuleId = adoptable[0].Rule.Id;
+            threshold.AlertRuleId = adoptable[0].Rule.Rule.Id;
             adoptable.RemoveAt(0);
         }
 
@@ -182,52 +184,36 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 
             if (threshold.AlertRuleId is { } ruleId && managedRules.TryGetValue(ruleId, out var rule))
             {
-                if (rule.ConditionType != AlertConditionType.TrackerAge
-                    || !ConditionTreeEquality.Same(rule.ConditionParams, conditionParams))
+                var same = rule.Rule.ConditionType == AlertConditionType.TrackerAge
+                    && ConditionTreeEquality.Same(rule.Rule.ConditionParams, conditionParams);
+                if (!same)
+                    changed.Add(ruleId);
+                await rules.UpdateAsync(ruleId, AlertRuleWrite.Of(rule) with
                 {
-                    changed.Add(rule.Id);
-                    rule.ConditionParams = conditionParams;
-                }
-                rule.Name = name;
-                rule.Description = threshold.Description;
-                rule.ConditionType = AlertConditionType.TrackerAge;
-                rule.ScopeClass = scopeClass;
-                rule.Severity = severity;
-                rule.UpdatedAt = _time.GetUtcNow().UtcDateTime;
-                keptRuleIds.Add(rule.Id);
-            }
-            else
-            {
-                var created = new AlertRuleEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
                     Name = name,
                     Description = threshold.Description,
                     ConditionType = AlertConditionType.TrackerAge,
-                    ConditionParams = conditionParams,
+                    ConditionParams = same ? rule.Rule.ConditionParams : conditionParams,
                     ScopeClass = scopeClass,
                     Severity = severity,
-                    ManagedBy = tag,
-                    IsEnabled = true,
-                    ClientConfiguration = "{}",
-                    CreatedAt = _time.GetUtcNow().UtcDateTime,
-                    UpdatedAt = _time.GetUtcNow().UtcDateTime,
-                };
-
-                created.Channels.Add(InAppChannel(tenantId, created.Id, recipient));
-
-                db.AlertRules.Add(created);
-                threshold.AlertRuleId = created.Id;
-                keptRuleIds.Add(created.Id);
+                }, ct);
+                keptRuleIds.Add(ruleId);
+            }
+            else
+            {
+                var createdId = await rules.CreateAsync(
+                    ManagedRule(name, threshold.Description, AlertConditionType.TrackerAge, conditionParams, scopeClass, severity, tag, recipient),
+                    ct);
+                threshold.AlertRuleId = createdId;
+                keptRuleIds.Add(createdId);
             }
         }
 
-        SyncReservoirLevelRule(db, tenantId, definition, recipient, tag, managedRules, keptRuleIds, changed);
+        await SyncReservoirLevelRuleAsync(rules, definition, recipient, tag, managedRules, keptRuleIds, changed, ct);
 
-        var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Id)).ToList();
+        var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Rule.Id)).ToList();
         var deleted = new List<Guid>();
-        var removed = await RemoveOrDisableAsync(db, orphaned, disabled, deleted, ct);
+        var removed = await RemoveOrDisableAsync(rules, orphaned, disabled, deleted, ct);
 
         // AlertRuleRetirement's remarks: a delete closes before the save that removes the rule.
         if (deleted.Count > 0)
@@ -249,14 +235,13 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         var db = unit.Context;
         var tag = ManagedByTag(definitionId);
 
-        var rules = await db.AlertRules
-            .Where(r => r.ManagedBy == tag)
-            .ToListAsync(ct);
-        if (rules.Count == 0) return;
+        var rules = new AlertRuleRepository(unit, _time);
+        var managed = (await rules.GetManagedRulesAsync(tag, ct)).Values.ToList();
+        if (managed.Count == 0) return;
 
         var disabled = new List<Guid>();
         var deleted = new List<Guid>();
-        var removed = await RemoveOrDisableAsync(db, rules, disabled, deleted, ct);
+        var removed = await RemoveOrDisableAsync(rules, managed, disabled, deleted, ct);
         // AlertRuleRetirement's remarks: a delete closes before the save that removes the rule.
         if (deleted.Count > 0)
             await _retirement.CloseAsync(deleted, db.TenantId, ct);
@@ -280,28 +265,28 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// <paramref name="deleted"/> so the caller can close its excursion before the save.
     /// </summary>
     private async Task<int> RemoveOrDisableAsync(
-        NocturneDbContext db, IReadOnlyList<AlertRuleEntity> rules,
+        IAlertRuleRepository rules, IReadOnlyList<AlertRuleRecord> managed,
         List<Guid> disabled, List<Guid> deleted, CancellationToken ct)
     {
         var removed = 0;
-        foreach (var rule in rules)
+        foreach (var rule in managed)
         {
-            var referencing = await _referenceService.FindReferencingRulesAsync(rule.Id, ct);
+            var ruleId = rule.Rule.Id;
+            var referencing = await _referenceService.FindReferencingRulesAsync(ruleId, ct);
             if (referencing.Count > 0)
             {
                 if (rule.IsEnabled)
-                    disabled.Add(rule.Id);
-                rule.IsEnabled = false;
-                rule.UpdatedAt = _time.GetUtcNow().UtcDateTime;
+                    disabled.Add(ruleId);
+                await rules.UpdateAsync(ruleId, AlertRuleWrite.Of(rule) with { IsEnabled = false }, ct);
                 _logger.LogWarning(
                     "Managed rule {RuleId} ('{RuleName}') is referenced by alert_state rule(s) {ReferencingIds}; disabled instead of deleted",
-                    rule.Id, rule.Name, string.Join(", ", referencing));
+                    ruleId, rule.Rule.Name, string.Join(", ", referencing));
                 continue;
             }
 
             if (rule.IsEnabled)
-                deleted.Add(rule.Id);
-            db.AlertRules.Remove(rule);
+                deleted.Add(ruleId);
+            await rules.DeleteAsync(ruleId, ct);
             removed++;
         }
 
@@ -318,15 +303,15 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// stops holding insulin — the rule is not marked kept, so the shared orphan
     /// pass removes it.
     /// </summary>
-    private void SyncReservoirLevelRule(
-        NocturneDbContext db,
-        Guid tenantId,
+    private async Task SyncReservoirLevelRuleAsync(
+        IAlertRuleRepository rules,
         TrackerDefinitionEntity definition,
         string recipient,
         string tag,
-        IReadOnlyDictionary<Guid, AlertRuleEntity> managedRules,
+        IReadOnlyDictionary<Guid, AlertRuleRecord> managedRules,
         HashSet<Guid> keptRuleIds,
-        List<Guid> changed)
+        List<Guid> changed,
+        CancellationToken ct)
     {
         if (!TrackerCoverage.HoldsInsulin(definition) || definition.LowReservoirUnits is not { } units)
             return;
@@ -338,41 +323,47 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         var scopeClass = _scopeClassifier.Classify(AlertConditionType.Reservoir, conditionParams);
 
         var existing = managedRules.Values
-            .FirstOrDefault(r => r.ConditionType == AlertConditionType.Reservoir);
+            .FirstOrDefault(r => r.Rule.ConditionType == AlertConditionType.Reservoir);
         if (existing is not null)
         {
-            if (!ConditionTreeEquality.Same(existing.ConditionParams, conditionParams))
+            var same = ConditionTreeEquality.Same(existing.Rule.ConditionParams, conditionParams);
+            if (!same)
+                changed.Add(existing.Rule.Id);
+            await rules.UpdateAsync(existing.Rule.Id, AlertRuleWrite.Of(existing) with
             {
-                changed.Add(existing.Id);
-                existing.ConditionParams = conditionParams;
-            }
-            existing.Name = name;
-            existing.ScopeClass = scopeClass;
-            existing.Severity = severity;
-            existing.UpdatedAt = _time.GetUtcNow().UtcDateTime;
-            keptRuleIds.Add(existing.Id);
+                Name = name,
+                ConditionParams = same ? existing.Rule.ConditionParams : conditionParams,
+                ScopeClass = scopeClass,
+                Severity = severity,
+            }, ct);
+            keptRuleIds.Add(existing.Rule.Id);
             return;
         }
 
-        var created = new AlertRuleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            Name = name,
-            ConditionType = AlertConditionType.Reservoir,
-            ConditionParams = conditionParams,
-            ScopeClass = scopeClass,
-            Severity = severity,
-            ManagedBy = tag,
-            IsEnabled = true,
-            ClientConfiguration = "{}",
-            CreatedAt = _time.GetUtcNow().UtcDateTime,
-            UpdatedAt = _time.GetUtcNow().UtcDateTime,
-        };
-        created.Channels.Add(InAppChannel(tenantId, created.Id, recipient));
-        db.AlertRules.Add(created);
-        keptRuleIds.Add(created.Id);
+        keptRuleIds.Add(await rules.CreateAsync(
+            ManagedRule(name, null, AlertConditionType.Reservoir, conditionParams, scopeClass, severity, tag, recipient),
+            ct));
     }
+
+    /// <summary>
+    /// A new managed rule, enabled, with one <c>in_app</c> channel to <paramref name="recipient"/>
+    /// and the user-editable fields at their defaults.
+    /// </summary>
+    private static NewAlertRule ManagedRule(
+        string name,
+        string? description,
+        AlertConditionType conditionType,
+        string conditionParams,
+        RuleScopeClass scopeClass,
+        AlertRuleSeverity severity,
+        string tag,
+        string recipient) => new(
+        new AlertRuleWrite(
+            name, description, conditionType, conditionParams, scopeClass, severity,
+            IsEnabled: true, SortOrder: 0, AllowThroughDnd: false,
+            AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
+        [new AlertRuleChannelWrite(ChannelType.InApp, recipient)],
+        ManagedBy: tag);
 
     /// <summary>
     /// Who a synced rule's in-app channel is sent to: the member who created the tracker definition,
@@ -381,33 +372,22 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// the tenant has neither, which delivery records as failed.
     /// </summary>
     private static async Task<string> InAppRecipientOfAsync(
-        NocturneDbContext db, Guid tenantId, TrackerDefinitionEntity definition, CancellationToken ct)
+        ITenantMembershipRepository members, Guid tenantId, TrackerDefinitionEntity definition, CancellationToken ct)
     {
-        var recipient = await InAppRecipients.ResolveAsync(db, tenantId, definition.CreatedBy, ct)
-            ?? await InAppRecipients.EarliestOwnerAsync(db, tenantId, ct);
+        var recipient = await InAppRecipients.ResolveAsync(members, tenantId, definition.CreatedBy, ct)
+            ?? await InAppRecipients.EarliestOwnerAsync(members, tenantId, ct);
         return recipient?.ToString() ?? string.Empty;
     }
-
-    private AlertRuleChannelEntity InAppChannel(Guid tenantId, Guid ruleId, string recipient) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        TenantId = tenantId,
-        AlertRuleId = ruleId,
-        ChannelType = ChannelType.InApp,
-        Destination = recipient,
-        SortOrder = 0,
-        CreatedAt = _time.GetUtcNow().UtcDateTime,
-    };
 
     /// <summary>
     /// The baked minutes of a managed rule's stored condition, or null when the stored
     /// params can't be read (never written by this service, but fail soft).
     /// </summary>
-    private static int? RuleMinutes(AlertRuleEntity rule)
+    private static int? RuleMinutes(AlertRuleRecord rule)
     {
         try
         {
-            using var doc = JsonDocument.Parse(rule.ConditionParams);
+            using var doc = JsonDocument.Parse(rule.Rule.ConditionParams);
             return doc.RootElement.TryGetProperty("minutes", out var minutes)
                 && minutes.ValueKind == JsonValueKind.Number
                 && minutes.TryGetInt32(out var value)

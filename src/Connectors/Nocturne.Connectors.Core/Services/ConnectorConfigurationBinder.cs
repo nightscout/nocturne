@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Linq;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.Connectors.Core.Services;
 
@@ -22,7 +23,7 @@ public static class ConnectorConfigurationBinder
         foreach (var property in properties.Where(p => p.CanWrite))
         {
             var camelName = GetBoundKeyName(property);
-            if (!root.TryGetProperty(camelName, out var element))
+            if (!TryGetValue(root, camelName, out var element))
                 continue;
 
             try
@@ -75,6 +76,24 @@ public static class ConnectorConfigurationBinder
             .Where(p => p.GetCustomAttribute<ConnectorPropertyAttribute>()?.Secret == true)
             .Select(GetBoundKeyName)
             .ToHashSet(StringComparer.Ordinal);
+
+    private static bool TryGetValue(JsonElement root, string key, out JsonElement value)
+    {
+        if (!ConnectorEnabledKey.Matches(key))
+            return root.TryGetProperty(key, out value);
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!ConnectorEnabledKey.Matches(property.Name))
+                continue;
+
+            value = property.Value;
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
 
     private static string GetBoundKeyName(PropertyInfo property)
     {

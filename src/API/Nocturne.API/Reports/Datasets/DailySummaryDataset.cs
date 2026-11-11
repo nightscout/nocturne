@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Reports.Datasets;
@@ -99,9 +100,8 @@ internal sealed class DailySummaryDataset : IReportDataset
         var endDate = LocalSlotBinning.LocalDay(request.To.ToUnixTimeMilliseconds() - 1, zone);
         var (startUtc, endUtc) = StatisticsService.PunchCardRange(startDate, endDate, zone);
 
-        var raw = await services.GetRequiredService<ISensorGlucoseRepository>().GetForAnalyticsAsync(
-            startUtc, endUtc, null, null, int.MaxValue, descending: false, ct: cancellationToken);
-        var glucose = await services.GetRequiredService<ICanonicalGlucoseService>().SelectAsync(raw.ToList(), cancellationToken);
+        var glucose = (await services.GetRequiredService<ISensorGlucoseRepository>().GetForAnalyticsAsync(
+            startUtc, endUtc, null, null, int.MaxValue, descending: false, ct: cancellationToken, streams: GlucoseStreams.Canonical)).ToList();
         var records = treatments
             ? await InsulinRecords.ReadAsync(services, startUtc, endUtc, cancellationToken)
             : new InsulinRecords([], [], [], [], []);

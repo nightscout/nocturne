@@ -9,6 +9,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -663,7 +665,8 @@ public class TotpServiceTests : IDisposable
 
     private TotpService CreateService()
     {
-        return new TotpService(_dbContext.AsFactory(), _dataProtectionProvider, NullLogger<TotpService>.Instance);
+        var contexts = _dbContext.AsFactory();
+        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts), _dataProtectionProvider, NullLogger<TotpService>.Instance);
     }
 
     private SubjectEntity SeedSubject(string username, Guid? subjectId = null)

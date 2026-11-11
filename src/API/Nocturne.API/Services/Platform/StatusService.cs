@@ -11,9 +11,11 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Platform;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -46,11 +48,14 @@ public class StatusService : IStatusService
     private readonly CacheFlights _flights;
     private readonly IDemoModeService _demoModeService;
     private readonly INocturneDbContextFactory _dbContextFactory;
+    private readonly ITenantRepository _tenantRepository;
+    private readonly ISubjectRepository _subjects;
+    private readonly IRoleRepository _roles;
+    private readonly IOidcProviderRepository _oidcProviders;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly PublicAccessCacheService _publicAccessCacheService;
-    private readonly ITenantService _tenants;
-    private readonly ITenantAppearanceReader _appearanceReader;
+    private readonly ITenantGlucoseUnits _glucoseUnits;
     private readonly IGlucoseStatusClassifier _thresholdClassifier;
     private readonly IAlertRepository _alertRepository;
     private readonly ICategoryReadContext _categoryReadContext;
@@ -77,11 +82,14 @@ public class StatusService : IStatusService
         CacheFlights flights,
         IDemoModeService demoModeService,
         INocturneDbContextFactory dbContextFactory,
+        ITenantRepository tenantRepository,
+        ISubjectRepository subjects,
+        IRoleRepository roles,
+        IOidcProviderRepository oidcProviders,
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
         PublicAccessCacheService publicAccessCacheService,
-        ITenantService tenants,
-        ITenantAppearanceReader appearanceReader,
+        ITenantGlucoseUnits glucoseUnits,
         IGlucoseStatusClassifier thresholdClassifier,
         IAlertRepository alertRepository,
         ICategoryReadContext categoryReadContext,
@@ -94,11 +102,14 @@ public class StatusService : IStatusService
         _flights = flights;
         _demoModeService = demoModeService;
         _dbContextFactory = dbContextFactory;
+        _tenantRepository = tenantRepository;
+        _subjects = subjects;
+        _roles = roles;
+        _oidcProviders = oidcProviders;
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;
         _publicAccessCacheService = publicAccessCacheService;
-        _tenants = tenants;
-        _appearanceReader = appearanceReader;
+        _glucoseUnits = glucoseUnits;
         _thresholdClassifier = thresholdClassifier;
         _alertRepository = alertRepository;
         _categoryReadContext = categoryReadContext;
@@ -173,12 +184,7 @@ public class StatusService : IStatusService
         {
             isDemo = true;
 
-            await using var ctx = await _dbContextFactory.CreatePlatformAsync();
-            nextResetAt = await ctx.Tenants
-                .AsNoTracking()
-                .Where(t => t.Id == tenantContext.TenantId)
-                .Select(t => t.DemoConfig != null ? t.DemoConfig.NextResetAt : null)
-                .FirstOrDefaultAsync();
+            nextResetAt = (await _tenantRepository.GetAsync(tenantContext.TenantId, CancellationToken.None))?.DemoConfig?.NextResetAt;
         }
 
         // Resolve whether this tenant grants anonymous read access (its public subject carries a
@@ -397,14 +403,8 @@ public class StatusService : IStatusService
     {
         var settings = new Dictionary<string, object>();
 
-        // Core display settings. Units are the owner's own choice, else the tenant default chosen in
-        // onboarding, which is what a Nightscout client reads as DISPLAY_UNITS.
-        var appearance = await _appearanceReader.GetTenantAppearanceAsync(_tenantAccessor.TenantId);
-        var tenantUnits = appearance.GlucoseUnits
-            ?? (_tenantAccessor.Context is { } tenant
-                ? await _tenants.GetDefaultGlucoseUnitsAsync(tenant.TenantId)
-                : null);
-        settings["units"] = tenantUnits ?? GlucoseUnitDefaults.MgDl;
+        // Core display settings. Units are what a Nightscout client reads as DISPLAY_UNITS.
+        settings["units"] = await _glucoseUnits.ResolveAsync();
         settings["timeFormat"] = _configuration.GetValue<int>("Display:TimeFormat", 12);
         settings["dayStart"] = _configuration.GetValue<int>("Display:DayStart", 7);
         settings["dayEnd"] = _configuration.GetValue<int>("Display:DayEnd", 21);
@@ -504,7 +504,7 @@ public class StatusService : IStatusService
         var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
         try
         {
-            var rules = await _alertRepository.GetEnabledRulesAsync(_tenantAccessor.TenantId, ct);
+            var rules = await _alertRepository.GetEnabledRulesAsync(ct);
             return (_thresholdClassifier.ResolveThresholds(rules), false);
         }
         catch (DbException ex)
@@ -673,20 +673,9 @@ public class StatusService : IStatusService
                 (DateTime?)(s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt))
             .FirstOrDefaultAsync());
 
-        var authSubjectsTask = LastModifiedAsync(ctx => ctx.Subjects.AsNoTracking()
-            .OrderByDescending(s => s.UpdatedAt)
-            .Select(s => (DateTime?)s.UpdatedAt)
-            .FirstOrDefaultAsync());
-
-        var roleTask = LastModifiedAsync(ctx => ctx.Roles.AsNoTracking()
-            .OrderByDescending(r => r.UpdatedAt)
-            .Select(r => (DateTime?)r.UpdatedAt)
-            .FirstOrDefaultAsync());
-
-        var oidcProviderTask = LastModifiedAsync(ctx => ctx.OidcProviders.AsNoTracking()
-            .OrderByDescending(p => p.UpdatedAt)
-            .Select(p => (DateTime?)p.UpdatedAt)
-            .FirstOrDefaultAsync());
+        var authSubjectsTask = _subjects.LastModifiedAsync(CancellationToken.None);
+        var roleTask = _roles.LastModifiedAsync(CancellationToken.None);
+        var oidcProviderTask = _oidcProviders.LastModifiedAsync(CancellationToken.None);
 
         await Task.WhenAll(
             entriesTask, treatmentsTask, profileTask, deviceStatusTask,
@@ -774,10 +763,8 @@ public class StatusService : IStatusService
         try
         {
             await using var ctx = await _dbContextFactory.CreatePlatformAsync();
-            var conn = ctx.Database.GetDbConnection();
-            if (conn.State != System.Data.ConnectionState.Open)
-                await conn.OpenAsync();
-            return _postgresVersion = conn.ServerVersion;
+            await ctx.Database.OpenConnectionAsync();
+            return _postgresVersion = ctx.Database.GetDbConnection().ServerVersion;
         }
         catch (Exception ex)
         {

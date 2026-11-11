@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Constants;

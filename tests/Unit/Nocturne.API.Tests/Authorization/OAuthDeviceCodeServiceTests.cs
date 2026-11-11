@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -96,7 +97,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     private OAuthDeviceCodeService CreateService(NocturneDbContext dbContext)
     {
         return new OAuthDeviceCodeService(
-            dbContext.AsFactory(),
+            new OAuthTokenRepository(dbContext.AsFactory()),
             _mockJwtService.Object,
             _mockClientService.Object,
             _mockGrantService.Object,
@@ -563,7 +564,8 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
     private OAuthTokenService CreateService(NocturneDbContext dbContext)
     {
         return new OAuthTokenService(
-            dbContext.AsFactory(),
+            new OAuthTokenRepository(dbContext.AsFactory()),
+            new OAuthGrantRepository(dbContext.AsFactory()),
             _mockJwtService.Object,
             _mockSubjectService.Object,
             _mockGrantService.Object,

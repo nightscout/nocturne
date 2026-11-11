@@ -167,7 +167,6 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         entity.RevokedAt = DateTime.UtcNow;
         entity.RevokedReason = reason;
         entity.ReplacedByTokenId = replacedByTokenId;
-        entity.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
     }
@@ -229,7 +228,6 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         {
             token.RevokedAt = now;
             token.RevokedReason = reason;
-            token.UpdatedAt = now;
         }
 
         await db.SaveChangesAsync(ct);
@@ -253,7 +251,6 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         {
             token.RevokedAt = now;
             token.RevokedReason = reason;
-            token.UpdatedAt = now;
         }
 
         await db.SaveChangesAsync(ct);
@@ -280,7 +277,6 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         {
             token.RevokedAt = now;
             token.RevokedReason = reason;
-            token.UpdatedAt = now;
         }
 
         await db.SaveChangesAsync(ct);
@@ -311,7 +307,6 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
 
             token.RevokedAt = now;
             token.RevokedReason = reason;
-            token.UpdatedAt = now;
             count++;
         }
 
@@ -364,6 +359,31 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
                 IsCurrent = false
             })
             .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> HasLiveSessionAsync(
+        Guid subjectId, string? sessionId, DateTime now, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateForSubjectAsync(subjectId, ct);
+        var live = db.RefreshTokens.Where(t =>
+            t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > now);
+        if (sessionId != null)
+            live = live.Where(RefreshTokenEntity.InSession(sessionId));
+        return await live.AnyAsync(ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// On a platform context, as the demo reset that retires the visitor ran it before the move:
+    /// the table carries no tenant, and with no subject pinned every row of the subject is in reach.
+    /// </remarks>
+    public async Task<int> DeleteAllForSubjectAsync(Guid subjectId, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreatePlatformAsync(ct);
+        return await db.RefreshTokens
+            .Where(t => t.SubjectId == subjectId)
+            .ExecuteDeleteAsync(ct);
     }
 
     private static RefreshTokenRecord ToRecord(RefreshTokenEntity entity) =>

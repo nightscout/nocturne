@@ -18,9 +18,11 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Shared.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -80,11 +82,13 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         return new ShareLinkService(
             db.AsFactory(),
+            new TenantRepository(db.AsFactory()),
+            new TenantMembershipRepository(db.AsFactory()),
             new ShareTokenGenerator(),
             new ShareTokenCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<ShareTokenCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantRepository(factory.Object.AsNocturneFactory()), NullLogger<ShareTokenCacheService>.Instance),
             new PublicAccessCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<PublicAccessCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory()), NullLogger<PublicAccessCacheService>.Instance),
             secrets,
             NullLogger<ShareLinkService>.Instance,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }));
@@ -95,13 +99,13 @@ public sealed class ShareLinkServiceTests : IDisposable
     /// <summary>Loads the Public subject's membership with its role assignments.</summary>
     private Task<TenantMemberEntity> GetPublicMemberAsync() =>
         _db.TenantMembers.AsNoTracking().Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
 
     /// <summary>Strips the seeded role/scope grant so the Public subject mirrors a fresh tenant.</summary>
     private async Task ResetPublicMemberAccessAsync()
     {
         var member = await _db.TenantMembers.Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
         _db.TenantMemberRoles.RemoveRange(member.MemberRoles);
         member.MemberRoles.Clear();
         member.DirectPermissions = null;
@@ -374,7 +378,7 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         // Remove the Public membership entirely, then disable.
         var publicMember = await _db.TenantMembers.Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
         _db.TenantMemberRoles.RemoveRange(publicMember.MemberRoles);
         _db.TenantMembers.Remove(publicMember);
         await _db.SaveChangesAsync();

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
-using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Hubs;
 
@@ -18,6 +17,12 @@ namespace Nocturne.API.Hubs;
 /// from the old credential. Closing makes the client reconnect, and its new connection joins only
 /// what its current credential allows. Each node re-checks the connections it holds, so this needs
 /// no backplane.
+/// <para>
+/// The sweep runs off the connection's own calls, so it reads only what the connection holds, never
+/// its upgrade request: the credential (<see cref="HubAuthorizationState.Granted"/>), which
+/// <see cref="HubAuthorizationFilter"/> has resolved onto the connection before it tracks it, and the
+/// tenant of the reader held since admission (<see cref="HubConnectionReader.Held"/>).
+/// </para>
 /// </remarks>
 public sealed class HubConnectionRevalidator(
     IServiceScopeFactory scopeFactory,
@@ -112,10 +117,10 @@ public sealed class HubConnectionRevalidator(
         if (HubAuthorizationState.Overview(context) is { } overview && !await verifier.StillHoldsAsync(overview))
             return false;
 
-        if (HubAuthorizationState.Resolve(context) is not { } granted)
+        if (HubAuthorizationState.Granted(context) is not { } granted)
             return true;
 
-        return context.GetHttpContext()?.GetTenantContext() is { } tenant
+        return HubConnectionReader.Held(context)?.Tenant is { } tenant
             && granted.IsCoveredBy(await verifier.ProveAsync(granted, tenant));
     }
 }

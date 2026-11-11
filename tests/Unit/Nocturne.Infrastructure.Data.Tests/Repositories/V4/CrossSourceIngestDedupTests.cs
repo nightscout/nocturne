@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -29,7 +30,7 @@ public class CrossSourceIngestDedupTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly DeduplicationService _dedup;
+    private readonly DuplicateLinker _dedup;
     private readonly BolusRepository _boluses;
     private readonly CarbIntakeRepository _carbs;
     private readonly SensorGlucoseRepository _glucose;
@@ -44,8 +45,7 @@ public class CrossSourceIngestDedupTests : IDisposable
 
         var dedupContext = _db.CreateContext();
         dedupContext.TenantId = TestTenantId;
-        _dedup = new DeduplicationService(
-            dedupContext.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+        _dedup = DeduplicationModules.Linker(dedupContext.AsFactory());
 
         var factory = new TestNocturneDbContextFactory(_context);
         var audit = new Mock<IAuditContext>().Object;

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using YamlDotNet.RepresentationModel;
 using Xunit;
+using static Nocturne.Aspire.Host.Tests.Publishing.ComposeYaml;
 
 namespace Nocturne.Aspire.Host.Tests.Publishing;
 
@@ -18,9 +19,9 @@ public class ShippedBundleTests
     [MemberData(nameof(Bundles))]
     public void TheApiRunsInProduction(string bundle)
     {
-        var environment = Service(bundle, "nocturne-api")["environment"];
+        var environment = ShippedService(bundle, "nocturne-api")["environment"];
 
-        ((YamlScalarNode)((YamlMappingNode)environment)["ASPNETCORE_ENVIRONMENT"]).Value
+        Text(((YamlMappingNode)environment)["ASPNETCORE_ENVIRONMENT"])
             .Should().Be("Production");
     }
 
@@ -28,10 +29,10 @@ public class ShippedBundleTests
     [MemberData(nameof(Bundles))]
     public void TheApiRunsTheConservingWorkstationGc(string bundle)
     {
-        var environment = (YamlMappingNode)Service(bundle, "nocturne-api")["environment"];
+        var environment = (YamlMappingNode)ShippedService(bundle, "nocturne-api")["environment"];
 
-        ((YamlScalarNode)environment["DOTNET_gcServer"]).Value.Should().Be("0");
-        ((YamlScalarNode)environment["DOTNET_GCConserveMemory"]).Value.Should().Be("5");
+        Text(environment["DOTNET_gcServer"]).Should().Be("0");
+        Text(environment["DOTNET_GCConserveMemory"]).Should().Be("5");
     }
 
     [Theory]
@@ -45,13 +46,8 @@ public class ShippedBundleTests
         hsts.Should().ContainSingle().Which.Should().Be("Strict-Transport-Security \"max-age=31536000\"");
     }
 
-    private static YamlMappingNode Service(string bundle, string name)
-    {
-        var yaml = new YamlStream();
-        yaml.Load(new StringReader(File.ReadAllText(Path.Combine(RepositoryRoot(), bundle))));
-        var root = (YamlMappingNode)yaml.Documents[0].RootNode;
-        return (YamlMappingNode)((YamlMappingNode)root["services"])[name];
-    }
+    private static YamlMappingNode ShippedService(string bundle, string name)
+        => Service(File.ReadAllText(Path.Combine(RepositoryRoot(), bundle)), name);
 
     private static string RepositoryRoot()
     {

@@ -249,7 +249,7 @@ public class TreatmentsController : ControllerBase
 
     /// <summary>
     /// Save the treatment identified by the <c>identifier</c> or <c>_id</c> in the body, inserting it
-    /// when that id is not already stored
+    /// when that id is not already stored. A treatment the user deleted is not restored: the response is 200 with an empty array.
     /// </summary>
     /// <remarks>
     /// Nightscout's save takes one document and matches on <c>identifier</c> before <c>_id</c>; see
@@ -492,7 +492,7 @@ public class TreatmentsController : ControllerBase
                 return NothingSaved(key);
         }
 
-        var created = await _treatmentService.CreateTreatmentsAsync([prepared], cancellationToken);
+        var created = await _treatmentService.CreateTreatmentsAsync([prepared], cancellationToken: cancellationToken);
         if (created.SkippedDeleted > 0)
             return NothingSaved(prepared.Id);
 
@@ -525,7 +525,7 @@ public class TreatmentsController : ControllerBase
                 return;
 
             results.AddRange(TreatmentEcho.InSubmittedOrder(
-                await _treatmentService.CreateV1TreatmentsAsync(withIdentity, cancellationToken)));
+                await _treatmentService.CreateV1TreatmentsAsync(withIdentity, cancellationToken: cancellationToken)));
             withIdentity.Clear();
         }
 
@@ -547,7 +547,7 @@ public class TreatmentsController : ControllerBase
             }
 
             results.AddRange(TreatmentEcho.InSubmittedOrder(
-                await _treatmentService.CreateV1TreatmentsAsync([treatment], cancellationToken)));
+                await _treatmentService.CreateV1TreatmentsAsync([treatment], cancellationToken: cancellationToken)));
         }
 
         await FlushAsync();

@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Reports;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Reports;
@@ -146,11 +147,9 @@ public class CustomReportTests
 
     private static ReportSpecStore Store(FakeRepository repository)
     {
-        var appearance = new Mock<ITenantAppearanceReader>();
-        appearance.Setup(a => a.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new UserDisplayPreferences());
-        return new ReportSpecStore(repository, Validator, appearance.Object, Mock.Of<ITenantAccessor>(),
-            Options.Create(new MvcJsonOptions()));
+        var units = new Mock<ITenantGlucoseUnits>();
+        units.Setup(u => u.UsesMmolAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        return new ReportSpecStore(repository, Validator, units.Object, Options.Create(new MvcJsonOptions()));
     }
 
     [Fact]

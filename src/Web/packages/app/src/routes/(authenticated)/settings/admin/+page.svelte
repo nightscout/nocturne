@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { page } from "$app/state";
   import {
     Card,
@@ -12,11 +12,14 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Bot from "@lucide/svelte/icons/bot";
+  import ListChecks from "@lucide/svelte/icons/list-checks";
   import * as rolesRemote from "#lib/api/generated/roles.generated.remote.js";
   import * as oidcRemote from "#lib/api/generated/oidcProviderAdmins.generated.remote.js";
   import * as platformSettingsRemote from "#lib/api/generated/platformSettings.generated.remote.js";
+  import * as jobLedgerRemote from "#lib/api/generated/jobLedgers.generated.remote.js";
   import IntegrationsTabContent from "#lib/components/admin/IntegrationsTabContent.svelte";
   import OidcProvidersTabContent from "#lib/components/admin/OidcProvidersTabContent.svelte";
+  import JobsTabContent from "#lib/components/admin/JobsTabContent.svelte";
   import OidcProviderDialog from "#lib/components/admin/OidcProviderDialog.svelte";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { withLockoutOverride } from "#lib/components/admin/lockout-override.js";
@@ -26,12 +29,14 @@
     OidcProviderResponse,
     PlatformSettingsSummary,
     CreateOidcProviderRequest,
+    JobLedgerListing,
   } from "#lib/api/index.js";
   import { fresh } from "#lib/api/fresh-query.js";
 
   // State
+  const requestedTab = page.url.searchParams.get("tab");
   let activeTab = $state(
-    page.url.searchParams.get("tab") === "integrations" ? "integrations" : "identity-providers"
+    requestedTab === "integrations" || requestedTab === "jobs" ? requestedTab : "identity-providers"
   );
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -135,6 +140,23 @@
     }
   }
 
+  let jobs = $state<JobLedgerListing | null>(null);
+  let jobsLoading = $state(false);
+  let jobsError = $state<string | null>(null);
+
+  async function loadJobs() {
+    jobsLoading = true;
+    jobsError = null;
+    try {
+      jobs = await fresh(jobLedgerRemote.list());
+    } catch (err) {
+      console.error("Failed to load jobs:", err);
+      jobsError = remoteErrorMessage(err, "Failed to load the background jobs.");
+    } finally {
+      jobsLoading = false;
+    }
+  }
+
   // Load data
   async function loadData() {
     loading = true;
@@ -157,6 +179,13 @@
 
   onMount(() => {
     void loadData();
+  });
+
+  // The ledger is read only once its tab is opened.
+  $effect(() => {
+    if (activeTab === "jobs") untrack(() => {
+      if (jobs === null && !jobsLoading) void loadJobs();
+    });
   });
 
   // ============================================================================
@@ -189,7 +218,7 @@
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Administration</h1>
       <p class="text-muted-foreground">
-        Manage identity providers and integrations
+        Manage identity providers, integrations, and background jobs
       </p>
     </div>
   </div>
@@ -222,6 +251,10 @@
           <Bot class="h-4 w-4" />
           Integrations
         </Tabs.Trigger>
+        <Tabs.Trigger value="jobs">
+          <ListChecks class="h-4 w-4" />
+          Jobs
+        </Tabs.Trigger>
       </Tabs.List>
 
       <OidcProvidersTabContent
@@ -239,6 +272,14 @@
         platforms={platformSettings}
         onSave={handlePlatformSettingsSave}
         onDelete={handlePlatformSettingsDelete}
+      />
+
+      <JobsTabContent
+        jobs={jobs?.rows ?? []}
+        capped={jobs?.capped ?? false}
+        loading={jobsLoading}
+        error={jobsError}
+        onRefresh={loadJobs}
       />
     </Tabs.Root>
   {/if}

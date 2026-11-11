@@ -1,8 +1,10 @@
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Performance.Tests.Shared;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Performance.Tests.Infrastructure;
 
@@ -72,10 +74,11 @@ public static class DataSeeder
 
     public static async Task SeedLinkedRecordsAsync(
         NocturneDbContext context, Guid tenantId,
-        string recordType, IReadOnlyList<Guid> recordIds,
+        RecordType recordType, IReadOnlyList<Guid> recordIds,
         double duplicatePercent, CancellationToken ct = default)
     {
         var dupeCount = (int)(recordIds.Count * duplicatePercent);
+        var key = RecordTypeKeys.Key(recordType);
         var indices = Enumerable.Range(0, dupeCount).ToList();
 
         const int batchSize = 1000;
@@ -92,7 +95,7 @@ public static class DataSeeder
                     Id = Guid.CreateVersion7(),
                     TenantId = tenantId,
                     CanonicalId = canonicalId,
-                    RecordType = recordType,
+                    RecordType = key,
                     RecordId = recordIds[dupeCount + idx],
                     SourceTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     DataSource = "source-a",
@@ -100,13 +103,13 @@ public static class DataSeeder
                     SysCreatedAt = DateTime.UtcNow,
                 });
 
-                // Non-primary duplicate (this is what gets filtered out)
+                // Non-primary duplicate, flagged so reads drop it
                 context.LinkedRecords.Add(new LinkedRecordEntity
                 {
                     Id = Guid.CreateVersion7(),
                     TenantId = tenantId,
                     CanonicalId = canonicalId,
-                    RecordType = recordType,
+                    RecordType = key,
                     RecordId = recordIds[idx],
                     SourceTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     DataSource = "source-b",
@@ -115,7 +118,7 @@ public static class DataSeeder
                 });
             }
 
-            await context.SaveChangesAsync(ct);
+            await DuplicateGroups.FlagAsync(context, recordType, [.. chunk.Select(idx => recordIds[idx])]);
             context.ChangeTracker.Clear();
         }
     }

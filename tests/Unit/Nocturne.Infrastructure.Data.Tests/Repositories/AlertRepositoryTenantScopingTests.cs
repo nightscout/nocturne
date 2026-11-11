@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.InMemory.Storage.Internal;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -12,23 +13,20 @@ using Xunit;
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
 /// <summary>
-/// Tenant-scoping regression tests for <see cref="AlertRepository"/>. These tests assert
-/// (a) per-tenant methods pin the requested tenant even when the factory's context arrives tagged
-/// with a different tenant, and (b) the cross-tenant sweeps iterate every active tenant rather
-/// than relying on a single (RLS-blocked) query.
-///
-/// EF InMemory honours the dynamic <c>e.TenantId == context.TenantId</c> global filter, so it
-/// validates the tenant pinning. InMemory has no Row-Level Security; the RLS half of the fix
-/// follows the same <c>context.TenantId</c> pattern already proven by
-/// <c>GetTenantAlertContextAsync</c> in production and is covered by Postgres integration tests.
+/// Tenant scoping of <see cref="AlertRepository"/>: a method without a tenant reads the scope's, one
+/// with a tenant pins it over the scope's.
 /// </summary>
+/// <remarks>
+/// EF InMemory honours the <c>e.TenantId == context.TenantId</c> global filter but has no Row-Level
+/// Security; <c>AlertRepositorySweepIntegrationTests</c> covers the same reads under RLS.
+/// </remarks>
 public class AlertRepositoryTenantScopingTests
 {
     private static readonly Guid TenantA = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid TenantB = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
     [Fact]
-    public async Task GetEnabledRulesAsync_ScopesToRequestedTenant_EvenWhenPooledContextIsStale()
+    public async Task GetEnabledRulesAsync_ReadsTheScopesTenantOnly()
     {
         var options = NewStore();
         await SeedAsync(options, ctx =>
@@ -40,10 +38,9 @@ public class AlertRepositoryTenantScopingTests
                 NewRule(TenantB, "Low"));
         });
 
-        // The factory hands back contexts already tagged with tenant B.
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
+        var repo = Repository(options, scopeTenant: TenantA);
 
-        var rules = await repo.GetEnabledRulesAsync(TenantA, CancellationToken.None);
+        var rules = await repo.GetEnabledRulesAsync(CancellationToken.None);
 
         rules.Select(r => r.Name).Should().BeEquivalentTo(["Overnight Low"]);
     }
@@ -67,9 +64,9 @@ public class AlertRepositoryTenantScopingTests
                 NewChannel(TenantA, second.Id, sortOrder: 1, "https://b.example", secret: "ciphertext"),
                 NewChannel(TenantA, second.Id, sortOrder: 0, "https://a.example"));
         });
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
+        var repo = Repository(options, scopeTenant: TenantA);
 
-        var rules = await repo.GetRulesAsync(TenantA, CancellationToken.None);
+        var rules = await repo.GetRulesAsync(CancellationToken.None);
 
         rules.Select(r => (r.Rule.Name, r.IsEnabled)).Should().Equal(("First", false), ("Second", true));
         var record = rules[1];
@@ -87,14 +84,14 @@ public class AlertRepositoryTenantScopingTests
         var mine = NewRule(TenantA, "Mine");
         var theirs = NewRule(TenantB, "Theirs");
         await SeedAsync(options, ctx => ctx.AlertRules.AddRange(mine, theirs));
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
+        var repo = Repository(options, scopeTenant: TenantA);
 
-        (await repo.GetRuleAsync(TenantA, theirs.Id, CancellationToken.None)).Should().BeNull();
-        (await repo.GetRuleAsync(TenantA, mine.Id, CancellationToken.None))!.Rule.Name.Should().Be("Mine");
+        (await repo.GetRuleAsync(theirs.Id, CancellationToken.None)).Should().BeNull();
+        (await repo.GetRuleAsync(mine.Id, CancellationToken.None))!.Rule.Name.Should().Be("Mine");
     }
 
     [Fact]
-    public async Task GetRuleSnapshotsAsync_ReturnsEveryRuleOfTheTenantInSortOrder()
+    public async Task GetRuleSnapshotsAsync_ReturnsEveryRuleOfTheGivenTenantInSortOrder_NotTheScopes()
     {
         var options = NewStore();
         var second = NewRule(TenantA, "Second");
@@ -103,7 +100,7 @@ public class AlertRepositoryTenantScopingTests
         first.SortOrder = 1;
         first.IsEnabled = false;
         await SeedAsync(options, ctx => ctx.AlertRules.AddRange(second, first, NewRule(TenantB, "Other tenant")));
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
+        var repo = Repository(options, scopeTenant: TenantB);
 
         var rules = await repo.GetRuleSnapshotsAsync(TenantA, CancellationToken.None);
 
@@ -140,9 +137,9 @@ public class AlertRepositoryTenantScopingTests
                 new AlertExcursionEntity { Id = Guid.NewGuid(), TenantId = TenantA, AlertRuleId = otherOwner.Id, StartedAt = start },
                 new AlertExcursionEntity { Id = Guid.NewGuid(), TenantId = TenantB, AlertRuleId = otherTenant.Id, StartedAt = start });
         });
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
+        var repo = Repository(options, scopeTenant: TenantA);
 
-        var ids = await repo.GetUnacknowledgedExcursionIdsAsync(TenantA, "tracker:1", CancellationToken.None);
+        var ids = await repo.GetUnacknowledgedExcursionIdsAsync("tracker:1", CancellationToken.None);
 
         ids.Should().Equal(open);
     }
@@ -155,54 +152,34 @@ public class AlertRepositoryTenantScopingTests
         disabled.IsEnabled = false;
         await SeedAsync(options, ctx => ctx.AlertRules.AddRange(
             NewRule(TenantA, "Enabled"), disabled, NewRule(TenantB, "Other tenant")));
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
+        var repo = Repository(options, scopeTenant: TenantA);
 
-        (await repo.CountRulesAsync(TenantA, CancellationToken.None)).Should().Be(2);
+        (await repo.CountRulesAsync(CancellationToken.None)).Should().Be(2);
     }
 
     [Fact]
-    public async Task GetAllEnabledRulesAsync_ReturnsRulesAcrossEveryActiveTenant()
-    {
-        var options = NewStore();
-        await SeedAsync(options, ctx =>
-        {
-            ctx.Tenants.AddRange(NewTenant(TenantA), NewTenant(TenantB));
-            ctx.AlertRules.AddRange(
-                NewRule(TenantA, "Signal loss A", AlertConditionType.SignalLoss),
-                NewRule(TenantB, "Signal loss B", AlertConditionType.SignalLoss),
-                NewRule(TenantA, "Threshold A"));
-        });
-
-        // Starts from an unset (Guid.Empty) context — the cross-tenant sweep must enumerate
-        // tenants itself rather than depending on whatever tenant the pool last left behind.
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: Guid.Empty));
-
-        var rules = await repo.GetAllEnabledRulesAsync(CancellationToken.None);
-
-        rules.Select(r => (r.TenantId, r.Name)).Should().BeEquivalentTo(
-            [(TenantA, "Signal loss A"), (TenantA, "Threshold A"), (TenantB, "Signal loss B")]);
-    }
-
-    [Fact]
-    public async Task GetExcursionsInHysteresisAsync_SelectsByTrackerState()
+    public async Task GetExcursionsInHysteresisAsync_SelectsTheScopesTenantByTrackerState()
     {
         var options = NewStore();
         var legacy = NewRule(TenantA, "Legacy hysteresis");
-        var resumed = NewRule(TenantB, "Resumed");
+        var resumed = NewRule(TenantA, "Resumed");
+        var otherTenant = NewRule(TenantB, "Other tenant");
         var legacyExcursion = Guid.NewGuid();
         var resumedExcursion = Guid.NewGuid();
+        var otherTenantExcursion = Guid.NewGuid();
         var start = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
         await SeedAsync(options, ctx =>
         {
             ctx.Tenants.AddRange(NewTenant(TenantA), NewTenant(TenantB));
-            ctx.AlertRules.AddRange(legacy, resumed);
+            ctx.AlertRules.AddRange(legacy, resumed, otherTenant);
             ctx.AlertExcursions.AddRange(
                 new AlertExcursionEntity { Id = legacyExcursion, TenantId = TenantA, AlertRuleId = legacy.Id, StartedAt = start },
                 new AlertExcursionEntity
                 {
-                    Id = resumedExcursion, TenantId = TenantB, AlertRuleId = resumed.Id, StartedAt = start,
+                    Id = resumedExcursion, TenantId = TenantA, AlertRuleId = resumed.Id, StartedAt = start,
                     HysteresisStartedAt = start.AddMinutes(5),
-                });
+                },
+                new AlertExcursionEntity { Id = otherTenantExcursion, TenantId = TenantB, AlertRuleId = otherTenant.Id, StartedAt = start });
             ctx.AlertTrackerState.AddRange(
                 new AlertTrackerStateEntity
                 {
@@ -211,11 +188,16 @@ public class AlertRepositoryTenantScopingTests
                 },
                 new AlertTrackerStateEntity
                 {
-                    AlertRuleId = resumed.Id, TenantId = TenantB, State = "active",
+                    AlertRuleId = resumed.Id, TenantId = TenantA, State = "active",
                     ActiveExcursionId = resumedExcursion, UpdatedAt = start.AddMinutes(6),
+                },
+                new AlertTrackerStateEntity
+                {
+                    AlertRuleId = otherTenant.Id, TenantId = TenantB, State = "hysteresis",
+                    ActiveExcursionId = otherTenantExcursion, UpdatedAt = start.AddMinutes(5),
                 });
         });
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: Guid.Empty));
+        var repo = Repository(options, scopeTenant: TenantA);
 
         var inHysteresis = await repo.GetExcursionsInHysteresisAsync(CancellationToken.None);
 
@@ -223,7 +205,54 @@ public class AlertRepositoryTenantScopingTests
     }
 
     [Fact]
-    public async Task GetExcursionRuleAsync_ReturnsTheExcursionsRule_WithinTheRequestedTenantOnly()
+    public async Task UpdateInstanceAsync_FromAScopeWithNoTenant_UpdatesTheRequestsTenantOnly()
+    {
+        var options = NewStore();
+        var rule = NewRule(TenantA, "Low");
+        var instanceA = Guid.NewGuid();
+        var instanceB = Guid.NewGuid();
+        var snoozedUntil = new DateTime(2026, 1, 5, 13, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(options, ctx =>
+        {
+            ctx.AlertRules.Add(rule);
+            ctx.AlertInstances.AddRange(
+                new AlertInstanceEntity { Id = instanceA, TenantId = TenantA, TriggeredAt = DateTime.UtcNow },
+                new AlertInstanceEntity { Id = instanceB, TenantId = TenantB, TriggeredAt = DateTime.UtcNow });
+        });
+        var repo = Repository(options, scopeTenant: Guid.Empty);
+
+        await repo.UpdateInstanceAsync(
+            new UpdateAlertInstanceRequest(TenantA, instanceA, "acknowledged", snoozedUntil, 2), CancellationToken.None);
+        await repo.UpdateInstanceAsync(
+            new UpdateAlertInstanceRequest(TenantA, instanceB, "acknowledged", snoozedUntil, 2), CancellationToken.None);
+
+        await using var read = new NocturneDbContext(options) { TenantId = Guid.Empty };
+        var instances = await read.AlertInstances.IgnoreQueryFilters()
+            .ToDictionaryAsync(i => i.Id, i => (i.Status, i.SnoozedUntil, i.SnoozeCount), CancellationToken.None);
+        instances[instanceA].Should().Be(("acknowledged", (DateTime?)snoozedUntil, 2));
+        instances[instanceB].Should().Be(("triggered", (DateTime?)null, 0));
+    }
+
+    [Fact]
+    public async Task GetTenantAlertContextAsync_FromAScopeWithNoTenant_ReadsTheGivenTenantsPatientName()
+    {
+        var options = NewStore();
+        await SeedAsync(options, ctx =>
+        {
+            ctx.Tenants.AddRange(NewTenant(TenantA), NewTenant(TenantB));
+            ctx.PatientRecords.AddRange(
+                new PatientRecordEntity { Id = Guid.NewGuid(), TenantId = TenantA, PreferredName = "Alex" },
+                new PatientRecordEntity { Id = Guid.NewGuid(), TenantId = TenantB, PreferredName = "Blake" });
+        });
+        var repo = Repository(options, scopeTenant: Guid.Empty);
+
+        var context = await repo.GetTenantAlertContextAsync(TenantA, CancellationToken.None);
+
+        context!.SubjectName.Should().Be("Alex");
+    }
+
+    [Fact]
+    public async Task GetExcursionRuleAsync_ReturnsTheExcursionsRule_WithinTheScopesTenantOnly()
     {
         var options = NewStore();
         var lowRule = NewRule(TenantA, "Overnight Low");
@@ -238,11 +267,11 @@ public class AlertRepositoryTenantScopingTests
                 new AlertExcursionEntity { Id = excursion, TenantId = TenantA, AlertRuleId = lowRule.Id, StartedAt = DateTime.UtcNow },
                 new AlertExcursionEntity { Id = otherTenantExcursion, TenantId = TenantB, AlertRuleId = otherRule.Id, StartedAt = DateTime.UtcNow });
         });
-        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
+        var repo = Repository(options, scopeTenant: TenantA);
 
-        (await repo.GetExcursionRuleAsync(TenantA, excursion, CancellationToken.None))
+        (await repo.GetExcursionRuleAsync(excursion, CancellationToken.None))
             .Should().Be(new ExcursionRuleSnapshot(lowRule.Id, "Overnight Low"));
-        (await repo.GetExcursionRuleAsync(TenantA, otherTenantExcursion, CancellationToken.None))
+        (await repo.GetExcursionRuleAsync(otherTenantExcursion, CancellationToken.None))
             .Should().BeNull();
     }
 
@@ -270,8 +299,8 @@ public class AlertRepositoryTenantScopingTests
             await seed.SaveChangesAsync();
         }
 
-        await new AlertRepository(store.ContextFactory)
-            .DeleteExcursionMutesAsync(TenantA, closed, CancellationToken.None);
+        await new AlertRepository(store.ContextFactory.AsNocturneFactory())
+            .DeleteExcursionMutesAsync(closed, CancellationToken.None);
 
         await using var read = store.CreateContext();
         (await read.AlertExcursionMutes.Select(m => new { m.SubjectId, m.AlertExcursionId }).ToListAsync())
@@ -332,18 +361,14 @@ public class AlertRepositoryTenantScopingTests
         SortOrder = sortOrder,
     };
 
-    /// <summary>
-    /// An <see cref="IDbContextFactory{TContext}"/> over a shared InMemory store whose leased
-    /// contexts arrive pre-tagged with <paramref name="staleTenantId"/>, mimicking a pooled
-    /// context that was not reset. The repository must overwrite <c>TenantId</c> itself.
-    /// </summary>
-    private sealed class InMemoryContextFactory(
-        DbContextOptions<NocturneDbContext> options, Guid staleTenantId)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options) { TenantId = staleTenantId };
+    /// <summary>A repository whose scope is resolved to <paramref name="scopeTenant"/>.</summary>
+    private static AlertRepository Repository(DbContextOptions<NocturneDbContext> options, Guid scopeTenant) =>
+        new(new ScopeFactory(options, scopeTenant));
 
-        public Task<NocturneDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(CreateDbContext());
+    private sealed class ScopeFactory(DbContextOptions<NocturneDbContext> options, Guid scopeTenant)
+        : SingleReaderDbContextFactory
+    {
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
+            ValueTask.FromResult(new NocturneDbContext(options) { TenantId = scopeTenant });
     }
 }

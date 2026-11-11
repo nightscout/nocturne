@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -18,12 +19,12 @@ namespace Nocturne.Connectors.NocturneRemote.Tests.Services;
 public class NocturneRemoteConnectorServiceCrawlTests
 {
     /// <summary>
-    /// A page that never arrives is not the end of the range. Ending the crawl there publishes the
-    /// newest pages and reports a green sync, and because the next lower bound is derived from the
-    /// newest record then stored locally, the pages below the failure are never asked for again.
+    /// A page that never arrives is not the end of the range. The pages above it stay published, and
+    /// the oldest of them is marked, because the next lower bound is derived from the newest record
+    /// then stored locally and would otherwise never ask for the pages below the failure again.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WhenAPageMidCrawlIsRejected_FailsTheRunAndPublishesNothing()
+    public async Task SyncDataAsync_WhenAPageMidCrawlIsRejected_KeepsThePagesAboveItAndMarksWhereItStopped()
     {
         var handler = new RemoteFakeHandler()
             .Serve(NocturneRemoteConstants.SensorGlucose,
@@ -41,8 +42,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
             .Which.Should().StartWith($"Failed to sync {SyncDataType.Glucose}");
         result.ItemsSynced.Should().BeEmpty(
             "a range the sync could not read through must stay unreported rather than claim a count");
-        fixture.PublishedGlucose.Should().BeEmpty(
-            "publishing the pages above the failure would put the ones below it out of reach");
+        fixture.PublishedGlucose.Should().HaveCount(2);
+        fixture.Marks.Should().Contain(nameof(SyncDataType.Glucose), new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc));
     }
 
     /// <summary>
@@ -50,7 +51,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
     /// failed, not a range that ran out. A range that ran out answers an empty array.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WhenAPageCarriesNoData_FailsTheRunAndPublishesNothing()
+    public async Task SyncDataAsync_WhenAPageCarriesNoData_FailsTheRun()
     {
         var handler = new RemoteFakeHandler()
             .Serve(NocturneRemoteConstants.SensorGlucose,
@@ -65,7 +66,6 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         result.Success.Should().BeFalse();
         result.ItemsSynced.Should().BeEmpty();
-        fixture.PublishedGlucose.Should().BeEmpty();
     }
 
     /// <summary>
@@ -75,7 +75,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
     /// all supplies an empty <c>Data</c> rather than a null one.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WhenAPageIsUnparseable_FailsTheRunAndPublishesNothing()
+    public async Task SyncDataAsync_WhenAPageIsUnparseable_FailsTheRun()
     {
         var handler = new RemoteFakeHandler()
             .Serve(NocturneRemoteConstants.SensorGlucose,
@@ -90,7 +90,6 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         result.Success.Should().BeFalse();
         result.ItemsSynced.Should().BeEmpty();
-        fixture.PublishedGlucose.Should().BeEmpty();
         result.Errors.Should().ContainSingle()
             .Which.Should().NotContain("see preceding connector logs",
                 "the response parsing cause must be visible in the connector status");
@@ -525,23 +524,275 @@ public class NocturneRemoteConnectorServiceCrawlTests
     }
 
     /// <summary>
-    /// A run carrying no lower bound imports this remote's full history, and no family's resume
-    /// point may narrow it back — the remote is another Nocturne instance, so the first sync is
-    /// meant to take everything it holds.
+    /// A run carrying no lower bound — the tenant's sync button — resumes each family from what it
+    /// has stored, and a family with nothing stored takes everything the remote holds: the remote is
+    /// another Nocturne instance, so its first sync is meant to.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WhenTheCallerSuppliesNoLowerBound_AsksEveryFamilyForEverything()
+    public async Task SyncDataAsync_WhenTheCallerSuppliesNoLowerBound_ResumesEachFamilyFromItsOwnPoint()
     {
+        var latestBolus = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var handler = new RemoteFakeHandler();
         var fixture = new ServiceFixture(
-            handler, latestTreatment: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            handler, latestByType: new Dictionary<SyncDataType, DateTime> { [SyncDataType.Boluses] = latestBolus });
 
         await fixture.Service.SyncDataAsync(
-            new SyncRequest { From = null, To = null, DataTypes = [SyncDataType.Boluses] },
+            new SyncRequest { From = null, To = null, DataTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake] },
             fixture.Config,
             CancellationToken.None);
 
-        handler.CrawlOf(NocturneRemoteConstants.Boluses).Should().NotContain("from=");
+        handler.CrawlOf(NocturneRemoteConstants.Boluses).Should().Contain($"from={latestBolus.AddMinutes(-5):o}");
+        handler.CrawlOf(NocturneRemoteConstants.CarbIntake).Should().NotContain("from=");
+    }
+
+    /// <summary>
+    /// A background run's lower bound is glucose's resume point, which says nothing about any other
+    /// family. Widening them to it ties each to glucose: a remote whose glucose endpoint fails every
+    /// run keeps that point at the start of history, and every run re-imports every family from there.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SyncDataAsync_OnABackgroundRun_ResumesEachFamilyIndependentlyOfGlucose(bool glucoseStored)
+    {
+        var latestGlucose = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var latestTreatment = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var latestStatus = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(
+            handler,
+            latestGlucose: glucoseStored ? latestGlucose : null,
+            latestTreatment: latestTreatment,
+            latestDeviceStatus: latestStatus);
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        handler.CrawlOf(NocturneRemoteConstants.Boluses).Should()
+            .Contain($"from={latestTreatment.AddMinutes(-5):o}");
+        handler.Requests.First(u => u.Contains(RemoteFakeHandler.V1DeviceStatus)).Should()
+            .Contain($"find[created_at][$gte]={latestStatus.AddMinutes(-5):o}");
+    }
+
+    /// <summary>
+    /// A run cut off mid-crawl — the per-tenant timeout — keeps the pages it published, and the next
+    /// run crawls only the range it still owes: between the catch-up's floor and those pages.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenARunIsCancelledMidCrawl_TheNextRunResumesTheRangeItOwes()
+    {
+        var latestStatus = new DateTime(2026, 1, 3, 7, 0, 0, DateTimeKind.Utc);
+        var floor = latestStatus.AddMinutes(-5);
+        var oldestPublished = new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler()
+            .Serve(RemoteFakeHandler.V1DeviceStatus,
+                RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"));
+        using var timeout = new CancellationTokenSource();
+        var fixture = new ServiceFixture(handler, latestDeviceStatus: latestStatus, onDeviceStatusPublished: timeout.Cancel);
+        var request = new SyncRequest { DataTypes = [SyncDataType.DeviceStatus] };
+
+        var cut = () => fixture.Service.SyncDataAsync(request, fixture.Config, timeout.Token);
+
+        await cut.Should().ThrowAsync<OperationCanceledException>();
+        fixture.PublishedStatuses.Should().HaveCount(2);
+        fixture.Marks.Should().BeEquivalentTo(new Dictionary<string, DateTime>
+        {
+            ["DeviceStatus.GapFrom"] = floor,
+            ["DeviceStatus.GapTo"] = oldestPublished,
+        }, "a bounded catch-up owes a bounded range, not the history below it");
+
+        handler.Requests.Clear();
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        handler.Requests.Should().Contain(u => u.Contains(RemoteFakeHandler.V1DeviceStatus)
+            && u.Contains($"find[created_at][$gte]={floor:o}")
+            && u.Contains($"find[created_at][$lte]={oldestPublished:o}"));
+        fixture.Marks.Should().BeEmpty("the owed range was crawled to its floor");
+    }
+
+    /// <summary>
+    /// A failed catch-up owes its own range only. Recording it in the collection's mark would replace
+    /// a deeper backfill's progress and turn a minutes-wide gap into a crawl of the whole history.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenACatchUpFails_KeepsADeeperBackfillMark()
+    {
+        var latestBolus = new DateTime(2026, 1, 3, 7, 0, 0, DateTimeKind.Utc);
+        var deepMark = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.Boluses,
+                RemoteFakeHandler.BolusPage(total: 6, "2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"),
+                RemoteFakeHandler.Status(HttpStatusCode.BadGateway));
+        var fixture = new ServiceFixture(handler, latestTreatment: latestBolus);
+        fixture.Marks["Boluses"] = deepMark;
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Boluses] }, fixture.Config, CancellationToken.None);
+
+        fixture.Marks.Should().BeEquivalentTo(new Dictionary<string, DateTime>
+        {
+            ["Boluses"] = deepMark,
+            ["Boluses.GapFrom"] = latestBolus.AddMinutes(-5),
+            ["Boluses.GapTo"] = new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc),
+        });
+    }
+
+    /// <summary>
+    /// A catch-up whose first page is full records what it owes before it asks for the next, so a
+    /// process killed during that fetch does not strand the range below what it published. A
+    /// catch-up of one short page, the common case, writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_ACatchUpRecordsItsRangeBeforeFetchingPastAFullPage()
+    {
+        var latestStatus = new DateTime(2026, 1, 3, 7, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler()
+            .Serve(RemoteFakeHandler.V1DeviceStatus,
+                RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"),
+                RemoteFakeHandler.DeviceStatusPage("2026-01-03T07:30:00Z"));
+        var fixture = new ServiceFixture(handler, latestDeviceStatus: latestStatus);
+        Dictionary<string, DateTime>? atSecondFetch = null;
+        handler.OnRequest = url =>
+        {
+            if (url.Contains(RemoteFakeHandler.V1DeviceStatus) && fixture.PublishedStatuses.Count == 2)
+                atSecondFetch ??= new(fixture.Marks);
+        };
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.DeviceStatus] }, fixture.Config, CancellationToken.None);
+
+        atSecondFetch.Should().ContainKey("DeviceStatus.GapTo");
+        fixture.Marks.Should().BeEmpty();
+
+        var single = new ServiceFixture(
+            new RemoteFakeHandler().Serve(RemoteFakeHandler.V1DeviceStatus,
+                RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z")),
+            latestDeviceStatus: latestStatus);
+        await single.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.DeviceStatus] }, single.Config, CancellationToken.None);
+
+        single.MarkWrites.Should().Be(0);
+    }
+
+    /// <summary>
+    /// A family with nothing stored owes its whole history, whatever another family has stored. Bounding
+    /// it at the glucose cursor instead — after a first run that stored glucose and then timed out
+    /// before device status ran — would put everything older than that run out of reach for good.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAFamilyHasNothingStored_CrawlsItsWholeHistoryWhateverGlucoseHolds()
+    {
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(handler, latestGlucose: new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc));
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        handler.Requests.First(u => u.Contains(RemoteFakeHandler.V1DeviceStatus)).Should().NotContain("$gte");
+        handler.LastCrawlOf(NocturneRemoteConstants.Activity).Should().NotContain("from=");
+    }
+
+    /// <summary>
+    /// A backfill stops taking pages once half the per-tenant timeout has passed, and the type still
+    /// reports success: a run the timeout cuts off fails every type after it and backs the connector
+    /// off, which would leave live glucose waiting on a backfill.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenABackfillOutrunsTheBudget_StopsBetweenPagesAndLetsTheRestSync()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 4, 0, 0, 0, TimeSpan.Zero));
+        var handler = new RemoteFakeHandler()
+            .Serve(RemoteFakeHandler.V1DeviceStatus,
+                RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"),
+                RemoteFakeHandler.DeviceStatusPage("2026-01-03T07:55:00Z", "2026-01-03T07:50:00Z"));
+        var budget = TimeSpan.FromSeconds(30);
+        var fixture = new ServiceFixture(handler, time: time, onDeviceStatusPublished: () => time.Advance(budget));
+        fixture.Service.BackfillBudget = budget;
+
+        var result = await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedStatuses.Should().HaveCount(2);
+        fixture.Marks.Should().Contain(nameof(SyncDataType.DeviceStatus), new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc));
+        handler.Requests.Should().Contain(u => u.Contains(NocturneRemoteConstants.Foods),
+            "the types after the backfill still sync");
+    }
+
+    /// <summary>
+    /// A type can publish without leaving the stored watermark its resume point reads — a device
+    /// status with no APS, pump or uploader fields writes no snapshot. Its next run resumes from the
+    /// newest record its full crawl published rather than crawling the whole history again; a cursor
+    /// reset still crawls everything.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AfterAFullCrawlOfATypeThatStoresNoWatermark_ResumesFromWhereItReached()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(RemoteFakeHandler.V1DeviceStatus,
+                RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"));
+        var fixture = new ServiceFixture(handler);
+        var request = new SyncRequest { DataTypes = [SyncDataType.DeviceStatus] };
+
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        DeviceStatusCrawls(handler).First().Should().NotContain("$gte");
+
+        handler.Requests.Clear();
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        DeviceStatusCrawls(handler).First().Should()
+            .Contain($"find[created_at][$gte]={new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc):o}");
+
+        handler.Requests.Clear();
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { To = new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc), DataTypes = [SyncDataType.DeviceStatus] },
+            fixture.Config, CancellationToken.None);
+        DeviceStatusCrawls(handler).First().Should().NotContain("$gte");
+    }
+
+    private static List<string> DeviceStatusCrawls(RemoteFakeHandler handler) =>
+        handler.Requests.Where(u => u.Contains(RemoteFakeHandler.V1DeviceStatus)).ToList();
+
+    /// <summary>
+    /// A V4 list refuses a range wider than its span limit, so an owed range wider than that is read
+    /// a window at a time. Asked for in one request, every run's first page of it would fail and the
+    /// deep backfill behind it would never be reached.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AnOwedRangeWiderThanTheV4SpanLimit_IsCrawledInWindows()
+    {
+        var gapFrom = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var gapTo = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(handler, latestTreatment: new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
+        fixture.Marks["Boluses.GapFrom"] = gapFrom;
+        fixture.Marks["Boluses.GapTo"] = gapTo;
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Boluses] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var windows = handler.Requests
+            .Where(u => u.Contains(NocturneRemoteConstants.Boluses) && u.Contains("&to="))
+            .Select(u => (From: DateTime.Parse(Query(u, "from")).ToUniversalTime(), To: DateTime.Parse(Query(u, "to")).ToUniversalTime()))
+            .ToList();
+        windows.Should().HaveCountGreaterThan(1);
+        windows.Should().OnlyContain(w => (w.To - w.From).TotalDays <= V4ApiLimits.MaxDateSpanDays);
+        windows.Max(w => w.To).Should().Be(gapTo);
+        windows.Min(w => w.From).Should().Be(gapFrom);
+        windows.Zip(windows.Skip(1)).Should().OnlyContain(pair => pair.Second.To < pair.First.From,
+            "a record on a boundary is read in one window only");
+        fixture.Marks.Should().BeEmpty();
+    }
+
+    private static string Query(string url, string name) =>
+        Uri.UnescapeDataString(System.Text.RegularExpressions.Regex.Match(url, $"[?&]{name}=([^&]+)").Groups[1].Value);
+
+    /// <summary>A full crawl of a type the remote holds nothing of writes no mark, on every run.</summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAFullCrawlFindsNothing_WritesNoMark()
+    {
+        var fixture = new ServiceFixture(new RemoteFakeHandler());
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        fixture.MarkWrites.Should().Be(0);
     }
 
     /// <summary>
@@ -852,6 +1103,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
         internal List<SensorGlucose> PublishedGlucose { get; } = [];
         internal List<Bolus> PublishedBoluses { get; } = [];
         internal List<ProfileActivation> PublishedActivations { get; } = [];
+        internal List<DeviceStatus> PublishedStatuses { get; } = [];
+        internal Dictionary<string, DateTime> Marks { get; } = [];
+        internal int MarkWrites { get; private set; }
 
         internal ServiceFixture(
             RemoteFakeHandler handler,
@@ -859,7 +1113,11 @@ public class NocturneRemoteConnectorServiceCrawlTests
             DateTime? latestTreatment = null,
             bool treatmentWatermarkFails = false,
             IReadOnlyDictionary<SyncDataType, DateTime>? latestByType = null,
-            DateTime? latestStateSpan = null)
+            DateTime? latestStateSpan = null,
+            DateTime? latestGlucose = null,
+            DateTime? latestDeviceStatus = null,
+            Action? onDeviceStatusPublished = null,
+            TimeProvider? time = null)
         {
             Config = config ?? NewConfig();
 
@@ -870,6 +1128,24 @@ public class NocturneRemoteConnectorServiceCrawlTests
                     It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
                 .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
                     (batch, _, _, _) => PublishedGlucose.AddRange(batch))
+                .ReturnsAsync(true);
+            glucose
+                .Setup(p => p.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(latestGlucose);
+
+            var device = new Mock<IDevicePublisher>();
+            device
+                .Setup(p => p.GetLatestDeviceStatusTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(latestDeviceStatus);
+            device
+                .Setup(p => p.PublishDeviceStatusAsync(
+                    It.IsAny<IEnumerable<DeviceStatus>>(), It.IsAny<string>(),
+                    It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<DeviceStatus>, string, WriteOrigin, CancellationToken>((batch, _, _, _) =>
+                {
+                    PublishedStatuses.AddRange(batch);
+                    onDeviceStatusPublished?.Invoke();
+                })
                 .ReturnsAsync(true);
 
             var treatments = new Mock<ITreatmentPublisher>();
@@ -892,6 +1168,20 @@ public class NocturneRemoteConnectorServiceCrawlTests
             }
 
             var metadata = new Mock<IMetadataPublisher>();
+            metadata
+                .Setup(p => p.GetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Dictionary<string, DateTime>(Marks));
+            metadata
+                .Setup(p => p.SetBackfillLowWaterMarksAsync(
+                    It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, IReadOnlyDictionary<string, DateTime?>, CancellationToken>((_, changes, _) =>
+                {
+                    MarkWrites++;
+                    foreach (var (key, mark) in changes)
+                        if (mark is { } at) Marks[key] = at;
+                        else Marks.Remove(key);
+                })
+                .Returns(Task.CompletedTask);
             metadata
                 .Setup(p => p.GetLatestStateSpanTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(latestStateSpan);
@@ -920,7 +1210,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
             publisher.Setup(p => p.IsAvailable).Returns(true);
             publisher.Setup(p => p.Glucose).Returns(glucose.Object);
             publisher.Setup(p => p.Treatments).Returns(treatments.Object);
-            publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
+            publisher.Setup(p => p.Device).Returns(device.Object);
             publisher.Setup(p => p.Metadata).Returns(metadata.Object);
 
             Service = new NocturneRemoteConnectorService(
@@ -928,7 +1218,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
                 Mock.Of<IConnectorServerResolver<NocturneRemoteConnectorConfiguration>>(),
                 NullLogger<NocturneRemoteConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                publisher.Object);
+                publisher.Object,
+                time);
         }
     }
 
@@ -957,6 +1248,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         /// <summary>Every request made, so a test can assert on the range each crawl asked for.</summary>
         internal List<string> Requests { get; } = [];
+
+        internal Action<string>? OnRequest { get; set; }
 
         /// <summary>
         /// The Authorization header each request carried, positionally aligned with
@@ -1019,6 +1312,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
         {
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(request.RequestUri.ToString());
+            OnRequest?.Invoke(request.RequestUri.ToString());
             Tokens.Add(request.Headers.TryGetValues("Authorization", out var authorization)
                 ? authorization.FirstOrDefault()
                 : null);

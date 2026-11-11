@@ -9,6 +9,10 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Microsoft.AspNetCore.Http;
+
 namespace Nocturne.API.Tests.Controllers.Admin;
 
 /// <summary>
@@ -43,7 +47,10 @@ public sealed class OidcProviderAdminLockoutTests : IDisposable
             .ReturnsAsync((OidcProvider p) => p);
 
         _controller = new OidcProviderAdminController(
-            _providers.Object, _context.AsFactory(), Mock.Of<IHttpClientFactory>());
+            _providers.Object, new SubjectRepository(_context.AsFactory()), Mock.Of<IHttpClientFactory>())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
     }
 
     public void Dispose()

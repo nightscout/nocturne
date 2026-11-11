@@ -231,7 +231,7 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/food/GiLabel.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
@@ -251,7 +251,7 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/food/GiLabel.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
@@ -559,7 +559,6 @@ msgstr ""
 #: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
@@ -627,7 +626,7 @@ msgstr ""
 #: src/lib/components/actogram/Actogram.svelte
 #: src/lib/components/actogram/ActogramRow.svelte
 #: src/lib/components/alerts/factText.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/engine/point-inspection.svelte.ts
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
@@ -731,9 +730,6 @@ msgstr ""
 #: src/lib/components/settings/CustomSoundUpload.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/(authenticated)/clock/+page.svelte
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(authenticated)/settings/timezone/+page.svelte
@@ -795,10 +791,6 @@ msgstr ""
 #: src/lib/forms/FormGuard.test-harness.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
 msgid "Name"
 msgstr ""
 
@@ -863,9 +855,9 @@ msgstr ""
 #: src/lib/forms/FormGuard.test-harness.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
+#: src/routes/(unauthenticated)/setup/hub/HubRecipientQuestion.svelte
 msgid "Save"
 msgstr ""
 
@@ -1170,11 +1162,6 @@ msgstr ""
 msgid "{0} reading{1}"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
@@ -1219,9 +1206,6 @@ msgstr ""
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
@@ -1269,7 +1253,6 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/entries/BolusSection.svelte
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 msgid "Normal"
 msgstr ""
@@ -1301,8 +1284,6 @@ msgstr ""
 #: src/lib/components/settings/ClientDevices.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
@@ -1396,10 +1377,8 @@ msgstr ""
 msgid "Time"
 msgstr ""
 
-#: src/lib/components/audit/AuditMutationsTable.svelte
-#: src/lib/components/audit/AuditReadsTable.svelte
-msgid "Subject"
-msgstr ""
+#~ msgid "Subject"
+#~ msgstr ""
 
 #: src/lib/components/audit/AuditMutationsTable.svelte
 msgid "Entity ID"
@@ -1645,7 +1624,7 @@ msgid "Carbs:"
 msgstr ""
 
 #. 0: stats.totalCarbs.toFixed(0)
-#. 0: grams
+#. 0: carbs
 #. 0: totalCarbs
 #. 0: carbIntake.carbs ?? 0
 #. 0: totalCarbs
@@ -1666,7 +1645,7 @@ msgstr ""
 #. 0: (summary?.totals?.food?.carbs ?? 0).toFixed(0)
 #. 0: row.carbs
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
@@ -1696,7 +1675,8 @@ msgstr ""
 
 #. 0: stats.totalBolus.toFixed(1)
 #. 0: stats.totalBasal.toFixed(1)
-#. 0: units
+#. 0: units.toFixed(1)
+#. 0: insulin.toFixed(1)
 #. 0: formatInsulinDisplay(bolus.insulin)
 #. 0: dayTotalInsulin.toFixed(1)
 #. 0: meal.totalInsulin.toFixed(1)
@@ -1708,7 +1688,8 @@ msgstr ""
 #. 0: (row.insulin ?? 0).toFixed(2)
 #: src/lib/components/calendar/CalendarDayCell.svelte
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
+#: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/meals/MealsTable.svelte
@@ -1751,8 +1732,10 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 #: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
 #: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
 #: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
@@ -1863,7 +1846,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/charts/BasalRateTrack.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 msgid "Last pump sync"
 msgstr ""
 
@@ -1904,7 +1887,6 @@ msgstr ""
 #: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "Preview"
 msgstr ""
@@ -2427,7 +2409,6 @@ msgstr ""
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
 #: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
@@ -2440,7 +2421,6 @@ msgstr ""
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
@@ -2871,6 +2851,7 @@ msgstr ""
 msgid "Completed"
 msgstr ""
 
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/(authenticated)/notifications/+page.svelte
@@ -2995,6 +2976,7 @@ msgstr ""
 
 #: ../portal/src/routes/changelog/+page.svelte
 #: ../portal/src/routes/roadmap/+page.svelte
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
@@ -3319,7 +3301,7 @@ msgstr ""
 msgid "4 hours"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/PredictionVisualizations.svelte
 msgid "Loading predictions..."
 msgstr ""
 
@@ -3344,7 +3326,8 @@ msgid "Last 24 hours"
 msgstr ""
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
@@ -3358,7 +3341,8 @@ msgid "Bolus"
 msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/food/FoodFields.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
@@ -3456,7 +3440,6 @@ msgid "Portion"
 msgstr ""
 
 #: src/lib/components/food/FoodFields.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
 msgid "Unit"
 msgstr ""
 
@@ -3543,7 +3526,7 @@ msgstr ""
 msgid "Finger"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/legacy-kind-label.svelte.ts
@@ -3593,7 +3576,6 @@ msgid "Rate (U/hr)"
 msgstr ""
 
 #: src/lib/components/entries/BolusSection.svelte
-#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
 msgid "<0/> Advanced"
 msgstr ""
 
@@ -3616,7 +3598,6 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/entries/CarbIntakeSection.svelte
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 msgid "Foods"
 msgstr ""
 
@@ -3884,7 +3865,12 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 msgid "Automatic"
 msgstr ""
@@ -3903,7 +3889,7 @@ msgid "Boost"
 msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
@@ -3919,7 +3905,8 @@ msgid "Exercise"
 msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 msgid "Suspended"
@@ -3950,9 +3937,12 @@ msgid "Snack"
 msgstr ""
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/engine/point-inspection.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
@@ -3971,11 +3961,11 @@ msgstr ""
 msgid "Basal"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Site"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/trackers/+page.svelte
@@ -4128,7 +4118,6 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/layout/UserMenu.svelte
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(authenticated)/settings/+page.svelte
 msgid "Settings"
@@ -4646,8 +4635,6 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/patient/InsulinFormFields.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
 msgid "hours"
 msgstr ""
 
@@ -5278,9 +5265,6 @@ msgstr ""
 #~ msgid "Date"
 #~ msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -5692,7 +5676,7 @@ msgid "Temp"
 msgstr ""
 
 #: src/lib/components/alerts/DndPanel.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
@@ -6480,7 +6464,6 @@ msgstr ""
 msgid "Show glucose values in browser tab"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
 #: src/lib/components/settings/TitleFaviconSettings.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 msgid "Title"
@@ -6543,6 +6526,7 @@ msgstr ""
 #~ msgid "Step Count"
 #~ msgstr ""
 
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/settings-navigation.svelte.ts
 msgid "Platform"
@@ -6583,7 +6567,6 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -6606,7 +6589,8 @@ msgstr ""
 msgid "Basal IOB"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
@@ -6927,7 +6911,7 @@ msgid "Cannula"
 msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 #: src/lib/components/status-pills/ReservoirPill.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -7710,9 +7694,7 @@ msgstr "{0} majeur"
 msgid "{0} minor"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
-#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
-#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -7792,7 +7774,6 @@ msgstr ""
 #: src/routes/(authenticated)/+layout.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
 #: src/routes/(authenticated)/compatibility/test/+page.svelte
-#: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 msgid "An error occurred"
 msgstr ""
@@ -7810,11 +7791,7 @@ msgstr ""
 #~ msgid "No foods yet — add one to get started"
 #~ msgstr ""
 
-#. 0: picked.length
-#. 0: foods.length
 #. 0: state.foods.length
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 #: src/routes/(authenticated)/food/+page.svelte
 msgid "{0} foods"
 msgstr ""
@@ -9159,7 +9136,7 @@ msgstr ""
 #~ msgid "Auto Basal"
 #~ msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 msgid "Percent"
 msgstr ""
 
@@ -9167,23 +9144,24 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Override"
 msgstr ""
 
-#. 0: count
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#. 0: systemEvents.length
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Alarms ({0})"
 msgstr ""
 
-#. 0: count
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#. 0: scheduledTrackerMarkers.length
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Scheduled ({0})"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Overrides"
@@ -9223,10 +9201,12 @@ msgstr ""
 #. 0: basic.count
 #. 0: formatNumber(totalReadings)
 #. 0: formatNumber(readingCount)
+#. 0: formatNumber(readingCount)
 #. 0: readings.length
 #. 0: formatNumber(readingCount)
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
@@ -9449,7 +9429,6 @@ msgstr ""
 #~ msgstr ""
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
 #: src/lib/components/settings/alarm-profile/AlarmScheduleTab.svelte
 #: src/routes/(authenticated)/reports/site-change-impact/+page.svelte
 msgid "to"
@@ -9694,8 +9673,6 @@ msgstr ""
 msgid "Change every"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
 #: src/lib/components/tools/packing/supply-item.svelte
 #: src/routes/(authenticated)/tools/packing/+page.svelte
 msgid "days"
@@ -10991,8 +10968,8 @@ msgstr ""
 #~ msgid "Meal Boluses"
 #~ msgstr ""
 
-#. 0: (insulinStats.manualBolusCount ?? 0) > 0 ? ( ((insulinStats.mealBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) * 100 ).toFixed(0) \\: 0
-#. 0: (insulinStats.manualBolusCount ?? 0) > 0 ? ( ((insulinStats.correctionBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) * 100 ).toFixed(0) \\: 0
+#. 0: (insulinStats.mealBolusPercent ?? 0).toFixed(0)
+#. 0: (insulinStats.correctionBolusPercent ?? 0).toFixed(0)
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 msgid "{0}% of boluses"
@@ -11087,8 +11064,8 @@ msgstr ""
 #~ msgid "Avg Total Daily Dose"
 #~ msgstr ""
 
-#. 0: avgBasal?.toFixed(1) ?? "--"
-#. 0: avgScheduled?.toFixed(1) ?? "--"
+#. 0: insulinStats?.totalBasalPerDay?.toFixed(1) ?? "--"
+#. 0: insulinStats?.scheduledBasalPerDay?.toFixed(1) ?? "--"
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "{0} U/day"
@@ -11354,11 +11331,9 @@ msgstr ""
 
 #. 0: def.name
 #. 0: preset.name
-#. 0: report.name
 #. 0: getRowLabel(rowToDelete)
 #: src/lib/components/trackers/TrackerDefinitionsTab.svelte
 #: src/lib/components/trackers/TrackerPresetsTab.svelte
-#: src/routes/(authenticated)/reports/custom/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Delete {0}"
 msgstr ""
@@ -12393,7 +12368,6 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/InspectionFooter.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
 msgid "<0/> Edit"
@@ -13453,8 +13427,8 @@ msgstr ""
 msgid "Several entries occurred around this time. Select one to edit."
 msgstr ""
 
-#. 0: rate
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#. 0: span.rate.toFixed(2)
+#: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 msgid "{0}U/h"
 msgstr ""
 
@@ -13750,7 +13724,6 @@ msgid "Label (used in <0/>)"
 msgstr ""
 
 #: src/lib/components/settings/ClientDevices.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 msgid "<0/> Cancel"
@@ -14257,7 +14230,6 @@ msgid "Remove wrapper"
 msgstr ""
 
 #: src/lib/components/alerts/RuleBuilderAddPicker.svelte
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
 msgid "Group"
 msgstr ""
 
@@ -14778,9 +14750,8 @@ msgstr ""
 msgid "What technology stack does Nocturne use?"
 msgstr ""
 
-#: ../portal/src/routes/faq/+page.svelte
-msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
-msgstr ""
+#~ msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+#~ msgstr ""
 
 #: ../portal/src/routes/faq/+page.svelte
 msgid "How do data connectors work?"
@@ -16343,7 +16314,6 @@ msgid "Revoke this device? It will stop receiving alerts until it re-registers."
 msgstr ""
 
 #: src/lib/components/settings/ClientDevices.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "<0/> Rename"
 msgstr ""
 
@@ -16616,10 +16586,8 @@ msgstr ""
 #~ msgid "Error Loading Comparison"
 #~ msgstr ""
 
-#. 0: signed(d)
-#. 0: signed(d, 2)
+#. 0: signed(v, d)
 #. 0: signedNumber(priorWeek.tirDelta)
-#: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 msgid "{0} pp"
@@ -16657,7 +16625,7 @@ msgstr ""
 #~ msgid "<0/> zero or suspend temp basals were recorded. This often indicates low glucose prevention or manual suspensions."
 #~ msgstr ""
 
-#. 0.0: (basalStats.totalDelivered / dateInfo.dayCount).toFixed(1); 0: dateInfo.dayCount
+#. 0.0: basalStats.totalDeliveredPerDay.toFixed(1); 0: analysisQuery.current?.windowDays ?? dateInfo.dayCount
 #: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
 msgid "Average of <0>{0} units</0> of basal insulin delivered per day over this {0}-day period."
 msgstr ""
@@ -16809,9 +16777,8 @@ msgstr ""
 msgid "There is no data to display yet. Connect a data source in your settings to get started."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/admin/+page.svelte
-msgid "Manage identity providers and integrations"
-msgstr ""
+#~ msgid "Manage identity providers and integrations"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Account linked successfully."
@@ -17532,6 +17499,7 @@ msgstr ""
 msgid "Select a tenant"
 msgstr ""
 
+#: src/lib/components/admin/JobsTabContent.svelte
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
 msgid "Tenant"
 msgstr ""
@@ -17663,13 +17631,13 @@ msgstr ""
 msgid "{0}U bolus"
 msgstr ""
 
-#. 0: units; 1: insulinName
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#. 0: units.toFixed(1); 1: insulinName
+#: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
 msgid "{0}U {1}"
 msgstr ""
 
-#. 0: units
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#. 0: units.toFixed(1)
+#: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
 msgid "{0}U basal injection"
 msgstr ""
 
@@ -17678,7 +17646,7 @@ msgstr ""
 msgid "{0}, {1} U/hr"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
@@ -19359,13 +19327,11 @@ msgstr ""
 msgid "Interactive Nocturne API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne."
 msgstr ""
 
-#: ../portal/src/routes/scalar/+page.svelte
-msgid "Want to send real requests? Open this reference on the demo instance; it comes already signed in, and the demo resets on a schedule."
-msgstr ""
+#~ msgid "Want to send real requests? Open this reference on the demo instance; it comes already signed in, and the demo resets on a schedule."
+#~ msgstr ""
 
-#: ../portal/src/routes/scalar/+page.svelte
-msgid "Try it on the demo <0/>"
-msgstr ""
+#~ msgid "Try it on the demo <0/>"
+#~ msgstr ""
 
 #~ msgid "Error Loading Test Report"
 #~ msgstr ""
@@ -20076,7 +20042,7 @@ msgstr ""
 msgid "<0/> Loading the selected range"
 msgstr ""
 
-#. 0: Math.round(value)
+#. 0: Math.round(pct.tightTarget)
 #: src/lib/components/reports/TIRStackedChart.svelte
 msgid "{0}% in tight range"
 msgstr ""
@@ -20256,8 +20222,8 @@ msgstr ""
 #~ msgid "<0/> Back to Previous View"
 #~ msgstr ""
 
-#. 0: range
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#. 0: targetLabel
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Target {0}"
 msgstr ""
 
@@ -21239,7 +21205,7 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -21338,7 +21304,7 @@ msgstr ""
 msgid "Delete this lab result?"
 msgstr ""
 
-#. 0: formatA1c(pendingDeleteLabResult.a1cDisplay); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
+#. 0: formatA1c(pendingDeleteLabResult.a1cDisplay); 1: formatLongDate(labDay(pendingDeleteLabResult.measuredAt))
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete the {0} lab result from {1}."
 msgstr ""
@@ -21926,13 +21892,9 @@ msgstr ""
 
 #. 0: rule.name
 #. 0: perm
-#. 0: labelOf.get(name)
-#. 0: food.current?.name ?? 'food'
 #. 0: item.l
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 #: src/lib/components/admin/RoleDialog.svelte
-#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 msgid "Remove {0}"
 msgstr ""
@@ -22127,12 +22089,12 @@ msgstr ""
 msgid "Heart rate"
 msgstr ""
 
-#. 0: avgBasal?.toFixed(1) ?? "--"; 1: basalPct.toFixed(0)
+#. 0: insulinStats?.totalBasalPerDay?.toFixed(1) ?? "--"; 1: basalPct.toFixed(0)
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "<0/> Basal: {0} U/day ({1}%)"
 msgstr ""
 
-#. 0: avgBolus?.toFixed(1) ?? "--"; 1: bolusPct.toFixed(0)
+#. 0: insulinStats?.totalBolusPerDay?.toFixed(1) ?? "--"; 1: bolusPct.toFixed(0)
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "<0/> Bolus: {0} U/day ({1}%)"
 msgstr ""
@@ -22163,23 +22125,23 @@ msgstr ""
 msgid "{0} print:stroke-2"
 msgstr ""
 
-#. 0: low; 1: high
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#. 0: bg(lowThreshold, glucoseUnits); 1: bg(highThreshold, glucoseUnits)
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Range limits {0} / {1}"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Fingerstick BG"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/loop-analysis/SlotDays.svelte
 msgid "Scheduled basal"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Not reported by pump"
 msgstr ""
 
@@ -22276,7 +22238,7 @@ msgstr ""
 #~ msgid "Sleep Night Report"
 #~ msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 msgid "Mode"
 msgstr ""
 
@@ -22444,10 +22406,8 @@ msgstr ""
 #~ msgid "{0} meals · {1}g/day · {2}g avg/meal"
 #~ msgstr ""
 
-#. 0: formatNumber(readingCount)
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "· {0} readings"
-msgstr ""
+#~ msgid "· {0} readings"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "Consensus target: at least 70% of time in range."
@@ -22679,7 +22639,9 @@ msgid "<0/> Failed to load changelog"
 msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/status-pills/BasalPill.svelte
@@ -23169,7 +23131,7 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -23378,7 +23340,7 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
@@ -23406,7 +23368,6 @@ msgstr ""
 msgid "Middle half ({0})"
 msgstr ""
 
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "Days"
 msgstr ""
@@ -24405,7 +24366,6 @@ msgstr "Entraînements"
 msgid "Body fat"
 msgstr "Masse grasse"
 
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Height"
 msgstr "Taille"
@@ -26793,13 +26753,14 @@ msgstr ""
 msgid "<0/> Add cohort"
 msgstr ""
 
-#~ msgid "Isolated events have no other meal, correction bolus or unannounced rise in their window. A window across midnight, for example 22:00 to 02:00, continues into the next day."
-#~ msgstr ""
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Isolated events have no other meal, correction bolus or unannounced rise in their window. A window across midnight, for example 22:00 to 02:00, continues into the next day."
+msgstr ""
 
 #~ msgid "Open in Day in Review"
 #~ msgstr ""
 
-#. 0: (event.cohorts ?? []) .map((n) => cohorts.find((c) => c.cohort === n)) .filter((c) => c != null) .map((c) => cohortLabel(c)) .join("\; ")
+#. 0: (event.cohorts ?? []) .map((n) => cohorts.find((c) => c.cohort === n)) .filter((c) => c != null) .map(cohortLabel) .join("\; ")
 #: src/lib/components/reports/loop-analysis/EventList.svelte
 msgid ", in {0}"
 msgstr ""
@@ -26996,12 +26957,13 @@ msgstr ""
 msgid "{0} to {1} each event. <0/> <1/>"
 msgstr ""
 
-#~ msgid "This page uses only the last hour for each range that you select."
-#~ msgid_plural "This page uses only the last # hours for each range that you select."
-#~ msgstr[0] ""
-#~ msgstr[1] ""
+#: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
+msgid "This page uses only the last hour for each range that you select."
+msgid_plural "This page uses only the last # hours for each range that you select."
+msgstr[0] ""
+msgstr[1] ""
 
-#. 0: plural(response.historyWindowHours ?? 0, [ "This page uses only the data from the last hour in each range that you select.", "This page uses only the data from the last # hours in each range that you select.", ])
+#. 0: plural(response.historyWindowHours ?? 0, [ "This page uses only the last hour for each range that you select.", "This page uses only the last # hours for each range that you select.", ])
 #: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
 msgid "{0} It does not compare ranges. <0/>"
 msgstr ""
@@ -28891,9 +28853,8 @@ msgstr ""
 msgid "Could not load the complete report. Try again before printing."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "Could not load reports"
-msgstr ""
+#~ msgid "Could not load reports"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "There are not enough glucose readings between these dates to summarize. Choose a longer date range."
@@ -30294,7 +30255,7 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/alerts/factText.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 msgid "Pump mode"
 msgstr ""
@@ -30821,6 +30782,7 @@ msgid "Connect Nightscout"
 msgstr ""
 
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
+#: src/routes/(unauthenticated)/setup/hub/HubRecipientQuestion.svelte
 msgid "We could not save your answer."
 msgstr ""
 
@@ -31102,6 +31064,7 @@ msgstr ""
 msgid "Someone you are setting it up for"
 msgstr ""
 
+#: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
 msgid "Not answered yet"
 msgstr ""
@@ -32604,9 +32567,8 @@ msgstr ""
 msgid "Meal attribution"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "Error loading reports"
-msgstr ""
+#~ msgid "Error loading reports"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "<0/> Executive summary"
@@ -34601,9 +34563,6 @@ msgstr ""
 
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
-#: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
-#: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
-#: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 msgid "Error loading comparison"
 msgstr ""
 
@@ -35755,7 +35714,8 @@ msgstr ""
 msgid "No data source is configured yet. Pick whichever matches how you track your glucose."
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 msgid "Auto basal"
 msgstr ""
 
@@ -36722,9 +36682,8 @@ msgstr ""
 msgid "The average daily risk range (ADRR) is not shown for either period, and days with data are counted on UTC days."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
-msgid "The hourly figures place each reading at the local time its device reported. Days of data are counted on UTC days."
-msgstr ""
+#~ msgid "The hourly figures place each reading at the local time its device reported. Days of data are counted on UTC days."
+#~ msgstr ""
 
 #~ msgid "Days in range, the weekly breakdown and the composition chart use UTC days."
 #~ msgstr ""
@@ -38387,740 +38346,207 @@ msgstr ""
 msgid "bar"
 msgstr ""
 
-#: src/lib/components/reports/ReportPageSwitcher.svelte
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Custom reports"
+#: src/lib/components/audit/AuditMutationsTable.svelte
+msgid "Changed by"
 msgstr ""
 
-#~ msgid "Reports that an assistant made from your data, saved to open again"
-#~ msgstr ""
-
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "New custom report"
-msgstr ""
-
-#~ msgid "A report that an assistant made, opened from its link"
-#~ msgstr ""
-
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Custom report"
-msgstr ""
-
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "A saved custom report, run on your current data"
-msgstr ""
-
-#: src/lib/components/reports/ReportPageSwitcher.svelte
-msgid "All custom reports"
-msgstr ""
-
-#: src/lib/components/reports/custom/custom-report-labels.svelte.ts
-#: src/lib/server/report-image/report-image-words.svelte.ts
-msgid "No data in this range."
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "<0/> Open the matching report"
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "The report data has a form that this page cannot show."
-msgstr ""
-
-#~ msgid "Could not run the report"
-#~ msgstr ""
-
-#: src/lib/components/reports/custom/SpecErrorList.svelte
-msgid "Show the spec"
-msgstr ""
-
-#: src/lib/components/reports/custom/SpecErrorList.svelte
-msgid "<0/> This report cannot run. Nocturne found these problems in its spec:"
-msgstr ""
-
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-msgid "Any food"
-msgstr ""
-
-#. 0: i + 1
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-msgid "Cohort {0} foods"
-msgstr ""
-
-#. 0: i + 1
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-msgid "Cohort {0} food category"
-msgstr ""
-
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-msgid "Any category"
-msgstr ""
-
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-msgid "Food category"
-msgstr ""
-
-#. 0: i + 1; 1: label
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-msgid "Cohort {0} {1}"
-msgstr ""
-
-#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-msgid "Isolated events have no other meal, correction bolus or unannounced rise in their window. A window across midnight, for example 22:00 to 02:00, continues into the next day. A food filter uses only meals with a food record. Meals with only carbs are not included, and the page shows how many there are."
-msgstr ""
-
-#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
-msgid "Needs access to food"
-msgstr ""
-
-#. 0: foodIds[1]
-#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
-msgid "Cohort {0}, foods"
-msgstr ""
-
-#. 0: foodCategory[1]
-#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
-msgid "Cohort {0}, food category"
-msgstr ""
-
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
-msgid "# meal with a food record"
-msgid_plural "# meals with a food record"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
-msgid "# meal with only carbs not included because the food filter cannot apply to it"
-msgid_plural "# meals with only carbs not included because the food filter cannot apply to them"
-msgstr[0] ""
-msgstr[1] ""
-
-#. 0: food.map(ignoredFilterLabel).join(", ")
-#: src/lib/components/reports/loop-analysis/IgnoredFiltersNotice.svelte
-msgid "Your access does not include food data, so these cohorts show no events: {0}."
-msgstr ""
-
-#~ msgid "This assistant sends the data it receives to its provider."
-#~ msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "Could not load the custom reports"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "Could not delete the report. Try again."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "Saved custom reports"
-msgstr ""
-
-#~ msgid "An assistant that reads Nocturne through MCP can make a report from your data. Open its link here, then save the report to open it again. Each member of this account sees the same list."
-#~ msgstr ""
-
-#~ msgid "No custom reports. To add a report, open a report link from an assistant and select Save."
-#~ msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "Actions"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "Last changed"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "Panels"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "Delete this custom report?"
-msgstr ""
-
-#. 0: pendingDelete?.name
-#. 0: report?.name
-#. 0: report.current?.name
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "Nocturne will delete \"{0}\" for every member of this account. Your data stays."
-msgstr ""
-
-#~ msgid "This link has no report in it. Open the report link from the assistant again."
-#~ msgstr ""
-
-#~ msgid "This link is too long. A report link can hold a spec of at most 16 kB."
-#~ msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "Could not save the report. Try again."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "Could not load the custom report"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-msgid "Could not rename the report. Try again."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-msgid "Nocturne copied the link."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-msgid "Could not copy the link. Copy it from the address bar."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
-msgid "<0/> Copy link"
-msgstr ""
-
-#: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
-msgid "The range that you selected ends before the last hour. You can see only the last hour, so this page has no data for this range."
-msgid_plural "The range that you selected ends before the last # hours. You can see only the last # hours, so this page has no data for this range."
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
-msgid "This page uses only the data from the last hour in each range that you select."
-msgid_plural "This page uses only the data from the last # hours in each range that you select."
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/lib/components/reports/AidSystemUseCard.svelte
-msgid "The range that you selected ends before the last hour. You can see only the last hour, so this card has no data for this range."
-msgid_plural "The range that you selected ends before the last # hours. You can see only the last # hours, so this card has no data for this range."
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/lib/components/reports/custom/custom-report-labels.svelte.ts
-msgid "Full summary"
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "The image could not be made."
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "Making the image"
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "Download PNG"
-msgstr ""
-
-#. 0: count
-#: src/lib/server/report-image/report-image-words.svelte.ts
-msgid "This image does not show {0} of the figures. The summary has all of them."
-msgstr ""
-
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Reports that you make from the charts and figures of your data"
-msgstr ""
-
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Make a report from the charts and figures of your data"
-msgstr ""
-
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Edit custom report"
-msgstr ""
-
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Change the panels of a saved custom report"
-msgstr ""
-
-#: src/lib/components/reports/ReportPageSwitcher.svelte
-msgid "New"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "Could not load what a report can show"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "Could not load the report templates"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "Start a report"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "Start from a template and change it, or start with no panels."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "Blank"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "A report with no panels. Add the panels that you want."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "<0/> Start again"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
-msgid "Report"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
-msgid "The title and the range of the report. A panel can have a range of its own."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
-msgid "The default of each panel"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
-msgid "The preview could not be made. Nocturne will try again when you make a change."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
-msgid "This report has no panels. Add a panel to start."
-msgstr ""
-
-#. 0: draft.maxPanels
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
-msgid "A report can have at most {0} panels."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/ReportBuilder.svelte
-msgid "<0/> Add a panel"
-msgstr ""
-
-#. 0: index + 1
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Move panel {0} up"
-msgstr ""
-
-#. 0: index + 1
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Move panel {0} down"
-msgstr ""
-
-#. 0: index + 1
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Remove panel {0}"
-msgstr ""
-
-#. 0: index + 1
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Panel {0}"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Your access does not include this data."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Your access does not include this data, so this panel shows nothing."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-msgid "Data"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Show as"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Panel title"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Same as the report"
-msgstr ""
-
-#. 0: index + 1
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Settings of panel {0}"
-msgstr ""
-
-#. 0: index + 1
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Preview of panel {0}"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Nocturne is making the preview."
-msgstr ""
-
-#. 0: omitted.join(", ")
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Not shown, because your access does not include it: {0}."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Correct the problems in the report to see the preview."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "No preview."
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "Only a member who is signed in can download an image."
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "You made many images in the last minute. Wait a minute and try again."
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "This panel has too much data for an image. Choose a shorter range."
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "The image renderer is busy. Try again."
-msgstr ""
-
-#: src/lib/components/reports/custom/CustomReportRun.svelte
-msgid "This panel cannot be made into an image."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
-msgid "Add a field"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/BindingsEditor.svelte
-msgid "<0/> Use the default fields"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-msgid "The last"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-msgid "From a date to a date"
-msgstr ""
-
-#~ msgid "Number of {0}"
-#~ msgstr ""
-
-#: src/lib/components/reports/custom/builder/SchemaForm.svelte
-msgid "This data has no settings."
-msgstr ""
-
-#~ msgid "Use this filter"
-#~ msgstr ""
-
-#. 0: item.title ?? title; 1: i + 1
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-msgid "Remove {0} {1}"
-msgstr ""
-
-#. 0: max
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-msgid "This list can have at most {0} items."
-msgstr ""
-
-#. 0: itemWords
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-msgid "<0/> Add {0}"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-msgid "This page cannot show this setting."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "Foods picked"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "A food you cannot read"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "Find a food"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "Your access does not include food data, so you cannot pick foods."
-msgstr ""
-
-#. 0: find
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "No food matches \"{0}\"."
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "Foods found"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/FoodCategoryInput.svelte
-msgid "Your access does not include food data, so no categories are offered."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "A custom report shows the charts and figures of your data that you select. Each member of this account sees the same list."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "<0/> New report"
-msgstr ""
-
-#~ msgid "No custom reports. To make a report, select New report."
-#~ msgstr ""
-
-#~ msgid "<0/> Add: {0}"
-#~ msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "Could not save the copy. Try again."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "Another member made this report, so you cannot change it. You can save a copy with Save as."
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "<0/> Save as"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "Name of the copy"
-msgstr ""
-
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "<0/> Save the copy"
-msgstr ""
-
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-msgid "Number of days"
+#: src/lib/components/audit/AuditReadsTable.svelte
+msgid "Read by"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/RangeControl.svelte
-msgid "Number of hours"
+#. 0: voice.name
+#: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
+msgid "These are the thresholds from {0}'s Nightscout site. Check that they are still right."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-#: src/routes/(authenticated)/reports/custom/new/+page.svelte
-msgid "Your access is limited to the last 24 hours. It cannot create reports."
+#: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
+msgid "These are the thresholds from the Nightscout site. Check that they are still right."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
-msgid "Your access is limited to the last 24 hours. It cannot change or copy reports."
+#: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
+msgid "These are the thresholds from your Nightscout site. Check that they are still right."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "To make a report, select New report."
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Loading the range analysis"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/custom/+page.svelte
-msgid "No custom reports.<0/>"
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Could not load the reading count."
 msgstr ""
 
-#: src/lib/components/reports/custom/CustomReportQuery.svelte
-msgid "Could not run the report. Try again."
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Loading the reading count"
 msgstr ""
 
-#: src/lib/components/reports/custom/CustomReportQuery.svelte
-msgid "<0/> Nocturne is running the report."
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "We could not change your role."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-msgid "Choose"
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Step down to a supporter role"
 msgstr ""
 
-#. 0: minuteToTime(schema.default)
-#: src/lib/components/reports/custom/builder/SchemaField.svelte
-msgid "Default: {0}"
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "They own Nocturne now. You can stay as a member who helps, with this access:"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "A food that no longer exists"
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Caretaker"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "A food that Nocturne could not load"
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Step down"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/FoodPicker.svelte
-msgid "The food search did not work. Try again."
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Step down?"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/FoodCategoryInput.svelte
-msgid "Nocturne could not load the food categories. You can type a category."
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "You will not own Nocturne after this. Only an owner can give you more access again."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Columns"
+#. 0: handover?.helperName
+#: src/routes/(unauthenticated)/setup/hub/SetupHub.svelte
+msgid "{0} set up <0>Nocturne</0> for you."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Each dataset's own spacing"
+#: src/routes/(unauthenticated)/setup/hub/SetupHub.svelte
+msgid "A few things only you can decide."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Every reading"
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "Hand it over"
 msgstr ""
 
-#. 0: value
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Every {0} minutes"
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "Make a link for the person who will own Nocturne. When they accept the link, Nocturne is theirs. Then they can choose who it is for and where alerts go."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Panel type"
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "They can do everything you can do, including remove you."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "Grid"
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "Waiting for them to accept."
 msgstr ""
 
-#. 0: draft.catalogue.maxTracks
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "A chart can have at most {0} tracks."
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
+msgid "Owner"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/PanelCard.svelte
-msgid "<0/> Add a track"
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
+msgid "They own Nocturne, the same as you."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "Small"
+#: src/routes/(authenticated)/reports/idp/+page.svelte
+msgid "The hourly glucose figures place each reading at the local time its device reported. Days of data are counted on UTC days."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "Large"
+#: src/routes/(authenticated)/reports/idp/+page.svelte
+msgid "This chart cannot show boluses by hour of day."
 msgstr ""
 
-#. 0: track + 1
-#. 0: track + 1
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "Track {0}"
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Try again to load the reading count"
 msgstr ""
 
-#. 0: track + 1
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "Move track {0} up"
+#: src/routes/(authenticated)/reports/+page.svelte
+msgid "Try again to load the analysis"
 msgstr ""
 
-#. 0: track + 1
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "Move track {0} down"
+#: src/routes/(authenticated)/reports/readings/+page.svelte
+msgid "Error Loading Readings"
 msgstr ""
 
-#. 0: track + 1
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "Remove track {0}"
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Background jobs"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "Track title"
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Each job and tenant has one row. Rows with a failed last run show first."
 msgstr ""
 
-#. 0: draft.catalogue.maxLayers
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "A chart can have at most {0} layers."
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "No jobs are scheduled."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/TrackSection.svelte
-msgid "<0/> Add a layer"
+#. 0: jobs.length
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "This list shows the first {0} rows only."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Left axis"
+#. 0: jobs.length
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "This list shows all {0} rows."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Right axis"
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Job"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "No axis"
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Next run"
 msgstr ""
 
-#. 0: layer + 1
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Move layer {0} up"
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Last completed"
 msgstr ""
 
-#. 0: layer + 1
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Move layer {0} down"
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Attempts"
 msgstr ""
 
-#. 0: layer + 1
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Remove layer {0}"
+#: src/lib/components/admin/JobsTabContent.svelte
+msgid "Last error"
 msgstr ""
 
-#. 0: layer + 1
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Layer {0}"
+#: src/routes/(authenticated)/settings/admin/+page.svelte
+msgid "Failed to load the background jobs."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Worked out from other data"
+#: src/routes/(authenticated)/settings/admin/+page.svelte
+msgid "Manage identity providers, integrations, and background jobs"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Your access does not include this data, so this layer shows nothing."
+#: src/routes/(authenticated)/settings/admin/+page.svelte
+msgid "<0/> Jobs"
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Name in the key"
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The client ID must end in .apps.googleusercontent.com."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Same as the panel"
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The callback URL must be an https address that ends in /api/v4/google-health/oauth/callback."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "First source"
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Google Health settings saved. No restart required."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/LayerRow.svelte
-msgid "Second source"
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The callback URL ends in /api/v4/google-health/oauth/callback."
 msgstr ""
 
-#. 0: draft.op(source.derived.op)?.label ?? source.derived.op
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-msgid "This source is worked out from other data: {0}."
+#: ../portal/src/routes/faq/+page.svelte
+msgid "Nocturne is built on .NET 11 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-msgid "Field"
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Requests go to the demo instance. It has sample data and resets on a schedule."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-msgid "Choose a layer"
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "To send requests, open this reference on the demo instance. The demo has sample data and resets on a schedule."
 msgstr ""
 
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-msgid "Copy from layer"
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Open the demo"
 msgstr ""
 
-#. 0: group
-#: src/lib/components/reports/custom/builder/SourceEditor.svelte
-msgid "Group {0}"
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Open the reference on the demo"
 msgstr ""

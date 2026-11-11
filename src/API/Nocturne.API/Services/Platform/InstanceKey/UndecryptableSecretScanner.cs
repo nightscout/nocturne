@@ -1,13 +1,17 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Platform.InstanceKey;
 
 public sealed record UndecryptableConnector(string ConnectorName, string DisplayName);
 
+/// <param name="RuleId">The id of the alert rule the channel belongs to.</param>
+/// <param name="RuleName">The name of the alert rule the channel belongs to.</param>
 /// <param name="Destination">
 /// The channel's label, or the hosts it posts to when it has none. Empty when it has neither.
 /// </param>
@@ -27,7 +31,11 @@ public sealed record TenantUndecryptableSecrets(
 /// one of them: the link is checked by its hash, and the settings page already says when its stored
 /// copy cannot be shown.
 /// </summary>
-public class UndecryptableSecretScanner(INocturneDbContextFactory contexts, ISecretEncryptionService encryption)
+public class UndecryptableSecretScanner(
+    INocturneDbContextFactory contexts,
+    IConnectorConfigurationRepository connectorConfigurations,
+    IAlertRuleRepository alertRules,
+    ISecretEncryptionService encryption)
 {
     /// <summary>
     /// The connector configurations and alert channels of the scope's tenant whose secrets do not
@@ -35,19 +43,11 @@ public class UndecryptableSecretScanner(INocturneDbContextFactory contexts, ISec
     /// </summary>
     public async Task<TenantUndecryptableSecrets> ScanTenantAsync(CancellationToken cancellationToken)
     {
-        await using var db = await contexts.CreateAsync(cancellationToken);
-
-        var connectors = await db.ConnectorConfigurations.AsNoTracking()
+        var connectors = (await connectorConfigurations.ListAsync(cancellationToken))
             .Where(c => c.SecretsJson != "{}")
-            .OrderBy(c => c.ConnectorName)
-            .Select(c => new { c.ConnectorName, c.SecretsJson })
-            .ToListAsync(cancellationToken);
+            .ToList();
 
-        var channels = await db.AlertRuleChannels.AsNoTracking()
-            .Where(c => c.Secret != null)
-            .OrderBy(c => c.AlertRule!.Name).ThenBy(c => c.SortOrder)
-            .Select(c => new { c.AlertRuleId, RuleName = c.AlertRule!.Name, c.Destination, c.DestinationLabel, c.Secret })
-            .ToListAsync(cancellationToken);
+        var channels = await alertRules.GetChannelSecretsAsync(cancellationToken);
 
         return new TenantUndecryptableSecrets(
             connectors

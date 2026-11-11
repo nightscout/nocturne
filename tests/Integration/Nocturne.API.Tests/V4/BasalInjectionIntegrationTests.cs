@@ -82,7 +82,7 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         var auditRows = await GetAuditEntriesAsync(_tenantAId, id);
         auditRows.Should().ContainSingle(a => a.Action == "create",
             "create operation must produce a single 'create' audit entry");
-        auditRows.Single(a => a.Action == "create").SubjectId.Should().Be(_subjectAId);
+        auditRows.Single(a => a.Action == "create").ActorSubjectId.Should().Be(_subjectAId);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         auditRows.Should().Contain(a => a.Action == "delete",
             "MutationAuditInterceptor must record a 'delete' entry on soft-delete");
         var deleteEntry = auditRows.Single(a => a.Action == "delete");
-        deleteEntry.SubjectId.Should().Be(_subjectAId);
+        deleteEntry.ActorSubjectId.Should().Be(_subjectAId);
         deleteEntry.EntityType.Should().Be(EntityType);
         deleteEntry.EntityId.Should().Be(id);
     }
@@ -345,7 +345,7 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         var rows = new List<AuditRow>();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT id, entity_type, entity_id, action, subject_id
+            SELECT id, entity_type, entity_id, action, actor_subject_id
             FROM mutation_audit_log
             WHERE entity_type = @entityType AND entity_id = @entityId
             ORDER BY created_at;
@@ -361,7 +361,7 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
                 EntityType: reader.GetString(1),
                 EntityId: reader.GetGuid(2),
                 Action: reader.GetString(3),
-                SubjectId: reader.IsDBNull(4) ? null : reader.GetGuid(4)));
+                ActorSubjectId: reader.IsDBNull(4) ? null : reader.GetGuid(4)));
         }
         return rows;
     }
@@ -374,5 +374,5 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private record AuditRow(Guid Id, string EntityType, Guid EntityId, string Action, Guid? SubjectId);
+    private record AuditRow(Guid Id, string EntityType, Guid EntityId, string Action, Guid? ActorSubjectId);
 }

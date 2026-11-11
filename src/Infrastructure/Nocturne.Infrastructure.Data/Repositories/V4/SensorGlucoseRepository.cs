@@ -14,19 +14,19 @@ using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.Projections;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing sensor glucose (CGM) records in the database. A DeduplicationService
+/// Repository for managing sensor glucose (CGM) records in the database. A deduplication
 /// participant on top of the sync-key upsert and keyed delete of
 /// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
-/// (non-primary LinkedRecords filter + keyset cursor), the legacy entries projection, the tenant
-/// last-reading watermark, the post-commit dedup linking, and the source/time-range deletes.
+/// (duplicate filter + keyset cursor), the legacy entries projection, the tenant
+/// last-reading watermark and the source/time-range deletes.
 /// </summary>
 public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
     private readonly IGlucoseReadingBroadcaster? _readingBroadcaster;
 
     /// <summary>
@@ -34,16 +34,16 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// </summary>
     public SensorGlucoseRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger,
         IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
         IDataEventSink<Entry>? entrySink = null,
-        IGlucoseReadingBroadcaster? readingBroadcaster = null
+        IGlucoseReadingBroadcaster? readingBroadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null
     )
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads, linker)
     {
-        _deduplicationService = deduplicationService;
         _readingBroadcaster = readingBroadcaster;
     }
 
@@ -98,26 +98,27 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
-        CancellationToken ct = default, Guid? patientDeviceId = null) =>
+        CancellationToken ct = default, Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All) =>
         ReadForEntriesAsync(from, to, device, source, limit, offset, descending,
-            afterTimestamp, afterId, patientDeviceId, orderByValue: false, ct);
+            afterTimestamp, afterId, patientDeviceId, streams, orderByValue: false, ct);
 
     /// <inheritdoc />
     public Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
         DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending,
-        CancellationToken ct = default) =>
+        CancellationToken ct = default, GlucoseStreams streams = GlucoseStreams.All) =>
         ReadForEntriesAsync(from, to, device: null, source, limit, offset, descending,
-            afterTimestamp: null, afterId: null, patientDeviceId: null, orderByValue: true, ct);
+            afterTimestamp: null, afterId: null, patientDeviceId: null, streams, orderByValue: true, ct);
 
     private async Task<IEnumerable<SensorGlucose>> ReadForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
-        bool orderByValue, CancellationToken ct)
+        GlucoseStreams streams, bool orderByValue, CancellationToken ct)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, afterTimestamp, afterId, patientDeviceId, orderByValue)
+                descending, afterTimestamp, afterId, patientDeviceId, streams, orderByValue)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -146,11 +147,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     protected override Entry? ProjectToLegacyEntry(SensorGlucose model) => EntryProjection.FromSensorGlucose(model);
 
     /// <summary>
-    /// Canonical-stream gate for the single-stream surfaces: a live write only reaches v1/v3
-    /// realtime clients and the Home Assistant relay if it survives
-    /// <see cref="CanonicalGlucoseStream"/> selection over the recent window plus the just-written
-    /// batch. Single-stream tenants pass through unchanged (the selector's fast path). Failures
-    /// fail open — a broadcast is better than a silent drop.
+    /// Canonical-stream gate for the single-stream surfaces: a live write reaches v1/v3 realtime
+    /// clients and the Home Assistant relay only as a canonical read shows it, so neither a duplicate
+    /// copy nor another stream's losing reading interleaves into their feed. Runs after the write's
+    /// dedup, so it reads the flags both left. Failures fail open: a broadcast is better than a silent
+    /// drop.
     /// </summary>
     protected override async Task<IReadOnlyList<SensorGlucose>> FilterLegacyProjectionAsync(
         IReadOnlyList<SensorGlucose> models, CancellationToken ct)
@@ -158,34 +159,14 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         try
         {
             await using var ctx = await ContextFactory.CreateAsync(ct);
-
-            var windowStart = DateTime.UtcNow - TimeSpan.FromMinutes(15);
-            var recentEntities = await ctx.Set<SensorGlucoseEntity>()
-                .AsNoTracking()
-                .Where(e => e.Timestamp >= windowStart)
-                .OrderByDescending(e => e.Timestamp)
-                .Take(500)
-                .ToListAsync(ct);
-
-            var batchIds = models.Select(m => m.Id).ToHashSet();
-            var pool = recentEntities
-                .Where(e => !batchIds.Contains(e.Id))
-                .Select(ToDomain)
-                .Where(m => !DataSources.IsEphemeral(m.DataSource))
-                .Concat(models)
-                .ToList();
-
-            // Devices are only needed when streams actually compete — skip the second query on
-            // the overwhelmingly common single-stream write.
-            if (pool.Select(CanonicalGlucoseStream.StreamKey).Distinct(StringComparer.Ordinal).Skip(1).Any() == false)
-                return models;
-
-            var deviceEntities = await ctx.PatientDevices.AsNoTracking().ToListAsync(ct);
-            var devices = deviceEntities.Select(PatientDeviceMapper.ToDomainModel).ToList();
-
-            var survivors = CanonicalGlucoseStream.Select(pool, devices);
-            var survivorIds = survivors.Select(s => s.Id).ToHashSet();
-            return models.Where(m => survivorIds.Contains(m.Id)).ToList();
+            var ids = models.Select(m => m.Id).ToArray();
+            var shown = (await ctx.SensorGlucose.AsNoTracking()
+                    .ExcludeDuplicates()
+                    .Where(e => ids.Contains(e.Id) && !e.IsSecondaryStream)
+                    .Select(e => e.Id)
+                    .ToListAsync(ct))
+                .ToHashSet();
+            return models.Where(m => shown.Contains(m.Id)).ToList();
         }
         catch (OperationCanceledException) { throw; }
         catch (DbUpdateException ex)
@@ -205,6 +186,28 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         }
     }
 
+    /// <summary>Saves the write and recomputes the buckets it left and reached, in one transaction.</summary>
+    protected override Task<int> SaveWriteAsync(
+        NocturneDbContext ctx, SensorGlucoseEntity written, DateTime? vacatedAt, CancellationToken ct) =>
+        ctx.ExecuteInTransactionAsync(async token =>
+        {
+            await GlucoseStreamFlags.LockAsync(ctx, token);
+            var saved = await ctx.SaveChangesAsync(token);
+            await GlucoseStreamFlags.RecomputeAsync(
+                ctx, vacatedAt is { } before ? [written.Timestamp, before] : [written.Timestamp], token);
+            return saved;
+        }, ct: ct);
+
+    /// <inheritdoc />
+    protected override Task BeginBulkWriteAsync(NocturneDbContext ctx, CancellationToken ct) =>
+        GlucoseStreamFlags.LockAsync(ctx, ct);
+
+    /// <inheritdoc />
+    protected override Task OnBulkSavedAsync(
+        NocturneDbContext ctx, IReadOnlyList<SensorGlucoseEntity> written, IReadOnlyList<DateTime> vacatedAt,
+        CancellationToken ct) =>
+        GlucoseStreamFlags.RecomputeAsync(ctx, [.. written.Select(e => e.Timestamp), .. vacatedAt], ct);
+
     /// <inheritdoc />
     protected override SensorGlucoseEntity ToEntity(SensorGlucose model) => SensorGlucoseMapper.ToEntity(model);
 
@@ -214,12 +217,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <inheritdoc />
     protected override void ApplyUpdate(SensorGlucoseEntity target, SensorGlucose source) => SensorGlucoseMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.SensorGlucose;
-
     /// <summary>
-    /// Routes the base 7-arg form through the extended sensor-glucose query (non-primary LinkedRecords
-    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// Routes the base 7-arg form through the extended sensor-glucose query (duplicate
+    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>
     public override Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
@@ -230,7 +230,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 
     /// <summary>
     /// Gets sensor glucose records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -245,6 +245,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <param name="patientDeviceId">Matched against the registered patient-device link and combined
     /// with <paramref name="device"/> when both are set. Last so positional callers ending at
     /// <paramref name="ct"/> are unaffected.</param>
+    /// <param name="streams">Which of the tenant's concurrent CGM streams to return.</param>
     /// <returns>A collection of sensor glucose records.</returns>
     public async Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from,
@@ -257,12 +258,13 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         DateTime? afterTimestamp = null,
         Guid? afterId = null,
         CancellationToken ct = default,
-        Guid? patientDeviceId = null
+        Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-            descending, afterTimestamp, afterId, patientDeviceId).ToListAsync(ct);
+            descending, afterTimestamp, afterId, patientDeviceId, streams).ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
     }
 
@@ -270,11 +272,12 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
-        CancellationToken ct = default, Guid? patientDeviceId = null)
+        CancellationToken ct = default, Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, afterTimestamp, afterId, patientDeviceId)
+                descending, afterTimestamp, afterId, patientDeviceId, streams)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -293,7 +296,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
-        bool orderByValue = false)
+        GlucoseStreams streams, bool orderByValue = false)
     {
         var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
         if (from.HasValue)
@@ -307,7 +310,12 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         if (patientDeviceId.HasValue)
             query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
+        if (streams != GlucoseStreams.All)
+            query = query.Where(e => !e.IsSecondaryStream);
+        if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
+            query = query.Where(e => e.DataSource == null
+                || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));
 
         // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
         // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
@@ -399,7 +407,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 
     /// <inheritdoc />
     /// <remarks>
-    /// Queries raw storage without the non-primary LinkedRecords exclusion: a reading whose copies
+    /// Queries raw storage without the duplicate filter: a reading whose copies
     /// are all linked non-primary is still a stored duplicate, and hiding it here caused uploads
     /// from a second source to re-insert their whole window on every cycle.
     /// </remarks>
@@ -426,7 +434,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 
     /// <summary>
     /// The duplicate probe's query, shared by the single-entry and whole-batch forms so both see
-    /// the same rows in the same order. Deliberately without the non-primary LinkedRecords filter.
+    /// the same rows in the same order. Deliberately without the duplicate filter.
     /// </summary>
     private static IQueryable<SensorGlucoseEntity> StoredDuplicateQuery(
         NocturneDbContext ctx, IReadOnlyCollection<string>? devices, DateTime from, DateTime to)
@@ -467,34 +475,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Insert-time deduplication: link newly inserted records to canonical groups. Feeds inserts-only
-    /// (matching Bolus/CarbIntake). Since dedup runs after commit (D4), upserted rows are reached as
-    /// committed canonicals via their committed value, so re-feeding them is redundant — already-linked
-    /// rows skip self-relinking and add no match candidates.
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<SensorGlucoseEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0) return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", inserted.Count);
-        }
     }
 
     /// <summary>
@@ -556,10 +536,64 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A reading's device is its stream, so the back-stamp requests the tenant's stream recompute in
+    /// the same transaction (<see cref="GlucoseStreamFlags"/>).
+    /// </remarks>
     public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.SetPatientDeviceIdsAsync<SensorGlucoseEntity>(patientDeviceIdByRecordId, ct);
+        return await ctx.ExecuteInTransactionAsync(async token =>
+        {
+            var stamped = await ctx.SetPatientDeviceIdsAsync<SensorGlucoseEntity>(patientDeviceIdByRecordId, token);
+            if (stamped > 0)
+                await GlucoseStreamFlags.RequestHistoryAsync(ctx, token);
+            return stamped;
+        }, ct: ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<(Guid? PatientDeviceId, int Count)>> CountByPatientDeviceAsync(
+        DateTime from, DateTime to, Guid? patientDeviceId = null, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.SensorGlucose.AsNoTracking().ExcludeDuplicates()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to);
+        if (patientDeviceId is { } deviceId)
+            query = query.Where(e => e.PatientDeviceId == deviceId);
+        return (await query
+                .GroupBy(e => e.PatientDeviceId)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .ToListAsync(ct))
+            .Select(g => (g.Key, g.Count))
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<HistoryRecord<SensorGlucose>>> GetCanonicalModifiedSinceAsync(
+        long cursorMills, int limit, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await HistoryPage.GetAsync(
+            ctx,
+            ctx.SensorGlucose.IncludingDeleted().AsNoTracking()
+                .Where(e => e.DeletedAt != null || (!e.IsDuplicate && !e.IsSecondaryStream)),
+            e => e.SysUpdatedAt,
+            e => e.Id,
+            cursorMills,
+            limit,
+            Logger,
+            nameof(SensorGlucose),
+            ct);
+
+        return entities.Select(e => new HistoryRecord<SensorGlucose>(ToDomain(e), e.DeletedAt is not null)).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RecomputeStreamsAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await GlucoseStreamFlags.RecomputeHistoryAsync(ctx, GlucoseStreamFlags.HistoryPageSize, ct);
     }
 
     /// <summary>

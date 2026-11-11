@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing meter glucose (fingerstick) records in the database. A LegacyId-only type
-/// (no SyncId-upsert, no DeduplicationService participation), so it uses the shared
+/// (no SyncId-upsert, no deduplication), so it uses the shared
 /// <see cref="V4RepositoryBase{TModel,TEntity}"/> behaviour unchanged plus the meter-glucose-specific
 /// queries below.
 /// </summary>
@@ -26,8 +26,8 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     /// Initializes a new instance of the <see cref="MeterGlucoseRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public MeterGlucoseRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger, IV4RecordBroadcaster<MeterGlucose>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
+    public MeterGlucoseRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger, IV4RecordBroadcaster<MeterGlucose>? broadcaster = null, IDataEventSink<Entry>? entrySink = null, ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads)
     {
     }
 

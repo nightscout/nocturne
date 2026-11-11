@@ -79,4 +79,31 @@ public interface ISettingsRepository
         string? findQuery = null,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// The value of the row a connector service keeps under <paramref name="key"/>, which is not a
+    /// settings document and so is reachable through none of the methods above; null when there is
+    /// no active row.
+    /// </summary>
+    /// <param name="key">A key under <see cref="Nocturne.Core.Constants.SettingsKeys.ConnectorsPrefix"/></param>
+    /// <exception cref="ArgumentException"><paramref name="key"/> is not under that prefix</exception>
+    Task<string?> GetConnectorSettingAsync(
+        string key,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Stores <paramref name="value"/> in the row a connector service keeps under
+    /// <paramref name="key"/>, creating it, with <paramref name="notes"/>, when there is none.
+    /// </summary>
+    /// <param name="key">A key under <see cref="Nocturne.Core.Constants.SettingsKeys.ConnectorsPrefix"/></param>
+    /// <param name="now">The time the row is stamped modified at</param>
+    /// <exception cref="ArgumentException"><paramref name="key"/> is not under that prefix</exception>
+    Task SetConnectorSettingAsync(
+        string key,
+        string value,
+        string notes,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default
+    );
 }

@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Platform;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -11,145 +13,68 @@ namespace Nocturne.API.Tests.Services.Glucose;
 public class CanonicalGlucoseServiceTests
 {
     private readonly Mock<ISensorGlucoseRepository> _sgRepo = new();
-    private readonly Mock<IPatientDeviceRepository> _deviceRepo = new();
-    private readonly CanonicalGlucoseService _sut;
+    private readonly Mock<IDemoModeService> _demoMode = new();
 
     private static readonly DateTime Now = DateTime.UtcNow;
 
-    public CanonicalGlucoseServiceTests()
+    private CanonicalGlucoseService CreateSut(bool demoMode = false)
     {
-        var demoMode = new Mock<Nocturne.API.Services.Platform.IDemoModeService>();
-        demoMode.Setup(d => d.IsEnabled).Returns(false);
-        _sut = new CanonicalGlucoseService(_sgRepo.Object, _deviceRepo.Object, demoMode.Object);
+        _demoMode.Setup(d => d.IsEnabled).Returns(demoMode);
+        return new CanonicalGlucoseService(_sgRepo.Object, _demoMode.Object);
     }
 
-    private static PatientDevice Cgm(int rank) => new()
-    {
-        Id = Guid.NewGuid(),
-        DeviceCategory = DeviceCategory.CGM,
-        Manufacturer = "Test",
-        Model = "Test CGM",
-        Rank = rank,
-    };
-
-    private static SensorGlucose Reading(Guid deviceId, double minutesAgo, double mgdl = 120) => new()
+    private static SensorGlucose Reading(double minutesAgo, double mgdl = 120) => new()
     {
         Id = Guid.NewGuid(),
         Mgdl = mgdl,
         Timestamp = Now.AddMinutes(-minutesAgo),
-        PatientDeviceId = deviceId,
     };
 
-    [Fact]
-    public async Task SelectAsync_SingleStream_ReturnsInputWithoutLoadingDevices()
-    {
-        var deviceId = Guid.NewGuid();
-        var readings = new List<SensorGlucose> { Reading(deviceId, 0), Reading(deviceId, 5) };
-
-        var result = await _sut.SelectAsync(readings);
-
-        result.Should().BeSameAs(readings);
-        _deviceRepo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Theory]
-    [InlineData(null, null, "", "")]
-    [InlineData("a|b", "c", "a", "b|c")]
-    public async Task SelectAsync_PseudoDeviceKeyAliases_DoNotLoadDevices(
-        string? firstSource, string? firstDevice, string? secondSource, string? secondDevice)
-    {
-        var readings = new[]
-        {
-            new SensorGlucose { DataSource = firstSource, Device = firstDevice },
-            new SensorGlucose { DataSource = secondSource, Device = secondDevice },
-        };
-
-        (await _sut.SelectAsync(readings)).Should().BeSameAs(readings);
-        _deviceRepo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task SelectAsync_MultiStream_LoadsDevicesOnce_AndFiltersByRank()
-    {
-        var primary = Cgm(rank: 1);
-        var secondary = Cgm(rank: 2);
-        _deviceRepo.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([primary, secondary]);
-
-        // Pin both readings into the same aligned 5-minute bucket so the shared-bucket premise
-        // (primary outranks secondary within a bucket) doesn't depend on where the wall clock
-        // sits relative to a bucket boundary.
-        var bucketStart = new DateTime(Now.Ticks - Now.Ticks % TimeSpan.FromMinutes(5).Ticks, DateTimeKind.Utc)
-            .AddMinutes(-5);
-        var primaryReading = Reading(primary.Id, 0);
-        primaryReading.Timestamp = bucketStart.AddMinutes(1);
-        var secondaryReading = Reading(secondary.Id, 0);
-        secondaryReading.Timestamp = bucketStart.AddMinutes(2);
-        var readings = new List<SensorGlucose> { primaryReading, secondaryReading };
-
-        var first = await _sut.SelectAsync(readings);
-        var second = await _sut.SelectAsync(readings);
-
-        first.Should().ContainSingle().Which.PatientDeviceId.Should().Be(primary.Id);
-        second.Should().ContainSingle();
-        _deviceRepo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task GetLatestAsync_ReturnsCanonicalLatest_NotRawLatest()
-    {
-        var primary = Cgm(rank: 1);
-        var secondary = Cgm(rank: 2);
-        _deviceRepo.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([primary, secondary]);
-
-        // Secondary reported most recently, but in a bucket where the primary also reported —
-        // the canonical latest is the primary's reading. Pin both into the previous full
-        // 5-minute bucket so the shared-bucket premise doesn't depend on the wall clock.
-        var bucketStart = new DateTime(Now.Ticks - Now.Ticks % TimeSpan.FromMinutes(5).Ticks, DateTimeKind.Utc)
-            .AddMinutes(-5);
-        var primaryReading = Reading(primary.Id, 0, mgdl: 110);
-        primaryReading.Timestamp = bucketStart.AddMinutes(1);
-        var secondaryReading = Reading(secondary.Id, 0, mgdl: 160);
-        secondaryReading.Timestamp = bucketStart.AddMinutes(2);
+    private void Serve(string? source, GlucoseStreams streams, params SensorGlucose[] readings) =>
         _sgRepo.Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([secondaryReading, primaryReading]);
+                It.IsAny<DateTime?>(), null, null, source,
+                It.IsAny<int>(), 0, true, null, null, It.IsAny<CancellationToken>(), null, streams))
+            .ReturnsAsync(readings);
 
-        var latest = await _sut.GetLatestAsync();
+    [Fact]
+    public async Task GetLatestAsync_ReadsTheNewestCanonicalRealReading()
+    {
+        var latest = Reading(0, mgdl: 110);
+        Serve(null, GlucoseStreams.CanonicalExcludingEphemeral, latest);
 
-        latest.Should().NotBeNull();
-        latest!.PatientDeviceId.Should().Be(primary.Id);
-        latest.Mgdl.Should().Be(110);
+        (await CreateSut().GetLatestAsync()).Should().BeSameAs(latest);
+        _sgRepo.Verify(r => r.GetAsync(
+            null, null, null, null, 1, 0, true, null, null, It.IsAny<CancellationToken>(), null,
+            GlucoseStreams.CanonicalExcludingEphemeral), Times.Once);
     }
 
     [Fact]
-    public async Task GetLatestAsync_NoRecentReadings_ReturnsNull()
+    public async Task GetLatestAsync_InDemoMode_ReadsOnlyTheDemoSource()
     {
-        _sgRepo.Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var demo = Reading(0, mgdl: 140);
+        Serve(DataSources.DemoService, GlucoseStreams.Canonical, demo);
 
-        (await _sut.GetLatestAsync()).Should().BeNull();
+        (await CreateSut(demoMode: true).GetLatestAsync()).Should().BeSameAs(demo);
     }
 
     [Fact]
-    public async Task GetRecentAsync_QueriesFromSince_AndDropsEphemeralSources()
+    public async Task GetLatestAsync_NoReadings_ReturnsNull()
     {
-        var deviceId = Guid.NewGuid();
+        Serve(null, GlucoseStreams.CanonicalExcludingEphemeral);
+
+        (await CreateSut().GetLatestAsync()).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetRecentAsync_ReadsTheCanonicalRealReadingsFromSince()
+    {
         var since = Now.AddMinutes(-25);
-        var real = Reading(deviceId, 1, mgdl: 90);
-        var ephemeral = Reading(deviceId, 2, mgdl: 300);
-        ephemeral.DataSource = Nocturne.Core.Constants.DataSources.DemoService;
-        _sgRepo.Setup(r => r.GetAsync(
-                since, null, null, null,
-                It.IsAny<int>(), 0, true, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([real, ephemeral]);
+        var recent = new[] { Reading(1, mgdl: 90), Reading(6, mgdl: 95) };
+        Serve(null, GlucoseStreams.CanonicalExcludingEphemeral, recent);
 
-        var recent = await _sut.GetRecentAsync(since);
-
-        recent.Should().ContainSingle().Which.Mgdl.Should().Be(90);
+        (await CreateSut().GetRecentAsync(since)).Should().Equal(recent);
+        _sgRepo.Verify(r => r.GetAsync(
+            since, null, null, null, It.IsAny<int>(), 0, true, null, null, It.IsAny<CancellationToken>(), null,
+            GlucoseStreams.CanonicalExcludingEphemeral), Times.Once);
     }
 }

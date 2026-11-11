@@ -177,6 +177,7 @@ public class ReadEndpointScopeEnforcementTests
             ["SupportController.GetFallbackUrl"] = V4Reason.StaticReference,
 
             ["DatabaseCapacityController.Get"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["JobLedgerController.List"] = V4ScopeGuardExemptions.PlatformAdminRole,
 
             ["WebhookSettingsController.GetWebhookSettings"] = V4Reason.NotStored,
 

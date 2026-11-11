@@ -24,7 +24,7 @@ vi.mock("#lib/server/patient-timezone.js", () => ({
   readable: async (read: () => Promise<unknown>) => read(),
 }));
 
-const { getActogramData } = await import("./actogram.remote");
+const { getActogramData, getActogramRange } = await import("./actogram.remote");
 const { getChartData } = await import("./chart-data.remote");
 const { getCgmComparison } = await import("./reports.remote");
 
@@ -52,6 +52,7 @@ const FALLBACK = "Could not load.";
 
 const remotes: [string, () => Promise<unknown>][] = [
   ["getActogramData", () => getActogramData({ from: 0, to: 1 })],
+  ["getActogramRange", () => getActogramRange({ from: "2026-03-01", to: "2026-03-14" })],
   ["getChartData", () => getChartData({ startTime: 0, endTime: 1, intervalMinutes: 5 })],
   [
     "getCgmComparison",

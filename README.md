@@ -1,6 +1,6 @@
 # Nocturne
 
-A modern, high-performance diabetes management platform built with .NET 10. Nocturne is a complete rewrite of the Nightscout API with full feature parity, providing native C# implementations of all endpoints with optimized performance and modern cloud-native architecture.
+A modern, high-performance diabetes management platform built with .NET 11. Nocturne is a complete rewrite of the Nightscout API with full feature parity, providing native C# implementations of all endpoints with optimized performance and modern cloud-native architecture.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/Web/packages/screenshots/images/dashboard-overview.dark.webp">
@@ -51,7 +51,7 @@ Nocturne/
 
 ### Prerequisites
 
-- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
+- [.NET 11.0 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) or later
 - [Docker Desktop](https://www.docker.com/products/docker-desktop)
 - [Node.js 24+](https://nodejs.org/)
 - [pnpm 9+](https://pnpm.io/)
@@ -215,11 +215,10 @@ Send the member `https://<tenant-host>/auth/recovery?code=<code>`. The code work
 
 ### Generating locally
 
-If you have the .NET 10 SDK and Aspire CLI installed, you can generate the production bundle from source:
+If you have the .NET 11 SDK and Aspire CLI installed, you can generate the production bundle from source:
 
 ```bash
-dotnet run scripts/publish-release.cs              # outputs to ./release-output
-dotnet run scripts/publish-release.cs ./deploy     # or specify a directory
+dotnet run scripts/publish-release.cs              # regenerates deploy/ and docs/diagrams/; CI fails a PR whose bundle drifts
 ```
 
 ### PostgreSQL Roles
@@ -304,4 +303,4 @@ Nocturne is a labor of love built by volunteers. If you find it useful, please c
 ### Acknowledgments
 
 - Built on the shoulders of the [Nightscout Project](https://github.com/nightscout/cgm-remote-monitor)
-- Powered by [.NET 10](https://dotnet.microsoft.com/) and [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
+- Powered by [.NET 11](https://dotnet.microsoft.com/) and [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)

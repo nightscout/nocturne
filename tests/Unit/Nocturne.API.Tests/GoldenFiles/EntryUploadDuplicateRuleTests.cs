@@ -7,7 +7,7 @@ using Xunit;
 namespace Nocturne.API.Tests.GoldenFiles;
 
 /// <summary>
-/// The rule <see cref="Nocturne.Core.Contracts.Entries.IEntryStore.CheckDuplicateAsync"/> defines,
+/// The rule <see cref="Nocturne.Core.Contracts.Entries.IEntryService.CheckForDuplicateEntryAsync"/> defines,
 /// through the v1 and v3 create endpoints.
 /// </summary>
 [Trait("Category", "Unit")]

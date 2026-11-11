@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Reports;
 using Nocturne.Core.Models.Reports;
 using MvcJsonOptions = Microsoft.AspNetCore.Mvc.JsonOptions;
+using Nocturne.API.Services.Identity;
 
 namespace Nocturne.API.Reports;
 
@@ -34,8 +35,7 @@ public interface IReportSpecStore
 internal sealed class ReportSpecStore(
     IReportSpecRepository repository,
     ReportSpecValidator validator,
-    ITenantAppearanceReader appearance,
-    ITenantAccessor tenant,
+    ITenantGlucoseUnits glucoseUnits,
     IOptions<MvcJsonOptions> jsonOptions) : IReportSpecStore
 {
     private JsonSerializerOptions Json => jsonOptions.Value.JsonSerializerOptions;
@@ -151,7 +151,7 @@ internal sealed class ReportSpecStore(
     }
 
     private Task<bool> UsesMmolAsync(CancellationToken cancellationToken) =>
-        GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken);
+        glucoseUnits.UsesMmolAsync(cancellationToken);
 
     internal static IReadOnlyList<CustomReportSpecError> Errors(ReportSpecValidation validation) =>
         [.. validation.Errors.Select(e => new CustomReportSpecError(e.Path, e.Message))];

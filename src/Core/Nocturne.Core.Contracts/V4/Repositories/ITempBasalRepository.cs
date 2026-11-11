@@ -62,9 +62,14 @@ public interface ITempBasalRepository
     Task<bool> SetScheduleDerivedRateAsync(
         Guid id, double percent, double? readRate, double? rate, double? scheduledRate, CancellationToken ct = default);
 
-    /// <summary>The live temp basals under these legacy ids.</summary>
-    Task<IReadOnlyList<TempBasal>> GetByLegacyIdsAsync(
-        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+    /// <summary>
+    /// Sets <see cref="TempBasal.ScheduledRate"/>, from <paramref name="scheduledRateAt"/> at the span
+    /// start, on each live temp basal of <paramref name="source"/> that has none and is not of origin
+    /// <see cref="TempBasalOrigin.Scheduled"/>, in one save. For the sample-data seeder only.
+    /// </summary>
+    /// <returns>The temp basals stamped.</returns>
+    Task<int> StampScheduledRatesAsync(
+        string source, Func<DateTime, double> scheduledRateAt, CancellationToken ct = default);
 
     /// <summary>
     /// Idempotently reconciles a source's temp basals within a date range: soft-deletes only the

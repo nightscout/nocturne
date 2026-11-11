@@ -16,7 +16,6 @@ namespace Nocturne.API.Controllers.V3;
 /// Implements the /api/v3/treatments endpoints with pagination, field selection, sorting, and advanced filtering.
 /// </summary>
 /// <seealso cref="ITreatmentService"/>
-/// <seealso cref="ITreatmentStore"/>
 /// <seealso cref="Treatment"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -39,6 +38,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     /// <summary>
     /// Get treatments with V3 API features including pagination, field selection, and advanced filtering.
+    /// Honors <c>If-None-Match</c> and <c>If-Modified-Since</c>, returning 304 when nothing changed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
@@ -154,6 +154,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     /// <summary>
     /// Create a new treatment via V3 API.
+    /// A treatment whose ID already exists is not duplicated: the response is 200 with <c>isDeduplication: true</c>.
     /// </summary>
     /// <param name="treatment">The <see cref="Treatment"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -215,7 +216,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             // Route through TreatmentService which handles StateSpan creation for temp basals
             var created = await _treatmentService.CreateTreatmentsAsync(
                 [processedTreatment],
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             if (created.Rejected is [{ Reason: var reason }])
@@ -287,7 +288,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             // Save to database
             var createdTreatments = await _treatmentService.CreateTreatmentsAsync(
                 processedTreatments,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             var createdArray = TreatmentEcho.InSubmittedOrder(createdTreatments);

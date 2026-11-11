@@ -44,7 +44,7 @@ internal sealed partial class LoopAnalysisService
 
         var predictionTask = apsSnapshotRepository.GetPredictionsAsync(fromUtc, toUtc, ct);
         var evidenceTask = apsSnapshotRepository.GetIobCobPointsAsync(ToUtc(from - DeviceReportedValues.RecencyThresholdMs), toUtc, ct);
-        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, readingsEndUtc, null, null, int.MaxValue, descending: false, ct: ct);
+        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, readingsEndUtc, null, null, int.MaxValue, descending: false, ct: ct, streams: GlucoseStreams.Canonical);
         var bolusTask = bolusRepository.GetAsync(lookbackUtc, treatmentsEndUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var carbTask = carbIntakeRepository.GetAsync(lookbackUtc, treatmentsEndUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var spanTask = stateSpanRepository.GetByCategories(MaskCategories, fromUtc, readingsEndUtc, ct);
@@ -55,7 +55,7 @@ internal sealed partial class LoopAnalysisService
             .Select(PredictionAccuracyCalculator.Parse)
             .OfType<PredictionSnapshot>()
             .ToList();
-        var glucose = await canonicalGlucose.SelectAsync([.. await glucoseTask], ct);
+        List<SensorGlucose> glucose = [.. await glucoseTask];
         var spans = await spanTask;
         var profiles = needsProfiles
             ? ProfileIntervals(await activeProfileResolver.GetProfileSpansForRangeAsync(from, to, ct), to)

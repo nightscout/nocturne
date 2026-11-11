@@ -153,7 +153,7 @@ public static class PortainerComposePublisherExtensions
     /// configs entry that inlines the init script. If no postgres service or no
     /// ./init bind-mount is found, returns the compose unchanged.
     /// </summary>
-    private static string InlineInitScript(string composeYaml, string initScriptPath)
+    internal static string InlineInitScript(string composeYaml, string initScriptPath)
     {
         var yaml = new YamlStream();
         using (var reader = new StringReader(composeYaml))
@@ -242,7 +242,7 @@ public static class PortainerComposePublisherExtensions
     /// is self-contained. If no caddy service or no Caddyfile bind-mount is found
     /// (e.g. Caddy disabled), returns the compose unchanged.
     /// </summary>
-    private static string InlineCaddyfile(string composeYaml, string caddyfilePath)
+    internal static string InlineCaddyfile(string composeYaml, string caddyfilePath)
     {
         var yaml = new YamlStream();
         using (var reader = new StringReader(composeYaml))
@@ -335,7 +335,7 @@ public static class PortainerComposePublisherExtensions
     /// healthy once the real server is up — avoiding a premature healthy status.
     /// Returns the compose unchanged if no postgres service is present.
     /// </summary>
-    private static string HardenPostgresStartup(string composeYaml)
+    internal static string HardenPostgresStartup(string composeYaml)
     {
         var yaml = new YamlStream();
         using (var reader = new StringReader(composeYaml))

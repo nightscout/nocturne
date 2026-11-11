@@ -13,19 +13,11 @@
     dayCount: reportsParams.dayCount,
   });
 
-  // ISO strings rather than Date objects: remote-query arguments are devalue
-  // serialised and the server schema is z.coerce.date(), which parses them back.
-  const analysisDates = $derived.by(() => {
-    const range = reportsParams.getDateRange();
-    return {
-      startDate: range.start.toISOString(),
-      endDate: range.end.toISOString(),
-    };
-  });
+  const range = $derived({ from: reportsParams.fromDay, to: reportsParams.toDay });
 
-  const rangeKey = $derived(JSON.stringify(reportsParams.dateRangeInput ?? {}));
+  const rangeKey = $derived(JSON.stringify(range));
 </script>
 
 {#key rangeKey}
-  <BasalAnalysisContent {analysisDates} {dateInfo} />
+  <BasalAnalysisContent {range} {dateInfo} />
 {/key}

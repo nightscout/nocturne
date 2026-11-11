@@ -9,7 +9,7 @@ namespace Nocturne.API.Controllers.V1;
 /// V1 debug controller for development and diagnostics.
 /// Provides basic database connectivity tests against the PostgreSQL data store.
 /// </summary>
-/// <seealso cref="IEntryStore"/>
+/// <seealso cref="IEntryService"/>
 /// <remarks>
 /// Admin-only: the responses carry real glucose rows and raw exception/inner-exception text from
 /// the data layer, so this is a diagnostics surface rather than a data API.
@@ -20,12 +20,12 @@ namespace Nocturne.API.Controllers.V1;
 [RequireSuperuser]
 public class DebugController : ControllerBase
 {
-    private readonly IEntryStore _store;
+    private readonly IEntryService _entries;
     private readonly ILogger<DebugController> _logger;
 
-    public DebugController(IEntryStore store, ILogger<DebugController> logger)
+    public DebugController(IEntryService entries, ILogger<DebugController> logger)
     {
-        _store = store;
+        _entries = entries;
         _logger = logger;
     }
 
@@ -37,7 +37,7 @@ public class DebugController : ControllerBase
             _logger.LogInformation("Testing PostgreSQL connection");
 
             // Try to get recent entries as a connectivity check
-            var entries = await _store.QueryAsync(new EntryQuery { Type = "sgv", Count = 1 });
+            var entries = await _entries.QueryEntriesAsync(new EntryQuery { Type = "sgv", Count = 1 });
             var firstEntry = entries.FirstOrDefault();
 
             return Ok(
@@ -70,7 +70,7 @@ public class DebugController : ControllerBase
     {
         try
         {
-            var entries = await _store.QueryAsync(new EntryQuery { Type = "sgv", Count = 5 });
+            var entries = await _entries.QueryEntriesAsync(new EntryQuery { Type = "sgv", Count = 5 });
             return Ok(entries);
         }
         catch (Exception ex)

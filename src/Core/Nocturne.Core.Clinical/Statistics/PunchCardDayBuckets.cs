@@ -14,8 +14,8 @@ public readonly record struct PunchCardDayWindow(long StartMs, long EndMs)
         var startLocal = DateTime.SpecifyKind(localDay.Date, DateTimeKind.Unspecified);
         var endLocal = startLocal.AddDays(1).AddTicks(-1);
         return new PunchCardDayWindow(
-            TimeZoneInfo.ConvertTimeToUtc(startLocal, tz).ToMills(),
-            TimeZoneInfo.ConvertTimeToUtc(endLocal, tz).ToMills());
+            TimeZoneHelper.ConvertTimeToUtc(startLocal, tz).ToMills(),
+            TimeZoneHelper.ConvertTimeToUtc(endLocal, tz).ToMills());
     }
 }
 

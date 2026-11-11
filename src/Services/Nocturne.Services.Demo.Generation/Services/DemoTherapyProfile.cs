@@ -43,7 +43,7 @@ public static class DemoTherapyProfile
                 multiplier = m;
         }
 
-        return Math.Round(baseRate * multiplier, 2);
+        return ScaledRounding.Round(baseRate * multiplier, 2);
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public static class DemoTherapyProfile
             .Select(b => new TimeValue
             {
                 Time = $"{b.Start.Hours:00}:{b.Start.Minutes:00}",
-                Value = Math.Round(config.BasalRate * b.Multiplier, 2),
+                Value = ScaledRounding.Round(config.BasalRate * b.Multiplier, 2),
                 TimeAsSeconds = (int)b.Start.TotalSeconds,
             })
             .ToList();

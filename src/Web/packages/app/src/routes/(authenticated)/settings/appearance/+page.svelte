@@ -55,7 +55,7 @@
   import GlucoseSourceDefaultsDialog from "#lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
   import type { FeatureSettings } from "#lib/api/generated/nocturne-api-client.js";
   import { getUiSettings } from "#lib/api/ui-settings.remote.js";
-  import { saveFeatureSettings } from "#lib/api/generated/uiSettings.generated.remote.js";
+  import { patchFeatureSettings } from "#lib/api/generated/uiSettings.generated.remote.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { SETTINGS_LOAD_FAILED } from "#lib/api/ui-settings-messages.js";
   import { toast } from "svelte-sonner";
@@ -178,15 +178,10 @@
   const focusHours = $derived(featureSettings?.display?.focusHours ?? 12);
   const trackerPillsEnabled = $derived(featureSettings?.trackerPills?.enabled ?? true);
 
-  /** Persists the whole features section, merging the patch over what's stored. */
+  /** Sends only the fields the control changed. The API merges them into the stored section. */
   async function saveFeatures(patch: Partial<FeatureSettings>) {
-    const current = featureSettings ?? {};
     try {
-      await saveFeatureSettings({
-        ...current,
-        display: { ...current.display, ...patch.display },
-        trackerPills: { ...current.trackerPills, ...patch.trackerPills },
-      });
+      await patchFeatureSettings(patch);
     } catch (err) {
       toast.error(
         describeSubmitError(err, "Could not save. Check your connection and try again.")
