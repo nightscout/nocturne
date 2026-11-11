@@ -52,6 +52,7 @@ public class TenantAlertSettingsController : ControllerBase
 
     /// <summary>
     /// Get the current tenant's alert settings, creating a default row if one does not exist.
+    /// Read-only credentials may call it; a repeat call stores nothing further.
     /// </summary>
     /// <remarks>
     /// The get-or-create is a write, but of server-defined defaults and idempotently, so it carries
@@ -82,6 +83,8 @@ public class TenantAlertSettingsController : ControllerBase
     /// <summary>
     /// Replace the current tenant's alert settings. Upserts on first call. The manual-DND toggle
     /// creates/clears the tenant's <c>scope=all</c> window; scheduled fields persist on the row.
+    /// Needs <c>alerts.readwrite</c>: the toggle suppresses delivery of every non-critical alert
+    /// tenant-wide, and read-only credentials such as a guest-link session are refused.
     /// </summary>
     /// <remarks>
     /// Requires <see cref="Scope.AlertsReadWrite"/>: this toggles tenant-wide Do not disturb,

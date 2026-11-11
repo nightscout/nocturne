@@ -41,6 +41,8 @@ public class ReservoirReportsController(
     /// <summary>
     /// Report a known reservoir value: a spot reading of the pump's current level,
     /// or the amount just filled into a fresh reservoir/pod.
+    /// A fill report also records a reservoir-change device event, which resets reservoir-age (IAGE) tracking.
+    /// Requires the devices read-write scope.
     /// </summary>
     /// <param name="request">The reservoir report.</param>
     /// <param name="ct">Cancellation token.</param>

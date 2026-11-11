@@ -31,6 +31,7 @@ public class VersionController : ControllerBase
 
     /// <summary>
     /// Get the current system version information.
+    /// On an internal error it still returns 200, with an unknown storage version.
     /// </summary>
     /// <returns>A <see cref="V3Envelope{T}"/> wrapping a <see cref="V3VersionResult"/>.</returns>
     /// <remarks>

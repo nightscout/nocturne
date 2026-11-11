@@ -38,6 +38,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     /// <summary>
     /// Get treatments with V3 API features including pagination, field selection, and advanced filtering.
+    /// Honors <c>If-None-Match</c> and <c>If-Modified-Since</c>, returning 304 when nothing changed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
@@ -153,6 +154,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     /// <summary>
     /// Create a new treatment via V3 API.
+    /// A treatment whose ID already exists is not duplicated: the response is 200 with <c>isDeduplication: true</c>.
     /// </summary>
     /// <param name="treatment">The <see cref="Treatment"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

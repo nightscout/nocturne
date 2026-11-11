@@ -146,6 +146,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// Create or update carb intakes in bulk (max 1000).
+    /// An intake with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other intake is inserted. An item whose pair is held by a deleted record is skipped and left out of the response.
+    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing.
     /// </summary>
     /// <remarks>
     /// Array semantics are per-item upsert, not all-or-nothing: each intake carrying both

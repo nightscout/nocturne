@@ -652,7 +652,10 @@ public class StatisticsController : ControllerBase
     /// Gets comprehensive statistics for multiple time periods (1, 3, 7, 30, and 90 days).
     /// Reads sensor glucose, bolus, carb, and temp-basal data for the 90-day window once and slices each period from it,
     /// computes <see cref="GlucoseAnalytics"/>, <see cref="TreatmentSummary"/>, and
-    /// <see cref="InsulinDeliveryStatistics"/>, and caches the result for 5 minutes.
+    /// <see cref="InsulinDeliveryStatistics"/>, and caches the result for 5 minutes. When a period
+    /// has no temp basals, profile basal may stand in for scheduled basal. GMI reliability is
+    /// assessed per period against a recommended-days minimum suited to the period's length. Each
+    /// response is narrowed to the caller's read scopes.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A <see cref="MultiPeriodStatistics"/> containing a <see cref="PeriodStatistics"/>
@@ -837,7 +840,8 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Pre-aggregated month-by-day statistics for the calendar punch-card view. Fetches glucose,
     /// boluses, carb intakes, and basal records in a single batch for
-    /// <see cref="IStatisticsService.CalculatePunchCard"/> (no per-day round-trips).
+    /// <see cref="IStatisticsService.CalculatePunchCard"/> (no per-day round-trips). Without either
+    /// <c>reports.read</c> or <c>treatments.read</c>, every carb, insulin and ratio figure is zero.
     /// </summary>
     /// <param name="startDate">Inclusive start calendar date in the tenant's timezone.</param>
     /// <param name="endDate">Inclusive end calendar date in the tenant's timezone.</param>
@@ -1012,7 +1016,10 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Calculates AID (Automated Insulin Delivery) system metrics for a date range.
     /// Uses patient device records to segment the period by algorithm and compute time-weighted metrics
-    /// via <see cref="AidSystemMetricsReader"/>.
+    /// via <see cref="AidSystemMetricsReader"/>. CGM active time is measured against the registered
+    /// CGMs' windows where any are registered. The target range is optional; the report goes without
+    /// it if it cannot be read. Each figure is narrowed to the caller's categories. A history-clamped
+    /// caller reads the last 24 hours whatever the dates, and a window ending in the future stops at now.
     /// </summary>
     /// <param name="startDate">Inclusive start of the analysis period (UTC).</param>
     /// <param name="endDate">Inclusive end of the analysis period (UTC).</param>

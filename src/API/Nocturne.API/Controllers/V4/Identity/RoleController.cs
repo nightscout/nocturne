@@ -33,6 +33,7 @@ public class RoleController : ControllerBase
 
     /// <summary>
     /// List roles for the current tenant.
+    /// A <c>roles.manage</c> caller gets every role; a <c>members.invite</c> or <c>members.manage</c> caller gets only the roles it can grant. <c>CanGrant</c> on each role says whether the caller may confer it.
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.GetRolesAsync"/>
     /// <remarks>

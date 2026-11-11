@@ -61,7 +61,8 @@ public class EntriesController : ControllerBase
 
     /// <summary>
     /// Get the most recent glucose entry
-    /// This endpoint assumes SGV (sensor glucose value) type and returns the single most recent entry
+    /// This endpoint assumes SGV (sensor glucose value) type and returns the single most recent entry.
+    /// The response is never cached; a conditional request with <c>If-Modified-Since</c> can return 304.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The most recent glucose entry, or empty array if no entries exist</returns>
@@ -113,7 +114,8 @@ public class EntriesController : ControllerBase
     }
 
     /// <summary>
-    /// Get a specific entry by ID or get entries by type
+    /// Get a specific entry by ID or get entries by type.
+    /// A type spec behaves like the entries list: it honors <c>count</c> and <c>find[...]</c>, and the path type overrides any <c>find[type]</c>.
     /// </summary>
     /// <param name="spec">Either an entry ID (24-character hex string) or entry type (e.g., "sgv", "mbg", "cal")</param>
     /// <param name="count">Maximum number of entries to return for a type spec (default 10, capped at <see cref="LegacyReadLimits.MaxCount"/>)</param>
@@ -196,7 +198,8 @@ public class EntriesController : ControllerBase
 
     /// <summary>
     /// Get entries with optional query parameters
-    /// Supports advanced query features including find filters, date ranges, and pagination
+    /// Supports advanced query features including find filters, date ranges, and pagination.
+    /// The response is never cached; a conditional request with <c>If-Modified-Since</c> can return 304.
     /// </summary>
     /// <param name="count">Maximum number of entries to return (default 10, capped at <see cref="LegacyReadLimits.MaxCount"/>)</param>
     /// <param name="type">Entry type filter (default: "sgv")</param>
@@ -694,7 +697,9 @@ public class EntriesController : ControllerBase
     }
 
     /// <summary>
-    /// Delete an entry by ID, or the entries a type spec and <c>find[...]</c> select
+    /// Delete an entry by ID, or the entries a type spec and <c>find[...]</c> select.
+    /// A type spec deletes in bulk, needs full access (403 without it), and the path type overrides
+    /// any <c>find[type]</c>.
     /// </summary>
     /// <param name="id">The entry ID to delete, an entry type, or <c>*</c> for every type</param>
     /// <param name="cancellationToken">Cancellation token for async operations</param>
