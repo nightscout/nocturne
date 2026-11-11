@@ -500,6 +500,7 @@ public class ProfileDecomposerTests
                 Mock<ITargetRangeScheduleRepository, TargetRangeSchedule>(null, [], onUpsert),
                 TempBasalRates.Object,
                 ClosedLoop.Object,
+                new AuditContext(),
                 NullLogger<ProfileDecomposer>.Instance);
         }
 
