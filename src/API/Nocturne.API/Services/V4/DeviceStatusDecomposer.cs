@@ -176,7 +176,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             EndTimestamp = DeclaredOverrideEnd(ds, timestamp),
             Source = ds.Device,
             OriginalId = legacyId,
-            Metadata = BuildOverrideMetadata(ds.Override),
+            Metadata = BuildOverrideMetadata(ds.Override!),
         };
     }
 
@@ -981,7 +981,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     private V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
-        var command = ApsSnapshotCurves.FreshestOpenApsCommand(ds.OpenAps!);
+        var openAps = ds.OpenAps!;
+        var command = ApsSnapshotCurves.FreshestOpenApsCommand(openAps);
         var apsSystem = DetectOpenApsVariant(ds);
 
         var snapshot = new V4Models.ApsSnapshot
@@ -993,27 +994,27 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             DataSource = source,
             CorrelationId = correlationId,
             AidAlgorithm = apsSystem,
-            Iob = ds.OpenAps.Iob?.Iob,
-            BasalIob = ds.OpenAps.Iob?.BasalIob,
-            BolusIob = ds.OpenAps.Iob?.BolusIob,
-            Cob = ds.OpenAps.Cob ?? command?.COB,
+            Iob = openAps.Iob?.Iob,
+            BasalIob = openAps.Iob?.BasalIob,
+            BolusIob = openAps.Iob?.BolusIob,
+            Cob = openAps.Cob ?? command?.COB,
             CurrentBg = command?.Bg,
             EventualBg = command?.EventualBG,
             TargetBg = command?.TargetBG,
             RecommendedBolus = command?.InsulinReq,
             SensitivityRatio = command?.SensitivityRatio,
-            Enacted = ds.OpenAps.Enacted != null
-                && (ds.OpenAps.Enacted.Received == true || ds.OpenAps.Enacted.Recieved == true),
-            EnactedRate = ds.OpenAps.Enacted?.Rate,
-            EnactedDuration = ds.OpenAps.Enacted?.Duration,
-            EnactedBolusVolume = ds.OpenAps.Enacted?.Smb is > 0
-                ? ds.OpenAps.Enacted.Smb
-                : ds.OpenAps.Enacted?.Units,
-            AidVersion = ds.OpenAps?.Version,
+            Enacted = openAps.Enacted != null
+                && (openAps.Enacted.Received == true || openAps.Enacted.Recieved == true),
+            EnactedRate = openAps.Enacted?.Rate,
+            EnactedDuration = openAps.Enacted?.Duration,
+            EnactedBolusVolume = openAps.Enacted?.Smb is > 0
+                ? openAps.Enacted.Smb
+                : openAps.Enacted?.Units,
+            AidVersion = openAps.Version,
         };
         ApsSnapshotCurves.FillColumns(snapshot, command);
-        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Suggested, snapshot, JsonOptions);
-        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Enacted, snapshot, JsonOptions);
+        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(openAps.Suggested, snapshot, JsonOptions);
+        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(openAps.Enacted, snapshot, JsonOptions);
         return snapshot;
     }
 

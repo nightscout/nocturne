@@ -377,6 +377,7 @@ public class AlertSetupService(
     }
 
     /// <param name="Mgdl">The threshold; 0 for a kind with none.</param>
+    /// <param name="IsEnabled">The switch; on when the settings do not state it.</param>
     /// <param name="FromNightscout">Whether the threshold or the switch was read from the settings.</param>
     internal record StartingPoint(decimal Mgdl, bool IsEnabled, bool FromNightscout);
 
@@ -458,7 +459,7 @@ public class AlertSetupService(
 
     private static decimal Display(decimal mgdl, string units) =>
         units == GlucoseUnitDefaults.Mmol
-            ? Math.Round(mgdl / (decimal)GlucoseConstants.MgdlPerMmol, 1, MidpointRounding.AwayFromZero)
+            ? Math.Round(mgdl / GlucoseConstants.MgdlPerMmolDecimal, 1, MidpointRounding.AwayFromZero)
             : Math.Round(mgdl, 0, MidpointRounding.AwayFromZero);
 
     private static decimal ToMgdl(StarterAlertKind kind, decimal? threshold, decimal stored, string units)
@@ -469,7 +470,7 @@ public class AlertSetupService(
             return stored;
 
         var mgdl = units == GlucoseUnitDefaults.Mmol
-            ? Math.Round(value * (decimal)GlucoseConstants.MgdlPerMmol, 0, MidpointRounding.AwayFromZero)
+            ? Math.Round(value * GlucoseConstants.MgdlPerMmolDecimal, 0, MidpointRounding.AwayFromZero)
             : Math.Round(value, 0, MidpointRounding.AwayFromZero);
         return mgdl is >= MinThresholdMgdl and <= MaxThresholdMgdl
             ? mgdl

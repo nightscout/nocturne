@@ -87,7 +87,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
     ///     The graph reports energy in kilocalories whatever unit the account displays.
     /// </summary>
     private static decimal ToKilojoules(decimal? kilocalories) =>
-        (kilocalories ?? 0) * (decimal)NutritionConstants.KilojoulesPerKilocalorie;
+        (kilocalories ?? 0) * NutritionConstants.KilojoulesPerKilocalorieDecimal;
 
     /// <summary>
     ///     Resolves the consumed-at time for an entry, preferring the time MyFitnessPal reports over

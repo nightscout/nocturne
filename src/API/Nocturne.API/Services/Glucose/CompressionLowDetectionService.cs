@@ -23,7 +23,7 @@ namespace Nocturne.API.Services.Glucose;
 /// </summary>
 /// <remarks>
 /// Each tenant's sleep schedule and timezone are read from <see cref="IUISettingsService"/> to
-/// determine the overnight evaluation window. <see cref="CompressionLowDetectionJob"/> runs it for each
+/// determine the overnight evaluation window. <see cref="Nocturne.API.Services.BackgroundServices.CompressionLowDetectionJob"/> runs it for each
 /// tenant's nights as they end.
 /// </remarks>
 /// <seealso cref="CompressionLowDetection"/>

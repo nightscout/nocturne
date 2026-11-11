@@ -17,6 +17,7 @@ namespace Nocturne.API.Services.Health;
 /// </summary>
 /// <seealso cref="IHeartRateService"/>
 /// <seealso cref="TimeSeriesEntityService{TModel,TEntity}"/>
+/// <param name="contexts">Factory that opens the database context each operation runs on.</param>
 /// <param name="documentProcessingService">Service that applies field processing before save.</param>
 /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
 /// <param name="timeProvider">Clock that stamps soft deletes.</param>

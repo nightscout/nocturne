@@ -134,7 +134,7 @@ public static class PeriodComparisonCalculator
 
     private static double Round(double value, int decimals)
     {
-        var rounded = Math.Round(value, decimals, MidpointRounding.AwayFromZero);
+        var rounded = ScaledRounding.Round(value, decimals, MidpointRounding.AwayFromZero);
         return rounded == 0 ? 0 : rounded;
     }
 }

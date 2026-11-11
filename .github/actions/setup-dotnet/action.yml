@@ -1,5 +1,5 @@
 name: Set up .NET
-description: The .NET 10 SDK and, when a cache key is given, the NuGet package cache.
+description: The .NET 11 SDK and, when a cache key is given, the NuGet package cache.
 
 inputs:
   nuget-cache-key:
@@ -15,7 +15,7 @@ runs:
   steps:
     - uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: "10.0"
+        dotnet-version: "11.0"
     - if: inputs.nuget-cache-key != ''
       uses: actions/cache@v5
       with:

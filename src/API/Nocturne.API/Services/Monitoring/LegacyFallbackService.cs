@@ -12,6 +12,9 @@ namespace Nocturne.API.Services.Monitoring;
 /// <summary>
 /// A consumable the tenant has no tracker for, aged from its latest device event.
 /// </summary>
+/// <param name="Kind">The consumable it ages.</param>
+/// <param name="LatestEvent">The latest device event that renews the kind, which the age counts from.</param>
+/// <param name="Spec">The tracker a conversion would create for the kind.</param>
 /// <param name="Projected">
 /// An unsaved run of the tracker <see cref="ILegacyFallbackService.CreateTrackersAsync"/> would
 /// create, started at <paramref name="LatestEvent"/>, so its schedule is the one that tracker shows.
@@ -23,6 +26,7 @@ public sealed record LegacyFallback(
     TrackerInstanceEntity Projected);
 
 /// <summary>A consumable the tenant has a tracker for, and the definitions that cover it.</summary>
+/// <param name="Kind">The covered consumable.</param>
 /// <param name="DefinitionIds">Every definition <see cref="LegacyFallbackRules.Covers"/> the kind.</param>
 public sealed record LegacyCoverage(LegacyConsumableKind Kind, IReadOnlyList<Guid> DefinitionIds);
 
@@ -56,6 +60,7 @@ public interface ILegacyFallbackService
     /// False for a caller that may not read device events: coverage comes from the definitions
     /// alone, and no fallback is resolved.
     /// </param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <remarks>A history-clamped member reads only the last day of device events, so sees fewer.</remarks>
     Task<LegacyFallbackRead> GetAsync(bool readDeviceAges, CancellationToken ct = default);
 

@@ -59,7 +59,7 @@ public class NocturneRemoteDeviceStatusPagerTests
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((state, _) =>
-                    state.ToString()!.Contains("devicestatus") && state.ToString()!.Contains($"{Crowded:o}")),
+                    state!.ToString()!.Contains("devicestatus") && state!.ToString()!.Contains($"{Crowded:o}")),
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once());

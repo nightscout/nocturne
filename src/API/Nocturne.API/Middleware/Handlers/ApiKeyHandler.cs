@@ -30,7 +30,9 @@ public class ApiKeyHandler : IAuthHandler
     private readonly ILogger<ApiKeyHandler> _logger;
 
     /// <param name="grants">The stored grants, pinned per read to the request's tenant.</param>
+    /// <param name="timeProvider">The clock a grant's liveness is checked against.</param>
     /// <param name="lastUsedClaims">Decides which concurrent request stamps the grant.</param>
+    /// <param name="logger">Logs lookup outcomes and a failed last-used stamp or rotation nudge.</param>
     public ApiKeyHandler(
         IOAuthGrantRepository grants,
         TimeProvider timeProvider,

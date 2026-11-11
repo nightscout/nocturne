@@ -348,7 +348,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             unlinked.ToDictionary(u => u.CanonicalId));
 
     /// <summary>
-    /// The primaries <see cref="MergeDuplicateGroupsAsync"/> must see to decide every pair touching
+    /// The primaries <see cref="MergeDuplicateGroupsAsync(NocturneDbContext, RecordType, IReadOnlySet{Guid}, CancellationToken)"/> must see to decide every pair touching
     /// a candidate whose neighbour range is <paramref name="minTs"/> to <paramref name="maxTs"/>.
     /// </summary>
     private static async Task<NeighbourPrimaries> LoadNeighbourPrimariesAsync(
@@ -400,12 +400,19 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
     }
 
     /// <summary>
-    /// The union-find, wide pass and re-pointing behind <see cref="MergeDuplicateGroupsAsync"/>, over
+    /// The union-find, wide pass and re-pointing behind <see cref="MergeDuplicateGroupsAsync(NocturneDbContext, RecordType, IReadOnlySet{Guid}, CancellationToken)"/>, over
     /// <paramref name="primaries"/> ordered by source timestamp.
     /// </summary>
+    /// <param name="db">The context the record criteria and group sources are read through and the merges written through.</param>
+    /// <param name="recordType">The record type whose groups are merged.</param>
+    /// <param name="primaries">The primary link of each group to consider, ordered by source timestamp.</param>
     /// <param name="unlinked">
     /// The groups among <paramref name="primaries"/> that are not stored. One merged into a group is
     /// stored with it.
+    /// </param>
+    /// <param name="candidateCanonicalIds">
+    /// The groups the pass was asked to reconcile. When non-null, the wide pass leaves a pair with
+    /// neither group among them unmerged; null on the full path.
     /// </param>
     /// <param name="neighbourMinTs">
     /// The start of the span the candidate-bounded path loaded. Groups whose extent reaches within a
@@ -415,6 +422,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
     /// subtraction.
     /// </param>
     /// <param name="neighbourMaxTs">The end of that span; null exactly when <paramref name="neighbourMinTs"/> is.</param>
+    /// <param name="ct">A token to cancel the operation.</param>
     private async Task<int> MergePrimariesAsync(
         NocturneDbContext db,
         RecordType recordType,

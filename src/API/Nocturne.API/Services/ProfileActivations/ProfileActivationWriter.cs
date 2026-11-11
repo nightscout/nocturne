@@ -9,6 +9,7 @@ namespace Nocturne.API.Services.ProfileActivations;
 public sealed record ProfileActivationWrite(ProfileActivation Activation, ProfileActivation? Stored);
 
 /// <summary>The ends and confirmation links one activation settles in its source family.</summary>
+/// <param name="Ends">The end each activation takes, or null for one left running.</param>
 /// <param name="Confirms">The requested activation each effective one confirms, or null for none.</param>
 internal sealed record ProfileActivationSettlement(
     IReadOnlyDictionary<Guid, DateTime?> Ends,
@@ -59,6 +60,7 @@ public sealed class ProfileActivationWriter
     /// <param name="activation">The activation to write, carrying the end it was uploaded with: its own length, or none.</param>
     /// <param name="stored">The live row <paramref name="activation"/> replaces, if any.</param>
     /// <param name="store">The write; null when it was refused.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<ProfileActivation?> WriteAsync(
         ProfileActivation activation,
         ProfileActivation? stored,
@@ -72,7 +74,9 @@ public sealed class ProfileActivationWriter
     /// one at a time in that order would, then settles the neighbours they change in one save. The
     /// neighbourhood is read once, around every start the writes touch.
     /// </summary>
+    /// <param name="writes">The activations to write, in the order they settle, each with the live row it replaces.</param>
     /// <param name="store">The write, returning per activation the row written, or null when it was refused.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <remarks>
     /// A confirmation of an activation the batch inserts is written with the settlement rather than
     /// with the row, so no row the store writes names one it may refuse. A refused write settles nothing:

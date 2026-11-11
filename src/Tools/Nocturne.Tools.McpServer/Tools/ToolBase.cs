@@ -46,19 +46,19 @@ public static class ToolBase
         return new TimeInRangeSummary(
             new
             {
-                VeryLow = Math.Round(metrics.Durations.VeryLow, 1),
-                Low = Math.Round(metrics.Durations.Low, 1),
-                InRange = Math.Round(metrics.Durations.Target, 1),
-                High = Math.Round(metrics.Durations.High, 1),
-                VeryHigh = Math.Round(metrics.Durations.VeryHigh, 1),
+                VeryLow = ScaledRounding.Round(metrics.Durations.VeryLow, 1),
+                Low = ScaledRounding.Round(metrics.Durations.Low, 1),
+                InRange = ScaledRounding.Round(metrics.Durations.Target, 1),
+                High = ScaledRounding.Round(metrics.Durations.High, 1),
+                VeryHigh = ScaledRounding.Round(metrics.Durations.VeryHigh, 1),
             },
             new
             {
-                VeryLow = Math.Round(metrics.Percentages.VeryLow, 1),
-                Low = Math.Round(metrics.Percentages.Low, 1),
-                InRange = Math.Round(metrics.Percentages.Target, 1),
-                High = Math.Round(metrics.Percentages.High, 1),
-                VeryHigh = Math.Round(metrics.Percentages.VeryHigh, 1),
+                VeryLow = ScaledRounding.Round(metrics.Percentages.VeryLow, 1),
+                Low = ScaledRounding.Round(metrics.Percentages.Low, 1),
+                InRange = ScaledRounding.Round(metrics.Percentages.Target, 1),
+                High = ScaledRounding.Round(metrics.Percentages.High, 1),
+                VeryHigh = ScaledRounding.Round(metrics.Percentages.VeryHigh, 1),
             });
     }
 

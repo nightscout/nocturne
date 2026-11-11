@@ -41,6 +41,7 @@ public sealed class GoogleHealthService(
     private static readonly TimeSpan FlowLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan PreviewWindow = TimeSpan.FromDays(7);
     private static readonly TimeSpan PreviewGateTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan UnstoredGrantLookupTimeout = TimeSpan.FromSeconds(5);
     // Dense heart-rate inventories can require minutes of paging even within a seven-day window.
     private static readonly TimeSpan PreviewTimeout = TimeSpan.FromMinutes(3);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -260,7 +261,7 @@ public sealed class GoogleHealthService(
             {
                 // StartAsync refuses while a refresh token is stored, so this grant is not one the
                 // tenant still relies on, and unrevoked it would stay live at Google.
-                if (!stored) await DiscardUnstoredGrantAsync(token.RefreshToken, account);
+                if (!stored) await DiscardUnstoredGrantAsync(token, account);
             }
             await ActivateAsync(token, subject, ct);
         }
@@ -313,7 +314,12 @@ public sealed class GoogleHealthService(
         }
     }
 
-    private async Task DiscardUnstoredGrantAsync(string refreshToken, string? account)
+    /// <remarks>
+    /// A request cancelled during the account lookup leaves <paramref name="account"/> unknown, and
+    /// <see cref="GoogleHealthSessionStore.RevokeAsync"/> keeps a grant whose account it cannot
+    /// name, so the lookup is repeated here without the request's cancellation.
+    /// </remarks>
+    private async Task DiscardUnstoredGrantAsync(GoogleHealthTokenSession token, string? account)
     {
         try
         {
@@ -323,8 +329,22 @@ public sealed class GoogleHealthService(
         {
             logger.LogWarning(ex, "Google Health could not release the hold of tenant {TenantId} on an unstored grant", TenantId);
         }
-        if (await sessions.RevokeAsync(refreshToken, account, CancellationToken.None) == GoogleHealthRevocation.Failed)
+        account ??= await AccountOfUnstoredGrantAsync(token.AccessToken!);
+        if (await sessions.RevokeAsync(token.RefreshToken, account, CancellationToken.None) == GoogleHealthRevocation.Failed)
             logger.LogWarning("Google Health could not revoke an unstored grant for tenant {TenantId}", TenantId);
+    }
+
+    private async Task<string?> AccountOfUnstoredGrantAsync(string accessToken)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(UnstoredGrantLookupTimeout, time);
+            return await oauth.AccountKeyAsync(accessToken, timeout.Token);
+        }
+        catch (Exception ex) when (ex is GoogleHealthException or HttpRequestException or JsonException or OperationCanceledException)
+        {
+            return null;
+        }
     }
 
     public async Task DisconnectAsync(Guid subject, CancellationToken ct)

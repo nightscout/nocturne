@@ -46,7 +46,11 @@ public class TotpService : ITotpService
     private readonly IDataProtector _stepUpProtector;
     private readonly ILogger<TotpService> _logger;
 
+    /// <param name="contexts">Context factory for reading and redeeming the single-use step-up tokens.</param>
+    /// <param name="credentials">Repository of the stored TOTP credentials and their consumed steps.</param>
+    /// <param name="subjects">Repository for looking up the subject a step-up token names.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting setup challenge tokens.</param>
+    /// <param name="logger">Logger for credential changes, rejected codes and undecryptable tokens.</param>
     public TotpService(
         INocturneDbContextFactory contexts,
         ITotpCredentialRepository credentials,

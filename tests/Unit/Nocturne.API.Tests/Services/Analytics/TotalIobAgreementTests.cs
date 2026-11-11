@@ -189,7 +189,7 @@ public class TotalIobAgreementTests
         var (retrospective, retrospectiveTimeline) = await RetrospectiveAsync();
 
         (await ChartAsync()).Should().BeApproximately(Total, 1e-9);
-        (await AlertsAsync()).Should().Be((decimal)Total);
+        (await AlertsAsync()).Should().Be(Total.ToDecimal());
         (await WidgetAsync()).Should().Be(-0.02);
         (await PropertiesAsync()).Should().Be(Total);
         (await PebbleAsync()).Should().Be("-0.02");
@@ -249,7 +249,7 @@ public class TotalIobAgreementTests
         var (retrospective, retrospectiveTimeline) = await RetrospectiveAsync();
 
         (await ChartAsync()).Should().Be(total);
-        (await AlertsAsync()).Should().Be((decimal)total);
+        (await AlertsAsync()).Should().Be(total.ToDecimal());
         (await WidgetAsync()).Should().Be(twoDecimals);
         (await PropertiesAsync()).Should().Be(total);
         (await PebbleAsync()).Should().Be(display);

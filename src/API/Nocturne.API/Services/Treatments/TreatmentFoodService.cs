@@ -55,7 +55,7 @@ public class TreatmentFoodService : ITreatmentFoodService
         );
 
         var attributedCarbs = entries.Sum(entry => entry.Carbs);
-        var totalCarbs = (decimal)carbIntakeEntity.Carbs;
+        var totalCarbs = carbIntakeEntity.Carbs.ToDecimal();
 
         return new TreatmentFoodBreakdown
         {

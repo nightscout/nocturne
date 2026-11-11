@@ -354,7 +354,15 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get all therapy settings with optional filtering
     /// </summary>
+    /// <param name="from">Start of the time range to return. Unbounded when omitted.</param>
+    /// <param name="to">End of the time range to return. Unbounded when omitted.</param>
+    /// <param name="limit">Maximum number of records in the page. Defaults to `100`.</param>
+    /// <param name="offset">Number of records to skip before the page. Defaults to `0`.</param>
+    /// <param name="sort">Order by timestamp: `timestamp_desc` or `timestamp_asc`. Any other value is a 400. Defaults to `timestamp_desc`.</param>
+    /// <param name="device">Return only records from this device.</param>
+    /// <param name="source">Return only records from this data source.</param>
     /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("settings")]
     [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]

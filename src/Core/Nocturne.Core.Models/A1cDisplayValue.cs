@@ -29,10 +29,10 @@ public class A1cTargetState
 
     public static A1cTargetState Below(A1cDisplayValue value, A1cDisplayValue target) => new()
     {
-        Percent = Math.Round(value.Percent, 1, MidpointRounding.AwayFromZero)
-            < Math.Round(target.Percent, 1, MidpointRounding.AwayFromZero),
-        MmolMol = Math.Round(value.MmolMol, 0, MidpointRounding.AwayFromZero)
-            < Math.Round(target.MmolMol, 0, MidpointRounding.AwayFromZero),
+        Percent = ScaledRounding.Round(value.Percent, 1, MidpointRounding.AwayFromZero)
+            < ScaledRounding.Round(target.Percent, 1, MidpointRounding.AwayFromZero),
+        MmolMol = ScaledRounding.Round(value.MmolMol, 0, MidpointRounding.AwayFromZero)
+            < ScaledRounding.Round(target.MmolMol, 0, MidpointRounding.AwayFromZero),
     };
 }
 

@@ -74,10 +74,16 @@ public partial class TenantService : ITenantService
     private static partial Regex SlugPattern();
 
     /// <param name="factory">For the units of work that provision a tenant or remove a member in one transaction.</param>
+    /// <param name="tenants">Reads and writes tenant records.</param>
+    /// <param name="members">Reads and writes memberships and looks up the roles they carry.</param>
+    /// <param name="subjects">Finds the Public system subject a new tenant's public membership is for.</param>
     /// <param name="cache">In-memory cache for caching resolved tenant contexts by slug.</param>
     /// <param name="config">Operator configuration (self-service creation, webhooks, etc.).</param>
     /// <param name="httpClientFactory">HTTP client factory for external tenant validation calls if needed.</param>
     /// <param name="roleService">Role service for seeding default roles on new tenant creation.</param>
+    /// <param name="grantRevocation">Revokes a removed member's grants and evicts their sessions.</param>
+    /// <param name="timeProvider">Clock for the handover, passkey and OIDC identity timestamps.</param>
+    /// <param name="logger">Logs a tenant left without its public membership.</param>
     public TenantService(
         INocturneDbContextFactory factory,
         ITenantRepository tenants,

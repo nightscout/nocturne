@@ -18,10 +18,12 @@ public interface ITempBasalRateReresolver
     /// The basal schedule versions written, moved or deleted, by profile name and start (a moved
     /// version once at each start).
     /// </param>
+    /// <param name="ct">Cancels the operation.</param>
     Task AfterSchedulesWrittenAsync(
         IReadOnlyCollection<(string ProfileName, DateTime Start)> versions, CancellationToken ct);
 
     /// <param name="spans">The activations written or removed, with the end they ran to, if any.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task AfterActivationsChangedAsync(
         IReadOnlyCollection<(string ProfileName, DateTime Start, DateTime? End)> spans, CancellationToken ct);
 
@@ -30,6 +32,7 @@ public interface ITempBasalRateReresolver
     /// patient's timezone, a source's activations removed): every schedule-derived rate, at any time.
     /// </summary>
     /// <param name="profileNames">The profiles whose cached versions the change made stale.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task AfterProfilesChangedAsync(IReadOnlyCollection<string> profileNames, CancellationToken ct);
 }
 

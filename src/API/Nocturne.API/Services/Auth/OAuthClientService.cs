@@ -19,6 +19,7 @@ public class OAuthClientService : IOAuthClientService
     /// <summary>
     /// Initialises a new <see cref="OAuthClientService"/>.
     /// </summary>
+    /// <param name="clients">Repository that stores the registered OAuth clients.</param>
     /// <param name="redirectUriValidator">
     /// Validator that applies RFC 8252 redirect URI matching rules.
     /// </param>

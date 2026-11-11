@@ -268,11 +268,11 @@ public class AnalyticsService : IAnalyticsService
 
         return new PerformanceMetrics
         {
-            AverageResponseTime = Math.Round(averageResponseTime, 2),
+            AverageResponseTime = ScaledRounding.Round(averageResponseTime, 2),
             TotalRequests = totalRequests,
             ErrorCount = totalErrors,
             MemoryUsageMB = GC.GetTotalMemory(false) / 1024 / 1024,
-            UptimeHours = Math.Round(uptime.TotalHours, 2),
+            UptimeHours = ScaledRounding.Round(uptime.TotalHours, 2),
             TopEndpoints = topEndpoints,
         };
     }
@@ -288,7 +288,7 @@ public class AnalyticsService : IAnalyticsService
                 .OrderByDescending(kvp => kvp.Value)
                 .Take(10)
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
-            AverageSessionDuration = Math.Round(uptime.TotalMinutes, 2),
+            AverageSessionDuration = ScaledRounding.Round(uptime.TotalMinutes, 2),
             DeviceTypes = _pageViewCounts.Any()
                 ? new Dictionary<string, long> { ["web"] = _pageViewCounts.Sum(kvp => kvp.Value) }
                 : new Dictionary<string, long>(),

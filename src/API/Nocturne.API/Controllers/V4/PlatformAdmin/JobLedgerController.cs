@@ -18,6 +18,7 @@ public class JobLedgerController(IJobLedger ledger) : ControllerBase
     internal const int MaxLimit = 1000;
 
     /// <param name="limit">How many rows to return, at most <see cref="MaxLimit"/>; failing rows come first.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(JobLedgerListing), StatusCodes.Status200OK)]

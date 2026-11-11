@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: "10.0.x"
+  DOTNET_VERSION: "11.0.x"
   NODE_VERSION: "24"
   PNPM_VERSION: "11.5.0"
 

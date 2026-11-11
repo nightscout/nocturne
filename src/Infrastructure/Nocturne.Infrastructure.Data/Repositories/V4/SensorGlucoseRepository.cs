@@ -245,6 +245,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <param name="patientDeviceId">Matched against the registered patient-device link and combined
     /// with <paramref name="device"/> when both are set. Last so positional callers ending at
     /// <paramref name="ct"/> are unaffected.</param>
+    /// <param name="streams">Which of the tenant's concurrent CGM streams to return.</param>
     /// <returns>A collection of sensor glucose records.</returns>
     public async Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from,

@@ -111,7 +111,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         count.Should().Be(0);
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().Contain(m => m!.Contains("has no conditions"));
     }
 
@@ -130,7 +130,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().NotContain(m => m!.Contains("forged-line") || m.Contains('\r') || m.Contains('\n') || m.Contains("other"));
     }
 
@@ -146,7 +146,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
 
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().NotContain(m => m!.Contains("secret-value"));
     }
 

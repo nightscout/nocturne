@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: "10.0"
+  DOTNET_VERSION: "11.0"
   NODE_VERSION: "24"
   PNPM_VERSION: "11.5.0"
   APPHOST_LOG: apphost.log

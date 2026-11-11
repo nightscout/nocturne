@@ -397,7 +397,7 @@ public class DemoTenantServiceResetTests : IDisposable
             l => l.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("alice")),
+                It.Is<It.IsAnyType>((state, _) => state!.ToString()!.Contains("alice")),
                 null,
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once,

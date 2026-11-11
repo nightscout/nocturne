@@ -321,6 +321,7 @@ public class StatisticsController : ControllerBase
     /// Extended glucose analytics including GMI, GRI, and clinical target assessment
     /// </summary>
     /// <param name="request">Request containing sensor glucose readings, boluses, carb intakes, population type, and configuration</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Extended glucose analytics with modern clinical metrics</returns>
     [HttpPost("extended-analytics")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]

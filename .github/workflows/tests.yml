@@ -186,7 +186,7 @@ jobs:
           dotnet build "$sln" -p:GenerateNSwagClient=true
           missing=0
           for project in tests/Unit/*/*.csproj tests/Integration/*/*.csproj tests/Parity/*/*.csproj; do
-            dll="$(dirname "$project")/bin/Debug/net10.0/$(basename "$project" .csproj).dll"
+            dll="$(dirname "$project")/bin/Debug/net11.0/$(basename "$project" .csproj).dll"
             if [ ! -f "$dll" ]; then
               echo "::error file=$project::was not built ($dll is missing)"
               missing=1
@@ -202,7 +202,7 @@ jobs:
         if: env.BUILD_TESTS == 'true'
         run: |
           set -euo pipefail
-          mapfile -t roots < <(jq -r '.ContentRoots[]' tests/*/*/bin/Debug/net10.0/*.staticwebassets.runtime.json | sort -u)
+          mapfile -t roots < <(jq -r '.ContentRoots[]' tests/*/*/bin/Debug/net11.0/*.staticwebassets.runtime.json | sort -u)
           paths=()
           for root in "${roots[@]}"; do
             case "$root" in
@@ -737,7 +737,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "10.0"
+          dotnet-version: "11.0"
       - uses: actions/setup-node@v5
         with:
           node-version: "24"

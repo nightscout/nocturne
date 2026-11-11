@@ -467,7 +467,7 @@ public partial class SetupController : ControllerBase
     /// or an error result if the preconditions are not met.
     /// </summary>
     /// <remarks>
-    /// A demo tenant never trips the credentialed-member arm (<see cref="DemoExclusionFilter"/>),
+    /// A demo tenant never trips the credentialed-member arm (<see cref="Nocturne.Infrastructure.Data.Extensions.DemoExclusionFilter"/>),
     /// so a demo-only instance answers <c>no_tenant_exists</c>, from which a tenant can still be
     /// created, rather than <c>setup_already_complete</c>, which would strand the operator on a
     /// tenant nobody can adopt.

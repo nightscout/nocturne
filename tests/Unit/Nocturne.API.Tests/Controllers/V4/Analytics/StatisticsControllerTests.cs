@@ -25,7 +25,6 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -229,7 +228,7 @@ public partial class StatisticsControllerTests
                 It.IsAny<IEnumerable<TempBasal>>(),
                 It.IsAny<DateTime>(),
                 It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(),
+                It.IsAny<TimeZoneInfo>(),
                 It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<CarbIntake>?>()))
             .Returns(new DailyBasalBolusRatioResponse());
@@ -1043,7 +1042,7 @@ public partial class StatisticsControllerTests
             .Setup(s => s.CalculateHourlyInsulinDelivery(
                 It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>(),
+                It.IsAny<TimeZoneInfo>(), It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<BasalSegment>?>()))
             .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, IEnumerable<Bolus>, DateTime, DateTime, long, TimeZoneInfo?, IEnumerable<BasalInjection>?, IEnumerable<BasalSegment>?>(
                 (tempBasals, _, _, _, _, _, _, _, _) => passed = tempBasals.ToList())
@@ -1074,7 +1073,7 @@ public partial class StatisticsControllerTests
             .Setup(s => s.CalculateHourlyInsulinDelivery(
                 It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>(),
+                It.IsAny<TimeZoneInfo>(), It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<BasalSegment>?>()))
             .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, IEnumerable<Bolus>, DateTime, DateTime, long, TimeZoneInfo?, IEnumerable<BasalInjection>?, IEnumerable<BasalSegment>?>(
                 (_, _, _, _, _, _, _, _, segments) => passed = segments?.ToList())
@@ -1096,7 +1095,7 @@ public partial class StatisticsControllerTests
             .Setup(s => s.CalculateHourlyInsulinDelivery(
                 It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>(),
+                It.IsAny<TimeZoneInfo>(), It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<BasalSegment>?>()))
             .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, IEnumerable<Bolus>, DateTime, DateTime, long, TimeZoneInfo?, IEnumerable<BasalInjection>?, IEnumerable<BasalSegment>?>(
                 (_, _, _, _, _, _, _, _, segments) => passed = segments?.ToList())
@@ -1257,7 +1256,7 @@ public partial class StatisticsControllerTests
             .Setup(s => s.CalculateHourlyInsulinDelivery(
                 It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>(),
+                It.IsAny<TimeZoneInfo>(), It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<BasalSegment>?>()))
             .Returns(new HourlyInsulinDeliveryResponse());
 

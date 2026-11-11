@@ -351,9 +351,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 : null;
             var baseContext = new SensorContext
             {
-                LatestValue = fresh is null ? null : (decimal)fresh.Mgdl,
+                LatestValue = fresh?.Mgdl.ToDecimal(),
                 LatestTimestamp = last.At,
-                TrendRate = (decimal?)fresh?.TrendRate,
+                TrendRate = fresh?.TrendRate?.ToDecimal(),
                 LastReadingAt = last.At,
             };
             return await enricher.EnrichAsync(baseContext, syntheticRules, ct);

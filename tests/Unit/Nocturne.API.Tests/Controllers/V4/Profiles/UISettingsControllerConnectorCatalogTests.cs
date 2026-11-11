@@ -24,7 +24,7 @@ public class UISettingsControllerConnectorCatalogTests
         var controller = NewController(database);
 
         var served = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
-        served.Services.AvailableServices.Add(
+        served.Services!.AvailableServices.Add(
             new AvailableService { Id = "dexcom-connector", Name = "Dexcom Share" }
         );
 
@@ -46,7 +46,7 @@ public class UISettingsControllerConnectorCatalogTests
         var database = NewDatabase();
         var controller = NewController(database);
         var settings = new UISettingsConfiguration();
-        settings.Services.AvailableServices.Add(
+        settings.Services!.AvailableServices.Add(
             new AvailableService { Id = "retired-connector", Name = "Retired" }
         );
         settings.Services.SyncSettings.AutoSync = false;
@@ -55,7 +55,7 @@ public class UISettingsControllerConnectorCatalogTests
         var served = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
 
         served
-            .Services.AvailableServices.Should()
+            .Services!.AvailableServices.Should()
             .BeEquivalentTo(ConnectorMetadataService.GetAvailableServices());
         served.Services.AvailableServices.Should().NotContain(s => s.Id == "retired-connector");
         served.Services.SyncSettings.AutoSync.Should().BeFalse();

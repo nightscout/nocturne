@@ -114,7 +114,7 @@ public class IobCobReaderTests
         current.Iob.Iob.Should().Be(1.254);
         current.Iob.Display.Should().Be("1.25");
         current.Iob.Source.Should().Be("OpenAPS");
-        current.Cob.Cob.Should().Be(23);
+        current.Cob!.Cob.Should().Be(23);
         current.Cob.Source.Should().Be("OpenAPS");
         current.HasIob.Should().BeTrue();
         current.HasCob.Should().BeTrue();
@@ -182,7 +182,7 @@ public class IobCobReaderTests
 
         current.Iob.Iob.Should().Be(0.8);
         current.Iob.Source.Should().Be("Loop");
-        current.Cob.Cob.Should().Be(12);
+        current.Cob!.Cob.Should().Be(12);
         current.Cob.Source.Should().Be("Loop");
     }
 
@@ -196,7 +196,7 @@ public class IobCobReaderTests
 
         current.Iob.Source.Should().NotBe("OpenAPS");
         current.Iob.Iob.Should().BeInRange(0.01, 2);
-        current.Cob.Cob.Should().Be(0);
+        current.Cob!.Cob.Should().Be(0);
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public class IobCobReaderTests
 
         current.Iob.Iob.Should().Be(0);
         current.Iob.Display.Should().Be("0");
-        current.Cob.Cob.Should().Be(0);
+        current.Cob!.Cob.Should().Be(0);
         current.HasIob.Should().BeFalse();
         current.HasCob.Should().BeFalse();
     }

@@ -70,6 +70,7 @@ public class MyTenantsController : ControllerBase
     /// those they can go to.
     /// </summary>
     /// <param name="reachableOnly">Leaves out inactive tenants.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <seealso cref="ITenantService.GetTenantsForSubjectAsync"/>
     /// <seealso cref="ITenantService.GetReachableTenantsForSubjectAsync"/>
     [HttpGet]
@@ -138,7 +139,7 @@ public class MyTenantsController : ControllerBase
         return Created($"/api/v4/me/tenants", tenant);
     }
 
-    /// <inheritdoc cref="ITenantService.ValidateSlugAsync"/>
+    /// <inheritdoc cref="ITenantService.ValidateSlugAsync(string, CancellationToken)"/>
     [HttpGet("validate-slug")]
     [AllowAnonymous]
     [AnonymousUntilSetupComplete]

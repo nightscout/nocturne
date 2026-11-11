@@ -40,7 +40,9 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// Creates a new instance of DirectGrantTokenHandler
     /// </summary>
     /// <param name="grants">The stored grants, pinned per read to the request's tenant.</param>
+    /// <param name="timeProvider">Gives the instant a grant must be active at.</param>
     /// <param name="lastUsedClaims">Decides which concurrent request stamps the grant.</param>
+    /// <param name="logger">Logs each lookup's outcome and a failed last-used stamp.</param>
     public DirectGrantTokenHandler(
         IOAuthGrantRepository grants,
         TimeProvider timeProvider,
