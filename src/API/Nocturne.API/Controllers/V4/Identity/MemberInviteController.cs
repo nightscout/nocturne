@@ -171,6 +171,7 @@ public class MemberInviteController : ControllerBase
 
     /// <summary>
     /// Get invite info for the accept page, along with where the caller stands relative to it.
+    /// Requires no authentication. An invite that can no longer be accepted answers with the reason only.
     /// </summary>
     /// <remarks>
     /// Anonymous, because the invitee may have no account yet. A caller who does arrive signed in
@@ -233,7 +234,7 @@ public class MemberInviteController : ControllerBase
         viewer);
 
     /// <summary>
-    /// Accept an invite and join the tenant.
+    /// Accept an invite and join the tenant. The caller must be signed in but need not already belong to the tenant.
     /// </summary>
     /// <remarks>
     /// The caller must be signed in as some subject, but need not already belong to this tenant —
@@ -285,6 +286,7 @@ public class MemberInviteController : ControllerBase
 
     /// <summary>
     /// Set roles for a member. <c>RoleIds</c> is the member's whole role set after the change.
+    /// Only the change is checked against the caller's grant ceiling, so a role the caller could not grant but the member already holds must stay in the set; removing it is refused like adding it.
     /// </summary>
     /// <remarks>
     /// Only the change is checked against the caller's grant ceiling, so a caller who could not
@@ -363,6 +365,7 @@ public class MemberInviteController : ControllerBase
     /// <summary>
     /// Replaces the caller's own roles with <see cref="RoleSeeds.Caretaker"/>, for a helper handing
     /// the tenant over. Direct permissions and the history clamp stay as they are.
+    /// Refused unless the caller could grant that role.
     /// </summary>
     /// <remarks>
     /// The one self-edit allowed past <see cref="IsCallersOwnMembership"/> and

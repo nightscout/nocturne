@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -96,6 +97,7 @@ public class ProfileDecomposerFixedQueryTests
             Table<ITargetRangeScheduleRepository, TargetRangeSchedule>().Object,
             Double<ITempBasalRateReresolver>().Object,
             Double<ILoopClosedLoopStamper>().Object,
+            new AuditContext(),
             NullLogger<ProfileDecomposer>.Instance);
     }
 }

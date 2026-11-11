@@ -1,4 +1,5 @@
 const DISPLAY_NAMES: Record<string, string> = {
+  "google-health": "Google Health",
   discord: "Discord",
   slack: "Slack",
   telegram: "Telegram",

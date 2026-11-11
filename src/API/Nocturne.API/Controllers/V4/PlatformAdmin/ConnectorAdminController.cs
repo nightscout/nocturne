@@ -65,6 +65,7 @@ public class ConnectorAdminController : ControllerBase
     /// Enqueue a background reset of the sync cursor for every connector configured on a target
     /// tenant, forcing a re-pull of history. Use after fixing a connector bug to push corrected data
     /// to an affected tenant.
+    /// Returns <c>202 Accepted</c> with a job id at once; the re-pull runs in the background and can take minutes per connector. Poll the reset job status for per-connector progress, or cancel the job.
     /// </summary>
     /// <remarks>
     /// A full re-pull can take minutes per connector — far longer than gateway/proxy/browser request

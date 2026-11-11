@@ -113,6 +113,7 @@ public class FoodController : BaseV3Controller<Food>
 
     /// <summary>
     /// Get food records modified since a given timestamp (for AAPS incremental sync).
+    /// When no newer records exist, the response still carries a cursor <c>ETag</c> equal to the requested timestamp.
     /// </summary>
     /// <param name="lastModified">Unix timestamp in milliseconds. Only foods modified after this time are returned.</param>
     /// <param name="limit">Maximum number of foods to return (1-1000, default 1000).</param>

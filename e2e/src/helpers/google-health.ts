@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { env } from "./env.ts";
-import { eventually } from "./http.ts";
+import { ApiClient, eventually } from "./http.ts";
 import type { Tenant } from "./tenant.ts";
 
 export const googleTypes = ["steps", "heart-rate", "weight", "sleep"];
@@ -12,11 +13,22 @@ export interface GoogleStatus {
   previewRequired: boolean;
 }
 
-/** The instance client e2e/docker-compose.yml configures; every tenant connects through it. */
+/** The instance client configured through the admin API; every tenant connects through it. */
 export const googleClientId = "e2e.apps.googleusercontent.com";
 
 /** Where Google sends every tenant back: the apex, relayed to the tenant by the API. */
 export const googleRedirectUri = `https://nocturne.localhost:${env.webTlsPort}/api/v4/google-health/oauth/callback`;
+
+export async function configureGoogleHealth() {
+  const response = await new ApiClient().request("PUT", "/api/v4/admin/platform-settings/google-health", {
+    enabled: true,
+    fields: { clientId: googleClientId, clientSecret: "e2e-google-secret", redirectUri: googleRedirectUri },
+  }, {
+    "X-Instance-Key": createHash("sha256").update("e2e-instance-key-test-only-not-a-real-secret").digest("hex"),
+    "X-Instance-Service": "e2e-setup",
+  });
+  if (response.status !== 200) throw new Error(`Google Health admin setup failed: HTTP ${response.status}`);
+}
 
 export function googleOptions() {
   return {

@@ -274,6 +274,7 @@ public class TenantController : ControllerBase
     /// <summary>
     /// Mints a single-use code that signs a member in on the tenant's own host, for a caller that
     /// has already established which browser the member is at.
+    /// The code is redeemed at <c>POST /api/auth/handoff</c> on the tenant's host and grants no more than a direct grant for the same member. The audit trail names the calling platform admin, not the member.
     /// </summary>
     /// <remarks>
     /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host. It grants no more than
@@ -297,6 +298,8 @@ public class TenantController : ControllerBase
     /// <summary>
     /// Mints a single-use recovery code that lets a member enrol a passkey at
     /// <c>POST /api/auth/passkey/recovery-mode/redeem</c> on the tenant's host.
+    /// Returns 404 when the subject is not a member of the tenant, and 409 when the tenant is
+    /// inactive or the member can still sign in.
     /// </summary>
     /// <remarks>
     /// The operator's way to recover a member nobody on the tenant may recover: the only owner, a

@@ -38514,3 +38514,19 @@ msgstr ""
 #: src/routes/(authenticated)/settings/admin/+page.svelte
 msgid "<0/> Jobs"
 msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The client ID must end in .apps.googleusercontent.com."
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The callback URL must be an https address that ends in /api/v4/google-health/oauth/callback."
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Google Health settings saved. No restart required."
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The callback URL ends in /api/v4/google-health/oauth/callback."
+msgstr ""

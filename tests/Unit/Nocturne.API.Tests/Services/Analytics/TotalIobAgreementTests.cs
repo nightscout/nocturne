@@ -72,6 +72,11 @@ public class TotalIobAgreementTests
 {
     private const long Minute = 60 * 1000;
     private const double Total = -0.022;
+    // A literal, not (decimal)Total: the compiler folds that cast with its own runtime's conversion,
+    // which from .NET 11 is exact (-0.02199999...) where the net10.0 cast the alerts reader makes
+    // rounds to 15 significant digits. On a net11.0 runtime the reader stops rounding and this fails:
+    // see #3289.
+    private const decimal TotalAsDecimal = -0.022m;
     private const double BolusPart = 0.461;
     private const double BasalPart = -0.483;
 
@@ -189,7 +194,7 @@ public class TotalIobAgreementTests
         var (retrospective, retrospectiveTimeline) = await RetrospectiveAsync();
 
         (await ChartAsync()).Should().BeApproximately(Total, 1e-9);
-        (await AlertsAsync()).Should().Be(Total.ToDecimal());
+        (await AlertsAsync()).Should().Be(TotalAsDecimal);
         (await WidgetAsync()).Should().Be(-0.02);
         (await PropertiesAsync()).Should().Be(Total);
         (await PebbleAsync()).Should().Be("-0.02");
@@ -243,13 +248,13 @@ public class TotalIobAgreementTests
             });
     }
 
-    private async Task EveryReaderReports(double total, double twoDecimals, string display)
+    private async Task EveryReaderReports(double total, decimal totalAsDecimal, double twoDecimals, string display)
     {
         var (v1, v1Hourly) = await V1Async();
         var (retrospective, retrospectiveTimeline) = await RetrospectiveAsync();
 
         (await ChartAsync()).Should().Be(total);
-        (await AlertsAsync()).Should().Be(total.ToDecimal());
+        (await AlertsAsync()).Should().Be(totalAsDecimal);
         (await WidgetAsync()).Should().Be(twoDecimals);
         (await PropertiesAsync()).Should().Be(total);
         (await PebbleAsync()).Should().Be(display);
@@ -265,7 +270,7 @@ public class TotalIobAgreementTests
         ApsReports(iob: 1.234, cob: 12, minutesBefore: 2);
         PumpReports(iob: 9.876, minutesBefore: 1);
 
-        await EveryReaderReports(1.234, 1.23, "1.23");
+        await EveryReaderReports(1.234, 1.234m, 1.23, "1.23");
     }
 
     [Fact]
@@ -274,7 +279,7 @@ public class TotalIobAgreementTests
         _noTreatments = true;
         ApsReports(iob: 1.234, cob: 12, minutesBefore: 2);
 
-        await EveryReaderReports(1.234, 1.23, "1.23");
+        await EveryReaderReports(1.234, 1.234m, 1.23, "1.23");
     }
 
     [Fact]
@@ -282,7 +287,7 @@ public class TotalIobAgreementTests
     {
         PumpReports(iob: 0.777, minutesBefore: 3);
 
-        await EveryReaderReports(0.777, 0.78, "0.78");
+        await EveryReaderReports(0.777, 0.777m, 0.78, "0.78");
     }
 
     private async Task<double> ChartAsync()

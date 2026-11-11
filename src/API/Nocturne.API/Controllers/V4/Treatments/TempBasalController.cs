@@ -37,6 +37,7 @@ public class TempBasalController(
 {
     /// <summary>
     /// Lists temp basal spans, newest-first by default.
+    /// Responses are never cached, so a just-started or just-cancelled span appears at once.
     /// </summary>
     /// <remarks>
     /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-started
@@ -91,6 +92,10 @@ public class TempBasalController(
 
     /// <summary>
     /// Write temp basal spans and cancels in bulk (max 1000).
+    /// Items are processed in timestamp order, so a batch may start a temp basal and cancel it later in the same request. Processing is per item, not all-or-nothing.
+    /// A regular item with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other item is inserted. A regular item whose pair belongs to a span the owner deleted is skipped and left out of the response, even in a one-item array, which returns `201 Created` with an empty array.
+    /// A cancel (`isCancel: true`) ends the temp basal active at its timestamp at that instant; with none active it does nothing.
+    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing. The response lists every record written or truncated, in processing order.
     /// </summary>
     /// <remarks>
     /// Items are processed in timestamp order, one at a time, so a batch may start a temp basal

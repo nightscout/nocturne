@@ -146,7 +146,7 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Generate registration options for a new passkey credential on the caller's own account.
+    /// Generate registration options for a new passkey credential on the caller's own account. The account comes from the caller's credentials; the request cannot name another.
     /// </summary>
     /// <remarks>
     /// The subject comes from the caller's credentials, never from the request: a caller-supplied
@@ -267,7 +267,7 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Complete passkey registration with attestation response
+    /// Complete passkey registration with attestation response. The challenge must have been issued for the caller's own account.
     /// </summary>
     /// <remarks>
     /// The challenge must have been issued for the subject the caller's credentials resolve to,
@@ -343,7 +343,7 @@ public class PasskeyController : ControllerBase
     /// <summary>
     /// Spends a recovery code an administrator issued for a member and starts the same restricted
     /// session <see cref="RecoveryVerify"/> does: one passkey enrolment through
-    /// <see cref="RegisterOptions"/>, nothing else.
+    /// <see cref="RegisterOptions"/>, nothing else. A code is single-use. Unknown, spent, expired and other-tenant codes all fail alike.
     /// </summary>
     /// <remarks>
     /// The code is the whole proof. It is single-use, bound to one subject on one tenant, minted
