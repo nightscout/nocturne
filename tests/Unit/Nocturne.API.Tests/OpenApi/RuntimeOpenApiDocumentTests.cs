@@ -63,7 +63,10 @@ public sealed class RuntimeOpenApiDocumentTests : IClassFixture<AuthenticationTe
             .GetProperty("paths").GetProperty("/api/v4/Activity").GetProperty("get");
 
         operation.GetProperty("summary").GetString().Should().Be("Get activities");
-        operation.GetProperty("description").GetString().Should().Be("Get activity records with pagination");
+        operation.GetProperty("description").GetString().Should()
+            .StartWith("Get activity records with pagination")
+            .And.NotContain("ActivityReadScopeGuard")
+            .And.NotContain("ClampMergedPage");
     }
 
     [Fact]
