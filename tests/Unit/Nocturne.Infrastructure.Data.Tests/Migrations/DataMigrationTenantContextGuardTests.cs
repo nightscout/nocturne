@@ -12,9 +12,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// applied. Drive the loop off <c>tenants</c>, which carries no RLS.
 /// <para>
 /// The same silent no-op needs no loop at all — a bare <c>UPDATE</c> on a tenant-scoped table
-/// matches zero rows — so loop sources and loop-free DML are checked separately. A finding only
-/// counts from the migration that brought its table under RLS onwards; see
-/// <see cref="RlsBeginsAt"/>.
+/// matches zero rows — so loop sources and loop-free DML are checked separately. Every
+/// tenant-scoped table the baseline creates is already under RLS, so every finding counts.
 /// </para>
 /// <para>
 /// Shapes this cannot see, which review has to catch: a DML target it cannot read off the
@@ -33,34 +32,6 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 [Trait("Category", "Unit")]
 public class DataMigrationTenantContextGuardTests
 {
-    /// <summary>
-    /// Shipped migrations whose driving SELECT reads a tenant-scoped table. Each was a silent
-    /// no-op on every deployment, and each still owes the work it did not do. An entry here is a
-    /// record of that debt, not an absolution: an applied migration cannot be repaired by
-    /// rewriting it, so the remediation is a new migration that redoes the work under a tenant
-    /// loop. Nothing may be added here.
-    /// </summary>
-    private static readonly IReadOnlySet<string> KnownNoOpMigrations = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "20260428074655_BackfillSensorGlucosePatientDeviceId",
-        "20260430071311_AlertsRedesign",
-        "20260515091302_DropTenantAlertSettingsTimezone",
-    };
-
-    /// <summary>
-    /// Shipped migrations that run DML on a table already under RLS with no tenant context
-    /// established earlier in the same <c>Up</c>. Each matched no row on every deployment, and
-    /// each still owes that work — except <c>DeviceIdentityUnification</c>, whose backfill was
-    /// harmless because the <c>AddColumn</c> it follows already carries the same value as its
-    /// default. Same history rule as <see cref="KnownNoOpMigrations"/>: nothing may be added here.
-    /// </summary>
-    private static readonly IReadOnlySet<string> KnownContextlessDmlMigrations = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "20260320105641_DeviceIdentityUnification",
-        "20260415032253_MigrateHeartRateStepCountToTimestamp",
-        "20260503010303_RipOutSchedulesAndEscalationSteps",
-    };
-
     /// <summary>
     /// Migrations whose tenant loop is driven by a query assembled at runtime, which this guard
     /// cannot read. An entry here is a hand-review claim that the query touches no tenant-scoped
@@ -101,10 +72,6 @@ public class DataMigrationTenantContextGuardTests
         @"^\s*(?:ONLY\s+)?(""?[A-Za-z_][\w""$.]*)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static readonly Regex RenameTable = new(
-        @"RenameTable\(\s*name:\s*""([^""]+)""\s*,\s*(?:schema:[^,]*,\s*)?newName:\s*""([^""]+)""",
-        RegexOptions.Singleline | RegexOptions.Compiled);
-
     private static readonly Regex DynamicLoopQuery = new(
         @"^\s*EXECUTE\b",
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
@@ -122,7 +89,7 @@ public class DataMigrationTenantContextGuardTests
     [Fact]
     public void NoDataMigrationDrivesItsTenantLoopOffATenantScopedTable()
     {
-        Offenders(ScopedLoopSources, KnownNoOpMigrations).Should().BeEmpty(
+        Offenders(ScopedLoopSources).Should().BeEmpty(
             "a tenant loop must be driven off the tenants table; reading its bounds from a "
             + "tenant-scoped table under FORCE RLS returns no rows and makes the migration a no-op");
     }
@@ -138,25 +105,18 @@ public class DataMigrationTenantContextGuardTests
     [Fact]
     public void NoDataMigrationRunsTenantScopedDmlWithoutATenantContext()
     {
-        Offenders(ContextlessScopedDml, KnownContextlessDmlMigrations).Should().BeEmpty(
+        Offenders(ContextlessScopedDml).Should().BeEmpty(
             "DML on a tenant-scoped table under FORCE RLS matches no row until "
             + "app.current_tenant_id is set, so the migration records as applied having done nothing");
     }
 
     [Fact]
-    public void TheGuardCanSeeMigrationsTenantScopedTablesAndWhenEachCameUnderRls()
+    public void TheGuardCanSeeMigrationsAndTenantScopedTables()
     {
-        // Any of these going empty makes the guards above pass vacuously. A named table catches
-        // the narrower regression too: a set that still holds most tables but has quietly dropped
-        // some. An unresolved RLS origin exempts its table outright, so none may be blank.
+        // Either going empty makes the guards above pass vacuously. A named table catches the
+        // narrower regression too: a set that still holds most tables but has quietly dropped some.
         MigrationSourceFiles.All().Should().NotBeEmpty();
         MigrationSourceFiles.TenantScopedTableNames().Should().Contain("sensor_glucose");
-        RlsBeginsAt.Value.Should().NotContainValue(string.Empty);
-
-        // devices is pump_devices renamed, and only pump_devices appears in the enabling
-        // migration; losing the rename hop dates it to 20260409020854_AddRlsToNewTenantTables,
-        // which is later than the migration whose contextless backfill has to be reported.
-        RlsBeginsAt.Value["devices"].Should().Be("20260227034745_EnforceMultitenancy");
     }
 
     [Fact]
@@ -408,16 +368,14 @@ public class DataMigrationTenantContextGuardTests
 
     private static readonly (IReadOnlySet<string> Allowlist, Detector Detect)[] Allowlists =
     [
-        (KnownNoOpMigrations, ScopedLoopSources),
-        (KnownContextlessDmlMigrations, ContextlessScopedDml),
         (KnownDynamicLoopMigrations, DynamicLoopSources),
     ];
 
     private delegate IReadOnlyList<(string Table, string Detail)> Detector(string up);
 
-    private static IReadOnlyList<string> Offenders(Detector detect, IReadOnlySet<string> allowlist) =>
+    private static IReadOnlyList<string> Offenders(Detector detect, IReadOnlySet<string>? allowlist = null) =>
         MigrationSourceFiles.All()
-            .Where(f => !allowlist.Contains(MigrationSourceFiles.Name(f)))
+            .Where(f => allowlist?.Contains(MigrationSourceFiles.Name(f)) != true)
             .SelectMany(f => Findings(f, detect))
             .ToList();
 
@@ -426,64 +384,12 @@ public class DataMigrationTenantContextGuardTests
         var migration = MigrationSourceFiles.Name(file);
 
         return detect(MigrationSourceFiles.UpBody(file))
-            .Where(x => string.CompareOrdinal(migration, RlsBeginsAt.Value.GetValueOrDefault(x.Table, "")) >= 0)
             .Select(x => $"{migration} -> {x.Detail}")
             .ToList();
     }
 
     private static IEnumerable<string> Details(IEnumerable<(string Table, string Detail)> findings) =>
         findings.Select(x => x.Detail);
-
-    /// <summary>
-    /// The migration each tenant-scoped table came under RLS in: the first that both enables
-    /// row-level security and names the table. Statements before that point ran against
-    /// an unpoliced table and did the work they were written to do, so a finding there is noise.
-    /// Read off the migration sources rather than a hand-kept list, and read off comment-blanked
-    /// text so a commented-out <c>ENABLE</c> cannot move the boundary later. A table whose origin
-    /// cannot be resolved maps to the empty string, which precedes every migration name and so
-    /// exempts nothing.
-    /// <para>
-    /// A renamed table keeps the policies it held under its old name, and the old name is the
-    /// only thing the enabling migration records, so a <c>RenameTable</c> in <c>Up</c> carries
-    /// the origin across — otherwise <c>devices</c> would date from the migration that renamed
-    /// <c>pump_devices</c> onto it rather than from the one that policied it.
-    /// </para>
-    /// </summary>
-    private static readonly Lazy<IReadOnlyDictionary<string, string>> RlsBeginsAt = new(() =>
-    {
-        var enablers = MigrationSourceFiles.All()
-            .Select(f => (Name: MigrationSourceFiles.Name(f),
-                          Source: MigrationSourceFiles.WithCommentsBlanked(MigrationSourceFiles.Source(f))))
-            .Where(m => m.Source.Contains("ENABLE ROW LEVEL SECURITY", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        string Enabler(string table) => enablers
-            .FirstOrDefault(m => Regex.IsMatch(m.Source, $@"\b{Regex.Escape(table)}\b"))
-            .Name ?? string.Empty;
-
-        var begins = ScopedTables.ToDictionary(t => t, Enabler, StringComparer.Ordinal);
-
-        foreach (var file in MigrationSourceFiles.All())
-        {
-            var migration = MigrationSourceFiles.Name(file);
-
-            foreach (Match rename in RenameTable.Matches(MigrationSourceFiles.UpBody(file)))
-            {
-                var from = rename.Groups[1].Value.ToLowerInvariant();
-                var to = rename.Groups[2].Value.ToLowerInvariant();
-                var inherited = begins.TryGetValue(from, out var known) && known.Length > 0 ? known : Enabler(from);
-
-                if (inherited.Length == 0 || string.CompareOrdinal(inherited, migration) > 0)
-                    continue;
-
-                if (!begins.TryGetValue(to, out var current) || current.Length == 0
-                    || string.CompareOrdinal(inherited, current) < 0)
-                    begins[to] = inherited;
-            }
-        }
-
-        return begins;
-    });
 
     /// <summary>
     /// Tenant-scoped tables the <c>Up</c> drives a tenant loop off. Scanned as raw text: this

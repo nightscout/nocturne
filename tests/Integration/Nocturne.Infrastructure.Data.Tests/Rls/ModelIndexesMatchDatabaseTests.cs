@@ -67,11 +67,10 @@ public class ModelIndexesMatchDatabaseTests
     /// builds are interchangeable — and the estate already disagrees with itself:
     /// <c>ix_boluses_tenant_timestamp</c>, <c>ix_carb_intakes_tenant_timestamp</c> and
     /// <c>ix_temp_basals_tenant_start_timestamp</c> are DESC in production and ASC in a database
-    /// built from the same migrations today, because
-    /// <c>20260511122202_AddCompositePerformanceIndexes</c> writes DESC behind
-    /// <c>CREATE INDEX IF NOT EXISTS</c> over names <c>20260511000001_AddTenantTimestampIndexes</c>
-    /// had already created ASC. Asserting direction would fail on that history rather than on new
-    /// drift.
+    /// built from the baseline today, because <c>20260511122202_AddCompositePerformanceIndexes</c>,
+    /// now squashed into the baseline, wrote DESC behind <c>CREATE INDEX IF NOT EXISTS</c> over
+    /// names <c>20260511000001_AddTenantTimestampIndexes</c> had already created ASC. Asserting
+    /// direction would fail on that history rather than on new drift.
     /// </para>
     /// </summary>
     private static Dictionary<string, string> DeclaredIndexes()
