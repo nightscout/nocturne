@@ -11,8 +11,7 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Community content contributions. Submit a contribution, or relay one from an instance without
-/// its own access token.
+/// Community content contributions. Submit a contribution.
 /// </summary>
 [ApiController]
 [Tags("Platform")]

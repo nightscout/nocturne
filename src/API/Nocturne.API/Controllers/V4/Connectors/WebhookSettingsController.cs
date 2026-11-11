@@ -11,7 +11,8 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Outbound webhook notification settings. Read and update the settings, and send a test payload to a webhook.
+/// Outbound webhook notifications. Send a test payload to a webhook. The read and update operations
+/// are not implemented and return <c>501</c>.
 /// </summary>
 /// <remarks>
 /// The <c>POST /test</c> endpoint sends a test payload via <see cref="WebhookRequestSender"/>.

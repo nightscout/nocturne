@@ -119,7 +119,13 @@ public sealed class RuntimeOpenApiDocumentTests : IClassFixture<AuthenticationTe
         var groups = Groups(await DocumentAsync(name));
         var declared = TagDescriptionDocumentTransformer.Sidebar[name];
 
-        groups.Should().HaveCount(declared.Length,
+        var environment = _factory.Services.GetRequiredService<IWebHostEnvironment>();
+        var displayNames = TagDescriptionLoader.Load(environment)
+            .Where(page => page.Document == name && page.DisplayName is not null)
+            .ToDictionary(page => page.TagName, page => page.DisplayName!);
+
+        groups.Select(group => group.Name).Should().Equal(
+            declared.Select(entry => displayNames.GetValueOrDefault(entry.Group, entry.Group)),
             "a [Tags] area needs a place in TagDescriptionDocumentTransformer.Sidebar, and a controller needs a [Tags] area");
 
         var areas = declared.Where(entry => entry.Pages is null).Select(entry => entry.Group);
@@ -181,7 +187,8 @@ public sealed class RuntimeOpenApiDocumentTests : IClassFixture<AuthenticationTe
             .Select(match => match.Value.TrimEnd('/', '.', '{'))
             .Distinct();
 
-        named.Where(path => !paths.Any(real => real.StartsWith(path, StringComparison.OrdinalIgnoreCase)))
+        named.Where(path => !paths.Any(real => real.Equals(path, StringComparison.OrdinalIgnoreCase)
+                || real.StartsWith(path + "/", StringComparison.OrdinalIgnoreCase)))
             .Should().BeEmpty();
     }
 

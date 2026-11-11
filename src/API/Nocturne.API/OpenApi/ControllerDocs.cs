@@ -31,7 +31,7 @@ public static partial class ControllerDocs
             ?? ControllerNameTagOperationProcessor.TagFor(controller);
         var area = controller.GetCustomAttribute<TagsAttribute>()?.Tags.FirstOrDefault();
 
-        // V1, V2 and V3 each have an Entries, a Profile and a Status controller in one document.
+        // V1, V2 and V3 repeat controller names (Entries, Treatments, Profile, ...) in one document.
         var tag = IsNightscout(controller) && area is not null
             ? $"{area} {ControllerNameTagOperationProcessor.TagFor(controller)}"
             : ControllerNameTagOperationProcessor.TagFor(controller);

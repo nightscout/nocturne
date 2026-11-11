@@ -36,9 +36,8 @@ public record TranslationCatalogSourceResponse
 }
 
 /// <summary>
-/// Translation drafts and contributions for each locale. Save, read, delete and submit drafts, or
-/// relay a contribution from an instance without its own access token. Read where the translation
-/// catalogs are published.
+/// Translation drafts and contributions for each locale. Save, read, delete and submit drafts, and
+/// submit a contribution. Read where the translation catalogs are published.
 /// </summary>
 [ApiController]
 [Tags("Platform")]

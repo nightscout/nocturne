@@ -8,7 +8,7 @@ What happens to a request between the client and the database.
 
 ## Gateway
 
-A YARP gateway is the one public HTTP endpoint of the stack. The API and the web app run as plain HTTP behind it. The gateway sends the OAuth, OIDC and `.well-known` paths, the OpenAPI documents and this reference directly to the API. Other `/api` paths go to the server side of the web app, which forwards them to the API. [Deployment topology](#nocturne/tag/arch-deployment) shows the routes.
+A YARP gateway is the one public HTTP endpoint of the stack. The API and the web app run as plain HTTP behind it. The gateway sends the OAuth, OIDC and `.well-known` paths, the OpenAPI documents and this reference directly to the API. Other `/api` paths go to the server side of the web app, which forwards most of them to the API. [Deployment topology](#nocturne/tag/arch-deployment) shows the routes.
 
 ## Middleware
 

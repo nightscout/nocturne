@@ -13,8 +13,9 @@ namespace Nocturne.API.Controllers.V4.ClientDevices;
 
 /// <summary>
 /// The client apps installed on a caller's devices, such as Prelude and the desktop Companion. A
-/// caller can register a device, list devices and their capabilities, rename a device, revoke a
-/// device and list a device's active intents.
+/// caller can register a device, list its devices, rename a device, revoke a device and list a
+/// device's active intents. The capabilities operation returns the fixed list of actions a device
+/// can offer.
 /// </summary>
 /// <remarks>
 /// Registered installs can be alert-engine actuation targets. Distinct from <c>api/v4/devices</c>,

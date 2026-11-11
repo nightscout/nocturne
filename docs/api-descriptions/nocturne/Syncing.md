@@ -34,7 +34,7 @@ All are safe to re-run because of idempotency, below.
 
 How Nocturne guarantees that writing the same record twice never creates a duplicate — and why there are two separate keys for it.
 
-Diabetes data is written by two very different kinds of client, and **both retry**. A phone app may resend a `POST` after a flaky network; a background connector re-fetches overlapping time windows on every sync. To make writes safe to repeat, every V4 record carries an idempotency key and the database enforces uniqueness on it. Which key is used depends on **who is writing**.
+Diabetes data is written by two very different kinds of client, and **both retry**. A phone app may resend a `POST` after a flaky network; a background connector re-fetches overlapping time windows on every sync. To make writes safe to repeat, most V4 records carry an idempotency key (calibrations, meter glucose and bolus calculations do not, and always insert) and the database enforces uniqueness on it. Which key is used depends on **who is writing**.
 
 ### Two channels
 

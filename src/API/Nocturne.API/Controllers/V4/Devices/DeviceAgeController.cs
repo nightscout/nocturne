@@ -8,13 +8,14 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Ages of consumables: the cannula, the sensor, the insulin reservoir, and the pump battery. Read the age of
-/// one consumable, or all four at once. Each age can be checked against alert thresholds.
+/// Ages of consumables: the cannula, the sensor, the insulin reservoir, and the pump battery. Read
+/// the age of one consumable, with optional alert thresholds, or all four at once with the default
+/// thresholds.
 /// </summary>
 /// <remarks>
 /// Uses the V4 DeviceEvents system via <see cref="IDeviceAgeService"/>.
 ///
-/// Each endpoint accepts optional threshold parameters (<c>info</c>, <c>warn</c>, <c>urgent</c>
+/// Each single-consumable endpoint accepts optional threshold parameters (<c>info</c>, <c>warn</c>, <c>urgent</c>
 /// in hours) and a <c>display</c> unit (<c>hours</c> or <c>days</c>) that are forwarded as a
 /// <see cref="DeviceAgePreferences"/> object to the service. Defaults are used when parameters
 /// are not supplied. An optional <c>patientDeviceId</c> scopes the underlying device events to a

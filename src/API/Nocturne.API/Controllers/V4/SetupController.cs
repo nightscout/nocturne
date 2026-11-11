@@ -24,7 +24,7 @@ namespace Nocturne.API.Controllers.V4;
 /// <summary>
 /// The first-run setup of a new install. A caller creates the first tenant, checks whether a
 /// username can be used, and then creates the owner account for that tenant. These endpoints need
-/// no sign-in.
+/// no sign-in while setup is not complete.
 /// </summary>
 /// <remarks>
 /// These operate without a resolved tenant and without authentication.

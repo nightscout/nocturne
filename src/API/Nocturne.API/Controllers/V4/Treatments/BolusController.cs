@@ -13,7 +13,8 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Insulin bolus doses. List, read, create, update, and delete boluses, and restore deleted ones.
+/// Insulin bolus doses. List, read, create (one or in bulk), update and delete boluses. List
+/// deleted boluses and restore them. Delete a bolus by its data source and sync identifier.
 /// </summary>
 /// <remarks>
 /// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.

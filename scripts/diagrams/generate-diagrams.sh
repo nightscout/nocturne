@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # scripts/diagrams/generate-diagrams.sh — Regenerate auto-produced mermaid sources.
 #
-# Mermaid sources (.mmd) are inlined as fenced code blocks in the OpenAPI
-# spec; Scalar's docs page lazy-loads pele and renders them in the
-# browser. No SVG output step is required.
+# Mermaid sources (.mmd) are placed as fenced code blocks in the pages of the
+# API reference; the Scalar plugin (src/Web/packages/scalar-plugin) draws them
+# in the browser. No SVG output step is required.
 #
 # Prerequisites:
 #   - dotnet tool restore (installs Dependify.Cli)

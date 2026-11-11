@@ -9,7 +9,8 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
 /// Usage analytics collection for the tenant. Callers can read the collection status and metrics,
-/// check pending data, and change the collection settings.
+/// check the pending data, change the settings, read the privacy information and record an event.
+/// Deleting the data removes all collected analytics data.
 /// </summary>
 /// <remarks>
 /// All analytics data is stored locally and never transmitted externally.

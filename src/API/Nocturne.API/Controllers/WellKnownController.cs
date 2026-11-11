@@ -13,8 +13,9 @@ using Nocturne.Core.Constants;
 namespace Nocturne.API.Controllers;
 
 /// <summary>
-/// OpenID Connect discovery documents for this server's built-in identity provider. Clients read the
-/// provider metadata, the signing keys, and the OAuth 2.0 server metadata.
+/// Discovery documents for this server's built-in identity provider. Clients read the OpenID
+/// provider metadata and the OAuth 2.0 server metadata. The key set document lists the signing
+/// algorithm and holds no key material.
 /// </summary>
 /// <remarks>
 /// Nocturne acts as its own OAuth 2.0 / OIDC issuer.

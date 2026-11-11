@@ -36,6 +36,7 @@ public sealed class PublicDocsCorsTests : IClassFixture<AuthenticationTestFactor
 
         var response = await client.SendAsync(request, CancellationToken.None);
 
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
         response.Headers.GetValues("Access-Control-Allow-Origin").Should().ContainSingle()
             .Which.Should().Be("*");
         // AllowAnyOrigin and credentials are mutually exclusive per the CORS spec; the

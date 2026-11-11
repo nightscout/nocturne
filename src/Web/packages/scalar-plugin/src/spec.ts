@@ -14,10 +14,14 @@ export type Resource = { label: string; href: string; summary: string; operation
 const DOCUMENTS = ['nocturne', 'nightscout'];
 const cache = new Map<string, Promise<Spec>>();
 
-/** The document the reader is on: Scalar puts its slug first in the hash (`#nocturne/tag/...`). */
-export function currentDocument(hash: string = location.hash): string {
+/**
+ * The documents to read, most likely first. Scalar puts the slug of the open document first in
+ * the hash (`#nocturne/tag/...`), but clears the hash at the top of a page, so the hash is a
+ * hint and the other documents follow.
+ */
+export function documentsFrom(hash: string): string[] {
   const slug = hash.replace(/^#/, '').split('/')[0];
-  return DOCUMENTS.includes(slug) ? slug : DOCUMENTS[0];
+  return DOCUMENTS.includes(slug) ? [slug, ...DOCUMENTS.filter((document) => document !== slug)] : DOCUMENTS;
 }
 
 /**
@@ -38,6 +42,19 @@ export function loadSpec(document: string, origin: string = import.meta.url): Pr
   return spec;
 }
 
+/** The rows of the first document that has any. */
+export async function firstRows<Row>(
+  documents: string[],
+  read: (spec: Spec, document: string) => Row[],
+  load: (document: string) => Promise<Spec> = loadSpec,
+): Promise<Row[]> {
+  for (const document of documents) {
+    const rows = read(await load(document), document);
+    if (rows.length > 0) return rows;
+  }
+  return [];
+}
+
 /** The scopes of the OAuth security scheme, each once, in the order the document gives them. */
 export function scopesOf(spec: Spec): Scope[] {
   const scopes = new Map<string, string>();
@@ -51,7 +68,12 @@ export function scopesOf(spec: Spec): Scope[] {
 
 /** The anchor Scalar gives a tag. */
 export function tagHref(document: string, tag: string): string {
-  return `#${document}/tag/${tag.toLowerCase().replaceAll(' ', '-')}`;
+  const slug = tag
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} -]/gu, '')
+    .trim()
+    .replace(/[ -]+/g, '-');
+  return `#${document}/tag/${slug}`;
 }
 
 /** The entries of one sidebar group that have operations, with the first sentence of each page. */

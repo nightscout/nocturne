@@ -19,8 +19,9 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// The patient record: its timezone, the devices linked to it, and its insulin configurations.
-/// Callers can read and change each of them.
+/// The patient record: diabetes type, diagnosis date, date of birth, sex and name, with the time
+/// zone, the devices and the insulins of the person. This is identifying health data. Callers can
+/// read and change each part.
 /// </summary>
 /// <remarks>
 /// Three resource types are exposed under <c>/api/v4/patient-record</c>:

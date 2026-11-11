@@ -26,18 +26,18 @@ A share link is a host name: `https://<token>.share.<base-domain>`. A request to
 
 ## Guest link
 
-A guest link is a short code, valid for 48 hours. The guest enters the code in the web app, which calls `POST /api/v4/guest-links/activate` and receives a session cookie. A tenant can have five active guest links.
+A guest link is a short code, valid for 48 hours. The guest enters the code in the web app, which calls `POST /api/v4/guest-links/activate` and receives a session cookie. A person can have five guest links at a time. A code that is not used yet counts.
 
 ## The 24-hour limit
 
-A member, an API token, an OAuth grant, a guest link and a share link can each be limited to the last 24 hours of data.
+A member, an API token, an OAuth grant, a guest link and a share link can each be limited to the last 24 hours of data. An owner, and a member who can change the tenant settings, cannot be limited as a member.
 
 For a limited reader:
 
 - A read returns only the records of the last 24 hours. Older records are absent, not refused: a list is shorter, and an older record is not found by its id.
-- A state that started earlier and is still in effect, such as the active profile or a pump mode, is still returned.
+- A state that started earlier and is still in effect, such as the active profile or a pump mode, is still returned to a member or a token. A share link never shows pump modes, overrides, profile switches or sleep.
 - Statistics and reports cover only what the reader can see.
-- Writes are not limited.
+- A limited reader can create a record with any time. It cannot change, delete or restore a record older than 24 hours: the record is not found.
 
 The limit is applied in the database, so it is the same for every read, including the legacy Nightscout API.
 

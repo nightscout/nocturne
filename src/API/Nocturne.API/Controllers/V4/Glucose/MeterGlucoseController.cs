@@ -13,8 +13,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Blood glucose meter readings, taken as discrete fingerstick values in mg/dL. List, read, create, update,
-/// and delete readings, and restore deleted ones.
+/// Blood glucose meter readings, taken as discrete fingerstick values in mg/dL. List, read, create
+/// (one or in bulk), update and delete readings. List deleted readings and restore them.
 /// </summary>
 /// <remarks>
 /// Readings are recorded by the uploader or directly by the patient device. Backed by

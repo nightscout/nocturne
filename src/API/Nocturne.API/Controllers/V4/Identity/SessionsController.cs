@@ -12,8 +12,8 @@ namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
 /// The web login sessions of the signed-in account. Each session is one login on one device. A
-/// caller can list sessions, revoke a session and revoke all other sessions. Revoking a session
-/// signs that device out wherever its tokens are used.
+/// caller can list sessions, revoke a session and revoke all other sessions. A revoked session
+/// cannot be renewed, and it ends when its current access token expires.
 /// </summary>
 /// <remarks>
 /// A session is a refresh-token rotation chain sharing a single OIDC session ID.

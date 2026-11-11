@@ -17,9 +17,10 @@ using Nocturne.Infrastructure.Data.Extensions;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Invites to join the tenant, and the tenant's members. A caller can send, list and revoke invites,
-/// accept an invite, list members, change a member's roles or permissions, set a member's 24-hour
-/// history limit, and step themselves down to a more limited role.
+/// Invites to join the tenant, and the tenant's members. A caller can send, list and revoke
+/// invites, accept an invite, list members, change a member's roles or permissions, set a member's
+/// 24-hour history limit, remove a member from the tenant, and step themselves down to a more
+/// limited role.
 /// </summary>
 /// <seealso cref="IMemberInviteService"/>
 /// <seealso cref="ITenantService"/>

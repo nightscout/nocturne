@@ -15,8 +15,9 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// The shared food catalog, with each user's favorite foods and recently used foods. Create, read, update,
-/// and delete foods. Deleting a food can clear or remove the meal attributions that reference it.
+/// The food catalog of the tenant, each user's favorite foods, and the recently used foods of the
+/// tenant. Create, read, update, and delete foods. Deleting a food can clear or remove the meal
+/// attributions that reference it.
 /// </summary>
 /// <remarks>
 /// Provides a V4-native (non-Nightscout-legacy) food catalog in addition to per-user

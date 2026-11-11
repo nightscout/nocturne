@@ -7,8 +7,9 @@ using Nocturne.Core.Contracts.Multitenancy;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The signed-in caller's effective permissions in the tenant the request resolves to. A caller can
-/// read the scopes and permissions its own access grants.
+/// The effective access of the current request in the tenant it resolves to. A caller can read the
+/// scopes its credential grants and whether it is limited to the last 24 hours of data. A public
+/// share link can also read its own access.
 /// </summary>
 /// <remarks>
 /// Permissions are populated by MemberScopeMiddleware from the user's roles

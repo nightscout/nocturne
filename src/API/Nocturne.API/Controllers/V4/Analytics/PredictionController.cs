@@ -10,8 +10,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Glucose forecast predictions. Callers can check the status of the prediction service and read the
-/// therapy profile a device needs to run its own oref forecast.
+/// Glucose forecast predictions. Callers can read the current forecast, check the status of the
+/// prediction service, and read the therapy profile a device needs to run its own oref forecast.
 /// </summary>
 /// <remarks>
 /// Supports the <c>DeviceStatus</c> source (AAPS, Trio and Loop loop data) and the <c>OrefWasm</c>

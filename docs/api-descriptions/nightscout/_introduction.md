@@ -22,7 +22,7 @@ Each tenant has its own host name: `https://<tenant>.<base-domain>`. An instance
 | Token | The `token` query parameter. |
 | Nocturne API token | In the `api-secret` header, in the `token` query parameter, or as `Authorization: Bearer`. |
 
-A Nocturne API token has scopes, so it can give an app less than full access. A person creates one in the web app, under **Settings**, then **Connectors**, then **API Tokens**.
+A Nocturne API token has scopes, so it can give an app less than full access. A person creates one in the web app, under **Settings**, then **Connectors & apps**, then **API tokens**.
 
 ## Quick start
 

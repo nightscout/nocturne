@@ -10,18 +10,31 @@ export type Block = {
   body: string;
 };
 
+// A fence of three or more backticks, indented at most three spaces, closed by a fence at least
+// as long. A page that fences a block another way is rendered by Scalar but not found here, and
+// the plugin then leaves the blocks of that name alone.
 const FENCE = new RegExp(
-  String.raw`^\`\`\`(${BLOCK_NAMES.join('|')})[ \t]*([^\n]*)\n([\s\S]*?)^\`\`\`[ \t]*$`,
+  String.raw`^ {0,3}(\`{3,})(${BLOCK_NAMES.join('|')})(?:[ \t]+([^\n]*))?\n([\s\S]*?)^ {0,3}\1\`*[ \t]*$`,
   'gm',
 );
 
 /** The blocks of a markdown source, in order. Scalar keeps that order in the rendered page. */
 export function parseBlocks(source: string): Block[] {
-  return [...source.replace(/\r\n/g, '\n').matchAll(FENCE)].map(([, name, argument, body]) => ({
+  return [...source.replace(/\r\n/g, '\n').matchAll(FENCE)].map(([, , name, argument, body]) => ({
     name: name as BlockName,
-    argument: argument.trim(),
+    argument: (argument ?? '').trim(),
     body: body.trim(),
   }));
+}
+
+/**
+ * Pairs the rendered code blocks of one name with the source blocks of that name, in order.
+ * Null when the two counts differ: a pairing by position would then put an argument on the
+ * wrong block.
+ */
+export function pairBlocks<Rendered>(name: BlockName, rendered: Rendered[], blocks: Block[]): [Rendered, Block][] | null {
+  const parsed = blocks.filter((block) => block.name === name);
+  return parsed.length === rendered.length ? rendered.map((element, index) => [element, parsed[index]]) : null;
 }
 
 export type Inline = { kind: 'text' | 'code' | 'strong'; text: string } | { kind: 'link'; text: string; href: string };
@@ -51,6 +64,7 @@ export function parseInline(text: string): Inline[] {
   return tokens;
 }
 
-function isSafeHref(href: string): boolean {
-  return /^(https?:\/\/|#|\/)/.test(href);
+/** An `https` URL, an anchor, or a path on this site. `//host` and `/\host` name another site. */
+export function isSafeHref(href: string): boolean {
+  return /^(https:\/\/|#|\/(?![/\\]))/.test(href);
 }

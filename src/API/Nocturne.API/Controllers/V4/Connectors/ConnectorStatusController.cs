@@ -10,7 +10,7 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Health and status of the data connectors. Read the last-seen time and error state of each connector.
+/// Health and status of the data connectors. Read the state of each connector.
 /// </summary>
 /// <remarks>
 /// Connector status is maintained by <see cref="IConnectorHealthService"/>, which tracks

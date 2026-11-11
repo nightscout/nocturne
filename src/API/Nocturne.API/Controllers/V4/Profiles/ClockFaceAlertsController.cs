@@ -15,8 +15,9 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Alerts shown on a public clock face whose owner has chosen to show them. Read the alerts, and mark an
-/// alert as seen.
+/// Alerts shown on a public clock face whose owner has chosen to show them. Read the alerts, and
+/// record that someone at the clock saw an alert. Recording this does not acknowledge or mute the
+/// alert. These endpoints need no sign-in: the id of the clock face gives access.
 /// </summary>
 /// <remarks>
 /// Shown when <see cref="ClockSettings.ShowAlerts"/> is on for the face.

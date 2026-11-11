@@ -13,8 +13,8 @@ namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
 /// Temporary guest links that give a person read-only access to the tenant's data. A caller can
-/// create, list and revoke links, read the scope options a link can grant, activate a link,
-/// dismiss a link and list pending links.
+/// create, list, revoke and dismiss links, and read the scope options a link can grant. A guest
+/// activates a link with its code, and can check whether a code is waiting to be activated.
 /// </summary>
 [ApiController]
 [System.ComponentModel.DisplayName("Guest Links")]

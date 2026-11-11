@@ -10,8 +10,9 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// Body weight readings from connected health apps, as a time series. Callers can list, read, add
-/// singly or in batches, update and delete readings.
+/// Body weight readings, as a time series, from connected health apps or entered by hand. Callers
+/// can list, read, add singly or in batches, update and delete readings. Reads need
+/// <c>therapy.read</c> and writes need <c>therapy.readwrite</c>.
 /// </summary>
 /// <remarks>
 /// Provides time-series weight readings sourced from connected health apps.

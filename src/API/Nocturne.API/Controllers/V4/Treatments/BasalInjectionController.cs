@@ -11,8 +11,9 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Long-acting basal insulin injections for multiple daily injection (MDI) therapy. List, read, create,
-/// update, and delete injections, and restore deleted ones.
+/// Long-acting basal insulin injections for multiple daily injection (MDI) therapy. List, read,
+/// create (one or in bulk), update and delete injections. List deleted injections and restore them.
+/// Delete an injection by its data source and sync identifier.
 /// </summary>
 /// <remarks>
 /// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>,

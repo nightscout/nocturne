@@ -9,7 +9,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Bolus calculation records. List, read, create, update, and delete calculations, and restore deleted ones.
+/// Bolus calculation records. List, read, create (one or in bulk), update and delete calculations.
+/// List deleted calculations and restore them.
 /// </summary>
 /// <remarks>
 /// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.

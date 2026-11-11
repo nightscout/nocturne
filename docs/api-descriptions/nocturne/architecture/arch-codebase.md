@@ -37,7 +37,7 @@ Nocturne is a .NET 10 rewrite of the Nightscout API with a SvelteKit web app. It
 ## Rules that shape the code
 
 - **The backend is the source of truth.** The API computes calculations, categories and chart colors. The web app only renders them.
-- **Time is stored as Unix milliseconds.** Other date fields on a model are computed from that value.
+- **Each record has one source of time.** A v4 record stores `timestamp`, and `mills` is computed from it. A legacy entry stores Unix milliseconds, and its date fields are computed from that.
 - **The database isolates each tenant.** PostgreSQL Row Level Security enforces it, so a query that has no tenant filter still returns only the rows of that tenant.
 - **Legacy data has no tables of its own.** A v1, v2 or v3 write is decomposed into v4 records, and a legacy read is projected back from them.
 - **The TypeScript client is generated.** See [Type safety pipeline](#nocturne/tag/arch-type-safety).
@@ -45,8 +45,6 @@ Nocturne is a .NET 10 rewrite of the Nightscout API with a SvelteKit web app. It
 ## Project dependencies
 
 The layers depend inward. `API` and `Infrastructure` depend on `Core`, and `Core` depends on nothing outside itself.
-
-<!-- diagram: project-dependencies.mmd -->
 
 ## Run it
 

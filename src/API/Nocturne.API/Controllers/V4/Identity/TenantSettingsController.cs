@@ -18,9 +18,9 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Settings that the tenant's own administrators control. A caller can update the public docs
-/// setting and the display name, read and update the patient relationship, and read and update the
-/// units and time zone.
+/// Settings that the tenant's own administrators control. A caller can read the settings, update
+/// the public docs setting and the display name, and read and update the patient relationship, the
+/// units and the time zone. The patient relationship, the units and the time zone need full access.
 /// </summary>
 /// <remarks>
 /// Set by the tenant's own administrators, as opposed to the platform-admin surface in

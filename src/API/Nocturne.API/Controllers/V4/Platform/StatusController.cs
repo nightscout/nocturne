@@ -8,8 +8,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// System status as JSON, plus a health check. For the Nightscout-compatible HTML status page,
-/// use <c>/api/v1/status</c>.
+/// System status as JSON, plus a health check. The Nightscout-compatible status is at
+/// <c>/api/v1/status</c>.
 /// </summary>
 /// <seealso cref="IStatusService"/>
 [ApiController]

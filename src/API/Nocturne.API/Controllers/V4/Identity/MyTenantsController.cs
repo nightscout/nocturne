@@ -14,12 +14,11 @@ namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
 /// The tenants the signed-in account belongs to. A caller can list them, read an overview of each,
-/// check whether a slug is available, and create a tenant.
+/// and check whether a slug is available. A caller can create a tenant when the operator allows
+/// self-service creation.
 /// </summary>
 /// <remarks>
 /// All tenants for which the authenticated subject has an active membership are returned.
-/// Tenant switching writes a new <c>X-Tenant-Slug</c> cookie that is read by subsequent
-/// requests' tenant-resolution middleware.
 /// </remarks>
 /// <seealso cref="ITenantService"/>
 [ApiController]

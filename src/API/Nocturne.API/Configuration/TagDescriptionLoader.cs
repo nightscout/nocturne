@@ -5,8 +5,9 @@ namespace Nocturne.API.Configuration;
 
 /// <summary>
 /// Loads OpenAPI tag descriptions from folder-based markdown sources under
-/// <c>docs/api-descriptions</c>. Each <c>.md</c> file is one tag: the file name (sans
-/// extension) is the tag name, and the top-level folder is the OpenAPI document it
+/// <c>docs/api-descriptions</c>. Each <c>.md</c> file is one page: the file name (sans
+/// extension) is the name of a <c>[Tags]</c> area or, for a standalone page, its tag, and
+/// the top-level folder is the OpenAPI document it
 /// belongs to (<c>nocturne</c> or <c>nightscout</c>). Deeper subfolders are purely
 /// organizational. Optional YAML frontmatter carries <c>displayName</c> (sidebar label
 /// override) and <c>standalone</c> (a conceptual page with no operations of its own).

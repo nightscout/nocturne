@@ -23,8 +23,11 @@ The services of a published Nocturne instance and how traffic reaches them. Both
 
 The gateway sends these paths directly to `nocturne-api`:
 
-- `/api/oauth` and `/api/auth/oidc`
+- `/api/oauth`, `/api/auth/oidc` and `/api/auth/platform-access`
 - `/.well-known`
 - `/openapi` and `/scalar`
+- `/pebble`
 
-Every other path goes to `nocturne-web`. Its server side forwards `/api` requests to `nocturne-api` and renders the app for the rest.
+Every other path goes to `nocturne-web`. Its server side forwards most `/api` requests to `nocturne-api`, answers a few itself, and renders the app for the rest. The diagram is the full list.
+
+The gateway has no route for `/hubs`, so the SignalR hubs are not reachable from outside the instance.

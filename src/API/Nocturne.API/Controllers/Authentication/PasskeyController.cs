@@ -21,8 +21,9 @@ using Nocturne.Infrastructure.Data.Extensions;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Passkey sign-in, registration and recovery. A caller can register a passkey, sign in with one, use a
-/// recovery code, and list, delete or regenerate passkeys and recovery codes.
+/// Passkey sign-in, registration and recovery. A caller can register a passkey, sign in with one,
+/// and sign in with a recovery code. A signed-in caller can list and delete passkeys, create a new
+/// set of recovery codes, and read how many recovery codes remain.
 /// </summary>
 /// <remarks>
 /// Implements WebAuthn/FIDO2 ceremonies.

@@ -465,8 +465,9 @@ app.MapScalarApiReference((options, httpContext) =>
     options.AddDocument("nightscout", "Nightscout API");
     // Built from src/Web/packages/scalar-plugin; renders the diagrams and the other fenced blocks
     // of the reference pages.
-    // Absolute: Scalar imports it from its own script, which has no base URL to resolve a path against.
-    options.AddPluginUrl($"{httpContext.Request.Scheme}://{httpContext.Request.Host}/scalar/nocturne-plugin.js");
+    // A path: this page loads Scalar from its own host, so the import resolves against the page and
+    // does not depend on the forwarded scheme or host.
+    options.AddPluginUrl("/scalar/nocturne-plugin.js");
     if (!string.IsNullOrEmpty(scalarCss))
         options.WithCustomCss(scalarCss);
     options.EnablePersistentAuthentication();

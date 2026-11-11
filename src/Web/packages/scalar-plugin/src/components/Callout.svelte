@@ -8,12 +8,15 @@
 
   let { type = 'info', body }: { type?: CalloutType; body: string } = $props();
 
+  const LABELS: Record<CalloutType, string> = { info: 'Note', tip: 'Tip', warning: 'Warning', danger: 'Danger' };
+
   const paragraphs = $derived(body.split(/\n\s*\n/).map((paragraph) => parseInline(paragraph.replace(/\n/g, ' '))));
 </script>
 
 <div class="callout {type}" role="note">
-  {#each paragraphs as paragraph}
+  {#each paragraphs as paragraph, index}
     <p>
+      {#if index === 0}<strong class="label">{LABELS[type]}:</strong>{/if}
       {#each paragraph as token}
         {#if token.kind === 'code'}<code>{token.text}</code>
         {:else if token.kind === 'strong'}<strong>{token.text}</strong>

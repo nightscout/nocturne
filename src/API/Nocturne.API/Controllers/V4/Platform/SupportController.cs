@@ -15,9 +15,8 @@ namespace Nocturne.API.Controllers.V4.Platform;
 internal sealed record SupportImageLimits(int MaxCount, long MaxBytesEach, long MaxTotalBytes);
 
 /// <summary>
-/// Support issues and diagnostics. Submit an issue, or relay one from an instance without its own
-/// access token. Read the diagnostics, the support configuration, or a pre-filled issue link for
-/// when the API is unavailable.
+/// Support issues and diagnostics. Submit an issue. Read the diagnostics, the support
+/// configuration, or a pre-filled issue link for when the API is unavailable.
 /// </summary>
 /// <remarks>
 /// Issues are filed through <see cref="GitHubIssueService"/>.

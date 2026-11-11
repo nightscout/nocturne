@@ -23,7 +23,7 @@ Authorization: Bearer <token>
 
 An API token starts with `noc_`. It belongs to one tenant and works only on the host of that tenant.
 
-To create one, sign in to the web app and open **Settings**, then **Connectors**, then **API Tokens**. Select the scopes, and copy the token. It is shown once.
+To create one, sign in to the web app and open **Settings**, then **Connectors & apps**, then **API tokens**. Select the scopes, and copy the token. It is shown once.
 
 ```callout warning
 A token made in the web app does not expire. Keep it as safe as a password, and revoke it when it is no longer needed.
@@ -50,7 +50,7 @@ All clients are public: there is no client secret. PKCE with `S256` is required.
 | Exchange the code, and refresh | `POST /api/oauth/token` |
 | Start a device grant | `POST /api/oauth/device` |
 
-Each refresh returns a new refresh token. Store it and discard the old one. If an old refresh token is used again, Nocturne revokes the whole grant, and the person must approve the app again.
+Each refresh returns a new refresh token. Store it and discard the old one. If an old refresh token is used again later, Nocturne revokes the whole grant, and the person must approve the app again.
 
 The step-by-step guides, with code, are on the documentation site:
 
@@ -63,7 +63,7 @@ The step-by-step guides, with code, are on the documentation site:
 A scope names a category of data and a level: `glucose.read`, `treatments.readwrite`.
 
 - `read` allows reads. `readwrite` allows reads, writes and deletes, and includes `read`.
-- `health.read` and `health.readwrite` are short forms for all the health data categories.
+- `health.read` is read access to glucose, treatments, devices, therapy settings, heart rate, step counts, sleep and food. `health.readwrite` is write access to the same set. Neither includes alerts or reports.
 - `*` is full access. Ask for the smallest set of scopes that the client needs.
 
 ```scopes
@@ -80,7 +80,7 @@ The permissions of a request are the scopes of the credential, limited by the ro
 | `401` | No credential, or the credential is not valid for this tenant. |
 | `403` | The credential is valid but does not have the scope. |
 | `429` | Too many requests. The sign-in and token endpoints are rate limited. Wait and try again. |
-| `503` with `"error": "setup_required"` | The tenant is not set up yet. Complete setup in the web app. |
+| `503` | The tenant is not set up yet (`"error": "setup_required"`) or is in recovery mode (`"error": "recovery_mode_active"`). |
 
 The OAuth endpoints return errors as `{ "error": "...", "error_description": "..." }`.
 

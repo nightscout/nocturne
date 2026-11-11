@@ -10,7 +10,8 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Notes about diabetes care. List, read, create, update, and delete notes, and restore deleted ones.
+/// Notes about diabetes care. List, read, create (one or in bulk), update and delete notes. List
+/// deleted notes and restore them. Delete a note by its data source and sync identifier.
 /// </summary>
 /// <remarks>
 /// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.

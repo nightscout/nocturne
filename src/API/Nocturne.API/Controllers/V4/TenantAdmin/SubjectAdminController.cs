@@ -7,10 +7,11 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// User accounts on the instance. List accounts, deactivate them, and change platform admin roles.
+/// Platform administrator rights of a user account. Grant or remove the right for one account. The
+/// last platform administrator cannot be removed.
 /// </summary>
 /// <remarks>
-/// Provides administrative operations on user accounts: listing, deactivation, and role changes.
+/// Grants and removes the platform admin role of a subject.
 /// Restricted to users with the <c>platform_admin</c> role. Allowed during initial setup so that
 /// an administrator can manage accounts before normal login is possible.
 /// </remarks>

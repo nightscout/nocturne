@@ -10,11 +10,9 @@ Nightscout stores a few large documents. One treatment document can be a bolus, 
 
 This makes a record easy to validate and to query. A legacy Nightscout document is stored as one or more of these records, and the Nightscout API builds the legacy shape from them when it is read.
 
-<!-- diagram: er-overview.mmd -->
-
 ## Every record
 
-Each time-based record starts with the same fields:
+Each time-based record starts with the same fields. Calibrations, meter glucose and bolus calculations have no `syncIdentifier`.
 
 | Field | Meaning |
 | --- | --- |
@@ -78,7 +76,7 @@ A meal is not a stored record. It is a view of a carb intake with the boluses an
 
 ## States that last
 
-A state span has a start and an end: a pump mode, an override, a temporary target, an active profile, or a period of sleep, exercise, illness or travel. A span with no end is still in effect. See **State Spans** in the Treatments group.
+A state span has a start and an end: a pump mode, an override, a temporary target, an active profile, or a period of exercise, illness or travel. Sleep is stored as sleep sessions, in the Health group. A span with no end is still in effect. See **State Spans** in the Treatments group.
 
 ## Therapy settings
 

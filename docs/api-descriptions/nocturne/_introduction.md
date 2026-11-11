@@ -20,7 +20,7 @@ Each tenant has its own host name: `https://<tenant>.<base-domain>`. An instance
 
 ### 2. Create an API token
 
-Sign in to the web app. Open **Settings**, then **Connectors**, then **API Tokens**, and create a token with the `glucose.read` scope. The token starts with `noc_` and is shown once.
+Sign in to the web app. Open **Settings**, then **Connectors & apps**, then **API tokens**, and create a token with the `glucose.read` scope. The token starts with `noc_` and is shown once.
 
 ### 3. Read the latest glucose value
 
@@ -67,7 +67,7 @@ The token is an API token (`noc_...`) or an OAuth 2.0 access token. The **Authen
 ### JSON
 
 - Property names are camelCase.
-- Enum values are strings in PascalCase, such as `"Flat"` or `"Normal"`.
+- Enum values are strings. The schema of each enum lists its values.
 - A property with no value is `null`.
 
 ### Time
@@ -96,19 +96,19 @@ A list operation accepts these query parameters:
 | `device`, `source` | none | Return only the records of one device or one data source. |
 | `includeTotal` | `false` | Add the total number of records in the time range to the response. |
 
-The response has the records in `data` and the page in `pagination`. `pagination.total` is present when you ask for it with `includeTotal=true`.
+The response has the records in `data` and the page in `pagination`. `pagination.total` is present when you ask for it with `includeTotal=true`. It counts the records in the time range and ignores the `device` and `source` filters.
 
 ### Identifiers and duplicates
 
 - `id` is a UUID that Nocturne assigns.
-- `dataSource` and `syncIdentifier` together are the key of a record in the system that wrote it. Send both on each create. A create with a pair that already exists updates that record and does not add a second one, so a retry is safe.
+- `dataSource` and `syncIdentifier` together are the key of a record in the system that wrote it. Send both on each create. A create with a pair that already exists updates that record and does not add a second one, so a retry is safe. Calibrations, meter glucose and bolus calculations have no `syncIdentifier`: a retried create of one of these adds a second record.
 - `correlationId` links records that describe one event, such as a bolus and the carbs it covers.
 
 The **Syncing** guide has the details.
 
 ### Bulk create
 
-`POST .../bulk` accepts an array of at most 1000 records. If one record is not valid, the request fails with `400` and nothing is saved. The message gives the index of the record.
+`POST .../bulk` accepts an array of at most 1000 records. If one record is not valid, the request fails with `400` and nothing is saved.
 
 ### Deleted records
 
@@ -120,11 +120,11 @@ A delete hides a record and keeps it for a time (30 days by default), so a mista
 | `POST .../{id}/restore` | Restores one record. |
 | `POST .../restore` | Restores the records in an array of ids. |
 
-A restore returns `409` when a newer record holds the same `dataSource` and `syncIdentifier`. A create with the key of a deleted record also returns `409`: restore the record, or use a new `syncIdentifier`.
+A restore returns `409` when a newer record holds the same `dataSource` and `syncIdentifier`. A create with the key of a record that a person deleted also returns `409`: restore the record, or use a new `syncIdentifier`. A bulk create leaves such a record out and saves the rest.
 
 ### Errors
 
-An error has a problem details body (RFC 9457). Its `detail` says what is wrong.
+An error from an operation has a problem details body (RFC 9457). Its `detail` says what is wrong. The OAuth operations, and a `503`, have a body with an `error` code in place of problem details.
 
 | Status | Meaning |
 | --- | --- |
@@ -133,11 +133,11 @@ An error has a problem details body (RFC 9457). Its `detail` says what is wrong.
 | `404` | No record has that id, or the host matches no tenant. |
 | `409` | The record conflicts with another one. See **Deleted records**. |
 | `429` | Too many requests. Wait and try again. |
-| `503` | The tenant is not set up yet. Complete setup in the web app. |
+| `503` | The tenant is not set up yet, or is in recovery mode. The `error` in the body says which. |
 
 ### Caching
 
-Record lists are sent with `Cache-Control: no-store`. Computed reads, such as chart data, can be cached by the client for a short time and say so in `Cache-Control`. Version 4 does not use `ETag` or `Last-Modified`.
+A response says in `Cache-Control` if the client can keep it. No response can be kept by a shared cache. Version 4 does not use `ETag` or `Last-Modified`.
 
 ## Where the data is
 

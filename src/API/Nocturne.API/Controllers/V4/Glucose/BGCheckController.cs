@@ -9,8 +9,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Blood glucose checks taken by fingerstick or another manual method. List, read, create, update, and delete
-/// checks, and restore deleted ones.
+/// Blood glucose checks taken by fingerstick or another manual method. List, read, create (one or
+/// in bulk), update and delete checks. List deleted checks and restore them.
 /// </summary>
 /// <remarks>
 /// Backed by <see cref="IBGCheckRepository"/>. Inherits standard list, get-by-ID, create, update, and delete operations from

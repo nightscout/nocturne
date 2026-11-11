@@ -7,7 +7,7 @@
       target: HTMLElement,
       source: string,
       options: { idPrefix: string; fontFamily: string; limit: number; onError: () => void },
-    ) => void;
+    ) => { destroy?: () => void } | void;
   };
 
   let pele: Promise<Pele> | undefined;
@@ -22,11 +22,14 @@
 
   let frame: HTMLDivElement;
   let canvas: HTMLDivElement;
-  let state = $state<'pending' | 'rendered' | 'error'>('pending');
+  let phase = $state<'pending' | 'rendered' | 'error'>('pending');
   let message = $state('Loading diagram…');
   let fullscreen = $state(false);
 
   $effect(() => {
+    let handle: { destroy?: () => void } | void;
+    let disposed = false;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
@@ -34,17 +37,21 @@
 
         loadPele().then(
           ({ mount }) => {
-            state = 'rendered';
-            mount(canvas, source, {
+            if (disposed) return;
+            phase = 'rendered';
+            handle = mount(canvas, source, {
               idPrefix: `m${Math.random().toString(36).slice(2)}-`,
               // Labels are measured in the font of the page, so the boxes fit the text Scalar draws.
               fontFamily: getComputedStyle(canvas).fontFamily,
               limit: SOURCE_LIMIT,
-              onError: () => (state = 'error'),
+              onError: () => {
+                phase = 'error';
+                message = 'This diagram could not be drawn.';
+              },
             });
           },
           (error: Error) => {
-            state = 'error';
+            phase = 'error';
             message = `Diagram failed to load: ${error.message}`;
           },
         );
@@ -52,8 +59,12 @@
       { rootMargin: '200px' },
     );
 
-    observer.observe(canvas);
-    return () => observer.disconnect();
+    observer.observe(frame);
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      handle?.destroy?.();
+    };
   });
 
   async function toggleFullscreen() {
@@ -67,10 +78,10 @@
 </script>
 
 <div class="frame" bind:this={frame} onfullscreenchange={() => (fullscreen = document.fullscreenElement === frame)}>
-  <button type="button" onclick={toggleFullscreen}>{fullscreen ? 'Exit' : 'Fullscreen'}</button>
-  <div class="canvas" class:pending={state !== 'rendered'} bind:this={canvas}>
-    {#if state !== 'rendered'}{message}{/if}
-  </div>
+  <button type="button" onclick={toggleFullscreen}>{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
+  {#if phase !== 'rendered'}<p class="status" role="status">{message}</p>{/if}
+  <!-- The diagram library owns the contents of this element; Svelte renders nothing into it. -->
+  <div class="canvas" bind:this={canvas}></div>
 </div>
 
 <style>
@@ -104,13 +115,14 @@
   }
   .canvas {
     display: block;
-    min-height: 120px;
   }
-  .pending {
+  .status {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--scalar-color-3, #888);
+    min-height: 120px;
+    margin: 0;
+    color: var(--scalar-color-2, #888);
     font-size: 0.85em;
   }
   button {
@@ -125,10 +137,5 @@
     border: var(--scalar-border-width, 1px) solid var(--scalar-border-color, rgba(127, 127, 127, 0.3));
     border-radius: 4px;
     cursor: pointer;
-    opacity: 0.7;
-  }
-  button:hover,
-  button:focus-visible {
-    opacity: 1;
   }
 </style>

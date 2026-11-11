@@ -16,8 +16,9 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Authenticator app codes (TOTP) for sign-in. A caller can set up an authenticator, verify it, list and
-/// remove authenticators, and sign in with a code.
+/// Authenticator app codes (TOTP) as a second step of sign-in. A caller can set up an
+/// authenticator, verify it, and list and remove authenticators. A code completes a sign-in that a
+/// passkey or an external provider started. A code alone never signs in.
 /// </summary>
 /// <remarks>
 /// TOTP is never a sole factor: <see cref="Setup"/> requires at least one primary auth factor

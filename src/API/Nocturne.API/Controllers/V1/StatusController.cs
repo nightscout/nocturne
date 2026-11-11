@@ -9,8 +9,8 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Nightscout status: returns <c>STATUS OK</c> as HTML by default. A client that asks for JSON in the Accept header
-/// receives the status as JSON.
+/// Nightscout status. A client that accepts JSON, or any content type, receives the status as JSON.
+/// A client that asks only for HTML receives <c>STATUS OK</c> as HTML.
 /// </summary>
 /// <remarks>
 /// Provides 1:1 compatibility with Nightscout status endpoint. For detailed JSON status, use the V4 status

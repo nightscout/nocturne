@@ -15,13 +15,13 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
 /// Access requests from users who want to join the instance. List pending requests, then approve or
-/// deny them.
+/// deny them. Denying a request deletes the account that made it.
 /// </summary>
 /// <remarks>
 /// Access requests are created when an unauthenticated user completes the
 /// <c>POST /api/auth/passkey/access-request/complete</c> ceremony. Admins with the
 /// <c>platform_admin</c> role can list pending requests, approve them (activating the subject
-/// and adding them as a tenant member), or reject them (deactivating the subject record).
+/// and adding them as a tenant member), or reject them (deleting the subject record).
 /// </remarks>
 /// <seealso cref="ISubjectService"/>
 /// <seealso cref="IAccessRequestService"/>

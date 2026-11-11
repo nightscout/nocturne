@@ -15,9 +15,10 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Therapy profiles: their settings, and their basal, carb ratio, sensitivity, and target range schedules.
-/// Read the profile summary, active schedules, and profile records. Create, update, and delete settings and
-/// schedules, and set the default profile.
+/// Therapy profiles: their settings, and their basal, carb ratio, sensitivity, and target range
+/// schedules. Read the profile summary, active schedules, and profile records. Create, update, and
+/// delete settings and schedules, and set the default profile. Deleting a profile by name removes
+/// its settings and all of its schedules.
 /// </summary>
 /// <seealso cref="ITherapySettingsRepository"/>
 /// <seealso cref="IBasalScheduleRepository"/>

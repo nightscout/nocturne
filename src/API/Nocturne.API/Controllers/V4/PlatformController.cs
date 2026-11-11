@@ -12,8 +12,9 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Cross-tenant endpoints on the apex domain. Signed-in users list their tenants, create a tenant,
-/// and read the multitenancy transition status.
+/// Cross-tenant endpoints on the apex domain. Signed-in users list their tenants and read the
+/// multitenancy transition status. They can create a tenant when the operator allows self-service
+/// creation.
 /// </summary>
 /// <remarks>
 /// These operate without a resolved tenant context. Tenant creation requires

@@ -9,9 +9,9 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Continuous glucose monitor (CGM) calibrations: the slope, intercept, and scale values that a sensor
-/// transmitter applies to the raw signal. List, read, create, update, and delete calibrations, and restore
-/// deleted ones.
+/// Continuous glucose monitor (CGM) calibrations: the slope, intercept, and scale values that a
+/// sensor transmitter applies to the raw signal. List, read, create (one or in bulk), update and
+/// delete calibrations. List deleted calibrations and restore them.
 /// </summary>
 /// <remarks>
 /// Backed by <see cref="ICalibrationRepository"/>. Inherits standard list, get-by-ID, create, update, and delete operations from

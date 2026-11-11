@@ -36,10 +36,10 @@ The **Data Model** pages of the Nightscout document show each mapping as a diagr
 | Time | `date` in milliseconds, `created_at`, `dateString`. | `timestamp` in ISO 8601, with `mills` as a read-only copy. |
 | Glucose | `sgv` or `mbg`, with the unit implied. | `mgdl` and `mmol` on each record. |
 | Lists | `count` and `find[...]` query syntax. | `from`, `to`, `limit`, `offset`, `sort`. |
-| Duplicates | Depends on the uploader. | `dataSource` and `syncIdentifier`. A retry updates the record. |
+| Duplicates | Depends on the uploader. | `dataSource` and `syncIdentifier`. For most record types, a retry updates the record. |
 | Credentials | One API secret with full access. | Tokens with scopes. |
 | Errors | `{ status, message }`. | Problem details (RFC 9457). |
-| Real time | Socket.IO. | SignalR. A bridge serves Socket.IO clients. |
+| Real time | Socket.IO. | SignalR hubs, where the gateway of the instance routes them. A bridge serves Socket.IO clients. |
 
 ## Move in steps
 

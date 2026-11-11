@@ -10,8 +10,8 @@ using IAuthorizationService = Nocturne.Core.Contracts.Identity.IAuthorizationSer
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// Nightscout authorization: access requests, permissions, subjects and roles. A client can read permissions,
-/// and list, create, update and delete subjects and roles.
+/// Nightscout authorization. A client can exchange an access token for a JWT and read its
+/// permissions. A client with full access can list, create, update and delete subjects and roles.
 /// </summary>
 /// <remarks>
 /// Provides 1:1 compatibility with Nightscout authorization endpoints.

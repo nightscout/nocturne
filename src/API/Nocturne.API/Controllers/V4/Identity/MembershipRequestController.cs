@@ -10,9 +10,9 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Requests to join the tenant, and their approval. A caller can ask to join, list its own requests,
-/// and read or change the request settings. Members with the <c>members.manage</c> permission can
-/// list, approve and deny requests.
+/// Requests to join the tenant, and their approval. A caller can ask to join and read its own
+/// request. Members with the <c>members.manage</c> permission can list, approve and deny requests,
+/// and read or change the request settings.
 /// </summary>
 [ApiController]
 [System.ComponentModel.DisplayName("Membership Requests")]
