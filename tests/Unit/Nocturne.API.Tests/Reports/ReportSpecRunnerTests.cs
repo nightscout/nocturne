@@ -562,6 +562,19 @@ public class ReportSpecRunnerTests
     }
 
     [Fact]
+    public async Task Each_panel_result_carries_its_group_as_sent()
+    {
+        var fine = new FakeDataset("fine", Scope.GlucoseRead, TimeSpan.Zero);
+        var (runner, context, _, _) = Arrange(new ReportDatasetRegistry([fine]), Scope.GlucoseRead);
+        var spec = FakeSpec("fine", "fine", "fine");
+        spec = spec with { Panels = [spec.Panels[0] with { Group = "set" }, spec.Panels[1] with { Group = "set" }, spec.Panels[2]] };
+
+        var result = await runner.RunAsync(spec, context, CancellationToken.None);
+
+        result.Panels.Select(p => p.Group).Should().Equal("set", "set", null);
+    }
+
+    [Fact]
     public async Task A_caller_that_cancels_is_not_reported_as_a_timeout()
     {
         var stuck = new FakeDataset("stuck", Scope.GlucoseRead, Timeout.InfiniteTimeSpan);

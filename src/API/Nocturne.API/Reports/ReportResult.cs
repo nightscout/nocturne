@@ -66,6 +66,9 @@ internal sealed record ReportPanelResult
 
     public string? Title { get; init; }
 
+    /// <summary>The spec's <see cref="ReportPanelSpec.Group"/>, as sent; null for none.</summary>
+    public string? Group { get; init; }
+
     public required ReportPanelKind Kind { get; init; }
 
     /// <summary>Ok when the panel, or at least one of a chart's layers, was read.</summary>

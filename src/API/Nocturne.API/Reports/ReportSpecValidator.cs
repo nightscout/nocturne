@@ -318,4 +318,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
 
     [GeneratedRegex(ReportSpec.IdPattern)]
     private static partial Regex IdPattern();
+
+    [GeneratedRegex(ReportSpec.GroupPattern)]
+    private static partial Regex GroupPattern();
 }

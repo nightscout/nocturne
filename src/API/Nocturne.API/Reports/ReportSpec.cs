@@ -26,6 +26,8 @@ internal sealed record ReportSpec
     public const int MaxTitleLength = 200;
     public const int MaxIdLength = 32;
     public const string IdPattern = "^[A-Za-z0-9_-]{1,32}$";
+    public const int MaxGroupLength = 40;
+    public const string GroupPattern = "^[A-Za-z0-9_-]{1,40}$";
 
     /// <summary>The largest spec, as UTF-8 JSON, a request may carry, its <see cref="Builder"/> apart.</summary>
     public const int MaxSpecBytes = 16 * 1024;
@@ -120,6 +122,19 @@ internal sealed record ReportPanelSpec
     [Description("The panel heading. Optional.")]
     [StringLength(ReportSpec.MaxTitleLength)]
     public string? Title { get; init; }
+
+    /// <summary>
+    /// Names a set of panels that lay out together, such as small charts of one question. A set is a run of
+    /// consecutive panels with the same group; the same group again after another panel starts a new set. Returned
+    /// on the panel's result and read by nothing else, so it changes no read, cache key or audit row.
+    /// </summary>
+    [Description(
+        "A short identifier (letters, digits, '-' and '_') that consecutive panels share to lay out as one set, such as "
+        + "small charts side by side. Only a run of consecutive panels is a set. Optional.")]
+    [StringLength(ReportSpec.MaxGroupLength)]
+    [RegularExpression(ReportSpec.GroupPattern)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Group { get; init; }
 
     [Description("chart (tracks of layers), stat_tiles, table or comparison.")]
     [JsonRequired]

@@ -42,6 +42,10 @@ public enum ChartColor
     [EnumMember(Value = "insulin-temp-basal"), JsonStringEnumMemberName("insulin-temp-basal")]
     InsulinTempBasal,
 
+    /// <summary>The rate the basal schedule calls for: the basal hue, told apart from delivered and temp basal by lightness.</summary>
+    [EnumMember(Value = "insulin-scheduled-basal"), JsonStringEnumMemberName("insulin-scheduled-basal")]
+    InsulinScheduledBasal,
+
     // Carbs
     [EnumMember(Value = "carbs"), JsonStringEnumMemberName("carbs")]
     Carbs,

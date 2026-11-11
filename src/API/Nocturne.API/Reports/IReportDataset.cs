@@ -120,6 +120,12 @@ internal sealed record ReportField(
     /// <summary>A row field that says, as <c>yes</c>, that the algorithm gave the row's bolus; a markers layer draws it outlined.</summary>
     public const string AutomaticField = "automatic";
 
+    /// <summary>
+    /// On a layer result: the texture the field is drawn with, because an earlier series on its track has its colour
+    /// and its mark (<see cref="ReportSpecRunner.Texture"/>); null to draw it plain.
+    /// </summary>
+    public string? Texture { get; init; }
+
     public bool IsNumber => Kind is ReportFieldKind.Number or ReportFieldKind.Percent;
 
     /// <summary>The horizontal axis a field of this kind lays a chart along, or null for a value field.</summary>

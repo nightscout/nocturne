@@ -50,7 +50,7 @@ internal sealed class DailyProfileDataset : IReportDataset
         new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the slot's readings.", Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
         new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the slot across the range.", Aggregate: ReportAggregate.Sum),
         new("scheduledBasal", "Scheduled basal", ReportFieldKind.Number, "U/h", "Median scheduled basal, including any override's scale.",
-            Scope.TherapyRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
+            Scope.TherapyRead, ChartColor.InsulinScheduledBasal, Aggregate: ReportAggregate.Mean, Setting: ReportSetting.Profile),
         new("deliveredBasal", "Delivered basal", ReportFieldKind.Number, "U/h", "Median delivered basal.", Scope.TreatmentsRead, ChartColor.InsulinBasal, Aggregate: ReportAggregate.Mean),
         new("netLoopCorrection", "Net loop correction", ReportFieldKind.Number, "U/h",
             "Mean across days of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, Aggregate: ReportAggregate.Mean,

@@ -147,6 +147,45 @@ public class ReportWorkspaceTests
         full.LeaveOuts.Should().OnlyContain(l => l.Permitted);
     }
 
+    /// <summary>
+    /// Every one- and two-layer track the cells of one lens make, hued and textured as the runner does them: no two
+    /// series on it share a colour, a mark and a texture. Markers and spans carry glyphs and categories, not series.
+    /// </summary>
+    [Fact]
+    public void No_two_series_on_a_track_the_workspace_can_make_look_the_same()
+    {
+        var workspace = Workspace();
+        var drawn = workspace.Cells
+            .SelectMany(c => c.Marks.Concat(c.FromStartMarks ?? []).Select(m => (Cell: c, Mark: m)))
+            .Where(d => d.Mark.Mark is not ("markers" or "spans"))
+            .Select(d => (d.Cell, Layer: ReportTextureTests.Layer($"{d.Cell.Signal}-{d.Mark.Word}", d.Cell.Dataset,
+                ReportWire.Parse<ReportMark>(d.Mark.Mark)!.Value, new ReportLayerBindings
+                {
+                    X = d.Mark.Bindings.X, Y = d.Mark.Bindings.Y, Edges = d.Mark.Bindings.Edges, Series = d.Mark.Bindings.Series,
+                    Stacked = d.Mark.Bindings.Stacked,
+                })))
+            .ToList();
+        var tracks = drawn.Select(d => new[] { d.Layer })
+            .Concat(drawn.SelectMany(a => drawn.Where(b => b.Cell.Lens == a.Cell.Lens && b.Cell != a.Cell).Select(b => new[] { a.Layer, b.Layer })))
+            .ToList();
+
+        var alike = tracks
+            .Select(track => ReportSpecRunner.Texture(ReportSpecRunner.Hue(track)))
+            .Select(track => track.SelectMany(layer =>
+                    (layer.Bindings.Y is { Count: > 0 } y ? y : (layer.Bindings.Edges ?? []).Take(1))
+                    .Select(name => layer.Fields.FirstOrDefault(f => f.Name == name)).OfType<ReportField>()
+                    .Select(f => (Layer: layer.Id, Field: f.Name,
+                        Look: (layer.Color is { } hue ? ReportWire.Name(hue) : f.GlucoseScale ? "glucose" : f.Color is { } c ? ReportWire.Name(c) : "foreground",
+                            layer.Mark, f.Texture))))
+                .ToList())
+            .Where(series => series.Select(s => s.Look).Distinct().Count() != series.Count)
+            .Select(series => string.Join(", ", series.Select(s => $"{s.Layer}.{s.Field}")))
+            .ToList();
+
+        alike.Should().BeEmpty(string.Join(Environment.NewLine, alike));
+        tracks.Should().HaveCountGreaterThan(1000);
+    }
+
     [Fact]
     public void Only_the_anchors_whose_events_corroboration_changes_say_so()
     {

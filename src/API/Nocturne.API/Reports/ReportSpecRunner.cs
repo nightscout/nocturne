@@ -53,6 +53,12 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     internal static readonly IReadOnlyList<ChartColor> SeriesHues =
         [ChartColor.Profile, ChartColor.Chart3, ChartColor.Override, ChartColor.Chart4, ChartColor.Chart5];
 
+    /// <summary>
+    /// The textures a series takes, in order, when an earlier series on its track has its colour and its mark: the
+    /// charts package's categorical textures, which carry no colour of their own.
+    /// </summary>
+    internal static readonly IReadOnlyList<string> SeriesTextures = ["cat-1", "cat-2", "cat-3", "cat-4", "cat-5", "cat-6"];
+
     /// <summary>One run's state: the deadline, the instant ranges resolve against and the caller.</summary>
     private sealed class Run(ReportRunContext context, DateTimeOffset now, CancellationTokenSource deadline, CancellationToken token, CancellationToken caller)
     {
@@ -220,6 +226,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var result = new ReportPanelResult
         {
             Id = panel.Id!,
+            Group = panel.Group,
             Title = panel.Title ?? output.Name,
             Days = output.Days,
             Kind = panel.Kind,
@@ -278,7 +285,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 var side = !layer.HasAxis ? ReportAxisSide.None : units.IndexOf(layer.Unit) == 0 ? ReportAxisSide.Left : ReportAxisSide.Right;
                 results.Add(layerResult with { Side = side });
             }
-            trackResults.Add(new ReportTrackResult(track.Id!, track.Title, track.Height ?? 1, Hue(results)));
+            trackResults.Add(new ReportTrackResult(track.Id!, track.Title, track.Height ?? 1, Texture(Hue(results))));
         }
 
         var all = trackResults.SelectMany(t => t.Layers).ToList();
@@ -300,6 +307,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var result = new ReportPanelResult
         {
             Id = panel.Id!,
+            Group = panel.Group,
             Title = panel.Title ?? DefaultPanelTitle(tracks.SelectMany(t => t.Layers).Single(l => l.Id == (first ?? all[0]).Id), first ?? all[0]),
             Kind = ReportPanelKind.Chart,
             Status = drawn.Count > 0 ? ReportPanelStatus.Ok : all[0].Status,
@@ -416,6 +424,50 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             hued.Add(layer with { Color = hue });
         }
         return hued;
+    }
+
+    /// <summary>
+    /// Gives each series on a track whose colour and mark an earlier series there has a texture, so the two differ by
+    /// more than their legend. A series is one drawn field of a layer: each of its <c>y</c> fields, or a band of edges
+    /// alone its first edge. Its colour is the layer's series hue (<see cref="Hue"/>) where it has one, else the
+    /// field's own, a glucose-scale field counting as one colour. Markers and spans keep their glyphs and categories.
+    /// The texture is set on the layer's field entry (<see cref="ReportField.Texture"/>); colours are not changed.
+    /// </summary>
+    internal static IReadOnlyList<ReportLayerResult> Texture(IReadOnlyList<ReportLayerResult> layers)
+    {
+        var worn = new Dictionary<(string Color, ReportMark Mark), List<string?>>();
+        var textured = new List<ReportLayerResult>(layers.Count);
+        foreach (var layer in layers)
+        {
+            if (layer.Mark is ReportMark.Markers or ReportMark.Spans || layer.Fields.Count == 0)
+            {
+                textured.Add(layer);
+                continue;
+            }
+            var series = layer.Bindings.Y is { Count: > 0 } y ? y : (layer.Bindings.Edges ?? []).Take(1);
+            var fields = layer.Fields.ToList();
+            var changed = false;
+            foreach (var name in series)
+            {
+                var at = fields.FindIndex(f => f.Name == name);
+                if (at < 0)
+                    continue;
+                var field = fields[at];
+                var color = layer.Color is { } hue ? ReportWire.Name(hue)
+                    : field.GlucoseScale ? "glucose" : field.Color is { } own ? ReportWire.Name(own) : "foreground";
+                if (!worn.TryGetValue((color, layer.Mark), out var textures))
+                {
+                    worn[(color, layer.Mark)] = [null];
+                    continue;
+                }
+                var texture = SeriesTextures.FirstOrDefault(t => !textures.Contains(t), SeriesTextures[(textures.Count - 1) % SeriesTextures.Count]);
+                textures.Add(texture);
+                fields[at] = field with { Texture = texture };
+                changed = true;
+            }
+            textured.Add(changed ? layer with { Fields = fields } : layer);
+        }
+        return textured;
     }
 
     private async Task<(ReportLayerResult Result, ReportDatasetOutput? Output)> RunLayerAsync(ReportPanelSpec panel, ReportLayerSpec layer, Run run)
@@ -800,6 +852,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         new()
         {
             Id = panel.Id!,
+            Group = panel.Group,
             Title = panel.Title,
             Kind = panel.Kind,
             Dataset = dataset,

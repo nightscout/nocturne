@@ -8,8 +8,8 @@ internal sealed partial class ReportSpecValidator
 {
     private static readonly string[] SpecKeys = ["version", "title", "range", "panels", "builder"];
     private static readonly string[] BuilderKeys = ["kind", "version", "state"];
-    private static readonly string[] ChartPanelKeys = ["id", "title", "kind", "range", "grid", "tracks"];
-    private static readonly string[] DatasetPanelKeys = ["id", "title", "kind", "range", "dataset", "bindings"];
+    private static readonly string[] ChartPanelKeys = ["id", "title", "group", "kind", "range", "grid", "tracks"];
+    private static readonly string[] DatasetPanelKeys = ["id", "title", "group", "kind", "range", "dataset", "bindings"];
     private static readonly string[] TrackKeys = ["id", "title", "height", "layers"];
     private static readonly string[] LayerKeys = ["id", "title", "dataset", "derived", "mark", "bindings", "range"];
     private static readonly string[] SourceKeys = ["dataset", "derived", "field", "series"];
@@ -222,6 +222,9 @@ internal sealed partial class ReportSpecValidator
         if (id is not null && !ids.Add(id))
             Error($"{at}.id", $"'{id}' is already the id of another panel. Panel ids must be unique.");
         var title = OptionalString(panel, "title", $"{at}.title", ReportSpec.MaxTitleLength, Error);
+        var group = OptionalString(panel, "group", $"{at}.group", ReportSpec.MaxGroupLength, Error);
+        if (group is not null && !GroupPattern().IsMatch(group))
+            Error($"{at}.group", "Use only letters, digits, '-' and '_'.");
         var range = (panel.TryGetProperty("range", out var pr) ? ReadRange(pr, $"{at}.range", now, Error) : null) ?? reportRange;
 
         if (kind is not { } panelKind)
@@ -232,7 +235,7 @@ internal sealed partial class ReportSpecValidator
             : ReadDatasetPanel(panel, at, panelKind, range, useMmol, reads, Error);
         if (failed || read is null)
             return null;
-        return read with { Id = id, Title = title };
+        return read with { Id = id, Title = title, Group = group };
     }
 
     private ReportPanelSpec? ReadDatasetPanel(
