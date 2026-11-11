@@ -95,6 +95,8 @@ public class MemberRecoveryController : ControllerBase
     /// Issues a single-use recovery code for a member who cannot sign in. The plaintext is returned
     /// once; the member redeems it within <see cref="LoginCodeService.LifetimeOf"/> for
     /// <see cref="LoginCodePurpose.Recovery"/>.
+    /// The caller must be signed in as themselves, hold every permission the member holds, and not be confined to less history than the member sees.
+    /// A member's existing recovery codes do not block issuance; redeeming the new code cancels them.
     /// </summary>
     /// <remarks>
     /// The code lets its holder put a passkey on the member's account, so the caller must be signed

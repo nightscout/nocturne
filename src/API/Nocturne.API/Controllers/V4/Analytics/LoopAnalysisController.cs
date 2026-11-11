@@ -57,6 +57,10 @@ public class LoopAnalysisController(
     /// <summary>
     /// How far each prediction curve's values at +30, +60, +90 and +120 minutes landed from the
     /// sensor reading nearest the time they predicted, overall, by local hour of day and by context.
+    /// Error is predicted minus actual, so a positive bias is a prediction that ran high. A horizon
+    /// with no reading within 2.5 minutes is counted as unmatched. Needs glucose.read and
+    /// devices.read; without treatments.read the context breakdowns and the oref IOB, zero-temp and
+    /// COB curves are withheld.
     /// </summary>
     /// <remarks>
     /// Only the +30 and +60 minute bias is a sign of the settings a prediction ran on: the reading at
@@ -114,7 +118,9 @@ public class LoopAnalysisController(
     /// from isolated announced meals, per local time-of-day block. Each figure carries its n, spread,
     /// confidence and the reasons it is not higher, the episodes rejected by each rule, why it has no
     /// value where it has none, and for the primary range the episodes it was read from. These are
-    /// observations, never instructions.
+    /// observations, never instructions. Without glucose.read, treatments.read and therapy.read, or
+    /// for a history-clamped caller, nothing is computed: <c>primary</c> and <c>comparison</c> are
+    /// null and <c>withheldReason</c> says why.
     /// </summary>
     /// <remarks>
     /// The page is withheld whole, with nothing computed, <c>primary</c> and <c>comparison</c> null
@@ -175,7 +181,11 @@ public class LoopAnalysisController(
     /// Glucose, net loop correction, net insulin above schedule, IOB and COB aligned on up to three
     /// cohorts of events (meals, correction boluses, unannounced rises, and the starts of sensors,
     /// exercise, overrides and temporary targets), each spread across its events in five-minute
-    /// slots from the anchor, with each event's figures and their spread.
+    /// slots from the anchor, with each event's figures and their spread. An event with no reading
+    /// within 5 minutes of its anchor is dropped and counted. A cohort whose anchor or glucose read
+    /// scope the caller lacks is dropped and its <c>anchor{n}</c> reported as ignored; without
+    /// treatments.read the event list and every insulin, IOB and COB series are withheld. Equal start
+    /// and end times of day mean all day, and grams given the wrong way round are swapped.
     /// </summary>
     /// <remarks>
     /// An event is dropped and counted when no reading lies within 5 minutes of its anchor. Every

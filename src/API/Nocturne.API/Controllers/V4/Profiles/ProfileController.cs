@@ -281,6 +281,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// Delete a whole named therapy profile and every schedule record belonging to it.
+    /// The name is matched case-sensitively, with no lenient fallback.
     /// </summary>
     /// <remarks>
     /// The name is matched case-sensitively, with no lenient fallback: this destroys data, so
@@ -436,6 +437,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// Create a new therapy settings record
+    /// <c>isDefault: true</c> makes the new record the tenant's only default; <c>false</c> leaves the current default alone.
     /// </summary>
     /// <remarks>
     /// <see cref="TherapySettings.IsDefault"/> <c>true</c> makes the new row the tenant's only default,
@@ -468,6 +470,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// Update an existing therapy settings record
+    /// <c>isDefault: true</c> makes the record the tenant's only default. <c>false</c> keeps the stored flag, so an update never demotes the default; promote another record to move it.
     /// </summary>
     /// <remarks>
     /// <see cref="TherapySettings.IsDefault"/> <c>true</c> makes the row the tenant's only default, as

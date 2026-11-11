@@ -58,6 +58,7 @@ public class ActivityController : ControllerBase
     /// <summary>
     /// Get all activities with optional filtering and pagination.
     /// Returns regular activities, heart rate, and step count data merged by timestamp.
+    /// Requires read access to at least one of those categories; records in categories the caller cannot read are omitted, so fewer than <c>count</c> records can come back.
     /// </summary>
     /// <remarks>
     /// Like Nightscout, <c>find[...]</c> filters narrow the result, a find that bounds neither
@@ -139,7 +140,8 @@ public class ActivityController : ControllerBase
     }
 
     /// <summary>
-    /// Get a specific activity by ID (checks StateSpans, sleep_sessions, heart_rates, and step_counts)
+    /// Get a specific activity by ID (checks StateSpans, sleep_sessions, heart_rates, and step_counts).
+    /// A record in a category the caller cannot read returns 404, not 403.
     /// </summary>
     /// <remarks>
     /// The scope requirement is an OR over the four storages this route resolves against, and
@@ -185,6 +187,7 @@ public class ActivityController : ControllerBase
     /// <summary>
     /// Create one or more new activities.
     /// Heart rate and step count data is automatically routed to dedicated tables.
+    /// Requires write access to the category of every record in the request.
     /// </summary>
     /// <remarks>
     /// The scope requirement is an OR, like the reads' (<see cref="GetActivities"/>): each record
@@ -253,7 +256,7 @@ public class ActivityController : ControllerBase
 
     /// <summary>
     /// Save the activity identified by the <c>_id</c> in the body, inserting it when that id is not
-    /// already stored
+    /// already stored. Like Nightscout, it takes one document; an array is refused with 400.
     /// </summary>
     /// <remarks>Nightscout's save takes one document, so an array is refused.</remarks>
     [HttpPut]

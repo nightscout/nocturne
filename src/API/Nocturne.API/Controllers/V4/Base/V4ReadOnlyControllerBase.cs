@@ -22,7 +22,14 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
 {
     protected TRepository Repository { get; } = repository;
 
-    /// <summary>Lists records with pagination, optional date range, device, and source filtering.</summary>
+    /// <summary>
+    /// Lists records with pagination, optional date range, device, and source filtering. `sort`
+    /// is `timestamp_asc` (oldest first) or `timestamp_desc` (newest first, the default). `limit` is
+    /// capped at a maximum page size, and a `from`/`to` range wider than the maximum span is rejected
+    /// with `400 Bad Request`. `pagination.total` is returned only when `includeTotal` is `true`, or
+    /// when a first page shorter than `limit` carries its own length; `includeTotal` counts the date
+    /// range only, not `device`, `source` or `patientDeviceId`.
+    /// </summary>
     /// <param name="from">Inclusive start of the date range filter.</param>
     /// <param name="to">Inclusive end of the date range filter.</param>
     /// <param name="limit">Maximum number of records to return. Defaults to `100`.</param>

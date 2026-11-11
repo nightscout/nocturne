@@ -229,7 +229,8 @@ public class CountController : ControllerBase
     }
 
     /// <summary>
-    /// Count activity entries matching specific criteria
+    /// Count activity entries matching specific criteria.
+    /// The count covers all activity categories, so it requires read access to every one of them.
     /// </summary>
     /// <param name="find">MongoDB-style find query filters (JSON format)</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -286,7 +287,9 @@ public class CountController : ControllerBase
     }
 
     /// <summary>
-    /// Generic count endpoint for any storage type</summary>
+    /// Generic count endpoint for any storage type.
+    /// Requires read access to the category of the requested storage; <c>activity</c> requires every activity category.
+    /// </summary>
     /// <param name="storage">Storage type (entries, treatments, devicestatus, profile, food, activity)</param>
     /// <param name="find">MongoDB-style find query filters (JSON format)</param>
     /// <param name="type">Additional type filter (for entries: sgv, mbg, cal)</param>

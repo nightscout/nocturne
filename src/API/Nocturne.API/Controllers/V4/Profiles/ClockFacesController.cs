@@ -75,6 +75,7 @@ public class ClockFacesController : ControllerBase
 
     /// <summary>
     /// Get the latest glucose readings a public clock face displays (public, no authentication required).
+    /// The clock id acts as the credential. Only sensor glucose is returned, whatever the tenant's anonymous-read setting.
     /// </summary>
     /// <remarks>
     /// The clock UUID is the capability: a caller must hold a valid clock id for the host-resolved

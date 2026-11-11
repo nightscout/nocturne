@@ -131,6 +131,8 @@ public class ChatIdentityDirectoryController : ControllerBase
     /// chat user acknowledge for everyone. The authority carries the linked subject and no scopes
     /// of its own, so the decision rests on that member's membership: with <c>alerts.readwrite</c>
     /// the excursion is acknowledged for everyone, otherwise it is muted for that member alone.
+    /// Must be called on the link's tenant host. Without an excursion ID, the decision applies to every active excursion of the tenant, and the outcome is <c>muted</c> if any was muted, else <c>acknowledged</c> if any was, else <c>closed</c>.
+    /// If someone else had already acknowledged the excursion, the response names them rather than the chat user.
     /// </summary>
     /// <remarks>
     /// Must be called on the link's tenant host, because the acknowledgement's realtime broadcasts

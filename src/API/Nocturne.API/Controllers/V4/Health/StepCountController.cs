@@ -60,6 +60,7 @@ public class StepCountController(IStepCountService stepCountService)
 
     /// <summary>
     /// Get step count records with optional pagination and date filtering
+    /// A date range without <c>count</c> returns at most the maximum page size of records; page through the rest with <c>skip</c>.
     /// </summary>
     /// <param name="count">Maximum number of records to return (default: 10, or up to the ceiling when from/to are specified)</param>
     /// <param name="skip">Number of records to skip for pagination (default: 0)</param>

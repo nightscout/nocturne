@@ -37,7 +37,8 @@ public class AuthorizationController : ControllerBase
     }
 
     /// <summary>
-    /// Generate JWT token from access token
+    /// Generate JWT token from access token.
+    /// Needs no other credential: the access token in the URL is validated, and a missing or invalid one returns 401. Accepts legacy subject access tokens and <c>noc_</c> direct-grant tokens; the JWT carries the grant's scopes.
     /// </summary>
     /// <param name="accessToken">Access token to exchange for JWT</param>
     /// <returns>JWT token response</returns>

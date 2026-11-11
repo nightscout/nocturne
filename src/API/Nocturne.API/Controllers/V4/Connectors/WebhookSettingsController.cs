@@ -63,7 +63,11 @@ public class WebhookSettingsController(
         title: "Not Implemented"
     );
 
-    /// <summary>Tests webhook settings by sending test payloads to configured URLs.</summary>
+    /// <summary>
+    /// Tests webhook settings by sending test payloads to configured URLs. The server makes the
+    /// outbound POST; destinations on private networks are refused, and the demo's shared visitor
+    /// cannot call it.
+    /// </summary>
     /// <remarks>
     /// Gated for the demo's shared visitor because the destination is caller-chosen: the server
     /// makes an outbound POST from its own address. <c>OutboundDestination</c> keeps it off private

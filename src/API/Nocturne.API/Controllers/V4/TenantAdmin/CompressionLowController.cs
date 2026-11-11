@@ -119,6 +119,7 @@ public class CompressionLowController : ControllerBase
 
     /// <summary>
     /// Accept, dismiss or delete several suggestions at once
+    /// Every item is checked before any is written, and one failing item rejects the whole batch. After that the writes are not atomic: a failure part way leaves earlier items applied, and a retry finishes the rest.
     /// </summary>
     /// <remarks>
     /// Not one database commit: <see cref="ICompressionLowService.ApplyBatchAsync"/> says what a
@@ -153,6 +154,7 @@ public class CompressionLowController : ControllerBase
 
     /// <summary>
     /// Manually trigger detection for a date range (for testing)
+    /// Provide either <c>nightOf</c> or a <c>startDate</c> and <c>endDate</c> range (inclusive, one run per night). Each night analysed stores the suggestions it finds.
     /// </summary>
     /// <remarks>
     /// Provide either a single `nightOf` date or a range with `startDate` and `endDate`.

@@ -76,6 +76,7 @@ public class SessionsController : ControllerBase
     /// <summary>
     /// Revoke a login session, logging that device out. Revoking the current
     /// session is allowed and acts as a logout.
+    /// On the shared demo, sessions belong to other visitors, so revoking one logs another visitor out.
     /// </summary>
     /// <remarks>
     /// The demo's subject is shared, so these sessions belong to other visitors and revoking one
@@ -115,6 +116,7 @@ public class SessionsController : ControllerBase
 
     /// <summary>
     /// Revoke every session except the current one (log out everywhere else).
+    /// On the shared demo, this revokes every other visitor's session.
     /// </summary>
     /// <remarks>
     /// On the shared demo subject, "everything else" is every other visitor currently using it.
