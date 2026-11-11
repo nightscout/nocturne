@@ -242,8 +242,15 @@ export function bandSets(layer: ReportLayer): BandSet[] {
     }
     set.rows.push(row);
   }
-  return [...sets.values()];
+  const all = [...sets.values()];
+  // One group and no comparison range: nothing to tell apart, so the band keeps the field's colour.
+  if (all.length === 1 && !all[0].comparison && !layer.color) {
+    const hue = tints(layerColor(layer));
+    return [{ ...all[0], outer: hue.outer, inner: hue.inner, line: hue.median }];
+  }
+  return all;
 }
+
 
 function tints(color: string): BandColors {
   return {

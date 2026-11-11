@@ -15,6 +15,11 @@ export function anchorLabels(): Record<EventAnchorKind, string> {
     [EventAnchorKind.UnannouncedRise]: "Unannounced rises",
     [EventAnchorKind.LowStart]: "Low starts",
     [EventAnchorKind.HighStart]: "High starts",
+    [EventAnchorKind.SiteChange]: "Site changes",
+    [EventAnchorKind.SleepStart]: "Sleep starts",
+    [EventAnchorKind.Wake]: "Wake-ups",
+    [EventAnchorKind.LowTreatment]: "Low treatments",
+    [EventAnchorKind.AnyBolus]: "Boluses",
   };
 }
 
@@ -64,6 +69,16 @@ export function anchorEventLabel(kind: EventAnchorKind | undefined): string {
       return "Low start";
     case EventAnchorKind.HighStart:
       return "High start";
+    case EventAnchorKind.SiteChange:
+      return "Site change";
+    case EventAnchorKind.SleepStart:
+      return "Sleep start";
+    case EventAnchorKind.Wake:
+      return "Wake-up";
+    case EventAnchorKind.LowTreatment:
+      return "Low treatment";
+    case EventAnchorKind.AnyBolus:
+      return "Bolus";
     default:
       return "";
   }

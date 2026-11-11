@@ -168,6 +168,28 @@ describe("a layered chart's layout", () => {
     ]);
   });
 
+  it("keeps the field's colour for a band of one group and no comparison range", () => {
+    const one = bandSets(layer({
+      mark: "band",
+      bindings: { x: "minute", y: ["glucose"], edges: ["glucose", "glucose"], series: "series" },
+      rows: [
+        { minute: 0, series: "Lows", cohort: 1, glucose: 1 },
+        { minute: 5, series: "Lows", cohort: 1, glucose: 2 },
+      ],
+    }));
+    expect(one.map((s) => [s.label, s.line])).toEqual([["Lows", "var(--glucose-in-range)"]]);
+
+    const withRange = bandSets(layer({
+      mark: "band",
+      bindings: { x: "minute", y: ["p50"], edges: ["p25", "p75"], series: "series" },
+      rows: [
+        { minute: 0, series: "Lows", cohort: 1, p50: 1 },
+        { minute: 0, series: "Lows", cohort: 1, range: "comparison", p50: 1 },
+      ],
+    }));
+    expect(withRange.map((s) => s.line)).toEqual(["var(--chart-1)", "var(--chart-1)"]);
+  });
+
   it("gives a band with no series the layer's colour, or the hue the API gave it", () => {
     expect(bandSets(layer({ mark: "band" }))[0].line).toBe("var(--glucose-in-range)");
     expect(bandSets(layer({ mark: "band", color: "chart-4" }))[0].line).toBe("var(--chart-4)");
