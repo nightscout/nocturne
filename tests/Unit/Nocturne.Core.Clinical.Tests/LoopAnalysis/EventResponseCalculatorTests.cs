@@ -460,7 +460,7 @@ public class EventResponseCalculatorTests
     [InlineData(true)]
     public void AnUnansweredRiseInAMealsWindow_TakesItsGramsPerUnitWhateverCorroborationIsAskedFor(bool requireCorroboration)
     {
-        // Lunch at 12:00 with its own climb, then a climb at 15:00 nobody logged and the loop did
+        // Lunch at 12:00 with its own climb, then a climb at 07:00 nobody logged and the loop did
         // not answer: a second intake inside lunch's window.
         var lunch = Local(2024, 6, 11, 12, 0);
         double Shape(long t) => ((t - lunch) / (double)Minute) switch
@@ -485,6 +485,54 @@ public class EventResponseCalculatorTests
         cohort.GramsPerUnitNotIsolated.Should().Be(1, "the climb at 15:00 is a second intake");
         range.Events.Single().Metrics.GramsPerUnit.Should().BeNull();
     }
+
+    [Theory]
+    [MemberData(nameof(EveryAnchor))]
+    public void CorroborationChangesOnlyTheAnchorsThatReadIt(EventAnchorKind anchor)
+    {
+        // Each day: a low at 03:00 treated with carbs, a climb at 07:00 nobody logged and the loop did not answer,
+        // lunch with its climb, and a correction at 19:00; with a sensor start, a site change and nights of sleep, so
+        // every anchor with a source has events.
+        double Shape(long t)
+        {
+            var minute = (t - From) % Day / (double)Minute;
+            return minute switch
+            {
+                >= 180 and < 240 => 60,
+                >= 720 and <= 750 => 110 + 2 * (minute - 720),
+                > 750 and <= 840 => 170 - (minute - 750) * 60 / 90,
+                >= 420 and < 450 => 110 + 3 * (minute - 420),
+                >= 450 and < 540 => 200 - (minute - 450),
+                _ => 110,
+            };
+        }
+        var days = Enumerable.Range(0, 7).Select(d => From + d * Day).ToList();
+        EventResponseRange Run(bool corroborate) => Calculate(
+            [Cohort(1, anchor)],
+            glucose: Readings(From - 12 * Hour, To + 12 * Hour, Shape),
+            carbs: [.. days.SelectMany(d => new CarbEvent[] { new(d + 12 * Hour, 60), new(d + 3 * Hour + 20 * Minute, 15) })],
+            doses: [.. days.SelectMany(d => new InsulinDose[] { new(d + 12 * Hour, 4, false), new(d + 19 * Hour, 1, false) })],
+            delivered: [new(From - Day, To + Day, 1.0, BasalDeliveryOrigin.Algorithm)],
+            scheduled: [new(From - Day, To + Day, 1.0)],
+            sensorStarts: [From + Day + 9 * Hour],
+            siteChanges: [From + 2 * Day + 9 * Hour],
+            sleep: [.. days.Select(d => new MillsInterval(d + 22 * Hour, d + 30 * Hour))],
+            requireCorroboration: corroborate);
+
+        var plain = Run(false);
+        var corroborated = Run(true);
+
+        if (EventAnchors.ReadsCorroboration(anchor))
+            corroborated.Cohorts.Single().Events.Should().BeLessThan(plain.Cohorts.Single().Events);
+        else
+        {
+            if (anchor is not (EventAnchorKind.ExerciseStart or EventAnchorKind.OverrideStart or EventAnchorKind.TemporaryTargetStart))
+                plain.Events.Should().NotBeEmpty("the fixture has events of every anchor it has a source for");
+            corroborated.Events.Select(e => e.Time).Should().Equal(plain.Events.Select(e => e.Time));
+        }
+    }
+
+    public static TheoryData<EventAnchorKind> EveryAnchor() => [.. Enum.GetValues<EventAnchorKind>()];
 
     [Fact]
     public void AFastUnloggedSnackBesideALoggedMeal_TakesTheMealsGramsPerUnit()

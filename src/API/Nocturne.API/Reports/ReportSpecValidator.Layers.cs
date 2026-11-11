@@ -405,7 +405,7 @@ internal sealed partial class ReportSpecValidator
             {
                 if (units.Contains(layer.Spec.Unit))
                     continue;
-                if (units.Count == 2)
+                if (units.Count == ReportSpec.MaxUnitsPerTrack)
                 {
                     Error(layer.At, $"This track has a left axis in {UnitWords(units[0])} and a right axis in {UnitWords(units[1])}; "
                         + $"this layer is in {UnitWords(layer.Spec.Unit)}. A track has at most two units: put this layer on another track.");

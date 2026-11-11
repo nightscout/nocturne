@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 using System.Text.Json;
 using Nocturne.API.Authorization;
 using Nocturne.API.Reports.Datasets;
 using Nocturne.API.Reports.Derived;
+using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
 
@@ -97,11 +100,13 @@ public sealed record CustomReportWorkspaceMark(
 
 /// <summary>An event anchor as the workspace lists it.</summary>
 /// <param name="MealNarrowing">Grams, foods and a food category narrow its groups: meals only, as the validator refuses them elsewhere.</param>
+/// <param name="Corroboration">Whether <c>requireCorroboration</c> changes which of its events are found.</param>
 /// <param name="Scopes">The read scopes its events need, as the scope guard requires them.</param>
 public sealed record CustomReportWorkspaceAnchor(
     [property: Required] string Id,
     [property: Required] string Group,
     [property: Required] bool MealNarrowing,
+    [property: Required] bool Corroboration,
     [property: Required] IReadOnlyList<string> Scopes,
     [property: Required] bool Permitted);
 
@@ -117,7 +122,12 @@ public sealed record CustomReportWorkspaceDayGroupPreset(
     [property: Required] IReadOnlyList<IReadOnlyList<string>> Groups);
 
 /// <summary>Something an analysis may leave out, by the dataset parameter that does it; its default is the parameter's schema default.</summary>
-public sealed record CustomReportWorkspaceLeaveOut([property: Required] string Id, [property: Required] string Parameter);
+/// <param name="Scopes">The read scopes the parameter needs, as its schema's <c>x-scope</c> says.</param>
+public sealed record CustomReportWorkspaceLeaveOut(
+    [property: Required] string Id,
+    [property: Required] string Parameter,
+    [property: Required] IReadOnlyList<string> Scopes,
+    [property: Required] bool Permitted);
 
 /// <summary>A report range preset, in hours.</summary>
 public sealed record CustomReportWorkspaceRangePreset([property: Required] string Id, [property: Required] int Hours);
@@ -200,29 +210,30 @@ internal static class ReportWorkspace
     private static readonly int[] DaySmooth = [4320, 10080];
 
     private static CellSpec Series(string signal, string field) =>
-        new(Timeline, signal, "glucose_series", null, field, [Line("time", field), Area("time", field)], TimeSmooth, true, Combine: true);
+        new(Timeline, signal, GlucoseSeriesParameters.Name, null, field, [Line("time", field), Area("time", field)], TimeSmooth, true, Combine: true);
 
-    private static CellSpec Treatments(string signal, string type, string field) =>
-        new(Timeline, signal, "treatments", new Dictionary<string, object> { ["types"] = new[] { type } }, field,
+    private static CellSpec Treatments(string signal, ReportTreatmentType type, string field) =>
+        new(Timeline, signal, TreatmentsParameters.Name, new Dictionary<string, object> { ["types"] = new[] { ReportWire.Name(type) } }, field,
             [Markers(field), Bars("time", field)], [], false);
 
     private static CellSpec Device(string signal, string field) =>
-        new(Timeline, signal, "device_status", null, field, [Line("time", field), Points("time", field)], TimeSmooth, true);
+        new(Timeline, signal, DeviceStatusParameters.Name, null, field, [Line("time", field), Points("time", field)], TimeSmooth, true);
 
-    private static CellSpec Span(string signal, string kind) =>
-        new(Timeline, signal, "state_spans", new Dictionary<string, object> { ["kinds"] = new[] { kind } }, null, [Spans], [], false, SpanKind: kind);
+    private static CellSpec Span(string signal, ReportSpanKind kind) =>
+        new(Timeline, signal, StateSpansParameters.Name, new Dictionary<string, object> { ["kinds"] = new[] { ReportWire.Name(kind) } }, null,
+            [Spans], [], false, SpanKind: ReportWire.Name(kind));
 
     private static CellSpec Profile(string signal, string? field, params CustomReportWorkspaceMark[] marks) =>
-        new(TypicalDay, signal, "daily_profile", null, field,
+        new(TypicalDay, signal, DailyProfileParameters.Name, null, field,
             marks.Length > 0 ? marks : [Line("minuteOfDay", field!), Area("minuteOfDay", field!)],
             FoldSmooth, true, Combine: true);
 
-    private static CellSpec Setting(string signal, string setting, string observed, string inProfile) =>
-        new(TypicalDay, signal, "settings_evidence", new Dictionary<string, object> { ["setting"] = setting }, observed,
+    private static CellSpec Setting(string signal, SettingsEvidenceSetting setting, string observed, string inProfile) =>
+        new(TypicalDay, signal, SettingsEvidenceParameters.Name, new Dictionary<string, object> { ["setting"] = ReportWire.Name(setting) }, observed,
             [Lines("startMinute", [observed, inProfile]), Points("startMinute", observed, inProfile)], [], false);
 
     private static CellSpec Day(string signal, string field, bool barsFirst) =>
-        new(Daily, signal, "daily_summary", null, field,
+        new(Daily, signal, DailySummaryParameters.Name, null, field,
             barsFirst ? [Bars("day", field), Line("day", field), Points("day", field)] : [Line("day", field), Points("day", field), Bars("day", field)],
             DaySmooth, true, Combine: true);
 
@@ -235,45 +246,45 @@ internal static class ReportWorkspace
     internal static readonly IReadOnlyList<CellSpec> Table =
     [
         Series("glucose", "glucose") with { Marks = [Line("time", "glucose"), Points("time", "glucose")] },
-        new(Timeline, "target", "glucose_series", null, null, [Edges("time", "targetLow", "targetHigh", "band")], [], false),
+        new(Timeline, "target", GlucoseSeriesParameters.Name, null, null, [Edges("time", "targetLow", "targetHigh", "band")], [], false),
         Series("iob", "iob"),
         Series("cob", "cob"),
-        new(Timeline, "basal", "basal_delivery", null, "delivered", [Area("time", "delivered"), Line("time", "delivered")], TimeSmooth, true, Combine: true),
-        new(Timeline, "basalScheduled", "basal_delivery", null, "scheduled", [Line("time", "scheduled"), Area("time", "scheduled")], [], false),
-        Treatments("boluses", "bolus", "insulin"),
-        Treatments("injections", "basal_injection", "injectionUnits"),
-        Treatments("carbs", "carbs", "carbs"),
-        Treatments("bgChecks", "bg_check", "bgCheck") with { Marks = [Markers("bgCheck"), Points("time", "bgCheck")] },
+        new(Timeline, "basal", BasalDeliveryParameters.Name, null, "delivered", [Area("time", "delivered"), Line("time", "delivered")], TimeSmooth, true, Combine: true),
+        new(Timeline, "basalScheduled", BasalDeliveryParameters.Name, null, "scheduled", [Line("time", "scheduled"), Area("time", "scheduled")], [], false),
+        Treatments("boluses", ReportTreatmentType.Bolus, "insulin"),
+        Treatments("injections", ReportTreatmentType.BasalInjection, "injectionUnits"),
+        Treatments("carbs", ReportTreatmentType.Carbs, "carbs"),
+        Treatments("bgChecks", ReportTreatmentType.BgCheck, "bgCheck") with { Marks = [Markers("bgCheck"), Points("time", "bgCheck")] },
         Device("reservoir", "reservoir"),
         Device("pumpBattery", "pumpBattery"),
         Device("uploaderBattery", "uploaderBattery"),
-        new(Timeline, "heartRate", "heart_rate", null, "bpm",
+        new(Timeline, "heartRate", HeartRateParameters.Name, null, "bpm",
             [Line("time", "bpm"), new("band", "range", Bind("time", ["bpm"], ["bpmMin", "bpmMax"]))], TimeSmooth, true, Combine: true),
-        new(Timeline, "steps", "steps", null, "steps", [Bars("time", "steps"), Line("time", "steps")], [], false),
-        new(Timeline, "sleep", "sleep", null, null, [Spans], [], false),
-        Span("pumpModes", "pump_mode"),
-        Span("profiles", "profile"),
-        Span("overrides", "override"),
-        Span("activities", "activity"),
-        Span("tempBasals", "temp_basal"),
+        new(Timeline, "steps", StepsParameters.Name, null, "steps", [Bars("time", "steps"), Line("time", "steps")], [], false),
+        new(Timeline, "sleep", SleepParameters.Name, null, null, [Spans], [], false),
+        Span("pumpModes", ReportSpanKind.PumpMode),
+        Span("profiles", ReportSpanKind.Profile),
+        Span("overrides", ReportSpanKind.Override),
+        Span("activities", ReportSpanKind.Activity),
+        Span("tempBasals", ReportSpanKind.TempBasal),
 
         Profile("glucose", "glucoseP50",
             Band("minuteOfDay", "glucoseP50", "glucoseP25", "glucoseP75"), Line("minuteOfDay", "glucoseP50", "median")),
         Profile("target", null, Edges("minuteOfDay", "targetLow", "targetHigh", "band")) with { Smooth = [], Trend = false, Combine = false },
         Profile("glucoseWide", null, Edges("minuteOfDay", "glucoseP10", "glucoseP90", "percentiles")) with { Smooth = [], Trend = false, Combine = false },
         Profile("readings", "readings") with { Smooth = [] },
-        new(TypicalDay, "ranges", "glucose_distribution_by_hour", null, null,
+        new(TypicalDay, "ranges", GlucoseDistributionByHourParameters.Name, null, null,
             [Stacked("hour", ["veryLow", "low", "tightRange", "aboveTightRange", "high", "veryHigh"])], [], false),
-        new(TypicalDay, "mean", "glucose_distribution_by_hour", null, "mean", [Line("hour", "mean"), Bars("hour", "mean")], [], true),
+        new(TypicalDay, "mean", GlucoseDistributionByHourParameters.Name, null, "mean", [Line("hour", "mean"), Bars("hour", "mean")], [], true),
         Profile("iob", "iob"),
         Profile("cob", "cob"),
         Profile("basal", "deliveredBasal"),
         Profile("basalScheduled", "scheduledBasal") with { Smooth = [], Trend = false, Combine = false },
         Profile("netLoop", "netLoopCorrection", Area("minuteOfDay", "netLoopCorrection"), Line("minuteOfDay", "netLoopCorrection"))
             with { Smooth = [], Trend = false, Combine = false },
-        Setting("settingBasal", "basal", "basalObserved", "basalProfile"),
-        Setting("settingIsf", "isf", "isfObserved", "isfProfile"),
-        Setting("settingCarbRatio", "carb_ratio", "carbRatioObserved", "carbRatioProfile"),
+        Setting("settingBasal", SettingsEvidenceSetting.Basal, "basalObserved", "basalProfile"),
+        Setting("settingIsf", SettingsEvidenceSetting.Isf, "isfObserved", "isfProfile"),
+        Setting("settingCarbRatio", SettingsEvidenceSetting.CarbRatio, "carbRatioObserved", "carbRatioProfile"),
 
         EventCell("glucose", "glucoseP50", Band("minute", "glucoseP50", "glucoseP25", "glucoseP75", "series"), SeriesLine("glucoseP50")) with
         {
@@ -291,23 +302,27 @@ internal static class ReportWorkspace
         Day("timeInRange", "timeInRange", true),
         Day("timeBelow", "timeBelow", true),
         Day("timeAbove", "timeAbove", true),
-        new(Daily, "ranges", "daily_summary", null, null, [Stacked("day", ["timeBelow", "timeInRange", "timeAbove"])], [], false),
+        new(Daily, "ranges", DailySummaryParameters.Name, null, null, [Stacked("day", ["timeBelow", "timeInRange", "timeAbove"])], [], false),
         Day("mean", "mean", false),
         Day("readings", "readings", true) with { Smooth = [], Trend = false },
         Day("totalInsulin", "totalInsulin", true),
         Day("totalBolus", "totalBolus", true),
         Day("totalBasal", "totalBasal", true),
         Day("carbs", "totalCarbs", true),
-        new(Daily, "sleep", "sleep", null, "totalSleep",
+        new(Daily, "sleep", SleepParameters.Name, null, "totalSleep",
             [Bars("night", "totalSleep"), Stacked("night", ["deepSleep", "lightSleep", "remSleep", "awake"])], [], false),
 
-        AgainstCell("glucose", "glucose_series", "glucose"),
-        AgainstCell("iob", "glucose_series", "iob"),
-        AgainstCell("cob", "glucose_series", "cob"),
-        AgainstCell("basal", "basal_delivery", "delivered"),
-        AgainstCell("heartRate", "heart_rate", "bpm"),
+        AgainstCell("glucose", GlucoseSeriesParameters.Name, "glucose"),
+        AgainstCell("iob", GlucoseSeriesParameters.Name, "iob"),
+        AgainstCell("cob", GlucoseSeriesParameters.Name, "cob"),
+        AgainstCell("basal", BasalDeliveryParameters.Name, "delivered"),
+        AgainstCell("heartRate", HeartRateParameters.Name, "bpm"),
     ];
 
+    /// <summary>
+    /// The signals. A signal's color is that of its first cell's field (<see cref="LeadColor"/>); the color here is
+    /// used only where none of its cells has a field with one.
+    /// </summary>
     private static readonly (string Id, string Family, string Color, string? Lane)[] SignalTable =
     [
         ("glucose", "Glucose", "glucose-in-range", null),
@@ -360,19 +375,29 @@ internal static class ReportWorkspace
         (EventAnchorKind.TemporaryTargetStart, "devices"),
     ];
 
-    private static readonly (string Id, string Parameter)[] LeaveOutTable =
+    private static readonly (string Id, string Property)[] LeaveOutTable =
     [
-        ("overrides", "excludeOverrides"), ("temporaryTargets", "excludeTemporaryTargets"), ("exercise", "excludeExercise"),
-        ("illness", "excludeIllness"), ("openLoop", "excludeOpenLoop"),
+        ("overrides", nameof(LoopAnalysisDatasetParameters.ExcludeOverrides)),
+        ("temporaryTargets", nameof(LoopAnalysisDatasetParameters.ExcludeTemporaryTargets)),
+        ("exercise", nameof(LoopAnalysisDatasetParameters.ExcludeExercise)),
+        ("illness", nameof(LoopAnalysisDatasetParameters.ExcludeIllness)),
+        ("openLoop", nameof(LoopAnalysisDatasetParameters.ExcludeOpenLoop)),
     ];
+
+    private static string ParameterOf(string property) => JsonNamingPolicy.CamelCase.ConvertName(property);
+
+    private static IReadOnlyList<string> LeaveOutScopes(string property) =>
+        typeof(LoopAnalysisDatasetParameters).GetProperty(property)!.GetCustomAttribute<ReportNeedsScopeAttribute>() is { } needs
+            ? [needs.Scope]
+            : [];
 
     private static readonly (string Id, int Hours)[] RangeTable = [("6h", 6), ("24h", 24), ("7d", 168), ("14d", 336), ("28d", 672), ("90d", 2160)];
 
-    private static readonly (string Id, string[][] Groups)[] DayGroupTable =
+    private static readonly (string Id, ReportWeekday[][] Groups)[] DayGroupTable =
     [
-        ("everyDay", [["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]]),
-        ("weekdaysAndWeekend", [["Mon", "Tue", "Wed", "Thu", "Fri"], ["Sat", "Sun"]]),
-        ("fridayAndWeekend", [["Mon", "Tue", "Wed", "Thu"], ["Fri"], ["Sat", "Sun"]]),
+        ("everyDay", [Enum.GetValues<ReportWeekday>()]),
+        ("weekdaysAndWeekend", [[ReportWeekday.Mon, ReportWeekday.Tue, ReportWeekday.Wed, ReportWeekday.Thu, ReportWeekday.Fri], [ReportWeekday.Sat, ReportWeekday.Sun]]),
+        ("fridayAndWeekend", [[ReportWeekday.Mon, ReportWeekday.Tue, ReportWeekday.Wed, ReportWeekday.Thu], [ReportWeekday.Fri], [ReportWeekday.Sat, ReportWeekday.Sun]]),
     ];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -388,22 +413,25 @@ internal static class ReportWorkspace
         return new CustomReportWorkspace(
             [Timeline, TypicalDay, Event, Daily, Against],
             [.. FamilyTable.Select(f => new CustomReportWorkspaceFamily(f.Id, f.Height))],
-            [.. SignalTable.Select(s => new CustomReportWorkspaceSignal(s.Id, s.Family, s.Lane, s.Color,
+            [.. SignalTable.Select(s => new CustomReportWorkspaceSignal(s.Id, s.Family, s.Lane,
+                Table.Where(c => c.Signal == s.Id).Select(c => LeadColor(c, registry)).OfType<ChartColor>().Select(ReportWire.Name).FirstOrDefault(s.Color),
                 cells.Any(c => c.Signal == s.Id && c.Permitted)))],
             cells,
             [.. AnchorTable.Select(a => a.Group).Distinct()],
             [.. AnchorTable.Select(a =>
             {
                 var scopes = LoopAnalysisReadScopeGuard.ScopesOf(a.Anchor);
-                return new CustomReportWorkspaceAnchor(a.Anchor.ToString(), a.Group, a.Anchor == EventAnchorKind.Meal, scopes, Holds(scopes));
+                return new CustomReportWorkspaceAnchor(a.Anchor.ToString(), a.Group, a.Anchor == EventAnchorKind.Meal,
+                    EventAnchors.ReadsCorroboration(a.Anchor), scopes, Holds(scopes));
             })],
             [.. Enum.GetValues<ReportDayKind>().Select(k =>
             {
                 IReadOnlyList<string> scopes = new ReportDayFilter { Kind = k }.NeedsTreatments ? [Scope.TreatmentsRead] : [];
                 return new CustomReportWorkspaceDayKind(ReportWire.Name(k), scopes, Holds(scopes));
             })],
-            [.. DayGroupTable.Select(p => new CustomReportWorkspaceDayGroupPreset(p.Id, [.. p.Groups.Select(g => (IReadOnlyList<string>)g)]))],
-            [.. LeaveOutTable.Select(l => new CustomReportWorkspaceLeaveOut(l.Id, l.Parameter))],
+            [.. DayGroupTable.Select(p => new CustomReportWorkspaceDayGroupPreset(p.Id, [.. p.Groups.Select(g => (IReadOnlyList<string>)[.. g.Select(ReportWire.Name)])]))],
+            [.. LeaveOutTable.Select(l => new CustomReportWorkspaceLeaveOut(
+                l.Id, ParameterOf(l.Property), LeaveOutScopes(l.Property), Holds(LeaveOutScopes(l.Property))))],
             [.. RangeTable.Select(r => new CustomReportWorkspaceRangePreset(r.Id, r.Hours))],
             DefaultReportHours,
             [DifferenceSpec.Name, RatioSpec.Name],
@@ -421,20 +449,34 @@ internal static class ReportWorkspace
                 [EventOutcomesDataset.WrappingAxis],
                 [.. occurrence.Fields.Where(f => !f.Companion && f.AxisKind is not null && !f.Name.StartsWith("events", StringComparison.Ordinal)).Select(f => f.Name)]),
             new CustomReportWorkspaceSources(
-                ["glucose_statistics", "glucose_distribution", "device_status"],
-                ["treatments", "daily_summary", EventResponseParameters.Name, "glucose_series", "basal_delivery", "state_spans",
-                 "glucose_distribution_by_hour", "daily_profile", "settings_evidence", "glucose_statistics"],
+                [GlucoseStatisticsParameters.Name, GlucoseDistributionParameters.Name, DeviceStatusParameters.Name],
+                [TreatmentsParameters.Name, DailySummaryParameters.Name, EventResponseParameters.Name, GlucoseSeriesParameters.Name,
+                 BasalDeliveryParameters.Name, StateSpansParameters.Name, GlucoseDistributionByHourParameters.Name,
+                 DailyProfileParameters.Name, SettingsEvidenceParameters.Name, GlucoseStatisticsParameters.Name],
                 PeriodComparisonParameters.Name));
     }
+
+    /// <summary>The fields a cell binds, its <see cref="CellSpec.Field"/> first.</summary>
+    private static List<string> Named(CellSpec c) =>
+        c.Marks.Concat(c.FromStartMarks ?? [])
+            .SelectMany(m => (m.Bindings.Y ?? []).Concat(m.Bindings.Edges ?? []))
+            .Prepend(c.Field).Append(c.FromStartField).OfType<string>().Distinct().ToList();
+
+    /// <summary>
+    /// The color of the cell's own <see cref="CellSpec.Field"/>, where it has one. A cell with no field of its own
+    /// (a band between two edges, a stack, spans) draws each part in its own color, so it gives the signal none.
+    /// </summary>
+    internal static ChartColor? LeadColor(CellSpec c, IReportDatasetRegistry registry) =>
+        c.Field is { } field
+            ? registry.Find(c.Dataset)!.FieldsFor(ReportPanelKind.Chart).FirstOrDefault(f => f.Name == field)?.Color
+            : null;
 
     /// <summary>A cell with what the registry says of it: the scopes of its dataset and the fields it draws, and its lead field's unit.</summary>
     private static CustomReportWorkspaceCell Resolve(CellSpec c, IReportDatasetRegistry registry, Func<IEnumerable<string>, bool> holds)
     {
         var dataset = registry.Find(c.Dataset) ?? throw new InvalidOperationException($"The workspace names no dataset '{c.Dataset}'.");
         var fields = dataset.FieldsFor(ReportPanelKind.Chart);
-        var named = c.Marks.Concat(c.FromStartMarks ?? [])
-            .SelectMany(m => (m.Bindings.Y ?? []).Concat(m.Bindings.Edges ?? []))
-            .Prepend(c.Field).Append(c.FromStartField).OfType<string>().Distinct().ToList();
+        var named = Named(c);
         var scopes = named.Select(n => fields.FirstOrDefault(f => f.Name == n)?.Scope).OfType<string>()
             .Prepend(dataset.RequiredScope).Distinct().ToList();
         var lead = c.Field ?? named.FirstOrDefault();
@@ -445,6 +487,6 @@ internal static class ReportWorkspace
             c.Lens, c.Signal, c.Dataset,
             c.Parameters is null ? null : JsonSerializer.SerializeToElement(c.Parameters, Json),
             c.Field, unit, c.Marks, c.FromStartField, c.FromStartMarks, c.Smooth, c.Trend, c.Combine,
-            Takes("dayOfWeek"), Takes("days"), LeaveOutTable.All(l => Takes(l.Parameter)), c.SpanKind, scopes, holds(scopes));
+            Takes("dayOfWeek"), Takes("days"), LeaveOutTable.All(l => Takes(ParameterOf(l.Property))), c.SpanKind, scopes, holds(scopes));
     }
 }

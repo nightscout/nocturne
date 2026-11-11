@@ -19,6 +19,7 @@ internal sealed record ReportSpec
     public const int MaxPanels = 6;
     public const int MaxTracks = 4;
     public const int MaxLayers = 8;
+    public const int MaxUnitsPerTrack = 2;
 
     /// <summary>The most dataset reads one report makes, counted after the run cache: a derived layer's sources count.</summary>
     public const int MaxReads = 16;

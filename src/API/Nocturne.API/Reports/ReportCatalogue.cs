@@ -14,6 +14,7 @@ namespace Nocturne.API.Reports;
 /// <param name="MaxPanels">The most panels one report holds.</param>
 /// <param name="MaxTracks">The most tracks one chart holds.</param>
 /// <param name="MaxLayers">The most layers one chart holds.</param>
+/// <param name="MaxUnitsPerTrack">The most units one track's layers on an axis may be in: a left and a right axis.</param>
 /// <param name="MaxReads">The most dataset reads one report makes, a derived layer's sources counted; one query read twice counts once.</param>
 /// <param name="MaxTitleLength">The longest report, panel, track or layer title.</param>
 /// <param name="MaxRangeHours">The longest range any dataset covers, in hours.</param>
@@ -23,6 +24,7 @@ public sealed record CustomReportCatalogue(
     [property: Required] int MaxPanels,
     [property: Required] int MaxTracks,
     [property: Required] int MaxLayers,
+    [property: Required] int MaxUnitsPerTrack,
     [property: Required] int MaxReads,
     [property: Required] int MaxTitleLength,
     [property: Required] int MaxRangeHours,
@@ -232,6 +234,7 @@ internal sealed class ReportCatalogue(
         ReportSpec.MaxPanels,
         ReportSpec.MaxTracks,
         ReportSpec.MaxLayers,
+        ReportSpec.MaxUnitsPerTrack,
         ReportSpec.MaxReads,
         ReportSpec.MaxTitleLength,
         ReportSpec.MaxRangeHours,

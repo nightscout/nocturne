@@ -18,6 +18,13 @@ public static class EventAnchors
     public const long BolusAfterMealMs = 30 * LocalSlotBinning.MinuteMs;
 
     /// <summary>
+    /// Whether finding the anchors of <paramref name="kind"/> reads
+    /// <see cref="EventResponseDefinition.RequireCorroboration"/>: only unannounced rises, which the calculator finds
+    /// through <see cref="UnannouncedRises.Find"/>. Every other anchor is found the same whatever it says.
+    /// </summary>
+    public static bool ReadsCorroboration(EventAnchorKind kind) => kind == EventAnchorKind.UnannouncedRise;
+
+    /// <summary>
     /// Which way glucose is expected to go after an anchor of <paramref name="kind"/>. A sensor start
     /// has no expected direction and keeps the rise figures. Exercise is a fall, since a low after it
     /// is the risk. Every override is a fall: the anchor carries no insulin percentage, so one that

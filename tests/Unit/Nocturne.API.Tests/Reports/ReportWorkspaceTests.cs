@@ -141,6 +141,32 @@ public class ReportWorkspaceTests
         glucoseOnly.Anchors.Single(a => a.Id == "SleepStart").Scopes.Should().Equal(Scope.GlucoseRead, Scope.SleepRead);
         glucoseOnly.DayKinds.Single(d => d.Id == "exercise").Permitted.Should().BeFalse();
         glucoseOnly.DayKinds.Single(d => d.Id == "lowOvernight").Permitted.Should().BeTrue();
+        glucoseOnly.LeaveOuts.Should().OnlyContain(l => !l.Permitted);
+        glucoseOnly.LeaveOuts.Single(l => l.Id == "overrides").Scopes.Should().Equal(Scope.TreatmentsRead);
+        glucoseOnly.LeaveOuts.Single(l => l.Id == "openLoop").Scopes.Should().Equal(Scope.DevicesRead);
+        full.LeaveOuts.Should().OnlyContain(l => l.Permitted);
+    }
+
+    [Fact]
+    public void Only_the_anchors_whose_events_corroboration_changes_say_so()
+    {
+        Workspace().Anchors.Where(a => a.Corroboration).Select(a => a.Id).Should().Equal("UnannouncedRise");
+    }
+
+    [Fact]
+    public void A_signal_has_the_color_of_its_first_cells_field_wherever_that_field_has_one()
+    {
+        var registry = ReportSpecValidatorTests.Registry;
+        var workspace = Workspace();
+
+        foreach (var signal in workspace.Signals)
+        {
+            var colored = ReportWorkspace.Table.Where(c => c.Signal == signal.Id)
+                .Select(c => ReportWorkspace.LeadColor(c, registry)).OfType<Nocturne.Core.Models.ChartColor>().ToList();
+            if (colored.Count > 0)
+                signal.Color.Should().Be(ReportWire.Name(colored[0]), signal.Id);
+        }
+        workspace.Signals.Single(s => s.Id == "sleep").Color.Should().Be("activity-sleep");
     }
 
     [Fact]

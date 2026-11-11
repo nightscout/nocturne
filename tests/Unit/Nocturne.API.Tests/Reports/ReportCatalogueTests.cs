@@ -69,6 +69,7 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         catalogue.MaxPanels.Should().Be(ReportSpec.MaxPanels);
         catalogue.MaxTracks.Should().Be(4);
         catalogue.MaxLayers.Should().Be(8);
+        catalogue.MaxUnitsPerTrack.Should().Be(2);
         catalogue.MaxReads.Should().Be(16);
         catalogue.MaxRangeHours.Should().Be(ReportSpec.MaxRangeHours);
         catalogue.PanelKinds.Select(k => k.Name).Should().Equal("chart", "stat_tiles", "table", "comparison");
