@@ -433,7 +433,7 @@ public class ReportSpecRunnerTests
         context.Cache.Reads.Should().Be(1);
         var derived = panel.Tracks[0].Layers[1];
         derived.Status.Should().Be(ReportPanelStatus.Ok);
-        derived.Title.Should().Be("Rolling mean · Glucose");
+        derived.Title.Should().Be("Rolling mean of Glucose");
         derived.Rows.Should().HaveCount(72, "six hours on the default five-minute grid");
         derived.Fields.Select(f => f.Name).Should().Equal("x", "value");
         derived.Color.Should().BeNull("the first layer is coloured by glucose, the mean in its own field's colour");

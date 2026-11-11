@@ -77,6 +77,35 @@ internal abstract record LoopAnalysisDatasetParameters : ReportDatasetParameters
     }
 }
 
+/// <summary>
+/// The names a layer or panel gets, when the spec gives none, from parameters that read only some days: the days a
+/// filter keeps, the weekdays read. Event groups are named from their data, by the event datasets.
+/// </summary>
+internal static class ReportNames
+{
+    /// <summary>"Days with a low", "All other days", "Mon Tue", "Days with a low, Mon Tue"; null for every day.</summary>
+    public static string? Of(ReportDatasetParameters? parameters)
+    {
+        var (days, weekdays) = parameters switch
+        {
+            DailyProfileParameters p => (p.Days, p.DayOfWeek),
+            DailySummaryParameters p => (p.Days, null),
+            GlucoseDistributionByHourParameters p => ((ReportDayFilter?)null, p.DayOfWeek),
+            _ => (null, null),
+        };
+        var week = weekdays is { Count: > 0 and < 7 }
+            ? string.Join(' ', weekdays.Order().Select(d => ReportWire.Name(d)))
+            : null;
+        return (days?.Name(), week) switch
+        {
+            ({ } named, { } w) => $"{named}, {w}",
+            ({ } named, null) => named,
+            (null, { } w) => w,
+            _ => null,
+        };
+    }
+}
+
 /// <summary>A local weekday, as a cohort filter names it.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ReportWeekday>))]
 internal enum ReportWeekday
@@ -164,6 +193,15 @@ internal sealed record ReportDayFilter
         MaxCarbs = MaxCarbs,
         Others = Others,
     };
+
+    /// <summary>The days kept as a name: "Days with a low", or "All other days" for <see cref="Others"/>.</summary>
+    public string Name()
+    {
+        if (Others)
+            return "All other days";
+        var words = Words();
+        return char.ToUpperInvariant(words[0]) + words[1..];
+    }
 
     /// <summary>The days kept, in words: "days with exercise", "days without a low", "days with less than 150 g of carbs".</summary>
     public string Words()

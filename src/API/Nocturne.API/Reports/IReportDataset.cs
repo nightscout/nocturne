@@ -342,6 +342,15 @@ internal sealed record ReportDatasetOutput
     /// <summary>The hue a chart layer of these rows is drawn in, where the data names one: an event group's own hue.</summary>
     public ChartColor? Color { get; init; }
 
+    /// <summary>
+    /// The name a layer or panel of these rows gets when the spec gives none, where the rows are one group of
+    /// something: one event group's label, the days a day filter kept, the weekdays read. Null for the default name.
+    /// </summary>
+    public string? Name { get; init; }
+
+    /// <summary>How the days fell under a day filter, where one kept only some of them.</summary>
+    public ReportDayCounts? Days { get; init; }
+
     /// <summary>The query the panel's web report opens with, in place of the range's days; null for the range's days.</summary>
     public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
 }
@@ -377,7 +386,35 @@ internal sealed record ReportBandSpan(string Label, string Low, string High)
 }
 
 /// <summary>An event cohort a panel asked for: its number (1 to 6, in the order sent) and the label that names its filter.</summary>
-internal sealed record ReportCohort(int Number, string Label);
+/// <param name="Omitted">Why the group is not shown, or null when it is.</param>
+internal sealed record ReportCohort(
+    int Number,
+    string Label,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ReportCohortOmission? Omitted = null);
+
+/// <summary>Why an asked event group is not shown, as data.</summary>
+/// <param name="Reason"><c>scope</c>: the token lacks <paramref name="Scope"/>; <c>sibling</c>: an all-others group whose group <paramref name="Group"/> is not shown.</param>
+internal sealed record ReportCohortOmission(
+    string Reason,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Scope = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Group = null)
+{
+    public const string ScopeReason = "scope";
+    public const string SiblingReason = "sibling";
+}
+
+/// <summary>
+/// How the local days of a range fell under a day filter: the days kept, every day of the range, the days that had
+/// what the filter names and those that did not, and the days in neither group (only partly in the range, or
+/// starting before the history the token reads).
+/// </summary>
+internal sealed record ReportDayCounts(int Kept, int Total, int Matching, int NotMatching, int Partial, int Undecided)
+{
+    public static ReportDayCounts Of(Core.Models.LoopAnalysis.DaySelection selection) => new(
+        selection.Kept.Count,
+        selection.Matching + selection.NotMatching + selection.Partial + selection.Undecided,
+        selection.Matching, selection.NotMatching, selection.Partial, selection.Undecided);
+}
 
 internal sealed record ReportOmittedField(string Field, string Scope);
 

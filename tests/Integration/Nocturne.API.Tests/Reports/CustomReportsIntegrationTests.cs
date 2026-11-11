@@ -411,6 +411,58 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task Validate_normalises_as_a_run_does_reads_nothing_and_writes_no_read_audit()
+    {
+        await PostGlucoseAsync(_slugA, _sessionA, 140, TimeSpan.FromMinutes(5));
+        using var a = Session(_slugA, _sessionA);
+        var spec = new
+        {
+            version = 1,
+            title = "Validated",
+            panels = ((dynamic)Spec()).panels,
+            builder = new { kind = "workspace", version = 1, state = new { open = new[] { "p1" } } },
+        };
+        var since = DateTime.UtcNow;
+        (await a.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = true })).StatusCode.Should().Be(HttpStatusCode.OK);
+        try
+        {
+            var validated = await ReadAsync(await a.PostAsJsonAsync($"{Route}/validate", new { spec }), HttpStatusCode.OK);
+            var invalid = await ReadAsync(await a.PostAsJsonAsync($"{Route}/validate", new { spec = new { version = 1, panels = new object[] { new { kind = "chart" } } } }), HttpStatusCode.OK);
+            await Task.Delay(1500);
+            var run = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec, preview = true }), HttpStatusCode.OK);
+
+            validated.GetProperty("errors").GetArrayLength().Should().Be(0);
+            validated.GetProperty("spec").GetRawText().Should().Be(run.GetProperty("spec").GetRawText(), "validate normalises as a run does, builder state included");
+            validated.TryGetProperty("result", out _).Should().BeFalse("nothing is read");
+            invalid.GetProperty("errors")[0].GetProperty("path").GetString().Should().Be("panels[0].tracks");
+
+            var endpoints = new List<string>();
+            for (var attempt = 0; attempt < 40 && endpoints.Count == 0; attempt++)
+            {
+                await Task.Delay(250);
+                await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+                await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    SELECT set_config('app.current_tenant_id', @t, false);
+                    SELECT endpoint FROM read_access_log WHERE endpoint LIKE '%/reports/custom%' AND created_at >= @since;
+                    """;
+                cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
+                cmd.Parameters.AddWithValue("since", since);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                await reader.NextResultAsync();
+                while (await reader.ReadAsync())
+                    endpoints.Add(reader.GetString(0));
+            }
+            endpoints.Should().Equal(["POST /api/v4/reports/custom/run (preview)"], "the run writes its row; validate writes none");
+        }
+        finally
+        {
+            (await a.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = false })).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+    }
+
+    [Fact]
     public async Task A_run_writes_one_read_audit_row_with_the_categories_it_read()
     {
         await PostGlucoseAsync(_slugA, _sessionA, 140, TimeSpan.FromMinutes(5));

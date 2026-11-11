@@ -219,12 +219,21 @@ internal sealed class EventResponseDataset : IReportDataset
     /// The event groups as computed for a request: the report narrowed for the caller, each shown
     /// group's label and its number as asked, and the notes on the groups left out.
     /// </summary>
+    /// <param name="Cohorts">Every asked group with its label, and why it is not shown where it is not.</param>
     internal sealed record EventRun(
         EventResponseReport Report,
         IReadOnlyDictionary<int, string> Labels,
         IReadOnlyDictionary<int, int> Number,
         List<string> Notes,
-        IReadOnlyList<string> AskedLabels);
+        IReadOnlyList<string> AskedLabels,
+        IReadOnlyList<ReportCohort>? Cohorts = null)
+    {
+        /// <summary>The name of a layer of one group: its label, where the layer draws one group (<paramref name="group"/>) or only one was asked.</summary>
+        public string? NameOf(int? group) =>
+            group is { } n && n >= 1 && n <= AskedLabels.Count ? AskedLabels[n - 1]
+            : AskedLabels.Count == 1 ? AskedLabels[0]
+            : null;
+    }
 
     private static readonly System.Text.Json.JsonSerializerOptions SharedKeyOptions = new() { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
 
@@ -260,12 +269,19 @@ internal sealed class EventResponseDataset : IReportDataset
         var asked = parameters.AppliedCohorts;
         var kept = new List<(ReportEventCohort Cohort, int Number)>();
         var notes = new List<string>();
+        var omitted = new Dictionary<int, ReportCohortOmission>();
         for (var i = 0; i < asked.Count; i++)
         {
             if (asked[i].HasFoodFilter && !foodRead)
+            {
                 notes.Add($"Cohort {i + 1} is not shown: its food filter needs the food.read scope, which this token does not hold.");
+                omitted[i + 1] = new(ReportCohortOmission.ScopeReason, Scope.FoodRead);
+            }
             else if (asked[i].ReadsTreatments && !treatmentsRead)
+            {
                 notes.Add($"Cohort {i + 1} is not shown: its condition on carbs or IOB needs the treatments.read scope, which this token does not hold.");
+                omitted[i + 1] = new(ReportCohortOmission.ScopeReason, Scope.TreatmentsRead);
+            }
             else
                 kept.Add((asked[i], i + 1));
         }
@@ -277,6 +293,7 @@ internal sealed class EventResponseDataset : IReportDataset
                 continue;
             kept.Remove(others);
             notes.Add($"Cohort {others.Number} is not shown: it holds the events no other group takes in, and cohort {missing + 1} is not shown.");
+            omitted[others.Number] = new(ReportCohortOmission.SiblingReason, Group: missing + 1);
         }
 
         // With every cohort left out there is nothing to read; an empty query would mean every meal.
@@ -310,13 +327,21 @@ internal sealed class EventResponseDataset : IReportDataset
         var labels = definition.Cohorts.ToDictionary(c => c.Cohort, c => askedLabels[number[c.Cohort] - 1]);
         RecordReads(request.ReadLog, report, ran: definition.Cohorts.Count > 0 && resolved.Filter is not null && resolved.Zone is not null,
             readFoodNames: foodNames.Count > 0);
-        return new EventRun(report, labels, number, notes, askedLabels);
+        var anchorScopes = LoopAnalysisReadScopeGuard.UnavailableAnchors(request.GrantedScopes).ToDictionary(a => a.Anchor, a => a.RequiredScope);
+        var shown = definition.Cohorts.Select(c => number[c.Cohort]).ToHashSet();
+        foreach (var k in kept.Where(k => !shown.Contains(k.Number)))
+            omitted.TryAdd(k.Number, anchorScopes.TryGetValue(k.Cohort.Anchor, out var scope)
+                ? new(ReportCohortOmission.ScopeReason, scope)
+                : new(ReportCohortOmission.SiblingReason, Group: asked.Select((c, j) => (c, j)).FirstOrDefault(x => x.c.Anchor == k.Cohort.Anchor && !x.c.Others).j + 1));
+        IReadOnlyList<ReportCohort> cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label, omitted.GetValueOrDefault(i + 1)))];
+        return new EventRun(report, labels, number, notes, askedLabels, cohorts);
     }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var useMmol = request.UseMmol;
-        var (report, labels, number, shared, askedLabels) = await ComputeAsync(request, (EventResponseParameters)request.Parameters, cancellationToken);
+        var run = await ComputeAsync(request, (EventResponseParameters)request.Parameters, cancellationToken);
+        var (report, labels, number, shared, askedLabels, _) = run;
         var notes = new List<string>(shared);
         var slotMinutes = EventResponseCalculator.SlotMinutes(report.Definition);
         var events = report.Primary.Events;
@@ -354,7 +379,8 @@ internal sealed class EventResponseDataset : IReportDataset
             Context = ContextLine(report, ReportFacts.Plural(counted, "event")),
             Omitted = Omitted(report, fieldSeries),
             Window = Window(report),
-            Cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
+            Cohorts = run.Cohorts!,
+            Name = run.NameOf(null),
         };
     }
 

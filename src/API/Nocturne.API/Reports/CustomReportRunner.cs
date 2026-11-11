@@ -12,6 +12,9 @@ namespace Nocturne.API.Reports;
 public interface ICustomReportRunner
 {
     Task<CustomReportRunResponse> RunAsync(CustomReportRunRequest request, CancellationToken cancellationToken);
+
+    /// <summary>The spec normalised, or what to change, as a run would give them: reads no data and writes no read audit.</summary>
+    Task<CustomReportValidateResponse> ValidateAsync(CustomReportValidateRequest request, CancellationToken cancellationToken);
 }
 
 internal sealed class CustomReportRunner(
@@ -60,6 +63,20 @@ internal sealed class CustomReportRunner(
             if (!cancellationToken.IsCancellationRequested)
                 await AuditAsync(normalised, status, request.Preview, cancellationToken);
         }
+    }
+
+    public async Task<CustomReportValidateResponse> ValidateAsync(CustomReportValidateRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Spec is not { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } spec)
+            return new CustomReportValidateResponse(null, [new CustomReportSpecError("spec", ReportSpecStore.SendASpec)]);
+        if (!ReportSpec.WithinLimit(spec))
+            return new CustomReportValidateResponse(spec, [new CustomReportSpecError("spec", ReportSpec.TooLarge)]);
+
+        var validation = validator.Validate(
+            ReportSpecRewriter.Current.Rewrite(spec), await renderer.UsesMmolAsync(cancellationToken));
+        return validation.IsValid
+            ? new CustomReportValidateResponse(JsonSerializer.SerializeToElement(validation.Spec, Json), [])
+            : new CustomReportValidateResponse(spec, [.. ReportSpecStore.Errors(validation)]);
     }
 
     private static CustomReportRunResponse Refused(JsonElement? spec, params CustomReportSpecError[] errors) =>

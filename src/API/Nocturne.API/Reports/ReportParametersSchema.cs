@@ -24,7 +24,7 @@ namespace Nocturne.API.Reports;
 /// the <c>default</c>s of optional members, <c>x-enumLabels</c> beside every <c>enum</c>,
 /// <c>x-scope</c> and a sentence that names it (<see cref="ReportNeedsScopeAttribute"/>), and
 /// <c>x-input</c> (<see cref="ReportInputAttribute"/>) for a value picked from the tenant's own
-/// records, and on an event dataset <c>x-eventFigures</c> (<see cref="Datasets.EventFigures"/>). A
+/// records, and on an event dataset <c>x-eventFigures</c> and <c>x-eventAnchors</c> (<see cref="Datasets.EventFigures"/>). A
 /// nullable type is written as its non-null type: a parameter left out is null.
 /// </remarks>
 internal static partial class ReportParametersSchema
@@ -46,7 +46,10 @@ internal static partial class ReportParametersSchema
         var schema = Options.GetJsonSchemaAsNode(parametersType, ExporterOptions);
         Defaults(schema, parametersType);
         if (typeof(EventResponseParameters).IsAssignableFrom(parametersType))
+        {
             schema["x-eventFigures"] = Datasets.EventFigures.Node();
+            schema["x-eventAnchors"] = Datasets.EventFigures.AnchorsNode();
+        }
         return JsonSerializer.SerializeToElement(schema);
     }
 

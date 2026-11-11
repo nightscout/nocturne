@@ -57,6 +57,20 @@ public sealed record CustomReportRunResponse(
     JsonElement? Spec,
     IReadOnlyList<CustomReportSpecError> Errors);
 
+/// <summary>A spec to normalise without running it.</summary>
+public sealed record CustomReportValidateRequest
+{
+    public JsonElement? Spec { get; init; }
+}
+
+/// <summary>
+/// A spec normalised as a run would normalise it, its <c>builder</c> state included; or, when it is not valid, the
+/// spec as sent and what to change.
+/// </summary>
+public sealed record CustomReportValidateResponse(
+    JsonElement? Spec,
+    IReadOnlyList<CustomReportSpecError> Errors);
+
 public sealed record CustomReportCreateRequest
 {
     public string Name { get; init; } = string.Empty;

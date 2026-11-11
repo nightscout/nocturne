@@ -144,4 +144,48 @@ public class EventReadSharingTests
         asked.Should().BeNull("no group is left to read");
         summary.Should().Contain("Cohort 2 is not shown: it holds the events no other group takes in, and cohort 1 is not shown.");
     }
+
+    [Fact]
+    public async Task A_layer_or_panel_of_one_event_group_is_named_by_the_groups_label()
+    {
+        var (runner, context, _) = Harness().Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
+
+        var result = await runner.RunAsync(Validate($$"""
+            { "version": 1, "range": { "hours": 336 }, "panels": [
+              { "kind": "chart", "tracks": [ { "layers": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "LowStart" } ] }, "mark": "band" } ] } ] },
+              { "kind": "chart", "tracks": [ { "layers": [
+                { "dataset": { "name": "event_outcomes", "group": 2, {{Groups}} }, "mark": "points" },
+                { "dataset": { "name": "event_outcomes", {{Groups}} }, "mark": "points" } ] } ] },
+              { "kind": "table", "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal", "minutesSinceMeal": { "min": 240 } } ] } } ] }
+            """).Spec!, context, CancellationToken.None);
+
+        result.Panels[0].Title.Should().Be("Low start: all");
+        result.Panels[0].Tracks![0].Layers[0].Title.Should().Be("Low start: all");
+        result.Panels[1].Tracks![0].Layers.Select(l => l.Title).Should().Equal("Meal: all others", "Each event · Peak rise");
+        result.Panels[1].Title.Should().Be("Meal: all others");
+        result.Panels[2].Title.Should().Be("Meal: no carbs in the 4 hours before");
+    }
+
+    [Fact]
+    public async Task The_groups_left_out_say_why_as_data()
+    {
+        var (runner, context, _) = Harness().Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
+
+        var result = await runner.RunAsync(Validate("""
+            { "version": 1, "range": { "hours": 336 }, "panels": [ { "kind": "table", "dataset": { "name": "event_response", "cohorts": [
+              { "anchor": "Meal", "foods": ["0190a3c4-0000-7000-8000-000000000001"] }, { "anchor": "Meal", "others": true },
+              { "anchor": "SleepStart" }, { "anchor": "LowStart" } ] } } ] }
+            """).Spec!, context, CancellationToken.None);
+
+        result.Panels[0].Cohorts.Select(c => c.Omitted).Should().Equal(
+            new ReportCohortOmission(ReportCohortOmission.ScopeReason, Scope.FoodRead),
+            new ReportCohortOmission(ReportCohortOmission.SiblingReason, Group: 1),
+            new ReportCohortOmission(ReportCohortOmission.ScopeReason, Scope.SleepRead),
+            null);
+        JsonSerializer.Serialize(result.Panels[0].Cohorts, new JsonSerializerOptions(JsonSerializerDefaults.Web)).Should().Be(
+            """[{"number":1,"label":"Meal: a food filter","omitted":{"reason":"scope","scope":"food.read"}},"""
+            + """{"number":2,"label":"Meal: all others","omitted":{"reason":"sibling","group":1}},"""
+            + """{"number":3,"label":"Sleep start: all","omitted":{"reason":"scope","scope":"sleep.read"}},"""
+            + """{"number":4,"label":"Low start: all"}]""");
+    }
 }

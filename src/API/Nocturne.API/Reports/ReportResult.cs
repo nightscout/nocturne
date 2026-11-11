@@ -112,6 +112,10 @@ internal sealed record ReportPanelResult
     /// <summary>Every event cohort the panel asked for, with the label that names its filter; empty for other datasets.</summary>
     public IReadOnlyList<ReportCohort> Cohorts { get; init; } = [];
 
+    /// <summary>How the days fell under the panel's day filter; null without one.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public ReportDayCounts? Days { get; init; }
+
     /// <summary>At most six figures the view prints under the panel, label above value; empty where the panel has none.</summary>
     public IReadOnlyList<ReportFact> Facts { get; init; } = [];
 
@@ -154,6 +158,14 @@ internal enum ReportAxisSide
 /// <summary>One layer of a chart, resolved: its rows, how they are drawn and on which axis.</summary>
 internal sealed record ReportLayerResult
 {
+    /// <summary>The layer's title came from its data (<see cref="ReportDatasetOutput.Name"/>), so an untitled panel it leads takes it.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Named { get; init; }
+
+    /// <summary>How the days fell under the layer's day filter; null without one.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public ReportDayCounts? Days { get; init; }
+
     public required string Id { get; init; }
 
     /// <summary>The layer's name in the legend: its title, else the dataset's and the fields' names.</summary>

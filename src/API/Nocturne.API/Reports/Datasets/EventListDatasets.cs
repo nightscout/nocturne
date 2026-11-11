@@ -64,6 +64,40 @@ internal static class EventFigures
     private static bool Any(EventAnchorKind a) => true;
     private static bool Meal(EventAnchorKind a) => a == EventAnchorKind.Meal;
 
+    /// <summary>The rule the starts of lows and highs are found by: the glucose statistics' episodes.</summary>
+    internal const string EpisodeRule =
+        "A low starts after at least 15 minutes of readings below 70 mg/dL (3.9 mmol/L), a high after at least 15 minutes "
+        + "above 180 mg/dL (10.0 mmol/L), and each ends after at least 15 minutes back in range or at a gap in the readings. "
+        + "These limits are the same for everyone, not the profile's target.";
+
+    /// <summary>Each anchor in one line, as the engine finds it.</summary>
+    internal static string Description(EventAnchorKind anchor) => anchor switch
+    {
+        EventAnchorKind.Meal => "A carb entry; entries at the same instant are one meal.",
+        EventAnchorKind.CorrectionBolus => "A manual bolus with no carbs logged from 30 minutes before it to an hour after it.",
+        EventAnchorKind.SensorStart => "A CGM sensor start or change; records within two hours are one new sensor.",
+        EventAnchorKind.ExerciseStart => "The start of an exercise span.",
+        EventAnchorKind.OverrideStart => "The start of an override.",
+        EventAnchorKind.TemporaryTargetStart => "The start of a temporary target.",
+        EventAnchorKind.UnannouncedRise => "A meal-like glucose rise with no carbs logged near it.",
+        EventAnchorKind.LowStart => "The first reading of a low.",
+        EventAnchorKind.HighStart => "The first reading of a high.",
+        EventAnchorKind.SiteChange => "An infusion site, cannula or pod change, or a pod activated; records within two hours are one change.",
+        EventAnchorKind.SleepStart => "The start of a sleep session, naps included.",
+        EventAnchorKind.Wake => "The end of a sleep session.",
+        EventAnchorKind.LowTreatment => "The first carbs logged during a low.",
+        EventAnchorKind.AnyBolus => "Every manual bolus, for a meal or not; automatic boluses are not.",
+        _ => throw new ArgumentOutOfRangeException(nameof(anchor), anchor, null),
+    };
+
+    /// <summary>Each anchor's <c>description</c>, and the <c>rule</c> it is found by where one sentence does not say it.</summary>
+    public static System.Text.Json.Nodes.JsonObject AnchorsNode() => new(Enum.GetValues<EventAnchorKind>().Select(a =>
+        KeyValuePair.Create(a.ToString(), (System.Text.Json.Nodes.JsonNode?)new System.Text.Json.Nodes.JsonObject
+        {
+            ["description"] = Description(a),
+            ["rule"] = a is EventAnchorKind.LowStart or EventAnchorKind.HighStart or EventAnchorKind.LowTreatment ? EpisodeRule : null,
+        })));
+
     /// <summary>
     /// <c>responses</c>: each anchor's kind, <c>rise</c> or <c>fall</c>; <c>figures</c>: each figure's
     /// field name (and <see cref="EventOutcome"/> wire name) with the anchors it is worked out for.
@@ -181,7 +215,7 @@ internal abstract class EventListDataset : IReportDataset
         Sentence = reason,
         Omitted = [.. fields.Where(f => f.Scope == Scope.TreatmentsRead).Select(f => new ReportOmittedField(f.Name, Scope.TreatmentsRead))],
         Window = Window(run.Report),
-        Cohorts = [.. run.AskedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
+        Cohorts = run.Cohorts!,
     };
 
     private static ReportDatasetOutput Shown(
@@ -197,7 +231,7 @@ internal abstract class EventListDataset : IReportDataset
             ? [.. fields.Where(f => f.Scope == Scope.TreatmentsRead).Select(f => new ReportOmittedField(f.Name, Scope.TreatmentsRead))]
             : [],
         Window = Window(run.Report),
-        Cohorts = [.. run.AskedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
+        Cohorts = run.Cohorts!,
         FieldLabels = Enumerable.Range(1, run.AskedLabels.Count).ToDictionary(EventsField, n => run.AskedLabels[n - 1]),
     };
 }
@@ -320,6 +354,7 @@ internal sealed class EventOutcomesDataset : EventListDataset
             fitSentence ?? $"{ReportFacts.Plural(events.Count, "event")}, each drawn as a point.", Fields, events.Count) with
         {
             Color = parameters.Group is { } only ? EventResponseDataset.GroupHue(only) : null,
+            Name = run.NameOf(parameters.Group),
         };
     }
 
@@ -462,7 +497,7 @@ internal sealed class EventOutcomeSpreadDataset : EventListDataset
         if (shown.Count == 1 && missing > 0)
             lines.Add($"{ReportFacts.Plural(missing, "event")} have no {outcome.Label.ToLowerInvariant()} and are not counted.");
 
-        return Output(run, rows, Summary(run, useMmol, lines), facts, sentence, Fields, events.Count);
+        return Output(run, rows, Summary(run, useMmol, lines), facts, sentence, Fields, events.Count) with { Name = run.NameOf(parameters.Group) };
     }
 
     /// <summary>The ranges, lowest first, every one between the lowest and highest value, so an empty range shows as one.</summary>
@@ -592,7 +627,7 @@ internal sealed class EventOccurrenceDataset : EventListDataset
         var sentence = string.Join(' ', sentences);
         lines.Add((byWeekday ? "By local weekday. " : "By local hour. ") + sentence);
 
-        return Output(run, rows, Summary(run, request.UseMmol, lines), facts, sentence, Fields, events.Count);
+        return Output(run, rows, Summary(run, request.UseMmol, lines), facts, sentence, Fields, events.Count) with { Name = run.NameOf(parameters.Group) };
     }
 
     private static int? HourOf(EventResponseEvent e) =>

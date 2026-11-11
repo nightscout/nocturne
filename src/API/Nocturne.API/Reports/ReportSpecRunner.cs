@@ -220,7 +220,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var result = new ReportPanelResult
         {
             Id = panel.Id!,
-            Title = panel.Title,
+            Title = panel.Title ?? output.Name,
+            Days = output.Days,
             Kind = panel.Kind,
             Dataset = dataset.Name,
             Bindings = panel.Bindings,
@@ -299,7 +300,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var result = new ReportPanelResult
         {
             Id = panel.Id!,
-            Title = panel.Title ?? DefaultPanelTitle(tracks.SelectMany(t => t.Layers).Single(l => l.Id == (first ?? all[0]).Id)),
+            Title = panel.Title ?? DefaultPanelTitle(tracks.SelectMany(t => t.Layers).Single(l => l.Id == (first ?? all[0]).Id), first ?? all[0]),
             Kind = ReportPanelKind.Chart,
             Status = drawn.Count > 0 ? ReportPanelStatus.Ok : all[0].Status,
             Window = new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),
@@ -339,9 +340,13 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         (layer.Bindings.Y ?? []).Concat(layer.Bindings.Edges ?? [])
             .Any(n => layer.Fields.FirstOrDefault(f => f.Name == n) is { GlucoseScale: true });
 
-    /// <summary>An untitled chart panel's title: its lead layer's title, else the name of that layer's dataset or op.</summary>
-    private string DefaultPanelTitle(ReportLayerSpec lead) =>
-        lead.Title ?? (lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : registry.Find(lead.Dataset!.DatasetName)!.Label);
+    /// <summary>
+    /// An untitled chart panel's title: its lead layer's title, or the name its data gave it (one event group, the days
+    /// kept), else the name of that layer's dataset or op.
+    /// </summary>
+    private string DefaultPanelTitle(ReportLayerSpec lead, ReportLayerResult leadResult) =>
+        lead.Title ?? (leadResult.Named ? leadResult.Title
+            : lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : registry.Find(lead.Dataset!.DatasetName)!.Label);
 
     /// <summary>
     /// The facts and the sentence of <paramref name="output"/> about fields <paramref name="drawn"/> names every one of
@@ -452,6 +457,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 return (Empty(computed.Status, computed.Note!, from, to), null);
             var op = ReportDerivedOps.Of(derived);
             var outputFields = computed.Fields!;
+            title = layer.Title ?? DerivedTitle(derived, computed.Cohorts);
             var bound = BoundNames(layer.Bindings!);
             var cut = computed.Cuts.Count > 0 ? string.Join(' ', computed.Cuts.Distinct()) : null;
             return (new ReportLayerResult
@@ -535,6 +541,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             : [];
         if (layer.Title is null && layer.Mark == ReportMark.Markers)
             title = MarkersTitle(dataset.Label, fields, bindings, markers);
+        var named = layer.Title is null && output.Name is not null;
+        if (named)
+            title = output.Name!;
         var (facts, sentence, settingsSentence) = About(output, drawnNames);
         if (output.CutNote is { } cutNote)
             sentence = sentence is null ? cutNote : $"{sentence} {cutNote}";
@@ -566,6 +575,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Cohorts = output.Cohorts,
             Omitted = output.Omitted,
             Color = output.Color,
+            Named = named,
+            Days = output.Days,
             Resolution = output.Resolution,
         }, output);
     }
@@ -722,14 +733,15 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         return new Derivation(ReportPanelStatus.Ok, null, computed, op.OutputFields(derived, infos[0], infos.ElementAtOrDefault(1)), infos[0], step, cuts, cohorts);
     }
 
-    /// <summary>A layer's name in the legend when it gives none: the dataset's and the fields' names, or the op's and the sources'.</summary>
+    /// <summary>
+    /// A layer's name in the legend when it gives none, before its data is read: the dataset's and the fields' names, or
+    /// a derived layer's own (<see cref="DerivedTitle"/>). A dataset may name the layer from its data instead
+    /// (<see cref="ReportDatasetOutput.Name"/>).
+    /// </summary>
     private string DefaultTitle(ReportLayerSpec layer, bool useMmol)
     {
         if (layer.Derived is { } derived)
-        {
-            var op = ReportDerivedOps.Of(derived);
-            return $"{op.Label} · {string.Join(" and ", derived.Sources.Select(SourceWords))}";
-        }
+            return DerivedTitle(derived, new Dictionary<string, IReadOnlyList<ReportCohort>>());
         var dataset = registry.Find(layer.Dataset!.DatasetName)!;
         var fields = dataset.FieldsFor(ReportPanelKind.Chart);
         var named = (layer.Bindings!.Y ?? []).Concat(layer.Mark == ReportMark.Band && layer.Bindings.Y is null ? layer.Bindings.Edges ?? [] : [])
@@ -737,10 +749,40 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         return named.Count == 0 || layer.Mark == ReportMark.Spans ? dataset.Label : $"{dataset.Label} · {string.Join(", ", named)}";
     }
 
-    private string SourceWords(ReportSourceSpec source) =>
-        source.Derived is { } inner
-            ? $"{ReportDerivedOps.Of(inner).Label.ToLowerInvariant()} of {string.Join(" and ", inner.Sources.Select(SourceWords))}"
-            : registry.Find(source.Dataset!.DatasetName)!.Fields.FirstOrDefault(f => f.Name == source.Field)?.Label ?? source.Field;
+    /// <summary>
+    /// A derived layer's name from its op and sources: "Glucose median, days with a low minus Glucose median, all other
+    /// days", "Rolling mean of Glucose", "IOB median, Meal: Pizza against Glucose median, Meal: Pizza".
+    /// </summary>
+    /// <param name="cohorts">Each source's event groups, by its key (a, b), once read; a group is "group n" until then.</param>
+    internal string DerivedTitle(ReportDerivedSpec derived, IReadOnlyDictionary<string, IReadOnlyList<ReportCohort>> cohorts)
+    {
+        var words = derived.Sources.Zip(new[] { "a", "b" })
+            .Select(s => SourceWords(s.First, cohorts.GetValueOrDefault(s.Second))).ToList();
+        return derived.OpName switch
+        {
+            DifferenceSpec.Name => $"{words[0]} minus {words[1]}",
+            RatioSpec.Name => $"{words[0]} over {words[1]}",
+            ScatterSpec.Name => $"{words[1]} against {words[0]}",
+            _ when words.Count == 2 => $"{ReportDerivedOps.Of(derived).Label} of {words[0]} and {words[1]}",
+            _ => $"{ReportDerivedOps.Of(derived).Label} of {words[0]}",
+        };
+    }
+
+    /// <summary>A source in words: its field, and what sets its rows apart (its event group, the days or weekdays it reads).</summary>
+    private string SourceWords(ReportSourceSpec source, IReadOnlyList<ReportCohort>? cohorts)
+    {
+        if (source.Derived is { } inner)
+        {
+            var nested = DerivedTitle(inner, new Dictionary<string, IReadOnlyList<ReportCohort>>());
+            return char.ToLowerInvariant(nested[0]) + nested[1..];
+        }
+        var label = registry.Find(source.Dataset!.DatasetName)!.Fields.FirstOrDefault(f => f.Name == source.Field)?.Label ?? source.Field;
+        var group = source.Series is { } n
+            ? cohorts?.FirstOrDefault(c => c.Number == n)?.Label ?? $"group {n}"
+            : null;
+        var apart = group ?? ReportNames.Of(source.Dataset);
+        return apart is null ? label : $"{label}, {(group is null ? char.ToLowerInvariant(apart[0]) + apart[1..] : apart)}";
+    }
 
     private static string ScopeWords(string scope) => scope switch
     {

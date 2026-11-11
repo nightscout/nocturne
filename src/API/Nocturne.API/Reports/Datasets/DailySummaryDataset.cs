@@ -161,6 +161,8 @@ internal sealed class DailySummaryDataset : IReportDataset
             Context = (dayFilter is null ? "" : dayFilter.Summary(selection) + " ") + string.Create(CultureInfo.InvariantCulture,
                 $"Local days {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}. {rows.Count(r => r["readings"] is int n && n > 0)} of {rows.Count} days with readings."),
             FieldLabels = DailyProfileDataset.DayFieldLabels(Fields, dayFilter),
+            Name = ReportNames.Of(request.Parameters),
+            Days = selection is null ? null : ReportDayCounts.Of(selection),
             Omitted = omitted,
             Window = days.Count == 0 ? null : new ReportWindow(days[0].Timestamp, days[^1].EndTimestamp),
         };

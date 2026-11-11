@@ -164,6 +164,8 @@ internal sealed class DailyProfileDataset : IReportDataset
             Omitted = Omitted(report, FieldSeries),
             Window = Window(report),
             FieldLabels = DayFieldLabels(Fields, dayFilter),
+            Name = ReportNames.Of(parameters),
+            Days = report.Primary.DaySelection is { } selection ? ReportDayCounts.Of(selection) : null,
         };
     }
 

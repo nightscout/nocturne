@@ -90,6 +90,18 @@ public class CustomReportsController(
         Ok(await runner.RunAsync(request, cancellationToken));
 
     /// <summary>
+    /// Normalises a spec as a run would, or says what to change, without running it: it reads no data and writes
+    /// no read-audit row. For a page that compares a spec it rebuilt with a saved one.
+    /// </summary>
+    [HttpPost("validate")]
+    [RemoteCommand]
+    [RequestSizeLimit(MaxBodyBytes)]
+    [ProducesResponseType(typeof(CustomReportValidateResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CustomReportValidateResponse>> ValidateCustomReport(
+        [FromBody] CustomReportValidateRequest request, CancellationToken cancellationToken) =>
+        Ok(await runner.ValidateAsync(request, cancellationToken));
+
+    /// <summary>
     /// Saves a spec under a name unique among the tenant's custom reports. Refused to a
     /// history-clamped member, and once the tenant keeps <see cref="ReportSpecStore.MaxReports"/>.
     /// </summary>
