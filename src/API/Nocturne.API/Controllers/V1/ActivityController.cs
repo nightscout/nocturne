@@ -57,7 +57,7 @@ public class ActivityController : ControllerBase
 
     /// <summary>
     /// Get all activities with optional filtering and pagination.
-    /// Returns regular activities, heart rate, and step count data merged by timestamp.
+    /// Returns regular activities, heart rate, step count and sleep data merged by timestamp.
     /// Requires read access to at least one of those categories; records in categories the caller cannot read are omitted, so fewer than <c>count</c> records can come back.
     /// </summary>
     /// <remarks>

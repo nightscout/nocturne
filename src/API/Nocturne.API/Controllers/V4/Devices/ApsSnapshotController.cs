@@ -33,8 +33,8 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
 {
     /// <summary>
     /// Create or update APS snapshots in bulk (max 1000).
-    /// A snapshot with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other snapshot is inserted.
-    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing. Stored records carry no device link.
+    /// A snapshot with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other snapshot is inserted. An item whose pair is held by a deleted record is skipped and left out of the response.
+    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing.
     /// A curve in a command's `predBGs` fills the matching `predicted*Json` field when that field is empty; a Loop status's `predicted.values` fills `predictedDefaultJson`.
     /// </summary>
     /// <remarks>

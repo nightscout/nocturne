@@ -31,7 +31,7 @@ public class LastModifiedController : ControllerBase
 
     /// <summary>
     /// Get last modified timestamps for the collections the caller can read.
-    /// On an internal error it still returns 200, with null timestamps.
+    /// On an internal error it still returns 200, with an empty <c>collections</c> map.
     /// </summary>
     /// <returns>A <see cref="LastModifiedResponse"/> with per-collection timestamps and server time.</returns>
     /// <remarks>

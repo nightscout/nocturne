@@ -698,7 +698,8 @@ public class EntriesController : ControllerBase
 
     /// <summary>
     /// Delete an entry by ID, or the entries a type spec and <c>find[...]</c> select.
-    /// A type spec deletes in bulk, and the path type overrides any <c>find[type]</c>.
+    /// A type spec deletes in bulk, needs full access (403 without it), and the path type overrides
+    /// any <c>find[type]</c>.
     /// </summary>
     /// <param name="id">The entry ID to delete, an entry type, or <c>*</c> for every type</param>
     /// <param name="cancellationToken">Cancellation token for async operations</param>

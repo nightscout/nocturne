@@ -50,7 +50,7 @@ public class ActivityController : ControllerBase
     }
 
     /// <summary>
-    /// Get activity records with pagination
+    /// Get activity records with pagination.
     /// The page size is clamped. Records in categories the caller cannot read are left out after paging, so a page can hold fewer than <c>limit</c> records; the total counts only categories the caller can read.
     /// </summary>
     /// <remarks>
@@ -98,7 +98,7 @@ public class ActivityController : ControllerBase
     }
 
     /// <summary>
-    /// Get a specific activity record by ID
+    /// Get a specific activity record by ID.
     /// A record in a category the caller cannot read returns 404, not 403.
     /// </summary>
     /// <remarks>

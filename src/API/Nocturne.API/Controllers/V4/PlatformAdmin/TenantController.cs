@@ -298,7 +298,7 @@ public class TenantController : ControllerBase
     /// <summary>
     /// Mints a single-use recovery code that lets a member enrol a passkey at
     /// <c>POST /api/auth/passkey/recovery-mode/redeem</c> on the tenant's host.
-    /// For a member nobody on the tenant may recover: the only owner, a platform admin, or a member of another tenant.
+    /// Refused with 409 when the member can still sign in or is not a member of the tenant.
     /// </summary>
     /// <remarks>
     /// The operator's way to recover a member nobody on the tenant may recover: the only owner, a

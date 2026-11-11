@@ -58,8 +58,8 @@ public class LoopAnalysisController(
     /// How far each prediction curve's values at +30, +60, +90 and +120 minutes landed from the
     /// sensor reading nearest the time they predicted, overall, by local hour of day and by context.
     /// Error is predicted minus actual, so a positive bias is a prediction that ran high. A horizon
-    /// with no reading within 2.5 minutes is counted as unmatched. Needs glucose.read and
-    /// devices.read; without treatments.read the context breakdowns and the oref IOB, zero-temp and
+    /// with no reading within 2.5 minutes is counted as unmatched. Without glucose.read and
+    /// devices.read no curve is returned; without treatments.read the context breakdowns and the oref IOB, zero-temp and
     /// COB curves are withheld.
     /// </summary>
     /// <remarks>

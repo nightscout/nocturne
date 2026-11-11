@@ -205,7 +205,7 @@ public class TotpController : ControllerBase
     }
 
     /// <summary>
-    /// Remove a TOTP credential by ID. Allowed even when it is the last credential, since TOTP is never the only sign-in factor.
+    /// Remove a TOTP credential by ID. Allowed even when it is the last TOTP credential.
     /// </summary>
     /// <param name="id">The unique identifier of the TOTP credential to remove.</param>
     /// <returns>204 on success.</returns>

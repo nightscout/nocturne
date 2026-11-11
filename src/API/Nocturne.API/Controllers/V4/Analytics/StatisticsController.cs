@@ -840,7 +840,7 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Pre-aggregated month-by-day statistics for the calendar punch-card view. Fetches glucose,
     /// boluses, carb intakes, and basal records in a single batch for
-    /// <see cref="IStatisticsService.CalculatePunchCard"/> (no per-day round-trips). Without
+    /// <see cref="IStatisticsService.CalculatePunchCard"/> (no per-day round-trips). Without either
     /// <c>reports.read</c> or <c>treatments.read</c>, every carb, insulin and ratio figure is zero.
     /// </summary>
     /// <param name="startDate">Inclusive start calendar date in the tenant's timezone.</param>

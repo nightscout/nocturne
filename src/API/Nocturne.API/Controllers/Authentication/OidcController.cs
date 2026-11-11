@@ -146,7 +146,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Handle OIDC callback from provider.
-    /// Exchanges authorization code for tokens and creates session. Sets session cookies on success and redirects to the error page on failure.
+    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page, and a missing <c>code</c> or <c>state</c> returns 400.
     /// </summary>
     /// <param name="code">Authorization code from provider.</param>
     /// <param name="state">State parameter for CSRF verification.</param>
@@ -437,7 +437,6 @@ public class OidcController : ControllerBase
     /// <summary>
     /// Unlink an OIDC identity from the currently-authenticated subject.
     /// Blocked if this would leave the subject with zero primary auth factors.
-    /// Removing an identity also lowers the primary factor count that the passkey credential list reports.
     /// </summary>
     /// <param name="identityId">The unique identifier of the OIDC identity to unlink.</param>
     /// <returns>204 on success, 404 if not found, 409 if this is the last primary factor.</returns>

@@ -113,8 +113,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     }
 
     /// <summary>
-    /// Creates or updates many records in one request, and returns them. Items are handled one by
-    /// one. For types that upsert, an item carrying both `dataSource` and `syncIdentifier` updates
+    /// Creates or updates many records in one request, and returns them. Each item's outcome is
+    /// decided on its own. For types that upsert, an item carrying both `dataSource` and `syncIdentifier` updates
     /// the matching record in place, and an item whose pair is held by a deleted record is skipped;
     /// other types, and items without both fields, insert. An empty body, too many items, an item
     /// with no `timestamp`, an item with `syncIdentifier` but no `dataSource`, or an item that fails

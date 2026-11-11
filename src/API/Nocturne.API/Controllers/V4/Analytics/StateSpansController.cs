@@ -264,7 +264,7 @@ public class StateSpansController : ControllerBase
 
     /// <summary>
     /// Get all activity state spans (exercise, illness, travel). The three categories are merged
-    /// before paging, so <c>offset</c> plus <c>count</c> is capped at a lower ceiling than on other
+    /// before paging, so <c>offset</c> plus <c>limit</c> is capped at a lower ceiling than on other
     /// lists, and a page near it can hold fewer spans than asked for.
     /// </summary>
     /// <remarks>

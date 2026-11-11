@@ -112,7 +112,7 @@ public class PredictionController : ControllerBase
     /// <summary>
     /// Get the pre-resolved therapy profile for the next 24 hours, flattened into contiguous
     /// absolute-time segments, for an offline on-device <c>oref</c> prediction run. Available
-    /// whatever <c>Predictions:Source</c> is set to. The payload omits the oref constants
+    /// even when server-side prediction is off. The payload omits the oref constants
     /// <c>max_iob=10</c>, <c>max_basal=4</c> and <c>max_daily_basal=2</c>; a client matching a
     /// server-side run applies them itself.
     /// </summary>

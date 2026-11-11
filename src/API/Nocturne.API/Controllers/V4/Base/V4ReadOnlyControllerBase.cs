@@ -28,7 +28,7 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
     /// capped at a maximum page size, and a `from`/`to` range wider than the maximum span is rejected
     /// with `400 Bad Request`. `pagination.total` is returned only when `includeTotal` is `true`, or
     /// when a first page shorter than `limit` carries its own length; `includeTotal` counts the date
-    /// range only, not `device`, `source` or `patientDeviceId`.
+    /// range only, not `device` or `source`.
     /// </summary>
     /// <param name="from">Inclusive start of the date range filter.</param>
     /// <param name="to">Inclusive end of the date range filter.</param>
