@@ -52,6 +52,9 @@ internal static partial class LoopAnalysisReadScopeGuard
         ("foodCategory", c => !string.IsNullOrWhiteSpace(c.FoodCategory), c => c.FoodCategory = null),
     ];
 
+    /// <summary>The read scopes an anchor kind needs: glucose, and the category its events are drawn from.</summary>
+    public static IReadOnlyList<string> ScopesOf(EventAnchorKind anchor) => AnchorScopes[anchor];
+
     /// <summary>The first scope an anchor kind needs that the caller lacks, or null.</summary>
     private static string? MissingScope(EventAnchorKind anchor, IReadOnlySet<string> grantedScopes) =>
         AnchorScopes[anchor].FirstOrDefault(scope => !AnalyticsReadScopes.Allows(grantedScopes, scope));

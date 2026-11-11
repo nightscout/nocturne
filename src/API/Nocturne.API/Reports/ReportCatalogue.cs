@@ -10,7 +10,7 @@ using MvcJsonOptions = Microsoft.AspNetCore.Mvc.JsonOptions;
 
 namespace Nocturne.API.Reports;
 
-/// <summary>What the report builder may compose: the limits of a spec, every dataset, mark and derived op.</summary>
+/// <summary>What the report builder may compose: the limits of a spec, every dataset, mark and derived op, and the workspace vocabulary.</summary>
 /// <param name="MaxPanels">The most panels one report holds.</param>
 /// <param name="MaxTracks">The most tracks one chart holds.</param>
 /// <param name="MaxLayers">The most layers one chart holds.</param>
@@ -31,7 +31,8 @@ public sealed record CustomReportCatalogue(
     [property: Required] IReadOnlyList<CustomReportPanelKind> PanelKinds,
     [property: Required] IReadOnlyList<CustomReportMark> Marks,
     [property: Required] IReadOnlyList<CustomReportOp> Ops,
-    [property: Required] IReadOnlyList<CustomReportDataset> Datasets);
+    [property: Required] IReadOnlyList<CustomReportDataset> Datasets,
+    [property: Required] CustomReportWorkspace Workspace);
 
 /// <summary>A kind of panel, with its words.</summary>
 public sealed record CustomReportPanelKind([property: Required] string Name, [property: Required] string Label);
@@ -244,7 +245,8 @@ internal sealed class ReportCatalogue(
             [.. ReportMarks.XKinds(m).Select(ReportWire.Name)],
             [.. ReportMarks.Slots(m).Select(s => new CustomReportMarkSlot(s.Key, s.Label, s.Input, s.Accepts, s.Counts, s.Required))]))],
         [.. ReportDerivedOps.All.Select(Op)],
-        [.. registry.All.Select(dataset => Describe(dataset, grantedScopes, useMmol))]);
+        [.. registry.All.Select(dataset => Describe(dataset, grantedScopes, useMmol))],
+        ReportWorkspace.Build(registry, grantedScopes));
 
     internal static string PanelKindLabel(ReportPanelKind kind) => kind switch
     {

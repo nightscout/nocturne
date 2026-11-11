@@ -258,12 +258,12 @@ internal sealed class EventOutcomesDataset : EventListDataset
     public override Type ParametersType => typeof(EventOutcomesParameters);
 
     /// <summary>The outcomes a point may show; the glucose at the event lies along the axis instead.</summary>
-    private static readonly IReadOnlyList<EventOutcomeInfo> Outcomes = [.. EventOutcomeInfo.All.Where(o => o.Outcome != EventOutcome.StartGlucose)];
+    internal static readonly IReadOnlyList<EventOutcomeInfo> Outcomes = [.. EventOutcomeInfo.All.Where(o => o.Outcome != EventOutcome.StartGlucose)];
 
     internal static string FitField(EventOutcomeInfo outcome) => outcome.Name + "Fit";
 
     /// <summary>The axis no straight line is fitted along: the time of day starts again at midnight, so 23:50 and 00:10 lie far apart on it.</summary>
-    private const string WrappingAxis = "timeOfDay";
+    internal const string WrappingAxis = "timeOfDay";
 
     public override IEnumerable<(string Field, string Message)> ValidateBindings(ReportLayerBindings bindings)
     {
@@ -278,7 +278,7 @@ internal sealed class EventOutcomesDataset : EventListDataset
     public override string? ReadVariant(ReportReadShape shape) =>
         Outcomes.FirstOrDefault(o => shape.Fields?.Contains(o.Name) == true)?.Name;
 
-    private static readonly IReadOnlyList<ReportField> AxisFields =
+    internal static readonly IReadOnlyList<ReportField> AxisFields =
     [
         new("startGlucose", "Glucose at the event", ReportFieldKind.Value, ReportField.GlucoseUnit, "The reading nearest the event, within 5 minutes.", Scope.TreatmentsRead),
         new("grams", "Carbs", ReportFieldKind.Value, "g", "A meal's carbs; empty for other events.", Scope.TreatmentsRead),
