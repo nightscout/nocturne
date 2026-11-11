@@ -22,7 +22,7 @@ test.describe("custom report builder", () => {
 
     await signIn(page, tenant);
     await page.goto(`${tenant.webUrl}/reports/custom/new`);
-    await page.getByText("Is there a dawn rise?", { exact: true }).click();
+    await page.getByText("The last 24 hours", { exact: true }).click();
     await expect(page.getByTestId("chart-preview").getByTestId("report-layered-chart")).toBeVisible();
 
     await page.getByTestId("save-trigger").click();
@@ -37,6 +37,13 @@ test.describe("custom report builder", () => {
     await page.goto(`${tenant.webUrl}/reports/custom/${id}/edit`);
     await expect(page.getByTestId("report-workspace")).toBeVisible();
     await expect(page.getByTestId("opened-in-form")).toHaveCount(0);
+    await expect(page.getByLabel("Report title")).toHaveValue("The last 24 hours");
+    await expect(page.getByRole("radio", { name: "Timeline" })).toHaveAttribute("data-state", "on");
+    await expect(page.getByTestId("chart-caption")).toContainText("as a timeline over the last 24 hours");
+    const chips = page.getByTestId("signal-chips");
+    for (const name of ["Glucose", "Target range", "Insulin on board", "Carbs on board"])
+      await expect(chips.getByRole("button", { name: new RegExp(`^${name}`) }).first()).toBeVisible();
+    await expect(page.getByTestId("chart-preview").getByTestId("report-layered-chart")).toBeVisible();
   });
 
   test("opens a report made elsewhere in the form, and saves an edit to it", async ({ page, seed }) => {

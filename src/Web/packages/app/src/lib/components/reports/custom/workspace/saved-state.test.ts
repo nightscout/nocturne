@@ -97,6 +97,22 @@ describe("the workspace's saved state", () => {
     for (const bad of [older, extra, unknownSignal, unknownAnchor, null, "state", []])
       expect(parseSavedReport(BUILDER_VERSION, bad)).toBeNull();
   });
+
+  it("refuses state the workspace could never have made", () => {
+    const state = travelled(new Report(liveCatalogue, starter("last-24-hours")!)) as SavedReport;
+    const [chart] = state.blocks;
+    if (chart.kind !== "chart") throw new Error("unexpected block");
+    const withChart = (patch: Record<string, unknown>) => ({ ...state, blocks: [{ ...chart, chart: { ...chart.chart, ...patch } }] });
+    const hidden = {
+      "a block key twice": { ...state, blocks: [chart, chart] },
+      "a lane naming a signal not placed": withChart({ lanes: [...chart.chart.lanes, { id: "lane-x", family: "Body", own: false, signals: ["heartRate"] }] }),
+      "a signal placed twice": withChart({ placed: [...chart.chart.placed, chart.chart.placed[0]] }),
+      "a group key twice": withChart({ moments: [chart.chart.moments[0], chart.chart.moments[0]] }),
+      "a profile name over 100 characters": withChart({ profileName: "p".repeat(101) }),
+    };
+    for (const [what, bad] of Object.entries(hidden)) expect(parseSavedReport(BUILDER_VERSION, bad), what).toBeNull();
+    expect(Report.fromState(liveCatalogue, BUILDER_VERSION, { ...state, title: "t".repeat(liveCatalogue.maxTitleLength + 1) })).toBeNull();
+  });
 });
 
 describe("the builder member of a spec", () => {
@@ -138,7 +154,13 @@ describe("opening a saved report", () => {
     const saved = await savedSpec(new Report(liveCatalogue, starter("meals-start-high")!));
     const changed = { ...saved, title: "Changed in the form" };
 
-    expect((await openSaved(liveCatalogue, changed, normalise)).builder).toBe("form");
+    expect(await openSaved(liveCatalogue, changed, normalise)).toEqual({ builder: "form", reason: "changed" });
+  });
+
+  it("does not answer when the check could not be made, so nothing opens in the form on a failure", async () => {
+    const saved = await savedSpec(new Report(liveCatalogue, starter("meals-start-high")!));
+
+    await expect(openSaved(liveCatalogue, saved, () => Promise.reject(new Error("offline")))).rejects.toThrow("offline");
   });
 
   it("opens in the form with no state, a state of another version, or a spec that does not validate", async () => {
@@ -146,8 +168,8 @@ describe("opening a saved report", () => {
     const saved = await savedSpec(report);
     const check = vi.fn(normalise);
 
-    expect((await openSaved(liveCatalogue, withoutBuilder(saved), check)).builder).toBe("form");
-    expect((await openSaved(liveCatalogue, { ...saved, builder: { ...saved.builder, version: 99 } }, check)).builder).toBe("form");
+    expect(await openSaved(liveCatalogue, withoutBuilder(saved), check)).toEqual({ builder: "form", reason: "notMade" });
+    expect(await openSaved(liveCatalogue, { ...saved, builder: { ...saved.builder, version: 99 } }, check)).toEqual({ builder: "form", reason: "notMade" });
     expect(check).not.toHaveBeenCalled();
     expect((await openSaved(liveCatalogue, saved, () => Promise.resolve(null))).builder).toBe("form");
   });

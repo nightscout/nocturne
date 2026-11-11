@@ -1,3 +1,4 @@
+import { EventAnchorKind } from "#lib/api/index.js";
 import { describe, expect, it } from "vitest";
 import { liveCatalogue } from "./catalogue.fixtures.js";
 import { Report } from "./report.svelte.js";
@@ -188,8 +189,8 @@ describe("the starters", () => {
       minutesAfter: 120,
     });
     expect(ws.beforeChoices).toContain(240);
-    expect(ws.anchorRule("LowStart")).toMatch(/^A low starts after at least 15 minutes/);
-    expect(ws.anchorRule("Meal")).toBeNull();
+    expect(ws.anchorRule(EventAnchorKind.LowStart)).toMatch(/^A low starts after at least 15 minutes/);
+    expect(ws.anchorRule(EventAnchorKind.Meal)).toBeNull();
     expect(ws.conditionReason("minutesSinceMeal")).toBeNull();
     expect(ws.conditionLimits("startGlucose")).toEqual({ min: 0, max: 600 });
   });
@@ -328,14 +329,28 @@ describe("the events one by one", () => {
     );
   });
 
-  it("refuses the event views beside an earlier period, with the reason", () => {
+  it("removes the earlier period, and says so, when the view changes to one that cannot draw it", () => {
     const ws = from("later-breakfast");
     ws.setEvent({ comparison: { from: "2026-08-01", to: "2026-08-31" } });
+    expect(JSON.stringify(spec(ws))).toContain("comparisonRange");
 
-    expect(ws.showReason("each")).toBe(
-      "Remove the earlier period first. This shows the events of the range only."
-    );
-    expect(ws.showReason("curve")).toBeNull();
+    expect(ws.showReason("each")).toBeNull();
+    expect(ws.setShow("each")).toBeNull();
+
+    expect(ws.event.comparison).toBeNull();
+    expect(ws.comparisonDropped).toBe(true);
+    expect(ws.captionText()).not.toContain("2026-08-01");
+    ws.setShow("curve");
+    expect(ws.comparisonDropped).toBe(false);
+  });
+
+  it("does not offer an earlier period under a view of the events one by one", () => {
+    const ws = from("later-breakfast");
+    ws.setShow("spread");
+
+    expect(ws.comparisonReason).toBe("Each event, Spread and When show the events of the range only.");
+    expect(ws.setEvent({ comparison: { from: "2026-08-01", to: "2026-08-31" } })).toBe(ws.comparisonReason);
+    expect(JSON.stringify(spec(ws))).not.toContain("comparisonRange");
   });
 });
 
@@ -360,16 +375,16 @@ describe("this round's engine features", () => {
     ]);
   });
 
-  it("draws four groups as one small chart each, titled by letter", () => {
+  it("draws four groups as one small chart each, with no title the workspace makes up", () => {
     const ws = from("later-breakfast");
-    ws.addMoment("LowStart");
-    ws.addMoment("HighStart");
+    ws.addMoment(EventAnchorKind.LowStart);
+    ws.addMoment(EventAnchorKind.HighStart);
 
     expect(ws.smallMultiples).toBe(true);
     expect(ws.groupsApart).toBe(false);
     const panels = spec(ws).panels;
     expect(panels.map((p) => p.id)).toEqual(["chart-1", "chart-2", "chart-3", "chart-4"]);
-    expect((panels[2] as { title?: string }).title).toBe("C: All lows");
+    expect(panels.map((p) => (p as { title?: string }).title)).toEqual([undefined, undefined, undefined, undefined]);
     expect(panels[3].tracks[0].layers[0]).toMatchObject({
       id: "glucose-g4",
       dataset: { cohorts: [{ anchor: "HighStart" }] },
@@ -391,11 +406,11 @@ describe("this round's engine features", () => {
       "glucoseAt2Hours",
       "netInsulin",
     ]);
-    expect(spec(ws).panels[0].tracks[0].layers[0]).toMatchObject({
-      title: "A: All carbs taken in a low",
-    });
-    expect(ws.anchorNote("SiteChange")).toBe("A site, cannula or pod change");
-    expect(ws.anchorReason("SleepStart")).toBeNull();
+    expect(spec(ws).panels[0].tracks[0].layers[0]).not.toHaveProperty("title");
+    expect(ws.anchorNote(EventAnchorKind.SiteChange)).toMatch(/^An infusion site, cannula or pod change/);
+    expect(ws.anchorRule(EventAnchorKind.LowStart)).toMatch(/^A low starts after/);
+    expect(ws.anchorRule(EventAnchorKind.Meal)).toBeNull();
+    expect(ws.anchorReason(EventAnchorKind.SleepStart)).toBeNull();
   });
 
   it("draws heart rate, steps and sleep, each where it applies", () => {
@@ -540,8 +555,8 @@ describe("relate", () => {
     );
     expect(ws.combine("iob", "basal", "ratio")).toBeNull();
     const track = spec(ws).panels[0].tracks.at(-1)!;
+    expect(track.layers[0]).not.toHaveProperty("title");
     expect(track.layers[0]).toMatchObject({
-      title: "Insulin on board divided by basal delivered",
       derived: { op: "ratio" },
       mark: "line",
     });
@@ -580,7 +595,7 @@ describe("options of the event and typical day lenses", () => {
     expect(spec(ws).panels[0].tracks[0].layers[0].dataset).not.toHaveProperty(
       "requireCorroboration"
     );
-    ws.updateMoment(0, { what: "UnannouncedRise" });
+    ws.updateMoment(0, { what: EventAnchorKind.UnannouncedRise });
     expect(spec(ws).panels[0].tracks[0].layers[0].dataset).toMatchObject({
       requireCorroboration: true,
       isolatedOnly: true,
@@ -641,7 +656,7 @@ describe("groups of events", () => {
     expect(ws.addEverythingElse()).toBeNull();
     expect(ws.everythingElseApplies).toBe(false);
 
-    expect(ws.addMoment("CorrectionBolus")).toBeNull();
+    expect(ws.addMoment(EventAnchorKind.CorrectionBolus)).toBeNull();
     expect(ws.everythingElseApplies).toBe(false);
     ws.updateMoment(1, { timeOfDay: { fromMinute: 1320, toMinute: 360 } });
     expect(ws.everythingElseApplies).toBe(true);
@@ -656,7 +671,7 @@ describe("groups of events", () => {
 
   it("moves everything else to a kind that has none when its own kind goes", () => {
     const ws = from("one-food");
-    ws.updateMoment(0, { what: "CorrectionBolus" });
+    ws.updateMoment(0, { what: EventAnchorKind.CorrectionBolus });
 
     expect(ws.moments.map((m) => [m.what, m.everythingElse ?? false])).toEqual([
       ["CorrectionBolus", false],
@@ -689,15 +704,16 @@ describe("the report", () => {
     expect((report.spec() as unknown as Spec).panels[0].range).toBeUndefined();
   });
 
-  it("gives a new block a plain title from its source, which follows the source until changed", () => {
+  it("gives a new block no title of its own, and keeps the title the member types", () => {
     const report = new Report(liveCatalogue);
     report.add("table");
     const table = report.blocks[1];
     if (table.kind !== "table") throw new Error("table");
 
-    expect(table.title).toBe("Treatments");
+    expect(table.title).toBe("");
+    expect(report.spec().panels).toEqual(expect.arrayContaining([expect.not.objectContaining({ title: expect.anything() })]));
     report.setSource(table, "daily_summary");
-    expect(report.blocks[1]).toMatchObject({ title: "Each day" });
+    expect(report.blocks[1]).toMatchObject({ title: "" });
     report.setBlockTitle(report.blocks[1], "My days");
     const renamed = report.blocks[1];
     if (renamed.kind !== "table") throw new Error("table");
@@ -727,7 +743,7 @@ describe("the report", () => {
     report.add("comparison");
     expect(report.add("table")).toBeNull();
     expect(report.addReason("figures")).toBe(
-      "A report has at most 6 parts. The lag chart is a part of its own."
+      "A report has at most 6 parts."
     );
   });
 

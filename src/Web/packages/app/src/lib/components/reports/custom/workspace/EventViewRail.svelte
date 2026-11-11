@@ -4,6 +4,7 @@
   hour of day or weekday. Only the figures that apply to the groups' events are offered.
 -->
 <script lang="ts">
+  import { alongLabel, outcomeLabel } from "./vocabulary-words.svelte.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
@@ -72,8 +73,8 @@
 
 <nav aria-label="What the chart shows" class="space-y-4" data-testid="event-view-rail">
   {#if ws.show === "each"}
-    {@render list("rail-up", "Up", ws.upChoices, ws.up, pickUp)}
-    {@render list("rail-along", "Along", ws.alongChoices, ws.along, pickAlong)}
+    {@render list("rail-up", "Up", ws.upChoices.map((o) => ({ id: o.id, label: outcomeLabel(o.id) })), ws.up, pickUp)}
+    {@render list("rail-along", "Along", ws.alongChoices.map((a) => ({ id: a.id, label: alongLabel(a.id) })), ws.along, pickAlong)}
     {#if ws.fitApplies}
       <div class="flex items-center gap-2 px-2">
         <Switch
@@ -87,7 +88,7 @@
       <p class="px-2 text-xs text-muted-foreground" data-testid="no-fit">No line along the time of day</p>
     {/if}
   {:else if ws.show === "spread"}
-    {@render list("rail-figure", "Figure", ws.figureChoices, ws.figure, pickFigure)}
+    {@render list("rail-figure", "Figure", ws.figureChoices.map((o) => ({ id: o.id, label: outcomeLabel(o.id) })), ws.figure, pickFigure)}
   {:else if ws.show === "when"}
     {@render list("rail-when", "Count the events", WHENS, ws.event.when, pickWhen)}
   {/if}

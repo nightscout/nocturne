@@ -4,8 +4,9 @@
   signals and the chart.
 -->
 <script lang="ts">
+  import { lensLabel, lensDescription, eventShowLabel } from "./vocabulary-words.svelte.js";
   import { untrack } from "svelte";
-  import { readReport } from "@nocturne/charts/core";
+  import { readReport, type ReportPanel } from "@nocturne/charts/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -29,7 +30,6 @@
   import {
     EVENT_SHOWS,
     LENSES,
-    lens as lensOf,
     type LensId,
   } from "./vocabulary.js";
   import { captionJoin, lowerFirst } from "./workspace.svelte.js";
@@ -73,20 +73,26 @@
     ws.groupsApart || (ws.lens === "typical_day" && ws.dayGroups.length > 1)
   );
 
-  /** Said once per run: the caption is read as it stood when the run arrived. */
+  /**
+   * Said once each preview settles, and not while one runs or after one fails, which shows its own
+   * alert: the caption is read as it stood when the run arrived.
+   */
   const announcement = $derived(
-    runner.ran === null
+    runner.ran === null || runner.running || runner.failure !== null
       ? ""
       : `Chart updated. ${untrack(() => ws.captionText())}.`
+  );
+
+  const lenses = $derived(LENSES.map((l) => ({ id: l.id, reason: ws.lensReason(l.id) })));
+  /** Each reason a lens cannot be used, once. */
+  const lensReasons = $derived(
+    lenses.flatMap((l) => (l.reason ? [l.reason] : [])).filter((r, i, all) => all.indexOf(r) === i)
   );
 
   function setLens(id: string) {
     const found = LENSES.find((l) => l.id === id);
     if (found) ws.setLens(found.id);
   }
-
-  const CAPTION_PART =
-    "rounded-sm decoration-dotted underline-offset-4 outline-none hover:underline focus-visible:underline focus-visible:ring-3 focus-visible:ring-ring/50";
 
   /** The control that owns each part of the caption. */
   function target(kind: CaptionKind): string {
@@ -104,11 +110,15 @@
     }
   }
 
-  function focusOwner(event: MouseEvent, kind: CaptionKind) {
-    event.preventDefault();
+  function focusOwner(kind: CaptionKind) {
     document.querySelector<HTMLElement>(target(kind))?.focus();
   }
 </script>
+
+{#snippet groupHeading(panel: ReportPanel)}
+  {@const at = /^chart-(\d+)$/.exec(panel.id)}
+  {at ? ws.groupHeading(Number(at[1]) - 1) : (panel.title ?? "")}
+{/snippet}
 
 <div
   bind:clientWidth={gridWidth}
@@ -200,17 +210,26 @@
         variant="segmented"
         class="w-full flex-wrap"
         aria-label="How time is shown"
-        {...describe(lensOf(ws.lens).description)}
+        {...describe(lensDescription(ws.lens))}
         bind:value={() => ws.lens, (id: string) => id && setLens(id)}
       >
-        {#each LENSES as lens (lens.id)}
+        {#each lenses as lens (lens.id)}
           {@const Icon = LENS_ICONS[lens.id]}
-          <ToggleGroup.Item value={lens.id}>
+          <ToggleGroup.Item
+            value={lens.id}
+            disabled={lens.reason !== null}
+            aria-describedby={lens.reason ? `lens-why-${lensReasons.indexOf(lens.reason)}` : undefined}
+          >
             <Icon aria-hidden="true" />
-            {lens.label}
+            {lensLabel(lens.id)}
           </ToggleGroup.Item>
         {/each}
       </ToggleGroup.Root>
+      {#each lensReasons as reason, i (reason)}
+        <p class="text-xs text-muted-foreground" id="lens-why-{i}" data-testid="lens-reason">
+          {lenses.filter((l) => l.reason === reason).map((l) => lensLabel(l.id)).join(", ")}: {reason}
+        </p>
+      {/each}
       {#if ws.lens === "event"}
         {@const shows = EVENT_SHOWS.map((o) => ({ ...o, reason: ws.showReason(o.id) }))}
         <div class="space-y-1 pt-2">
@@ -237,14 +256,19 @@
                   value={o.id}
                   disabled={o.reason !== null}
                 >
-                  {o.label}
+                  {eventShowLabel(o.id)}
                 </ToggleGroup.Item>
               {/each}
             </ToggleGroup.Root>
           </div>
+          {#if ws.comparisonDropped}
+            <p class="text-xs text-muted-foreground" role="status" data-testid="comparison-dropped">
+              The earlier period was removed. This view shows the events of the range only.
+            </p>
+          {/if}
           {#each shows.filter((o, i) => o.reason && shows.findIndex((x) => x.reason === o.reason) === i) as o (o.id)}
             <p class="text-xs text-muted-foreground">
-              {shows.filter((x) => x.reason === o.reason).map((x) => x.label).join(", ")}: {o.reason}
+              {shows.filter((x) => x.reason === o.reason).map((x) => eventShowLabel(x.id)).join(", ")}: {o.reason}
             </p>
           {/each}
         </div>
@@ -281,7 +305,7 @@
     <div class="space-y-3">
       {#if !ws.empty}
         <!-- prettier-ignore -->
-        <p class="text-base text-foreground" data-testid="chart-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<a href="#{part.kind}" class={CAPTION_PART} onclick={(event) => focusOwner(event, part.kind)}>{part.text}</a>{/each}</p>
+        <p class="text-base text-foreground" data-testid="chart-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<Button variant="prose" size="inline" onclick={() => focusOwner(part.kind)}>{part.text}</Button>{/each}</p>
         {#if !ws.eventList}
           <SignalChips {ws} report={result} {perGroup} />
         {/if}
@@ -296,6 +320,7 @@
           legend={false}
           facts={ws.lens !== "event"}
           layout={ws.smallMultiples ? "multiples" : "stack"}
+          heading={ws.smallMultiples ? groupHeading : undefined}
         />
       </div>
       <p class="sr-only" aria-live="polite">{announcement}</p>

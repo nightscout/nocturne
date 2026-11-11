@@ -3,6 +3,8 @@
   the events are, a chip for each narrowing, and the count of events from the last preview.
 -->
 <script lang="ts">
+  import { before, removeThenFocus } from "./refocus.js";
+  import { anchorLabel, anchorPhrase } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -131,16 +133,37 @@
     }));
   }
 
-  /** What the run left out of group `number`, in the engine's words. */
-  function leftOut(number: number): string[] {
+  /** The access scopes a group of events can be left out for, in words. */
+  const SCOPE_WORDS: Record<string, string> = {
+    "food.read": "food",
+    "treatments.read": "treatments",
+    "glucose.read": "glucose",
+    "therapy.read": "therapy settings",
+    "devices.read": "devices",
+    "heartrate.read": "heart rate",
+    "sleep.read": "sleep",
+    "stepcount.read": "steps",
+  };
+
+  /** Why the run left out group `index`'s events, once for each reason, from the run's cohorts. */
+  function leftOut(index: number): string[] {
     const lines: string[] = [];
-    for (const ref of ws.cohortsOf(number - 1)) {
-      const summary = findLayer(report, ref.layer)?.summary ?? "";
-      for (const line of summary.split("\n"))
-        if (line.startsWith(`Cohort ${number} `) && line.includes("not shown"))
-          if (!lines.includes(line.trim())) lines.push(line.trim());
+    for (const ref of ws.cohortsOf(index)) {
+      const omitted = findLayer(report, ref.layer)?.cohorts?.find((c) => c.number === ref.cohort)?.omitted;
+      if (!omitted) continue;
+      const line =
+        omitted.reason === "scope"
+          ? `Not shown: your access does not include ${SCOPE_WORDS[omitted.scope] ?? omitted.scope}.`
+          : `Not shown: group ${LETTERS[omitted.group - 1] ?? omitted.group} is not shown.`;
+      if (!lines.includes(line)) lines.push(line);
     }
     return lines;
+  }
+
+  /** A rule's first sentence, and the rest behind "More". */
+  function ruleParts(rule: string): { first: string; rest: string } {
+    const at = rule.indexOf(". ");
+    return at < 0 ? { first: rule, rest: "" } : { first: rule.slice(0, at + 1), rest: rule.slice(at + 2) };
   }
 
   const STARTS: Record<Narrowing, MomentPatch> = {
@@ -167,19 +190,31 @@
     return !b || (b.min === undefined && b.max === undefined);
   }
 
-  /** Closes a chip's popover; a condition closed with no value is removed. */
+  /** Closes a chip's popover; a condition closed with no value is removed, and the focus goes to the group's "Narrow". */
   function setOpen(index: number, moment: Moment, kind: Narrowing, o: boolean) {
     open = o ? `${moment.key}:${kind}` : null;
-    if (!o && unset(moment, kind)) remove(index, kind);
+    if (!o && unset(moment, kind)) void removeThenFocus(() => rowOf(moment)?.querySelector("[data-narrow-add]"), () => remove(index, kind));
   }
 
-  /** The first sentence of an anchor's rule, and the rest. */
-  function ruleParts(rule: string): { first: string; rest: string } {
-    const at = rule.indexOf(". ");
-    return at < 0
-      ? { first: rule, rest: "" }
-      : { first: rule.slice(0, at + 1), rest: rule.slice(at + 2) };
+  function rowOf(moment: Moment): HTMLElement | null {
+    return document.querySelector<HTMLElement>(`[data-moment-key="${moment.key}"]`);
   }
+
+  /** Removes a narrowing; the focus goes to the chip before it, else to "Narrow". */
+  function removeNarrowing(index: number, moment: Moment, kind: Narrowing) {
+    const row = rowOf(moment);
+    const chips = [...(row?.querySelectorAll("[data-narrowing]") ?? [])];
+    const target = before(chips, row?.querySelector(`[data-narrowing="${kind}"]`) ?? null, () => rowOf(moment)?.querySelector("[data-narrow-add]"));
+    void removeThenFocus(target, () => remove(index, kind));
+  }
+
+  /** Removes a group; the focus goes to the group before it, else to "Compare with another group". */
+  function removeGroup(index: number, moment: Moment) {
+    const groups = [...document.querySelectorAll("[data-group-focus]")];
+    const target = before(groups, rowOf(moment)?.querySelector("[data-group-focus]") ?? null, () => document.querySelector("[data-group-add]"));
+    void removeThenFocus(target, () => ws.removeMoment(index));
+  }
+
 
   function chipText(moment: Moment, kind: Narrowing): string {
     switch (kind) {
@@ -247,7 +282,7 @@
         moment.cohorts.map((c) => c.layer),
         (moment.cohorts[0]?.cohort ?? i + 1) - 1
       )}
-      <li class="py-2" data-testid="moment-row">
+      <li class="py-2" data-testid="moment-row" data-moment-key={moment.key}>
         <div class="flex flex-wrap items-center gap-2">
           <span
             class="flex w-8 shrink-0 items-center gap-1.5 text-sm font-medium"
@@ -269,11 +304,11 @@
                         (moment.cohorts[0]?.cohort ?? i + 1) - 1
                       )}
             />
-            <span aria-label="Group {LETTERS[i]}">{LETTERS[i]}</span>
+            <span aria-hidden="true">{LETTERS[i]}</span><span class="sr-only">Group {LETTERS[i]}</span>
           </span>
           {#if moment.everythingElse}
             <Badge variant="outline">
-              All other {anchor(moment.what).phrase}
+              All other {anchorPhrase(moment.what)}
             </Badge>
           {:else}
             <DropdownMenu.Root>
@@ -283,9 +318,10 @@
                     {...props}
                     variant="outline"
                     size="xs"
-                    aria-label="Events: {anchor(moment.what).label}"
+                    data-group-focus
+                    aria-label="Events: {anchorLabel(moment.what)}"
                   >
-                    {anchor(moment.what).label}
+                    {anchorLabel(moment.what)}
                     <ChevronDown aria-hidden="true" />
                   </Button>
                 {/snippet}
@@ -307,7 +343,7 @@
                       {@const note = ws.anchorNote(a.id)}
                       <DropdownMenu.RadioItem value={a.id} disabled={why !== null}>
                         <span class="flex flex-col">
-                          {a.label}
+                          {anchorLabel(a.id)}
                           {#if why ?? note}
                             <span class="text-xs text-muted-foreground">{why ?? note}</span>
                           {/if}
@@ -337,6 +373,7 @@
                         variant="outline"
                         size="xs"
                         aria-label="{label(kind)}: {chipText(moment, kind)}"
+                        data-narrowing={kind}
                       >
                         {chipText(moment, kind)}
                       </Button>
@@ -430,7 +467,7 @@
                   aria-label="Remove {label(
                     kind
                   ).toLowerCase()} from group {LETTERS[i]}"
-                  onclick={() => remove(i, kind)}
+                  onclick={() => removeNarrowing(i, moment, kind)}
                 >
                   <X aria-hidden="true" />
                 </Button>
@@ -444,7 +481,7 @@
                   }: {
                     props: Record<string, unknown>;
                   })}
-                    <Button {...props} variant="ghost" size="xs">
+                    <Button {...props} variant="ghost" size="xs" data-narrow-add>
                       <Plus aria-hidden="true" />
                       Narrow
                     </Button>
@@ -493,14 +530,14 @@
                 variant="ghost"
                 size="icon-xs"
                 aria-label="Remove group {LETTERS[i]}"
-                onclick={() => ws.removeMoment(i)}
+                onclick={() => removeGroup(i, moment)}
               >
                 <X aria-hidden="true" />
               </Button>
             {/if}
           </span>
         </div>
-        {#if !moment.everythingElse && ws.anchorRule(moment.what) && ws.momentViews.findIndex((m) => !m.everythingElse && ws.anchorRule(m.what)) === i}
+        {#if !moment.everythingElse && ws.anchorRule(moment.what) && ws.momentViews.findIndex((m) => !m.everythingElse && ws.anchorRule(m.what) === ws.anchorRule(moment.what)) === i}
           {@const rule = ruleParts(ws.anchorRule(moment.what) ?? "")}
           <div class="mt-1 pl-10 text-xs text-muted-foreground" data-testid="anchor-rule">
             <p>{rule.first}</p>
@@ -524,7 +561,7 @@
             {/if}
           </div>
         {/if}
-        {#each leftOut(i + 1) as note (note)}
+        {#each leftOut(i) as note (note)}
           <p class="mt-1 pl-10 text-xs text-muted-foreground" data-testid="left-out">
             {note}
           </p>
@@ -540,6 +577,7 @@
         disabled={addReason !== null}
         {...describe(addReason)}
         onclick={() => ws.addMoment(ws.moments[0]?.what)}
+        data-group-add
       >
         <Plus aria-hidden="true" />
         Compare with another group

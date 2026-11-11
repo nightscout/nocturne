@@ -3,29 +3,29 @@
   blank report.
 -->
 <script lang="ts">
+  import type { CustomReportTemplate } from "#lib/api/generated/nocturne-api-client.js";
   import * as Item from "#lib/components/ui/item/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { minuteLabel } from "./clock.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { STARTERS, STARTERS_SHOWN, STARTER_GROUPS } from "./starters.js";
+  import { starterGroupLabel, starterWords } from "./vocabulary-words.svelte.js";
   import type { Starter } from "./workspace.svelte.js";
 
   interface Props {
     onstart: (starter: Starter | null) => void;
+    /** The API's ready-made reports, which open in the form; listed last. */
+    templates?: CustomReportTemplate[];
+    ontemplate?: (template: CustomReportTemplate) => void;
   }
 
-  let { onstart }: Props = $props();
+  let { onstart, templates = [], ontemplate }: Props = $props();
 </script>
 
 {#snippet starterRow(starter: Starter)}
-  {@render row(
-    starter.title,
-    typeof starter.description === "function"
-      ? starter.description(minuteLabel)
-      : starter.description,
-    () => onstart(starter)
-  )}
+  {@const words = starterWords(minuteLabel)[starter.id]}
+  {@render row(words.title, words.description, () => onstart(starter))}
 {/snippet}
 
 {#snippet row(title: string, description: string, start: () => void)}
@@ -51,7 +51,7 @@
     {@const all = STARTERS.filter((s) => s.group === group)}
     <section class="space-y-1" aria-labelledby="starters-{g}">
       <h3 id="starters-{g}" class="text-sm font-medium text-muted-foreground">
-        {group}
+        {starterGroupLabel(group)}
       </h3>
       <ul class="divide-y divide-border border-y border-border">
         {#each all.slice(0, STARTERS_SHOWN) as starter (starter.id)}
@@ -82,6 +82,16 @@
       {/if}
     </section>
   {/each}
+  {#if templates.length > 0 && ontemplate}
+    <section class="space-y-1" aria-labelledby="starters-templates" data-testid="ready-made-reports">
+      <h3 id="starters-templates" class="text-sm font-medium text-muted-foreground">Ready-made reports</h3>
+      <ul class="divide-y divide-border border-y border-border">
+        {#each templates as template (template.id)}
+          {@render row(template.name, template.description, () => ontemplate(template))}
+        {/each}
+      </ul>
+    </section>
+  {/if}
   <ul class="divide-y divide-border border-y border-border">
     {@render row(
       "Blank report",

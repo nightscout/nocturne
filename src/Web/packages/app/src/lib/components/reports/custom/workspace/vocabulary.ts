@@ -13,6 +13,8 @@
  * keeps them out of those files.
  */
 
+import { EventAnchorKind } from "#lib/api/index.js";
+
 export type SignalId =
   | "glucose"
   | "target"
@@ -58,21 +60,7 @@ export type Family =
   | "Settings"
   | "Body"
   | "Context";
-export type AnchorId =
-  | "Meal"
-  | "CorrectionBolus"
-  | "SensorStart"
-  | "ExerciseStart"
-  | "OverrideStart"
-  | "TemporaryTargetStart"
-  | "UnannouncedRise"
-  | "LowStart"
-  | "HighStart"
-  | "SiteChange"
-  | "SleepStart"
-  | "Wake"
-  | "LowTreatment"
-  | "AnyBolus";
+export type AnchorId = EventAnchorKind;
 export type Weekday = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
 export type RangePresetId = "6h" | "24h" | "7d" | "14d" | "28d" | "90d";
 export type LeaveOutId =
@@ -104,12 +92,12 @@ export type Along =
 export type WhenAxis = "hour" | "weekday";
 export type CombineOp = "difference" | "ratio";
 
-export const ANCHOR_MEAL: AnchorId = "Meal";
-export const ANCHOR_RISE: AnchorId = "UnannouncedRise";
-export const ANCHOR_CORRECTION: AnchorId = "CorrectionBolus";
-export const ANCHOR_SENSOR: AnchorId = "SensorStart";
-export const ANCHOR_LOW: AnchorId = "LowStart";
-export const ANCHOR_HIGH: AnchorId = "HighStart";
+export const ANCHOR_MEAL: AnchorId = EventAnchorKind.Meal;
+export const ANCHOR_RISE: AnchorId = EventAnchorKind.UnannouncedRise;
+export const ANCHOR_CORRECTION: AnchorId = EventAnchorKind.CorrectionBolus;
+export const ANCHOR_SENSOR: AnchorId = EventAnchorKind.SensorStart;
+export const ANCHOR_LOW: AnchorId = EventAnchorKind.LowStart;
+export const ANCHOR_HIGH: AnchorId = EventAnchorKind.HighStart;
 export const WEEKDAY_IDS: readonly Weekday[] = [
   "Mon",
   "Tue",
@@ -123,7 +111,6 @@ export const WORKDAYS: readonly Weekday[] = WEEKDAY_IDS.slice(0, 5);
 
 export interface Signal {
   id: SignalId;
-  label: string;
   family: Family;
   /**
    * A CSS custom property of the chart theme
@@ -136,24 +123,18 @@ export interface Signal {
 
 export interface Lens {
   id: LensId;
-  label: string;
-  description: string;
 }
 
 export interface Anchor {
   id: AnchorId;
-  label: string;
-  /** The label inside a sentence: "around meals". */
-  phrase: string;
   /** Meal narrowings (grams, foods, food category) apply only to meals. */
   meal: boolean;
   /** The heading the event menu lists it under. */
-  group: string;
+  group: AnchorGroup;
 }
 
 export interface RangePreset {
   id: RangePresetId;
-  label: string;
   hours: number;
 }
 
@@ -163,10 +144,27 @@ export interface FamilyLane {
   height: number;
 }
 
+/** The name of a way to draw a signal; `markLabel` gives its words. */
+export type MarkWord =
+  | "line"
+  | "lines"
+  | "area"
+  | "points"
+  | "bars"
+  | "stacked"
+  | "medianBand"
+  | "band"
+  | "range"
+  | "percentiles"
+  | "median"
+  | "markers"
+  | "spans";
+
 /** One way a signal is drawn: the spec's mark and its bindings. */
 export interface MarkChoice {
   mark: string;
-  label: string;
+  /** The words the choice is offered with, as `markLabel` writes them. */
+  word: MarkWord;
   bindings: Record<string, unknown>;
   /** Markers and spans take no vertical axis, so no unit. */
   noAxis?: boolean;
@@ -178,7 +176,10 @@ export interface Cell {
   parameters?: Record<string, unknown>;
   /** The field a derived layer (smooth, trend, scatter, lag, combine) reads. */
   field: string;
-  /** The unit of the field, as a key: two cells of one key share an axis. */
+  /**
+   * The unit of the field, as a key: two cells of one key share an axis. `NO_UNIT` for a count the
+   * engine gives no unit, which takes no unit of a track's two.
+   */
   unit: string;
   /**
    * The first is the default. Empty under `against`, where the signal is a
@@ -210,7 +211,6 @@ export interface LeaveOut {
   id: LeaveOutId;
   /** The dataset parameter. */
   parameter: string;
-  label: string;
   /** The API's default, used when the catalogue gives none. */
   fallback: boolean;
 }
@@ -218,208 +218,174 @@ export interface LeaveOut {
 /** A dataset a block of figures or a table reads, named in plain words. */
 export interface Source {
   dataset: string;
-  label: string;
 }
 
 export const SIGNALS: readonly Signal[] = [
   {
     id: "glucose",
-    label: "Glucose",
     family: "Glucose",
     color: "--glucose-in-range",
   },
   {
     id: "target",
-    label: "Target range",
     family: "Glucose",
     color: "--glucose-tight-range",
   },
   {
     id: "glucoseWide",
-    label: "Glucose, 10 to 90 percent",
     family: "Glucose",
     color: "--glucose-in-range",
   },
   {
     id: "mean",
-    label: "Mean glucose",
     family: "Glucose",
     color: "--glucose-in-range",
   },
   {
     id: "timeInRange",
-    label: "Time in range",
     family: "Glucose",
     color: "--glucose-tight-range",
   },
   {
     id: "timeBelow",
-    label: "Time below range",
     family: "Glucose",
     color: "--glucose-low",
   },
   {
     id: "timeAbove",
-    label: "Time above range",
     family: "Glucose",
     color: "--glucose-high",
   },
   {
     id: "ranges",
-    label: "Time in each range",
     family: "Glucose",
     color: "--glucose-in-range",
   },
   {
     id: "readings",
-    label: "Readings",
     family: "Glucose",
     color: "--system-event-info",
   },
   {
     id: "iob",
-    label: "Insulin on board",
     family: "Insulin",
     color: "--insulin",
   },
   {
     id: "basal",
-    label: "Basal delivered",
     family: "Insulin",
     color: "--basal",
   },
   {
     id: "basalScheduled",
-    label: "Basal scheduled",
     family: "Insulin",
     color: "--insulin-scheduled-basal",
   },
   {
     id: "boluses",
-    label: "Boluses",
     family: "Insulin",
     color: "--insulin-bolus",
   },
   {
     id: "injections",
-    label: "Long-acting injections",
     family: "Insulin",
     color: "--insulin-basal",
   },
   {
     id: "netLoop",
-    label: "Insulin the loop added or removed",
     family: "Insulin",
     color: "--insulin-additional-basal",
   },
   {
     id: "totalInsulin",
-    label: "Total insulin",
     family: "Insulin",
     color: "--insulin",
   },
   {
     id: "totalBolus",
-    label: "Total bolus",
     family: "Insulin",
     color: "--insulin-bolus",
   },
   {
     id: "totalBasal",
-    label: "Total basal",
     family: "Insulin",
     color: "--basal",
   },
   {
     id: "cob",
-    label: "Carbs on board",
     family: "Food",
     color: "--carbs-on-board",
   },
-  { id: "carbs", label: "Carbs", family: "Food", color: "--carbs" },
+  { id: "carbs", family: "Food", color: "--carbs" },
   {
     id: "reservoir",
-    label: "Reservoir",
     family: "Devices",
     color: "--insulin-basal",
   },
   {
     id: "pumpBattery",
-    label: "Pump battery",
     family: "Devices",
     color: "--pump-mode-boost",
   },
   {
     id: "uploaderBattery",
-    label: "Uploader battery",
     family: "Devices",
     color: "--pump-mode-sleep",
   },
   {
     id: "settingBasal",
-    label: "Basal rate in data and profile",
     family: "Settings",
     color: "--basal",
   },
   {
     id: "settingIsf",
-    label: "ISF in data and profile",
     family: "Settings",
     color: "--insulin",
   },
   {
     id: "settingCarbRatio",
-    label: "Carb ratio in data and profile",
     family: "Settings",
     color: "--carbs",
   },
   {
     id: "heartRate",
-    label: "Heart rate",
     family: "Body",
     color: "--heart-rate",
   },
-  { id: "steps", label: "Steps", family: "Body", color: "--steps" },
+  { id: "steps", family: "Body", color: "--steps" },
   {
     id: "sleep",
-    label: "Sleep",
     family: "Body",
-    color: "--pump-mode-sleep",
+    color: "--activity-sleep",
     lane: "Context",
   },
   {
     id: "pumpModes",
-    label: "Pump modes",
     family: "Context",
     color: "--pump-mode-automatic",
   },
   {
     id: "profiles",
-    label: "Profiles",
     family: "Context",
     color: "--pump-mode-liberty",
   },
   {
     id: "overrides",
-    label: "Overrides",
     family: "Context",
     color: "--pump-mode-boost",
   },
   {
     id: "activities",
-    label: "Activities",
     family: "Context",
     color: "--pump-mode-exercise",
   },
   {
     id: "tempBasals",
-    label: "Temp basals",
     family: "Context",
     color: "--insulin-temp-basal",
   },
   {
     id: "bgChecks",
-    label: "BG checks",
     family: "Context",
     color: "--glucose-in-range",
   },
@@ -438,129 +404,100 @@ export const FAMILY_LANES: readonly FamilyLane[] = [
 export const LENSES: readonly Lens[] = [
   {
     id: "timeline",
-    label: "Timeline",
-    description: "Each value at the time it occurred.",
   },
   {
     id: "typical_day",
-    label: "Typical day",
-    description:
-      "All days put on top of one day, as the median and middle half.",
   },
   {
     id: "event",
-    label: "Around an event",
-    description:
-      "The hours before and after each event, put on top of each other.",
   },
   {
     id: "daily",
-    label: "Day by day",
-    description: "One value for each day.",
   },
   {
     id: "against",
-    label: "One against another",
-    description: "Two signals as points, each 15 minutes, one along each axis.",
   },
 ];
 
-export const ANCHOR_GROUPS = [
-  "Food and insulin",
-  "Glucose",
-  "Activity and sleep",
-  "Devices and modes",
-] as const;
+export const ANCHOR_GROUPS = ["food", "glucose", "activity", "devices"] as const;
+export type AnchorGroup = (typeof ANCHOR_GROUPS)[number];
 
 export const ANCHORS: readonly Anchor[] = [
-  { id: "Meal", label: "Meals", phrase: "meals", meal: true, group: "Food and insulin" },
+  { id: EventAnchorKind.Meal, meal: true, group: "food" },
   {
-    id: "CorrectionBolus",
-    label: "Correction boluses",
-    phrase: "correction boluses",
+    id: EventAnchorKind.CorrectionBolus,
     meal: false,
-    group: "Food and insulin",
+    group: "food",
   },
-  { id: "AnyBolus", label: "Boluses", phrase: "boluses", meal: false, group: "Food and insulin" },
+  { id: EventAnchorKind.AnyBolus, meal: false, group: "food" },
   {
-    id: "UnannouncedRise",
-    label: "Rises with no carbs",
-    phrase: "rises with no carbs",
+    id: EventAnchorKind.UnannouncedRise,
     meal: false,
-    group: "Food and insulin",
+    group: "food",
   },
-  { id: "LowStart", label: "Lows", phrase: "lows", meal: false, group: "Glucose" },
-  { id: "HighStart", label: "Highs", phrase: "highs", meal: false, group: "Glucose" },
+  { id: EventAnchorKind.LowStart, meal: false, group: "glucose" },
+  { id: EventAnchorKind.HighStart, meal: false, group: "glucose" },
   {
-    id: "LowTreatment",
-    label: "Carbs taken in a low",
-    phrase: "carbs taken in a low",
+    id: EventAnchorKind.LowTreatment,
     meal: false,
-    group: "Glucose",
+    group: "glucose",
   },
-  { id: "ExerciseStart", label: "Exercise", phrase: "exercise", meal: false, group: "Activity and sleep" },
-  { id: "SleepStart", label: "Sleep start", phrase: "sleep starts", meal: false, group: "Activity and sleep" },
-  { id: "Wake", label: "Wake-up", phrase: "wake-ups", meal: false, group: "Activity and sleep" },
+  { id: EventAnchorKind.ExerciseStart, meal: false, group: "activity" },
+  { id: EventAnchorKind.SleepStart, meal: false, group: "activity" },
+  { id: EventAnchorKind.Wake, meal: false, group: "activity" },
   {
-    id: "SensorStart",
-    label: "Sensor starts",
-    phrase: "sensor starts",
+    id: EventAnchorKind.SensorStart,
     meal: false,
-    group: "Devices and modes",
+    group: "devices",
   },
-  { id: "SiteChange", label: "Site changes", phrase: "site changes", meal: false, group: "Devices and modes" },
-  { id: "OverrideStart", label: "Overrides", phrase: "overrides", meal: false, group: "Devices and modes" },
+  { id: EventAnchorKind.SiteChange, meal: false, group: "devices" },
+  { id: EventAnchorKind.OverrideStart, meal: false, group: "devices" },
   {
-    id: "TemporaryTargetStart",
-    label: "Temporary targets",
-    phrase: "temporary targets",
+    id: EventAnchorKind.TemporaryTargetStart,
     meal: false,
-    group: "Devices and modes",
+    group: "devices",
   },
 ];
 
 /** Anchors read from sleep sessions: they need the sleep permission. */
-export const SLEEP_ANCHORS: readonly AnchorId[] = ["SleepStart", "Wake"];
+export const SLEEP_ANCHORS: readonly AnchorId[] = [EventAnchorKind.SleepStart, EventAnchorKind.Wake];
 
 export const RANGE_PRESETS: readonly RangePreset[] = [
-  { id: "6h", label: "6 hours", hours: 6 },
-  { id: "24h", label: "24 hours", hours: 24 },
-  { id: "7d", label: "7 days", hours: 168 },
-  { id: "14d", label: "14 days", hours: 336 },
-  { id: "28d", label: "28 days", hours: 672 },
-  { id: "90d", label: "90 days", hours: 2160 },
+  { id: "6h", hours: 6 },
+  { id: "24h", hours: 24 },
+  { id: "7d", hours: 168 },
+  { id: "14d", hours: 336 },
+  { id: "28d", hours: 672 },
+  { id: "90d", hours: 2160 },
 ];
 
 /** The report's range when a starter gives none. */
 export const DEFAULT_REPORT_HOURS = 336;
 
-export const WEEKDAYS: readonly { id: Weekday; label: string }[] = [
-  { id: "Mon", label: "Monday" },
-  { id: "Tue", label: "Tuesday" },
-  { id: "Wed", label: "Wednesday" },
-  { id: "Thu", label: "Thursday" },
-  { id: "Fri", label: "Friday" },
-  { id: "Sat", label: "Saturday" },
-  { id: "Sun", label: "Sunday" },
+export const WEEKDAYS: readonly { id: Weekday }[] = [
+  { id: "Mon" },
+  { id: "Tue" },
+  { id: "Wed" },
+  { id: "Thu" },
+  { id: "Fri" },
+  { id: "Sat" },
+  { id: "Sun" },
 ];
 
 export const DAY_GROUP_PRESETS = {
   everyDay: {
-    label: "Every day",
     groups: [["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]],
   },
   weekdaysAndWeekend: {
-    label: "Weekdays and the weekend",
     groups: [
       ["Mon", "Tue", "Wed", "Thu", "Fri"],
       ["Sat", "Sun"],
     ],
   },
   fridayAndWeekend: {
-    label: "Monday to Thursday, Friday, and the weekend",
     groups: [["Mon", "Tue", "Wed", "Thu"], ["Fri"], ["Sat", "Sun"]],
   },
-} as const satisfies Record<string, { label: string; groups: Weekday[][] }>;
+} as const satisfies Record<string, { groups: Weekday[][] }>;
 
 export type DayGroupPresetId = keyof typeof DAY_GROUP_PRESETS;
 
@@ -583,31 +520,26 @@ export const LEAVE_OUTS: readonly LeaveOut[] = [
   {
     id: "overrides",
     parameter: "excludeOverrides",
-    label: "Overrides",
     fallback: false,
   },
   {
     id: "temporaryTargets",
     parameter: "excludeTemporaryTargets",
-    label: "Temporary targets",
     fallback: false,
   },
   {
     id: "exercise",
     parameter: "excludeExercise",
-    label: "Exercise",
     fallback: false,
   },
   {
     id: "illness",
     parameter: "excludeIllness",
-    label: "Illness",
     fallback: true,
   },
   {
     id: "openLoop",
     parameter: "excludeOpenLoop",
-    label: "Manual mode",
     fallback: true,
   },
 ];
@@ -623,23 +555,23 @@ export const EVENT_AFTER_CHOICES = [120, 180, 240, 300, 360, 420, 480];
 
 /** The datasets a block of figures reads, in the order the picker lists them. */
 export const FIGURE_SOURCES: readonly Source[] = [
-  { dataset: "glucose_statistics", label: "Glucose statistics" },
-  { dataset: "glucose_distribution", label: "Time in each glucose range" },
-  { dataset: "device_status", label: "Device status" },
+  { dataset: "glucose_statistics" },
+  { dataset: "glucose_distribution" },
+  { dataset: "device_status" },
 ];
 
 /** The datasets a table lists, named by what one row is. */
 export const TABLE_SOURCES: readonly Source[] = [
-  { dataset: "treatments", label: "Treatments" },
-  { dataset: "daily_summary", label: "Each day" },
-  { dataset: "event_response", label: "Each event" },
-  { dataset: "glucose_series", label: "Each glucose reading" },
-  { dataset: "basal_delivery", label: "Basal rates over time" },
-  { dataset: "state_spans", label: "Modes, profiles and overrides" },
-  { dataset: "glucose_distribution_by_hour", label: "Each hour of the day" },
-  { dataset: "daily_profile", label: "Each 5 minutes of a typical day" },
-  { dataset: "settings_evidence", label: "Settings against the data" },
-  { dataset: "glucose_statistics", label: "Glucose statistics" },
+  { dataset: "treatments" },
+  { dataset: "daily_summary" },
+  { dataset: "event_response" },
+  { dataset: "glucose_series" },
+  { dataset: "basal_delivery" },
+  { dataset: "state_spans" },
+  { dataset: "glucose_distribution_by_hour" },
+  { dataset: "daily_profile" },
+  { dataset: "settings_evidence" },
+  { dataset: "glucose_statistics" },
 ];
 
 export const COMPARISON_DATASET = "period_comparison";
@@ -649,35 +581,31 @@ export const OCCURRENCE_DATASET = "event_occurrence";
 
 export interface OutcomeChoice {
   id: Outcome;
-  label: string;
   /** Drawn only as a spread: as each event it lies along the axis. */
   spreadOnly?: boolean;
 }
 
 /** The figures of each event, in plain words. */
 export const OUTCOMES: readonly OutcomeChoice[] = [
-  { id: "peakRise", label: "Peak rise" },
-  { id: "minutesToPeak", label: "Time to peak" },
+  { id: "peakRise" },
+  { id: "minutesToPeak" },
   {
     id: "minutesBackToStart",
-    label: "Time back to the start value",
   },
-  { id: "nadir", label: "Lowest reading" },
-  { id: "drop", label: "Drop" },
-  { id: "minutesToNadir", label: "Time to the lowest reading" },
-  { id: "glucoseAt2Hours", label: "Glucose 2 hours after" },
-  { id: "netInsulin", label: "Net insulin" },
-  { id: "gramsPerUnit", label: "Carbs for each unit" },
+  { id: "nadir" },
+  { id: "drop" },
+  { id: "minutesToNadir" },
+  { id: "glucoseAt2Hours" },
+  { id: "netInsulin" },
+  { id: "gramsPerUnit" },
   {
     id: "startGlucose",
-    label: "Glucose at the event",
     spreadOnly: true,
   },
 ];
 
 export interface AlongChoice {
   id: Along;
-  label: string;
 }
 
 /** Whether an anchor is the start of something that lasts (a low, exercise), by the API's naming. */
@@ -685,57 +613,55 @@ export function isStartAnchor(id: AnchorId): boolean {
   return id.endsWith("Start");
 }
 
-/** How the engine's summary of a group of days begins its count line ("Only days with a low: 4 of 29 days."). */
-export const DAY_COUNT_LINE = "Only days";
 
 /** The one axis no line goes through: the time of day wraps at midnight. */
 export const ALONG_TIME_OF_DAY: Along = "timeOfDay";
 
 /** What each event can lie along. */
 export const ALONGS: readonly AlongChoice[] = [
-  { id: "startGlucose", label: "Glucose at the event" },
-  { id: "grams", label: "Carbs" },
-  { id: "minutesSinceMeal", label: "Time since the last carbs" },
-  { id: "iobAtEvent", label: "Insulin on board at the event" },
-  { id: "timeOfDay", label: "Time of day" },
+  { id: "startGlucose" },
+  { id: "grams" },
+  { id: "minutesSinceMeal" },
+  { id: "iobAtEvent" },
+  { id: "timeOfDay" },
 ];
 
-export const EVENT_SHOWS: readonly { id: EventShow; label: string }[] = [
-  { id: "curve", label: "Over time" },
-  { id: "each", label: "Each event" },
-  { id: "spread", label: "Spread" },
-  { id: "when", label: "When" },
+export const EVENT_SHOWS: readonly { id: EventShow }[] = [
+  { id: "curve" },
+  { id: "each" },
+  { id: "spread" },
+  { id: "when" },
 ];
 export const EVENT_DATASET = "event_response";
 
-const line = (x: string, y: string, label = "Line"): MarkChoice => ({
+const line = (x: string, y: string, word: MarkWord = "line"): MarkChoice => ({
   mark: "line",
-  label,
+  word,
   bindings: { x, y: [y] },
 });
 const lines = (x: string, y: string[]): MarkChoice => ({
   mark: "line",
-  label: "Lines",
+  word: "lines",
   bindings: { x, y },
 });
 const area = (x: string, y: string): MarkChoice => ({
   mark: "area",
-  label: "Area",
+  word: "area",
   bindings: { x, y: [y] },
 });
 const points = (x: string, y: string | string[]): MarkChoice => ({
   mark: "points",
-  label: "Points",
+  word: "points",
   bindings: { x, y: Array.isArray(y) ? y : [y] },
 });
 const bars = (x: string, y: string): MarkChoice => ({
   mark: "bars",
-  label: "Bars",
+  word: "bars",
   bindings: { x, y: [y] },
 });
 const stacked = (x: string, y: string[]): MarkChoice => ({
   mark: "bars",
-  label: "Stacked bars",
+  word: "stacked",
   bindings: { x, y, stacked: true },
 });
 const band = (
@@ -746,34 +672,34 @@ const band = (
   series?: string
 ): MarkChoice => ({
   mark: "band",
-  label: "Median and middle half",
+  word: "medianBand",
   bindings: { x, y: [mid], edges: [low, high], ...(series ? { series } : {}) },
 });
 const edges = (
   x: string,
   low: string,
   high: string,
-  label: string,
+  word: MarkWord,
   series?: string
 ): MarkChoice => ({
   mark: "band",
-  label,
+  word,
   bindings: { x, edges: [low, high], ...(series ? { series } : {}) },
 });
 const seriesLine = (y: string): MarkChoice => ({
   mark: "line",
-  label: "Median",
+  word: "median",
   bindings: { x: "minute", y: [y], series: "series" },
 });
 const markers = (y: string): MarkChoice => ({
   mark: "markers",
-  label: "Markers",
+  word: "markers",
   bindings: { x: "time", y: [y] },
   noAxis: true,
 });
 const spans: MarkChoice = {
   mark: "spans",
-  label: "Spans",
+  word: "spans",
   bindings: { start: "start", end: "end", category: "kind" },
   noAxis: true,
 };
@@ -782,7 +708,13 @@ const TIME_SMOOTH = [30, 60, 120, 240];
 const FOLD_SMOOTH = [30, 60, 120];
 const DAY_SMOOTH = [4320, 10080];
 
+/** A field the engine gives no unit, such as a count of readings. */
+export const NO_UNIT = "";
+
+/** The tenant's glucose unit, mg/dL or mmol/L, as a unit key: the engine writes the field in it. */
 const GLUCOSE = "glucose";
+/** The tenant's glucose unit per unit of insulin: an insulin sensitivity. */
+const GLUCOSE_PER_UNIT = "glucose/U";
 
 const series = (field: string, unit: string): Cell => ({
   dataset: "glucose_series",
@@ -894,7 +826,7 @@ export const CELLS: Record<LensId, Partial<Record<SignalId, Cell>>> = {
       dataset: "glucose_series",
       field: "",
       unit: GLUCOSE,
-      marks: [edges("time", "targetLow", "targetHigh", "Band")],
+      marks: [edges("time", "targetLow", "targetHigh", "band")],
       smooth: [],
       trend: false,
     },
@@ -935,7 +867,7 @@ export const CELLS: Record<LensId, Partial<Record<SignalId, Cell>>> = {
         line("time", "bpm"),
         {
           mark: "band",
-          label: "Lowest to highest",
+          word: "range",
           bindings: { x: "time", y: ["bpm"], edges: ["bpmMin", "bpmMax"] },
         },
       ],
@@ -970,12 +902,12 @@ export const CELLS: Record<LensId, Partial<Record<SignalId, Cell>>> = {
       ...profile("glucoseP50", GLUCOSE),
       marks: [
         band("minuteOfDay", "glucoseP50", "glucoseP25", "glucoseP75"),
-        line("minuteOfDay", "glucoseP50", "Median"),
+        line("minuteOfDay", "glucoseP50", "median"),
       ],
     },
     target: {
       ...profile("", GLUCOSE),
-      marks: [edges("minuteOfDay", "targetLow", "targetHigh", "Band")],
+      marks: [edges("minuteOfDay", "targetLow", "targetHigh", "band")],
       smooth: [],
       trend: false,
       combine: false,
@@ -983,14 +915,14 @@ export const CELLS: Record<LensId, Partial<Record<SignalId, Cell>>> = {
     glucoseWide: {
       ...profile("", GLUCOSE),
       marks: [
-        edges("minuteOfDay", "glucoseP10", "glucoseP90", "10 to 90 percent"),
+        edges("minuteOfDay", "glucoseP10", "glucoseP90", "percentiles"),
       ],
       smooth: [],
       trend: false,
       combine: false,
     },
     readings: {
-      ...profile("readings", "count"),
+      ...profile("readings", NO_UNIT),
       marks: [
         line("minuteOfDay", "readings"),
         area("minuteOfDay", "readings"),
@@ -1048,7 +980,7 @@ export const CELLS: Record<LensId, Partial<Record<SignalId, Cell>>> = {
       combine: false,
     },
     settingBasal: setting("basal", "basalObserved", "basalProfile", "U/h"),
-    settingIsf: setting("isf", "isfObserved", "isfProfile", "mg/dL/U"),
+    settingIsf: setting("isf", "isfObserved", "isfProfile", GLUCOSE_PER_UNIT),
     settingCarbRatio: setting(
       "carb_ratio",
       "carbRatioObserved",
@@ -1076,12 +1008,12 @@ export const CELLS: Record<LensId, Partial<Record<SignalId, Cell>>> = {
           "minute",
           "glucoseP10",
           "glucoseP90",
-          "10 to 90 percent",
+          "percentiles",
           "series"
         ),
       ],
       fromStartMarks: [
-        edges("minute", "deltaP10", "deltaP90", "10 to 90 percent", "series"),
+        edges("minute", "deltaP10", "deltaP90", "percentiles", "series"),
       ],
     },
     iob: event("iobP50", "U"),
@@ -1102,7 +1034,7 @@ export const CELLS: Record<LensId, Partial<Record<SignalId, Cell>>> = {
       happened: true,
     },
     mean: day("mean", GLUCOSE, "line"),
-    readings: { ...day("readings", "count", "bars"), smooth: [], trend: false },
+    readings: { ...day("readings", NO_UNIT, "bars"), smooth: [], trend: false },
     totalInsulin: day("totalInsulin", "U", "bars"),
     totalBolus: day("totalBolus", "U", "bars"),
     totalBasal: day("totalBasal", "U", "bars"),

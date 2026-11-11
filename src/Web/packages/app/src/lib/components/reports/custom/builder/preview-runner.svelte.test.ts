@@ -78,4 +78,21 @@ describe("the builder's preview runner", () => {
     expect(runner.run).toBeNull();
     expect(runner.ran).toBeNull();
   });
+
+  it("clears a failure when the member returns to the spec whose result is on screen", async () => {
+    let fail = false;
+    const runner = new PreviewRunner((spec) => (fail ? Promise.reject(new Error("down")) : Promise.resolve({ spec, errors: [] })), 10);
+
+    runner.now({ n: 1 });
+    await vi.advanceTimersByTimeAsync(0);
+    fail = true;
+    runner.schedule({ n: 2 });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(runner.failure).not.toBeNull();
+
+    runner.schedule({ n: 1 });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(runner.failure).toBeNull();
+    expect(runner.ran).toBe(JSON.stringify({ n: 1 }));
+  });
 });

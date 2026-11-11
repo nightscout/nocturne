@@ -8,9 +8,13 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { createCustomReport, getCustomReportCatalogue } from "#lib/api/generated/customReports.generated.remote.js";
+  import {
+    createCustomReport,
+    getCustomReportCatalogue,
+    getCustomReportTemplates,
+  } from "#lib/api/generated/customReports.generated.remote.js";
   import ReportBuilder from "#lib/components/reports/custom/builder/ReportBuilder.svelte";
-  import { minuteLabel } from "#lib/components/reports/custom/workspace/clock.js";
+  import { minuteLabel, spanLabel } from "#lib/components/reports/custom/workspace/clock.js";
   import { Report } from "#lib/components/reports/custom/workspace/report.svelte.js";
   import ReportWorkspace from "#lib/components/reports/custom/workspace/ReportWorkspace.svelte";
   import { specToSave } from "#lib/components/reports/custom/workspace/saved-report.js";
@@ -25,6 +29,10 @@
 
   const catalogue = contextResource(() => getCustomReportCatalogue(), {
     errorTitle: "Could not load what a report can show",
+  });
+
+  const templates = contextResource(() => getCustomReportTemplates(), {
+    errorTitle: "Could not load the ready-made reports",
   });
 
   /** Where the member is: choosing a start, in the workspace, or in the form with a spec. */
@@ -72,7 +80,11 @@
   {:else if catalogue.current}
     {@const current = catalogue.current}
     {#if mode.at === "start"}
-      <StarterList onstart={(starter) => (mode = { at: "workspace", report: new Report(current, starter, minuteLabel) })} />
+      <StarterList
+        onstart={(starter) => (mode = { at: "workspace", report: new Report(current, starter, minuteLabel, spanLabel) })}
+        templates={templates.current ?? []}
+        ontemplate={(template) => (mode = { at: "form", spec: template.spec })}
+      />
     {:else if mode.at === "workspace"}
       {@const report = mode.report}
       {#key report}
@@ -81,8 +93,8 @@
           onrestart={() => (mode = { at: "start" })}
           onform={(spec) => (mode = { at: "form", spec })}
         >
-          {#snippet actions()}
-            <SaveControl {report} onsave={(name) => saveWorkspace(report, name)} />
+          {#snippet actions(problem: string | null)}
+            <SaveControl {report} reason={problem} onsave={(name) => saveWorkspace(report, name)} />
           {/snippet}
         </ReportWorkspace>
       {/key}

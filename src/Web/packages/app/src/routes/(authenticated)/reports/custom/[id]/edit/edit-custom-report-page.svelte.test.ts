@@ -12,7 +12,9 @@ import { Report } from "#lib/components/reports/custom/workspace/report.svelte.j
 import { BUILDER_KIND, withBuilder } from "#lib/components/reports/custom/workspace/saved-state.js";
 import { starter } from "#lib/components/reports/custom/workspace/starters.js";
 
-const calls = vi.hoisted(() => ({ runs: [] as unknown[], updates: [] as unknown[], creates: [] as unknown[], gotos: [] as string[] }));
+const calls = vi.hoisted(() => ({ runs: [] as unknown[], validations: [] as unknown[], updates: [] as unknown[], creates: [] as unknown[], gotos: [] as string[] }));
+/** How the validator answers: as the engine does, or by failing to answer, as a network error does. */
+let validatorDown = false;
 let saved: CustomReport;
 /** The catalogue the page reads: the form's fixture, or a live one for a report made in the workspace. */
 let known: CustomReportCatalogue = catalogue;
@@ -27,6 +29,11 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
     calls.runs.push(arg);
     const spec = (arg as { spec: Record<string, unknown> }).spec;
     return known === catalogue ? { result: resultFor(spec, statTilesResult()), spec, errors: [] } : runOf(spec);
+  }),
+  validateCustomReport: remoteCommand((arg) => {
+    calls.validations.push(arg);
+    if (validatorDown) return Promise.reject(new Error("The report engine did not answer."));
+    return { spec: (arg as { spec: unknown }).spec, errors: [] };
   }),
   updateCustomReport: remoteCommand((arg) => {
     calls.updates.push(arg);
@@ -63,7 +70,7 @@ describe("editing a saved custom report", () => {
   it("opens a report made in the form in the form, and says why", async () => {
     render(EditCustomReportPage, {});
 
-    await expect.element(page.getByTestId("opened-in-form")).toHaveTextContent("made or changed outside the question builder");
+    await expect.element(page.getByTestId("opened-in-form")).toHaveTextContent("not made in this builder, or it was changed outside it");
     await expect.element(page.getByLabelText("Title", { exact: true })).toHaveValue("Two weeks");
     expect(page.getByTestId("report-workspace").elements()).toHaveLength(0);
   });
@@ -124,6 +131,8 @@ describe("editing a report made in the workspace", () => {
 
   beforeEach(async () => {
     calls.runs.length = 0;
+    calls.validations.length = 0;
+    validatorDown = false;
     calls.updates.length = 0;
     calls.creates.length = 0;
     calls.gotos.length = 0;
@@ -170,7 +179,7 @@ describe("editing a report made in the workspace", () => {
     await page.getByRole("button", { name: "All settings" }).click();
     await page.getByTestId("change-in-form").click();
     const dialog = page.getByRole("alertdialog");
-    await expect.element(dialog).toHaveTextContent("it cannot open in the question builder again");
+    await expect.element(dialog).toHaveTextContent("it cannot open in this builder again");
     await dialog.getByRole("button", { name: "Change in the form" }).click();
 
     await expect.element(page.getByTestId("track-section").first()).toBeVisible();
@@ -193,5 +202,57 @@ describe("editing a report made in the workspace", () => {
     await vi.waitFor(() => expect(calls.creates).toHaveLength(1));
     expect(calls.creates[0]).toMatchObject({ name: "My dawn", spec: { builder: { kind: BUILDER_KIND } } });
     await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/copy-id"]));
+  });
+
+  it("says it could not check how the report opens, opens nothing, and tries again", async () => {
+    saved = madeInWorkspace();
+    validatorDown = true;
+    render(EditCustomReportPage, {});
+
+    await expect.element(page.getByTestId("opening-failed")).toHaveTextContent("Could not check how this report opens");
+    expect(page.getByTestId("report-workspace").elements()).toHaveLength(0);
+    expect(page.getByTestId("panel-card").elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Save", exact: true }).elements()).toHaveLength(0);
+
+    validatorDown = false;
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    expect(calls.updates).toEqual([]);
+  });
+
+  it("checks with the validator, which reads no data, not with a run", async () => {
+    saved = madeInWorkspace();
+    render(EditCustomReportPage, {});
+
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    expect(calls.validations).toHaveLength(1);
+    expect((calls.validations[0] as { spec: Record<string, unknown> }).spec).not.toHaveProperty("builder");
+  });
+
+  it("asks before a save from the form removes the state of the builder it was made in", async () => {
+    saved = madeInWorkspace((spec) => ({ ...spec, title: "Changed elsewhere" }));
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("opened-in-form")).toBeVisible();
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Saving from the form removes those settings");
+    expect(calls.updates).toEqual([]);
+    await dialog.getByRole("button", { name: "Save" }).click();
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect((calls.updates[0] as { request: { spec: Record<string, unknown> } }).request.spec).not.toHaveProperty("builder");
+  });
+
+  it("asks nothing before a save from the form of a report made in the form", async () => {
+    saved = { id: "r1", name: "Fortnight", spec: statisticsTemplate.spec, errors: [], canEdit: true };
+    known = catalogue;
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("opened-in-form")).toBeVisible();
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect(page.getByRole("alertdialog").elements()).toHaveLength(0);
   });
 });

@@ -5,6 +5,8 @@
   behind "More". An option that cannot be used now is disabled, with its reason beside it.
 -->
 <script lang="ts">
+  import { before, removeThenFocus } from "./refocus.js";
+  import { signalLabel, familyLabel } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -22,7 +24,7 @@
   import Spline from "@lucide/svelte/icons/spline";
   import { signalSwatch } from "./result-colors.js";
   import Swatch from "./Swatch.svelte";
-  import { signal as signalOf, type SignalId } from "./vocabulary.js";
+  import { type SignalId } from "./vocabulary.js";
   import {
     COMBO_MARKS,
     comboLabel,
@@ -60,7 +62,7 @@
       ? [{ id: "against", label: "Signals", signals: ws.againstPair }]
       : ws.lanes.map((l) => ({
           id: l.id,
-          label: l.own ? "Own lane" : l.family,
+          label: l.own ? "Own lane" : familyLabel(l.family),
           signals: l.signals,
         }))
   );
@@ -86,6 +88,18 @@
   ): string | null {
     const found = items.find((i) => i.reason);
     return found ? `${found.label}: ${found.reason}` : null;
+  }
+
+  /**
+   * Removes a chip's signal or line; the focus goes to the chip before it, else to the signal in the
+   * rail, else to the lens switch.
+   */
+  function removeChip(selector: string, signal: string | null, remove: () => unknown) {
+    const chips = [...document.querySelectorAll("[data-testid='signal-chips'] [data-signal-chip], [data-testid='signal-chips'] [data-combo-chip]")];
+    const fallback = () =>
+      (signal ? document.querySelector(`[data-testid='signal-rail'] [data-signal="${signal}"]`) : null) ??
+      document.querySelector("#lens-switch [data-state='on']");
+    void removeThenFocus(before(chips, document.querySelector(selector), fallback), remove);
   }
 </script>
 
@@ -176,7 +190,7 @@
               <Button
                 variant="ghost-destructive"
                 size="sm"
-                onclick={() => ws.removeCombo(combo.key)}
+                onclick={() => removeChip(`[data-combo-chip="${combo.key}"]`, null, () => ws.removeCombo(combo.key))}
               >
                 Remove from chart
               </Button>
@@ -232,7 +246,7 @@
           <Swatch
             swatch={signalSwatch(report, id, ws.layersOf(id), perGroup)}
           />
-          {signalOf(id).label}
+          {signalLabel(id)}
           {#if Glyph}
             <Glyph class="text-muted-foreground" aria-hidden="true" />
           {/if}
@@ -258,7 +272,7 @@
         ]),
       ] satisfies [string, string | null][]}
       {@const once = (slot: string) => onceIn(slots, slot)}
-      <p class="text-sm font-medium">{signalOf(id).label}</p>
+      <p class="text-sm font-medium">{signalLabel(id)}</p>
       {#if marks.length > 1}
         <div class="space-y-1.5">
           <p class="text-xs text-muted-foreground" id="draw-{id}">Draw as</p>
@@ -435,8 +449,8 @@
                       op,
                       label:
                         op === "difference"
-                          ? `Subtract ${lowerFirst(signalOf(other).label)}`
-                          : `Divide by ${lowerFirst(signalOf(other).label)}`,
+                          ? `Subtract ${lowerFirst(signalLabel(other))}`
+                          : `Divide by ${lowerFirst(signalLabel(other))}`,
                       reason: ws.combineReason(id, other, op),
                     }))}
                     <li class="space-y-1">
@@ -468,7 +482,7 @@
       <Button
         variant="ghost-destructive"
         size="sm"
-        onclick={() => ws.toggleSignal(id)}
+        onclick={() => removeChip(`[data-signal-chip="${id}"]`, id, () => ws.toggleSignal(id))}
       >
         Remove from chart
       </Button>

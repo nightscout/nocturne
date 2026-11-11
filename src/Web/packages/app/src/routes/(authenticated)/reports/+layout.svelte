@@ -93,6 +93,15 @@
     let reportRoot = $state<HTMLElement | null>(null);
     /** The sticky header's height, its page tabs included; 0 before it is measured, or where there is none. */
     let headerHeight = $state(0);
+    // The header's height before it is measured, so the first paint matches it: the h-14 bar and its
+    // border, and a row of page tabs (its border, py-1.5, and a py-1 link of 20px text) where
+    // ReportPageSwitcher draws one. Only a row that wraps on a narrow screen is corrected after.
+    const tabbed = $derived(
+        page.url.pathname === "/reports/custom" ||
+            page.url.pathname.startsWith("/reports/custom/") ||
+            reportCategories().some((c) => c.pages && c.reports.some((r) => r.href === page.url.pathname))
+    );
+    const headerFallback = $derived(tabbed ? "3.5rem + 1px + 41px" : "3.5rem + 1px");
     $effect(() => installPrintFitFallback(() => reportRoot));
 
     const registryTitles = $derived(
@@ -154,7 +163,7 @@
      header and its page tabs; before the header is measured, under the h-14 bar and its border. -->
 <div
         class="@container relative min-h-full bg-background"
-        style:--headroom-top="calc(var(--app-sticky-top, 0px) + {headerHeight > 0 ? `${headerHeight}px` : "3.5rem + 1px"})"
+        style:--headroom-top="calc(var(--app-sticky-top, 0px) + {headerHeight > 0 ? `${headerHeight}px` : headerFallback})"
         bind:this={reportRoot}
         data-report-root
 >

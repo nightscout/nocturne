@@ -1,3 +1,4 @@
+import { createRawSnippet } from "svelte";
 import { render } from "svelte/server";
 import { describe, expect, it } from "vitest";
 import type { ChartLabels } from "../labels.js";
@@ -93,5 +94,15 @@ describe("a report view", () => {
 
     expect(html({ report: panels }).match(/data-testid="report-sentence"/g)).toHaveLength(2);
     expect(html({ report: panels, layout: "multiples" }).match(/data-testid="report-sentence"/g)).toHaveLength(1);
+  });
+
+  it("heads each panel with the host's words in place of the engine's title", () => {
+    const panels = report([panel("engine name", [layer("g", [100])])]);
+    const heading = createRawSnippet((p: () => ReportPanel) => ({ render: () => `<span>Group A: ${p().id.length} letters</span>` }));
+
+    const body = html({ report: panels, heading });
+
+    expect(body).toContain("Group A: 11 letters");
+    expect(body).not.toMatch(/>engine name</);
   });
 });

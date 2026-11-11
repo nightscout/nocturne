@@ -13,14 +13,14 @@
     deleteCustomReport,
     getCustomReport,
     getCustomReportCatalogue,
-    runCustomReport,
+    validateCustomReport,
     updateCustomReport,
   } from "#lib/api/generated/customReports.generated.remote.js";
   import ReportBuilder from "#lib/components/reports/custom/builder/ReportBuilder.svelte";
-  import { minuteLabel } from "#lib/components/reports/custom/workspace/clock.js";
+  import { minuteLabel, spanLabel } from "#lib/components/reports/custom/workspace/clock.js";
   import type { Report } from "#lib/components/reports/custom/workspace/report.svelte.js";
   import ReportWorkspace from "#lib/components/reports/custom/workspace/ReportWorkspace.svelte";
-  import { openSaved, specToSave } from "#lib/components/reports/custom/workspace/saved-report.js";
+  import { normaliseWith, openSaved, specToSave } from "#lib/components/reports/custom/workspace/saved-report.js";
   import { withoutBuilder } from "#lib/components/reports/custom/workspace/saved-state.js";
   import SaveControl from "#lib/components/reports/custom/workspace/SaveControl.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -34,6 +34,7 @@
   import CopyPlus from "@lucide/svelte/icons/copy-plus";
   import Save from "@lucide/svelte/icons/save";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Undo2 from "@lucide/svelte/icons/undo-2";
 
   const id = $derived(page.params.id ?? "");
@@ -57,49 +58,57 @@
   const maxName = $derived(catalogue.current?.maxNameLength);
 
   /**
-   * The builder the report opened in, for the report of `id`. `outside` says the form opened because
-   * the report was not made in the workspace or was changed outside it.
+   * The builder the report opened in, for the report of `id`; `failed` while whether it opens in the
+   * workspace could not be checked. `dropsState` marks a form opened on a report that carries this
+   * builder's state, which a save from the form removes.
    */
   let opening = $state<
     | { id: string; builder: "workspace"; report: Report }
-    | { id: string; builder: "form"; spec: Record<string, unknown>; outside: boolean }
+    | { id: string; builder: "form"; spec: Record<string, unknown>; outside: boolean; dropsState: boolean }
+    | { id: string; builder: "failed" }
     | null
   >(null);
-
-  /** The spec as the engine stores it, for comparing with the saved one; null when it does not validate. */
-  async function normalise(spec: Record<string, unknown>): Promise<unknown> {
-    try {
-      const run = await runCustomReport({ spec, preview: true });
-      return (run.errors ?? []).length === 0 ? (run.spec ?? null) : null;
-    } catch {
-      return null;
-    }
-  }
+  /** Bumped by "Try again", so the check runs once more. */
+  let attempt = $state(0);
+  let confirmingFormSave = $state<Record<string, unknown> | null>(null);
 
   $effect(() => {
     const saved = report.current;
     const known = catalogue.current;
     const forId = id;
     const limited = clamped;
-    if (!saved || !known || untrack(() => opening?.id === forId)) return;
+    // "Try again" bumps it, so a failed check runs once more.
+    void attempt;
+    if (!saved || !known || untrack(() => opening?.id === forId && opening.builder !== "failed")) return;
     if (limited) {
-      opening = { id: forId, builder: "form", spec: withoutBuilder(saved.spec), outside: false };
+      opening = { id: forId, builder: "form", spec: withoutBuilder(saved.spec), outside: false, dropsState: false };
       return;
     }
     let current = true;
+    opening = null;
     // The restored report's state is made and read here; the effect depends on none of it.
-    void untrack(() => openSaved(known, saved.spec, normalise, minuteLabel)).then((o) => {
-      if (!current) return;
-      opening =
-        o.builder === "workspace"
-          ? { id: forId, builder: "workspace", report: o.report }
-          : { id: forId, builder: "form", spec: withoutBuilder(saved.spec), outside: true };
-    });
+    untrack(() => openSaved(known, saved.spec, (spec) => normaliseWith(validateCustomReport, spec), minuteLabel, spanLabel)).then(
+      (o) => {
+        if (!current) return;
+        opening =
+          o.builder === "workspace"
+            ? { id: forId, builder: "workspace", report: o.report }
+            : {
+                id: forId,
+                builder: "form",
+                spec: withoutBuilder(saved.spec),
+                outside: true,
+                dropsState: o.reason === "changed",
+              };
+      },
+      () => {
+        if (current) opening = { id: forId, builder: "failed" };
+      }
+    );
     return () => {
       current = false;
     };
   });
-
   function opened() {
     return goto(resolve("/(authenticated)/reports/custom/[id]", { id }));
   }
@@ -119,13 +128,23 @@
   }
 
   async function saveWorkspace(workspace: Report, newName: string) {
-    await updateCustomReport({ id, request: { name: newName, spec: specToSave(workspace) } });
-    await opened();
+    busy = true;
+    try {
+      await updateCustomReport({ id, request: { name: newName, spec: specToSave(workspace) } });
+      await opened();
+    } finally {
+      busy = false;
+    }
   }
 
   async function copyWorkspace(workspace: Report, copy: string) {
-    const saved = await createCustomReport({ name: copy, spec: specToSave(workspace) });
-    await goto(resolve("/(authenticated)/reports/custom/[id]", { id: saved.id ?? "" }));
+    busy = true;
+    try {
+      const saved = await createCustomReport({ name: copy, spec: specToSave(workspace) });
+      await goto(resolve("/(authenticated)/reports/custom/[id]", { id: saved.id ?? "" }));
+    } finally {
+      busy = false;
+    }
   }
 
   async function saveCopy(spec: Record<string, unknown>) {
@@ -179,13 +198,21 @@
       {#key workspace}
         <ReportWorkspace
           report={workspace}
-          onform={(spec) => (opening = { id, builder: "form", spec, outside: false })}
+          onform={(spec) => (opening = { id, builder: "form", spec, outside: false, dropsState: false })}
         >
-          {#snippet actions()}
+          {#snippet actions(problem: string | null)}
             {#if canEdit}
-              <SaveControl report={workspace} {name} disabled={busy} onsave={(n) => saveWorkspace(workspace, n)} />
+              <SaveControl report={workspace} {name} reason={problem} disabled={busy} onsave={(n) => saveWorkspace(workspace, n)} />
             {/if}
-            <SaveControl report={workspace} kind="copy" variant="outline" disabled={busy} onsave={(n) => copyWorkspace(workspace, n)} />
+            <SaveControl
+              report={workspace}
+              kind="copy"
+              variant="outline"
+              reason={problem}
+              showReason={!canEdit}
+              disabled={busy}
+              onsave={(n) => copyWorkspace(workspace, n)}
+            />
             <Button variant="outline" size="sm" onclick={opened} disabled={busy}>
               <Undo2 aria-hidden="true" />
               Cancel
@@ -202,10 +229,18 @@
       {#if actionError}
         <p class="text-sm text-destructive" role="alert">{actionError}</p>
       {/if}
+    {:else if opening.builder === "failed"}
+      <div class="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4" role="alert" data-testid="opening-failed">
+        <p class="text-sm">Could not check how this report opens. Your report is not changed.</p>
+        <Button variant="outline" size="sm" onclick={() => attempt++}>
+          <RotateCcw aria-hidden="true" />
+          Try again
+        </Button>
+      </div>
     {:else}
       {#if opening.outside}
         <p class="text-sm text-muted-foreground" data-testid="opened-in-form">
-          This report was made or changed outside the question builder, so it opens in the form.
+          This report was not made in this builder, or it was changed outside it, so it opens in the form.
         </p>
       {/if}
       {#key opening}
@@ -228,7 +263,10 @@
               {/if}
               <div class="flex flex-wrap gap-2">
                 {#if canEdit}
-                  <Button onclick={() => save(spec())} disabled={busy || empty || name.trim() === ""}>
+                  <Button
+                    onclick={() => (opening?.builder === "form" && opening.dropsState ? (confirmingFormSave = spec()) : save(spec()))}
+                    disabled={busy || empty || name.trim() === ""}
+                  >
                     <Save aria-hidden="true" />
                     Save
                   </Button>
@@ -291,5 +329,23 @@
 >
   {#snippet description()}
     Nocturne will delete "{report.current?.name}" for every member of this account. Your data stays.
+  {/snippet}
+</ConfirmDialog>
+
+<ConfirmDialog
+  open={confirmingFormSave !== null}
+  onOpenChange={(open) => !open && (confirmingFormSave = null)}
+  title="Save this report from the form?"
+  confirmLabel="Save"
+  {busy}
+  onConfirm={() => {
+    const spec = confirmingFormSave;
+    confirmingFormSave = null;
+    if (spec) void save(spec);
+  }}
+>
+  {#snippet description()}
+    This report was made in another builder, which kept its own settings with it. Saving from the form
+    removes those settings, so the report then opens only in the form.
   {/snippet}
 </ConfirmDialog>

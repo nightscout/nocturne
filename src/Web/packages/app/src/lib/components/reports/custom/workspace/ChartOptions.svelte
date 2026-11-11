@@ -5,6 +5,8 @@
   A row only shows when it applies to a signal on the chart.
 -->
 <script lang="ts">
+  import { before, removeThenFocus } from "./refocus.js";
+  import { signalLabel, leaveOutLabel } from "./vocabulary-words.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -14,7 +16,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
   import DateSpanField from "./DateSpanField.svelte";
-  import { LEAVE_OUTS, signal as signalOf } from "./vocabulary.js";
+  import { LEAVE_OUTS } from "./vocabulary.js";
   import {
     minutesText,
     windowText,
@@ -45,7 +47,17 @@
 {#snippet removable(label: string, remove: () => void, testid: string)}
   <span class="inline-flex items-center rounded-md border border-border" data-testid={testid}>
     <span class="px-2 text-xs">{label}</span>
-    <Button variant="ghost" size="icon-xs" aria-label="Remove: {label}" onclick={remove}>
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      aria-label="Remove: {label}"
+      data-removable
+      onclick={(event) => {
+        const row = event.currentTarget.closest("[data-option-row]");
+        const items = [...(row?.querySelectorAll("[data-removable]") ?? [])];
+        void removeThenFocus(before(items, event.currentTarget, () => row?.querySelector("[data-option-add]")), remove);
+      }}
+    >
       <X aria-hidden="true" />
     </Button>
   </span>
@@ -53,7 +65,7 @@
 
 <div class="space-y-2" data-testid="chart-options">
   {#if isEvent}
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2" data-option-row>
       <span class="w-20 shrink-0 text-xs text-muted-foreground">Window</span>
       <Popover.Root>
         <Popover.Trigger>
@@ -132,7 +144,7 @@
           "option-corroboration"
         )}
       {/if}
-      {#if ws.event.comparison || comparisonOpen}
+      {#if (ws.event.comparison || comparisonOpen) && !ws.comparisonReason}
         <span class="inline-flex items-center gap-1">
           <DateSpanField
             value={ws.event.comparison}
@@ -154,11 +166,11 @@
           </Button>
         </span>
       {/if}
-      {#if !ws.event.isolatedOnly || (ws.hasRises && !ws.event.requireCorroboration) || !(ws.event.comparison || comparisonOpen)}
+      {#if !ws.event.isolatedOnly || (ws.hasRises && !ws.event.requireCorroboration) || (!(ws.event.comparison || comparisonOpen) && !ws.comparisonReason)}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             {#snippet child({ props }: { props: Record<string, unknown> })}
-              <Button {...props} variant="ghost" size="xs" data-testid="event-options">
+              <Button {...props} variant="ghost" size="xs" data-testid="event-options" data-option-add>
                 <Plus aria-hidden="true" />
                 Options
               </Button>
@@ -170,7 +182,7 @@
                 Only events with nothing else near them
               </DropdownMenu.Item>
             {/if}
-            {#if !(ws.event.comparison || comparisonOpen)}
+            {#if !(ws.event.comparison || comparisonOpen) && !ws.comparisonReason}
               <DropdownMenu.Item onSelect={() => (comparisonOpen = true)}>
                 Compare with an earlier period
               </DropdownMenu.Item>
@@ -186,13 +198,18 @@
         </DropdownMenu.Root>
       {/if}
     </div>
+    {#if ws.comparisonReason}
+      <p class="text-xs text-muted-foreground" data-testid="comparison-reason">
+        Compare with an earlier period: {ws.comparisonReason}
+      </p>
+    {/if}
   {/if}
 
   {#if ws.leaveOutApplies}
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2" data-option-row>
       <span class="w-20 shrink-0 text-xs text-muted-foreground">Leave out</span>
       {#each left as l (l.id)}
-        {@render removable(l.label, () => ws.setLeaveOut(l.id, false), `leave-out-${l.id}`)}
+        {@render removable(leaveOutLabel(l.id), () => ws.setLeaveOut(l.id, false), `leave-out-${l.id}`)}
       {/each}
       {#if ws.profileName}
         {@render removable(
@@ -206,7 +223,7 @@
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
               {#snippet child({ props }: { props: Record<string, unknown> })}
-                <Button {...props} variant="ghost" size="xs" data-testid="leave-out-add">
+                <Button {...props} variant="ghost" size="xs" data-testid="leave-out-add" data-option-add>
                   <Plus aria-hidden="true" />
                   Leave out
                 </Button>
@@ -215,7 +232,7 @@
             <DropdownMenu.Content align="start">
               {#each notLeft as l (l.id)}
                 <DropdownMenu.Item onSelect={() => ws.setLeaveOut(l.id, true)}>
-                  {l.label}
+                  {leaveOutLabel(l.id)}
                 </DropdownMenu.Item>
               {/each}
               {#if !ws.profileName}
@@ -255,7 +272,7 @@
     </div>
     {#if ws.leaveOutMisses.length > 0}
       <p class="pl-22 text-xs text-muted-foreground">
-        {ws.leaveOutMisses.map((id) => signalOf(id).label).join(", ")}: all time is
+        {ws.leaveOutMisses.map((id) => signalLabel(id)).join(", ")}: all time is
         shown. These signals cannot leave time out.
       </p>
     {/if}

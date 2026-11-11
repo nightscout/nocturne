@@ -4,6 +4,8 @@
   with a small spinner, until the next one arrives.
 -->
 <script lang="ts">
+  import type { Snippet } from "svelte";
+  import type { ReportPanel } from "@nocturne/charts/core";
   import { untrack } from "svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
@@ -23,21 +25,19 @@
     facts?: boolean;
     /** How the panels are laid out; `multiples` for one chart's small multiples. */
     layout?: "stack" | "multiples";
+    /** The workspace's words for a panel's heading, in place of the engine's title. */
+    heading?: Snippet<[ReportPanel]>;
+    /** Say, once each preview settles, that the block updated: only for the open block, and not a chart, whose view says it with its caption. */
+    announce?: boolean;
   }
 
-  let { spec, runner, kind, incomplete = null, legend = true, facts = true, layout = "stack" }: Props = $props();
+  let { spec, runner, kind, incomplete = null, legend = true, facts = true, layout = "stack", heading, announce = false }: Props = $props();
 
-  const LOADING: Record<BlockKind, string> = {
-    chart: "Loading the chart",
-    figures: "Loading the figures",
-    table: "Loading the table",
-    comparison: "Loading the comparison",
-  };
-  const UPDATING: Record<BlockKind, string> = {
-    chart: "Updating the chart",
-    figures: "Updating the figures",
-    table: "Updating the table",
-    comparison: "Updating the comparison",
+  const UPDATED: Record<BlockKind, string> = {
+    chart: "Chart updated.",
+    figures: "Figures updated.",
+    table: "Table updated.",
+    comparison: "Comparison updated.",
   };
 
   $effect(() => {
@@ -50,9 +50,11 @@
   });
 
   const current = $derived(JSON.stringify(spec));
+  /** A newer spec is on its way: not after a failed run, which shows its failure alone. */
   const stale = $derived(
-    runner.running || (runner.ran !== null && runner.ran !== current)
+    runner.running || (runner.failure === null && runner.ran !== null && runner.ran !== current)
   );
+  const settled = $derived(runner.ran !== null && !runner.running && runner.failure === null ? UPDATED[kind] : "");
 </script>
 
 {#if incomplete || !spec}
@@ -74,14 +76,13 @@
         class="transition-opacity duration-150 motion-reduce:transition-none"
         class:opacity-50={stale}
       >
-        <CustomReportRun run={runner.run} {legend} {facts} {layout} />
+        <CustomReportRun run={runner.run} {legend} {facts} {layout} {heading} />
       </div>
       {#if stale}
         <LoaderCircle
           class="absolute top-1 right-1 size-4 animate-spin text-muted-foreground motion-reduce:animate-none"
           aria-hidden="true"
         />
-        <span class="sr-only" role="status">{UPDATING[kind]}</span>
       {/if}
     </div>
   {:else if !runner.failure}
@@ -92,7 +93,9 @@
     >
       <Skeleton class="h-4 w-1/3" />
       <Skeleton class={kind === "chart" ? "h-80 w-full" : "h-32 w-full"} />
-      <span class="sr-only" role="status">{LOADING[kind]}</span>
     </div>
   {/if}
+{/if}
+{#if announce}
+  <p class="sr-only" aria-live="polite">{settled}</p>
 {/if}

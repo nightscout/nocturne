@@ -22,11 +22,15 @@
     kind?: "save" | "copy";
     variant?: ButtonVariant;
     disabled?: boolean;
+    /** Why the page cannot save the report now, beyond the report's own reasons; null when it can. */
+    reason?: string | null;
+    /** Write why it cannot save beside the button; off where another save control beside it says so. */
+    showReason?: boolean;
     /** Saves under the name; a rejection is shown under the button. */
     onsave: (name: string) => Promise<void>;
   }
 
-  let { report, name: given = "", kind = "save", variant = "default", disabled = false, onsave }: Props = $props();
+  let { report, name: given = "", kind = "save", variant = "default", disabled = false, reason = null, showReason = true, onsave }: Props = $props();
 
   let open = $state(false);
   let typed = $state<string | null>(null);
@@ -46,7 +50,8 @@
   const name = $derived(typed ?? (kind === "copy" ? "" : suggested));
   const blocked = $derived(
     report.saveReason ??
-      (open && stateTooLarge(report) ? "This report has too many blocks and groups to save. Remove a block first." : null)
+      reason ??
+      (stateTooLarge(report) ? "This report has too many blocks and groups to save. Remove a block first." : null)
   );
 
   async function save(event: SubmitEvent) {
@@ -68,10 +73,19 @@
   }
 </script>
 
+{#if blocked && showReason}
+  <span class="max-w-72 text-xs text-muted-foreground" id="{id}-blocked" data-testid="save-blocked">{blocked}</span>
+{/if}
 <Popover.Root bind:open>
-  <Popover.Trigger {disabled}>
+  <Popover.Trigger disabled={disabled || blocked !== null}>
     {#snippet child({ props }: { props: Record<string, unknown> })}
-      <Button {...props} size="sm" {variant} data-testid={kind === "copy" ? "save-copy-trigger" : "save-trigger"}>
+      <Button
+        {...props}
+        size="sm"
+        {variant}
+        aria-describedby={blocked && showReason ? `${id}-blocked` : undefined}
+        data-testid={kind === "copy" ? "save-copy-trigger" : "save-trigger"}
+      >
         {#if kind === "copy"}
           <CopyPlus aria-hidden="true" />
           Save as

@@ -115,7 +115,7 @@ const workspaceState = z.strictObject({
     illness: z.boolean(),
     openLoop: z.boolean(),
   }),
-  profileName: z.string().nullable(),
+  profileName: z.string().max(100).nullable(),
   event: z.strictObject({
     before: minute,
     after: minute,
@@ -129,7 +129,25 @@ const workspaceState = z.strictObject({
     figure: outcome,
     when: z.enum(["hour", "weekday"]),
   }),
-}) satisfies z.ZodType<WorkspaceState>;
+})
+  .superRefine((state, ctx) => {
+    const placed = state.placed.map((p) => p.id);
+    const inLanes = state.lanes.flatMap((l) => l.signals);
+    const problems = [
+      hasDuplicates(placed) && "a signal placed twice",
+      inLanes.some((id) => !placed.includes(id)) && "a lane names a signal that is not placed",
+      hasDuplicates(inLanes) && "a signal in two lanes",
+      hasDuplicates(state.lanes.map((l) => l.id)) && "two lanes of one id",
+      state.combos.some((c) => !placed.includes(c.a) || !placed.includes(c.b)) && "a combination of a signal that is not placed",
+      hasDuplicates(state.combos.map((c) => c.key)) && "two combinations of one key",
+      hasDuplicates(state.moments.map((m) => m.key)) && "two groups of one key",
+    ].filter((p): p is string => typeof p === "string");
+    for (const message of problems) ctx.addIssue({ code: "custom", message });
+  }) satisfies z.ZodType<WorkspaceState>;
+
+function hasDuplicates(values: readonly unknown[]): boolean {
+  return new Set(values).size !== values.length;
+}
 
 const blockRange = z.number().int().positive().nullable();
 const columns = z.array(z.string()).min(1);
@@ -158,11 +176,16 @@ const savedBlock = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const savedReport = z.strictObject({
-  title: z.string(),
-  rangeHours: z.number().int().positive(),
-  blocks: z.array(savedBlock).min(1),
-});
+const savedReport = z
+  .strictObject({
+    title: z.string(),
+    rangeHours: z.number().int().positive(),
+    blocks: z.array(savedBlock).min(1),
+  })
+  .superRefine((report, ctx) => {
+    const keys = report.blocks.map((b) => b.key);
+    if (hasDuplicates(keys)) ctx.addIssue({ code: "custom", message: "two blocks of one key" });
+  });
 
 /** A report as the workspace saves it: its title, range and blocks, with the keys its panel ids carry. */
 export type SavedReport = z.infer<typeof savedReport>;

@@ -2,6 +2,7 @@
   Seven toggles, Monday to Sunday, for the days a group covers. At least one day stays on.
 -->
 <script lang="ts">
+  import { weekdayName } from "./vocabulary-words.svelte.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { WEEKDAYS, type Weekday } from "./vocabulary.js";
 
@@ -35,8 +36,8 @@
   }
 >
   {#each WEEKDAYS as day (day.id)}
-    <ToggleGroup.Item value={day.id} aria-label={day.label}>
-      {day.id}
+    <ToggleGroup.Item value={day.id} aria-label={weekdayName(day.id)}>
+      {weekdayName(day.id, "short")}
     </ToggleGroup.Item>
   {/each}
 </ToggleGroup.Root>

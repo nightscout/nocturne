@@ -7,8 +7,19 @@
     value = $bindable(),
     orientation = "horizontal",
     class: className,
+    thumbLabels,
+    thumbValueText,
     ...restProps
-  }: WithoutChildrenOrChild<SliderPrimitive.RootProps> = $props();
+  }: WithoutChildrenOrChild<SliderPrimitive.RootProps> & {
+    /** Each thumb's accessible name, e.g. "Start" and "End" of a range, by thumb. */
+    thumbLabels?: string[];
+    /** Each thumb's value as a screen reader says it, e.g. a clock time. */
+    thumbValueText?: (value: number, thumb: number) => string;
+  } = $props();
+
+  function thumbValue(thumb: number): number | undefined {
+    return Array.isArray(value) ? value[thumb] : typeof value === "number" ? value : undefined;
+  }
 </script>
 
 <!-- eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- bits-ui types value as a union keyed by `type`, which destructuring for $bindable splits apart -->
@@ -41,6 +52,8 @@
       <SliderPrimitive.Thumb
         data-slot="slider-thumb"
         index={thumb}
+        aria-label={thumbLabels?.[thumb]}
+        aria-valuetext={thumbValueText && thumbValue(thumb) !== undefined ? thumbValueText(thumbValue(thumb)!, thumb) : undefined}
         class="border-primary bg-background ring-ring/50 focus-visible:outline-hidden block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 disabled:pointer-events-none disabled:opacity-50"
       />
     {/each}

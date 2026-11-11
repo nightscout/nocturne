@@ -9,6 +9,7 @@ import {
   type BlockKind,
   type Source,
 } from "./vocabulary.js";
+import { rangeLabel, sourceLabel, starterWords } from "./vocabulary-words.svelte.js";
 import { parseSavedReport, type SavedBlock, type SavedReport } from "./saved-state.js";
 import {
   Workspace,
@@ -120,18 +121,20 @@ export class Report {
   readonly #catalogue: CustomReportCatalogue;
   readonly #clock: (minute: number) => string;
 
-  /** How captions write two dates; the UI sets the app's date format. */
-  dates: (span: DateSpan) => string = (span) => `${span.from} to ${span.to}`;
+  /** How captions write two dates: the app's date format on a page. */
+  readonly dates: (span: DateSpan) => string;
 
   constructor(
     catalogue: CustomReportCatalogue,
     starter: Starter | null = null,
-    clock?: (minute: number) => string
+    clock?: (minute: number) => string,
+    dates?: (span: DateSpan) => string
   ) {
     this.#catalogue = catalogue;
     this.#clock = clock ?? ((m) => String(m));
+    this.dates = dates ?? ((span) => `${span.from} to ${span.to}`);
     this.state = {
-      title: starter?.title ?? "",
+      title: starter ? (starterWords(this.#clock)[starter.id]?.title ?? "") : "",
       rangeHours: starter?.rangeHours ?? DEFAULT_REPORT_HOURS,
       blocks: [],
       open: null,
@@ -228,19 +231,30 @@ export class Report {
     catalogue: CustomReportCatalogue,
     version: unknown,
     state: unknown,
-    clock?: (minute: number) => string
+    clock?: (minute: number) => string,
+    dates?: (span: DateSpan) => string
   ): Report | null {
     const saved = parseSavedReport(version, state);
-    if (!saved) return null;
+    if (!saved || !Report.#withinLimits(catalogue, saved)) return null;
     for (const block of saved.blocks) {
       reserveKey(block.key);
       const inner = block.kind === "chart" ? block.chart : block.kind === "table" ? block.events : undefined;
       for (const m of inner?.moments ?? []) reserveKey(m.key);
       for (const c of inner?.combos ?? []) reserveKey(c.key);
     }
-    const report = new Report(catalogue, null, clock);
+    const report = new Report(catalogue, null, clock, dates);
     report.#restore(saved);
     return report;
+  }
+
+  /** Whether the saved titles fit the catalogue's limit, as every title the workspace keeps does. */
+  static #withinLimits(catalogue: CustomReportCatalogue, saved: SavedReport): boolean {
+    const titles = [
+      saved.title,
+      ...saved.blocks.map((b) => (b.kind === "chart" ? b.chart.title : b.title)),
+      ...saved.blocks.flatMap((b) => (b.kind === "table" && b.events ? [b.events.title] : [])),
+    ];
+    return titles.every((t) => t.length <= catalogue.maxTitleLength);
   }
 
   #restore(saved: SavedReport) {
@@ -372,7 +386,9 @@ export class Report {
     const c = this.#catalogue;
     const panels = footprints.reduce((n, f) => n + f.panels, 0);
     if (panels > c.maxPanels)
-      return `A report has at most ${c.maxPanels} parts. The lag chart is a part of its own.`;
+      return this.state.blocks.some((b) => b.kind === "chart" && b.ws.lens === "against" && b.ws.findLag)
+        ? `A report has at most ${c.maxPanels} parts. The lag chart is a part of its own.`
+        : `A report has at most ${c.maxPanels} parts.`;
     const all = footprints.flatMap((f) => f.reads);
     const reads = all.filter((r, i) => all.indexOf(r) === i);
     if (reads.length > c.maxReads)
@@ -411,7 +427,7 @@ export class Report {
           kind,
           key,
           range: null,
-          title: this.#labelOf(FIGURE_SOURCES, source),
+          title: "",
           source,
           columns: this.#defaultColumns(source, "stat_tiles"),
         };
@@ -422,7 +438,7 @@ export class Report {
           kind,
           key,
           range: null,
-          title: this.#labelOf(TABLE_SOURCES, source),
+          title: "",
           source,
           columns: this.#defaultColumns(source, "table"),
           events: this.#eventsEditor(),
@@ -433,7 +449,7 @@ export class Report {
           kind,
           key,
           range: null,
-          title: this.#dataset(COMPARISON_DATASET)?.label ?? "",
+          title: "",
           preset: this.comparisonPresets.some(
             (p) => p.value === COMPARISON_FALLBACK_PRESET
           )
@@ -536,7 +552,7 @@ export class Report {
 
   /** The report's range presets, each with why it cannot be chosen now. */
   get ranges(): RangeOption[] {
-    return RANGE_PRESETS.map((p) => ({ ...p, reason: this.rangeReason(p.hours) }));
+    return RANGE_PRESETS.map((p) => ({ ...p, label: rangeLabel(p.id), reason: this.rangeReason(p.hours) }));
   }
 
   rangeReason(hours: number): Reason {
@@ -579,7 +595,7 @@ export class Report {
       report,
       ...presets.map((p) => ({
         id: p.id,
-        label: p.label,
+        label: rangeLabel(p.id),
         hours: p.hours,
         reason: p.reason,
       })),
@@ -635,13 +651,8 @@ export class Report {
     return this.#permittedSources(TABLE_SOURCES, "table");
   }
 
-  #labelOf(list: readonly Source[], dataset: string): string {
-    return list.find((s) => s.dataset === dataset)?.label ?? dataset;
-  }
-
   sourceLabel(block: FiguresBlock | TableBlock): string {
-    const list = block.kind === "figures" ? FIGURE_SOURCES : TABLE_SOURCES;
-    return list.find((s) => s.dataset === block.source)?.label ?? block.source;
+    return sourceLabel(block.source);
   }
 
   #defaultColumns(source: string, kind: string): string[] {
@@ -671,15 +682,7 @@ export class Report {
     const reason = this.sourceReason(block, source);
     if (reason) return reason;
     const kind = block.kind === "figures" ? "stat_tiles" : "table";
-    const list = block.kind === "figures" ? FIGURE_SOURCES : TABLE_SOURCES;
-    const keepTitle =
-      block.title.trim() !== "" &&
-      block.title !== this.#labelOf(list, block.source);
-    this.#update(block, {
-      source,
-      columns: this.#defaultColumns(source, kind),
-      ...(keepTitle ? {} : { title: this.#labelOf(list, source) }),
-    });
+    this.#update(block, { source, columns: this.#defaultColumns(source, kind) });
     return null;
   }
 
@@ -773,7 +776,7 @@ export class Report {
       case "table":
         if (block.source === EVENT_DATASET) {
           const texts = block.events.moments.map((m) =>
-            momentText(m, true, this.#clock)
+            momentText(m, true, this.#clock, block.events.glucoseUnits)
           );
           return `${upperFirst(texts.join(" against "))}, one row for each event ${range}`;
         }
@@ -795,10 +798,12 @@ export class Report {
   spec(): Record<string, unknown> {
     const panels = this.state.blocks.flatMap((block) => {
       const own = block.kind === "chart" ? block.ws.ownRange : block.range;
-      return this.panelsOf(block).map((panel) => ({
+      // A chart's title, which the member typed, heads its first panel: its small multiples and lag
+      // chart follow under it.
+      return this.panelsOf(block).map((panel, i) => ({
         ...panel,
         id: `b${block.key}-${String(panel.id)}`,
-        ...(block.kind === "chart" && panel.id === "chart" && block.ws.title.trim()
+        ...(block.kind === "chart" && i === 0 && block.ws.title.trim()
           ? { title: block.ws.title.trim() }
           : {}),
         ...(own !== null && block.kind !== "comparison"
@@ -818,6 +823,15 @@ export class Report {
   get saveReason(): Reason {
     if (this.state.blocks.every((b) => this.panelsOf(b).length === 0))
       return "Add a signal or a block first.";
+    const at = this.state.blocks.findIndex((b) => this.incomplete(b) !== null);
+    if (at >= 0) return `Finish or remove block ${at + 1} first. ${this.incomplete(this.state.blocks[at])}`;
+    return null;
+  }
+
+  /** What the member does next before the block can run, or null. */
+  incomplete(block: Block): string | null {
+    if (block.kind === "chart") return block.ws.incomplete;
+    if (block.kind === "comparison" && !block.preset && !(block.a && block.b)) return "Pick both periods.";
     return null;
   }
 }

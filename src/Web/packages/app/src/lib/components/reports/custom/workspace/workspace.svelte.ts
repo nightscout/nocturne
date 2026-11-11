@@ -1,4 +1,5 @@
 import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { StarterGroup } from "./starters.js";
 import {
   convertFromDisplayUnits,
   convertToDisplayUnits,
@@ -8,10 +9,9 @@ import {
   AGAINST_GRID_MINUTES,
   ANCHOR_MEAL,
   ANCHOR_RISE,
-  ANCHOR_LOW,
-  ANCHOR_HIGH,
   ALONGS,
   ALONG_TIME_OF_DAY,
+  NO_UNIT,
   DAY_KINDS,
   OCCURRENCE_DATASET,
   OUTCOMES,
@@ -29,11 +29,10 @@ import {
   LEAVE_OUTS,
   RANGE_PRESETS,
   SIGNALS,
-  WEEKDAYS,
+  WEEKDAY_IDS,
   anchor,
   cellOf,
   isStartAnchor,
-  lens as lensOf,
   lensesOf,
   signal as signalOf,
   type Along,
@@ -54,6 +53,7 @@ import {
   type SignalId,
   type Weekday,
 } from "./vocabulary.js";
+import { alongLabel, anchorPhrase, leaveOutLabel, lensLabel, markLabel, outcomeLabel, rangeLabel, signalLabel, weekdayName } from "./vocabulary-words.svelte.js";
 
 export interface Relate {
   /** Rolling-mean window in minutes, or null for none. */
@@ -163,8 +163,12 @@ export type EventFigures = Record<string, readonly string[]>;
 /** The letters of the groups of events, A to F. */
 export const GROUP_LETTERS = ["A", "B", "C", "D", "E", "F"];
 
-/** The engine's group hues repeat after this many; more groups are drawn as small multiples. */
-export const GROUP_HUES = 3;
+/**
+ * The most groups of events drawn over one another. Overlaid bands of more groups cannot be told
+ * apart however distinct their colours, so from one more the chart is a grid of small charts, one for
+ * each group. A rule of reading, not of colour: the engine has more group hues than this.
+ */
+export const MAX_OVERLAID_GROUPS = 3;
 
 export interface EventOptions {
   before: number;
@@ -207,15 +211,8 @@ export interface WorkspaceState {
 /** A preset starting state. */
 export interface Starter {
   id: string;
-  title: string;
   /** The heading the starter list puts it under. */
-  group: string;
-  /**
-   * One line; a function where it names a time of day, so it is written in the
-   * member's clock format. Glucose values are whole mg/dL, as the spec takes
-   * them for every tenant.
-   */
-  description: string | ((clock: (minute: number) => string) => string);
+  group: StarterGroup;
   lens: LensId;
   rangeHours: number;
   signals: { id: SignalId; relate?: Partial<Relate>; mark?: string }[];
@@ -470,7 +467,7 @@ function axisUnit(state: WorkspaceState, id: SignalId): string | null {
   const cell = cellOf(state.lens, id);
   const placed = state.placed.find((p) => p.id === id);
   if (!cell || !placed) return null;
-  return markOf(placed, state.lens, cell)?.noAxis ? null : cell.unit;
+  return markOf(placed, state.lens, cell)?.noAxis || cell.unit === NO_UNIT ? null : cell.unit;
 }
 
 /**
@@ -711,7 +708,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
     (signalLayers[id] ??= []).push(layer);
 
   // More groups than the engine has hues: one small chart for each group, each its own panel.
-  if (state.lens === "event" && state.moments.length > GROUP_HUES) {
+  if (state.lens === "event" && state.moments.length > MAX_OVERLAID_GROUPS) {
     const panels: Record<string, unknown>[] = [];
     let tracks = 0;
     let layers = 0;
@@ -728,7 +725,6 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
         panels.push({
           ...panel,
           id: `chart-${g + 1}`,
-          title: `${GROUP_LETTERS[g]}: ${upperFirst(momentText(m, true, ctx.clock))}`,
           tracks: t,
         });
       }
@@ -853,12 +849,11 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
     if (state.event.show === "each") {
       const up = pickOutcome(state.moments, state.event.up, false, ctx.figures);
       const along = pickAlong(state.moments, state.event.along, ctx.figures);
-      state.moments.forEach((m, i) => {
+      state.moments.forEach((_, i) => {
         const dataset = { name: OUTCOMES_DATASET, ...params, group: i + 1 };
         read(dataset);
         layers.push({
           id: `each-${i + 1}`,
-          title: `${GROUP_LETTERS[i]}: ${upperFirst(momentText(m, true, ctx.clock))}`,
           dataset,
           mark: "points",
           bindings: {
@@ -939,15 +934,10 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
         relate.fromStart && cell.fromStartField
           ? cell.fromStartField
           : cell.field;
-      const add = (
-        layerId: string,
-        dataset: Record<string, unknown>,
-        title = signalOf(id).label
-      ) => {
+      const add = (layerId: string, dataset: Record<string, unknown>) => {
         read(dataset);
         layers.push({
           id: layerId,
-          title,
           dataset,
           mark: mark.mark,
           bindings: mark.bindings,
@@ -992,17 +982,10 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
 
       if (dayFilterOn && cell.happened && state.dayFilter) {
         const filter = state.dayFilter;
-        const sets = [
-          { days: filter, title: dayFilterText(filter, ctx.clock) },
-          { days: { ...filter, others: true }, title: "All other days" },
-        ];
-        sets.forEach((set, g) => {
+        const sets = [filter, { ...filter, others: true }];
+        sets.forEach((days, g) => {
           const before = layers.length;
-          add(
-            `${id}-${g + 1}`,
-            datasetOf(cell, { days: set.days }),
-            `${signalOf(id).label}, ${lowerFirst(set.title)}`
-          );
+          add(`${id}-${g + 1}`, datasetOf(cell, { days }));
           dayGroupLayers[g].push(...layers.slice(before).map((l) => String(l.id)));
         });
         continue;
@@ -1016,13 +999,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
             days.length < 7 ? { dayOfWeek: days } : {}
           );
           const before = layers.length;
-          add(
-            layerId,
-            dataset,
-            state.dayGroups.length > 1
-              ? `${signalOf(id).label}, ${weekdaysText(days)}`
-              : undefined
-          );
+          add(layerId, dataset);
           dayGroupLayers[g].push(
             ...layers.slice(before).map((l) => String(l.id))
           );
@@ -1072,7 +1049,6 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
       layers: [
         {
           id: layerId,
-          title: comboLabel(combo),
           derived: { op: combo.op, a: source(cellA), b: source(cellB) },
           mark: combo.mark ?? "line",
         },
@@ -1098,13 +1074,13 @@ export const COMBO_MARKS: Record<CombineOp, string[]> = {
 };
 
 export function comboLabel(combo: Pick<Combo, "a" | "b" | "op">): string {
-  const a = signalOf(combo.a).label;
-  const b = lowerFirst(signalOf(combo.b).label);
+  const a = signalLabel(combo.a);
+  const b = lowerFirst(signalLabel(combo.b));
   return combo.op === "difference" ? `${a} minus ${b}` : `${a} divided by ${b}`;
 }
 
 function weekdayLabel(day: Weekday): string {
-  return WEEKDAYS.find((w) => w.id === day)!.label;
+  return weekdayName(day);
 }
 
 function joinAnd(items: string[]): string {
@@ -1114,7 +1090,7 @@ function joinAnd(items: string[]): string {
 
 /** Weekdays as words: runs of three or more as "Monday to Friday". */
 export function weekdaysText(days: Weekday[]): string {
-  const order = WEEKDAYS.map((w) => w.id);
+  const order = [...WEEKDAY_IDS];
   const sorted = order.filter((d) => days.includes(d));
   if (sorted.length === 7) return "every day";
   const runs: Weekday[][] = [];
@@ -1165,12 +1141,12 @@ export function windowText(before: number, after: number): string {
 export function momentText(
   moment: Moment,
   withAnchor: boolean,
-  clock: (minute: number) => string = clockText,
-  units: GlucoseUnits = "mg/dl"
+  clock: (minute: number) => string,
+  units: GlucoseUnits
 ): string {
   if (moment.everythingElse)
     return withAnchor
-      ? `all other ${anchor(moment.what).phrase}`
+      ? `all other ${anchorPhrase(moment.what)}`
       : "everything else";
   const parts: string[] = [];
   if (moment.timeOfDay)
@@ -1207,7 +1183,7 @@ export function momentText(
   if (glucose) parts.push(`glucose ${glucose} at the event`);
   const iob = boundsText(moment.insulinOnBoard, "U");
   if (iob) parts.push(`insulin on board ${iob} at the event`);
-  const phrase = anchor(moment.what).phrase;
+  const phrase = anchorPhrase(moment.what);
   if (parts.length === 0) return withAnchor ? `all ${phrase}` : "all";
   return withAnchor ? `${phrase} ${parts.join(", ")}` : parts.join(", ");
 }
@@ -1275,7 +1251,7 @@ function sentenceCase(labels: string[]): string {
 
 export function rangeText(hours: number): string {
   const preset = RANGE_PRESETS.find((p) => p.hours === hours);
-  if (preset) return `over the last ${preset.label}`;
+  if (preset) return `over the last ${rangeLabel(preset.id)}`;
   return hours % 24 === 0
     ? `over the last ${hours / 24} days`
     : `over the last ${hours} hours`;
@@ -1442,29 +1418,38 @@ export class Workspace {
   /** Why a "Show" choice cannot be used now, or null. */
   showReason(show: EventShow): Reason {
     if (show === "curve" || show === this.state.event.show) return null;
-    const dataset =
-      show === "each"
-        ? OUTCOMES_DATASET
-        : show === "spread"
-          ? SPREAD_DATASET
-          : OCCURRENCE_DATASET;
+    const dataset = listDataset(show);
     const found = this.#catalogue.datasets.find((d) => d.name === dataset);
     if (!found) return "This report engine cannot show this.";
     if (!found.permitted || found.fields.some((f) => f.scope && !f.permitted))
       return "Your access cannot read treatments, which this needs.";
-    if (this.state.event.comparison)
-      return "Remove the earlier period first. This shows the events of the range only.";
     return this.#reason((d) => {
       d.event.show = show;
+      d.event.comparison = null;
     });
   }
+
+  /**
+   * Set when a change of view removed the earlier period, which only the curve over time draws; the
+   * view says so until the member changes the period or goes back to the curve. Not saved.
+   */
+  comparisonDropped = $state(false);
 
   setShow(show: EventShow): Reason {
     const reason = this.showReason(show);
     if (reason) return reason;
-    return this.#commit((d) => {
+    const had = this.state.event.comparison !== null;
+    const done = this.#commit((d) => {
       d.event.show = show;
+      if (show !== "curve") d.event.comparison = null;
     });
+    if (!done) this.comparisonDropped = show !== "curve" && (had || this.comparisonDropped);
+    return done;
+  }
+
+  /** Why an earlier period cannot be added now, or null: only the curve over time draws one. */
+  get comparisonReason(): Reason {
+    return this.eventList ? "Each event, Spread and When show the events of the range only." : null;
   }
 
   /** Each event: the figures up, and what they lie along, that apply to the groups. */
@@ -1500,7 +1485,7 @@ export class Workspace {
 
   /** Whether the chart draws one small chart for each group: more groups than hues. */
   get smallMultiples(): boolean {
-    return this.state.lens === "event" && this.state.moments.length > GROUP_HUES;
+    return this.state.lens === "event" && this.state.moments.length > MAX_OVERLAID_GROUPS;
   }
 
   /** Why the reader cannot use an anchor, or null: sleep starts and wake-ups need the sleep permission. */
@@ -1511,13 +1496,20 @@ export class Workspace {
 
   /** The engine's one-line note on an anchor ("a site, cannula or pod change"), or null. */
   anchorNote(id: AnchorId): string | null {
-    const text = this.#cohortProperty("anchor")?.description;
-    if (typeof text !== "string") return null;
-    const at = text.indexOf(`${id} (`);
-    if (at < 0) return null;
-    const start = at + id.length + 2;
-    const end = text.indexOf(")", start);
-    return end < 0 ? null : upperFirst(text.slice(start, end));
+    return this.#anchorNotes()[id]?.description ?? null;
+  }
+
+  /** The event datasets' notes on each kind of event: the catalogue's `x-eventAnchors`. */
+  #anchorNotes(): Partial<Record<string, { description: string | null; rule: string | null }>> {
+    const params: unknown = this.#catalogue.datasets.find((d) => d.name === EVENT_DATASET)?.parameters;
+    const notes = objectAt(params, "x-eventAnchors") ?? {};
+    const text = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+    return Object.fromEntries(
+      Object.entries(notes).map(([id, note]) => [
+        id,
+        { description: text(objectAt({ note }, "note")?.description), rule: text(objectAt({ note }, "note")?.rule) },
+      ])
+    );
   }
 
   #datasetPermitted(name: string): boolean {
@@ -1538,7 +1530,7 @@ export class Workspace {
     const parts: string[] = [];
     if (s.lens === "event") parts.push(lowerFirst(windowText(s.event.before, s.event.after)));
     if (this.leaveOutApplies) {
-      const left = LEAVE_OUTS.filter((l) => s.leaveOut[l.id]).map((l) => lowerFirst(l.label));
+      const left = LEAVE_OUTS.filter((l) => s.leaveOut[l.id]).map((l) => lowerFirst(leaveOutLabel(l.id)));
       parts.push(left.length > 0 ? `without ${joinAnd(left)}` : "all time");
     }
     return parts.join(", ");
@@ -1648,6 +1640,16 @@ export class Workspace {
     }));
   }
 
+  /**
+   * A group's name in the member's words, with its letter: "A: Meals 06:00 to 08:30". Heads a small
+   * chart of the group; the engine's own name for it stays out of view.
+   */
+  groupHeading(index: number): string {
+    const m = this.state.moments[index];
+    if (!m) return "";
+    return `${GROUP_LETTERS[index]}: ${upperFirst(momentText(m, true, this.clock, this.glucoseUnits))}`;
+  }
+
   /** The unit the tenant's reports show glucose in: the catalogue's glucose fields carry it. */
   get glucoseUnits(): GlucoseUnits {
     const unit = this.#catalogue.datasets
@@ -1712,13 +1714,9 @@ export class Workspace {
       : "Your access cannot read treatments, which this needs.";
   }
 
-  /** The API's own rule for an anchor that has one (lows and highs), or null. */
+  /** The engine's rule for when an event of the kind starts and ends (lows, highs, carbs in a low), or null. */
   anchorRule(what: AnchorId): string | null {
-    if (what !== ANCHOR_LOW && what !== ANCHOR_HIGH) return null;
-    const text = this.#cohortProperty("anchor")?.description;
-    if (typeof text !== "string") return null;
-    const at = text.indexOf("a low starts");
-    return at < 0 ? null : upperFirst(text.slice(at));
+    return this.#anchorNotes()[what]?.rule ?? null;
   }
 
   /** The signals the lens draws, each with the reason it cannot be placed now. */
@@ -1830,6 +1828,11 @@ export class Workspace {
       hours: this.#catalogue.maxRangeHours,
       by: null,
     };
+    // A view of the events one by one draws no signal: only its own dataset limits the range.
+    if (state.lens === "event" && state.event.show !== "curve") {
+      const hours = this.#catalogue.datasets.find((d) => d.name === listDataset(state.event.show))?.maxRangeHours;
+      return hours !== undefined && hours < limit.hours ? { hours, by: null } : limit;
+    }
     for (const id of shownSignals(state)) {
       const hours = this.#catalogue.datasets.find(
         (d) => d.name === cellOf(state.lens, id)?.dataset
@@ -1843,7 +1846,7 @@ export class Workspace {
     const limit = this.#rangeLimit(state);
     if (hours <= limit.hours) return null;
     return limit.by
-      ? `${signalOf(limit.by).label} shows at most ${daysText(limit.hours)}. Choose a shorter range first.`
+      ? `${signalLabel(limit.by)} shows at most ${daysText(limit.hours)}. Choose a shorter range first.`
       : `A report covers at most ${daysText(limit.hours)}.`;
   }
 
@@ -1851,6 +1854,7 @@ export class Workspace {
   get ranges(): RangeOption[] {
     return RANGE_PRESETS.map((p) => ({
       ...p,
+      label: rangeLabel(p.id),
       reason: this.#reason((d) => {
         d.range = p.hours;
       }),
@@ -1880,7 +1884,7 @@ export class Workspace {
   #place(d: WorkspaceState, id: SignalId): Reason {
     if (d.placed.some((p) => p.id === id)) return null;
     if (!cellOf(d.lens, id))
-      return `${lensOf(d.lens).label} cannot show this signal.`;
+      return `${lensLabel(d.lens)} cannot show this signal.`;
     if (d.lens === "against" && shownSignals(d).length >= 2)
       return "This view shows two signals. Remove one first.";
     d.placed.push({ id, marks: {}, relate: {} });
@@ -1962,7 +1966,7 @@ export class Workspace {
     const chosen = markOf(placed, this.state.lens, cell)?.mark;
     return markChoices(placed, this.state.lens, cell).map((m) => ({
       mark: m.mark,
-      label: m.label,
+      label: markLabel(m.word),
       chosen: m.mark === chosen,
       reason:
         m.mark === chosen
@@ -2131,15 +2135,21 @@ export class Workspace {
    * so a switch back shows them again.
    */
   setLens(id: LensId): Reason {
-    return this.#commit((d) => {
-      this.#switchLens(d, id);
-      if (d.range === null && this.#rangeReason(d, this.#hoursOf(d))) {
-        const fits = RANGE_PRESETS.filter(
-          (p) => !this.#rangeReason(d, p.hours)
-        );
-        d.range = fits[fits.length - 1]?.hours ?? RANGE_PRESETS[0].hours;
-      }
-    });
+    return this.#commit((d) => this.#toLens(d, id));
+  }
+
+  /** Why the chart cannot be shown through `id` now, or null: the answer the lens switch shows before it is used. */
+  lensReason(id: LensId): Reason {
+    if (id === this.state.lens) return null;
+    return this.#reason((d) => this.#toLens(d, id));
+  }
+
+  #toLens(d: WorkspaceState, id: LensId) {
+    this.#switchLens(d, id);
+    if (d.range === null && this.#rangeReason(d, this.#hoursOf(d))) {
+      const fits = RANGE_PRESETS.filter((p) => !this.#rangeReason(d, p.hours));
+      d.range = fits[fits.length - 1]?.hours ?? RANGE_PRESETS[0].hours;
+    }
   }
 
   get addMomentReason(): Reason {
@@ -2149,7 +2159,7 @@ export class Workspace {
   #addMoment(d: WorkspaceState, what: AnchorId = ANCHOR_MEAL): Reason {
     if (d.moments.length >= this.maxMoments)
       return `A chart has at most ${this.maxMoments} groups of events.`;
-    if (d.moments.some((m) => m.everythingElse) && d.moments.length >= GROUP_HUES)
+    if (d.moments.some((m) => m.everythingElse) && d.moments.length >= MAX_OVERLAID_GROUPS)
       return "Remove everything else first. It can go with at most two other groups.";
     const at = d.moments.findIndex((m) => m.everythingElse);
     d.moments.splice(at < 0 ? d.moments.length : at, 0, {
@@ -2180,7 +2190,7 @@ export class Workspace {
     if (!target) return "Each kind of event here already has its everything else.";
     if (d.moments.length >= this.maxMoments)
       return `A chart has at most ${this.maxMoments} groups of events.`;
-    if (d.moments.length >= GROUP_HUES)
+    if (d.moments.length >= MAX_OVERLAID_GROUPS)
       return "Everything else can go with at most two other groups.";
     d.moments.push({ key: freshKey(), what: target, everythingElse: true });
     return null;
@@ -2254,6 +2264,8 @@ export class Workspace {
   }
 
   setEvent(patch: Partial<EventOptions>): Reason {
+    if (patch.comparison && this.comparisonReason) return this.comparisonReason;
+    if (patch.comparison !== undefined) this.comparisonDropped = false;
     return this.#commit((d) => {
       if (patch.before !== undefined && !this.beforeChoices.includes(patch.before))
         return "Choose one of the windows given.";
@@ -2280,7 +2292,6 @@ export class Workspace {
     // A starter held in a component's state is a proxy, which structuredClone refuses.
     const starter = $state.snapshot(given);
     const state = emptyState(this.#leaveOut);
-    state.title = starter.title;
     state.lens = starter.lens;
     state.range = ownRange ? starter.rangeHours : null;
     for (const s of starter.signals) {
@@ -2316,10 +2327,10 @@ export class Workspace {
       if (pair.length === 2)
         parts.push({
           kind: "signals",
-          text: `${signalOf(pair[1]).label} against ${lowerFirst(signalOf(pair[0]).label)}`,
+          text: `${signalLabel(pair[1])} against ${lowerFirst(signalLabel(pair[0]))}`,
         });
       else if (pair.length === 1)
-        parts.push({ kind: "signals", text: signalOf(pair[0]).label });
+        parts.push({ kind: "signals", text: signalLabel(pair[0]) });
       parts.push({
         kind: "lens",
         text: s.findLag
@@ -2328,7 +2339,7 @@ export class Workspace {
       });
     } else {
       const names = [
-        ...this.shown.map((id) => signalOf(id).label),
+        ...this.shown.map((id) => signalLabel(id)),
         ...this.combos.map((c) => comboLabel(c)),
       ];
       if (names.length > 0)
@@ -2354,14 +2365,12 @@ export class Workspace {
   #eventListCaption(): CaptionPart[] {
     const s = this.state;
     const anchors = distinct(s.moments.map((m) => m.what));
-    const phrase = joinAnd(anchors.map((a) => anchor(a).phrase));
-    const label = (list: readonly { id: string; label: string }[], id: string) =>
-      list.find((o) => o.id === id)?.label ?? id;
+    const phrase = joinAnd(anchors.map((a) => anchorPhrase(a)));
     let head: string;
     if (s.event.show === "each")
-      head = `${label(OUTCOMES, this.up)} against ${lowerFirst(label(ALONGS, this.along))}`;
+      head = `${outcomeLabel(this.up)} against ${lowerFirst(alongLabel(this.along))}`;
     else if (s.event.show === "spread")
-      head = `How many ${phrase} had each ${lowerFirst(label(OUTCOMES, this.figure))}`;
+      head = `How many ${phrase} had each ${lowerFirst(outcomeLabel(this.figure))}`;
     else {
       const verb = anchors.every((a) => isStartAnchor(a)) ? "start" : "happen";
       head = `When ${phrase} ${verb}, ${s.event.when === "hour" ? "by hour of day" : "by weekday"}`;
@@ -2397,7 +2406,7 @@ export class Workspace {
         const anchors = distinct(
           s.moments.filter((m) => !m.everythingElse).map((m) => m.what)
         );
-        const around = `around ${joinAnd(anchors.map((a) => anchor(a).phrase))}`;
+        const around = `around ${joinAnd(anchors.map((a) => anchorPhrase(a)))}`;
         const isDefault =
           s.event.before === EVENT_MINUTES_BEFORE &&
           s.event.after === EVENT_MINUTES_AFTER;
@@ -2446,7 +2455,7 @@ export class Workspace {
     }
     if (this.leaveOutApplies) {
       const left = LEAVE_OUTS.filter((l) => s.leaveOut[l.id]).map((l) =>
-        lowerFirst(l.label)
+        lowerFirst(leaveOutLabel(l.id))
       );
       if (left.length > 0) parts.push(`without ${joinAnd(left)}`);
       if (s.profileName) parts.push(`only while ${s.profileName} was active`);
@@ -2479,6 +2488,11 @@ function retargetElse(d: WorkspaceState) {
     if (free) other.what = free.what;
     else d.moments.splice(d.moments.indexOf(other), 1);
   }
+}
+
+/** The dataset a view of the events one by one reads. */
+function listDataset(show: EventShow): string {
+  return show === "each" ? OUTCOMES_DATASET : show === "spread" ? SPREAD_DATASET : OCCURRENCE_DATASET;
 }
 
 function placeInFamilyLane(state: WorkspaceState, id: SignalId) {

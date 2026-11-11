@@ -5,6 +5,7 @@
   count of days.
 -->
 <script lang="ts">
+  import { dayGroupPresetLabel } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -13,7 +14,6 @@
   import { dayGroupSwatch, findLayer } from "./result-colors.js";
   import Swatch from "./Swatch.svelte";
   import {
-    DAY_COUNT_LINE,
     DAY_GROUP_PRESETS,
     DAY_KINDS,
     type DayGroupPresetId,
@@ -83,13 +83,16 @@
     ws.setDayGroups(ws.dayGroups.map((g, i) => (i === index ? days : g)));
   }
 
-  /** The engine's count of days for group `g` of what happened ("Only days with a low: 4 of 29 days."). */
+  /** How many days group `g` of what happened kept, from the run's counts, and why the rest are in neither group. */
   function countLine(g: number): string | null {
-    const layer = findLayer(report, ws.dayGroupLayersOf(g)[0]);
-    return (
-      layer?.summary?.split("\n").find((line) => line.startsWith(DAY_COUNT_LINE)) ??
-      null
-    );
+    const days = findLayer(report, ws.dayGroupLayersOf(g)[0])?.days;
+    if (!days) return null;
+    const parts = [`${days.kept} of ${days.total} days.`];
+    if (days.partial === 1) parts.push("One day is only partly in the range and is in neither group.");
+    else if (days.partial > 1) parts.push(`${days.partial} days are only partly in the range and are in neither group.`);
+    if (days.undecided === 1) parts.push("One day is before the history your access reads.");
+    else if (days.undecided > 1) parts.push(`${days.undecided} days are before the history your access reads.`);
+    return parts.join(" ");
   }
 
   const modeReason = $derived(
@@ -148,7 +151,7 @@
           value={id}
           disabled={preset !== id && ws.dayGroupPresetReason(id) !== null}
         >
-          {DAY_GROUP_PRESETS[id].label}
+          {dayGroupPresetLabel(id)}
         </ToggleGroup.Item>
       {/each}
     </ToggleGroup.Root>
@@ -158,7 +161,7 @@
           <li class="flex flex-wrap items-center gap-3 py-2" data-testid="day-group-row">
             <span class="flex w-8 shrink-0 items-center gap-1.5 text-sm font-medium">
               <Swatch swatch={dayGroupSwatch(report, ws.dayGroupLayersOf(g)[0])} />
-              <span aria-label="Group {GROUP_LETTERS[g]}">{GROUP_LETTERS[g]}</span>
+              <span aria-hidden="true">{GROUP_LETTERS[g]}</span><span class="sr-only">Group {GROUP_LETTERS[g]}</span>
             </span>
             <Popover.Root>
               <Popover.Trigger>
@@ -189,7 +192,7 @@
       {@const why = preset === id ? null : ws.dayGroupPresetReason(id)}
       {#if why}
         <p class="text-xs text-muted-foreground">
-          {DAY_GROUP_PRESETS[id].label}: {why}
+          {dayGroupPresetLabel(id)}: {why}
         </p>
       {/if}
     {/each}
@@ -239,7 +242,7 @@
         <li class="flex flex-wrap items-center gap-3 py-2" data-testid="day-group-row">
           <span class="flex w-8 shrink-0 items-center gap-1.5 text-sm font-medium">
             <Swatch swatch={dayGroupSwatch(report, ws.dayGroupLayersOf(g)[0])} />
-            <span aria-label="Group {GROUP_LETTERS[g]}">{GROUP_LETTERS[g]}</span>
+            <span aria-hidden="true">{GROUP_LETTERS[g]}</span><span class="sr-only">Group {GROUP_LETTERS[g]}</span>
           </span>
           <span class="text-sm">{label}</span>
           {#if count}

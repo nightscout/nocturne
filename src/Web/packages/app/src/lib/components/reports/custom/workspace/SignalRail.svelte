@@ -5,6 +5,7 @@
   its lens and places the signal. A filter field appears once the lens offers more than 12 signals.
 -->
 <script lang="ts">
+  import { signalLabel, lensLabel, familyLabel } from "./vocabulary-words.svelte.js";
   import { SvelteSet } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -14,7 +15,6 @@
   import Swatch from "./Swatch.svelte";
   import {
     FAMILY_LANES,
-    lens as lensOf,
     signal as signalOf,
     type Family,
     type SignalId,
@@ -37,7 +37,7 @@
   const visible = $derived(
     options.length > FILTER_AFTER && query
       ? options.filter((o) =>
-          signalOf(o.id).label.toLowerCase().includes(query)
+          signalLabel(o.id).toLowerCase().includes(query)
         )
       : options
   );
@@ -111,7 +111,7 @@
                   class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
                   aria-hidden="true"
                 />
-                {family}
+                {familyLabel(family)}
                 <span class="ml-auto tabular-nums">
                   {rows.filter((r) => r.placed).length || ""}
                 </span>
@@ -138,7 +138,7 @@
                     data-signal={row.id}
                   >
                     <Swatch swatch={swatch(row.id)} />
-                    <span class="truncate">{signalOf(row.id).label}</span>
+                    <span class="truncate">{signalLabel(row.id)}</span>
                     {#if row.placed}
                       <Check class="ml-auto" aria-hidden="true" />
                     {/if}
@@ -191,7 +191,7 @@
               <li>
                 <Button variant="menu" size="menu" disabled aria-describedby="rail-no-access-why">
                   <Swatch swatch={swatch(id)} />
-                  <span class="truncate">{signalOf(id).label}</span>
+                  <span class="truncate">{signalLabel(id)}</span>
                 </Button>
               </li>
             {/each}
@@ -240,9 +240,9 @@
               >
                 <Swatch swatch={swatch(row.id)} />
                 <span class="truncate">
-                  {signalOf(row.id).label}:
+                  {signalLabel(row.id)}:
                   <span class="text-muted-foreground">
-                    {lensOf(row.lens).label}
+                    {lensLabel(row.lens)}
                   </span>
                 </span>
                 {#if row.placed}

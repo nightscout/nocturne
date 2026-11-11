@@ -2,6 +2,7 @@ import type {
   CustomReportCatalogue,
   CustomReportDataset,
 } from "#lib/api/generated/nocturne-api-client.js";
+import { liveCatalogue } from "../workspace/catalogue.fixtures.js";
 import type { ParameterSchema } from "./schema-form.js";
 
 /** One node of every shape the form draws, as the API's catalogue writes them. */
@@ -174,6 +175,8 @@ export const catalogue: CustomReportCatalogue = {
       defaultRangeHours: 6,
     }),
   ],
+  // The form builder reads none of the workspace's vocabulary; the live catalogue's stands in.
+  workspace: liveCatalogue.workspace,
 };
 
 /** A template spec as the API normalises it: one stat tiles panel over 14 days. */

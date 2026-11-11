@@ -48,7 +48,11 @@ export class PreviewRunner {
 
   async #start(text: string) {
     if (this.#disposed) return;
-    if (text === this.ran && this.run) return;
+    if (text === this.ran && this.run) {
+      // Back on the spec the result on screen belongs to: a failure of another spec is not this one's.
+      this.failure = null;
+      return;
+    }
     if (this.running) {
       this.#pending = text;
       return;

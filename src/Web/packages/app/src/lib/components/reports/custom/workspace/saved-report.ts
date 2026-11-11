@@ -5,36 +5,53 @@
  */
 import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
 import { Report } from "./report.svelte.js";
+import type { DateSpan } from "./workspace.svelte.js";
 import { BUILDER_MAX_BYTES, builderOf, sameJson, withBuilder, withoutBuilder } from "./saved-state.js";
 
-/** Which builder a saved report opens in. */
-export type Opening = { builder: "workspace"; report: Report } | { builder: "form" };
+/**
+ * Which builder a saved report opens in. The form says why: the report carries no state of this
+ * builder (or one of another version), or its state no longer makes the spec saved.
+ */
+export type Opening =
+  | { builder: "workspace"; report: Report }
+  | { builder: "form"; reason: "notMade" | "changed" };
 
 /**
  * The spec as the engine stores it (version stamped, ids assigned, defaults written), or null when it
- * does not validate. The engine keeps a report's spec in that form, so the two are compared in it.
+ * does not validate. It throws when the engine could not be asked, which is not an answer: the
+ * caller says so and offers to try again, and never opens the form on it.
  */
 export type Normalise = (spec: Record<string, unknown>) => Promise<unknown>;
 
 /**
  * The builder a saved report opens in: the workspace when its spec carries a workspace state of a
- * known version and that state, normalised, produces the spec saved; the form in every other case
- * (no state, a state of another version or shape, or a spec changed outside the workspace).
+ * known version and that state, normalised, produces the spec saved; the form when there is no such
+ * state or it makes another spec. Rejects, as `normalise` does, when that could not be checked.
  */
 export async function openSaved(
   catalogue: CustomReportCatalogue,
   spec: unknown,
   normalise: Normalise,
-  clock?: (minute: number) => string
+  clock?: (minute: number) => string,
+  dates?: (span: DateSpan) => string
 ): Promise<Opening> {
   const member = builderOf(spec);
-  if (!member) return { builder: "form" };
-  const report = Report.fromState(catalogue, member.version, member.state, clock);
-  if (!report) return { builder: "form" };
+  if (!member) return { builder: "form", reason: "notMade" };
+  const report = Report.fromState(catalogue, member.version, member.state, clock, dates);
+  if (!report) return { builder: "form", reason: "notMade" };
   const produced = await normalise(report.spec());
   return produced !== null && sameJson(withoutBuilder(produced), withoutBuilder(spec))
     ? { builder: "workspace", report }
-    : { builder: "form" };
+    : { builder: "form", reason: "changed" };
+}
+
+/** Asks the engine's validator for the stored form of a spec; it reads no data. */
+export async function normaliseWith(
+  validate: (request: { spec: Record<string, unknown> }) => Promise<{ spec?: unknown; errors?: unknown[] }>,
+  spec: Record<string, unknown>
+): Promise<unknown> {
+  const result = await validate({ spec });
+  return (result.errors ?? []).length === 0 ? (result.spec ?? null) : null;
 }
 
 /** The spec the report saves: what it produces, with its state as the `builder` member. */

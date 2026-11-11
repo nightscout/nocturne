@@ -27,7 +27,6 @@
   import { PreviewRunner } from "../builder/preview-runner.svelte.js";
   import BlockEditors from "./BlockEditors.svelte";
   import BlockPreview from "./BlockPreview.svelte";
-  import { spanLabel } from "./clock.js";
   import { describe } from "./describe.js";
   import RangeChoices from "./RangeChoices.svelte";
   import type { Block, Report } from "./report.svelte.js";
@@ -36,8 +35,11 @@
 
   interface Props {
     report: Report;
-    /** The page's save controls, beside the report's title. */
-    actions: Snippet;
+    /**
+     * The page's save controls, beside the report's title, given why the engine refuses a block's
+     * settings in its last preview, or null.
+     */
+    actions: Snippet<[string | null]>;
     /** Goes back to the start screen; a saved report has none. */
     onrestart?: () => void;
     /** Opens the report's spec in the form builder, once the member has confirmed. */
@@ -46,10 +48,9 @@
 
   let { report, actions, onrestart, onform }: Props = $props();
 
-  // svelte-ignore state_referenced_locally
-  report.dates = spanLabel;
   const catalogue = $derived(report.catalogue);
   let confirmingForm = $state(false);
+  let confirmingRestart = $state(false);
 
   /** One preview runner for each block, made the first time the block draws. */
   const runners: Record<number, PreviewRunner> = {};
@@ -61,6 +62,12 @@
   onDestroy(() => {
     for (const r of Object.values(runners)) r.dispose();
   });
+
+  /** Why the report cannot be saved as its previews stand: a block whose settings the engine refused. */
+  function refused(): string | null {
+    const at = report.blocks.findIndex((b) => (runners[b.key]?.run?.errors ?? []).length > 0);
+    return at < 0 ? null : `Change block ${at + 1} first. The report engine refuses one of its settings.`;
+  }
 
   function remove(key: number) {
     runners[key]?.dispose();
@@ -108,12 +115,6 @@
   /** The collapsed comparisons shown in full. */
   let expanded = $state<number[]>([]);
 
-  function incompleteOf(block: Block): string | null {
-    if (block.kind === "chart") return block.ws.incomplete;
-    if (block.kind === "comparison" && !block.preset && !(block.a && block.b))
-      return "Pick both periods.";
-    return null;
-  }
 </script>
 
 {#snippet header(block: Block, index: number, open: boolean)}
@@ -177,12 +178,12 @@
       />
       <div class="flex flex-wrap items-center gap-2">
         {#if onrestart}
-          <Button variant="ghost" size="sm" onclick={onrestart}>
+          <Button variant="ghost" size="sm" onclick={() => (confirmingRestart = true)}>
             <RotateCcw aria-hidden="true" />
             Start again
           </Button>
         {/if}
-        {@render actions()}
+        {@render actions(refused())}
       </div>
     </div>
     <RangeChoices
@@ -222,7 +223,7 @@
                   spec={report.previewSpec(block)}
                   runner={runnerOf(block.key)}
                   kind={block.kind}
-                  incomplete={incompleteOf(block)}
+                  incomplete={report.incomplete(block)}
                 />
                 {#if !expanded.includes(block.key)}
                   <div
@@ -251,7 +252,7 @@
                 spec={report.previewSpec(block)}
                 runner={runnerOf(block.key)}
                 kind={block.kind}
-                incomplete={incompleteOf(block)}
+                incomplete={report.incomplete(block)}
               />
             {/if}
           </Card.Content>
@@ -323,6 +324,22 @@
 >
   {#snippet description()}
     The form shows each setting of the report. After you change the report in the form, it cannot
-    open in the question builder again.
+    open in this builder again.
+  {/snippet}
+</ConfirmDialog>
+
+<ConfirmDialog
+  open={confirmingRestart}
+  onOpenChange={(open) => (confirmingRestart = open)}
+  title="Start again?"
+  confirmLabel="Start again"
+  destructive
+  onConfirm={() => {
+    confirmingRestart = false;
+    onrestart?.();
+  }}
+>
+  {#snippet description()}
+    This report is not saved. If you start again, Nocturne discards it.
   {/snippet}
 </ConfirmDialog>

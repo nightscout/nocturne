@@ -133,6 +133,8 @@ export interface ReportLayer {
   /** A markers layer's markers. */
   markers?: ReportMarker[];
   cohorts?: ReportCohort[];
+  /** The days counted, on a day-filtered layer or table. */
+  days?: ReportDayCounts | null;
   omitted?: { field: string; scope: string }[];
   resolution?: ReportResolution | null;
 }
@@ -182,6 +184,8 @@ export interface ReportPanel {
   rangeLimit?: string | null;
   /** Every event cohort the panel asked for, with the API's label naming its filter. */
   cohorts?: ReportCohort[];
+  /** The days counted, on a day-filtered layer or table. */
+  days?: ReportDayCounts | null;
 }
 
 /** One figure under a panel: its words, its value as the API wrote it, its unit and an optional note. */
@@ -196,6 +200,23 @@ export interface ReportFact {
 export interface ReportCohort {
   number: number;
   label: string;
+  /** Why the group's events are not shown; absent when they are. */
+  omitted?: ReportCohortOmission | null;
+}
+
+/** Why a group of events is not shown: the reader's access lacks a scope, or another group stands in for it. */
+export type ReportCohortOmission = { reason: "scope"; scope: string } | { reason: "sibling"; group: number };
+
+/** The days a day-filtered layer or table counted: those kept, of all in the range, and why the rest are not. */
+export interface ReportDayCounts {
+  kept: number;
+  total: number;
+  matching: number;
+  notMatching: number;
+  /** Days only partly in the range, in neither group. */
+  partial: number;
+  /** Days before the history the reader's access reads, in neither group. */
+  undecided: number;
 }
 
 /** The row field holding the API's one sentence about the row. */

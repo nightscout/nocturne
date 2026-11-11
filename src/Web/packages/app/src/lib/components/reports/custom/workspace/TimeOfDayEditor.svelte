@@ -16,12 +16,15 @@
 
   const ticks = [0, 360, 720, 1080, 1440];
   const end = $derived(to === 0 && from > 0 ? 1440 : to);
+  /** Said once a thumb is let go, not at every step it moves. */
+  let committed = $state("");
 </script>
 
 <div class="w-72 space-y-3">
-  <p class="text-sm font-medium tabular-nums" aria-live="polite">
+  <p class="text-sm font-medium tabular-nums" aria-hidden="true">
     {minuteLabel(from)} to {minuteLabel(end)}
   </p>
+  <p class="sr-only" aria-live="polite">{committed}</p>
   <Slider
     type="multiple"
     min={0}
@@ -32,6 +35,9 @@
       if (value[1] > value[0])
         onchange(value[0], value[1] >= 1440 ? 0 : value[1]);
     }}
+    onValueCommit={(value: number[]) => (committed = `${minuteLabel(value[0])} to ${minuteLabel(value[1])}`)}
+    thumbLabels={["Start", "End"]}
+    thumbValueText={(minute: number) => minuteLabel(minute)}
     aria-label="Time of day"
   />
   <div

@@ -2,11 +2,11 @@
   One against another: which signal lies along the axis and which goes up, and the lag chart.
 -->
 <script lang="ts">
+  import { signalLabel } from "./vocabulary-words.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
-  import { signal as signalOf } from "./vocabulary.js";
   import type { Workspace } from "./workspace.svelte.js";
 
   interface Props {
@@ -29,11 +29,11 @@
     {#if pair.length === 2}
       <p class="text-sm">
         <span class="text-muted-foreground">Along the axis:</span>
-        <span class="font-medium">{signalOf(pair[0]).label}</span>
+        <span class="font-medium">{signalLabel(pair[0])}</span>
       </p>
       <p class="text-sm">
         <span class="text-muted-foreground">Up:</span>
-        <span class="font-medium">{signalOf(pair[1]).label}</span>
+        <span class="font-medium">{signalLabel(pair[1])}</span>
       </p>
       <Button variant="outline" size="xs" onclick={() => ws.swapAgainst()}>
         <ArrowLeftRight aria-hidden="true" />

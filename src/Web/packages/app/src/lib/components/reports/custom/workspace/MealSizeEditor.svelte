@@ -29,11 +29,27 @@
     step = 1,
   }: Props = $props();
 
-  function read(text: string): number | undefined {
+  function parse(text: string): number | undefined {
     const value = Number(text);
-    return text.trim() === "" || !Number.isFinite(value)
-      ? undefined
-      : Math.min(highest, Math.max(lowest, value));
+    return text.trim() === "" || !Number.isFinite(value) ? undefined : value;
+  }
+
+  /**
+   * A value as it is typed: none while the field holds a number not yet whole ("5."), which the
+   * browser reads as empty, and none outside the limits until the field is left; else the value.
+   */
+  function typed(input: HTMLInputElement): { value: number | undefined } | null {
+    if (input.validity.badInput) return null;
+    const value = parse(input.value);
+    if (value !== undefined && (value < lowest || value > highest)) return null;
+    return { value };
+  }
+
+  /** A value once the field is left: kept within the limits. */
+  function left(input: HTMLInputElement): number | undefined {
+    if (input.validity.badInput) return undefined;
+    const value = parse(input.value);
+    return value === undefined ? undefined : Math.min(highest, Math.max(lowest, value));
   }
 </script>
 
@@ -50,8 +66,11 @@
           max={highest}
           {step}
           value={min ?? ""}
-          oninput={(event) =>
-            onchange({ min: read(event.currentTarget.value), max })}
+          oninput={(event) => {
+            const t = typed(event.currentTarget);
+            if (t) onchange({ min: t.value, max });
+          }}
+          onchange={(event) => onchange({ min: left(event.currentTarget), max })}
         />
         <span class="shrink-0 text-xs text-muted-foreground">{unit}</span>
       </div>
@@ -67,8 +86,11 @@
           max={highest}
           {step}
           value={max ?? ""}
-          oninput={(event) =>
-            onchange({ min, max: read(event.currentTarget.value) })}
+          oninput={(event) => {
+            const t = typed(event.currentTarget);
+            if (t) onchange({ min, max: t.value });
+          }}
+          onchange={(event) => onchange({ min, max: left(event.currentTarget) })}
         />
         <span class="shrink-0 text-xs text-muted-foreground">{unit}</span>
       </div>

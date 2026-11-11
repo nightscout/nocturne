@@ -4,6 +4,7 @@
   saved as a PNG.
 -->
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { ReportView } from "@nocturne/charts";
   import { isHttpError } from "@sveltejs/kit";
   import { readReport, staticPanel, type ReportPanel } from "@nocturne/charts/core";
@@ -24,9 +25,11 @@
     facts?: boolean;
     /** How the panels are laid out; `multiples` for one chart's small multiples. */
     layout?: "stack" | "multiples";
+    /** The host's words for a panel's heading, in place of the engine's title. */
+    heading?: Snippet<[ReportPanel]>;
   }
 
-  let { run, legend = true, facts = true, layout = "stack" }: Props = $props();
+  let { run, legend = true, facts = true, layout = "stack", heading }: Props = $props();
 
   const report = $derived(readReport(run.result));
   const errors = $derived(run.errors ?? []);
@@ -123,7 +126,7 @@
 {#if errors.length > 0}
   <SpecErrorList {errors} spec={run.spec} />
 {:else if report}
-  <ReportView {report} format={chartFormat()} labels={customReportLabels()} headingLevel={2} controls={panelLink} {legend} {facts} {layout} />
+  <ReportView {report} format={chartFormat()} labels={customReportLabels()} headingLevel={2} controls={panelLink} {legend} {facts} {layout} {heading} />
 {:else}
   <p class="text-sm text-muted-foreground" role="alert">The report data has a form that this page cannot show.</p>
 {/if}

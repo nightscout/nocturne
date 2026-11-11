@@ -4,6 +4,7 @@
   beside it.
 -->
 <script lang="ts">
+  import { sourceLabel } from "./vocabulary-words.svelte.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -128,12 +129,12 @@
             value={s.dataset}
             disabled={s.reason !== null}
           >
-            {s.label}
+            {sourceLabel(s.dataset)}
           </ToggleGroup.Item>
         {/each}
       </ToggleGroup.Root>
       {#each sources.filter((s) => s.reason) as s (s.dataset)}
-        <p class="text-xs text-muted-foreground">{s.label}: {s.reason}</p>
+        <p class="text-xs text-muted-foreground">{sourceLabel(s.dataset)}: {s.reason}</p>
       {/each}
     </div>
     {@render columns(block, "Figures to show")}
@@ -159,10 +160,10 @@
           {#each sources as s (s.dataset)}
             <Select.Item
               value={s.dataset}
-              label={s.label}
+              label={sourceLabel(s.dataset)}
               disabled={s.reason !== null}
             >
-              {s.label}
+              {sourceLabel(s.dataset)}
             </Select.Item>
           {/each}
         </Select.Content>
@@ -249,8 +250,7 @@
     spec={report.previewSpec(block)}
     {runner}
     kind={block.kind}
-    incomplete={block.kind === "comparison" && !block.preset && !(block.a && block.b)
-      ? "Pick both periods."
-      : null}
+    incomplete={report.incomplete(block)}
+    announce
   />
 </div>

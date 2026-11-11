@@ -43,6 +43,11 @@
      * scale wherever the unit is the same.
      */
     layout?: "stack" | "multiples";
+    /**
+     * The host's words for a panel's heading, in place of the panel's title: a host that names the
+     * panels in its own language, such as the groups of small multiples.
+     */
+    heading?: Snippet<[ReportPanel]>;
   }
 
   let {
@@ -58,6 +63,7 @@
     legend = true,
     facts: showFacts = true,
     layout = "stack",
+    heading,
   }: Props = $props();
 
   /** The report's zone when this browser knows it, so times match the summaries; else the browser's own. */
@@ -138,7 +144,7 @@
     >
       <div class="flex flex-col gap-0.5">
         <svelte:element this={panelHeading} id="panel-{panel.id}" class="text-sm leading-tight font-semibold">
-          {panel.title ?? panel.dataset ?? ""}
+          {#if heading}{@render heading(panel)}{:else}{panel.title ?? panel.dataset ?? ""}{/if}
         </svelte:element>
         {#if panel.context}
           <p class="text-xs text-muted-foreground tabular-nums" data-testid="report-context">{panel.context}</p>
