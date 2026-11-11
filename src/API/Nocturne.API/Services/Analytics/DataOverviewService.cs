@@ -562,8 +562,8 @@ public class DataOverviewService : IDataOverviewService
         var localYearEnd = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
         var localRangeStart = localYearStart.AddDays(-EHbA1cWindowDays);
 
-        var lookbackStartUtc = TimeZoneInfo.ConvertTimeToUtc(localRangeStart, tz);
-        var yearEndUtc = TimeZoneInfo.ConvertTimeToUtc(localYearEnd, tz);
+        var lookbackStartUtc = TimeZoneHelper.ConvertTimeToUtc(localRangeStart, tz);
+        var yearEndUtc = TimeZoneHelper.ConvertTimeToUtc(localYearEnd, tz);
 
         var allReadings = new List<(DateTime Timestamp, double Mgdl)>();
 
@@ -734,8 +734,8 @@ public class DataOverviewService : IDataOverviewService
         var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
 
         return (
-            TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz),
-            TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz)
+            TimeZoneHelper.ConvertTimeToUtc(localYearStart, tz),
+            TimeZoneHelper.ConvertTimeToUtc(localNextYearStart, tz)
         );
     }
 

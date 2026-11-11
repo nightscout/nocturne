@@ -3042,19 +3042,6 @@ public partial class StatisticsControllerTests
         var tz = TimeZoneInfo.FindSystemTimeZoneById(zone);
         var start = DateOnly.Parse(from);
         var end = DateOnly.Parse(to);
-        try
-        {
-            for (var date = start; date <= end; date = date.AddDays(1))
-            {
-                PunchCardDayWindow.For(date.ToDateTime(TimeOnly.MinValue), tz);
-            }
-        }
-        catch (ArgumentException) when (OperatingSystem.IsWindows())
-        {
-            // Windows time zone data skips local midnight for these zones, which the endpoint rejects; the overlap only exists in IANA data.
-            return;
-        }
-
         var (glucose, boluses, carbs, injections) = PunchCardFixture(tz, start, end);
 
         SetupEmptyTreatments();
@@ -3104,7 +3091,7 @@ public partial class StatisticsControllerTests
     public async Task GetPunchCardData_PutsARecordAtLocalMidnightOnTheDayItOpens()
     {
         var tz = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
-        var midnightUtc = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Unspecified), tz);
+        var midnightUtc = TimeZoneHelper.ConvertTimeToUtc(new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Unspecified), tz);
 
         SetupEmptyTreatments();
         SetupPunchCardGlucose(
@@ -3138,7 +3125,7 @@ public partial class StatisticsControllerTests
         {
             var n = date.DayNumber - start.DayNumber;
             var localMidnight = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, DateTimeKind.Unspecified);
-            var midnightUtc = TimeZoneInfo.ConvertTimeToUtc(localMidnight, tz);
+            var midnightUtc = TimeZoneHelper.ConvertTimeToUtc(localMidnight, tz);
 
             if (n % 7 != 3 && n % 7 != 4)
             {
@@ -3220,8 +3207,8 @@ public partial class StatisticsControllerTests
         {
             var dayStartLocal = DateTime.SpecifyKind(day, DateTimeKind.Unspecified);
             var dayEndLocal = dayStartLocal.AddDays(1).AddTicks(-1);
-            var dayStartMs = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(dayStartLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var dayEndMs = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(dayEndLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var dayStartMs = new DateTimeOffset(TimeZoneHelper.ConvertTimeToUtc(dayStartLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var dayEndMs = new DateTimeOffset(TimeZoneHelper.ConvertTimeToUtc(dayEndLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
 
             var dayEntries = glucoseData.Where(e => e.Mills >= dayStartMs && e.Mills <= dayEndMs).ToList();
             var dayBoluses = manualBoluses.Where(b => b.Mills >= dayStartMs && b.Mills <= dayEndMs).ToList();

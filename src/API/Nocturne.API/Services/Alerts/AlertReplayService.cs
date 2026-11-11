@@ -407,8 +407,8 @@ internal sealed class AlertReplayService(
 
         var localStart = localDate.Value.ToDateTime(TimeOnly.MinValue);
         var localEnd = localStart.AddDays(1);
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localStart, DateTimeKind.Unspecified), tz);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localEnd, DateTimeKind.Unspecified), tz);
+        var startUtc = TimeZoneHelper.ConvertTimeToUtc(DateTime.SpecifyKind(localStart, DateTimeKind.Unspecified), tz);
+        var endUtc = TimeZoneHelper.ConvertTimeToUtc(DateTime.SpecifyKind(localEnd, DateTimeKind.Unspecified), tz);
         return (startUtc, endUtc);
     }
 
