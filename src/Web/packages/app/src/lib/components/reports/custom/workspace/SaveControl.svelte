@@ -1,39 +1,53 @@
 <!--
-  Saves the report under a name, prefilled from its title, then goes to the saved report.
+  A save action in a popover: a name, prefilled, and the button that saves under it. The page says
+  what saving does (a new report, the saved one, or a copy); the report says why it cannot be saved
+  yet.
 -->
 <script lang="ts">
-  import { goto } from "$app/navigation";
-  import { resolve } from "$app/paths";
-  import { createCustomReport } from "#lib/api/generated/customReports.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import { Button, type ButtonVariant } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import CopyPlus from "@lucide/svelte/icons/copy-plus";
   import Save from "@lucide/svelte/icons/save";
   import type { Report } from "./report.svelte.js";
+  import { stateTooLarge } from "./saved-report.js";
 
   interface Props {
     report: Report;
+    /** The name offered; the report's title, or its first block's, when empty. */
+    name?: string;
+    /** "save" keeps the report; "copy" saves it again under another name. */
+    kind?: "save" | "copy";
+    variant?: ButtonVariant;
+    disabled?: boolean;
+    /** Saves under the name; a rejection is shown under the button. */
+    onsave: (name: string) => Promise<void>;
   }
 
-  let { report }: Props = $props();
+  let { report, name: given = "", kind = "save", variant = "default", disabled = false, onsave }: Props = $props();
 
   let open = $state(false);
   let typed = $state<string | null>(null);
   let saving = $state(false);
   let error = $state<string | null>(null);
 
+  const id = $props.id();
   const maxName = $derived(report.catalogue.maxNameLength);
   const suggested = $derived(
     (
+      given.trim() ||
       report.title.trim() ||
       report.blocks.map((b) => report.blockTitle(b).trim()).find(Boolean) ||
       ""
     ).slice(0, maxName)
   );
-  const name = $derived(typed ?? suggested);
-  const blocked = $derived(report.saveReason);
+  const name = $derived(typed ?? (kind === "copy" ? "" : suggested));
+  const blocked = $derived(
+    report.saveReason ??
+      (open && stateTooLarge(report) ? "This report has too many blocks and groups to save. Remove a block first." : null)
+  );
 
   async function save(event: SubmitEvent) {
     event.preventDefault();
@@ -42,12 +56,12 @@
     saving = true;
     error = null;
     try {
-      const saved = await createCustomReport({ name: trimmed, spec: report.spec() });
-      await goto(
-        resolve("/(authenticated)/reports/custom/[id]", { id: saved.id ?? "" })
-      );
+      await onsave(trimmed);
     } catch (err) {
-      error = describeSubmitError(err, "Could not save the report. Try again.");
+      error = describeSubmitError(
+        err,
+        kind === "copy" ? "Could not save the copy. Try again." : "Could not save the report. Try again."
+      );
     } finally {
       saving = false;
     }
@@ -55,20 +69,25 @@
 </script>
 
 <Popover.Root bind:open>
-  <Popover.Trigger>
+  <Popover.Trigger {disabled}>
     {#snippet child({ props }: { props: Record<string, unknown> })}
-      <Button {...props} size="sm" data-testid="save-trigger">
-        <Save aria-hidden="true" />
-        Save
+      <Button {...props} size="sm" {variant} data-testid={kind === "copy" ? "save-copy-trigger" : "save-trigger"}>
+        {#if kind === "copy"}
+          <CopyPlus aria-hidden="true" />
+          Save as
+        {:else}
+          <Save aria-hidden="true" />
+          Save
+        {/if}
       </Button>
     {/snippet}
   </Popover.Trigger>
   <Popover.Content align="end" class="w-80">
     <form class="space-y-3" onsubmit={save}>
       <div class="space-y-1.5">
-        <Label for="lab-report-name">Name</Label>
+        <Label for="{id}-name">{kind === "copy" ? "Name of the copy" : "Name"}</Label>
         <Input
-          id="lab-report-name"
+          id="{id}-name"
           value={name}
           oninput={(e) => (typed = e.currentTarget.value)}
           maxlength={maxName}
@@ -77,20 +96,22 @@
         />
       </div>
       {#if blocked}
-        <p class="text-xs text-muted-foreground" id="save-why">{blocked}</p>
+        <p class="text-xs text-muted-foreground" id="{id}-why">{blocked}</p>
       {/if}
       <Button
         type="submit"
         size="sm"
         disabled={saving || blocked !== null || name.trim() === ""}
-        aria-describedby={blocked ? "save-why" : undefined}
+        aria-describedby={blocked ? `${id}-why` : undefined}
       >
-        <Save aria-hidden="true" />
-        Save the report
+        {#if kind === "copy"}
+          <CopyPlus aria-hidden="true" />
+          Save the copy
+        {:else}
+          <Save aria-hidden="true" />
+          Save the report
+        {/if}
       </Button>
-      <p class="text-xs text-muted-foreground">
-        A saved report opens for changes in the current form builder.
-      </p>
       {#if error}
         <p class="text-sm text-destructive" role="alert">{error}</p>
       {/if}

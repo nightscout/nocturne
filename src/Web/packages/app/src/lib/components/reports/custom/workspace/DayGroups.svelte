@@ -13,6 +13,7 @@
   import { dayGroupSwatch, findLayer } from "./result-colors.js";
   import Swatch from "./Swatch.svelte";
   import {
+    DAY_COUNT_LINE,
     DAY_GROUP_PRESETS,
     DAY_KINDS,
     type DayGroupPresetId,
@@ -86,7 +87,7 @@
   function countLine(g: number): string | null {
     const layer = findLayer(report, ws.dayGroupLayersOf(g)[0]);
     return (
-      layer?.summary?.split("\n").find((line) => line.startsWith("Only days")) ??
+      layer?.summary?.split("\n").find((line) => line.startsWith(DAY_COUNT_LINE)) ??
       null
     );
   }
@@ -107,23 +108,22 @@
     <span class="text-xs text-muted-foreground" id="days-by">Group days by</span>
     <ToggleGroup.Root
       type="single"
-      variant="outline"
+      variant="choice"
       size="xs"
       spacing={1}
       aria-labelledby="days-by"
       bind:value={() => mode, (v: string) => v && setMode(v)}
     >
       {#if byWeekday}
-        <ToggleGroup.Item value={WEEKDAY} data-lab-selected>Weekday</ToggleGroup.Item>
+        <ToggleGroup.Item value={WEEKDAY}>Weekday</ToggleGroup.Item>
       {:else}
-        <ToggleGroup.Item value={EVERY_DAY} data-lab-selected>
+        <ToggleGroup.Item value={EVERY_DAY}>
           Every day alike
         </ToggleGroup.Item>
       {/if}
       <ToggleGroup.Item
         value={HAPPENED}
         disabled={modeReason !== null}
-        data-lab-selected
       >
         What happened
       </ToggleGroup.Item>
@@ -136,7 +136,7 @@
   {#if mode === WEEKDAY}
     <ToggleGroup.Root
       type="single"
-      variant="outline"
+      variant="choice"
       size="sm"
       spacing={1}
       class="flex-wrap"
@@ -147,7 +147,6 @@
         <ToggleGroup.Item
           value={id}
           disabled={preset !== id && ws.dayGroupPresetReason(id) !== null}
-          data-lab-selected
         >
           {DAY_GROUP_PRESETS[id].label}
         </ToggleGroup.Item>
@@ -198,7 +197,7 @@
     {@const filter = ws.dayFilter}
     <ToggleGroup.Root
       type="single"
-      variant="outline"
+      variant="choice"
       size="sm"
       spacing={1}
       class="flex-wrap"
@@ -212,7 +211,7 @@
       }
     >
       {#each kinds as k (k.id)}
-        <ToggleGroup.Item value={k.id} disabled={k.reason !== null} data-lab-selected>
+        <ToggleGroup.Item value={k.id} disabled={k.reason !== null}>
           {k.id === "carbs" ? "Days by total carbs" : k.label}
         </ToggleGroup.Item>
       {/each}

@@ -8,6 +8,7 @@ import {
   placeGlyphs,
   rowMatch,
   rowsAt,
+  sharedValueExtents,
   sideScales,
   slots,
   spanRects,
@@ -15,6 +16,7 @@ import {
   trackBands,
   xExtent,
 } from "./layered-layout.js";
+import { COHORT_HUES, cohortBands } from "../percentile-bands.js";
 
 const glucose = { name: "glucose", label: "Glucose", kind: "number" as const, unit: "mg/dL", color: "glucose-in-range" as const, glucoseScale: true };
 const iob = { name: "iob", label: "IOB", kind: "number" as const, unit: "U", color: "insulin-bolus" as const };
@@ -282,5 +284,51 @@ describe("a layered chart's layout", () => {
       ["Modes", null],
     ]);
     expect(entries.map((e) => e.context)).toEqual([null, "Glucose, mean per 15 minutes", null]);
+  });
+});
+
+describe("small multiples", () => {
+  const band = { top: 0, bottom: 100, height: 100 };
+  const panel = (glucoseValues: number[], iobUnit = "U") => ({
+    tracks: [
+      {
+        id: "lane-glucose",
+        height: 2,
+        layers: [
+          layer({ id: "g", rows: glucoseValues.map((glucose, i) => ({ time: i, glucose })) }),
+          layer({ id: "i", side: "right", unit: iobUnit, bindings: { x: "time", y: ["iob"] }, fields: [time, { ...iob, unit: iobUnit }], rows: [{ time: 0, iob: 2 }] }),
+        ],
+      },
+    ],
+    thresholds: null,
+  });
+
+  it("gives every panel's side one scale across the panels when the unit is the same", () => {
+    const shared = sharedValueExtents([panel([100, 140]), panel([90, 300])]);
+
+    expect(shared["lane-glucose"].left).toEqual([0, 300]);
+    const quiet = sideScales(panel([100, 140]).tracks[0], band, null, shared["lane-glucose"]);
+    const loud = sideScales(panel([90, 300]).tracks[0], band, null, shared["lane-glucose"]);
+    expect(quiet.left?.domain).toEqual(loud.left?.domain);
+    expect(quiet.left?.domain[1]).toBeGreaterThanOrEqual(300);
+  });
+
+  it("keeps a side's own scale where the panels draw it in different units", () => {
+    const shared = sharedValueExtents([panel([100], "U"), panel([100], "g")]);
+
+    expect(shared["lane-glucose"].right).toBeUndefined();
+    expect(shared["lane-glucose"].left).toEqual([0, 100]);
+  });
+
+  it("draws a scale from its own values when nothing is shared", () => {
+    expect(sideScales(panel([100, 140]).tracks[0], band, null).left?.domain[1]).toBeLessThan(300);
+  });
+});
+
+describe("event group hues", () => {
+  it("are the engine's five group tokens in order, the sixth group again as the first", () => {
+    expect(COHORT_HUES).toEqual(["var(--chart-1)", "var(--chart-3)", "var(--chart-2)", "var(--chart-4)", "var(--chart-5)"]);
+    expect(cohortBands(5).median).toBe(cohortBands(0).median);
+    expect(new Set([0, 1, 2, 3, 4].map((i) => cohortBands(i).median)).size).toBe(5);
   });
 });

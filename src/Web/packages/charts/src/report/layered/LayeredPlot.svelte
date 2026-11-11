@@ -11,7 +11,7 @@
   import type { GradientStop, LineColorMode } from "../../view/glucose-gradient-stops.js";
   import { reportGlucoseStops } from "../glucose-scale.js";
   import type { ReportLayer, ReportPanel } from "../types.js";
-  import { drawnLayers, sideScales, toDomain, trackBands, type SideScale, type TrackBand } from "./layered-layout.js";
+  import { drawnLayers, sideScales, toDomain, trackBands, type SharedSides, type SideScale, type TrackBand } from "./layered-layout.js";
   import MarkArea from "../marks/MarkArea.svelte";
   import MarkBand from "../marks/MarkBand.svelte";
   import MarkBars from "../marks/MarkBars.svelte";
@@ -34,15 +34,17 @@
     formatTick: (value: unknown) => string;
     /** Draw a rule at the slot under the pointer, on the page. */
     hover?: boolean;
+    /** Values each track's sides cover beyond their own, by track id, so small multiples share one scale. */
+    valueExtents?: Record<string, SharedSides>;
   }
 
-  let { panel, labels, lineColorMode, paint, gradient, tickLabels, text, formatTick, hover = false }: Props = $props();
+  let { panel, labels, lineColorMode, paint, gradient, tickLabels, text, formatTick, hover = false, valueExtents }: Props = $props();
 
   const chart = getChartContext();
   const kind = $derived(panel.xKind ?? "time");
   const bands = $derived(trackBands(panel.tracks, chart.height));
   const high = $derived(panel.thresholds?.high ?? null);
-  const scales = $derived(panel.tracks.map((track, i) => sideScales(track, bands[i], high)));
+  const scales = $derived(panel.tracks.map((track, i) => sideScales(track, bands[i], high, valueExtents?.[track.id])));
 
   const x = (raw: number) => Number(chart.xScale(toDomain(kind, raw)));
 

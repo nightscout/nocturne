@@ -30,8 +30,11 @@ export const BASAL_BANDS: BandColors = {
   median: "var(--entry-basal)",
 };
 
-/** One hue per cohort, in cohort order, so a cohort reads the same in every panel, the table and the list. */
-const COHORT_HUES = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)"];
+/**
+ * One hue per cohort, in cohort order, so a cohort reads the same in every panel, the table and the
+ * list: the engine's group hues, groups 1 to 5 apart and group 6 again as group 1.
+ */
+export const COHORT_HUES = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)", "var(--chart-4)", "var(--chart-5)"];
 
 export function cohortBands(index: number): BandColors {
   const hue = COHORT_HUES[index % COHORT_HUES.length];

@@ -289,7 +289,7 @@ Components come from shadcn-svelte, extended in `packages/ui` with Tailwind Vari
 - **Style:** a hairline `--input` stroke, 8px radius, 36px height, 12px padding, and `shadow-xs`. In dark mode the fill is a 30% input tint.
 - **Focus:** `--ring` border with a 3px ring at 50%, the same as buttons.
 - **Error / Valid / Disabled:** `aria-invalid` switches to a destructive border and ring. `data-valid` (a value the server accepted) shows a 60% success border. Disabled fields are at 50% opacity.
-- **Variants:** `code` (centred, uppercase, wide-tracked, for pairing codes) and `title` (borderless in-place rename that shows its border on focus).
+- **Variants:** `code` (centred, uppercase, wide-tracked, for pairing codes) and `title` (borderless in-place rename that shows its border on focus). The `heading` size sets a `title` at 18px semibold, for a heading edited in place such as a custom report's title.
 
 ### Navigation
 The sidebar navigation is a list of rows, each a 16px Lucide icon with 14px text, 8px padding, and 8px rounding. The hovered or active row takes a `--sidebar-accent` fill, and the active row is set in medium weight. Groups expand with a chevron. The sidebar collapses to icons, and the current-reading tile collapses with it (`xs` size). On mobile the sidebar becomes a sheet behind a trigger.

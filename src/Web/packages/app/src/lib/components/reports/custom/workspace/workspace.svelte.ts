@@ -11,6 +11,7 @@ import {
   ANCHOR_LOW,
   ANCHOR_HIGH,
   ALONGS,
+  ALONG_TIME_OF_DAY,
   DAY_KINDS,
   OCCURRENCE_DATASET,
   OUTCOMES,
@@ -31,6 +32,7 @@ import {
   WEEKDAYS,
   anchor,
   cellOf,
+  isStartAnchor,
   lens as lensOf,
   lensesOf,
   signal as signalOf,
@@ -326,9 +328,14 @@ const STANDALONE: WorkspaceHost = {
 
 let nextKey = 0;
 
-/** A key unique in the page, for moments and combinations. */
+/** A key unique in the page, for blocks, moments and combinations. */
 export function freshKey(): number {
   return nextKey++;
+}
+
+/** Keeps `freshKey` from giving out a key a restored report already holds. */
+export function reserveKey(key: number) {
+  nextKey = Math.max(nextKey, key + 1);
 }
 
 /** The API's defaults for leaving time out, from the catalogue when it gives them. */
@@ -721,7 +728,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
         panels.push({
           ...panel,
           id: `chart-${g + 1}`,
-          title: `${GROUP_LETTERS[g]}: ${momentText(m, true, ctx.clock)}`,
+          title: `${GROUP_LETTERS[g]}: ${upperFirst(momentText(m, true, ctx.clock))}`,
           tracks: t,
         });
       }
@@ -851,13 +858,13 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
         read(dataset);
         layers.push({
           id: `each-${i + 1}`,
-          title: `${GROUP_LETTERS[i]}: ${momentText(m, true, ctx.clock)}`,
+          title: `${GROUP_LETTERS[i]}: ${upperFirst(momentText(m, true, ctx.clock))}`,
           dataset,
           mark: "points",
           bindings: {
             x: along,
             y: [up],
-            ...(state.event.fit ? { fit: `${up}Fit` } : {}),
+            ...(state.event.fit && along !== ALONG_TIME_OF_DAY ? { fit: `${up}Fit` } : {}),
           },
         });
         momentCohorts[i].push({ layer: `each-${i + 1}`, cohort: i + 1 });
@@ -1480,6 +1487,11 @@ export class Workspace {
 
   get along(): Along {
     return pickAlong(this.state.moments, this.state.event.along, this.#figures);
+  }
+
+  /** Whether a line can go through the points: not along the time of day, which wraps at midnight. */
+  get fitApplies(): boolean {
+    return this.along !== ALONG_TIME_OF_DAY;
   }
 
   get figure(): Outcome {
@@ -2156,10 +2168,7 @@ export class Workspace {
    * no group is already everything else.
    */
   get everythingElseApplies(): boolean {
-    return (
-      !this.state.moments.some((m) => m.everythingElse) &&
-      this.state.moments.some((m) => isNarrowed(m))
-    );
+    return elseTarget(this.state.moments) !== undefined;
   }
 
   get everythingElseReason(): Reason {
@@ -2167,18 +2176,13 @@ export class Workspace {
   }
 
   #addEverythingElse(d: WorkspaceState): Reason {
-    if (d.moments.some((m) => m.everythingElse))
-      return "Everything else is already a group.";
+    const target = elseTarget(d.moments);
+    if (!target) return "Each kind of event here already has its everything else.";
     if (d.moments.length >= this.maxMoments)
       return `A chart has at most ${this.maxMoments} groups of events.`;
     if (d.moments.length >= GROUP_HUES)
       return "Everything else can go with at most two other groups.";
-    const first = d.moments.find((m) => isNarrowed(m)) ?? d.moments[0];
-    d.moments.push({
-      key: freshKey(),
-      what: first?.what ?? ANCHOR_MEAL,
-      everythingElse: true,
-    });
+    d.moments.push({ key: freshKey(), what: target, everythingElse: true });
     return null;
   }
 
@@ -2194,6 +2198,7 @@ export class Workspace {
       d.moments.splice(index, 1);
       if (d.moments.every((m) => m.everythingElse))
         d.moments = [{ key: freshKey(), what: d.moments[0].what }];
+      retargetElse(d);
     });
   }
 
@@ -2222,11 +2227,7 @@ export class Workspace {
         delete moment.foods;
         delete moment.foodCategory;
       }
-      const sibling =
-        d.moments.find((m) => isNarrowed(m)) ??
-        d.moments.find((m) => !m.everythingElse);
-      for (const other of d.moments)
-        if (other.everythingElse && sibling) other.what = sibling.what;
+      retargetElse(d);
     });
   }
 
@@ -2362,7 +2363,7 @@ export class Workspace {
     else if (s.event.show === "spread")
       head = `How many ${phrase} had each ${lowerFirst(label(OUTCOMES, this.figure))}`;
     else {
-      const verb = anchors.every((a) => a.endsWith("Start")) ? "start" : "happen";
+      const verb = anchors.every((a) => isStartAnchor(a)) ? "start" : "happen";
       head = `When ${phrase} ${verb}, ${s.event.when === "hour" ? "by hour of day" : "by weekday"}`;
     }
     const parts: CaptionPart[] = [{ kind: "signals", text: head }];
@@ -2421,11 +2422,14 @@ export class Workspace {
     }
     if (s.lens === "event") {
       const sameAnchor = distinct(s.moments.map((m) => m.what)).length === 1;
-      const texts = s.moments.map((m) =>
-        momentText(m, !sameAnchor, this.clock, this.glucoseUnits)
-      );
-      if (texts.length === 1 && texts[0] === "all") return null;
-      return texts.join(" against ");
+      if (s.moments.length === 1 && !isNarrowed(s.moments[0]) && !s.moments[0].everythingElse)
+        return null;
+      // A group that narrows nothing is named by its events, "all meals", not "all".
+      return s.moments
+        .map((m) =>
+          momentText(m, !sameAnchor || (!isNarrowed(m) && !m.everythingElse), this.clock, this.glucoseUnits)
+        )
+        .join(" against ");
     }
     return null;
   }
@@ -2448,6 +2452,32 @@ export class Workspace {
       if (s.profileName) parts.push(`only while ${s.profileName} was active`);
     }
     return parts.length > 0 ? parts.join(", ") : null;
+  }
+}
+
+/**
+ * The kind of event an "everything else" group would take: the first kind a group narrows that has
+ * no everything else yet (the API takes one for each kind), or undefined.
+ */
+function elseTarget(moments: Moment[]): AnchorId | undefined {
+  return moments.find(
+    (m) => isNarrowed(m) && !moments.some((o) => o.everythingElse && o.what === m.what)
+  )?.what;
+}
+
+/**
+ * Keeps each "everything else" group on a kind some other group takes: one left without one moves to
+ * a kind that has none, else it goes.
+ */
+function retargetElse(d: WorkspaceState) {
+  for (const other of [...d.moments]) {
+    if (!other.everythingElse) continue;
+    if (d.moments.some((m) => !m.everythingElse && m.what === other.what)) continue;
+    const free = d.moments.find(
+      (m) => !m.everythingElse && !d.moments.some((o) => o.everythingElse && o.what === m.what)
+    );
+    if (free) other.what = free.what;
+    else d.moments.splice(d.moments.indexOf(other), 1);
   }
 }
 

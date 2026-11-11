@@ -10,6 +10,7 @@
   import ComparisonChart from "./ComparisonChart.svelte";
   import DataTable from "./DataTable.svelte";
   import LayeredChart from "./LayeredChart.svelte";
+  import { sharedValueExtents } from "./layered/layered-layout.js";
   import StatTiles from "./StatTiles.svelte";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import type { ReportViewLabels } from "./report-view-labels.js";
@@ -32,6 +33,16 @@
     selected?: { panel: string; row: number } | null;
     /** The host's controls for a panel, drawn under its chart, figures or table. */
     controls?: Snippet<[ReportPanel]>;
+    /** Draw each chart's key of its layers; a host that names the layers itself leaves it out. */
+    legend?: boolean;
+    /** Draw each panel's figures; a host that shows them itself leaves them out. */
+    facts?: boolean;
+    /**
+     * `stack`: each panel full size, one under another. `multiples`: the panels are one chart's small
+     * multiples, a grid of small charts (two columns from a medium width) whose tracks share a value
+     * scale wherever the unit is the same.
+     */
+    layout?: "stack" | "multiples";
   }
 
   let {
@@ -44,6 +55,9 @@
     selectable,
     selected = null,
     controls,
+    legend = true,
+    facts: showFacts = true,
+    layout = "stack",
   }: Props = $props();
 
   /** The report's zone when this browser knows it, so times match the summaries; else the browser's own. */
@@ -57,7 +71,17 @@
   }
 
   const zoned = $derived<ChartFormat>({ ...format, timeZone: knownZone(report.timeZone ?? "UTC") });
-  const trackHeight = $derived(displayMode === "fullscreen" ? 360 : 240);
+  const multiples = $derived(layout === "multiples");
+  const trackHeight = $derived(displayMode === "fullscreen" ? 360 : multiples ? 80 : 240);
+  /** Small multiples that all carry one sentence say it once, under the grid. */
+  const sharedSentence = $derived.by(() => {
+    if (!multiples || report.panels.length < 2) return null;
+    const first = report.panels[0].sentence;
+    return first && report.panels.every((p) => p.sentence === first) ? first : null;
+  });
+  const valueExtents = $derived(
+    multiples ? sharedValueExtents(report.panels.filter((p) => p.kind === "chart" && p.status === "ok")) : undefined,
+  );
   const tableHeight = $derived(displayMode === "fullscreen" ? "max-h-[45vh]" : "max-h-[280px]");
   const colorMode = $derived(report.glucoseColorMode ?? "continuous");
   const reportHeading = $derived(`h${headingLevel}`);
@@ -104,11 +128,12 @@
       {/each}
     </header>
   {/if}
+  <div class={multiples ? "grid gap-x-6 gap-y-8 @2xl:grid-cols-2" : "contents"} data-testid="report-panels" data-layout={layout}>
   {#each report.panels as panel, i (panel.id)}
     {@const described = (panel.facts ?? []).length > 0 || !!panel.sentence}
     <section
       aria-labelledby="panel-{panel.id}"
-      class={["flex flex-col gap-3", i > 0 && "border-t border-border pt-6"]}
+      class={["flex min-w-0 flex-col gap-3", i > 0 && !multiples && "border-t border-border pt-6"]}
       data-testid="report-panel"
     >
       <div class="flex flex-col gap-0.5">
@@ -122,7 +147,7 @@
       {#if panel.status !== "ok"}
         <!-- The sentence below says why. -->
       {:else if panel.kind === "chart"}
-        <LayeredChart {panel} format={zoned} {trackHeight} lineColorMode={colorMode} labels={labels.chart} />
+        <LayeredChart {panel} format={zoned} {trackHeight} lineColorMode={colorMode} labels={labels.chart} {legend} {valueExtents} />
       {:else if panel.kind === "comparison"}
         <ComparisonChart {panel} format={zoned} emptyText={labels.noData} />
       {:else if panel.kind === "stat_tiles"}
@@ -140,10 +165,10 @@
       {@render controls?.(panel)}
       {#if described}
         <!-- Stat tiles, and one stacked bar's key, print the panel's figures already. -->
-        {#if panel.status === "ok" && !printsItsFigures(panel) && (panel.facts ?? []).length > 0}
+        {#if showFacts && panel.status === "ok" && !printsItsFigures(panel) && (panel.facts ?? []).length > 0}
           {@render facts(panel)}
         {/if}
-        {#if panel.sentence}
+        {#if panel.sentence && !sharedSentence}
           <p class="max-w-[65ch] text-sm text-pretty" data-testid="report-sentence">{panel.sentence}</p>
         {/if}
         {#if panel.status === "ok" && panel.summary && panel.summary !== panel.sentence}
@@ -161,4 +186,8 @@
       {/if}
     </section>
   {/each}
+  </div>
+  {#if sharedSentence}
+    <p class="max-w-[65ch] text-sm text-pretty" data-testid="report-sentence">{sharedSentence}</p>
+  {/if}
 </article>

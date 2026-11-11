@@ -1,15 +1,16 @@
 <!--
-  The lab's report: a title, a range and Save, then a stack of blocks. One block is open for
-  editing; the others show only their result under a one-line header. A row of dashed buttons adds a
-  block, each one disabled with its reason once the report is at a limit.
+  The report workspace: a title, a range and the page's save controls, then a stack of blocks. One
+  block is open for editing; the others show only their result under a one-line header. A row of
+  dashed buttons adds a block, each one disabled with its reason once the report is at a limit. "All
+  settings" shows the spec the report makes, and can hand it to the form builder.
 -->
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, type Snippet } from "svelte";
   import { runCustomReport } from "#lib/api/generated/customReports.generated.remote.js";
-  import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
@@ -18,6 +19,7 @@
   import Columns2 from "@lucide/svelte/icons/columns-2";
   import Hash from "@lucide/svelte/icons/hash";
   import Pencil from "@lucide/svelte/icons/pencil";
+  import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Plus from "@lucide/svelte/icons/plus";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Table from "@lucide/svelte/icons/table";
@@ -25,26 +27,29 @@
   import { PreviewRunner } from "../builder/preview-runner.svelte.js";
   import BlockEditors from "./BlockEditors.svelte";
   import BlockPreview from "./BlockPreview.svelte";
-  import { minuteLabel, spanLabel } from "./clock.js";
+  import { spanLabel } from "./clock.js";
   import { describe } from "./describe.js";
   import RangeChoices from "./RangeChoices.svelte";
-  import { Report, type Block } from "./report.svelte.js";
-  import SaveControl from "./SaveControl.svelte";
+  import type { Block, Report } from "./report.svelte.js";
   import type { BlockKind } from "./vocabulary.js";
   import WorkspaceView from "./WorkspaceView.svelte";
-  import type { Starter } from "./workspace.svelte.js";
 
   interface Props {
-    catalogue: CustomReportCatalogue;
-    starter: Starter | null;
-    onrestart: () => void;
+    report: Report;
+    /** The page's save controls, beside the report's title. */
+    actions: Snippet;
+    /** Goes back to the start screen; a saved report has none. */
+    onrestart?: () => void;
+    /** Opens the report's spec in the form builder, once the member has confirmed. */
+    onform: (spec: Record<string, unknown>) => void;
   }
 
-  let { catalogue, starter, onrestart }: Props = $props();
+  let { report, actions, onrestart, onform }: Props = $props();
 
   // svelte-ignore state_referenced_locally
-  const report = new Report(catalogue, starter, minuteLabel);
   report.dates = spanLabel;
+  const catalogue = $derived(report.catalogue);
+  let confirmingForm = $state(false);
 
   /** One preview runner for each block, made the first time the block draws. */
   const runners: Record<number, PreviewRunner> = {};
@@ -103,27 +108,6 @@
   /** The collapsed comparisons shown in full. */
   let expanded = $state<number[]>([]);
 
-  /**
-   * The bottom of the report page's sticky header, its tab row included, so the
-   * rail sticks below it. The layout's `--headroom-top` counts only the title bar.
-   */
-  let stickyTop = $state<number | null>(null);
-  function measureHeader(node: HTMLElement) {
-    const header = node
-      .closest("[data-report-root]")
-      ?.querySelector<HTMLElement>(":scope > .sticky");
-    if (!header) return;
-    const update = () => {
-      stickyTop =
-        (Number.parseFloat(getComputedStyle(header).top) || 0) +
-        header.offsetHeight;
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(header);
-    return () => observer.disconnect();
-  }
-
   function incompleteOf(block: Block): string | null {
     if (block.kind === "chart") return block.ws.incomplete;
     if (block.kind === "comparison" && !block.preset && !(block.a && block.b))
@@ -179,34 +163,28 @@
   </div>
 {/snippet}
 
-<div
-  class="@container space-y-5"
-  data-testid="lab-report"
-  style:--lab-sticky-top={stickyTop === null ? undefined : `${stickyTop}px`}
-  {@attach measureHeader}
->
-  <div class="flex flex-wrap items-center justify-between gap-2">
-    <p class="text-sm text-muted-foreground">
-      Prototype. Save keeps the report; the lab itself keeps nothing.
-    </p>
-    <div class="flex items-center gap-2">
-      <Button variant="ghost" size="sm" onclick={onrestart}>
-        <RotateCcw aria-hidden="true" />
-        Start again
-      </Button>
-      <SaveControl {report} />
-    </div>
-  </div>
-
+<div class="@container space-y-5" data-testid="report-workspace">
   <div class="space-y-3">
-    <Input
-      variant="title"
-      data-lab-title
-      aria-label="Report title"
-      placeholder="Untitled report"
-      maxlength={catalogue.maxTitleLength}
-      bind:value={() => report.title, (v: string) => (report.title = v)}
-    />
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <Input
+        variant="title"
+        size="heading"
+        class="min-w-0 flex-1 basis-64"
+        aria-label="Report title"
+        placeholder="Untitled report"
+        maxlength={catalogue.maxTitleLength}
+        bind:value={() => report.title, (v: string) => (report.title = v)}
+      />
+      <div class="flex flex-wrap items-center gap-2">
+        {#if onrestart}
+          <Button variant="ghost" size="sm" onclick={onrestart}>
+            <RotateCcw aria-hidden="true" />
+            Start again
+          </Button>
+        {/if}
+        {@render actions()}
+      </div>
+    </div>
     <RangeChoices
       id="report-range"
       label="Range of the report"
@@ -219,7 +197,7 @@
     />
   </div>
 
-  <ol class="space-y-4" data-testid="lab-blocks">
+  <ol class="space-y-4" data-testid="report-blocks">
     {#each report.blocks as block, index (block.key)}
       {@const open = report.open === block.key}
       <li data-block-kind={block.kind} data-open={open}>
@@ -283,7 +261,7 @@
   </ol>
 
   <div class="space-y-1.5">
-    <div class="flex flex-wrap gap-2" data-testid="lab-add-blocks">
+    <div class="flex flex-wrap gap-2" data-testid="add-blocks">
       {#each adds as a (a.kind)}
         <Button
           variant="dashed"
@@ -313,40 +291,38 @@
               class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
               aria-hidden="true"
             />
-            All settings (prototype: read only)
+            All settings
           </Button>
         {/snippet}
       </Collapsible.Trigger>
-      <Collapsible.Content>
-        <pre class="mt-2 max-h-96 overflow-auto text-xs" data-testid="lab-spec">{JSON.stringify(
+      <Collapsible.Content class="space-y-3 pt-2">
+        <p class="text-xs text-muted-foreground">The report as the engine reads it. Change it in the form to edit each setting.</p>
+        <pre class="max-h-96 overflow-auto rounded-md border border-border bg-muted/30 p-3 text-xs" data-testid="report-spec">{JSON.stringify(
             report.spec(),
             null,
             2
           )}</pre>
+        <Button variant="outline" size="sm" onclick={() => (confirmingForm = true)} data-testid="change-in-form">
+          <SlidersHorizontal aria-hidden="true" />
+          Change in the form
+        </Button>
       </Collapsible.Content>
     </Collapsible.Root>
   </div>
 </div>
 
-<style>
-  /* Prototype only: the real build adds a named "selected" variant to the toggle component. Global, so
-     items in portalled popovers take it too. */
-  :global([data-lab-selected][data-state="on"]) {
-    background-color: var(--primary);
-    color: var(--primary-foreground);
-  }
-
-  /* Prototype only: the report header is translucent, so the canvas scrolling under it showed through
-     in dark mode. The lab's header is opaque. */
-  :global([data-report-root]:has([data-testid="lab-report"]) > .sticky) {
-    background-color: var(--card);
-    backdrop-filter: none;
-  }
-
-  /* Prototype only: the real build adds a size to the Input "title" variant. */
-  :global(input[data-lab-title]) {
-    font-size: 1.125rem;
-    line-height: 1.75rem;
-    font-weight: 600;
-  }
-</style>
+<ConfirmDialog
+  open={confirmingForm}
+  onOpenChange={(open) => (confirmingForm = open)}
+  title="Change this report in the form?"
+  confirmLabel="Change in the form"
+  onConfirm={() => {
+    confirmingForm = false;
+    onform(report.spec());
+  }}
+>
+  {#snippet description()}
+    The form shows each setting of the report. After you change the report in the form, it cannot
+    open in the question builder again.
+  {/snippet}
+</ConfirmDialog>

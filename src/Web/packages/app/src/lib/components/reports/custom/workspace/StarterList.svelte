@@ -1,5 +1,5 @@
 <!--
-  The first screen of the lab: the starting questions as ruled lists under plain headings, and a
+  The start of a new report: the starting questions as ruled lists under plain headings, and a
   blank report.
 -->
 <script lang="ts">
@@ -40,11 +40,11 @@
   </li>
 {/snippet}
 
-<div class="max-w-3xl space-y-6" data-testid="lab-starters">
+<div class="max-w-3xl space-y-6" data-testid="report-starters">
   <div class="space-y-1">
     <h2 class="text-xl font-semibold">Start with a question</h2>
     <p class="text-sm text-muted-foreground">
-      Prototype. Save keeps the report; the lab itself keeps nothing.
+      Choose a question to start from. You can change everything in it after.
     </p>
   </div>
   {#each STARTER_GROUPS as group, g (group)}

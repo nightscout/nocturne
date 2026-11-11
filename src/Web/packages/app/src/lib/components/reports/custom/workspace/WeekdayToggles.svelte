@@ -20,7 +20,7 @@
 
 <ToggleGroup.Root
   type="multiple"
-  variant="outline"
+  variant="choice"
   size="xs"
   spacing={1}
   class="flex-wrap"
@@ -35,7 +35,7 @@
   }
 >
   {#each WEEKDAYS as day (day.id)}
-    <ToggleGroup.Item value={day.id} aria-label={day.label} data-lab-selected>
+    <ToggleGroup.Item value={day.id} aria-label={day.label}>
       {day.id}
     </ToggleGroup.Item>
   {/each}

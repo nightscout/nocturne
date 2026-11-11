@@ -41,7 +41,7 @@
       </Button>
     {:else}
       <p class="text-sm text-muted-foreground">
-        Select two signals: the first lies along the axis, the second goes up.
+        Select two signals: the first on the horizontal axis, the second on the vertical axis.
       </p>
     {/if}
   </div>

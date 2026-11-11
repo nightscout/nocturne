@@ -91,6 +91,8 @@
     });
 
     let reportRoot = $state<HTMLElement | null>(null);
+    /** The sticky header's height, its page tabs included; 0 before it is measured, or where there is none. */
+    let headerHeight = $state(0);
     $effect(() => installPrintFitFallback(() => reportRoot));
 
     const registryTitles = $derived(
@@ -148,13 +150,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </svelte:head>
 
-<!-- --headroom-top sits a Headroom panel flush under the sticky report header (h-14 plus its border). -->
-<div class="@container relative min-h-full bg-background [--headroom-top:calc(var(--app-sticky-top,0px)+3.5rem+1px)]" bind:this={reportRoot} data-report-root>
+<!-- --headroom-top sits a Headroom panel, or any sticky part of a report, flush under the sticky report
+     header and its page tabs; before the header is measured, under the h-14 bar and its border. -->
+<div
+        class="@container relative min-h-full bg-background"
+        style:--headroom-top="calc(var(--app-sticky-top, 0px) + {headerHeight > 0 ? `${headerHeight}px` : "3.5rem + 1px"})"
+        bind:this={reportRoot}
+        data-report-root
+>
     {#if page.url.pathname !== "/reports"}
         <ReportPrintHeader title={reportName} period={printPeriod} />
 
         <div
-                class="sticky top-(--app-sticky-top,0px) z-20 transition-all duration-300 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
+                class="sticky top-(--app-sticky-top,0px) z-20 transition-all duration-300 border-b border-border bg-card print:hidden"
+                bind:offsetHeight={headerHeight}
                 {@attach loopAnalysisHeaderMark()}
         >
             <!-- At 35% the darkest wash keeps the bar's text above 9:1 in either theme. -->

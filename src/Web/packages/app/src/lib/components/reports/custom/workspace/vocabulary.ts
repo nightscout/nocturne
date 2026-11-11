@@ -1,3 +1,6 @@
+// This vocabulary (signals, lenses, and which dataset draws each signal under each lens) will move
+// into the API's report catalogue (/api/v4/reports/custom/catalogue), and the workspace will read it from there.
+
 /**
  * The words the workspace builds a report from: signals, lenses, the events a
  * moment can be, range presets, the blocks a report stacks, and for each signal
@@ -676,6 +679,17 @@ export interface AlongChoice {
   id: Along;
   label: string;
 }
+
+/** Whether an anchor is the start of something that lasts (a low, exercise), by the API's naming. */
+export function isStartAnchor(id: AnchorId): boolean {
+  return id.endsWith("Start");
+}
+
+/** How the engine's summary of a group of days begins its count line ("Only days with a low: 4 of 29 days."). */
+export const DAY_COUNT_LINE = "Only days";
+
+/** The one axis no line goes through: the time of day wraps at midnight. */
+export const ALONG_TIME_OF_DAY: Along = "timeOfDay";
 
 /** What each event can lie along. */
 export const ALONGS: readonly AlongChoice[] = [

@@ -150,7 +150,7 @@
                 </p>
                 <ToggleGroup.Root
                   type="single"
-                  variant="outline"
+                  variant="choice"
                   size="xs"
                   spacing={1}
                   class="flex-wrap"
@@ -165,7 +165,6 @@
                     <ToggleGroup.Item
                       value={m.mark}
                       disabled={m.reason !== null}
-                      data-lab-selected
                     >
                       {#if Icon}<Icon aria-hidden="true" />{/if}
                       {m.label}
@@ -265,7 +264,7 @@
           <p class="text-xs text-muted-foreground" id="draw-{id}">Draw as</p>
           <ToggleGroup.Root
             type="single"
-            variant="outline"
+            variant="choice"
             size="xs"
             spacing={1}
             class="flex-wrap"
@@ -280,7 +279,6 @@
               <ToggleGroup.Item
                 value={m.mark}
                 disabled={m.reason !== null}
-                data-lab-selected
               >
                 {#if Icon}<Icon aria-hidden="true" />{/if}
                 {m.label}
@@ -295,7 +293,7 @@
           <p class="text-xs text-muted-foreground" id="smooth-{id}">Smooth</p>
           <ToggleGroup.Root
             type="single"
-            variant="outline"
+            variant="choice"
             size="xs"
             spacing={1}
             class="flex-wrap"
@@ -306,12 +304,11 @@
                 v && ws.setRelate(id, { smooth: v === "off" ? null : Number(v) })
             }
           >
-            <ToggleGroup.Item value="off" data-lab-selected>Off</ToggleGroup.Item>
+            <ToggleGroup.Item value="off">Off</ToggleGroup.Item>
             {#each smoothChoices as c (c.minutes)}
               <ToggleGroup.Item
                 value={String(c.minutes)}
                 disabled={c.reason !== null}
-                data-lab-selected
               >
                 {c.label}
               </ToggleGroup.Item>
@@ -372,7 +369,7 @@
                 </p>
                 <ToggleGroup.Root
                   type="single"
-                  variant="outline"
+                  variant="choice"
                   size="xs"
                   spacing={1}
                   class="flex-wrap"
@@ -383,14 +380,13 @@
                       v && ws.setRelate(id, { sd: v === "off" ? null : Number(v) })
                   }
                 >
-                  <ToggleGroup.Item value="off" data-lab-selected>
+                  <ToggleGroup.Item value="off">
                     Off
                   </ToggleGroup.Item>
                   {#each sdChoices as c (c.minutes)}
                     <ToggleGroup.Item
                       value={String(c.minutes)}
                       disabled={c.reason !== null}
-                      data-lab-selected
                     >
                       {c.label}
                     </ToggleGroup.Item>

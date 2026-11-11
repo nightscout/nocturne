@@ -1,5 +1,6 @@
 <!--
-  A saved custom report in the builder. Its creator, an owner or a member who edits every report
+  A saved custom report in a builder: the workspace when the report was made there and is unchanged
+  since (see `openSaved`), else the form. Its creator, an owner or a member who edits every report
   saves the changes, renames or deletes it; anyone who can read reports can save a copy under another
   name. The API checks each write again.
 -->
@@ -12,9 +13,18 @@
     deleteCustomReport,
     getCustomReport,
     getCustomReportCatalogue,
+    runCustomReport,
     updateCustomReport,
   } from "#lib/api/generated/customReports.generated.remote.js";
   import ReportBuilder from "#lib/components/reports/custom/builder/ReportBuilder.svelte";
+  import { minuteLabel } from "#lib/components/reports/custom/workspace/clock.js";
+  import type { Report } from "#lib/components/reports/custom/workspace/report.svelte.js";
+  import ReportWorkspace from "#lib/components/reports/custom/workspace/ReportWorkspace.svelte";
+  import { openSaved, specToSave } from "#lib/components/reports/custom/workspace/saved-report.js";
+  import { withoutBuilder } from "#lib/components/reports/custom/workspace/saved-state.js";
+  import SaveControl from "#lib/components/reports/custom/workspace/SaveControl.svelte";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -46,6 +56,50 @@
   const name = $derived(typedName ?? report.current?.name ?? "");
   const maxName = $derived(catalogue.current?.maxNameLength);
 
+  /**
+   * The builder the report opened in, for the report of `id`. `outside` says the form opened because
+   * the report was not made in the workspace or was changed outside it.
+   */
+  let opening = $state<
+    | { id: string; builder: "workspace"; report: Report }
+    | { id: string; builder: "form"; spec: Record<string, unknown>; outside: boolean }
+    | null
+  >(null);
+
+  /** The spec as the engine stores it, for comparing with the saved one; null when it does not validate. */
+  async function normalise(spec: Record<string, unknown>): Promise<unknown> {
+    try {
+      const run = await runCustomReport({ spec, preview: true });
+      return (run.errors ?? []).length === 0 ? (run.spec ?? null) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  $effect(() => {
+    const saved = report.current;
+    const known = catalogue.current;
+    const forId = id;
+    const limited = clamped;
+    if (!saved || !known || untrack(() => opening?.id === forId)) return;
+    if (limited) {
+      opening = { id: forId, builder: "form", spec: withoutBuilder(saved.spec), outside: false };
+      return;
+    }
+    let current = true;
+    // The restored report's state is made and read here; the effect depends on none of it.
+    void untrack(() => openSaved(known, saved.spec, normalise, minuteLabel)).then((o) => {
+      if (!current) return;
+      opening =
+        o.builder === "workspace"
+          ? { id: forId, builder: "workspace", report: o.report }
+          : { id: forId, builder: "form", spec: withoutBuilder(saved.spec), outside: true };
+    });
+    return () => {
+      current = false;
+    };
+  });
+
   function opened() {
     return goto(resolve("/(authenticated)/reports/custom/[id]", { id }));
   }
@@ -62,6 +116,16 @@
     } finally {
       busy = false;
     }
+  }
+
+  async function saveWorkspace(workspace: Report, newName: string) {
+    await updateCustomReport({ id, request: { name: newName, spec: specToSave(workspace) } });
+    await opened();
+  }
+
+  async function copyWorkspace(workspace: Report, copy: string) {
+    const saved = await createCustomReport({ name: copy, spec: specToSave(workspace) });
+    await goto(resolve("/(authenticated)/reports/custom/[id]", { id: saved.id ?? "" }));
   }
 
   async function saveCopy(spec: Record<string, unknown>) {
@@ -104,8 +168,48 @@
         Another member made this report, so you cannot change it. You can save a copy with Save as.
       </p>
     {/if}
-    {#key id}
-      <ReportBuilder catalogue={catalogue.current} spec={report.current.spec} disabled={busy}>
+    {#if opening?.id !== id}
+      <div class="space-y-3" aria-busy="true" data-testid="report-opening">
+        <Skeleton class="h-10 w-1/2" />
+        <Skeleton class="h-80 w-full" />
+        <span class="sr-only" role="status">Opening the report</span>
+      </div>
+    {:else if opening.builder === "workspace"}
+      {@const workspace = opening.report}
+      {#key workspace}
+        <ReportWorkspace
+          report={workspace}
+          onform={(spec) => (opening = { id, builder: "form", spec, outside: false })}
+        >
+          {#snippet actions()}
+            {#if canEdit}
+              <SaveControl report={workspace} {name} disabled={busy} onsave={(n) => saveWorkspace(workspace, n)} />
+            {/if}
+            <SaveControl report={workspace} kind="copy" variant="outline" disabled={busy} onsave={(n) => copyWorkspace(workspace, n)} />
+            <Button variant="outline" size="sm" onclick={opened} disabled={busy}>
+              <Undo2 aria-hidden="true" />
+              Cancel
+            </Button>
+            {#if canEdit}
+              <Button variant="ghost-destructive" size="sm" onclick={() => (confirmingDelete = true)} disabled={busy}>
+                <Trash2 aria-hidden="true" />
+                Delete
+              </Button>
+            {/if}
+          {/snippet}
+        </ReportWorkspace>
+      {/key}
+      {#if actionError}
+        <p class="text-sm text-destructive" role="alert">{actionError}</p>
+      {/if}
+    {:else}
+      {#if opening.outside}
+        <p class="text-sm text-muted-foreground" data-testid="opened-in-form">
+          This report was made or changed outside the question builder, so it opens in the form.
+        </p>
+      {/if}
+      {#key opening}
+      <ReportBuilder catalogue={catalogue.current} spec={opening.spec} disabled={busy}>
         {#snippet actions({ spec, empty })}
           <div class="flex flex-col gap-3">
             <div class="flex flex-col gap-2 @lg:flex-row @lg:items-end">
@@ -171,7 +275,8 @@
           </div>
         {/snippet}
       </ReportBuilder>
-    {/key}
+      {/key}
+    {/if}
   {/if}
 </div>
 

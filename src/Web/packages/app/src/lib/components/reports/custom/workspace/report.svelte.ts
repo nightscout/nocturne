@@ -9,10 +9,12 @@ import {
   type BlockKind,
   type Source,
 } from "./vocabulary.js";
+import { parseSavedReport, type SavedBlock, type SavedReport } from "./saved-state.js";
 import {
   Workspace,
   eventParameters,
   freshKey,
+  reserveKey,
   momentText,
   rangeText,
   upperFirst,
@@ -21,6 +23,7 @@ import {
   type RangeOption,
   type Reason,
   type Starter,
+  type WorkspaceState,
 } from "./workspace.svelte.js";
 
 interface BlockBase {
@@ -164,8 +167,7 @@ export class Report {
     return this.state.open;
   }
 
-  #chart(): ChartBlock {
-    const key = freshKey();
+  #chart(key = freshKey()): ChartBlock {
     const ws = new Workspace(this.#catalogue, undefined, {
       reportHours: () => this.state.rangeHours,
       budget: (built) => this.#chartBudget(key, built),
@@ -175,12 +177,97 @@ export class Report {
     return { kind: "chart", key, range: null, ws };
   }
 
-  #eventsEditor(): Workspace {
+  #eventsEditor(state?: WorkspaceState): Workspace {
     const ws = new Workspace(this.#catalogue);
     ws.clock = this.#clock;
     ws.dates = (span) => this.dates(span);
-    ws.setLens("event");
+    if (state) ws.state = structuredClone(state);
+    else ws.setLens("event");
     return ws;
+  }
+
+  /** The report's state as the workspace saves it with the spec: ids and choices, nothing derived. */
+  toState(): SavedReport {
+    const blocks = this.state.blocks.map((block): SavedBlock => {
+      switch (block.kind) {
+        case "chart":
+          return { kind: "chart", key: block.key, chart: $state.snapshot(block.ws.state) };
+        case "figures":
+          return { kind: "figures", key: block.key, range: block.range, title: block.title, source: block.source, columns: [...block.columns] };
+        case "table":
+          return {
+            kind: "table",
+            key: block.key,
+            range: block.range,
+            title: block.title,
+            source: block.source,
+            columns: [...block.columns],
+            ...(block.source === EVENT_DATASET ? { events: $state.snapshot(block.events.state) } : {}),
+          };
+        case "comparison":
+          return {
+            kind: "comparison",
+            key: block.key,
+            range: block.range,
+            title: block.title,
+            preset: block.preset,
+            a: block.a && { ...block.a },
+            b: block.b && { ...block.b },
+          };
+      }
+    });
+    // A JSON round trip drops the keys an optional narrowing leaves undefined, as the saved form has them.
+    return JSON.parse(JSON.stringify({ title: this.state.title, rangeHours: this.state.rangeHours, blocks }));
+  }
+
+  /**
+   * The report a saved state describes, its blocks keeping their keys so the spec keeps its panel
+   * ids; null when the state is of another version or shape (see `parseSavedReport`).
+   */
+  static fromState(
+    catalogue: CustomReportCatalogue,
+    version: unknown,
+    state: unknown,
+    clock?: (minute: number) => string
+  ): Report | null {
+    const saved = parseSavedReport(version, state);
+    if (!saved) return null;
+    for (const block of saved.blocks) {
+      reserveKey(block.key);
+      const inner = block.kind === "chart" ? block.chart : block.kind === "table" ? block.events : undefined;
+      for (const m of inner?.moments ?? []) reserveKey(m.key);
+      for (const c of inner?.combos ?? []) reserveKey(c.key);
+    }
+    const report = new Report(catalogue, null, clock);
+    report.#restore(saved);
+    return report;
+  }
+
+  #restore(saved: SavedReport) {
+    const blocks = saved.blocks.map((b): Block => {
+      switch (b.kind) {
+        case "chart": {
+          const chart = this.#chart(b.key);
+          chart.ws.state = structuredClone(b.chart);
+          return chart;
+        }
+        case "figures":
+          return { ...b, columns: [...b.columns] };
+        case "table":
+          return {
+            kind: "table",
+            key: b.key,
+            range: b.range,
+            title: b.title,
+            source: b.source,
+            columns: [...b.columns],
+            events: this.#eventsEditor(b.events),
+          };
+        case "comparison":
+          return { ...b };
+      }
+    });
+    this.state = { title: saved.title, rangeHours: saved.rangeHours, blocks, open: blocks[0]?.key ?? null };
   }
 
   /** The range a block reads, its own or the report's. */

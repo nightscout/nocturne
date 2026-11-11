@@ -20,6 +20,7 @@
     legend,
     rowMatch,
     rowsAt,
+    type SharedSides,
     slots,
     toDomain,
     valueFields,
@@ -36,9 +37,13 @@
     labels?: ChartLabels;
     /** The plot's height, in pixels, for one track of normal height; a chart of more tracks is taller. */
     trackHeight?: number;
+    /** Draw the key of the layers under the plot; a host that names the layers itself leaves it out. */
+    legend?: boolean;
+    /** Values each track's sides cover beyond their own, by track id, so small multiples share one scale. */
+    valueExtents?: Record<string, SharedSides>;
   }
 
-  let { panel, format, lineColorMode = "continuous", labels, trackHeight = 240 }: Props = $props();
+  let { panel, format, lineColorMode = "continuous", labels, trackHeight = 240, legend: showLegend = true, valueExtents }: Props = $props();
 
   const kind = $derived(panel.xKind ?? "time");
   const weight = $derived(panel.tracks.reduce((sum, t) => sum + t.height, 0));
@@ -111,6 +116,7 @@
         tickLabels={{ class: "text-xs fill-muted-foreground", fontSize: 11 }}
         text={{ muted: { class: "fill-muted-foreground" }, strong: { class: "fill-foreground font-semibold" } }}
         formatTick={tick}
+        {valueExtents}
         hover
       />
     </Svg>
@@ -170,7 +176,7 @@
   {#if (kind === "value" || kind === "lag") && xField}
     <p class="text-center text-xs text-muted-foreground" data-testid="report-x-caption">{xField.label}{xField.unit ? ` (${xField.unit})` : ""}</p>
   {/if}
-  {#if entries.length > 1 || entries.some((e) => e.context)}
+  {#if showLegend && (entries.length > 1 || entries.some((e) => e.context))}
     <ul class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" data-testid="report-legend">
       {#each entries as entry (entry.id)}
         <li class="flex items-center gap-1.5">

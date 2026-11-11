@@ -9,7 +9,6 @@ const MODES = ["light", "dark"] as const;
 
 /** ChartColor values no stylesheet defines: the live chart draws them unset, an image in the muted colour. */
 const UNDEFINED_CHART_COLORS = [
-  "activity-sleep",
   "activity-exercise",
   "activity-illness",
   "activity-travel",

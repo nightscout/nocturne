@@ -76,7 +76,7 @@
             </p>
             <ToggleGroup.Root
               type="single"
-              variant="outline"
+              variant="choice"
               size="xs"
               spacing={1}
               class="flex-wrap"
@@ -87,7 +87,7 @@
               }
             >
               {#each ws.beforeChoices as minutes (minutes)}
-                <ToggleGroup.Item value={String(minutes)} data-lab-selected>
+                <ToggleGroup.Item value={String(minutes)}>
                   {minutes === 0 ? "None" : minutesText(minutes)}
                 </ToggleGroup.Item>
               {/each}
@@ -99,7 +99,7 @@
             </p>
             <ToggleGroup.Root
               type="single"
-              variant="outline"
+              variant="choice"
               size="xs"
               spacing={1}
               class="flex-wrap"
@@ -110,7 +110,7 @@
               }
             >
               {#each ws.afterChoices as minutes (minutes)}
-                <ToggleGroup.Item value={String(minutes)} data-lab-selected>
+                <ToggleGroup.Item value={String(minutes)}>
                   {minutesText(minutes)}
                 </ToggleGroup.Item>
               {/each}

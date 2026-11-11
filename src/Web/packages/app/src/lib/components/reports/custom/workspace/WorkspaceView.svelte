@@ -113,10 +113,10 @@
 <div
   bind:clientWidth={gridWidth}
   class="grid gap-6 @4xl:grid-cols-[232px_minmax(0,1fr)]"
-  data-testid="lab-workspace"
+  data-testid="chart-workspace"
 >
   <aside
-    class="@4xl:sticky @4xl:top-[calc(var(--lab-sticky-top,var(--headroom-top,0px))+1rem)] @4xl:max-h-[calc(100dvh-var(--lab-sticky-top,var(--headroom-top,0px))-2rem)] @4xl:self-start @4xl:overflow-y-auto"
+    class="@4xl:sticky @4xl:top-[calc(var(--headroom-top,0px)+1rem)] @4xl:max-h-[calc(100dvh-var(--headroom-top,0px)-2rem)] @4xl:self-start @4xl:overflow-y-auto"
   >
     {#if narrow}
       <Collapsible.Root bind:open={railOpen}>
@@ -174,7 +174,7 @@
       <Collapsible.Content class="space-y-3 pt-3">
       <Input
         variant="title"
-        data-lab-title
+        size="heading"
         aria-label="Chart title"
         placeholder="Untitled chart"
         maxlength={report.catalogue.maxTitleLength}
@@ -219,7 +219,7 @@
             <ToggleGroup.Root
               id="event-show"
               type="single"
-              variant="outline"
+              variant="choice"
               size="sm"
               spacing={1}
               class="flex-wrap"
@@ -236,7 +236,6 @@
                 <ToggleGroup.Item
                   value={o.id}
                   disabled={o.reason !== null}
-                  data-lab-selected
                 >
                   {o.label}
                 </ToggleGroup.Item>
@@ -282,31 +281,24 @@
     <div class="space-y-3">
       {#if !ws.empty}
         <!-- prettier-ignore -->
-        <p class="text-base text-foreground" data-testid="lab-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<a href="#{part.kind}" class={CAPTION_PART} onclick={(event) => focusOwner(event, part.kind)}>{part.text}</a>{/each}</p>
+        <p class="text-base text-foreground" data-testid="chart-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<a href="#{part.kind}" class={CAPTION_PART} onclick={(event) => focusOwner(event, part.kind)}>{part.text}</a>{/each}</p>
         {#if !ws.eventList}
           <SignalChips {ws} report={result} {perGroup} />
         {/if}
       {/if}
-      <div class="lab-chart" data-testid="lab-chart" data-lens={ws.lens}>
+      <div data-testid="chart-preview" data-lens={ws.lens}>
+        <!-- The chips above name each layer, and around an event the group rows give each group's figures. -->
         <BlockPreview
           spec={preview}
           {runner}
           kind="chart"
           incomplete={ws.incomplete}
+          legend={false}
+          facts={ws.lens !== "event"}
+          layout={ws.smallMultiples ? "multiples" : "stack"}
         />
       </div>
       <p class="sr-only" aria-live="polite">{announcement}</p>
     </div>
   </div>
 </div>
-
-<style>
-  .lab-chart :global([data-testid="report-legend"]) {
-    display: none;
-  }
-
-  /* The group rows above the chart already give each group's count and note. */
-  .lab-chart[data-lens="event"] :global([data-testid="report-facts"]) {
-    display: none;
-  }
-</style>

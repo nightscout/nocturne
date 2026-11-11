@@ -1,12 +1,11 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import type { CustomReportCatalogue, CustomReportRunResponse } from "#lib/api/generated/nocturne-api-client.js";
-import { catalogue as fixtureCatalogue, chartTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
+import { catalogue as fixtureCatalogue, chartTemplate } from "./schema-form.fixtures.js";
 
-const calls = vi.hoisted(() => ({ runs: [] as unknown[], creates: [] as unknown[], gotos: [] as string[] }));
+const calls = vi.hoisted(() => ({ runs: [] as unknown[], saves: [] as Record<string, unknown>[] }));
 let catalogue: CustomReportCatalogue;
 let respond: (spec: Record<string, unknown>) => CustomReportRunResponse;
 
@@ -20,27 +19,13 @@ vi.mock("#lib/api/generated/foods.generated.remote.js", () => ({
 }));
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
-  getCustomReportCatalogue: () => remoteQuery(() => catalogue),
-  getCustomReportTemplates: () => remoteQuery(() => [chartTemplate]),
-  getCustomReports: () => remoteQuery(() => []),
   runCustomReport: remoteCommand((arg) => {
     calls.runs.push(arg);
     return respond((arg as { spec: Record<string, unknown> }).spec);
   }),
-  createCustomReport: remoteCommand((arg) => {
-    calls.creates.push(arg);
-    return { id: "new-id", name: "Saved" };
-  }),
 }));
 
-vi.mock("$app/navigation", () => ({
-  goto: (url: string) => {
-    calls.gotos.push(url);
-    return Promise.resolve();
-  },
-}));
-
-import NewCustomReportPage from "./+page.svelte";
+import ReportBuilderHarness from "./ReportBuilder.test-harness.svelte";
 
 type Spec = { panels: { id: string; tracks: { id: string; layers: { id: string; derived?: Record<string, unknown> }[] }[] }[] };
 const lastSpec = () => (calls.runs.at(-1) as { spec: Spec }).spec;
@@ -90,16 +75,13 @@ function chartRun(spec: Record<string, unknown>): CustomReportRunResponse {
 describe("the report builder on a chart of tracks of layers", () => {
   beforeEach(() => {
     calls.runs.length = 0;
-    calls.creates.length = 0;
-    calls.gotos.length = 0;
+    calls.saves.length = 0;
     catalogue = structuredClone(fixtureCatalogue);
     respond = chartRun;
-    pageState.data = {};
   });
 
   async function openTemplate() {
-    render(NewCustomReportPage, {});
-    await page.getByRole("button", { name: /Glucose chart/ }).click();
+    render(ReportBuilderHarness, { catalogue, spec: chartTemplate.spec, onsave: (spec) => calls.saves.push(spec) });
     await vi.waitFor(() => expect(calls.runs.length).toBeGreaterThan(0));
   }
 
@@ -112,10 +94,9 @@ describe("the report builder on a chart of tracks of layers", () => {
     await expect.element(rows.nth(1).getByTestId("layer-side")).toHaveTextContent("Right axis, U");
     await expect.element(page.getByTestId("report-layered-chart")).toBeVisible();
 
-    await page.getByLabelText("Name", { exact: true }).fill("Glucose and IOB");
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await vi.waitFor(() => expect(calls.creates).toHaveLength(1));
-    expect(calls.creates[0]).toMatchObject({ name: "Glucose and IOB", spec: { panels: [{ kind: "chart", tracks: [{ id: "glucose" }, { id: "onboard" }] }] } });
+    await vi.waitFor(() => expect(calls.saves).toHaveLength(1));
+    expect(calls.saves[0]).toMatchObject({ panels: [{ kind: "chart", tracks: [{ id: "glucose" }, { id: "onboard" }] }] });
   });
 
   it("adds a track with a layer of its own", async () => {

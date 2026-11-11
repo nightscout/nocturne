@@ -116,37 +116,98 @@ export interface SideScale {
   toPixel: (value: number) => number;
 }
 
-/** A track's left and right value scales, each over its layers' values and from zero; a glucose side reaches the high limit. */
+/** The values one side of a track spans, from zero, in its unit; a glucose side reaches the high limit. */
+interface SideExtent {
+  unit: string | null;
+  min: number;
+  max: number;
+}
+
+function sideExtent(track: ReportTrack, which: "left" | "right", highLimit: number | null): SideExtent | null {
+  const placed = track.layers.find((l) => l.side === which);
+  if (!placed) return null;
+  let min = 0;
+  let max = 0;
+  let glucose = false;
+  for (const layer of drawnLayers(track).filter((l) => l.side === which))
+    for (const field of valueFields(layer)) {
+      glucose ||= field.glucoseScale === true;
+      for (const row of layer.rows) {
+        const v = num(row, field.name);
+        if (v === null) continue;
+        min = Math.min(min, v);
+        max = Math.max(max, v);
+      }
+    }
+  if (glucose && highLimit !== null) max = Math.max(max, highLimit);
+  return { unit: placed.unit ?? null, min, max };
+}
+
+/** The values each side of a track must cover beyond its own, as `sharedValueExtents` gives them. */
+export interface SharedSides {
+  left?: [number, number];
+  right?: [number, number];
+}
+
+/**
+ * A track's left and right value scales, each over its layers' values and from zero; a glucose side
+ * reaches the high limit, and a side given a shared extent covers it too.
+ */
 export function sideScales(
   track: ReportTrack,
   band: TrackBand,
   highLimit: number | null,
+  shared?: SharedSides,
 ): { left: SideScale | null; right: SideScale | null } {
   function side(which: "left" | "right"): SideScale | null {
-    const layers = drawnLayers(track).filter((l) => l.side === which);
-    const placed = track.layers.find((l) => l.side === which);
-    if (!placed) return null;
-    let min = 0;
-    let max = 0;
-    let glucose = false;
-    for (const layer of layers)
-      for (const field of valueFields(layer)) {
-        glucose ||= field.glucoseScale === true;
-        for (const row of layer.rows) {
-          const v = num(row, field.name);
-          if (v === null) continue;
-          min = Math.min(min, v);
-          max = Math.max(max, v);
-        }
-      }
-    if (glucose && highLimit !== null) max = Math.max(max, highLimit);
+    const own = sideExtent(track, which, highLimit);
+    if (!own) return null;
+    const also = shared?.[which];
+    const min = also ? Math.min(own.min, also[0]) : own.min;
+    let max = also ? Math.max(own.max, also[1]) : own.max;
     if (max === min) max = min + 1;
     const span = max - min;
     const domain: [number, number] = [min < 0 ? min - span * 0.05 : min, max + span * 0.08];
     const scale = scaleLinear().domain(domain).range([band.bottom, band.top]);
-    return { unit: placed.unit ?? null, domain, toPixel: (v: number) => scale(v) };
+    return { unit: own.unit, domain, toPixel: (v: number) => scale(v) };
   }
   return { left: side("left"), right: side("right") };
+}
+
+/**
+ * One value scale for each side of each track across panels drawn side by side as small multiples,
+ * keyed by track id: the values that side spans in every panel, where every panel draws it in one
+ * unit. A side whose unit differs between panels keeps its own scale in each.
+ */
+export function sharedValueExtents(panels: readonly Pick<ReportPanel, "tracks" | "thresholds">[]): Record<string, SharedSides> {
+  type Seen = SideExtent & { mixed: boolean };
+  const tracks = new Map<string, { left?: Seen; right?: Seen }>();
+  for (const panel of panels)
+    for (const track of panel.tracks) {
+      const sides = tracks.get(track.id) ?? {};
+      tracks.set(track.id, sides);
+      for (const which of ["left", "right"] as const) {
+        const extent = sideExtent(track, which, panel.thresholds?.high ?? null);
+        if (!extent) continue;
+        const seen = sides[which];
+        if (!seen) sides[which] = { ...extent, mixed: false };
+        else {
+          seen.mixed ||= seen.unit !== extent.unit;
+          seen.min = Math.min(seen.min, extent.min);
+          seen.max = Math.max(seen.max, extent.max);
+        }
+      }
+    }
+  const out: Record<string, SharedSides> = {};
+  for (const [id, sides] of tracks) {
+    const shared: SharedSides = {};
+    for (const which of ["left", "right"] as const) {
+      const side = sides[which];
+      if (side && !side.mixed) shared[which] = [side.min, side.max];
+    }
+    out[id] = shared;
+  }
+  return out;
 }
 
 /** The colour a field of a layer is drawn in: the layer's series hue where the API gave one, else the field's own. */

@@ -34,7 +34,7 @@
 <div class="w-80 space-y-3">
   <ToggleGroup.Root
     type="single"
-    variant="outline"
+    variant="choice"
     size="xs"
     spacing={1}
     class="flex-wrap"
@@ -48,7 +48,7 @@
     }
   >
     {#each CHOICES as c (key(c))}
-      <ToggleGroup.Item value={key(c)} data-lab-selected>
+      <ToggleGroup.Item value={key(c)}>
         {upperFirst(sinceMealText(c) ?? "")}
       </ToggleGroup.Item>
     {/each}

@@ -5,7 +5,7 @@ import { expect, signIn, test } from "./fixtures.ts";
 interface CustomReport {
   id: string;
   name: string;
-  spec: { title?: string; panels: unknown[] };
+  spec: { title?: string; panels: unknown[]; builder?: { kind: string; version: number; state: unknown } };
 }
 
 interface Template {
@@ -16,31 +16,46 @@ interface Template {
 const ID = /\/reports\/custom\/([0-9a-f-]{36})/;
 
 test.describe("custom report builder", () => {
-  test("makes a report from a template, saves it, and saves an edit to it", async ({ page, seed }) => {
+  test("makes a report from a question, saves it with the workspace's state, and reopens it there", async ({ page, seed }) => {
+    const tenant = await seed();
+    await postEntries(tenant.api, sgvSeries({ count: 96, end: Date.now(), valueAt: (i) => Math.round(140 + 60 * Math.sin(i / 8)) }));
+
+    await signIn(page, tenant);
+    await page.goto(`${tenant.webUrl}/reports/custom/new`);
+    await page.getByText("Is there a dawn rise?", { exact: true }).click();
+    await expect(page.getByTestId("chart-preview").getByTestId("report-layered-chart")).toBeVisible();
+
+    await page.getByTestId("save-trigger").click();
+    await page.getByLabel("Name", { exact: true }).fill("Workspace e2e");
+    await page.getByRole("button", { name: "Save the report" }).click();
+    await expect(page).toHaveURL(ID);
+    const id = ID.exec(page.url())![1];
+
+    const saved = await tenant.api.ok<CustomReport>("GET", `/api/v4/reports/custom/${id}`);
+    expect(saved.spec.builder).toMatchObject({ kind: "workspace", version: 1 });
+
+    await page.goto(`${tenant.webUrl}/reports/custom/${id}/edit`);
+    await expect(page.getByTestId("report-workspace")).toBeVisible();
+    await expect(page.getByTestId("opened-in-form")).toHaveCount(0);
+  });
+
+  test("opens a report made elsewhere in the form, and saves an edit to it", async ({ page, seed }) => {
     const tenant = await seed();
     // Every reading in range, so the report's time in range is 100%.
     await postEntries(tenant.api, sgvSeries({ count: 48, end: Date.now(), valueAt: (i) => 100 + (i % 12) * 5 }));
     const templates = await tenant.api.ok<Template[]>("GET", "/api/v4/reports/custom/templates");
     const agp = templates.find((t) => t.id === "agp")!;
+    const { id } = await tenant.api.ok<CustomReport>("POST", "/api/v4/reports/custom", { name: "Builder e2e", spec: agp.spec });
 
     await signIn(page, tenant);
-    await page.goto(`${tenant.webUrl}/reports/custom/new`);
-    await page.getByRole("button", { name: /Ambulatory glucose profile/ }).click();
+    await page.goto(`${tenant.webUrl}/reports/custom/${id}`);
+    await expect(page.getByRole("heading", { name: "Builder e2e" })).toBeVisible();
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page).toHaveURL(new RegExp(`/reports/custom/${id}/edit`));
+    await expect(page.getByTestId("opened-in-form")).toBeVisible();
 
     const figures = page.getByTestId("panel-card").first().getByTestId("panel-preview");
     await expect(figures.getByText("Time in range", { exact: true }).locator("..")).toContainText("100");
-
-    await page.getByLabel("Name", { exact: true }).fill("Builder e2e");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page).toHaveURL(ID);
-    const id = ID.exec(page.url())![1];
-    await expect(page.getByRole("heading", { name: "Builder e2e" })).toBeVisible();
-
-    const saved = await tenant.api.ok<CustomReport>("GET", `/api/v4/reports/custom/${id}`);
-    expect(saved.spec).toEqual(agp.spec);
-
-    await page.getByRole("link", { name: "Edit" }).click();
-    await expect(page).toHaveURL(new RegExp(`/reports/custom/${id}/edit`));
     await page.getByLabel("Title", { exact: true }).fill("Two weeks of glucose");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/reports/custom/${id}(\\?.*)?$`));
@@ -81,7 +96,7 @@ test.describe("custom report builder", () => {
     await expect(page.getByTestId("panel-preview").first().getByRole("heading", { name: "Meals 1" })).toBeVisible();
   });
 
-  test("saves the Insulin and glucose template, opens it, and downloads a chart of it as a PNG", async ({ page, seed }) => {
+  test("opens a saved Insulin and glucose report, and downloads a chart of it as a PNG", async ({ page, seed }) => {
     const tenant = await seed();
     // Eight hours of glucose that rises and falls, and a bolus every two hours, so IOB varies with it.
     await postEntries(tenant.api, sgvSeries({ count: 96, end: Date.now(), valueAt: (i) => Math.round(140 + 60 * Math.sin(i / 8)) }));
@@ -91,17 +106,15 @@ test.describe("custom report builder", () => {
       created_at: minutesAgo(30 + i * 120),
     })));
 
+    const templates = await tenant.api.ok<Template[]>("GET", "/api/v4/reports/custom/templates");
+    const template = templates.find((t) => t.id === "insulin-glucose")!;
+    const { id } = await tenant.api.ok<CustomReport>("POST", "/api/v4/reports/custom", { name: "Insulin and glucose e2e", spec: template.spec });
+
     await signIn(page, tenant);
-    await page.goto(`${tenant.webUrl}/reports/custom/new`);
-    await page.getByRole("button", { name: /Insulin and glucose/ }).click();
+    await page.goto(`${tenant.webUrl}/reports/custom/${id}/edit`);
     await expect(page.getByTestId("panel-card")).toHaveCount(2);
     await expect(page.getByTestId("layer-row").first().getByTestId("layer-source").first()).toBeVisible();
     await expect(page.getByTestId("panel-preview").first().getByTestId("report-layered-chart")).toBeVisible();
-
-    await page.getByLabel("Name", { exact: true }).fill("Insulin and glucose e2e");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page).toHaveURL(ID);
-    const id = ID.exec(page.url())![1];
 
     await page.goto(`${tenant.webUrl}/reports/custom/${id}`);
     await expect(page.getByRole("heading", { name: "Glucose against insulin on board" })).toBeVisible();

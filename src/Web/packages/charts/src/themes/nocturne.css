@@ -80,6 +80,9 @@
   /* Health Overlays */
   --heart-rate: oklch(0.6 0.2 25);
   --steps: oklch(0.6 0.15 300);
+  /* Sleep, as hours slept and sleep sessions: a night navy, darker than the insulin blues and apart
+     from the violet of a high and the pump's sleep mode. */
+  --activity-sleep: oklch(0.42 0.1 260);
 }
 
 @media not print {
@@ -95,6 +98,9 @@
   --iob-basal: rgba(60, 160, 255, 0.8);
   --iob-bolus: rgba(30, 150, 252, 1);
   --iob-temporary: rgba(60, 215, 200, 0.9);
+
+  /* Sleep - Dark Mode - lifted off the page. */
+  --activity-sleep: oklch(0.62 0.1 260);
 }
 }
 
@@ -142,6 +148,7 @@
 
   /* Health overlays */
   --color-heart-rate: var(--heart-rate);
+  --color-activity-sleep: var(--activity-sleep);
 
   /* Pump modes */
   --color-pump-mode-automatic: var(--pump-mode-automatic);

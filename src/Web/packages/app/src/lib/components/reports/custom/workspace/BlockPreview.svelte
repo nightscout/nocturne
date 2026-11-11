@@ -17,9 +17,15 @@
     kind: BlockKind;
     /** What the member does next before the block can run, or null. */
     incomplete?: string | null;
+    /** Draw each chart's legend; the workspace names the layers itself. */
+    legend?: boolean;
+    /** Draw each panel's figures; the workspace's group rows give an event chart's. */
+    facts?: boolean;
+    /** How the panels are laid out; `multiples` for one chart's small multiples. */
+    layout?: "stack" | "multiples";
   }
 
-  let { spec, runner, kind, incomplete = null }: Props = $props();
+  let { spec, runner, kind, incomplete = null, legend = true, facts = true, layout = "stack" }: Props = $props();
 
   const LOADING: Record<BlockKind, string> = {
     chart: "Loading the chart",
@@ -68,7 +74,7 @@
         class="transition-opacity duration-150 motion-reduce:transition-none"
         class:opacity-50={stale}
       >
-        <CustomReportRun run={runner.run} />
+        <CustomReportRun run={runner.run} {legend} {facts} {layout} />
       </div>
       {#if stale}
         <LoaderCircle

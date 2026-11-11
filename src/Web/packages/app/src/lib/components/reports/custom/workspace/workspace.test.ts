@@ -369,7 +369,7 @@ describe("this round's engine features", () => {
     expect(ws.groupsApart).toBe(false);
     const panels = spec(ws).panels;
     expect(panels.map((p) => p.id)).toEqual(["chart-1", "chart-2", "chart-3", "chart-4"]);
-    expect((panels[2] as { title?: string }).title).toBe("C: all lows");
+    expect((panels[2] as { title?: string }).title).toBe("C: All lows");
     expect(panels[3].tracks[0].layers[0]).toMatchObject({
       id: "glucose-g4",
       dataset: { cohorts: [{ anchor: "HighStart" }] },
@@ -392,7 +392,7 @@ describe("this round's engine features", () => {
       "netInsulin",
     ]);
     expect(spec(ws).panels[0].tracks[0].layers[0]).toMatchObject({
-      title: "A: all carbs taken in a low",
+      title: "A: All carbs taken in a low",
     });
     expect(ws.anchorNote("SiteChange")).toBe("A site, cannula or pod change");
     expect(ws.anchorReason("SleepStart")).toBeNull();
@@ -614,6 +614,63 @@ describe("the caption", () => {
     expect(text("reservoir-batteries")).toBe(
       "Reservoir, pump battery and uploader battery as a timeline over the last 7 days"
     );
+  });
+});
+
+describe("groups of events", () => {
+  const cohorts = (ws: Workspace) =>
+    (spec(ws).panels[0].tracks[0].layers[0].dataset as { cohorts: unknown[] }).cohorts;
+
+  it("names a group that narrows nothing by its events, not as \"all\"", () => {
+    const ws = new Workspace(liveCatalogue);
+    ws.setLens("event");
+    ws.toggleSignal("glucose");
+    ws.addMoment();
+    ws.addMoment();
+    ws.updateMoment(0, { timeOfDay: { fromMinute: 360, toMinute: 600 } });
+
+    expect(ws.captionText()).toContain("06:00 to 10:00 against all meals against all meals");
+    expect(ws.captionText()).not.toContain("against all against");
+  });
+
+  it("offers one everything else for each kind of event a group narrows", () => {
+    const ws = new Workspace(liveCatalogue);
+    ws.setLens("event");
+    ws.toggleSignal("glucose");
+    ws.updateMoment(0, { minutesSinceMeal: { min: 240 } });
+    expect(ws.addEverythingElse()).toBeNull();
+    expect(ws.everythingElseApplies).toBe(false);
+
+    expect(ws.addMoment("CorrectionBolus")).toBeNull();
+    expect(ws.everythingElseApplies).toBe(false);
+    ws.updateMoment(1, { timeOfDay: { fromMinute: 1320, toMinute: 360 } });
+    expect(ws.everythingElseApplies).toBe(true);
+    expect(cohorts(ws)).toEqual([
+      { anchor: "Meal", minutesSinceMeal: { min: 240 } },
+      { anchor: "CorrectionBolus", timeOfDay: { fromMinute: 1320, toMinute: 360 } },
+      { anchor: "Meal", others: true },
+    ]);
+    // A fourth group would be drawn as small multiples, where a group of all others has nothing beside it.
+    expect(ws.everythingElseReason).toBe("Everything else can go with at most two other groups.");
+  });
+
+  it("moves everything else to a kind that has none when its own kind goes", () => {
+    const ws = from("one-food");
+    ws.updateMoment(0, { what: "CorrectionBolus" });
+
+    expect(ws.moments.map((m) => [m.what, m.everythingElse ?? false])).toEqual([
+      ["CorrectionBolus", false],
+      ["CorrectionBolus", true],
+    ]);
+  });
+
+  it("draws no line through the points along the time of day, and says why", () => {
+    const ws = from("start-and-peak");
+    expect(ws.fitApplies).toBe(true);
+    ws.setEvent({ along: "timeOfDay" });
+
+    expect(ws.fitApplies).toBe(false);
+    expect(spec(ws).panels[0].tracks[0].layers[0].bindings).not.toHaveProperty("fit");
   });
 });
 

@@ -80,3 +80,52 @@ export function chartResult() {
     ],
   };
 }
+
+type SpecPanels = { panels?: { id: string; tracks?: { id: string; layers: { id: string }[] }[] }[] };
+
+/**
+ * The API's run of any chart spec, as a stand-in: each chart panel's layers drawn as a glucose line
+ * over two readings, each other panel as one stat tile. Enough to draw a preview of every block.
+ */
+export function runOf(spec: Record<string, unknown>) {
+  const from = Date.UTC(2026, 9, 29, 6);
+  const to = from + 6 * 3_600_000;
+  const given: SpecPanels["panels"] = Array.isArray(spec.panels) ? spec.panels : [];
+  const panels = (given ?? []).map((p) =>
+    p.tracks
+      ? {
+          id: p.id,
+          title: "Chart",
+          kind: "chart",
+          xKind: "time",
+          status: "ok",
+          window: { from, to },
+          fields: [],
+          rows: [],
+          summary: "Glucose.",
+          facts: [{ label: "Readings", value: "2" }],
+          tracks: p.tracks.map((t) => ({
+            id: t.id,
+            height: 1,
+            layers: t.layers.map((l) => ({
+              id: l.id,
+              title: l.id,
+              mark: "line",
+              bindings: { x: "time", y: ["glucose"] },
+              xKind: "time",
+              unit: "mg/dL",
+              side: "left",
+              status: "ok",
+              window: { from, to },
+              fields: [
+                { name: "time", label: "Time", kind: "time" },
+                { name: "glucose", label: "Glucose", kind: "number", unit: "mg/dL", color: "glucose-in-range" },
+              ],
+              rows: [{ time: from, glucose: 110 }, { time: to, glucose: 140 }],
+            })),
+          })),
+        }
+      : { ...statTilesResult().panels[0], id: p.id },
+  );
+  return { result: { spec: { version: 1 }, units: "mg/dl", summary: "", warnings: [], timeZone: "UTC", panels }, spec, errors: [] };
+}

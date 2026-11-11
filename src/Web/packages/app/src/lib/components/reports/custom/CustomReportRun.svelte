@@ -18,9 +18,15 @@
 
   interface Props {
     run: CustomReportRunResponse;
+    /** Draw each chart's legend; a host that names the layers itself leaves it out. */
+    legend?: boolean;
+    /** Draw each panel's figures; a host that shows them itself leaves them out. */
+    facts?: boolean;
+    /** How the panels are laid out; `multiples` for one chart's small multiples. */
+    layout?: "stack" | "multiples";
   }
 
-  let { run }: Props = $props();
+  let { run, legend = true, facts = true, layout = "stack" }: Props = $props();
 
   const report = $derived(readReport(run.result));
   const errors = $derived(run.errors ?? []);
@@ -117,7 +123,7 @@
 {#if errors.length > 0}
   <SpecErrorList {errors} spec={run.spec} />
 {:else if report}
-  <ReportView {report} format={chartFormat()} labels={customReportLabels()} headingLevel={2} controls={panelLink} />
+  <ReportView {report} format={chartFormat()} labels={customReportLabels()} headingLevel={2} controls={panelLink} {legend} {facts} {layout} />
 {:else}
   <p class="text-sm text-muted-foreground" role="alert">The report data has a form that this page cannot show.</p>
 {/if}

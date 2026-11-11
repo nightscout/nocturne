@@ -3,17 +3,17 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import type { CustomReportCatalogue, CustomReportRunResponse } from "#lib/api/generated/nocturne-api-client.js";
-import { catalogue as fixtureCatalogue, resultFor, statisticsTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
-import { statTilesResult } from "../custom-report-fixtures.js";
+import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
+import { BUILDER_KIND, BUILDER_VERSION } from "#lib/components/reports/custom/workspace/saved-state.js";
+import { runOf } from "../custom-report-fixtures.js";
 
-const calls = vi.hoisted(() => ({ runs: [] as unknown[], creates: [] as unknown[], gotos: [] as string[] }));
-let catalogue: CustomReportCatalogue;
-let respond: (spec: Record<string, unknown>) => CustomReportRunResponse;
+type Spec = { panels: { id: string; tracks?: { layers: { id: string }[] }[] }[]; builder?: { kind: string; version: number; state: unknown } };
 
-vi.mock("#lib/api/report-image.remote.js", () => ({
-  drawReportPanelImage: () => Promise.resolve(""),
-}));
+const calls = vi.hoisted(() => ({ runs: [] as { spec: Spec }[], creates: [] as { name: string; spec: Spec }[], gotos: [] as string[] }));
+/** The engine's refusal of the next save, or null to save it. */
+let refusal: unknown = null;
+
+vi.mock("#lib/api/report-image.remote.js", () => ({ drawReportPanelImage: () => Promise.resolve("") }));
 
 vi.mock("#lib/api/generated/foods.generated.remote.js", () => ({
   getFoods: () => remoteQuery(() => []),
@@ -21,16 +21,18 @@ vi.mock("#lib/api/generated/foods.generated.remote.js", () => ({
 }));
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
-  getCustomReportCatalogue: () => remoteQuery(() => catalogue),
-  getCustomReportTemplates: () => remoteQuery(() => [statisticsTemplate]),
+  getCustomReportCatalogue: () => remoteQuery(() => liveCatalogue),
   getCustomReports: () => remoteQuery(() => []),
   runCustomReport: remoteCommand((arg) => {
-    calls.runs.push(arg);
-    return respond((arg as { spec: Record<string, unknown> }).spec);
+    const run = arg as { spec: Spec };
+    calls.runs.push(run);
+    return runOf(run.spec as unknown as Record<string, unknown>);
   }),
   createCustomReport: remoteCommand((arg) => {
-    calls.creates.push(arg);
-    return { id: "new-id", name: "Saved" };
+    const request = arg as { name: string; spec: Spec };
+    if (refusal) return Promise.reject(refusal);
+    calls.creates.push(request);
+    return { id: "new-id", name: request.name };
   }),
 }));
 
@@ -43,132 +45,124 @@ vi.mock("$app/navigation", () => ({
 
 import NewCustomReportPage from "./+page.svelte";
 
-const lastRun = () => calls.runs.at(-1) as { spec: { title?: string; panels: { dataset: Record<string, unknown> }[] } };
+const layerIds = (spec: Spec) => spec.panels.flatMap((p) => (p.tracks ?? []).flatMap((t) => t.layers.map((l) => l.id)));
 
-describe("the report builder on a new report", () => {
-  beforeEach(() => {
+async function start(question: string) {
+  render(NewCustomReportPage, {});
+  await page.getByText(question, { exact: true }).click();
+  await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+  await vi.waitFor(() => expect(calls.runs.length).toBeGreaterThan(0));
+}
+
+async function save(name: string) {
+  await page.getByTestId("save-trigger").click();
+  await page.getByLabelText("Name", { exact: true }).fill(name);
+  await page.getByRole("button", { name: "Save the report" }).click();
+}
+
+describe("a new custom report", () => {
+  beforeEach(async () => {
     calls.runs.length = 0;
     calls.creates.length = 0;
     calls.gotos.length = 0;
-    catalogue = structuredClone(fixtureCatalogue);
-    respond = (spec) => ({ result: resultFor(spec, statTilesResult()), spec, errors: [] });
+    refusal = null;
     pageState.data = {};
+    await page.viewport(1280, 900);
   });
 
-  it("opens a template, previews it, and saves it under a name", async () => {
+  it("starts with the questions, grouped, and a blank report", async () => {
     render(NewCustomReportPage, {});
 
-    await page.getByRole("button", { name: /Statistics/ }).click();
+    await expect.element(page.getByRole("heading", { name: "Start with a question" })).toBeVisible();
+    await expect.element(page.getByRole("heading", { name: "Lows and highs" })).toBeVisible();
+    await expect.element(page.getByText("Is there a dawn rise?", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Blank report", { exact: true })).toBeVisible();
+    expect(calls.runs).toEqual([]);
+  });
 
-    await vi.waitFor(() => expect(calls.runs.length).toBeGreaterThan(0));
-    expect(lastRun().spec).toMatchObject({ title: "Two weeks", panels: [{ id: "p1", dataset: { name: "glucose_statistics" } }] });
-    await expect.element(page.getByText("72.4")).toBeVisible();
+  it("opens a question in the workspace and previews its chart", async () => {
+    await start("Is there a dawn rise?");
 
-    const name = page.getByLabelText("Name", { exact: true });
-    await expect.element(name).toHaveValue("Two weeks");
-    await name.fill("Fortnight");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    expect(layerIds(calls.runs[0].spec)).toEqual(["glucoseWide", "glucose", "target"]);
+    await expect.element(page.getByTestId("chart-caption")).toHaveTextContent("over a typical day");
+    await expect.element(page.getByTestId("chart-preview").getByTestId("report-layered-chart")).toBeVisible();
+    // The chips name the layers, so the chart's own legend is left out.
+    expect(page.getByTestId("chart-preview").getByTestId("report-legend").elements()).toHaveLength(0);
+  });
+
+  it("runs the preview again when a signal is taken off the chart", async () => {
+    await start("Is there a dawn rise?");
+    const before = calls.runs.length;
+
+    await page.getByTestId("signal-rail").getByRole("button", { name: "Target range" }).click();
+
+    await vi.waitFor(() => expect(calls.runs.length).toBeGreaterThan(before), { timeout: 3000 });
+    expect(layerIds(calls.runs.at(-1)!.spec)).toEqual(["glucoseWide", "glucose"]);
+  });
+
+  it("disables a control that cannot be used now, and says why beside it", async () => {
+    await start("Is there a dawn rise?");
+    await page.getByRole("radio", { name: "One against another" }).click();
+    const rail = page.getByTestId("signal-rail");
+    await rail.getByRole("button", { name: "Insulin", exact: true }).click();
+    await rail.getByRole("button", { name: "Insulin on board" }).click();
+    await rail.getByRole("button", { name: "Food", exact: true }).click();
+
+    const reason = page.getByText("This view shows two signals. Remove one first.").first();
+    await expect.element(reason).toBeVisible();
+    const id = reason.element().id;
+    const blocked = rail.getByRole("button", { name: "Carbs on board" });
+    await expect.element(blocked).toBeDisabled();
+    expect(blocked.element().getAttribute("aria-describedby")).toBe(id);
+  });
+
+  it("saves the spec with the workspace's state, then opens the saved report", async () => {
+    await start("Is there a dawn rise?");
+    await save("Dawn");
 
     await vi.waitFor(() => expect(calls.creates).toHaveLength(1));
-    expect(calls.creates[0]).toMatchObject({ name: "Fortnight", spec: { title: "Two weeks", version: 1 } });
+    const { name, spec } = calls.creates[0];
+    expect(name).toBe("Dawn");
+    expect(layerIds(spec)).toEqual(["glucoseWide", "glucose", "target"]);
+    expect(spec.builder).toMatchObject({ kind: BUILDER_KIND, version: BUILDER_VERSION, state: { rangeHours: 336 } });
     await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/new-id"]));
   });
 
-  it("starts blank and adds panels up to the most a report holds, then says why it cannot add more", async () => {
-    catalogue.maxPanels = 2;
-    render(NewCustomReportPage, {});
-    await page.getByRole("button", { name: /Blank/ }).click();
-    await expect.element(page.getByText("This report has no panels. Add a panel to start.")).toBeVisible();
+  it("shows the engine's refusal beside Save, and stays", async () => {
+    refusal = { status: 400, body: { message: "The builder state is too large. It can be at most 32 kB." } };
+    await start("Is there a dawn rise?");
+    await save("Dawn");
 
-    const add = page.getByTestId("add-panel");
-    await add.click();
-    await add.click();
-
-    await expect.element(page.getByTestId("panel-card").nth(1)).toBeVisible();
-    await expect.element(add).toBeDisabled();
-    await expect.element(page.getByTestId("panel-limit")).toHaveTextContent("A report can have at most 2 panels.");
+    await expect.element(page.getByRole("alert")).toHaveTextContent("The builder state is too large.");
+    expect(calls.gotos).toEqual([]);
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
   });
 
-  it("draws a form control for every kind of setting the catalogue gives", async () => {
-    render(NewCustomReportPage, {});
-    await page.getByRole("button", { name: /Blank/ }).click();
-    await page.getByTestId("add-panel").click();
+  it("moves the report to the form after a confirm, and saves it from there without the state", async () => {
+    await start("Is there a dawn rise?");
 
-    await page.getByLabelText("Panel type").click();
-    await page.getByRole("option", { name: "Statistics tiles" }).click();
-    await page.getByLabelText("Data").click();
-    await page.getByRole("option", { name: /Every setting/ }).click();
+    await page.getByRole("button", { name: "All settings" }).click();
+    await expect.element(page.getByTestId("report-spec")).toHaveTextContent('"glucoseWide"');
+    await page.getByTestId("change-in-form").click();
+    await expect.element(page.getByRole("alertdialog")).toHaveTextContent("it cannot open in the question builder again");
+    await page.getByRole("alertdialog").getByRole("button", { name: "Change in the form" }).click();
 
-    await vi.waitFor(() => {
-      const drawn = new Set(
-        [...page.getByTestId("panel-card").element().querySelectorAll("[data-control]")].map((e) => e.getAttribute("data-control")),
-      );
-      for (const control of ["list", "toggles", "foods", "switch", "number", "select", "time", "group", "text", "date", "food-category"])
-        expect(drawn, control).toContain(control);
-      expect(drawn).not.toContain("none");
-    });
+    await expect.element(page.getByTestId("report-workspace")).not.toBeInTheDocument();
+    await expect.element(page.getByTestId("track-section").first()).toBeVisible();
+    await page.getByLabelText("Name", { exact: true }).fill("Dawn in the form");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
 
-    await page.getByRole("switch", { name: "Exclude illness" }).click();
-    await vi.waitFor(() => expect(lastRun().spec.panels[0].dataset).toMatchObject({ name: "every_shape", p3: false }), { timeout: 3000 });
+    await vi.waitFor(() => expect(calls.creates).toHaveLength(1));
+    expect(calls.creates[0].name).toBe("Dawn in the form");
+    expect(calls.creates[0].spec.builder).toBeUndefined();
   });
 
-  it("puts the validator's message under the setting it names", async () => {
-    respond = (spec) => ({
-      result: undefined,
-      spec,
-      errors: [{ path: "panels[0].dataset.p4", message: "Send a whole number, 1 to 60." }],
-    });
-    render(NewCustomReportPage, {});
-    await page.getByRole("button", { name: /Blank/ }).click();
-    await page.getByTestId("add-panel").click();
-    await page.getByLabelText("Panel type").click();
-    await page.getByRole("option", { name: "Statistics tiles" }).click();
-    await page.getByLabelText("Data").click();
-    await page.getByRole("option", { name: /Every setting/ }).click();
+  it("goes back to the questions with Start again", async () => {
+    await start("Is there a dawn rise?");
 
-    const field = page.getByTestId("panel-card").element().querySelector('[data-parameter="p4"]') as HTMLElement;
-    await vi.waitFor(() => expect(field.textContent).toContain("Send a whole number, 1 to 60."), { timeout: 3000 });
-    expect(page.getByTestId("panel-card").element().querySelector('[data-parameter="p3"]')?.textContent).not.toContain("Send a whole number");
-    await expect.element(page.getByText("Correct the problems in the report to see the preview.")).toBeVisible();
-  });
+    await page.getByRole("button", { name: "Start again" }).click();
 
-  it("tells a caller with glucose access only what its preview leaves out", async () => {
-    respond = (spec) => {
-      const result = resultFor(spec, statTilesResult());
-      return { result: { ...result, panels: result.panels.map((p) => ({ ...p, omitted: [{ field: "tdd", scope: "treatments.read" }] })) }, spec, errors: [] };
-    };
-    render(NewCustomReportPage, {});
-    await page.getByRole("button", { name: /Statistics/ }).click();
-
-    await expect.element(page.getByText("Not shown, because your access does not include it: Insulin per day.")).toBeVisible();
-
-    await page.getByLabelText("Data").click();
-    await page.getByRole("option", { name: /Treatments/ }).click();
-    await expect.element(page.getByText("Your access does not include this data, so this panel shows nothing.")).toBeVisible();
-  });
-
-  it("draws each panel's own result after a reorder, and no result of an older spec meanwhile", async () => {
-    respond = (spec) => {
-      const result = resultFor(spec, statTilesResult());
-      return {
-        result: { ...result, panels: result.panels.map((p) => ({ ...p, rows: [{ timeInRangePercent: p.id === "p1" ? 11.1 : 22.2 }] })) },
-        spec,
-        errors: [],
-      };
-    };
-    render(NewCustomReportPage, {});
-    await page.getByRole("button", { name: /Blank/ }).click();
-    await page.getByTestId("add-panel").click();
-    await page.getByTestId("add-panel").click();
-    const cards = page.getByTestId("panel-card");
-    await expect.element(cards.nth(0).getByText("11.1")).toBeVisible();
-    await expect.element(cards.nth(1).getByText("22.2")).toBeVisible();
-
-    await page.getByRole("button", { name: "Move panel 2 up" }).click();
-
-    expect(cards.nth(0).element().textContent).not.toContain("11.1");
-    await expect.element(cards.nth(0).getByText("22.2")).toBeVisible();
-    await expect.element(cards.nth(1).getByText("11.1")).toBeVisible();
+    await expect.element(page.getByRole("heading", { name: "Start with a question" })).toBeVisible();
   });
 
   it("tells a member limited to the last 24 hours that it cannot create reports", async () => {
@@ -176,6 +170,6 @@ describe("the report builder on a new report", () => {
     render(NewCustomReportPage, {});
 
     await expect.element(page.getByTestId("clamped-note")).toHaveTextContent("Your access is limited to the last 24 hours. It cannot create reports.");
-    expect(page.getByTestId("report-starts").elements()).toHaveLength(0);
+    expect(page.getByTestId("report-starters").elements()).toHaveLength(0);
   });
 });

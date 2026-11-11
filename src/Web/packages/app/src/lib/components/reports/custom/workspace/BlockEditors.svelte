@@ -78,7 +78,7 @@
   <div class="space-y-3">
     <Input
       variant="title"
-      data-lab-title
+      size="heading"
       aria-label="Title"
       placeholder={PLACEHOLDERS[block.kind]}
       maxlength={report.catalogue.maxTitleLength}
@@ -113,7 +113,7 @@
       </p>
       <ToggleGroup.Root
         type="single"
-        variant="outline"
+        variant="choice"
         size="sm"
         spacing={1}
         class="flex-wrap"
@@ -127,7 +127,6 @@
           <ToggleGroup.Item
             value={s.dataset}
             disabled={s.reason !== null}
-            data-lab-selected
           >
             {s.label}
           </ToggleGroup.Item>
@@ -195,7 +194,7 @@
       </p>
       <ToggleGroup.Root
         type="single"
-        variant="outline"
+        variant="choice"
         size="sm"
         spacing={1}
         class="flex-wrap"
@@ -206,7 +205,7 @@
         }
       >
         {#each report.comparisonPresets as p (p.value)}
-          <ToggleGroup.Item value={p.value} data-lab-selected>
+          <ToggleGroup.Item value={p.value}>
             {p.label}
           </ToggleGroup.Item>
         {/each}

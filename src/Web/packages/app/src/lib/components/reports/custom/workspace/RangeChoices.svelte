@@ -38,7 +38,7 @@
   <ToggleGroup.Root
     {id}
     type="single"
-    variant="outline"
+    variant="choice"
     size="sm"
     spacing={1}
     class="flex-wrap"
@@ -50,7 +50,6 @@
       <ToggleGroup.Item
         value={option.id}
         disabled={option.reason !== null && option.id !== value}
-        data-lab-selected
       >
         {option.label}
       </ToggleGroup.Item>

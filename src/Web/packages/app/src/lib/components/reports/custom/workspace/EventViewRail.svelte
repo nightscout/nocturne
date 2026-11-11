@@ -54,7 +54,7 @@
     <ToggleGroup.Root
       type="single"
       orientation="vertical"
-      variant="outline"
+      variant="choice"
       size="sm"
       spacing={1}
       class="w-full flex-col items-stretch"
@@ -62,7 +62,7 @@
       bind:value={() => value, (v: string) => v && pick(v)}
     >
       {#each choices as c (c.id)}
-        <ToggleGroup.Item value={c.id} class="justify-start" data-lab-selected>
+        <ToggleGroup.Item value={c.id} class="justify-start">
           {c.label}
         </ToggleGroup.Item>
       {/each}
@@ -74,14 +74,18 @@
   {#if ws.show === "each"}
     {@render list("rail-up", "Up", ws.upChoices, ws.up, pickUp)}
     {@render list("rail-along", "Along", ws.alongChoices, ws.along, pickAlong)}
-    <div class="flex items-center gap-2 px-2">
-      <Switch
-        id="rail-fit"
-        checked={ws.event.fit}
-        onCheckedChange={(on: boolean) => ws.setEvent({ fit: on })}
-      />
-      <Label for="rail-fit" variant="option">Line through the points</Label>
-    </div>
+    {#if ws.fitApplies}
+      <div class="flex items-center gap-2 px-2">
+        <Switch
+          id="rail-fit"
+          checked={ws.event.fit}
+          onCheckedChange={(on: boolean) => ws.setEvent({ fit: on })}
+        />
+        <Label for="rail-fit" variant="option">Line through the points</Label>
+      </div>
+    {:else}
+      <p class="px-2 text-xs text-muted-foreground" data-testid="no-fit">No line along the time of day</p>
+    {/if}
   {:else if ws.show === "spread"}
     {@render list("rail-figure", "Figure", ws.figureChoices, ws.figure, pickFigure)}
   {:else if ws.show === "when"}
