@@ -9,12 +9,15 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
   import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { PatientRelationship } from "#lib/api/index.js";
   import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
   import { hubPaintingStop, HUB_PAINTING_STOPS } from "#lib/setup-hub/items.svelte.js";
   import SetupChrome from "../SetupChrome.svelte";
   import HubPainting from "./HubPainting.svelte";
   import HubItemRow from "./HubItemRow.svelte";
   import HubBasics from "./HubBasics.svelte";
+  import HubRecipientQuestion from "./HubRecipientQuestion.svelte";
+  import HubStepDown from "./HubStepDown.svelte";
 
   const hubQuery = getSetupHub();
   const relationshipQuery = getPatientRelationship();
@@ -22,6 +25,11 @@
   const hub = $derived(hubQuery.current);
   const voice = $derived(patientVoice(relationshipQuery.current));
   const complete = $derived(hub !== undefined && hub.openCount === 0);
+  const handover = $derived(hub?.handover);
+  const isRecipient = $derived(!!handover && !handover.callerIsHelper);
+  const recipientToAnswer = $derived(isRecipient && !handover?.recipientAnswered);
+  /** Setting it up for someone else is the helper's answer, never the recipient's. */
+  const RECIPIENT_ANSWERS = [PatientRelationship.Self, PatientRelationship.Caregiver];
 
   /** How long the wash over the finished painting holds before the card collapses. */
   const WASH_MS = 3200;
@@ -125,7 +133,9 @@
         </div>
         <div class="relative flex flex-col gap-2 px-6 pb-6">
           <h1 class="font-brand font-hairline text-3xl leading-tight @xl:text-4xl">
-            {#if voice.kind === "self"}
+            {#if recipientToAnswer}
+              {handover?.helperName} set up <em class="not-italic font-light text-primary">Nocturne</em> for you.
+            {:else if voice.kind === "self"}
               Make Nocturne <em class="not-italic font-light text-primary">yours</em>.
             {:else if voice.kind === "named"}
               Set Nocturne up for <em class="not-italic font-light text-primary">{voice.name}</em>.
@@ -133,6 +143,11 @@
               Finish setting up <em class="not-italic font-light text-primary">Nocturne</em>.
             {/if}
           </h1>
+          {#if recipientToAnswer}
+            <p class="text-sm text-muted-foreground" data-testid="hub-handover">
+              A few things only you can decide.
+            </p>
+          {/if}
           {#if hub}
             <p class="text-sm text-muted-foreground" data-testid="hub-progress">
               {hub.resolvedCount} of {hub.totalCount} set up. Each of these is optional: do what
@@ -143,6 +158,10 @@
           {/if}
         </div>
       </Card.Root>
+    {/if}
+
+    {#if recipientToAnswer}
+      <HubRecipientQuestion offered={RECIPIENT_ANSWERS} />
     {/if}
 
     <Card.Root size="flush">
@@ -163,7 +182,15 @@
       {/if}
     </Card.Root>
 
-    <HubBasics {voice} />
+    {#if handover?.canStepDown}
+      <HubStepDown />
+    {/if}
+
+    <HubBasics
+      {voice}
+      unanswered={recipientToAnswer}
+      offered={isRecipient ? RECIPIENT_ANSWERS : undefined}
+    />
 
     <div class="flex justify-end">
       <Button variant="outline" href={resolve("")}>

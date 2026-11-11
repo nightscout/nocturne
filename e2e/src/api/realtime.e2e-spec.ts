@@ -120,8 +120,7 @@ describe("realtime data hub", () => {
     expect(storage([created]).doc?._id).toBe(rest!._id);
   });
 
-  // Bug #1809: a re-upload refused by the user's delete still broadcasts a create. Flip to `it` once fixed.
-  it.fails("pushes no create when an uploader re-sends a treatment the user deleted", async () => {
+  it("pushes no create when an uploader re-sends a treatment the user deleted", async () => {
     const upload = [{ eventType: "Correction Bolus", insulin: 0.65, created_at: minutesAgo(35), enteredBy: "loop://e2e-iphone", syncIdentifier: randomUUID() }];
     const isThis = (a: unknown[]) => storage(a).colName === "treatments" && storage(a).doc?.insulin === 0.65;
     await tenant.api.ok("POST", "/api/v1/treatments", upload);

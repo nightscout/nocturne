@@ -9,10 +9,10 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data.Entities;
 using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 
 namespace Nocturne.API.Controllers.Authentication;
@@ -146,7 +146,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Handle OIDC callback from provider.
-    /// Exchanges authorization code for tokens and creates session.
+    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page, and a missing <c>code</c> or <c>state</c> returns 400.
     /// </summary>
     /// <param name="code">Authorization code from provider.</param>
     /// <param name="state">State parameter for CSRF verification.</param>
@@ -257,7 +257,7 @@ public class OidcController : ControllerBase
                 result.ErrorDescription
             );
 
-            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectId: null, success: false,
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
                 ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
                 errorMessage: result.ErrorDescription,
                 detailsJson: JsonSerializer.Serialize(new { method = "oidc" }));
@@ -488,7 +488,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Refresh the session tokens.
-    /// Uses the refresh token to get a new access token.
+    /// Uses the refresh token to get a new access token. The refresh token is read from the cookie or the <c>Refresh</c> Authorization header. A failed refresh returns 401 and leaves cookies unchanged.
     /// </summary>
     /// <returns>A new <see cref="OidcTokenResponse"/> with rotated tokens.</returns>
     /// <remarks>
@@ -544,7 +544,7 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Logout and revoke the session.
+    /// Logout and revoke the session. Clears all session cookies and revokes the refresh token if one is present. When <c>providerId</c> names a provider that supports RP-initiated logout, the response includes a provider logout URL.
     /// </summary>
     /// <param name="providerId">Provider ID for RP-initiated logout (optional).</param>
     /// <returns>A <see cref="LogoutResponse"/> indicating success and an optional provider logout URL.</returns>
@@ -619,6 +619,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Get current session information including authentication status, roles, and permissions.
+    /// An unauthenticated request returns 200 with <c>IsAuthenticated</c> false rather than 401.
     /// </summary>
     /// <returns>A <see cref="SessionInfo"/> describing the current session state.</returns>
     /// <remarks>

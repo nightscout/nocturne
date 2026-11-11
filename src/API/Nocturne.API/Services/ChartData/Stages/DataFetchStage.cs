@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Treatments;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
@@ -50,7 +49,6 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <seealso cref="ChartDataContext"/>
 internal sealed class DataFetchStage(
     ISensorGlucoseRepository sensorGlucoseRepository,
-    ICanonicalGlucoseService canonicalGlucose,
     IBolusRepository bolusRepository,
     ICarbIntakeRepository carbIntakeRepository,
     IBGCheckRepository bgCheckRepository,
@@ -81,10 +79,9 @@ internal sealed class DataFetchStage(
 
         // Calculate reasonable limits based on the actual time range
         var rangeHours = (endTime - startTime) / (60.0 * 60 * 1000);
-        // 3 sensors × 60 readings/hour (1-minute resolution) = 4 320 for a 24-hour window.
-        // Covers the realistic worst case of multiple simultaneous high-frequency sources
-        // without removing the limit entirely.
-        var entryLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 3 * 60));
+        // The canonical read returns one stream per bucket: twice a 1-minute stream's 60 readings an
+        // hour leaves room for a denser uploader without removing the limit entirely.
+        var entryLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 2 * 60));
         // Treatments are less frequent but include the buffer window
         var bufferMs = startTime - bufferStartTime;
         var treatmentRangeHours = (endTime - (startTime - bufferMs)) / (60.0 * 60 * 1000);
@@ -95,20 +92,17 @@ internal sealed class DataFetchStage(
         // stream, not blended concurrent CGMs.
         var sensorGlucoseTask = FetchCanonicalGlucoseAsync();
         async Task<List<SensorGlucose>> FetchCanonicalGlucoseAsync() =>
-            (
-                await canonicalGlucose.SelectAsync(
-                    (await sensorGlucoseRepository.GetForAnalyticsAsync(
-                        from: MillsToDateTime(startTime),
-                        to: MillsToDateTime(endTime),
-                        device: null,
-                        source: null,
-                        limit: entryLimit,
-                        offset: 0,
-                        descending: true,
-                        ct: cancellationToken
-                    )).ToList(),
-                    cancellationToken)
-            ).ToList();
+            (await sensorGlucoseRepository.GetForAnalyticsAsync(
+                from: MillsToDateTime(startTime),
+                to: MillsToDateTime(endTime),
+                device: null,
+                source: null,
+                limit: entryLimit,
+                offset: 0,
+                descending: true,
+                ct: cancellationToken,
+                streams: GlucoseStreams.Canonical
+            )).ToList();
 
         // Fetch bolus data from v4 Bolus table — extended range for IOB calculation
         var bolusTask = bolusRepository.GetAsync(

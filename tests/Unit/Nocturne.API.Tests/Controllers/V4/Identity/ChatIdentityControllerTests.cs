@@ -11,6 +11,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
 
@@ -42,6 +43,7 @@ public class ChatIdentityControllerTests : IDisposable
             new ChatIdentityPendingLinkService(
                 _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             _db.ContextFactory.AsNocturneFactory(),
+            new TenantRepository(_db.ContextFactory.AsNocturneFactory()),
             TimeProvider.System, Mock.Of<ILogger<ChatIdentityService>>());
 
         _tenantId = NewTenant();

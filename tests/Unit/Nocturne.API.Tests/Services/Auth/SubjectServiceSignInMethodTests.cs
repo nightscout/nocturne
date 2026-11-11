@@ -7,6 +7,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -26,7 +28,7 @@ public class SubjectServiceSignInMethodTests : IDisposable
     {
         _db = TestDbContextFactory.CreateInMemoryContext();
         _service = new SubjectService(
-            _db.AsFactory(),
+            new SubjectRepository(_db.AsFactory()),
             Mock.Of<IAuthAuditService>(),
             _recoveryCodes.Object,
             NullLogger<SubjectService>.Instance

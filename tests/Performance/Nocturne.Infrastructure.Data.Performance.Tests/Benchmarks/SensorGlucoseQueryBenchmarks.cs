@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Performance.Tests.Infrastructure;
 
@@ -32,7 +33,7 @@ public class SensorGlucoseQueryBenchmarks
             .ToListAsync();
         if (ids.Count != RowCount)
             throw new InvalidOperationException($"Expected {RowCount} sensor glucose rows, found {ids.Count}.");
-        await DataSeeder.SeedLinkedRecordsAsync(ctx, _tenantId, "sensorglucose", ids, 0.01);
+        await DataSeeder.SeedLinkedRecordsAsync(ctx, _tenantId, RecordType.SensorGlucose, ids, 0.01);
     }
 
     [GlobalCleanup]

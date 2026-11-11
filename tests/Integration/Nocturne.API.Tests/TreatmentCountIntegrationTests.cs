@@ -10,7 +10,8 @@ namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
 /// The no-filter treatment count adds up every table the legacy projection serves, records, state
-/// spans and profile activations alike, on real PostgreSQL, where the state-span filters run.
+/// spans and profile activations alike, a Meal Bolus once, on real PostgreSQL, where the state-span
+/// filters run.
 /// </summary>
 [Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
@@ -62,21 +63,21 @@ public class TreatmentCountIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
-    public async Task Count_AddsEveryServedTable_TheMealTwice_Issue2981()
+    public async Task Count_AddsEveryServedTable_TheMealOnce()
     {
         var client = CreateAuthenticatedClient();
         await SeedAsync(client);
 
-        (await CountAsync(client)).Should().Be(8);
+        (await CountAsync(client)).Should().Be(7);
     }
 
     [Fact]
-    public async Task Count_InAWindow_AddsOnlyWhatStartsInside_TheMealTwice_Issue2981()
+    public async Task Count_InAWindow_AddsOnlyWhatStartsInside_TheMealOnce()
     {
         var client = CreateAuthenticatedClient();
         await SeedAsync(client);
 
         var since = Uri.EscapeDataString(MinutesAgo(120));
-        (await CountAsync(client, $"?find[created_at][$gte]={since}")).Should().Be(5);
+        (await CountAsync(client, $"?find[created_at][$gte]={since}")).Should().Be(4);
     }
 }

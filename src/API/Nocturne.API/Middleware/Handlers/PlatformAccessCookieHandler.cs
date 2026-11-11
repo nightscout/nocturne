@@ -87,11 +87,8 @@ public class PlatformAccessCookieHandler : IAuthHandler
 
         // Confirm the subject is STILL a platform admin on every request, so clearing the flag
         // ends access on the next request instead of lingering until the grant expires.
-        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(context.RequestAborted);
-        var stillPlatformAdmin = await db.Subjects
-            .Where(s => s.Id == claims.SubjectId)
-            .Select(s => s.IsPlatformAdmin)
-            .FirstOrDefaultAsync();
+        var stillPlatformAdmin = await scope.ServiceProvider.GetRequiredService<ISubjectRepository>()
+            .IsPlatformAdminAsync(claims.SubjectId, context.RequestAborted);
 
         if (!stillPlatformAdmin)
         {

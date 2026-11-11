@@ -24,6 +24,7 @@ using Nocturne.Core.Models;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -63,6 +64,8 @@ public class MetadataPublisherTests
 
     private MetadataPublisher CreatePublisher()
     {
+        var contexts = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase($"metadata-publisher-{Guid.NewGuid():N}").Options).AsFactory();
         return new MetadataPublisher(
             _mockProfileDataService.Object,
             _mockFoodService.Object,
@@ -76,8 +79,8 @@ public class MetadataPublisherTests
             Mock.Of<IHeartRateService>(),
             _mockTenantOwnerResolver.Object,
             _mockTenantAccessor.Object,
-            new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseInMemoryDatabase($"metadata-publisher-{Guid.NewGuid():N}").Options).AsFactory(),
+            new ActivityDedupRepository(contexts),
+            new ConnectorConfigurationRepository(contexts),
             Mock.Of<IProfileActivationRepository>(),
             new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),

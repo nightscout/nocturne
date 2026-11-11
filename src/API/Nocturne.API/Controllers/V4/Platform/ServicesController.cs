@@ -290,7 +290,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("data-sources/demo")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteDemoData(
@@ -326,7 +326,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("data-sources/{id}")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -406,7 +406,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("connectors/{id}/data")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus", "GetConnectorDataSummary"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "ConnectorStatus_GetStatus", "GetConnectorDataSummary"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(409)]
@@ -489,6 +489,7 @@ public class ServicesController : ControllerBase
 
     /// <summary>
     /// Reset a connector's sync cursor for the current tenant and re-pull historical data.
+    /// Re-ingested records are deduplicated. The request runs synchronously: a full-history re-pull can take minutes and may exceed proxy or browser timeouts, so limit it with <c>from</c> or <c>dataTypes</c>.
     /// </summary>
     /// <remarks>
     /// Nocturne does not persist a sync cursor — each data type resumes from the latest record

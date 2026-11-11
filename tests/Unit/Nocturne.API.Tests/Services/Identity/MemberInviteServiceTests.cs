@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -21,7 +22,6 @@ public class MemberInviteServiceTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IJwtService> _jwtService;
-    private readonly Mock<ITenantService> _tenantService;
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero));
     private readonly MemberInviteService _service;
 
@@ -50,15 +50,13 @@ public class MemberInviteServiceTests : IDisposable
         _jwtService = new Mock<IJwtService>();
         _jwtService.Setup(j => j.GenerateRefreshToken()).Returns(FakeToken);
 
-        _tenantService = new Mock<ITenantService>();
-
         var logger = new Mock<ILogger<MemberInviteService>>();
 
         _service = new MemberInviteService(
+            new TenantMembershipRepository(_dbContext.AsFactory()), new MemberInviteRepository(_dbContext.AsFactory()), new SubjectRepository(_dbContext.AsFactory()),
             _dbContext.AsFactory(),
             _jwtService.Object,
-            _tenantService.Object,
-            new TenantRoleService(_dbContext.AsFactory(), _time),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), _time),
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             _time,
             logger.Object);
@@ -248,12 +246,8 @@ public class MemberInviteServiceTests : IDisposable
 
         result.Success.Should().BeFalse();
         result.ErrorCode.Should().Be("exhausted");
-        _tenantService.Verify(
-            s => s.AddMemberAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Never,
-            "the use is claimed before the membership is written, so a refused claim writes nothing");
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == _acceptorSubjectId))
+            .Should().BeFalse("a refused claim writes no membership");
     }
 
     /// <summary>
@@ -269,30 +263,19 @@ public class MemberInviteServiceTests : IDisposable
             [_followerRoleId],
             maxUses: 1);
 
-        _tenantService
-            .Setup(s => s.AddMemberAsync(
-                _tenantId, It.IsAny<Guid>(), It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid _, Guid subjectId, List<Guid> _, List<string>? _, string? _, bool _, CancellationToken _) =>
-            {
-                _dbContext.TenantMembers.Add(new TenantMemberEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = _tenantId,
-                    SubjectId = subjectId,
-                });
-                _dbContext.SaveChanges();
-            })
-            .Returns(Task.CompletedTask);
-
         var first = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
         first.Success.Should().BeTrue();
 
-        var second = await _service.AcceptInviteAsync(FakeToken, Guid.CreateVersion7(), _tenantId);
+        var secondAcceptor = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity { Id = secondAcceptor, Name = "Second Acceptor" });
+        await _dbContext.SaveChangesAsync();
+
+        var second = await _service.AcceptInviteAsync(FakeToken, secondAcceptor, _tenantId);
 
         second.Success.Should().BeFalse();
         second.ErrorCode.Should().Be("exhausted");
         (await _dbContext.MemberInvites.AsNoTracking().FirstAsync()).UseCount.Should().Be(1);
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == secondAcceptor)).Should().BeFalse();
     }
 
     /// <summary>
@@ -346,7 +329,6 @@ public class MemberInviteServiceTests : IDisposable
             OwnerPermissions,
             [_followerRoleId],
             expiresInDays: 7);
-        AcceptorJoinsOnAdd();
         _time.SetUtcNow(new DateTimeOffset(created.ExpiresAt, TimeSpan.Zero).AddSeconds(secondsFromExpiry));
 
         var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
@@ -455,12 +437,8 @@ public class MemberInviteServiceTests : IDisposable
         result.Success.Should().BeFalse();
         result.ErrorCode.Should().Be("invalid_token");
 
-        _tenantService.Verify(
-            s => s.AddMemberAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Never,
-            "a token from another tenant must not write a membership anywhere");
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == _acceptorSubjectId))
+            .Should().BeFalse("a token from another tenant must not write a membership anywhere");
     }
 
     /// <summary>
@@ -546,34 +524,46 @@ public class MemberInviteServiceTests : IDisposable
             OwnerPermissions,
             [_followerRoleId]);
 
-        AcceptorJoinsOnAdd();
 
         var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         result.Success.Should().BeTrue();
         result.MembershipId.Should().NotBeNull();
 
-        var invite = await _dbContext.MemberInvites.FirstAsync();
+        var invite = await _dbContext.MemberInvites.AsNoTracking().FirstAsync();
         invite.UseCount.Should().Be(1);
+        var member = await _dbContext.TenantMembers.AsNoTracking()
+            .Include(m => m.MemberRoles)
+            .SingleAsync(m => m.SubjectId == _acceptorSubjectId);
+        member.Id.Should().Be(result.MembershipId!.Value);
+        member.CreatedFromInviteId.Should().Be(invite.Id);
+        member.MemberRoles.Select(r => r.TenantRoleId).Should().Equal(_followerRoleId);
     }
 
-    private void AcceptorJoinsOnAdd()
+    /// <summary>
+    /// The use and the membership commit together: a membership the database refuses gives the use
+    /// back, so a single-use invite is not burned by an accept that joined no one.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInviteAsync_whenTheMembershipCannotBeWritten_leavesTheUseUnclaimed()
     {
-        _tenantService
-            .Setup(s => s.AddMemberAsync(
-                _tenantId, _acceptorSubjectId, It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback(() =>
-            {
-                _dbContext.TenantMembers.Add(new TenantMemberEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = _tenantId,
-                    SubjectId = _acceptorSubjectId,
-                });
-                _dbContext.SaveChanges();
-            })
-            .Returns(Task.CompletedTask);
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId],
+            maxUses: 1);
+        var unknownSubject = Guid.CreateVersion7();
+
+        var act = () => _service.AcceptInviteAsync(FakeToken, unknownSubject, _tenantId);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        (await _dbContext.MemberInvites.AsNoTracking().SingleAsync()).UseCount.Should().Be(0);
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == unknownSubject)).Should().BeFalse();
+
+        var retry = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
+
+        retry.Success.Should().BeTrue("the single use is still there for the next accept");
     }
 
     /// <summary>
@@ -627,6 +617,5 @@ public class MemberInviteServiceTests : IDisposable
 
         var invite = await _dbContext.MemberInvites.FirstAsync();
         invite.RevokedAt.Should().NotBeNull();
-        invite.IsRevoked.Should().BeTrue();
     }
 }

@@ -28,6 +28,7 @@ public class AlarmAckHandlerTests
             _tenant.Contexts.AsNocturneFactory(),
             _tenant.Accessor,
             Mock.Of<IAlertRepository>(),
+            Mock.Of<IAlertRuleRepository>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<ISensorContextEnricher>(),
             _tenant.Canonical.Object,

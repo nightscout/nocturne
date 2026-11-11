@@ -10,8 +10,22 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.SensorGlucose
 /// </summary>
 [Table("sensor_glucose")]
-public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity
+public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IDuplicateFlagged
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("is_duplicate")]
+    public bool IsDuplicate { get; set; }
+
+    /// <summary>
+    /// Whether another stream won this reading's bucket (<see cref="Core.Models.V4.CanonicalGlucoseStream"/>),
+    /// so canonical reads leave it out. Meaningful on visible rows only (live, not a duplicate); written
+    /// only by <see cref="Extensions.GlucoseStreamFlags"/>.
+    /// </summary>
+    [AuditIgnored]
+    [Column("is_secondary_stream")]
+    public bool IsSecondaryStream { get; set; }
+
     /// <summary>
     /// FK to the patient's registered device record (resolved at ingest time)
     /// </summary>

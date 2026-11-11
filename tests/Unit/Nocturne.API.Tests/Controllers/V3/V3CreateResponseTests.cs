@@ -5,12 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V3;
-using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
@@ -19,6 +16,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Controllers.V3;
 
@@ -73,24 +71,14 @@ public class V3CreateResponseTests
     [Fact]
     public async Task A_devicestatus_create_answers_the_identifier_and_last_modified()
     {
-        var uploaders = new Mock<IUploaderSnapshotRepository>();
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
-        decomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses
+            .Setup(s => s.CreateDeviceStatusesAsync(
+                It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<DeviceStatus> statuses, string? _, WriteOrigin _, CancellationToken _) =>
+                new BulkWrite<DeviceStatus>(statuses, 0));
         var controller = WithContext(new DeviceStatusController(
-            new DeviceStatusProjectionService(
-                Mock.Of<IDeviceStatusGroupRepository>(),
-                Mock.Of<IApsSnapshotRepository>(),
-                Mock.Of<IPumpSnapshotRepository>(),
-                uploaders.Object,
-                Mock.Of<IStateSpanRepository>(),
-                Mock.Of<IDeviceStatusExtrasRepository>(),
-                TimeProvider.System,
-                NullLogger<DeviceStatusProjectionService>.Instance),
-            decomposer.Object,
-            Mock.Of<IWriteSideEffects>(),
-            Mock.Of<IDataEventSink<DeviceStatus>>(),
+            deviceStatuses.Object,
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<DeviceStatusController>.Instance));
 
@@ -144,7 +132,7 @@ public class V3CreateResponseTests
 
         AssertDeduplicated(result, controller);
         service.Verify(
-            s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()),
+            s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -196,8 +184,8 @@ public class V3CreateResponseTests
             .Setup(s => s.GetTreatmentByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         service
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Treatment> t, CancellationToken _) =>
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Treatment> t, WriteOrigin _, CancellationToken _) =>
                 new BulkWrite<Treatment>(t.Select(x => { x.Id = StoredId; return x; }).ToList(), 0));
         var controller = WithContext(new TreatmentsController(
             processing.Object,

@@ -56,7 +56,7 @@ build context holding only `src/Web/packages`, so a member outside it breaks the
 
 | Service | Image | Limits | Notes |
 |---|---|---|---|
-| `postgres` | `postgres:17.6-alpine` | 256 MB, 1 CPU | the production role bootstrap (`docs/postgres/container-init/00-init.sh`); tmpfs data directory, fsync, synchronous commit and full-page writes off |
+| `postgres` | `postgres:17.6-alpine` | 1 GB, 1 CPU | the production role bootstrap (`docs/postgres/container-init/00-init.sh`); tmpfs data directory, fsync, synchronous commit and full-page writes off |
 | `mocks` | `node:24-alpine` + `e2e/mocks` | 96 MB | fake third-party vendors |
 | `api` | `nocturne-api:e2e` | 512 MB, 2 CPUs | the SDK container build, as released; `NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS=true` |
 | `web` | `nocturne-web:e2e` | 320 MB, 1 CPU | `Dockerfile.web`, as released |
@@ -105,7 +105,7 @@ To add a vendor, write a module exporting a `Vendor` and list it in `server.ts`.
 Google Health (`vendors/google-health.ts`) validates authorization-code PKCE, client credentials,
 redirect URIs and one-use codes, serves account identity, refresh/revocation and two pages of
 steps, heart rate, weight and sleep. The stack configures one instance client
-(`GOOGLE_HEALTH_CLIENT_ID`/`_SECRET`) whose redirect URI is the apex of the TLS proxy, so every
+(configured by global setup through the platform-admin settings API) whose redirect URI is the apex of the TLS proxy, so every
 tenant shares it; each consent picks a fake Google account named after the tenant
 (`mock_account`), which keeps tenants' data apart. The browser spec intercepts only Google's
 external consent navigation; the apex callback, its relay to the tenant host, the web callback,

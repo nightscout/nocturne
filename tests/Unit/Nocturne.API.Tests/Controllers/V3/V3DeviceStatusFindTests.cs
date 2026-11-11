@@ -5,16 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V3;
-using Nocturne.API.Services.Devices;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Repositories;
-using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
-using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V3;
@@ -66,35 +61,34 @@ public class V3DeviceStatusFindTests
     }
 
     [Fact]
-    public async Task Search_PushesTheDateWindowAndDeviceToTheStore()
+    public async Task Search_BoundsTheReadByTheDateWindowAndDevice()
     {
         var (_, reads) = await Read("?date$gte=1727658000000&date$lte=1727661600000&device$eq=loop://iPhone");
 
-        reads.Should().OnlyContain(read =>
-            read.From == DateTimeOffset.FromUnixTimeMilliseconds(Start + Hour).UtcDateTime
-            && read.To >= DateTimeOffset.FromUnixTimeMilliseconds(Start + 2 * Hour).UtcDateTime
-            && read.To < DateTimeOffset.FromUnixTimeMilliseconds(Start + 2 * Hour + 1).UtcDateTime
-            && read.Device == "loop://iPhone");
+        reads.Should().ContainSingle().Which.Should().Match<FindQuery>(read =>
+            read.FromMills == Start + Hour
+            && read.ToMills == Start + 2 * Hour
+            && read.GetPushableEquality("device", StringComparison.Ordinal) == "loop://iPhone");
     }
 
     [Fact]
-    public async Task Search_ADeviceEqualityBesideAnotherOperator_StillNarrowsTheStoreToTheDevice()
+    public async Task Search_ADeviceEqualityBesideAnotherOperator_StillBoundsTheReadToTheDevice()
     {
         var (identifiers, reads) = await Read("?device$eq=loop://iPhone&device$ne=loop://iPad");
 
         identifiers.Should().Equal(IPhone);
-        reads.Should().OnlyContain(read => read.Device == "loop://iPhone");
+        reads.Should().OnlyContain(read => read.GetPushableEquality("device", StringComparison.Ordinal) == "loop://iPhone");
     }
 
     [Theory]
     [InlineData("?identifier$eq=" + IPhone)]
     [InlineData("?identifier=" + IPhone)]
-    public async Task Search_AnIdentifierFilter_ResolvesTheStatusByIdWithoutScanningTheStore(string queryString)
+    public async Task Search_AnIdentifierFilter_ReadsTheStatusById(string queryString)
     {
         var (identifiers, reads) = await Read(queryString);
 
         identifiers.Should().Equal(IPhone);
-        reads.Should().BeEmpty();
+        reads.Should().ContainSingle().Which.GetEqualityValues("_id").Should().Equal(IPhone);
     }
 
     [Fact]
@@ -103,7 +97,7 @@ public class V3DeviceStatusFindTests
         var (identifiers, reads) = await Read(QueryString.Create("filter", $$"""{"identifier":"{{Phone}}"}""").Value!);
 
         identifiers.Should().Equal(Phone);
-        reads.Should().BeEmpty();
+        reads.Should().ContainSingle().Which.GetEqualityValues("_id").Should().Equal(Phone);
     }
 
     [Fact]
@@ -159,81 +153,41 @@ public class V3DeviceStatusFindTests
         (IPad, "loop://iPad", Start + 3 * Hour),
     ];
 
-    private sealed record StoreRead(DateTime? From, DateTime? To, string? Device);
-
-    private static async Task<(List<string> Identifiers, List<StoreRead> Reads)> Read(string queryString)
+    /// <summary>
+    /// Searches through a device status service that matches the find the controller passes against
+    /// each stored status's wire shape.
+    /// </summary>
+    private static async Task<(List<string> Identifiers, List<FindQuery> Reads)> Read(string queryString)
     {
-        var groups = Stored
-            .Select(s => new DeviceStatusGroup(
-                new ApsSnapshot
-                {
-                    Id = Guid.NewGuid(),
-                    LegacyId = s.Id,
-                    Device = s.Device,
-                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(s.Mills).UtcDateTime,
-                    CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds(s.Mills).UtcDateTime,
-                    ModifiedAt = DateTimeOffset.FromUnixTimeMilliseconds(s.Mills).UtcDateTime,
-                    AidAlgorithm = AidAlgorithm.OpenAps,
-                },
-                null,
-                null,
-                null,
-                DateTimeOffset.FromUnixTimeMilliseconds(s.Mills).UtcDateTime))
+        var statuses = Stored
+            .Select(s => new DeviceStatus
+            {
+                Id = s.Id,
+                Device = s.Device,
+                Mills = s.Mills,
+                Date = s.Mills,
+                CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds(s.Mills).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            })
             .ToList();
 
-        IEnumerable<DeviceStatusGroup> InWindow(DateTime? from, DateTime? to, string? device) => groups.Where(g =>
-            (from is null || g.Aps!.Timestamp >= from)
-            && (to is null || g.Aps!.Timestamp <= to)
-            && (device is null || g.Aps!.Device == device));
-
-        var reads = new List<StoreRead>();
-        var store = new Mock<IDeviceStatusGroupRepository>();
-        store
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken _) =>
+        var reads = new List<FindQuery>();
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses
+            .Setup(s => s.GetDeviceStatusesAsync(
+                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<ReadSortField>()))
+            .ReturnsAsync((FindQuery find, int count, int skip, CancellationToken _, bool descending, ReadSortField _) =>
             {
-                reads.Add(new StoreRead(from, to, device));
-                var window = InWindow(from, to, device);
-                return (descending ? window.OrderByDescending(g => g.Aps!.Timestamp) : window.OrderBy(g => g.Aps!.Timestamp))
-                    .Skip(offset)
-                    .Take(limit)
+                reads.Add(find);
+                var matching = statuses.Where(find.Matches);
+                return (descending ? matching.OrderByDescending(s => s.Mills) : matching.OrderBy(s => s.Mills))
+                    .Skip(skip)
+                    .Take(count)
                     .ToList();
             });
-        store
-            .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((long cursor, int limit, CancellationToken _) => groups
-                .Where(g => new DateTimeOffset(g.ModifiedAt).ToUnixTimeMilliseconds() > cursor)
-                .OrderBy(g => g.ModifiedAt)
-                .Take(limit)
-                .Select(g => new HistoryRecord<DeviceStatusGroup>(g, false))
-                .ToList());
-
-        var snapshots = new Mock<IApsSnapshotRepository>();
-        snapshots
-            .Setup(r => r.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string id, CancellationToken _) => groups.Select(g => g.Aps!).FirstOrDefault(aps => aps.LegacyId == id));
-
-        var stateSpans = new Mock<IStateSpanRepository>();
-        stateSpans
-            .Setup(r => r.GetByCategory(
-                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
 
         var controller = new DeviceStatusController(
-            new DeviceStatusProjectionService(
-                store.Object,
-                snapshots.Object,
-                Mock.Of<IPumpSnapshotRepository>(),
-                Mock.Of<IUploaderSnapshotRepository>(),
-                stateSpans.Object,
-                Mock.Of<IDeviceStatusExtrasRepository>(),
-                TimeProvider.System,
-                NullLogger<DeviceStatusProjectionService>.Instance),
-            Mock.Of<IDeviceStatusDecomposer>(),
-            Mock.Of<IWriteSideEffects>(),
-            Mock.Of<IDataEventSink<DeviceStatus>>(),
+            deviceStatuses.Object,
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<DeviceStatusController>.Instance)
         {

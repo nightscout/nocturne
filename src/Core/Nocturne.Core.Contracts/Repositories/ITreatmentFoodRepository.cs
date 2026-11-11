@@ -31,6 +31,11 @@ public interface ITreatmentFoodRepository
         TreatmentFood entry,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Creates food breakdown entries in one save.</summary>
+    Task CreateManyAsync(
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Update a food breakdown entry.
     /// </summary>
@@ -62,6 +67,16 @@ public interface ITreatmentFoodRepository
     /// </summary>
     Task<int> DeleteByFoodIdAsync(
         Guid foodId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Hard-deletes the breakdowns of <paramref name="carbIntakeIds"/> and writes
+    /// <paramref name="entries"/> in their place in one transaction. For the sample-data seeder's idempotent
+    /// re-seed only.
+    /// </summary>
+    Task ReplaceForCarbIntakesAsync(
+        IReadOnlyCollection<Guid> carbIntakeIds,
+        IReadOnlyCollection<TreatmentFood> entries,
         CancellationToken cancellationToken = default);
 
     /// <summary>

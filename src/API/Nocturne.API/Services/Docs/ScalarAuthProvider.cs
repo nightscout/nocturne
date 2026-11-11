@@ -1,15 +1,11 @@
-using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Docs;
 
@@ -74,40 +70,38 @@ public sealed class ScalarAuthProvider
     /// </remarks>
     internal const int MaxRedirectUris = 5;
 
-    private const int ClientLockClass = 0x4E53_434C;
-
     // Matches the tenant-resolution and public-access caches: long enough to keep the
     // docs page off the database, short enough that a demo reset heals within a couple
     // of minutes.
     private static readonly TimeSpan ClientCacheTtl = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan DemoTokenCacheTtl = TimeSpan.FromMinutes(10);
 
-    private readonly INocturneDbContextFactory _factory;
+    private readonly IOAuthClientRepository _clients;
+    private readonly ITenantRepository _tenants;
     private readonly DemoTenantService _demoTenantService;
     private readonly ISessionService _sessionService;
     private readonly RedirectUriValidator _redirectUriValidator;
     private readonly IMemoryCache _cache;
     private readonly BaseDomainOptions _baseDomain;
-    private readonly TimeProvider _time;
     private readonly ILogger<ScalarAuthProvider> _logger;
 
     public ScalarAuthProvider(
-        INocturneDbContextFactory factory,
+        IOAuthClientRepository clients,
+        ITenantRepository tenants,
         DemoTenantService demoTenantService,
         ISessionService sessionService,
         RedirectUriValidator redirectUriValidator,
         IMemoryCache cache,
         IOptions<BaseDomainOptions> baseDomain,
-        TimeProvider timeProvider,
         ILogger<ScalarAuthProvider> logger)
     {
-        _factory = factory;
+        _clients = clients;
+        _tenants = tenants;
         _demoTenantService = demoTenantService;
         _sessionService = sessionService;
         _redirectUriValidator = redirectUriValidator;
         _cache = cache;
         _baseDomain = baseDomain.Value;
-        _time = timeProvider;
         _logger = logger;
     }
 
@@ -276,25 +270,12 @@ public sealed class ScalarAuthProvider
         if (_cache.TryGetValue(cacheKey, out ResolvedDocsTenant? cached) && cached is not null)
             return cached;
 
-        await using var db = await _factory.CreatePlatformAsync(ct);
+        var tenant = slug is null
+            ? await _tenants.FindSoleTenantAsync(ct)
+            : await _tenants.FindBySlugAsync(slug, ct) is { IsActive: true } bySlug ? bySlug : null;
 
-        TenantEntity? tenant;
-        if (slug is null)
-        {
-            tenant = await db.Set<TenantEntity>().SoleTenantAsync(ct);
-
-            if (tenant is null)
-                return null;
-        }
-        else
-        {
-            tenant = await db.Set<TenantEntity>()
-                .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive, ct);
-
-            if (tenant is null)
-                return null;
-        }
+        if (tenant is null)
+            return null;
 
         var resolved = new ResolvedDocsTenant(
             tenant.Id,
@@ -340,8 +321,8 @@ public sealed class ScalarAuthProvider
     /// <paramref name="redirectUri"/> must already be validated: it is persisted as an
     /// allowed OAuth redirect target, and authorize-time matching is byte-exact.
     /// <para>
-    /// The find-or-create holds a per-tenant advisory lock, since no unique index keeps two first
-    /// requests from each inserting a row.
+    /// The find-or-create is serialised per tenant by
+    /// <see cref="IOAuthClientRepository.FindOrCreateWithRedirectUriAsync"/>.
     /// </para>
     /// <para>
     /// <c>IsKnown</c> is taken from the bundled directory rather than asserted. The
@@ -357,71 +338,33 @@ public sealed class ScalarAuthProvider
         if (_cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
             return cached;
 
-        await using var db = await _factory.CreateForTenantAsync(tenantId, ct);
+        var registration = await _clients.FindOrCreateWithRedirectUriAsync(
+            tenantId,
+            new NewOAuthClient(
+                ClientId: Guid.CreateVersion7().ToString(),
+                SoftwareId: ScalarSoftwareId,
+                ClientName: ClientName,
+                ClientUri: null,
+                LogoUri: null,
+                DisplayName: ClientName,
+                IsKnown: KnownOAuthClients.MatchBySoftwareId(ScalarSoftwareId) is not null,
+                RedirectUris: []),
+            redirectUri,
+            MaxRedirectUris,
+            ct);
 
-        var clientId = await db.ExecuteInTransactionAsync<string?>(async token =>
+        // Each distinct origin this instance is served on adds one entry. A real deployment has
+        // one or two; the cap keeps an unauthenticated caller from growing the row without bound.
+        if (!registration.Registered)
         {
-            await db.LockForTransactionAsync(ClientLockClass, tenantId, token);
-
-            var client = await db.OAuthClients
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.SoftwareId == ScalarSoftwareId, token);
-
-            if (client is null)
-            {
-                client = new OAuthClientEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    ClientId = Guid.CreateVersion7().ToString(),
-                    SoftwareId = ScalarSoftwareId,
-                    ClientName = ClientName,
-                    DisplayName = ClientName,
-                    IsKnown = KnownOAuthClients.MatchBySoftwareId(ScalarSoftwareId) is not null,
-                    RedirectUris = JsonSerializer.Serialize(new[] { redirectUri }),
-                };
-                db.OAuthClients.Add(client);
-                await db.SaveChangesAsync(token);
-                return client.ClientId;
-            }
-
-            var registered = DeserializeRedirectUris(client.RedirectUris);
-            if (registered.Contains(redirectUri, StringComparer.Ordinal))
-                return client.ClientId;
-
-            // Each distinct origin this instance is served on adds one entry. A real
-            // deployment has one or two; a cap keeps an unauthenticated caller from
-            // growing the row without bound.
-            if (registered.Count >= MaxRedirectUris)
-            {
-                _logger.LogWarning(
-                    "Scalar client for tenant {TenantId} already holds {Count} redirect URIs: not adding another",
-                    tenantId, registered.Count);
-                return null;
-            }
-
-            registered.Add(redirectUri);
-            client.RedirectUris = JsonSerializer.Serialize(registered);
-            client.UpdatedAt = _time.GetUtcNow().UtcDateTime;
-            await db.SaveChangesAsync(token);
-            return client.ClientId;
-        }, ct: ct);
-
-        if (clientId is not null)
-            _cache.Set(cacheKey, clientId, ClientCacheTtl);
-        return clientId;
-    }
-
-    private static List<string> DeserializeRedirectUris(string json)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            _logger.LogWarning(
+                "Scalar client for tenant {TenantId} already holds {Count} redirect URIs: not adding another",
+                tenantId, registration.RedirectUriCount);
+            return null;
         }
-        catch (JsonException)
-        {
-            return [];
-        }
+
+        _cache.Set(cacheKey, registration.ClientId, ClientCacheTtl);
+        return registration.ClientId;
     }
 
     /// <summary>

@@ -11,6 +11,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
@@ -37,7 +38,10 @@ public class OverviewHubAuthorizeTests
 
     private static GlucoseReadTenant Tenant(Guid id) =>
         new(
-            new TenantEntity { Id = id, Slug = id.ToString("N")[..8], DisplayName = "T", IsActive = true },
+            new TenantRecord(Id: id, Slug: id.ToString("N")[..8], DisplayName: "T", IsActive: true, IsDemo: false, AllowAccessRequests: true, AllowPublicDocs: false,
+                OnboardingCompletedAt: null, SetupHubEnrolledAt: null, SetupStripDismissedRevision: null, PatientRelationship: null, HandedOverAt: null,
+                DefaultGlucoseUnits: null, LastReadingAt: null, ShareTokenHash: null, ShareTokenEncrypted: null, ShareTokenSetAt: null,
+                ShareLastAccessedAt: null, SysCreatedAt: DateTime.UtcNow, SysUpdatedAt: DateTime.UtcNow, DemoConfig: null),
             new HashSet<string> { Scope.GlucoseRead },
             MembershipLimitTo24Hours: false,
             new HashSet<string> { Scope.GlucoseRead });

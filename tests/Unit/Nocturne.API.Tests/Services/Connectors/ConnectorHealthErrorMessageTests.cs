@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -57,18 +58,20 @@ public class ConnectorHealthErrorMessageTests : IDisposable
         var encryptionService = new Mock<ISecretEncryptionService>();
         encryptionService.Setup(e => e.IsConfigured).Returns(true);
 
+        var contexts = new TestNocturneDbContextFactory(_dbContext)
+        {
+            Prepare = c => c.SavingChanges += (_, _) => _saved.AddRange(c.ConnectorConfigurations.Local),
+        };
         _service = new ConnectorConfigurationService(
-            new TestNocturneDbContextFactory(_dbContext)
-            {
-                Prepare = c => c.SavingChanges += (_, _) => _saved.AddRange(c.ConnectorConfigurations.Local),
-            },
+            new ConnectorConfigurationRepository(contexts),
+            new SubjectRepository(contexts),
+            new OAuthGrantRepository(contexts),
             encryptionService.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IAuditContext>(),
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
-            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

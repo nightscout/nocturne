@@ -2,27 +2,25 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Caching;
-using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Entries;
 
 /// <summary>
 /// <see cref="IDataEventSink{T}"/> implementation for <see cref="Entry"/> that translates
-/// write lifecycle events (created, updated, deleted, bulk-deleted) into cache invalidation
-/// and <see cref="ISignalRBroadcastService"/> broadcasts via <see cref="IWriteSideEffects"/>.
+/// write lifecycle events (created, updated, deleted, bulk-deleted) into
+/// <see cref="ISignalRBroadcastService"/> broadcasts via <see cref="IWriteSideEffects"/>.
 /// </summary>
 /// <remarks>
-/// Cache invalidation clears the <see cref="EntryCacheAdapter.CacheFamily"/> family, and the eHbA1c
-/// years a written reading reaches (<see cref="OnWrittenAsync"/>), or all of them after a bulk delete.
-/// V4 decomposition is disabled here because <see cref="EntryService"/> writes directly to V4 tables
-/// via <see cref="Nocturne.Core.Contracts.V4.IEntryDecomposer"/> before side effects fire.
+/// The only cache this clears is eHbA1c: the years a written reading reaches (<see cref="OnWrittenAsync"/>),
+/// or all of them after a bulk delete. The entry reads are cleared by
+/// <see cref="Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation"/>.
 /// <c>dataUpdate</c> broadcasts are suppressed on single-record updates to avoid duplicate client refreshes.
 /// </remarks>
 /// <seealso cref="IDataEventSink{T}"/>
 /// <seealso cref="IWriteSideEffects"/>
 /// <seealso cref="EntryService"/>
-public class SignalREntryEventSink : IDataEventSink<Entry>
+internal class SignalREntryEventSink : IDataEventSink<Entry>
 {
     private readonly IWriteSideEffects _sideEffects;
     private readonly ILogger<SignalREntryEventSink> _logger;
@@ -31,7 +29,7 @@ public class SignalREntryEventSink : IDataEventSink<Entry>
     /// <summary>
     /// Initializes a new instance of <see cref="SignalREntryEventSink"/>.
     /// </summary>
-    /// <param name="sideEffects">Orchestrates cache invalidation, broadcasting, and V4 decomposition.</param>
+    /// <param name="sideEffects">Orchestrates cache invalidation and broadcasting.</param>
     /// <param name="logger">The logger instance.</param>
     public SignalREntryEventSink(
         IWriteSideEffects sideEffects,
@@ -43,21 +41,17 @@ public class SignalREntryEventSink : IDataEventSink<Entry>
 
     private WriteEffectOptions BuildWriteOptions() => new()
     {
-        CacheFamiliesToClear = [EntryCacheAdapter.CacheFamily],
-        DecomposeToV4 = false,
         BroadcastDataUpdate = true,
     };
 
     private WriteEffectOptions BuildWriteOptionsNoBroadcastDataUpdate() => new()
     {
-        CacheFamiliesToClear = [EntryCacheAdapter.CacheFamily],
-        DecomposeToV4 = false,
         BroadcastDataUpdate = false,
     };
 
     private WriteEffectOptions BuildCacheOnlyOptions() => new()
     {
-        CacheFamiliesToClear = [EntryCacheAdapter.CacheFamily, TenantCacheFamily.EHbA1c],
+        CacheFamiliesToClear = [TenantCacheFamily.EHbA1c],
     };
 
     public async Task OnCreatedAsync(IReadOnlyList<Entry> entries, CancellationToken ct = default)
@@ -107,18 +101,6 @@ public class SignalREntryEventSink : IDataEventSink<Entry>
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process update side effects for entry {Id}", entry.Id);
-        }
-    }
-
-    public async Task BeforeDeleteAsync(string id, CancellationToken ct = default)
-    {
-        try
-        {
-            await _sideEffects.BeforeDeleteAsync<Entry>(id, BuildWriteOptions(), ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process pre-delete side effects for entry {Id}", id);
         }
     }
 

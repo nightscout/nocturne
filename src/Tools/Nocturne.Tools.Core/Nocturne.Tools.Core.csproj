@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -30,7 +30,6 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions"/>
         <PackageReference Include="MongoDB.Bson"/>
-        <PackageReference Include="System.ComponentModel.Annotations"/>
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Nocturne.Tools.Abstractions\Nocturne.Tools.Abstractions.csproj"/>

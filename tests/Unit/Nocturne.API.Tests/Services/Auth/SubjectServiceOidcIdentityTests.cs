@@ -9,6 +9,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -25,7 +27,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
     {
         _db = TestDbContextFactory.CreateInMemoryContext();
         _service = new SubjectService(
-            _db.AsFactory(),
+            new SubjectRepository(_db.AsFactory()),
             _audit.Object,
             Mock.Of<IRecoveryCodeService>(),
             NullLogger<SubjectService>.Instance

@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
 
@@ -48,6 +49,7 @@ public sealed class GoogleHealthGrantHoldersTests : IDisposable
     private PostgresGoogleHealthGrantHolders Holders() => new(
         provider.GetRequiredService<IServiceScopeFactory>(),
         provider.GetRequiredService<INocturneDbContextFactory>(),
+        new TenantRepository(provider.GetRequiredService<INocturneDbContextFactory>()),
         NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
     private static Func<Dictionary<string, string>> Session(string account) =>

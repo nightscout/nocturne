@@ -46,7 +46,8 @@ public class ConsentApprovalRequest
     public bool Approved { get; set; }
 
     /// <summary>
-    /// When true, limits data access to 24 hours from the grant creation time.
+    /// When true, the grant reads only the last 24 hours of every time-series category, a rolling
+    /// window from now.
     /// </summary>
     [FromForm(Name = "limit_to_24_hours")]
     public bool LimitTo24Hours { get; set; }

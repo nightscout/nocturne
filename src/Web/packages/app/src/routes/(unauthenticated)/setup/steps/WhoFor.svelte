@@ -10,16 +10,19 @@
   interface Props {
     relationship: PatientRelationship | undefined;
     patientName: string;
+    /** The answers offered; all of them by default. */
+    offered?: PatientRelationship[];
     error?: string;
   }
 
   let {
     relationship = $bindable(),
     patientName = $bindable(),
+    offered,
     error,
   }: Props = $props();
 
-  const OPTIONS = [
+  const ALL_OPTIONS = [
     {
       value: PatientRelationship.Self,
       icon: User,
@@ -39,6 +42,9 @@
       description: "I will hand it over to them when it is ready.",
     },
   ];
+  const OPTIONS = $derived(
+    offered ? ALL_OPTIONS.filter((o) => offered.includes(o.value)) : ALL_OPTIONS
+  );
 
   const asksName = $derived(
     relationship !== undefined && relationship !== PatientRelationship.Self
@@ -61,7 +67,7 @@
   </div>
 
   <RadioGroup.Root
-    class="w-full max-w-200 grid-cols-1 gap-5 @xl:grid-cols-3"
+    class="w-full max-w-200 grid-cols-1 gap-5 {OPTIONS.length === 2 ? '@xl:grid-cols-2' : '@xl:grid-cols-3'}"
     aria-labelledby="who-for-heading"
     value={relationship}
     onValueChange={(value) => {

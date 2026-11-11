@@ -22,7 +22,7 @@
   const VISIBLE_DAYS = 14;
 
   const report = useActogramReport("Error loading step count report");
-  const { params: reportsParams, resource: actogramResource } = report;
+  const { resource: actogramResource } = report;
 
   const dayTotals = $derived(actogramResource.current?.stepDayTotals ?? {});
   const noZoneReason = $derived(actogramResource.current?.timeZoneUnavailableReason);
@@ -37,21 +37,14 @@
     (actogramResource.current?.glucoseData ?? []).map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
   );
 
-  // Summary statistics scoped to the selected range, not the padded fetch window
-  const selectedStepCounts = $derived(
-    pointsInRange(
-      actogramResource.current?.stepCounts ?? [],
-      reportsParams.dateRangeMillis.from,
-      reportsParams.dateRangeMillis.to
-    )
-  );
-  const totalSteps = $derived(selectedStepCounts.reduce((sum, s) => sum + s.metric, 0));
-  const dayCount = $derived(reportsParams.dayCount);
-  const dailyAverage = $derived(Math.round(totalSteps / dayCount));
-  // Cap bar scale at a reasonable max
-  const barScale = $derived(
-    Math.max(extentOf(selectedStepCounts, (s) => s.metric)?.max ?? 0, 1000)
-  );
+  const stepSummary = $derived(actogramResource.current?.stepSummary);
+  // Bar heights scale to the selected range's largest sample, not the padded fetch window
+  const barScale = $derived.by(() => {
+    const range = actogramResource.current?.range;
+    const stepCounts = actogramResource.current?.stepCounts ?? [];
+    const inRange = range ? pointsInRange(stepCounts, range.from, range.to) : [];
+    return Math.max(extentOf(inRange, (s) => s.metric)?.max ?? 0, 1000);
+  });
 </script>
 
 <div class="@container space-y-6">
@@ -63,9 +56,9 @@
 
   <FigureStrip
     figures={[
-      { label: "Total steps", value: formatNumber(totalSteps), unit: "steps" },
-      { label: "Daily average", value: formatNumber(dailyAverage), unit: "steps/day" },
-      { label: "Period", value: String(dayCount), unit: "days" },
+      { label: "Total steps", value: stepSummary ? formatNumber(stepSummary.totalSteps ?? 0) : "--", unit: "steps" },
+      { label: "Daily average", value: stepSummary ? formatNumber(stepSummary.dailyAverage ?? 0) : "--", unit: "steps/day" },
+      { label: "Period", value: stepSummary ? String(stepSummary.dayCount ?? 0) : "--", unit: "days" },
     ]}
   />
 

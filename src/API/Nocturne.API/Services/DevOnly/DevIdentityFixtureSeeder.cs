@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Models.DevOnly;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Services.DevOnly;
 
@@ -93,7 +93,8 @@ public static class DevIdentityFixtureSeeder
     /// inserted with sign_count = 0; existing rows are left untouched.
     /// </summary>
     public static async Task<List<Guid>> SeedAsync(
-        NocturneDbContext db,
+        ISubjectRepository subjects,
+        IPasskeyCredentialRepository passkeys,
         IConfiguration configuration,
         TimeProvider time,
         ILogger logger,
@@ -104,41 +105,30 @@ public static class DevIdentityFixtureSeeder
             return [];
 
         var subjectIds = fixture.Identities.Select(i => i.SubjectId).ToList();
-        var existingSubjects = await db.Subjects
-            .Where(s => subjectIds.Contains(s.Id))
-            .Select(s => s.Id)
-            .ToListAsync(ct);
+        var existingSubjects = (await subjects.GetManyAsync(subjectIds, ct)).ToDictionary(s => s.Id);
 
         var seeded = 0;
         foreach (var identity in fixture.Identities)
         {
-            if (!existingSubjects.Contains(identity.SubjectId))
+            if (!existingSubjects.TryGetValue(identity.SubjectId, out var existing))
             {
-                db.Subjects.Add(new()
-                {
-                    Id = identity.SubjectId,
-                    Name = identity.Name,
-                    Username = identity.Username,
-                    Email = identity.Email,
-                    IsActive = true,
-                    IsSystemSubject = false,
-                    ApprovalStatus = "Approved",
-                });
+                await subjects.CreateAsync(
+                    new NewSubject(
+                        identity.Name,
+                        Username: identity.Username,
+                        Email: identity.Email,
+                        Id: identity.SubjectId),
+                    ct);
             }
-            else
+            else if (!existing.IsActive)
             {
                 // A deactivated fixture subject would be silently excluded from
                 // login candidate filters — the fixture is an assertion that
                 // this identity is usable.
-                await db.Subjects
-                    .Where(s => s.Id == identity.SubjectId && !s.IsActive)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, true), ct);
+                await subjects.UpdateAsync(identity.SubjectId, new SubjectEdit(IsActive: true), ct);
             }
 
-            var existingCredentialIds = await db.PasskeyCredentials
-                .Where(c => c.SubjectId == identity.SubjectId)
-                .Select(c => c.CredentialId)
-                .ToListAsync(ct);
+            var existingCredentialIds = await passkeys.GetCredentialIdsAsync(identity.SubjectId, ct);
 
             foreach (var credential in identity.Credentials)
             {
@@ -162,23 +152,20 @@ public static class DevIdentityFixtureSeeder
                 if (existingCredentialIds.Any(existing => existing.SequenceEqual(credentialId)))
                     continue;
 
-                db.PasskeyCredentials.Add(new()
-                {
-                    Id = Guid.CreateVersion7(),
-                    SubjectId = identity.SubjectId,
-                    CredentialId = credentialId,
-                    PublicKey = publicKey,
-                    SignCount = 0,
-                    Transports = credential.Transports,
-                    Label = credential.Label ?? "dev fixture",
-                    AaGuid = credential.AaGuid,
-                    CreatedAt = time.GetUtcNow().UtcDateTime,
-                });
+                await passkeys.CreateAsync(
+                    new NewPasskeyCredential(
+                        identity.SubjectId,
+                        credentialId,
+                        publicKey,
+                        SignCount: 0,
+                        credential.Transports,
+                        credential.Label ?? "dev fixture",
+                        credential.AaGuid,
+                        time.GetUtcNow().UtcDateTime),
+                    ct);
                 seeded++;
             }
         }
-
-        await db.SaveChangesAsync(ct);
 
         if (seeded > 0)
             logger.LogInformation(

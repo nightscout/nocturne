@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Infrastructure;
 
@@ -26,7 +27,7 @@ internal static class TestPublicAccessCache
 
         return new PublicAccessCacheService(
             new MemoryCache(new MemoryCacheOptions()),
-            factory.Object.AsNocturneFactory(),
+            new TenantMembershipRepository(factory.Object.AsNocturneFactory()),
             NullLogger<PublicAccessCacheService>.Instance);
     }
 }

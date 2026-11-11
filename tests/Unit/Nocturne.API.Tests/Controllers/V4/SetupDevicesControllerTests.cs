@@ -33,6 +33,7 @@ public class SetupDevicesControllerTests
         var factory = new TestNocturneDbContextFactory(db);
         var service = new DeviceSetupService(
             factory,
+            new ConnectorConfigurationRepository(factory),
             new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
             Mock.Of<IDeviceReattributionService>(),

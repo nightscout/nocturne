@@ -16,10 +16,16 @@ namespace Nocturne.Infrastructure.Data.Tests.Configuration;
 public class PostgresRuntimeOptionsTests
 {
     /// <summary>
-    /// Reads the pool the registration actually built. The data source is registered as a
-    /// singleton instance, so this needs no provider and touches nothing else in the graph.
+    /// Reads the context pool the registration actually built. Both pools are registered as
+    /// singleton instances, so this needs no provider and touches nothing else in the graph.
     /// </summary>
     private static NpgsqlConnectionStringBuilder RegisteredPool(
+        IConfiguration? configuration = null,
+        Action<PostgreSqlConfiguration>? configure = null,
+        string connectionString = PostgreSqlSection.AppConnectionString)
+        => RegisteredPools(configuration, configure, connectionString).Contexts;
+
+    private static (NpgsqlConnectionStringBuilder Contexts, NpgsqlConnectionStringBuilder Raw) RegisteredPools(
         IConfiguration? configuration = null,
         Action<PostgreSqlConfiguration>? configure = null,
         string connectionString = PostgreSqlSection.AppConnectionString)
@@ -27,14 +33,49 @@ public class PostgresRuntimeOptionsTests
         var services = new ServiceCollection();
         services.AddPostgreSqlInfrastructure(connectionString, configuration, configure);
 
-        var dataSource = (NpgsqlDataSource)services
+        using var contexts = ((ContextDataSource)services
+            .Single(d => d.ServiceType == typeof(ContextDataSource))
+            .ImplementationInstance!).Source;
+        using var raw = (NpgsqlDataSource)services
             .Single(d => d.ServiceType == typeof(NpgsqlDataSource))
             .ImplementationInstance!;
 
-        using (dataSource)
-        {
-            return new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
-        }
+        return (new NpgsqlConnectionStringBuilder(contexts.ConnectionString),
+            new NpgsqlConnectionStringBuilder(raw.ConnectionString));
+    }
+
+    /// <summary>
+    /// The context pool's session is overwritten on every open by <c>TenantConnectionInterceptor</c>;
+    /// raw ADO.NET passes through no interceptor, so its pool must keep the reset.
+    /// </summary>
+    [Fact]
+    public void ContextPool_SkipsTheSessionReset_AndTheRawPoolKeepsIt()
+    {
+        var (contexts, raw) = RegisteredPools(
+            connectionString: PostgreSqlSection.AppConnectionString + ";No Reset On Close=true");
+
+        contexts.NoResetOnClose.Should().BeTrue();
+        raw.NoResetOnClose.Should().BeFalse("an operator's connection string must not turn the raw pool's reset off");
+    }
+
+    [Fact]
+    public void RawPool_HoldsNoIdleConnections_AndSharesTheContextPoolsLimits()
+    {
+        var (contexts, raw) = RegisteredPools(PostgreSqlSection.With(
+            ("MinPoolSize", "5"), ("MaxPoolSize", "33"), ("StatementTimeoutSeconds", "12")));
+
+        contexts.MinPoolSize.Should().Be(5);
+        raw.MinPoolSize.Should().Be(0, "raw ADO.NET opens are rare, so a floor there holds backends that do nothing");
+        raw.MaxPoolSize.Should().Be(33);
+        raw.Options.Should().Contain("statement_timeout=12000");
+    }
+
+    [Fact]
+    public void Multiplexing_FailsAtStartup()
+    {
+        var register = () => RegisteredPool(connectionString: PostgreSqlSection.AppConnectionString + ";Multiplexing=true");
+
+        register.Should().Throw<InvalidOperationException>().WithMessage("*Multiplexing*");
     }
 
     /// <summary>

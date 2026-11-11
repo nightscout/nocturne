@@ -15,6 +15,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Controllers.V4.DevOnly;
 
 /// <summary>
@@ -105,10 +107,13 @@ public class DevAdminSnapshotUpdateStampTests : IDisposable
     private DevAdminController NewController(NocturneDbContext context) =>
         new(
             context.AsFactory(),
+            new TenantMembershipRepository(context.AsFactory()),
+            new SubjectRepository(context.AsFactory()),
+            new PasskeyCredentialRepository(context.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ITenantService>(),
             new MemoryCache(new MemoryCacheOptions()),
-            TimeProvider.System, NullLogger<DevAdminController>.Instance);
+            TimeProvider.System, [], NullLogger<DevAdminController>.Instance);
 
     private static TenantEntityDto TenantDto(Guid id, string slug) =>
         new() { Id = id, Slug = slug, DisplayName = slug, IsActive = true, AllowAccessRequests = true, SysCreatedAt = Stale, SysUpdatedAt = Stale };

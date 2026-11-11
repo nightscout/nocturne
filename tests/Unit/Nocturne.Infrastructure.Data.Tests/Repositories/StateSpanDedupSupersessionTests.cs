@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -27,7 +28,7 @@ public class StateSpanDedupSupersessionTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly DeduplicationService _dedup;
+    private readonly DuplicateReconciler _dedup;
     private readonly StateSpanRepository _repository;
 
     public StateSpanDedupSupersessionTests()
@@ -38,11 +39,11 @@ public class StateSpanDedupSupersessionTests : IDisposable
 
         var dedupContext = _db.CreateContext();
         dedupContext.TenantId = TestTenantId;
-        _dedup = new DeduplicationService(
-            dedupContext.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+        _dedup = DeduplicationModules.Reconciler(dedupContext.AsFactory());
 
         _repository = new StateSpanRepository(
-            _context.AsFactory(), _dedup, new Mock<IAuditContext>().Object, NullLogger<StateSpanRepository>.Instance);
+            _context.AsFactory(), DeduplicationModules.Linker(dedupContext.AsFactory()), new Mock<IAuditContext>().Object,
+            NullLogger<StateSpanRepository>.Instance);
     }
 
     public void Dispose()
@@ -251,7 +252,7 @@ public class StateSpanDedupSupersessionTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        (await DeduplicationService.MisplacedStateSpanPrimaries(_context, DateTime.UtcNow - DeduplicationService.StateSpanRepairHorizon)
+        (await DuplicateReconciler.MisplacedStateSpanPrimaries(_context, DateTime.UtcNow - DuplicateReconciler.StateSpanRepairHorizon)
                 .ToListAsync())
             .Should().BeEmpty("the group's only live member is {0}, its primary", closed.Id);
     }

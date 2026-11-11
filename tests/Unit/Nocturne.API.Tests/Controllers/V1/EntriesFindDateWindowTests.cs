@@ -8,7 +8,6 @@ using Nocturne.API.Controllers.V1;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;

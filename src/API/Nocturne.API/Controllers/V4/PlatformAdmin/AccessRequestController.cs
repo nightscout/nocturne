@@ -1,16 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Multitenancy;
-using Nocturne.Infrastructure.Data;
 using Nocturne.API.Extensions;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -24,17 +23,17 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 /// and adding them as a tenant member), or reject them (deactivating the subject record).
 /// </remarks>
 /// <seealso cref="ISubjectService"/>
-/// <seealso cref="ITenantService"/>
+/// <seealso cref="IAccessRequestService"/>
 [ApiController]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/access-requests")]
 [Authorize(Roles = "platform_admin")]
 [AllowDuringSetup]
 public class AccessRequestController(
-    INocturneDbContextFactory contexts,
+    ITenantMembershipRepository members,
+    ISubjectRepository subjects,
     ISubjectService subjectService,
-    ITenantService tenantService,
-    ITenantRoleService tenantRoleService,
+    IAccessRequestService accessRequests,
     ITenantAccessor tenantAccessor,
     IInAppNotificationService notificationService,
     ILogger<AccessRequestController> logger) : ControllerBase
@@ -44,87 +43,56 @@ public class AccessRequestController(
     [ProducesResponseType(typeof(List<AccessRequestDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<AccessRequestDto>>> GetPendingRequests(CancellationToken ct)
     {
-        await using var db = await contexts.CreateAsync(ct);
-        var requests = await db.Subjects
-            .Where(s => s.ApprovalStatus == "Pending" && !s.IsSystemSubject)
-            .OrderByDescending(s => s.CreatedAt)
-            .Select(s => new AccessRequestDto
-            {
-                SubjectId = s.Id,
-                Name = s.Name,
-                Message = s.AccessRequestMessage,
-                CreatedAt = s.CreatedAt,
-            })
-            .ToListAsync(ct);
+        var pending = await subjects.ListPendingAccessRequestsAsync(ct);
 
-        return Ok(requests);
+        return Ok(pending.Select(s => new AccessRequestDto
+        {
+            SubjectId = s.Id,
+            Name = s.Name,
+            Message = s.AccessRequestMessage,
+            CreatedAt = s.CreatedAt,
+        }).ToList());
     }
 
-    /// <inheritdoc cref="ITenantService.AddMemberAsync"/>
+    /// <inheritdoc cref="IAccessRequestService.ApproveAsync"/>
     [HttpPost("{subjectId:guid}/approve")]
     [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Approve(
         Guid subjectId,
         [FromBody] ApproveAccessRequestRequest request,
         CancellationToken ct)
     {
-        await using var db = await contexts.CreateAsync(ct);
-        var subject = await db.Subjects
-            .FirstOrDefaultAsync(s => s.Id == subjectId && s.ApprovalStatus == "Pending", ct);
+        var result = await accessRequests.ApproveAsync(
+            subjectId,
+            tenantAccessor.Context?.TenantId,
+            request.RoleIds,
+            request.DirectPermissions,
+            request.LimitTo24Hours,
+            HttpContext.GetGrantedScopes(),
+            ct);
 
-        if (subject == null)
-            return NotFound();
-
-        if (request.RoleIds.Count == 0 && (request.DirectPermissions == null || request.DirectPermissions.Count == 0))
-            return Problem(detail: "At least one role or direct permission is required", statusCode: 400, title: "Bad Request");
-
-        subject.ApprovalStatus = "Approved";
-        subject.IsActive = true;
-        subject.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-
-        var tenantContext = tenantAccessor.Context;
-        if (tenantContext != null)
+        switch (result.Outcome)
         {
-            var tenantId = tenantContext.TenantId;
-
-            var roleGrant = await tenantRoleService.ValidateRoleGrantAsync(
-                tenantId, request.RoleIds, HttpContext.GetGrantedScopes(), ct);
-            if (!roleGrant.Ok)
-            {
+            case ApproveAccessRequestOutcome.Approved:
+                return Ok();
+            case ApproveAccessRequestOutcome.NothingGranted:
+                return Problem(detail: "At least one role or direct permission is required", statusCode: 400, title: "Bad Request");
+            case ApproveAccessRequestOutcome.RoleGrantRefused:
+                var foreignRole = result.RoleGrant!.ErrorCode == RoleGrantValidation.ForeignRole;
                 return Problem(
-                    detail: roleGrant.ErrorDescription,
-                    statusCode: roleGrant.ErrorCode == RoleGrantValidation.ForeignRole ? 400 : 403,
-                    title: roleGrant.ErrorCode == RoleGrantValidation.ForeignRole ? "Bad Request" : "Forbidden");
-            }
-
-            await tenantService.AddMemberAsync(
-                tenantId, subjectId, request.RoleIds, request.DirectPermissions,
-                limitTo24Hours: request.LimitTo24Hours, ct: ct);
-
-            var ownerIds = await db.TenantMembers
-                .OwnersOf(tenantId)
-                .Select(tm => tm.SubjectId)
-                .ToListAsync(ct);
-
-            foreach (var ownerId in ownerIds)
-            {
-                await notificationService.ArchiveBySourceAsync(
-                    ownerId.ToString(),
-                    "passkey.anonymous_login_request",
-                    subjectId.ToString(),
-                    NotificationArchiveReason.Completed,
-                    ct);
-            }
+                    detail: result.RoleGrant.ErrorDescription,
+                    statusCode: foreignRole ? 400 : 403,
+                    title: foreignRole ? "Bad Request" : "Forbidden");
+            case ApproveAccessRequestOutcome.AlreadyMember:
+                return Problem(detail: "The subject is already a member.", statusCode: 409, title: "Conflict");
+            case ApproveAccessRequestOutcome.NotFound:
+                return NotFound();
+            default:
+                throw new ArgumentOutOfRangeException(nameof(result));
         }
-
-        logger.LogInformation(
-            "Access request approved: subject {SubjectId} ({Name}) assigned {RoleCount} roles",
-            subjectId, subject.Name, request.RoleIds.Count);
-
-        return Ok();
     }
 
     /// <inheritdoc cref="ISubjectService.DeleteSubjectAsync"/>
@@ -132,22 +100,26 @@ public class AccessRequestController(
     [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Deny(Guid subjectId, CancellationToken ct)
     {
-        await using var db = await contexts.CreateAsync(ct);
-        var subject = await db.Subjects
-            .FirstOrDefaultAsync(s => s.Id == subjectId && s.ApprovalStatus == "Pending", ct);
+        var subject = await subjects.GetAsync(subjectId, ct);
 
-        if (subject == null)
+        if (subject is not { ApprovalStatus: "Pending" })
             return NotFound();
+
+        if (await subjectService.DeleteSubjectAsync(subjectId) is SubjectChange.LastOwnerOf lastOwnerOf)
+        {
+            return Problem(
+                detail: $"The subject is the last owner of: {string.Join(", ", lastOwnerOf.OwnedTenants.Select(t => t.Slug))}.",
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Conflict");
+        }
 
         var denyTenantContext = tenantAccessor.Context;
         if (denyTenantContext != null)
         {
-            var ownerIds = await db.TenantMembers
-                .OwnersOf(denyTenantContext.TenantId)
-                .Select(tm => tm.SubjectId)
-                .ToListAsync(ct);
+            var ownerIds = await members.GetOwnerSubjectIdsAsync(denyTenantContext.TenantId, ct);
 
             foreach (var ownerId in ownerIds)
             {
@@ -159,8 +131,6 @@ public class AccessRequestController(
                     ct);
             }
         }
-
-        await subjectService.DeleteSubjectAsync(subjectId);
 
         logger.LogInformation(
             "Access request denied: subject {SubjectId} ({Name}) deleted",

@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -22,7 +23,7 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class TreatmentServiceBulkDeleteTests
 {
     private readonly Mock<ITreatmentStore> _store = new();
-    private readonly Mock<ITreatmentDecomposer> _decomposer = new();
+    private readonly Mock<IPerTreatmentDecomposer> _decomposer = new Mock<IPerTreatmentDecomposer>().AnswersBatchPerTreatment();
     private readonly Mock<ITreatmentCache> _cache = new();
     private readonly Mock<IDataEventSink<Treatment>> _events = new();
     private readonly TreatmentService _service;
@@ -64,7 +65,6 @@ public class TreatmentServiceBulkDeleteTests
             d => d.BulkDeleteAsync(It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _events.Verify(e => e.OnDeletedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
-        _cache.Verify(c => c.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -82,7 +82,6 @@ public class TreatmentServiceBulkDeleteTests
         deleted.Should().Be(1);
         _decomposer.Verify(d => d.BulkDeleteAsync(find, WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
         _store.Verify(s => s.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()), Times.Never);
-        _cache.Verify(c => c.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -100,7 +99,7 @@ public class TreatmentServiceBulkDeleteTests
     }
 
     [Fact]
-    public async Task DeleteTreatmentsAsync_NoMatches_ReturnsZeroWithoutInvalidation()
+    public async Task DeleteTreatmentsAsync_NoMatches_ReturnsZero()
     {
         _store
             .Setup(s => s.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
@@ -109,7 +108,6 @@ public class TreatmentServiceBulkDeleteTests
         var deleted = await _service.DeleteTreatmentsAsync("find[eventType]=Note&find[created_at][$gte]=2023-01-01T00:00:00Z");
 
         deleted.Should().Be(0);
-        _cache.Verify(c => c.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -128,7 +126,6 @@ public class TreatmentServiceBulkDeleteTests
         var readService = new TreatmentReadService(
             projection.Object,
             new Mock<ITreatmentDecomposer>().Object,
-            new Mock<IDecompositionPipeline>().Object,
             new Mock<ITempBasalRepository>().Object,
             new Mock<IBolusRepository>().Object,
             new Mock<ICarbIntakeRepository>().Object,

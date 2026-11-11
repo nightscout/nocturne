@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -13,14 +15,20 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class TreatmentFoodRepository : ITreatmentFoodRepository
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ILegacyReadCacheInvalidation? _legacyReads;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TreatmentFoodRepository"/> class.
     /// </summary>
-    public TreatmentFoodRepository(INocturneDbContextFactory contexts)
+    public TreatmentFoodRepository(INocturneDbContextFactory contexts, ILegacyReadCacheInvalidation? legacyReads = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _legacyReads = legacyReads;
     }
+
+    /// <summary>Tells <see cref="ILegacyReadCacheInvalidation"/> food breakdowns were written, after every committed write.</summary>
+    private Task ReportWrittenAsync() =>
+        _legacyReads?.WrittenAsync([typeof(TreatmentFood)]) ?? Task.CompletedTask;
 
     /// <summary>
     /// Get food breakdown entries for a carb intake record.
@@ -93,6 +101,7 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         var entity = TreatmentFoodMapper.ToEntity(entry);
         db.Set<TreatmentFoodEntity>().Add(entity);
         await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
 
         var food = entity.FoodId.HasValue
             ? await db
@@ -101,6 +110,21 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
             : null;
 
         return TreatmentFoodMapper.ToDomainModel(entity, food);
+    }
+
+    /// <inheritdoc />
+    public async Task CreateManyAsync(
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (entries.Count == 0)
+            return;
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        db.Set<TreatmentFoodEntity>().AddRange(entries.Select(TreatmentFoodMapper.ToEntity));
+        await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
     }
 
     /// <summary>
@@ -126,6 +150,7 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
 
         TreatmentFoodMapper.UpdateEntity(entity, entry);
         await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
 
         var food = entity.FoodId.HasValue
             ? await db
@@ -156,6 +181,7 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
 
         db.Set<TreatmentFoodEntity>().Remove(entity);
         await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
         return true;
     }
 
@@ -189,13 +215,16 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        return await db
+        var cleared = await db
             .Set<TreatmentFoodEntity>()
             .Where(tf => tf.FoodId == foodId)
             .ExecuteUpdateAsync(
                 s => s.SetProperty(tf => tf.FoodId, (Guid?)null),
                 cancellationToken
             );
+        if (cleared > 0)
+            await ReportWrittenAsync();
+        return cleared;
     }
 
     /// <summary>
@@ -210,10 +239,32 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        return await db
+        var deleted = await db
             .Set<TreatmentFoodEntity>()
             .Where(tf => tf.FoodId == foodId)
             .ExecuteDeleteAsync(cancellationToken);
+        if (deleted > 0)
+            await ReportWrittenAsync();
+        return deleted;
+    }
+
+    /// <inheritdoc />
+    public async Task ReplaceForCarbIntakesAsync(
+        IReadOnlyCollection<Guid> carbIntakeIds,
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var purged = await db.ExecuteInTransactionAsync(async ct =>
+        {
+            var count = await db.TreatmentFoods.PurgeAsync(tf => carbIntakeIds.Contains(tf.CarbIntakeId), ct);
+            db.TreatmentFoods.AddRange(entries.Select(TreatmentFoodMapper.ToEntity));
+            await db.SaveChangesAsync(ct);
+            return count;
+        }, ct: cancellationToken);
+        if (purged > 0 || entries.Count > 0)
+            await ReportWrittenAsync();
     }
 
     /// <summary>

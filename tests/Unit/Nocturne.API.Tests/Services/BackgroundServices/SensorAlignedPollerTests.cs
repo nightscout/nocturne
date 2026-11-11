@@ -3,18 +3,17 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
-using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Jobs;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
 /// <summary>
 /// The scheduler's alignment as a connector declares it on its registration: the cadence decides
-/// whether the poller aligns at all and how fast it ticks, and the data source is where it looks for
-/// the newest reading.
+/// whether the poller aligns at all, and the data source is where it looks for the newest reading.
 /// </summary>
 public class SensorAlignedPollerTests
 {
@@ -34,15 +33,12 @@ public class SensorAlignedPollerTests
 
     private sealed class ExposedPoller<TConfig>()
         : ConnectorBackgroundService<TConfig>(
-            new ServiceCollection().BuildServiceProvider(),
             new ConnectorSyncBudget(),
-            ActiveTenantSnapshotTestDoubles.Unread(),
+            Mock.Of<IJobLedger>(),
             NullLogger.Instance,
             TimeProvider.System)
         where TConfig : BaseConnectorConfiguration, new()
     {
-        public TimeSpan Tick => PollInterval;
-
         public Task<DateTime?> AlignAsync(IServiceProvider scope, DateTime now) =>
             GetAlignedSyncTimeAsync(scope, new TConfig(), now, CancellationToken.None);
 
@@ -72,7 +68,7 @@ public class SensorAlignedPollerTests
         var now = DateTime.UtcNow;
         var reading = now.AddMinutes(-2);
         var publisher = PublisherReturning(reading);
-        using var poller = new ExposedPoller<SensorConfig>();
+        var poller = new ExposedPoller<SensorConfig>();
 
         var next = await poller.AlignAsync(ScopeWith(publisher), now);
 
@@ -88,7 +84,7 @@ public class SensorAlignedPollerTests
     {
         var now = DateTime.UtcNow;
         var reading = DateTime.SpecifyKind(now.AddMinutes(-2), DateTimeKind.Unspecified);
-        using var poller = new ExposedPoller<SensorConfig>();
+        var poller = new ExposedPoller<SensorConfig>();
 
         var next = await poller.AlignAsync(ScopeWith(PublisherReturning(reading)), now);
 
@@ -99,7 +95,7 @@ public class SensorAlignedPollerTests
     [Fact]
     public async Task WithNoReadingsStored_TheIntervalStaysInCharge()
     {
-        using var poller = new ExposedPoller<SensorConfig>();
+        var poller = new ExposedPoller<SensorConfig>();
 
         var next = await poller.AlignAsync(ScopeWith(PublisherReturning(null)), DateTime.UtcNow);
 
@@ -109,7 +105,7 @@ public class SensorAlignedPollerTests
     [Fact]
     public async Task WithNoGlucosePublisherInScope_TheIntervalStaysInCharge()
     {
-        using var poller = new ExposedPoller<SensorConfig>();
+        var poller = new ExposedPoller<SensorConfig>();
 
         var next = await poller.AlignAsync(new ServiceCollection().BuildServiceProvider(), DateTime.UtcNow);
 
@@ -121,7 +117,7 @@ public class SensorAlignedPollerTests
     public async Task WithoutADeclaredCadence_NothingIsLookedUp()
     {
         var publisher = new Mock<IGlucosePublisher>(MockBehavior.Strict);
-        using var poller = new ExposedPoller<PlainConfig>();
+        var poller = new ExposedPoller<PlainConfig>();
 
         var next = await poller.AlignAsync(ScopeWith(publisher), DateTime.UtcNow);
 
@@ -133,23 +129,11 @@ public class SensorAlignedPollerTests
     public async Task ACadenceWithoutADataSource_IsNotAligned()
     {
         var publisher = new Mock<IGlucosePublisher>(MockBehavior.Strict);
-        using var poller = new ExposedPoller<SourcelessConfig>();
+        var poller = new ExposedPoller<SourcelessConfig>();
 
         var next = await poller.AlignAsync(ScopeWith(publisher), DateTime.UtcNow);
 
         next.Should().BeNull();
         publisher.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void AnAlignedConnector_TicksFastEnoughToMeetItsSchedule_AndOthersKeepTheMinute()
-    {
-        using var aligned = new ExposedPoller<SensorConfig>();
-        using var plain = new ExposedPoller<PlainConfig>();
-        using var sourceless = new ExposedPoller<SourcelessConfig>();
-
-        aligned.Tick.Should().Be(TimeSpan.FromSeconds(15));
-        plain.Tick.Should().Be(TimeSpan.FromMinutes(1));
-        sourceless.Tick.Should().Be(TimeSpan.FromMinutes(1));
     }
 }

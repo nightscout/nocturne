@@ -1,5 +1,4 @@
 using Nocturne.API.Tests.Infrastructure;
-using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Clinical.Treatments;
 using System.Reflection;
 using FluentAssertions;
@@ -420,7 +419,7 @@ public partial class AnalyticsReadScopeGuardTests
 
         var controller = new RetrospectiveController(
             iob.Object, cob.Object, entries.Object, boluses.Object, carbs.Object,
-            tempBasals.Object, projectionService: null!, timelines.Object, MockStateSpans.Empty().Object, Mock.Of<IApsSnapshotRepository>(),
+            tempBasals.Object, deviceStatuses: null!, timelines.Object, MockStateSpans.Empty().Object, Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(), new IobCobReader(iob.Object, cob.Object, boluses.Object, tempBasals.Object, carbs.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             NullLogger<RetrospectiveController>.Instance)
         {

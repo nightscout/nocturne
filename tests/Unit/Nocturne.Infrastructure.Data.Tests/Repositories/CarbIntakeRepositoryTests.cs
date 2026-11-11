@@ -21,7 +21,7 @@ public class CarbIntakeRepositoryTests : IDisposable
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly Mock<IDeduplicationService> _mockDeduplicationService;
+    private readonly Mock<IDuplicateLinker> _linker;
     private readonly CarbIntakeRepository _repo;
 
     public CarbIntakeRepositoryTests()
@@ -34,11 +34,11 @@ public class CarbIntakeRepositoryTests : IDisposable
         _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
-        _mockDeduplicationService = new Mock<IDeduplicationService>();
+        _linker = new Mock<IDuplicateLinker>();
 
         _repo = new CarbIntakeRepository(
             new TestNocturneDbContextFactory(_context),
-            _mockDeduplicationService.Object,
+            _linker.Object,
             new Mock<IAuditContext>().Object,
             NullLogger<CarbIntakeRepository>.Instance);
     }
@@ -152,7 +152,7 @@ public class CarbIntakeRepositoryTests : IDisposable
         results.Should().ContainSingle(r => r.SyncIdentifier == "sync-2" && r.Carbs == 15.0);
 
         // The updated-in-place row is not handed to deduplication; only the insert is
-        _mockDeduplicationService.Verify(
+        _linker.Verify(
             d => d.DeduplicateBatchAsync(
                 RecordType.CarbIntake,
                 It.Is<IReadOnlyList<DeduplicationInput>>(inputs =>
@@ -184,32 +184,7 @@ public class CarbIntakeRepositoryTests : IDisposable
         }, WriteOrigin.Live);
 
         // Dedup links them into one canonical group; the Glooko row is non-primary.
-        var canonicalId = Guid.CreateVersion7();
-        var mills = new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        _context.LinkedRecords.AddRange(
-            new LinkedRecordEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = TestTenantId,
-                CanonicalId = canonicalId,
-                RecordType = "carbintake",
-                RecordId = primary.Id,
-                SourceTimestamp = mills,
-                DataSource = "mylife-connector",
-                IsPrimary = true,
-            },
-            new LinkedRecordEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = TestTenantId,
-                CanonicalId = canonicalId,
-                RecordType = "carbintake",
-                RecordId = duplicate.Id,
-                SourceTimestamp = mills,
-                DataSource = "glooko-connector",
-                IsPrimary = false,
-            });
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.CarbIntake, primary.Id, duplicate.Id);
 
         // GetAsync already drops the non-primary duplicate; CountAsync must agree
         // so pagination totals match the returned rows.

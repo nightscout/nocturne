@@ -181,7 +181,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
         log.EntityId.Should().BeNull();
         log.EntityType.Should().Be("TestAuditable");
         log.AuthType.Should().Be("SessionCookie");
-        log.SubjectName.Should().Be("tester");
+        log.ActorName.Should().Be("tester");
         ReadSummary(log.ChangesJson).Should().Be((3, Scope));
     }
 

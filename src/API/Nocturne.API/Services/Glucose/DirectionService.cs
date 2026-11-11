@@ -240,7 +240,7 @@ public static class DirectionService
     /// </summary>
     private static double RoundBGToDisplayFormat(double value)
     {
-        return Math.Round(value, 1);
+        return ScaledRounding.Round(value, 1);
     }
 }
 

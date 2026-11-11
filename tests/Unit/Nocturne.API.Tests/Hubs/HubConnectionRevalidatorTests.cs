@@ -7,8 +7,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -27,10 +31,22 @@ public class HubConnectionRevalidatorTests
         public HttpContext? HttpContext { get; set; }
     }
 
+    private static readonly TenantContext TenantContext =
+        new(Tenant, "default", "Default", IsActive: true, IsDemo: false);
+
     private readonly HubConnectionRevalidator _revalidator = new(
-        new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+        new ServiceCollection()
+            .AddSingleton(Mock.Of<ITenantRepository>(r => r.IsActiveAsync(Tenant, It.IsAny<CancellationToken>()) == Task.FromResult(true)))
+            .BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>(),
         TimeProvider.System,
         NullLogger<HubConnectionRevalidator>.Instance);
+
+    private static ServiceProvider RequestScope() => new ServiceCollection()
+        .AddSingleton<ITenantAccessor>(new HttpContextTenantAccessor())
+        .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
+        .AddSingleton<IAuditContext>(new AuditContext())
+        .BuildServiceProvider();
 
     private static HubAuthorization Member(bool historyClamped = false, params string[] scopes) => new(
         Tenant, Scope.Normalize(scopes), HubCredentialKind.Subject, Subject, historyClamped);
@@ -43,21 +59,38 @@ public class HubConnectionRevalidatorTests
                 AuthType.InstanceKey, null, null, new HashSet<string> { Scope.FullAccess }, false, null),
         };
 
-    private static Mock<HubCallerContext> Connection(string connectionId, HubAuthorization? granted = null)
+    /// <summary>
+    /// A connection admitted by <see cref="TenantHubFilter"/> from an upgrade request that resolved
+    /// <see cref="Tenant"/> and recorded its reader, holding <paramref name="granted"/>.
+    /// <paramref name="upgrade"/> is the feature the connection reads its upgrade request through.
+    /// A request that records no reader (<paramref name="recordsReader"/> false) leaves the connection holding none.
+    /// </summary>
+    private static Mock<HubCallerContext> Connection(
+        string connectionId, HubAuthorization? granted, out TestHttpContextFeature upgrade, bool recordsReader = true)
     {
-        var httpContext = new DefaultHttpContext { RequestServices = new ServiceCollection().BuildServiceProvider() };
-        httpContext.SetTenantContext(new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false));
+        var httpContext = new DefaultHttpContext { RequestServices = RequestScope() };
+        httpContext.SetTenantContext(TenantContext);
+        httpContext.RequestServices.GetRequiredService<ITenantAccessor>().SetTenant(TenantContext);
+        if (recordsReader)
+            httpContext.RecordReader();
+        upgrade = new TestHttpContextFeature { HttpContext = httpContext };
         var features = new FeatureCollection();
-        features.Set<IHttpContextFeature>(new TestHttpContextFeature { HttpContext = httpContext });
+        features.Set<IHttpContextFeature>(upgrade);
 
         var context = new Mock<HubCallerContext>();
         context.SetupGet(c => c.ConnectionId).Returns(connectionId);
         context.SetupGet(c => c.Features).Returns(features);
         context.SetupGet(c => c.Items).Returns(new Dictionary<object, object?>());
+        new TenantHubFilter()
+            .OnConnectedAsync(new HubLifetimeContext(context.Object, RequestScope(), new StubHub()), _ => Task.CompletedTask)
+            .GetAwaiter().GetResult();
         if (granted is not null)
             HubAuthorizationState.Grant(context.Object, granted);
         return context;
     }
+
+    private static Mock<HubCallerContext> Connection(string connectionId, HubAuthorization? granted = null) =>
+        Connection(connectionId, granted, out _);
 
     private Mock<HubCallerContext> Tracked(string connectionId, HubAuthorization granted)
     {
@@ -76,6 +109,29 @@ public class HubConnectionRevalidatorTests
 
         covered.Verify(c => c.Abort(), Times.Never);
         unprovable.Verify(c => c.Abort(), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_connection_is_checked_against_what_it_held_from_admission_once_its_upgrade_request_is_gone()
+    {
+        var connection = Connection("conn", InstanceKey(), out var upgrade);
+        _revalidator.Track(connection.Object);
+        upgrade.HttpContext = null;
+
+        await _revalidator.RevalidateAsync(CancellationToken.None);
+
+        connection.Verify(c => c.Abort(), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_connection_with_a_credential_and_no_held_reader_is_closed()
+    {
+        var connection = Connection("conn", InstanceKey(), out _, recordsReader: false);
+        _revalidator.Track(connection.Object);
+
+        await _revalidator.RevalidateAsync(CancellationToken.None);
+
+        connection.Verify(c => c.Abort(), Times.Once);
     }
 
     [Fact]

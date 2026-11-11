@@ -18,9 +18,15 @@ public interface IActogramReportService
     /// </summary>
     /// <param name="startTime">Start of the time range in Unix milliseconds (inclusive).</param>
     /// <param name="endTime">End of the time range in Unix milliseconds (exclusive).</param>
+    /// <param name="summaryStartTime">Start of the range the heart-rate and step summaries cover
+    /// (inclusive); the whole time range when null.</param>
+    /// <param name="summaryEndTime">End of the summary range (exclusive); the end of the time range
+    /// when null.</param>
     Task<ActogramReportData> GetAsync(
         long startTime,
         long endTime,
+        long? summaryStartTime = null,
+        long? summaryEndTime = null,
         CancellationToken cancellationToken = default
     );
 }

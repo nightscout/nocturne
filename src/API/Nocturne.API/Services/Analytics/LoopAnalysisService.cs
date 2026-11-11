@@ -6,7 +6,6 @@ using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
@@ -22,11 +21,10 @@ namespace Nocturne.API.Services.Analytics;
 /// Fetches one window of everything Loop Analysis reads and hands it to the Core calculators.
 /// Each page's load and calculation is in its own part (<c>LoopAnalysisService.&lt;Page&gt;.cs</c>);
 /// this one holds what the pages share. Every collection is read uncapped, for the reason given on
-/// <c>StatisticsController.FetchInsulinRecordsAsync</c>.
+/// <see cref="InsulinDeliveryReader.ReadRecordsAsync"/>.
 /// </summary>
 internal sealed partial class LoopAnalysisService(
     ISensorGlucoseRepository glucoseRepository,
-    ICanonicalGlucoseService canonicalGlucose,
     IBolusRepository bolusRepository,
     ICarbIntakeRepository carbIntakeRepository,
     ITempBasalRepository tempBasalRepository,
@@ -153,7 +151,7 @@ internal sealed partial class LoopAnalysisService(
         var toUtc = ToUtc(to);
         var lookbackUtc = ToUtc(from - DailyProfileCalculator.ActingMs);
 
-        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct);
+        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct, streams: GlucoseStreams.Canonical);
         var bolusTask = bolusRepository.GetAsync(lookbackUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var tempBasalTask = tempBasalRepository.GetAsync(
             StatisticsService.TempBasalReadStart(fromUtc), ToUtc(to + NetInsulinAboveSchedule.MaxInferredGapMs), null, null, int.MaxValue, descending: false, ct: ct);
@@ -170,7 +168,7 @@ internal sealed partial class LoopAnalysisService(
         var profiles = await activeProfileResolver.GetProfileSpansForRangeAsync(from, to, ct);
         var clock = await deviceDates.ResolveAsync(ct);
         return new Common(
-            await canonicalGlucose.SelectAsync([.. await glucoseTask], ct),
+            [.. await glucoseTask],
             [.. await bolusTask],
             [.. await tempBasalTask],
             spans,
@@ -268,6 +266,11 @@ internal sealed partial class LoopAnalysisService(
         Common common, IReadOnlyList<ApsLoopState> snapshots, long openEnd) =>
         MaskSources(common.Spans, common.Devices, common.DeviceDates, snapshots, common.ProfileIntervals, openEnd);
 
+    /// <param name="spans">The state spans by category: the override, temporary target, exercise, illness, data exclusion and pump mode masks are read from them.</param>
+    /// <param name="devices">The registered devices; the pumps among them with a known algorithm are open-loop evidence.</param>
+    /// <param name="deviceDates">Turns a pump's start and end dates into the interval it was in use.</param>
+    /// <param name="snapshots">The APS snapshot evidence of the open-loop mask.</param>
+    /// <param name="profiles">When each profile was active, passed through as the mask's profiles.</param>
     /// <param name="openEnd">Where a span still open ends: the end of the time its readers look at.</param>
     private static LoopAnalysisMaskSources MaskSources(
         Dictionary<StateSpanCategory, List<StateSpan>> spans,

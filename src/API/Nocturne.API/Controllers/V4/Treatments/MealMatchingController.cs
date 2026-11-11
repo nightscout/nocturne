@@ -123,6 +123,7 @@ public class MealMatchingController : ControllerBase
 
     /// <summary>
     /// Accept a meal match
+    /// Links the connector food entry to the carb intake and marks the entry matched. Requires the treatments read-write scope.
     /// </summary>
     /// <remarks>
     /// Writes a <c>treatment_foods</c> row keyed by the carb intake, which
@@ -172,6 +173,7 @@ public class MealMatchingController : ControllerBase
 
     /// <summary>
     /// Dismiss a meal match
+    /// Requires the food read-write scope.
     /// </summary>
     /// <remarks>
     /// Writes only the <c>connector_food_entries</c> status, which is the food category in

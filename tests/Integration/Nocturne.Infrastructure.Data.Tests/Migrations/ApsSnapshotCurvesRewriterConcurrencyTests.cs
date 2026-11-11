@@ -96,8 +96,8 @@ public class ApsSnapshotCurvesRewriterConcurrencyTests(ApsSnapshotCurvesRewriter
         var rewrite = Task.Run(async () =>
         {
             await using var db = new NocturneDbContext(fixture.Options()) { TenantId = Tenant };
-            return await ApsSnapshotCurvesRewriter.RewriteTenantAsync(
-                db, Tenant, 500, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None);
+            return (await ApsSnapshotCurvesRewriter.RewriteTenantAsync(
+                db, Tenant, after: null, int.MaxValue, 500, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None)).Changed;
         });
 
         await WaitUntilBlockedOnALockAsync();

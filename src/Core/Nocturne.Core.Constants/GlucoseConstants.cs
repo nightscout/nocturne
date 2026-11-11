@@ -12,6 +12,11 @@ public static class GlucoseConstants
     public const double MgdlPerMmol = 18.0182;
 
     /// <summary>
+    /// <see cref="MgdlPerMmol"/> for decimal arithmetic. A cast of the double is a different number.
+    /// </summary>
+    public const decimal MgdlPerMmolDecimal = 18.0182m;
+
+    /// <summary>
     /// Bottom of the consensus in-range band in mg/dL — the boundary time-in-range is measured
     /// against and below which a reading is drawn as low, before any tenant threshold overrides it.
     /// Not the legacy Nightscout <c>bgTargetBottom</c> alarm setting, which ships 80; that one is

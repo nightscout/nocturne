@@ -8,7 +8,9 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -34,11 +36,15 @@ public sealed class TenantServicePatientRelationshipTests : IDisposable
 
     private TenantService Service() => new(
         _db.ContextFactory.AsNocturneFactory(),
+        new TenantRepository(_db.ContextFactory.AsNocturneFactory()),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory()),
+        new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new GrantRevocationService(
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
         Mock.Of<ILogger<TenantService>>());
 
@@ -54,7 +60,7 @@ public sealed class TenantServicePatientRelationshipTests : IDisposable
     [InlineData(PatientRelationship.Helper)]
     public async Task StoresEachAnswer(PatientRelationship answer)
     {
-        await Service().SetPatientRelationshipAsync(_tenantId, answer);
+        await Service().SetPatientRelationshipAsync(_tenantId, answer, null);
 
         (await Service().GetPatientRelationshipAsync(_tenantId)).Should().Be(answer);
     }
@@ -62,8 +68,8 @@ public sealed class TenantServicePatientRelationshipTests : IDisposable
     [Fact]
     public async Task ALaterAnswerOverwritesTheFirst()
     {
-        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Helper);
-        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Self);
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Helper, null);
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Self, null);
 
         (await Service().GetPatientRelationshipAsync(_tenantId)).Should().Be(PatientRelationship.Self);
     }
@@ -71,9 +77,83 @@ public sealed class TenantServicePatientRelationshipTests : IDisposable
     [Fact]
     public async Task LeavesOtherTenantsUnanswered()
     {
-        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Caregiver);
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Caregiver, null);
 
         (await Service().GetPatientRelationshipAsync(_otherTenantId)).Should().BeNull();
+    }
+
+    /// <summary>
+    /// Adds a person member in a save of its own, so it joins after every earlier one, and returns
+    /// their subject id. The first to join is the helper.
+    /// </summary>
+    private Guid AddMember()
+    {
+        using var db = _db.CreateContext();
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Person" };
+        db.Subjects.Add(subject);
+        db.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = subject.Id,
+        });
+        db.SaveChanges();
+        return subject.Id;
+    }
+
+    private DateTime? HandedOverAt()
+    {
+        using var db = _db.CreateContext();
+        return db.Tenants.Single(t => t.Id == _tenantId).HandedOverAt;
+    }
+
+    [Theory]
+    [InlineData(PatientRelationship.Self)]
+    [InlineData(PatientRelationship.Caregiver)]
+    public async Task TheRecipientReplacingTheHelpersAnswer_MarksTheTenantHandedOver(PatientRelationship answer)
+    {
+        var helper = AddMember();
+        var recipient = AddMember();
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Helper, helper);
+
+        await Service().SetPatientRelationshipAsync(_tenantId, answer, recipient);
+
+        HandedOverAt().Should().NotBeNull();
+        (await Service().GetPatientRelationshipAsync(_tenantId)).Should().Be(answer);
+    }
+
+    [Fact]
+    public async Task TheHelperChangingTheirOwnAnswer_IsNotAHandover()
+    {
+        var helper = AddMember();
+        AddMember();
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Helper, helper);
+
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Self, helper);
+
+        HandedOverAt().Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AnAnswerWithNoCaller_IsNotAHandover()
+    {
+        var helper = AddMember();
+        AddMember();
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Helper, helper);
+
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Self, null);
+
+        HandedOverAt().Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AnAnswerOverAnythingButHelper_IsNotAHandover()
+    {
+        var owner = AddMember();
+        var other = AddMember();
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Caregiver, owner);
+
+        await Service().SetPatientRelationshipAsync(_tenantId, PatientRelationship.Self, other);
+
+        HandedOverAt().Should().BeNull();
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;

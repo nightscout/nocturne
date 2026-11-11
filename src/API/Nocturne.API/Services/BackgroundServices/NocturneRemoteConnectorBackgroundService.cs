@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Connectors.NocturneRemote.Services;
+using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
 using Nocturne.Infrastructure.Data.Services;
@@ -10,19 +11,21 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
-/// Background service that periodically pulls data from a remote Nocturne V4 instance via
-/// <see cref="NocturneRemoteConnectorService"/>.
-/// Optionally connects to each tenant's Nocturne SignalR hub to trigger
-/// immediate syncs when upstream data changes.
+/// Pulls data from a remote Nocturne V4 instance through <see cref="NocturneRemoteConnectorService"/>,
+/// and connects to each tenant's Nocturne SignalR hub to sync at once when upstream data changes.
 /// </summary>
 public class NocturneRemoteConnectorBackgroundService
-    : ConnectorBackgroundService<NocturneRemoteConnectorService, NocturneRemoteConnectorConfiguration>
+    : ConnectorBackgroundService<NocturneRemoteConnectorService, NocturneRemoteConnectorConfiguration>,
+        IConnectorRealtimeListeners
 {
     private readonly ConcurrentDictionary<Guid, HubConnection> _hubConnections = new();
+    private readonly IServiceProvider _serviceProvider;
+    private readonly ActiveTenantSnapshot _activeTenants;
 
-    /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
+    /// <param name="serviceProvider">Root provider each listener's configuration scope is opened from.</param>
     /// <param name="budget">The process-wide budget.</param>
-    /// <param name="activeTenants">The active tenants every poller reads.</param>
+    /// <param name="ledger">The job ledger.</param>
+    /// <param name="activeTenants">The active tenants a listener is started for.</param>
     /// <param name="logger">Logger instance for this background service.</param>
     /// <param name="timeProvider">Clock the schedule is computed against.</param>
     /// <param name="nudge">Delivers configuration writes for this connector.</param>
@@ -31,6 +34,7 @@ public class NocturneRemoteConnectorBackgroundService
     public NocturneRemoteConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
+        IJobLedger ledger,
         ActiveTenantSnapshot activeTenants,
         ILogger<NocturneRemoteConnectorBackgroundService> logger,
         TimeProvider timeProvider,
@@ -38,12 +42,16 @@ public class NocturneRemoteConnectorBackgroundService
         ConnectorSyncMetrics? metrics = null,
         TenantRunGuard? runGuard = null
     )
-        : base(serviceProvider, budget, activeTenants, logger, timeProvider, nudge, metrics, runGuard) { }
+        : base(budget, ledger, logger, timeProvider, nudge, metrics, runGuard)
+    {
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _activeTenants = activeTenants ?? throw new ArgumentNullException(nameof(activeTenants));
+    }
 
     /// <inheritdoc />
-    protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
+    public async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
     {
-        var tenants = await ActiveTenants.GetAsync(cancellationToken);
+        var tenants = await _activeTenants.GetAsync(cancellationToken);
 
         foreach (var tenant in tenants)
         {
@@ -56,7 +64,7 @@ public class NocturneRemoteConnectorBackgroundService
                     continue;
 
                 await using var tenantScope = TenantJobScope.Open(
-                    ServiceProvider,
+                    _serviceProvider,
                     new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
                     AuditEndpoint);
 
@@ -139,7 +147,7 @@ public class NocturneRemoteConnectorBackgroundService
     }
 
     /// <inheritdoc />
-    protected override async Task StopRealtimeListenersAsync()
+    public async Task StopRealtimeListenersAsync()
     {
         foreach (var (tenantId, connection) in _hubConnections)
         {

@@ -1,4 +1,4 @@
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 

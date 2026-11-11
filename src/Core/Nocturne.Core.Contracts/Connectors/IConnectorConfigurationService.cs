@@ -87,7 +87,9 @@ public interface IConnectorConfigurationService
 
     /// <summary>
     /// Saves or updates runtime configuration for a connector.
-    /// Only properties marked with [RuntimeConfigurable] are stored.
+    /// Only properties marked with [RuntimeConfigurable] are stored. A stored row keeps its enabled
+    /// flag whatever the document carries, and a row with none takes the document's
+    /// (<see cref="ConnectorEnabledKey"/>); <see cref="SetActiveAsync"/> is the way to change it.
     /// </summary>
     /// <param name="configuration">Runtime configuration values as JSON</param>
     /// <param name="modifiedBy">Who is making the change</param>
@@ -102,6 +104,19 @@ public interface IConnectorConfigurationService
     /// <param name="modifiedBy">Who is making the change</param>
     /// <exception cref="InvalidOperationException">Thrown when secret encryption is not configured.</exception>
     Task SaveSecretsAsync(string connectorName, Dictionary<string, string> secrets, string? modifiedBy = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Saves the secrets a connector rotates or derives during its own run, attributed to
+    /// <see cref="RuntimeModifiedBy"/>. Stores them as <see cref="SaveSecretsAsync"/> does, but empties
+    /// no cache, nudges no poller, broadcasts no change and adopts no legacy grant: the writer already
+    /// holds the values. An emptied token cache would make the next sync refresh again, and a nudge
+    /// would run that sync a minute later.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when secret encryption is not configured.</exception>
+    Task SaveRuntimeSecretsAsync(string connectorName, Dictionary<string, string> secrets, CancellationToken ct = default);
+
+    /// <summary>The <c>modifiedBy</c> of a write a connector makes during its own run.</summary>
+    const string RuntimeModifiedBy = "connector-runtime";
 
     /// <summary>Decrypted secrets, for connectors' internal use only.</summary>
     /// <returns>Dictionary of secret property names to plaintext values</returns>

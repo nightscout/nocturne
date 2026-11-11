@@ -48,19 +48,19 @@ public class SyncKeyedWriterConformanceTests : IDisposable
     private TestNocturneDbContextFactory Factory => new(_context);
 
     private TempBasalRepository TempBasals() =>
-        new(Factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+        new(Factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<TempBasalRepository>.Instance);
 
     private NoteRepository Notes() =>
-        new(Factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+        new(Factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<NoteRepository>.Instance);
 
     private DeviceEventRepository DeviceEvents() =>
-        new(Factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+        new(Factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance);
 
     private BGCheckRepository BGChecks() =>
-        new(Factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+        new(Factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<BGCheckRepository>.Instance);
 
     private static TempBasal TempBasal(double rate) => new()

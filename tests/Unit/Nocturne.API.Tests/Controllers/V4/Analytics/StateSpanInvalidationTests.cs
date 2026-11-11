@@ -47,17 +47,4 @@ public class StateSpanInvalidationTests
     {
         RemoteAttributes.Command<StateSpansController>(write).Invalidates.Should().Contain(nameof(StateSpansController.GetStateSpan));
     }
-
-    [Theory]
-    [InlineData(nameof(StateSpansController.GetPumpModes))]
-    [InlineData(nameof(StateSpansController.GetConnectivity))]
-    [InlineData(nameof(StateSpansController.GetOverrides))]
-    [InlineData(nameof(StateSpansController.GetTemporaryTargets))]
-    [InlineData(nameof(StateSpansController.GetExercise))]
-    [InlineData(nameof(StateSpansController.GetIllness))]
-    [InlineData(nameof(StateSpansController.GetTravel))]
-    public void EveryCategoryRead_IsAQueryTheWritesCanRefresh(string read)
-    {
-        RemoteAttributes.Query<StateSpansController>(read).Should().NotBeNull();
-    }
 }

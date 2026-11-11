@@ -18,10 +18,12 @@ public interface ITempBasalRateReresolver
     /// The basal schedule versions written, moved or deleted, by profile name and start (a moved
     /// version once at each start).
     /// </param>
+    /// <param name="ct">Cancels the operation.</param>
     Task AfterSchedulesWrittenAsync(
         IReadOnlyCollection<(string ProfileName, DateTime Start)> versions, CancellationToken ct);
 
     /// <param name="spans">The activations written or removed, with the end they ran to, if any.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task AfterActivationsChangedAsync(
         IReadOnlyCollection<(string ProfileName, DateTime Start, DateTime? End)> spans, CancellationToken ct);
 
@@ -30,6 +32,7 @@ public interface ITempBasalRateReresolver
     /// patient's timezone, a source's activations removed): every schedule-derived rate, at any time.
     /// </summary>
     /// <param name="profileNames">The profiles whose cached versions the change made stale.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task AfterProfilesChangedAsync(IReadOnlyCollection<string> profileNames, CancellationToken ct);
 }
 
@@ -118,11 +121,7 @@ internal sealed class TempBasalRateReresolver(
                 changed += await ReresolveAsync(window, rates, tempBasals, ct);
 
             if (changed > 0)
-            {
-                var cache = services.GetRequiredService<ITenantCache>();
-                await cache.RemoveFamilyAsync(TenantCacheFamily.Treatments, ct);
-                await cache.RemoveFamilyAsync(TenantCacheFamily.Statistics, ct);
-            }
+                await services.GetRequiredService<ITenantCache>().RemoveFamilyAsync(TenantCacheFamily.Statistics, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -138,10 +137,9 @@ internal sealed class TempBasalRateReresolver(
         while (true)
         {
             var page = await tempBasals.GetScheduleDerivedAsync(window.From, window.To, after, PageSize, ct);
-            foreach (var tempBasal in page)
+            foreach (var (tempBasal, (rate, scheduled)) in page.Zip(await rates.RatesAtAsync(page, ct)))
             {
                 var percent = tempBasal.Percent!.Value;
-                var (rate, scheduled) = await rates.RateAtAsync(percent, tempBasal.StartMills, ct);
                 if (rate == tempBasal.Rate && scheduled == tempBasal.ScheduledRate)
                     continue;
 

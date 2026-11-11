@@ -1,8 +1,8 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/dotnet
 {
-	"name": "Nocturne (.NET 10 + Aspire + SvelteKit)",
-	"image": "mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble",
+	"name": "Nocturne (.NET 11 + Aspire + SvelteKit)",
+	"image": "mcr.microsoft.com/devcontainers/dotnet:2-11.0-resolute",
 	"features": {
 		"ghcr.io/devcontainers/features/dotnet:2": {},
 		"ghcr.io/nikiforovall/devcontainer-features/dotnet-csharpier:1": {},

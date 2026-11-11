@@ -16,31 +16,30 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for temporary basal records: a sync-key upsert participant and a DeduplicationService
-/// participant, keeping only the span-specific queries, the non-primary read filter, the post-commit
-/// dedup linking and the field preservation of <see cref="ApplySyncUpsert"/>.
+/// Repository for temporary basal records: a sync-key upsert participant and a deduplication
+/// participant, keeping only the span-specific queries, the non-primary read filter and the field
+/// preservation of <see cref="ApplySyncUpsert"/>.
 /// </summary>
 public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasalEntity>, ITempBasalRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="TempBasalRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
+    /// <param name="linker">Links committed inserts into their duplicate groups.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
     public TempBasalRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<TempBasalRepository> logger,
-        IV4RecordBroadcaster<TempBasal>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<TempBasal>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
     }
 
     /// <inheritdoc />
@@ -52,11 +51,8 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     /// <inheritdoc />
     protected override void ApplyUpdate(TempBasalEntity target, TempBasal source) => TempBasalMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.TempBasal;
-
     /// <summary>
-    /// The base query with the non-primary LinkedRecords exclusion, which
+    /// The base query with the duplicate filter, which
     /// <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/> applies too.
     /// </summary>
     public override async Task<IEnumerable<TempBasal>> GetAsync(
@@ -75,39 +71,11 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
+        query = query.InObservationOrder(descending);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(TempBasalMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Links committed inserts into canonical groups, best-effort: a failure is logged rather than
-    /// failing a committed write. Only the full dedup job links a row missed here; the reconcile
-    /// pass reads links, so it never sees one.
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<TempBasalEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "TempBasal", inserted.Count);
-        }
     }
 
     /// <summary>
@@ -151,14 +119,17 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
         // The global query filter already restricts to active (DeletedAt == null) rows for this
         // tenant. Soft-delete only the window's rows whose legacy id the source no longer reports;
         // a row with no legacy id can't be matched against the incoming set, so treat it as absent.
-        return await ctx.AuditedSoftDeleteAsync(
+        var deleted = await ctx.AuditedSoftDeleteAsync(
             AbsentFromSource(ctx, source, from, to, keepLegacyIds),
             AuditContext, $"data_source={source}", ct);
+        if (deleted > 0)
+            await ReportWrittenAsync();
+        return deleted;
     }
 
     /// <summary>
     /// The rows <see cref="SoftDeleteAbsentBySourceAndDateRangeAsync"/> removes. The set is bound as
-    /// an array for the reason given on <see cref="DeduplicationService.PrimariesOf"/>.
+    /// an array for the reason given on <see cref="Services.Deduplication.DuplicateReconciler.PrimariesOf"/>.
     /// </summary>
     internal static IQueryable<TempBasalEntity> AbsentFromSource(
         NocturneDbContext ctx, string source, DateTime from, DateTime to, IReadOnlySet<string> keepLegacyIds)
@@ -213,21 +184,30 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
                 .SetProperty(t => t.RateFromSchedule, fromSchedule)
                 .SetProperty(t => t.OriginEvidence, t => t.OriginEvidence == Uncorroborated ? Pending : t.OriginEvidence) // judged without a rate, judged again with one
                 .SetProperty(t => t.SysUpdatedAt, stamp), ct);
-        return updated > 0;
+        if (updated == 0)
+            return false;
+
+        await ReportWrittenAsync();
+        return true;
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<TempBasal>> GetByLegacyIdsAsync(
-        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    public async Task<int> StampScheduledRatesAsync(
+        string source, Func<DateTime, double> scheduledRateAt, CancellationToken ct = default)
     {
-        if (legacyIds.Count == 0)
-            return [];
-
+        var scheduled = nameof(TempBasalOrigin.Scheduled);
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.TempBasals.AsNoTracking()
-            .Where(t => t.LegacyId != null && legacyIds.Contains(t.LegacyId))
+        var temps = await ctx.TempBasals
+            .Where(t => t.DataSource == source && t.ScheduledRate == null && t.Origin != scheduled)
             .ToListAsync(ct);
-        return entities.Select(TempBasalMapper.ToDomainModel).ToList();
+        if (temps.Count == 0)
+            return 0;
+
+        foreach (var temp in temps)
+            temp.ScheduledRate = scheduledRateAt(temp.Timestamp);
+        await ctx.SaveChangesAsync(ct);
+        await ReportWrittenAsync();
+        return temps.Count;
     }
 
     /// <inheritdoc />
@@ -237,7 +217,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
         var entity = await ctx.TempBasals
             .AsNoTracking()
             .Where(t => t.Timestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
-            .ExcludeNonPrimary(ctx, RecordType.TempBasal)
+            .ExcludeDuplicates()
             .OrderByDescending(t => t.Timestamp)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);

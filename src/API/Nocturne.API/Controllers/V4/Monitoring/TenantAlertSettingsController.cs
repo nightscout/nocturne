@@ -24,7 +24,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// The request/response shape is unchanged, but manual DND is now backed by a
 /// <c>scope=all</c> row in <c>dnd_windows</c> (ADR 0004 D5) rather than columns on this row:
 /// the toggle creates/clears that window and <c>dndManual*</c> is computed from it. Scheduled
-/// DND stays here. The per-rule <see cref="AlertRuleEntity.AllowThroughDnd"/> bypass and the
+/// DND stays here. The per-rule <see cref="AlertRuleSnapshot.AllowThroughDnd"/> bypass and the
 /// <c>do_not_disturb</c> condition apply to both paths; critical rules implicitly bypass DND.
 /// </remarks>
 [ApiController]
@@ -52,6 +52,7 @@ public class TenantAlertSettingsController : ControllerBase
 
     /// <summary>
     /// Get the current tenant's alert settings, creating a default row if one does not exist.
+    /// Read-only credentials may call it; a repeat call stores nothing further.
     /// </summary>
     /// <remarks>
     /// The get-or-create is a write, but of server-defined defaults and idempotently, so it carries
@@ -82,6 +83,8 @@ public class TenantAlertSettingsController : ControllerBase
     /// <summary>
     /// Replace the current tenant's alert settings. Upserts on first call. The manual-DND toggle
     /// creates/clears the tenant's <c>scope=all</c> window; scheduled fields persist on the row.
+    /// Needs <c>alerts.readwrite</c>: the toggle suppresses delivery of every non-critical alert
+    /// tenant-wide, and read-only credentials such as a guest-link session are refused.
     /// </summary>
     /// <remarks>
     /// Requires <see cref="Scope.AlertsReadWrite"/>: this toggles tenant-wide Do not disturb,

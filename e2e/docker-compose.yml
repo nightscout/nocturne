@@ -39,7 +39,10 @@ services:
     shm_size: 64mb
     ports:
       - "127.0.0.1:${E2E_POSTGRES_PORT:-1633}:5432"
-    mem_limit: 256m
+    # The tmpfs is charged to this limit as it fills: the database (about 51 MB after a full
+    # run) and up to max_wal_size of WAL, about 310 MB. With 32 MB of shared_buffers that
+    # leaves about 680 MB, room for some 30 backends of about 20 MB each.
+    mem_limit: 1g
     cpus: 1.0
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d nocturne -h 127.0.0.1"]
@@ -80,10 +83,6 @@ services:
       NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS: "true"
       NOCTURNE_GOOGLE_HEALTH_MOCK: "true"
       NOCTURNE_EVERSENSE_MOCK: "true"
-      GOOGLE_HEALTH_CLIENT_ID: e2e.apps.googleusercontent.com
-      GOOGLE_HEALTH_CLIENT_SECRET: e2e-google-secret
-      # The apex over the test TLS proxy: BASE_DOMAIN's default would name the plain-HTTP web port.
-      GOOGLE_HEALTH_REDIRECT_URI: https://nocturne.localhost:${E2E_WEB_TLS_PORT:-1635}/api/v4/google-health/oauth/callback
       # Workstation GC with a conserving heap: the server GC sizes its heaps per core.
       DOTNET_gcServer: "0"
       DOTNET_GCConserveMemory: "5"

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -22,8 +23,9 @@ public class ProfileActivationRepository
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<ProfileActivationRepository> logger,
-        IV4RecordBroadcaster<ProfileActivation>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<ProfileActivation>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
     {
     }
 
@@ -115,31 +117,38 @@ public class ProfileActivationRepository
         return entities.Select(ProfileActivationMapper.ToDomainModel).ToList();
     }
 
-    public async Task<int> SetEndsAsync(IReadOnlyDictionary<Guid, DateTime?> ends, CancellationToken ct = default)
+    public async Task<int> SettleAsync(
+        IReadOnlyDictionary<Guid, DateTime?> ends, IReadOnlyDictionary<Guid, Guid?> confirms, CancellationToken ct = default)
     {
-        if (ends.Count == 0)
+        var ids = ends.Keys.Concat(confirms.Keys).Distinct().ToList();
+        if (ids.Count == 0)
             return 0;
 
-        var ids = ends.Keys.ToList();
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx.ProfileActivations.Where(e => ids.Contains(e.Id)).ToListAsync(ct);
         foreach (var entity in entities)
-            entity.EndTimestamp = ends[entity.Id];
+        {
+            if (ends.TryGetValue(entity.Id, out var end))
+                entity.EndTimestamp = end;
+            if (confirms.TryGetValue(entity.Id, out var requested))
+                entity.RequestedActivationId = requested;
+        }
         return entities.Count == 0 ? 0 : await SaveChangedAsync(ctx, entities, ct);
     }
 
-    public async Task<int> SetRequestedActivationAsync(
-        IReadOnlyCollection<Guid> effectiveIds, Guid? requestedId, CancellationToken ct = default)
+    public async Task ReplaceByDataSourceAsync(
+        string dataSource, IReadOnlyCollection<ProfileActivation> activations, CancellationToken ct = default)
     {
-        if (effectiveIds.Count == 0)
-            return 0;
-
-        var ids = effectiveIds.ToList();
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.ProfileActivations.Where(e => ids.Contains(e.Id)).ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.RequestedActivationId = requestedId;
-        return entities.Count == 0 ? 0 : await SaveChangedAsync(ctx, entities, ct);
+        var purged = await ctx.ExecuteInTransactionAsync(async token =>
+        {
+            var count = await ctx.ProfileActivations.PurgeAsync(a => a.DataSource == dataSource, token);
+            ctx.ProfileActivations.AddRange(activations.Select(ProfileActivationMapper.ToEntity));
+            await ctx.SaveChangesAsync(token);
+            return count;
+        }, ct: ct);
+        if (purged > 0 || activations.Count > 0)
+            await ReportWrittenAsync();
     }
 
     public async Task<IReadOnlyList<ProfileActivation>> GetUnattributedAsync(
@@ -158,12 +167,15 @@ public class ProfileActivationRepository
     }
 
     /// <summary>Saves only the rows whose values moved, so an unchanged end writes no row version.</summary>
-    private static async Task<int> SaveChangedAsync(
+    private async Task<int> SaveChangedAsync(
         NocturneDbContext ctx, List<ProfileActivationEntity> entities, CancellationToken ct)
     {
         var changed = entities.Count(e => ctx.Entry(e).State == EntityState.Modified);
         if (changed > 0)
+        {
             await ctx.SaveChangesAsync(ct);
+            await ReportWrittenAsync();
+        }
         return changed;
     }
 }

@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing calibration records. A LegacyId-only type (no SyncId-upsert, no
-/// DeduplicationService participation), so it uses the shared <see cref="V4RepositoryBase{TModel,TEntity}"/>
+/// deduplication), so it uses the shared <see cref="V4RepositoryBase{TModel,TEntity}"/>
 /// behaviour unchanged plus the calibration-specific queries below.
 /// </summary>
 public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEntity>, ICalibrationRepository
@@ -25,8 +25,8 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// Initializes a new instance of the <see cref="CalibrationRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public CalibrationRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
+    public CalibrationRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null, ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads)
     {
     }
 

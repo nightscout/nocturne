@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Platform-level audit configuration for a tenant.
 /// Controls whether read-access logging is enabled and retention periods.
 /// Intentionally NOT ITenantScoped — this is platform config (like TenantEntity itself),
-/// not tenant-scoped PHI. The retention service reads all tenants' configs at once.
+/// not tenant-scoped PHI. The audit retention job reads the row by its tenant id.
 /// No RLS policy on this table.
 /// </summary>
 [Table("tenant_audit_config")]

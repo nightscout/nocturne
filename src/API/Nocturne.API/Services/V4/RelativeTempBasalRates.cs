@@ -19,12 +19,9 @@ public sealed class RelativeTempBasalRates(IBasalRateResolver basalRates)
 {
     public async Task ResolveAsync(IEnumerable<TempBasal> relative, CancellationToken ct)
     {
-        foreach (var tempBasal in relative)
+        var unresolved = relative.Where(t => t is { Percent: not null, Rate: null }).ToList();
+        foreach (var (tempBasal, (rate, scheduled)) in unresolved.Zip(await RatesAtAsync(unresolved, ct)))
         {
-            if (tempBasal is not { Percent: { } percent, Rate: null })
-                continue;
-
-            var (rate, scheduled) = await RateAtAsync(percent, tempBasal.StartMills, ct);
             tempBasal.Rate = rate;
             tempBasal.ScheduledRate = scheduled;
             tempBasal.RateFromSchedule = rate is not null;
@@ -32,14 +29,21 @@ public sealed class RelativeTempBasalRates(IBasalRateResolver basalRates)
     }
 
     /// <summary>
-    /// The rate <paramref name="percent"/> sets at <paramref name="startMills"/> and the scheduled rate
-    /// it applies to; both null where no schedule is in force.
+    /// The rate each of <paramref name="tempBasals"/>' percent sets at its start and the scheduled rate
+    /// it applies to, in order; both null where no schedule is in force. One read of the schedules for
+    /// all of them.
     /// </summary>
-    public async Task<(double? Rate, double? ScheduledRate)> RateAtAsync(
-        double percent, long startMills, CancellationToken ct) =>
-        await basalRates.FindBasalRateAsync(startMills, ct) is { } scheduled
-            ? (TempBasal.RateRelativeTo(scheduled, percent), scheduled)
-            : (null, null);
+    public async Task<IReadOnlyList<(double? Rate, double? ScheduledRate)>> RatesAtAsync(
+        IReadOnlyList<TempBasal> tempBasals, CancellationToken ct)
+    {
+        if (tempBasals.Count == 0)
+            return [];
+
+        var scheduled = await basalRates.FindBasalRatesAsync([.. tempBasals.Select(t => t.StartMills)], ct);
+        return [.. tempBasals.Zip(scheduled, (tempBasal, rate) => rate is { } value
+            ? (TempBasal.RateRelativeTo(value, tempBasal.Percent!.Value), rate)
+            : ((double?)null, (double?)null))];
+    }
 
     /// <summary>
     /// Drops the rate a read-back carried into an edit that changed the percent, so the edit

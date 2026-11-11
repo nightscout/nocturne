@@ -7,6 +7,12 @@ namespace Nocturne.Infrastructure.Data.Tests.Entities;
 
 public class MutationAuditLogEntityTests
 {
+    private static readonly Dictionary<string, string> RowPropertyByContextProperty = new()
+    {
+        [nameof(IAuditContext.SubjectId)] = nameof(MutationAuditLogEntity.ActorSubjectId),
+        [nameof(IAuditContext.SubjectName)] = nameof(MutationAuditLogEntity.ActorName),
+    };
+
     [Fact]
     public void Create_CopiesEveryActorFieldFromTheAuditContext()
     {
@@ -33,7 +39,8 @@ public class MutationAuditLogEntityTests
         {
             property.GetValue(context).Should().NotBeNull(
                 $"set {property.Name} on the stub so the copy is observable");
-            var onRow = typeof(MutationAuditLogEntity).GetProperty(property.Name);
+            var rowPropertyName = RowPropertyByContextProperty.GetValueOrDefault(property.Name, property.Name);
+            var onRow = typeof(MutationAuditLogEntity).GetProperty(rowPropertyName);
             onRow.Should().NotBeNull($"the audit row must record {property.Name}");
             onRow!.GetValue(row).Should().Be(
                 property.GetValue(context),
@@ -42,13 +49,26 @@ public class MutationAuditLogEntityTests
     }
 
     [Fact]
+    public void Create_RecordsTheCallerInActorSubjectIdAndActorName()
+    {
+        var caller = Guid.NewGuid();
+        var context = new StubAuditContext { SubjectId = caller, SubjectName = "Alex" };
+
+        var row = MutationAuditLogEntity.Create(
+            Guid.NewGuid(), context, "Entry", Guid.NewGuid(), "update", "{}", DateTime.UtcNow);
+
+        row.ActorSubjectId.Should().Be(caller);
+        row.ActorName.Should().Be("Alex");
+    }
+
+    [Fact]
     public void Create_WithNoAuditContext_LeavesActorFieldsNull()
     {
         var row = MutationAuditLogEntity.Create(
             Guid.NewGuid(), null, "Entry", null, "bulk_delete", null, DateTime.UtcNow);
 
-        row.SubjectId.Should().BeNull();
-        row.SubjectName.Should().BeNull();
+        row.ActorSubjectId.Should().BeNull();
+        row.ActorName.Should().BeNull();
         row.AuthType.Should().BeNull();
         row.IpAddress.Should().BeNull();
         row.TokenId.Should().BeNull();

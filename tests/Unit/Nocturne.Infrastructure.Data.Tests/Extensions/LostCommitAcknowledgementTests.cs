@@ -83,7 +83,7 @@ public sealed class LostCommitAcknowledgementTests : IDisposable
         var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
         var repository = new BolusRepository(
             new TestNocturneDbContextFactory(_retrying),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
             broadcaster);
@@ -123,7 +123,7 @@ public sealed class LostCommitAcknowledgementTests : IDisposable
         var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
         var repository = new BolusRepository(
             new TestNocturneDbContextFactory(_retrying),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
             broadcaster);

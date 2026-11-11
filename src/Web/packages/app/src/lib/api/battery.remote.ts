@@ -1,10 +1,9 @@
 import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
+import { DateRangeSchema, resolveReportRange } from "#lib/api/report-range.js";
 
-const batteryReportSchema = z.object({
+const batteryReportSchema = DateRangeSchema.extend({
   device: z.string().optional().nullable(),
-  from: z.number(),
-  to: z.number(),
   cycleLimit: z.number().optional().default(50),
 });
 
@@ -15,8 +14,8 @@ export const getBatteryReportData = query(
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
 
-    const fromDate = new Date(props.from).toISOString();
-    const toDate = new Date(props.to).toISOString();
+    const { startDate: fromDate, endDate: toDate } =
+      await resolveReportRange(props);
 
     const [statistics, cycles, readings] = await Promise.all([
       apiClient.battery.getBatteryStatistics(

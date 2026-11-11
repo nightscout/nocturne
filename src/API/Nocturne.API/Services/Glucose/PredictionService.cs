@@ -16,7 +16,7 @@ namespace Nocturne.API.Services.Glucose;
 /// <seealso cref="IPredictionService"/>
 public class PredictionService : IPredictionService
 {
-    private readonly IEntryStore _store;
+    private readonly IEntryService _entries;
     private readonly ITreatmentService _treatments;
     private readonly IBasalRateResolver _basalRate;
     private readonly ISensitivityResolver _sensitivity;
@@ -28,7 +28,7 @@ public class PredictionService : IPredictionService
     private readonly ILogger<PredictionService> _logger;
 
     public PredictionService(
-        IEntryStore store,
+        IEntryService entries,
         ITreatmentService treatments,
         IBasalRateResolver basalRate,
         ISensitivityResolver sensitivity,
@@ -39,7 +39,7 @@ public class PredictionService : IPredictionService
         TimeProvider timeProvider,
         ILogger<PredictionService> logger)
     {
-        _store = store;
+        _entries = entries;
         _treatments = treatments;
         _basalRate = basalRate;
         _sensitivity = sensitivity;
@@ -74,7 +74,7 @@ public class PredictionService : IPredictionService
         // Fetch recent glucose readings (last 10 entries at-or-before the anchor for delta
         // calculation). ToMills bounds the query at the anchor so an as-of replay sees only
         // readings the user would have had at that moment.
-        var glucoseEntries = await _store.QueryAsync(
+        var glucoseEntries = await _entries.QueryEntriesAsync(
             new EntryQuery { Type = "sgv", Count = 10, ToMills = nowMills },
             cancellationToken);
 
@@ -291,7 +291,7 @@ public class PredictionService : IPredictionService
         CancellationToken cancellationToken)
     {
         // Get current entry
-        var currentEntry = await _store.GetCurrentAsync(cancellationToken);
+        var currentEntry = await _entries.GetCurrentEntryAsync(cancellationToken);
 
         if (currentEntry is null || currentEntry.GlucoseMgdl() <= 0)
         {

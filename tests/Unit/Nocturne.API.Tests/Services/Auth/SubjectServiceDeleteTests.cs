@@ -10,6 +10,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -49,10 +51,10 @@ public class SubjectServiceDeleteTests : IDisposable
         await DeleteAsLeaverAsync();
 
         var rows = await ReadRowsAsync();
-        rows[_selfLoginRow].SubjectId.Should().Be(_deletedId);
+        rows[_selfLoginRow].TargetSubjectId.Should().Be(_deletedId);
         rows[_selfLoginRow].ActorSubjectId.Should().Be(_deletedId);
         rows[_actedOnOtherRow].ActorSubjectId.Should().Be(_deletedId);
-        rows[_actedOnByAdminRow].SubjectId.Should().Be(_deletedId);
+        rows[_actedOnByAdminRow].TargetSubjectId.Should().Be(_deletedId);
     }
 
     [Fact]
@@ -107,7 +109,7 @@ public class SubjectServiceDeleteTests : IDisposable
 
         await using var reader = _db.CreateContext();
         var deleted = await reader.AuthAuditLog.SingleAsync(a => a.EventType == AuthAuditEventType.SubjectDeleted);
-        deleted.SubjectId.Should().Be(_deletedId);
+        deleted.TargetSubjectId.Should().Be(_deletedId);
         deleted.ActorSubjectId.Should().Be(_adminId);
         (await reader.Subjects.AnyAsync(s => s.Id == _deletedId)).Should().BeFalse();
     }
@@ -129,9 +131,9 @@ public class SubjectServiceDeleteTests : IDisposable
             new AuditContext(),
             NullLogger<AuthAuditService>.Instance);
         var service = new SubjectService(
-            dbContext.AsFactory(), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
+            new SubjectRepository(dbContext.AsFactory()), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
 
-        (await service.DeleteSubjectAsync(_deletedId)).Should().BeTrue();
+        (await service.DeleteSubjectAsync(_deletedId)).Should().BeOfType<SubjectChange.Changed>();
     }
 
     private async Task<Dictionary<Guid, AuthAuditLogEntity>> ReadRowsAsync()
@@ -144,7 +146,7 @@ public class SubjectServiceDeleteTests : IDisposable
     {
         Id = id,
         EventType = eventType,
-        SubjectId = subject,
+        TargetSubjectId = subject,
         ActorSubjectId = actor,
         IpAddress = ip,
         UserAgent = $"agent-{ip}",

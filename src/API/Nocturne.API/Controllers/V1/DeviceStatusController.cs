@@ -7,58 +7,38 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
 /// Device Status controller that provides 1:1 compatibility with Nightscout device status endpoints.
 /// Implements the /api/v1/devicestatus/* endpoints from the legacy JavaScript implementation.
-/// Writes decompose directly into V4 snapshot tables; reads project back from V4.
 /// </summary>
-/// <seealso cref="IDeviceStatusDecomposer"/>
-/// <seealso cref="DeviceStatusProjectionService"/>
+/// <seealso cref="IDeviceStatusService"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class DeviceStatusController : ControllerBase
 {
-    private readonly DeviceStatusProjectionService _projection;
-    private readonly IDeviceStatusDecomposer _decomposer;
-    private readonly IWriteSideEffects _sideEffects;
-    private readonly IDataEventSink<DeviceStatus> _events;
+    private readonly IDeviceStatusService _deviceStatuses;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DeviceStatusController> _logger;
-
-    private const string CollectionName = "devicestatus";
-
-    /// <summary>
-    /// Suppress V4 decomposition in side effects — the controller decomposes directly.
-    /// </summary>
-    private static readonly WriteEffectOptions NoDecompose = new() { DecomposeToV4 = false };
 
     /// <summary>
     /// Initializes a new instance of <see cref="DeviceStatusController"/>.
     /// </summary>
     public DeviceStatusController(
-        DeviceStatusProjectionService projection,
-        IDeviceStatusDecomposer decomposer,
-        IWriteSideEffects sideEffects,
-        IDataEventSink<DeviceStatus> events,
+        IDeviceStatusService deviceStatuses,
         TimeProvider timeProvider,
         ILogger<DeviceStatusController> logger
     )
     {
-        _projection = projection;
-        _decomposer = decomposer;
-        _sideEffects = sideEffects;
-        _events = events;
+        _deviceStatuses = deviceStatuses;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -107,11 +87,11 @@ public class DeviceStatusController : ControllerBase
                 skip = 0; // Normalize to 0 for Nightscout compatibility
             }
 
-            var find = DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(
+            var find = FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(
                 LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null),
                 _timeProvider.GetUtcNow()
             ));
-            var deviceStatusEntries = await _projection.GetMatchingAsync(
+            var deviceStatusEntries = await _deviceStatuses.GetDeviceStatusesAsync(
                 find, LegacyReadLimits.ClampMergedCount(count), skip, cancellationToken
             );
             var deviceStatusArray = deviceStatusEntries.ToArray();
@@ -203,36 +183,8 @@ public class DeviceStatusController : ControllerBase
                 }
             }
 
-            // Decompose each device status directly into V4 snapshot tables
-            var projectedResults = new List<DeviceStatus>();
-            foreach (var ds in deviceStatusEntries)
-            {
-                // Direct v1 upload has no connector data source; a live upload broadcasts.
-                await _decomposer.DecomposeAsync(ds, source: null, WriteOrigin.Live, cancellationToken);
-
-                // Project the V4 snapshots back to DeviceStatus shape for the response
-                var projected = ds;
-                if (!string.IsNullOrEmpty(ds.Id))
-                {
-                    var fromV4 = await _projection.GetByIdAsync(ds.Id, cancellationToken);
-                    if (fromV4 != null)
-                        projected = fromV4;
-                }
-
-                projectedResults.Add(projected);
-            }
-
-            var createdArray = projectedResults.ToArray();
-
-            // Broadcast via WriteSideEffectsService (cache invalidation + SignalR)
-            await _sideEffects.OnCreatedAsync(
-                CollectionName,
-                createdArray,
-                NoDecompose,
-                cancellationToken
-            );
-
-            await _events.OnCreatedAsync(createdArray.ToList(), cancellationToken);
+            var createdArray = (await _deviceStatuses.CreateDeviceStatusesAsync(
+                deviceStatusEntries, cancellationToken: cancellationToken)).ToArray();
 
             _logger.LogDebug(
                 "Successfully created {Count} device status entries",
@@ -294,21 +246,8 @@ public class DeviceStatusController : ControllerBase
                     : Forbid();
             }
 
-            // The path's wire form may only resolve to the stored id; the projection is also the broadcast.
-            var deviceStatusToDelete = await _projection.GetByIdAsync(id, cancellationToken);
-
-            if (deviceStatusToDelete?.Id is { } storedId
-                && await _decomposer.DeleteStoredAsync(storedId, WriteOrigin.Live, cancellationToken) > 0)
+            if (await _deviceStatuses.DeleteDeviceStatusAsync(id, cancellationToken))
             {
-                await _sideEffects.OnDeletedAsync(
-                    CollectionName,
-                    deviceStatusToDelete,
-                    NoDecompose,
-                    cancellationToken
-                );
-
-                await _events.OnDeletedAsync(deviceStatusToDelete, cancellationToken);
-
                 _logger.LogDebug("Successfully deleted device status with ID: {Id}", id);
                 return Ok(LegacyDeleteStatus.For(1));
             }
@@ -325,7 +264,6 @@ public class DeviceStatusController : ControllerBase
 
     /// <summary>
     /// Bulk delete device status entries using query filters.
-    /// Finds matching records via V4 projection, then cascade-deletes their V4 snapshots.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Number of deleted entries</returns>
@@ -348,7 +286,7 @@ public class DeviceStatusController : ControllerBase
         try
         {
             var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
-            var find = DeviceStatusProjectionService.ParseFind(findQuery);
+            var find = FindQuery.ParseDeviceStatus(findQuery);
 
             if (find.IsEmpty || find.HasInexactCondition)
             {
@@ -358,45 +296,12 @@ public class DeviceStatusController : ControllerBase
                 );
             }
 
-            // Find matching records via V4 projection, then delete each by legacy ID.
-            // NOTE: hardcoded limit of 10,000 means bulk deletes silently truncate
-            // if more records match. Nightscout legacy has the same limitation.
             // Nightscout windows every delete naming no created_at or _id, a time-only one included.
-            const int bulkDeleteLimit = 10_000;
-            var matchingRecords = await _projection.GetMatchingAsync(
-                DeviceStatusProjectionService.ParseFind(
+            var deletedCount = await _deviceStatuses.DeleteDeviceStatusesAsync(
+                FindQuery.ParseDeviceStatus(
                     LegacyFindDateWindow.Apply(findQuery, _timeProvider.GetUtcNow(), windowUnfiltered: true)),
-                bulkDeleteLimit,
-                skip: 0,
                 cancellationToken
             );
-
-            if (matchingRecords.Count == bulkDeleteLimit)
-            {
-                _logger.LogWarning(
-                    "Bulk delete matched the maximum of {Limit} records — results may be truncated",
-                    bulkDeleteLimit);
-            }
-
-            long deletedCount = 0;
-            foreach (var record in matchingRecords)
-            {
-                if (!string.IsNullOrEmpty(record.Id))
-                {
-                    var count = await _decomposer.DeleteStoredAsync(record.Id, WriteOrigin.Live, cancellationToken);
-                    if (count > 0)
-                        deletedCount++;
-                }
-            }
-
-            await _sideEffects.OnBulkDeletedAsync(
-                CollectionName,
-                deletedCount,
-                NoDecompose,
-                cancellationToken
-            );
-
-            await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
 
             _logger.LogDebug(
                 "Successfully bulk deleted {Count} device status entries",

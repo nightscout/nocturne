@@ -21,6 +21,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -68,7 +69,8 @@ public class MetadataPublisherBackfillMarkTests
             Mock.Of<IHeartRateService>(),
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
-            _db.AsFactory(),
+            new ActivityDedupRepository(_db.AsFactory()),
+            new ConnectorConfigurationRepository(_db.AsFactory()),
             Mock.Of<IProfileActivationRepository>(),
             new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
@@ -81,33 +83,35 @@ public class MetadataPublisherBackfillMarkTests
     {
         var mark = new DateTime(2024, 6, 1, 12, 30, 15, DateTimeKind.Utc);
 
-        await _publisher.SetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", mark);
+        await _publisher.SetBackfillLowWaterMarksAsync("nightscout-connector", Changes(("Glucose", mark)));
 
-        var read = await _publisher.GetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose");
+        var read = (await _publisher.GetBackfillLowWaterMarksAsync("nightscout-connector"))["Glucose"];
         read.Should().Be(mark, "the value must round-trip without a timezone shift");
-        read!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        read.Kind.Should().Be(DateTimeKind.Utc);
     }
 
     [Fact]
-    public async Task Marks_AreIndependentPerCollection()
+    public async Task OneWrite_StoresAndRemovesKeys_AndKeepsTheKeysItDoesNotName()
     {
         var glucoseMark = new DateTime(2024, 6, 1, 0, 0, 0, DateTimeKind.Utc);
         var treatmentsMark = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var gapFrom = new DateTime(2025, 2, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        await _publisher.SetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", glucoseMark);
-        await _publisher.SetBackfillLowWaterMarkAsync("nightscout-connector", "Treatments", treatmentsMark);
-        await _publisher.SetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", null);
+        await _publisher.SetBackfillLowWaterMarksAsync("nightscout-connector",
+            Changes(("Glucose", glucoseMark), ("Treatments", treatmentsMark)));
+        await _publisher.SetBackfillLowWaterMarksAsync("nightscout-connector",
+            Changes(("Glucose", null), ("Treatments.GapFrom", gapFrom)));
 
-        (await _publisher.GetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose")).Should().BeNull();
-        (await _publisher.GetBackfillLowWaterMarkAsync("nightscout-connector", "Treatments")).Should().Be(treatmentsMark);
+        (await _publisher.GetBackfillLowWaterMarksAsync("nightscout-connector")).Should().BeEquivalentTo(
+            new Dictionary<string, DateTime> { ["Treatments"] = treatmentsMark, ["Treatments.GapFrom"] = gapFrom });
     }
 
     [Fact]
     public async Task ClearingTheLastMark_EmptiesTheColumn()
     {
-        await _publisher.SetBackfillLowWaterMarkAsync(
-            "nightscout-connector", "Glucose", new DateTime(2024, 6, 1, 0, 0, 0, DateTimeKind.Utc));
-        await _publisher.SetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", null);
+        await _publisher.SetBackfillLowWaterMarksAsync(
+            "nightscout-connector", Changes(("Glucose", new DateTime(2024, 6, 1, 0, 0, 0, DateTimeKind.Utc))));
+        await _publisher.SetBackfillLowWaterMarksAsync("nightscout-connector", Changes(("Glucose", null)));
 
         _db.ChangeTracker.Clear();
         _db.ConnectorConfigurations.Single().BackfillLowWaterMarks.Should().BeNull();
@@ -116,12 +120,15 @@ public class MetadataPublisherBackfillMarkTests
     [Fact]
     public async Task UnknownSource_IsANoOp_NotAThrow()
     {
-        await _publisher.SetBackfillLowWaterMarkAsync(
-            "dexcom-connector", "Glucose", new DateTime(2024, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+        await _publisher.SetBackfillLowWaterMarksAsync(
+            "dexcom-connector", Changes(("Glucose", new DateTime(2024, 6, 1, 0, 0, 0, DateTimeKind.Utc))));
 
-        (await _publisher.GetBackfillLowWaterMarkAsync("dexcom-connector", "Glucose")).Should().BeNull();
+        (await _publisher.GetBackfillLowWaterMarksAsync("dexcom-connector")).Should().BeEmpty();
         _db.ChangeTracker.Clear();
         _db.ConnectorConfigurations.Single().BackfillLowWaterMarks.Should().BeNull(
             "a mark for an unconfigured connector must not land on another connector's row");
     }
+
+    private static Dictionary<string, DateTime?> Changes(params (string Key, DateTime? Mark)[] changes) =>
+        changes.ToDictionary(c => c.Key, c => c.Mark);
 }

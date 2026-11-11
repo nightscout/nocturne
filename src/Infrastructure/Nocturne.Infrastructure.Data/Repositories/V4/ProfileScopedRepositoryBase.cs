@@ -129,19 +129,4 @@ public abstract class ProfileScopedRepositoryBase<TModel, TEntity> : V4Repositor
             .ToListAsync(ct);
         return entities.Select(ToDomain).ToList();
     }
-
-    /// <inheritdoc cref="IProfileScopedRepository{TRecord}.GetByLegacyIdsAsync" />
-    public async Task<IEnumerable<TModel>> GetByLegacyIdsAsync(
-        IEnumerable<string> legacyIds, CancellationToken ct = default)
-    {
-        var ids = legacyIds.Distinct(StringComparer.Ordinal).ToArray();
-        if (ids.Length == 0) return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.Set<TEntity>()
-            .AsNoTracking()
-            .Where(e => e.LegacyId != null && ids.Contains(e.LegacyId))
-            .ToListAsync(ct);
-        return entities.Select(ToDomain).ToList();
-    }
 }

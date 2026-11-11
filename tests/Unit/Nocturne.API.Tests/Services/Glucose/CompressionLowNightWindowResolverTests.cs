@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
@@ -14,6 +13,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Services.Glucose;
 
@@ -191,11 +191,7 @@ public class CompressionLowNightWindowResolverTests
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
 
-        var detector = new CompressionLowDetectionService(
-            provider,
-            null!,
-            TimeProvider.System,
-            NullLogger<CompressionLowDetectionService>.Instance);
+        var detector = new CompressionLowDetectionService(TimeProvider.System, NullLogger<CompressionLowDetectionService>.Instance);
         await detector.DetectForNightAsync(NightOf, scope.ServiceProvider, CancellationToken.None);
         var detectionQuery = _windowQueries.Should().ContainSingle().Subject;
 

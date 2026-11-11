@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Helpers;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.Core.Models;
 
@@ -100,15 +101,12 @@ public class ResponseComparisonService : IResponseComparisonService
             ComparisonTimestamp = _time.GetUtcNow(),
         };
 
-        // Sanitize user-controlled path to prevent log forging
-        var sanitizedPath = requestPath?.Replace("\r", "").Replace("\n", "");
-
         try
         {
             _logger.LogDebug(
                 "Starting response comparison for correlation {CorrelationId} on path {RequestPath}",
                 traceId,
-                sanitizedPath
+                LogText.Sanitize(requestPath)
             );
 
             // Check if both responses exist

@@ -60,6 +60,12 @@ public interface IBolusRepository
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
+    /// <summary>Every <see cref="Bolus"/> sharing one of <paramref name="correlationIds"/>, in one query.</summary>
+    Task<IEnumerable<Bolus>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds,
+        CancellationToken ct = default
+    );
+
     /// <summary>Retrieve all <see cref="Bolus"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking a bolus to its wizard calculation or meal.</param>
     Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(

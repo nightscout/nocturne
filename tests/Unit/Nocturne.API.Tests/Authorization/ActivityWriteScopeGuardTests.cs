@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Authorization;

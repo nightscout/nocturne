@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Tests.Infrastructure;
 using System.Text.Json;
 using FluentAssertions;
@@ -10,6 +11,7 @@ using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -37,7 +39,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly TestNocturneDbContextFactory _factory;
     private readonly IAuditContext _audit = Mock.Of<IAuditContext>();
-    private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
+    private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
 
     public BatchResendMatchesSingleTests()
     {
@@ -102,9 +104,9 @@ public class BatchResendMatchesSingleTests : IDisposable
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             foods.Object,
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             _audit,
@@ -125,9 +127,9 @@ public class BatchResendMatchesSingleTests : IDisposable
             Rate = rate, Absolute = rate, Duration = 30,
         };
 
-        await decomposer.DecomposeAsync(Carbs(20), WriteOrigin.Live);
-        await decomposer.DecomposeAsync(Note("before"), WriteOrigin.Live);
-        await decomposer.DecomposeAsync(TempBasal(0.5), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(Carbs(20), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(Note("before"), WriteOrigin.Live);
+        await decomposer.DecomposeOneAsync(TempBasal(0.5), WriteOrigin.Live);
 
         var result = await decomposer.DecomposeBatchAsync(
             [Carbs(35), Note("after"), TempBasal(1.5)], WriteOrigin.Live);
@@ -138,7 +140,7 @@ public class BatchResendMatchesSingleTests : IDisposable
         _context.Notes.Select(e => e.Text).Should().Equal("after");
         _context.TempBasals.Select(e => e.Rate).Should().Equal(1.5);
         foods.Verify(
-            s => s.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            s => s.AddManyAsync(It.Is<IReadOnlyCollection<TreatmentFood>>(lines => lines.Count == 1), It.IsAny<CancellationToken>()),
             Times.Once,
             "the food line is seeded on create only, so a resend leaves a user's deletion of it standing");
     }
@@ -152,7 +154,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             new UploaderSnapshotRepository(_factory, _audit, NullLogger<UploaderSnapshotRepository>.Instance),
             new DeviceStatusExtrasRepository(_factory, _audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
             Mock.Of<IStateSpanService>(),
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             _audit,
             Mock.Of<ILoopClosedLoopStamper>(),
             TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
@@ -162,7 +164,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             Id = "6500000000000000000000d1", Mills = At, Device = "phone", UploaderBattery = battery,
         };
 
-        await decomposer.DecomposeAsync(Status(80), source: null, WriteOrigin.Live);
+        await decomposer.DecomposeBatchAsync([Status(80)], source: null, WriteOrigin.Live);
 
         var result = await decomposer.DecomposeBatchAsync([Status(40)], source: null, WriteOrigin.Live);
 
@@ -171,10 +173,8 @@ public class BatchResendMatchesSingleTests : IDisposable
         _context.UploaderSnapshots.Select(e => e.Battery).Should().Equal(40);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task DeviceStatus_ResendWithExtras_KeepsOneExtrasRowThatADeleteRemoves(bool batch)
+    [Fact]
+    public async Task DeviceStatus_ResendWithExtras_KeepsOneExtrasRowThatADeleteRemoves()
     {
         var decomposer = new DeviceStatusDecomposer(
             new ApsSnapshotRepository(_factory, _audit, NullLogger<ApsSnapshotRepository>.Instance),
@@ -182,7 +182,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             new UploaderSnapshotRepository(_factory, _audit, NullLogger<UploaderSnapshotRepository>.Instance),
             new DeviceStatusExtrasRepository(_factory, _audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
             Mock.Of<IStateSpanService>(),
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             _audit,
             Mock.Of<ILoopClosedLoopStamper>(),
             TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
@@ -197,9 +197,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             },
         };
 
-        Task Send(DeviceStatus ds) => batch
-            ? decomposer.DecomposeBatchAsync([ds], source: null, WriteOrigin.Live)
-            : decomposer.DecomposeAsync(ds, source: null, WriteOrigin.Live);
+        Task Send(DeviceStatus ds) => decomposer.DecomposeBatchAsync([ds], source: null, WriteOrigin.Live);
 
         await Send(Status(80));
         var storedCorrelationId = _context.UploaderSnapshots.Single().CorrelationId;
@@ -210,14 +208,14 @@ public class BatchResendMatchesSingleTests : IDisposable
         _context.DeviceStatusExtras.IgnoreQueryFilters().Where(e => e.DeletedAt == null)
             .Select(e => (Guid?)e.CorrelationId).Should().Equal(storedCorrelationId);
 
-        await decomposer.DeleteByLegacyIdAsync(legacyId, WriteOrigin.Live);
+        await decomposer.DeleteStoredAsync(legacyId, WriteOrigin.Live);
 
         _context.DeviceStatusExtras.IgnoreQueryFilters().Where(e => e.DeletedAt == null)
             .Should().BeEmpty("deleting the device status must reach its extras row");
     }
 
     [Fact]
-    public async Task DeviceStatus_SingleResendAfterUserDelete_WritesNoExtrasRow()
+    public async Task DeviceStatus_ResendAfterUserDelete_WritesNoExtrasRow()
     {
         var decomposer = new DeviceStatusDecomposer(
             new ApsSnapshotRepository(_factory, _audit, NullLogger<ApsSnapshotRepository>.Instance),
@@ -225,7 +223,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             new UploaderSnapshotRepository(_factory, _audit, NullLogger<UploaderSnapshotRepository>.Instance),
             new DeviceStatusExtrasRepository(_factory, _audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
             Mock.Of<IStateSpanService>(),
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             _audit,
             Mock.Of<ILoopClosedLoopStamper>(),
             TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
@@ -240,21 +238,57 @@ public class BatchResendMatchesSingleTests : IDisposable
             },
         };
 
-        await decomposer.DecomposeAsync(Status(), source: null, WriteOrigin.Live);
-        await decomposer.DeleteByLegacyIdAsync(legacyId, WriteOrigin.Live);
+        await decomposer.DecomposeBatchAsync([Status()], source: null, WriteOrigin.Live);
+        await decomposer.DeleteStoredAsync(legacyId, WriteOrigin.Live);
 
-        var result = await decomposer.DecomposeAsync(Status(), source: null, WriteOrigin.Live);
+        var result = await decomposer.DecomposeBatchAsync([Status()], source: null, WriteOrigin.Live);
 
         result.CreatedRecords.Should().BeEmpty();
         _context.DeviceStatusExtras.IgnoreQueryFilters().Where(e => e.DeletedAt == null)
             .Should().BeEmpty("a resend must not revive the deleted group's extras under a fresh correlation id");
     }
 
+    /// <summary>
+    /// A status that writes no snapshot has no legacy-keyed row to keep its correlation id, so its
+    /// re-send is recognised by the extras it holds: it writes no second row and reports nothing written.
+    /// </summary>
+    [Fact]
+    public async Task DeviceStatus_SnapshotlessResend_WritesNoSecondExtrasRow()
+    {
+        var decomposer = new DeviceStatusDecomposer(
+            new ApsSnapshotRepository(_factory, _audit, NullLogger<ApsSnapshotRepository>.Instance),
+            new PumpSnapshotRepository(_factory, _audit, NullLogger<PumpSnapshotRepository>.Instance),
+            new UploaderSnapshotRepository(_factory, _audit, NullLogger<UploaderSnapshotRepository>.Instance),
+            new DeviceStatusExtrasRepository(_factory, _audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
+            Mock.Of<IStateSpanService>(),
+            new UnresolvedDevices(),
+            _audit,
+            Mock.Of<ILoopClosedLoopStamper>(),
+            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+
+        DeviceStatus Status() => new()
+        {
+            Id = "6500000000000000000000d4", Mills = At, Device = "xdrip",
+            XDripJs = new XDripJsStatus { State = 6, StateString = "OK" },
+            ExtensionData = new Dictionary<string, JsonElement>
+            {
+                ["configuration"] = JsonDocument.Parse("""{"version":1}""").RootElement,
+            },
+        };
+
+        await decomposer.DecomposeBatchAsync([Status()], source: null, WriteOrigin.Live);
+        var resend = await decomposer.DecomposeBatchAsync([Status()], source: null, WriteOrigin.Live);
+
+        resend.Wrote.Should().Equal(false);
+        resend.UnchangedRecords.Should().ContainSingle().Which.Should().BeOfType<Nocturne.Core.Models.V4.DeviceStatusExtras>();
+        _context.DeviceStatusExtras.Should().ContainSingle();
+    }
+
     [Fact]
     public async Task Activity_BatchResend_UpdatesTheHeartRateRow()
     {
         var decomposer = new ActivityDecomposer(
-            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
 
         Activity HeartRate(int bpm) => new()
         {
@@ -262,7 +296,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             AdditionalProperties = new Dictionary<string, object> { ["bpm"] = bpm },
         };
 
-        await decomposer.DecomposeAsync(HeartRate(60), WriteOrigin.Live);
+        await decomposer.DecomposeBatchAsync([HeartRate(60)], WriteOrigin.Live);
 
         var result = await decomposer.DecomposeBatchAsync([HeartRate(90)], WriteOrigin.Live);
 

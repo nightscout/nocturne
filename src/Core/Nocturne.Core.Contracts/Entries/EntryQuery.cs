@@ -2,10 +2,8 @@ namespace Nocturne.Core.Contracts.Entries;
 
 /// <summary>
 /// Value object encapsulating query parameters for entry reads.
-/// Used by <see cref="IEntryStore"/> and <see cref="IEntryCache"/> to filter and paginate results.
 /// </summary>
-/// <seealso cref="IEntryStore"/>
-/// <seealso cref="IEntryCache"/>
+/// <seealso cref="IEntryService.QueryEntriesAsync"/>
 public sealed record EntryQuery
 {
     /// <summary>

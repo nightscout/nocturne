@@ -4,16 +4,15 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
-using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -38,8 +37,7 @@ public class PebbleController : ControllerBase
     private readonly IEntryService _entryService;
     private readonly IIobCobReader _iobCobReader;
     private readonly IUploaderSnapshotRepository _uploaderSnapshots;
-    private readonly ITenantAppearanceReader _appearanceReader;
-    private readonly ITenantAccessor _tenantAccessor;
+    private readonly ITenantGlucoseUnits _glucoseUnits;
     private readonly ILogger<PebbleController> _logger;
 
     /// <summary>
@@ -55,23 +53,20 @@ public class PebbleController : ControllerBase
     /// <param name="entryService">Service for glucose entry retrieval.</param>
     /// <param name="iobCobReader">Reader of the IOB and COB now.</param>
     /// <param name="uploaderSnapshots">Repository of uploader snapshots, for the battery.</param>
-    /// <param name="appearanceReader">Reader of the owner's display preferences, for the default units.</param>
-    /// <param name="tenantAccessor">Accessor for the current tenant.</param>
+    /// <param name="glucoseUnits">Resolver of the tenant's glucose units, for the default units.</param>
     /// <param name="logger">Logger instance.</param>
     public PebbleController(
         IEntryService entryService,
         IIobCobReader iobCobReader,
         IUploaderSnapshotRepository uploaderSnapshots,
-        ITenantAppearanceReader appearanceReader,
-        ITenantAccessor tenantAccessor,
+        ITenantGlucoseUnits glucoseUnits,
         ILogger<PebbleController> logger
     )
     {
         _entryService = entryService;
         _iobCobReader = iobCobReader;
         _uploaderSnapshots = uploaderSnapshots;
-        _appearanceReader = appearanceReader;
-        _tenantAccessor = tenantAccessor;
+        _glucoseUnits = glucoseUnits;
         _logger = logger;
     }
 
@@ -220,7 +215,7 @@ public class PebbleController : ControllerBase
         if (!string.IsNullOrEmpty(units))
             return GlucoseUnits.IsMmol(units);
 
-        return await GlucoseUnits.UsesMmolAsync(_appearanceReader, _tenantAccessor, cancellationToken);
+        return await _glucoseUnits.UsesMmolAsync(cancellationToken);
     }
 
     private static string FormatGlucose(double mgdl, bool useMmol)

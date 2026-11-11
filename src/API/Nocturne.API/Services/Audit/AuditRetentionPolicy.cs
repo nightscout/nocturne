@@ -2,7 +2,7 @@ namespace Nocturne.API.Services.Audit;
 
 /// <summary>
 /// Single source of truth for the effective audit retention window a tenant is subject to.
-/// <see cref="AuditRetentionService"/> purges against it; <c>AuditController.UpdateAuditConfig</c>
+/// <see cref="AuditRetentionJob"/> purges against it; <c>AuditController.UpdateAuditConfig</c>
 /// resolves the same window so its floor check sees the value that will actually be applied.
 /// </summary>
 /// <remarks>

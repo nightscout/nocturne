@@ -23,33 +23,31 @@
   import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
   import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
   import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
-  import { getReportsData } from "#lib/api/reports.remote.js";
   import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
-  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { rangeSummaryResources } from "#lib/hooks/range-summary-resources.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is the standard AGP report period
   const reportsParams = requireDateParamsContext(14);
 
-  // Create resource with automatic layout registration; `date` carries the
-  // selected range so the header and footer never disagree with the query.
-  const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error loading AGP report", dateParams: reportsParams }
-  );
+  // `date` carries the selected range so the header and footer never disagree with the query.
+  const { analysis: analysisResource, count: countResource } = rangeSummaryResources(reportsParams, {
+    errorTitle: "Error loading AGP report",
+    registration: "combined",
+  });
 
-  const readingCount = $derived(reportsResource.current?.readingCount ?? 0);
-  const analysis = $derived(reportsResource.current?.analysis);
-  const averagedStats = $derived(reportsResource.current?.averagedStats);
+  const readingCount = $derived(countResource.current?.readingCount ?? 0);
+  const analysis = $derived(analysisResource.current?.analysis);
+  const averagedStats = $derived(analysisResource.current?.averagedStats);
   const edges = $derived(analysis?.timeInRange?.thresholds);
-  const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
-  const startDate = $derived(reportsResource.date.from);
-  const endDate = $derived(reportsResource.date.to);
-  const dayCount = $derived(reportsResource.date.dayCount);
+  const lastUpdated = $derived(analysisResource.current?.dateRange?.lastUpdated);
+  const startDate = $derived(analysisResource.date.from);
+  const endDate = $derived(analysisResource.date.to);
+  const dayCount = $derived(analysisResource.date.dayCount);
 </script>
 
-{#if reportsResource.current}
+{#if analysisResource.current && countResource.current}
 <div class="@container space-y-8">
   <!-- Header with AGP Explanation -->
   <div class="space-y-4">
@@ -147,7 +145,7 @@
 
     <ReliabilityBadge
       reliability={analysis?.reliability}
-      timeZoneUnavailableReason={reportsResource.current?.timeZoneUnavailableReason}
+      timeZoneUnavailableReason={analysisResource.current?.timeZoneUnavailableReason}
     />
 
     <!-- Main AGP Chart -->

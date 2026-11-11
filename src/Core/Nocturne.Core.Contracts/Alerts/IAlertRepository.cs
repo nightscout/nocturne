@@ -7,38 +7,45 @@ namespace Nocturne.Core.Contracts.Alerts;
 /// Repository port for alert rule configuration, alert instances, and excursion state.
 /// Provides the persistence layer consumed by <see cref="IAlertOrchestrator"/>.
 /// </summary>
+/// <remarks>
+/// A method runs as the scope's reader on its tenant unless it takes a tenant. One that takes a
+/// tenant pins it in place of the scope's and keeps the scope's share and history-clamp state: a
+/// loop calls it once per tenant from a scope that has none.
+/// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="IExcursionTracker"/>
 public interface IAlertRepository
 {
     /// <summary>
-    /// Returns all enabled <see cref="AlertRuleSnapshot"/> records for the specified tenant.
+    /// Returns all enabled <see cref="AlertRuleSnapshot"/> records of the tenant.
     /// </summary>
-    /// <param name="tenantId">The tenant whose rules should be retrieved.</param>
-    /// <returns>A read-only list of enabled alert rule snapshots.</returns>
-    Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(Guid tenantId, CancellationToken ct);
+    Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(CancellationToken ct);
 
     /// <summary>
-    /// Returns the tenant's enabled rules as <see cref="GetEnabledRulesAsync"/> does, together with
-    /// the ids of the enabled rules it leaves out because they cannot be read.
+    /// Returns the enabled rules of <paramref name="tenantId"/> as <see cref="GetEnabledRulesAsync"/>
+    /// does, together with the ids of the enabled rules it leaves out because they cannot be read.
     /// </summary>
+    /// <remarks>A startup loop calls it once per tenant.</remarks>
     Task<EnabledAlertRules> ReadEnabledRulesAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
     /// Returns every rule of the tenant, enabled or not, in <c>SortOrder</c>, each with its channels.
     /// </summary>
     /// <remarks>
-    /// Reads with the tenant pinned and none of the caller's share or history-clamp state, so a
-    /// public share or guest link would see every rule and every channel destination through it. A
-    /// caller serving a request must refuse those viewers first, as <c>AlertRulesController</c> does
-    /// with <c>[DenyNoAccountViewer]</c>.
+    /// A viewer without an account, such as a public share or a guest link, could read rules and
+    /// their channel destinations through it. A caller serving a request must refuse those viewers
+    /// first, as <c>AlertRulesController</c> does with <c>[DenyNoAccountViewer]</c>.
     /// </remarks>
-    Task<IReadOnlyList<AlertRuleRecord>> GetRulesAsync(Guid tenantId, CancellationToken ct);
+    Task<IReadOnlyList<AlertRuleRecord>> GetRulesAsync(CancellationToken ct);
 
     /// <summary>
-    /// Returns every rule of the tenant, enabled or not, in <c>SortOrder</c>, without its channels.
+    /// Returns every rule of <paramref name="tenantId"/>, enabled or not, in <c>SortOrder</c>,
+    /// without its channels.
     /// </summary>
-    /// <remarks>Callers are bound as for <see cref="GetRulesAsync"/>.</remarks>
+    /// <remarks>
+    /// A startup loop calls it once per tenant. Callers serving a request are bound as for
+    /// <see cref="GetRulesAsync"/>.
+    /// </remarks>
     Task<IReadOnlyList<AlertRuleSnapshot>> GetRuleSnapshotsAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
@@ -46,51 +53,40 @@ public interface IAlertRepository
     /// no rule <paramref name="ruleId"/>.
     /// </summary>
     /// <remarks>Callers are bound as for <see cref="GetRulesAsync"/>.</remarks>
-    Task<AlertRuleRecord?> GetRuleAsync(Guid tenantId, Guid ruleId, CancellationToken ct);
+    Task<AlertRuleRecord?> GetRuleAsync(Guid ruleId, CancellationToken ct);
 
     /// <summary>
     /// Counts the tenant's rules, enabled or not.
     /// </summary>
     /// <remarks>Callers are bound as for <see cref="GetRulesAsync"/>.</remarks>
-    Task<int> CountRulesAsync(Guid tenantId, CancellationToken ct);
+    Task<int> CountRulesAsync(CancellationToken ct);
 
     /// <summary>
     /// Returns the open, unacknowledged excursions of the rules whose <c>ManagedBy</c> tag is
     /// <paramref name="managedBy"/>.
     /// </summary>
     /// <remarks>Callers are bound as for <see cref="GetRulesAsync"/>.</remarks>
-    Task<IReadOnlyList<Guid>> GetUnacknowledgedExcursionIdsAsync(
-        Guid tenantId, string managedBy, CancellationToken ct);
-
-    /// <summary>
-    /// Returns the flat per-rule channel list. Channels are dispatched in parallel when the
-    /// rule fires; <see cref="AlertRuleChannelSnapshot.SortOrder"/> is cosmetic only.
-    /// </summary>
-    /// <param name="tenantId">The tenant that owns the rule, used to scope the query.</param>
-    Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(Guid tenantId, Guid ruleId, CancellationToken ct);
+    Task<IReadOnlyList<Guid>> GetUnacknowledgedExcursionIdsAsync(string managedBy, CancellationToken ct);
 
     /// <summary>
     /// Creates a new <see cref="AlertInstanceSnapshot"/> for a triggered alert.
     /// </summary>
     Task<AlertInstanceSnapshot> CreateInstanceAsync(CreateAlertInstanceRequest request, CancellationToken ct);
 
-    /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
-    Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
+    Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(Guid excursionId, CancellationToken ct);
 
     /// <summary>
     /// The rule an excursion belongs to, or null when the excursion does not exist.
     /// </summary>
-    /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
-    Task<ExcursionRuleSnapshot?> GetExcursionRuleAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
+    Task<ExcursionRuleSnapshot?> GetExcursionRuleAsync(Guid excursionId, CancellationToken ct);
 
     /// <summary>
     /// Resolves all active alert instances for the specified excursion, marking them
     /// with the given resolution timestamp and reason.
     /// </summary>
-    /// <param name="tenantId">The tenant that owns the excursion, used to scope the update.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <param name="resolvedAt">The timestamp when the excursion was resolved.</param>
     /// <param name="resolutionReason">
@@ -98,13 +94,11 @@ public interface IAlertRepository
     /// (e.g. <c>"hysteresis"</c>, <c>"auto"</c>). Null is allowed only as a defensive
     /// fall-back — every production call site has a reason.
     /// </param>
-    Task ResolveInstancesForExcursionAsync(Guid tenantId, Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct);
+    Task ResolveInstancesForExcursionAsync(Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct);
 
     /// <summary>
-    /// Returns every open excursion whose owning rule has auto-resolve enabled
-    /// and a non-null <c>AutoResolveParams</c>. Used by <c>AlertSweepService</c>
-    /// to evaluate auto-resolve conditions that don't depend on the latest
-    /// reading (e.g. time-of-day, IOB, sensor age).
+    /// Returns every open excursion of the tenant whose owning rule has auto-resolve enabled
+    /// and a non-null <c>AutoResolveParams</c>.
     /// </summary>
     Task<IReadOnlyList<AutoResolveExcursionSnapshot>> GetAutoResolveExcursionsAsync(CancellationToken ct);
 
@@ -114,13 +108,14 @@ public interface IAlertRepository
     /// <c>ExcursionResolutionHandler</c> to auto-archive in-app notifications when the
     /// excursion closes.
     /// </summary>
-    /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
-    Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
+    Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(Guid excursionId, CancellationToken ct);
 
     /// <summary>
-    /// Updates an existing alert instance (e.g., advancing its escalation step or snooze state).
+    /// Updates an existing alert instance of <see cref="UpdateAlertInstanceRequest.TenantId"/> (e.g.,
+    /// advancing its escalation step or snooze state).
     /// </summary>
+    /// <remarks>The sweep calls it once per tenant.</remarks>
     /// <param name="request">The update request containing the fields to change.</param>
     Task UpdateInstanceAsync(UpdateAlertInstanceRequest request, CancellationToken ct);
 
@@ -128,24 +123,22 @@ public interface IAlertRepository
     /// Expires all pending (unsent) deliveries for the specified alert instances,
     /// typically called when instances are resolved or acknowledged.
     /// </summary>
-    /// <param name="tenantId">The tenant that owns the instances, used to scope the update.</param>
     /// <param name="instanceIds">The alert instance identifiers whose pending deliveries should be expired.</param>
-    Task ExpirePendingDeliveriesAsync(Guid tenantId, IReadOnlyList<Guid> instanceIds, CancellationToken ct);
+    Task ExpirePendingDeliveriesAsync(IReadOnlyList<Guid> instanceIds, CancellationToken ct);
 
     /// <summary>
     /// Deletes every member's mute of an excursion, so no mute outlives the excursion it silenced.
     /// </summary>
-    /// <param name="tenantId">The tenant that owns the excursion, used to scope the delete.</param>
     /// <param name="excursionId">The closed excursion.</param>
-    Task DeleteExcursionMutesAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
+    Task DeleteExcursionMutesAsync(Guid excursionId, CancellationToken ct);
 
     /// <summary>
-    /// Counts the number of active (unresolved) excursions for a tenant.
+    /// Counts the number of active (unresolved) excursions of the tenant.
     /// </summary>
-    Task<int> CountActiveExcursionsAsync(Guid tenantId, CancellationToken ct);
+    Task<int> CountActiveExcursionsAsync(CancellationToken ct);
 
     /// <summary>
-    /// Returns all excursions that are currently in a hysteresis cool-down period.
+    /// Returns the tenant's excursions that are in a hysteresis cool-down period.
     /// </summary>
     /// <returns>A read-only list of excursion snapshots in hysteresis.</returns>
     Task<IReadOnlyList<HysteresisExcursionSnapshot>> GetExcursionsInHysteresisAsync(CancellationToken ct);
@@ -163,7 +156,7 @@ public interface IAlertRepository
     /// Used by <see cref="ISensorContextEnricher"/> to populate
     /// <see cref="SensorContext.ActiveDoNotDisturb"/> per evaluation pass.
     /// </summary>
-    Task<TenantAlertSettingsSnapshot> GetTenantAlertSettingsAsync(Guid tenantId, CancellationToken ct);
+    Task<TenantAlertSettingsSnapshot> GetTenantAlertSettingsAsync(CancellationToken ct);
 
     /// <summary>
     /// Returns the tenant's DND windows that can still take effect at or after
@@ -180,8 +173,7 @@ public interface IAlertRepository
     /// <c>(tenant_id, scope) WHERE cleared_at IS NULL</c> still serves the lookup; only rows
     /// that can still matter come back.
     /// </remarks>
-    Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredDndWindowsAsync(
-        Guid tenantId, DateTime nowUtc, CancellationToken ct);
+    Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredDndWindowsAsync(DateTime nowUtc, CancellationToken ct);
 
     /// <summary>
     /// Returns every DND window for the tenant received by <paramref name="asOfReceiptUtc"/>
@@ -191,8 +183,7 @@ public interface IAlertRepository
     /// <c>cleared_at</c> still matters. Every <see cref="DateTime"/> is normalised to
     /// <see cref="DateTimeKind.Utc"/>.
     /// </summary>
-    Task<IReadOnlyList<DndWindowSnapshot>> GetDndWindowsAsOfAsync(
-        Guid tenantId, DateTime asOfReceiptUtc, CancellationToken ct);
+    Task<IReadOnlyList<DndWindowSnapshot>> GetDndWindowsAsOfAsync(DateTime asOfReceiptUtc, CancellationToken ct);
 
     /// <summary>
     /// Marks an alert instance as suppressed at fire time without dispatching deliveries.
@@ -200,17 +191,10 @@ public interface IAlertRepository
     /// and History can display "would have fired but suppressed" rows. Currently the only
     /// reason emitted by the orchestrator is <c>"dnd"</c>.
     /// </summary>
-    /// <param name="tenantId">Tenant scope for the lookup. Defence-in-depth alongside RLS.</param>
-    Task MarkInstanceSuppressedAsync(Guid tenantId, Guid instanceId, string reason, CancellationToken ct);
+    Task MarkInstanceSuppressedAsync(Guid instanceId, string reason, CancellationToken ct);
 
     /// <summary>
-    /// Returns every enabled rule across all active tenants, each tenant's in
-    /// <c>SortOrder</c>. The sweep selects the rules it evaluates on the wall clock from these.
-    /// </summary>
-    Task<IReadOnlyList<AlertRuleSnapshot>> GetAllEnabledRulesAsync(CancellationToken ct);
-
-    /// <summary>
-    /// Returns snoozed alert instances whose snooze period has expired as of
+    /// Returns the tenant's snoozed alert instances whose snooze period has expired as of
     /// <paramref name="asOf"/>, so they can resume escalation.
     /// </summary>
     /// <param name="asOf">The point-in-time cutoff for expired snoozes.</param>
@@ -227,11 +211,5 @@ public interface IAlertRepository
     /// always <c>"firing"</c>; downstream evaluators decide acknowledgement state from
     /// <see cref="ActiveAlertSnapshot.AcknowledgedAt"/>.
     /// </returns>
-    Task<IReadOnlyDictionary<Guid, ActiveAlertSnapshot>> GetActiveAlertSnapshotsAsync(
-        Guid tenantId, CancellationToken ct);
-
-    /// <summary>
-    /// Persists all pending changes tracked by the underlying context.
-    /// </summary>
-    Task SaveChangesAsync(CancellationToken ct);
+    Task<IReadOnlyDictionary<Guid, ActiveAlertSnapshot>> GetActiveAlertSnapshotsAsync(CancellationToken ct);
 }

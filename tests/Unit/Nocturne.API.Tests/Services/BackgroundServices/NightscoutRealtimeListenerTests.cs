@@ -11,6 +11,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
@@ -21,6 +22,12 @@ namespace Nocturne.API.Tests.Services.BackgroundServices;
 
 public class NightscoutRealtimeListenerTests
 {
+    /// <summary>
+    /// Cuts a dial of the discard port short of the production cap and the reconnect backoff. The
+    /// tests read only the warning that follows, which the service logs whatever ended the connect.
+    /// </summary>
+    private static readonly TimeSpan ConnectBudget = TimeSpan.FromSeconds(1);
+
     /// <summary>
     /// StartRealtimeListenersAsync should complete without throwing when there
     /// are no active tenants in the database.
@@ -35,8 +42,12 @@ public class NightscoutRealtimeListenerTests
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System);
+            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         // Act & Assert — should not throw
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -56,8 +67,12 @@ public class NightscoutRealtimeListenerTests
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System);
+            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         // Act & Assert — should not throw
         await InvokeStopRealtimeListenersAsync(sut);
@@ -76,8 +91,12 @@ public class NightscoutRealtimeListenerTests
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System);
+            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         // Act & Assert — should not throw on repeated calls
         await InvokeStopRealtimeListenersAsync(sut);
@@ -104,8 +123,12 @@ public class NightscoutRealtimeListenerTests
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System);
+            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         // Act & Assert — should skip the tenant without throwing
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -131,8 +154,12 @@ public class NightscoutRealtimeListenerTests
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System);
+            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         // Act & Assert — should skip the tenant without throwing
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -174,7 +201,10 @@ public class NightscoutRealtimeListenerTests
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(db, config);
-        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         // Act
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -203,7 +233,10 @@ public class NightscoutRealtimeListenerTests
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(db, config);
-        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         // Act
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -232,7 +265,10 @@ public class NightscoutRealtimeListenerTests
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(db, config);
-        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 
@@ -264,8 +300,12 @@ public class NightscoutRealtimeListenerTests
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System);
+            NullLogger<NightscoutConnectorBackgroundService>.Instance, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         var dead = new SocketIO(new Uri("http://127.0.0.1:9"));
         SocketClients(sut)[tenantId] = dead;
@@ -295,7 +335,10 @@ public class NightscoutRealtimeListenerTests
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(db, config);
         var sut = new NightscoutConnectorBackgroundService(
-            serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System);
+            serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System)
+        {
+            ConnectTimeout = ConnectBudget,
+        };
 
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 
@@ -317,30 +360,12 @@ public class NightscoutRealtimeListenerTests
             .GetField("_socketClients", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(sut)!;
 
-    /// <summary>
-    /// Invokes the protected StartRealtimeListenersAsync via reflection.
-    /// </summary>
-    private static async Task InvokeStartRealtimeListenersAsync(
+    private static Task InvokeStartRealtimeListenersAsync(
         NightscoutConnectorBackgroundService sut,
-        CancellationToken cancellationToken)
-    {
-        var method = typeof(ConnectorBackgroundService<NightscoutConnectorConfiguration>)
-            .GetMethod("StartRealtimeListenersAsync",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        await (Task)method.Invoke(sut, [cancellationToken])!;
-    }
+        CancellationToken cancellationToken) => sut.StartRealtimeListenersAsync(cancellationToken);
 
-    /// <summary>
-    /// Invokes the protected StopRealtimeListenersAsync via reflection.
-    /// </summary>
-    private static async Task InvokeStopRealtimeListenersAsync(
-        NightscoutConnectorBackgroundService sut)
-    {
-        var method = typeof(ConnectorBackgroundService<NightscoutConnectorConfiguration>)
-            .GetMethod("StopRealtimeListenersAsync",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        await (Task)method.Invoke(sut, [])!;
-    }
+    private static Task InvokeStopRealtimeListenersAsync(NightscoutConnectorBackgroundService sut) =>
+        sut.StopRealtimeListenersAsync();
 
     /// <summary>
     /// Builds a service provider wired up for the NightscoutConnectorBackgroundService.

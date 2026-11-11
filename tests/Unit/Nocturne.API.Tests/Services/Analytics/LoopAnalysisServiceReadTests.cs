@@ -79,7 +79,7 @@ public class LoopAnalysisServiceReadTests
         glucose
             .Setup(r => r.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()))
             .ReturnsAsync([]);
         var timeline = new Mock<ITherapyTimelineResolver>();
         timeline
@@ -93,7 +93,6 @@ public class LoopAnalysisServiceReadTests
 
         return new LoopAnalysisService(
             glucoseRepository: glucose.Object,
-            canonicalGlucose: CanonicalGlucosePassThrough.Create(),
             bolusRepository: Mock.Of<IBolusRepository>(),
             carbIntakeRepository: Mock.Of<ICarbIntakeRepository>(),
             tempBasalRepository: _tempBasals.Object,

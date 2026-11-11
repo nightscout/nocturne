@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
@@ -28,8 +29,10 @@ public abstract class SyncKeyedRepositoryBase<TModel, TEntity> : V4RepositoryBas
         IAuditContext auditContext,
         ILogger logger,
         IV4RecordBroadcaster<TModel>? broadcaster = null,
-        IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
+        IDataEventSink<Entry>? entrySink = null,
+        ILegacyReadCacheInvalidation? legacyReads = null,
+        IDuplicateLinker? linker = null)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads, linker)
     {
     }
 

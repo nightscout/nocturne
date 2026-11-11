@@ -2,7 +2,7 @@
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
 	import type { DataQualitySettings } from '#lib/api/generated/nocturne-api-client.js';
 	import { getUiSettings } from '#lib/api/ui-settings.remote.js';
-	import { saveDataQualitySettings } from '#lib/api/generated/uiSettings.generated.remote.js';
+	import { patchDataQualitySettings } from '#lib/api/generated/uiSettings.generated.remote.js';
 	import { remoteErrorMessage } from '#lib/api/remote-error.js';
 	import { describeSubmitError } from '#lib/forms/submit-error.js';
 	import { SETTINGS_LOAD_FAILED } from '#lib/api/ui-settings-messages.js';
@@ -53,21 +53,10 @@
 		return found?.label ?? `${hour}:00`;
 	}
 
-	/**
-	 * Persists the whole section — the API stores it as one document, so the patch
-	 * merges over the loaded values (keeping e.g. the sleep-schedule timezone).
-	 */
+	/** Sends only the fields the control changed. The API merges them into the stored section. */
 	async function save(patch: Partial<DataQualitySettings>) {
-		const current = dataQuality ?? {};
 		try {
-			await saveDataQualitySettings({
-				...current,
-				sleepSchedule: { ...current.sleepSchedule, ...patch.sleepSchedule },
-				compressionLowDetection: {
-					...current.compressionLowDetection,
-					...patch.compressionLowDetection
-				}
-			});
+			await patchDataQualitySettings(patch);
 		} catch (err) {
 			toast.error(describeSubmitError(err, 'Could not save. Check your connection and try again.'));
 		}

@@ -111,7 +111,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
 
         var stateSpanRepository = new StateSpanRepository(
             _context.AsFactory(),
-            Mock.Of<IDeduplicationService>(),
+            Mock.Of<IDuplicateLinker>(),
             Mock.Of<IAuditContext>(),
             NullLogger<StateSpanRepository>.Instance);
 
@@ -126,14 +126,15 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             _context.AsFactory(), processing.Object, Mock.Of<ISignalRBroadcastService>(),
             TimeProvider.System, NullLogger<StepCountService>.Instance);
 
+        var sleepService = Mock.Of<ISleepService>();
         var activityService = new ActivityService(
             _stateSpanService,
-            Mock.Of<ISleepService>(),
+            sleepService,
             processing.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IDataEventSink<Activity>>(),
             new ActivityDecomposer(
-                _context.AsFactory(), stateSpanRepository, TimeProvider.System, NullLogger<ActivityDecomposer>.Instance),
+                _context.AsFactory(), stateSpanRepository, sleepService, TimeProvider.System, NullLogger<ActivityDecomposer>.Instance),
             heartRateService,
             stepCountService,
             NullLogger<ActivityService>.Instance);
@@ -151,7 +152,8 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             Mock.Of<IHeartRateService>(),
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
-            _context.AsFactory(),
+            new ActivityDedupRepository(_context.AsFactory()),
+            new ConnectorConfigurationRepository(_context.AsFactory()),
             Mock.Of<IProfileActivationRepository>(),
             new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),

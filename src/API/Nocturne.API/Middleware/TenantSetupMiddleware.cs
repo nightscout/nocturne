@@ -1,8 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Middleware;
 
@@ -47,13 +44,13 @@ public class TenantSetupMiddleware
     /// </summary>
     /// <param name="context">The current HTTP context.</param>
     /// <param name="tenantAccessor">Accessor for the resolved tenant identity.</param>
-    /// <param name="dbFactory">Factory for the tenant-pinned context the checks below run on.</param>
+    /// <param name="members">The memberships the checks below read, under the repository's system pin.</param>
     /// <param name="instanceKeyValidator">Validator used to let trusted instance-key callers bypass the setup gate.</param>
     /// <returns>A task that completes when the middleware has finished processing.</returns>
     public async Task InvokeAsync(
         HttpContext context,
         ITenantAccessor tenantAccessor,
-        INocturneDbContextFactory dbFactory,
+        ITenantMembershipRepository members,
         IInstanceKeyValidator instanceKeyValidator)
     {
         // Only check when a tenant has been resolved
@@ -103,9 +100,7 @@ public class TenantSetupMiddleware
             return;
         }
 
-        // Evaluated in a scope of its own so the extra context is disposed before the rest of the
-        // pipeline runs, rather than being held open for the whole downstream request.
-        switch (await EvaluateGateAsync(dbFactory, tenantAccessor.TenantId, path, context.RequestAborted))
+        switch (await EvaluateGateAsync(members, tenantAccessor.TenantId, path, context.RequestAborted))
         {
             case SetupGate.SetupRequired:
                 context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
@@ -150,64 +145,37 @@ public class TenantSetupMiddleware
     /// Runs the setup and recovery checks and logs the diagnostics for a refusal.
     /// </summary>
     /// <remarks>
-    /// System-pinned (<see cref="INocturneDbContextFactory.CreateSystemPinnedAsync"/>): the gate runs on public-share requests
-    /// too. Scoped to this method so the context is released before the pipeline continues.
+    /// The reads are system-pinned in the repository (<see cref="ITenantMembershipRepository.ReadSetupGateAsync"/>):
+    /// the gate runs on public-share requests too. The counts and the orphan list are read only to
+    /// log a refusal.
     /// </remarks>
     private async Task<SetupGate> EvaluateGateAsync(
-        INocturneDbContextFactory dbFactory,
+        ITenantMembershipRepository members,
         Guid tenantId,
         string path,
         CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateSystemPinnedAsync(tenantId, ct);
-
-        // Every API request passes through here, so both checks are one statement: no member row
-        // means no member can hold a credential, and the counts below are read only to log a refusal.
-        // Credentials and OIDC identities are subject-scoped (not tenant-scoped), so the checks join
-        // through TenantMembers.
-        var members = db.TenantMembers.Where(m => m.TenantId == tenantId);
-        var orphans = db.OrphanedSubjectsOf(tenantId);
-        var gate = await members
-            .Take(1)
-            .Select(_ => new
-            {
-                HasCredentials = members.Any(m =>
-                    db.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                    db.WorkingOidcIdentities().Any(i => i.SubjectId == m.SubjectId)),
-                HasOrphans = orphans.Any(),
-            })
-            .FirstOrDefaultAsync(ct);
+        var gate = await members.ReadSetupGateAsync(tenantId, ct);
 
         if (gate is not { HasCredentials: true })
         {
-            var memberCount = gate is null ? 0 : await members.CountAsync(ct);
-            var passkeyCount = memberCount > 0
-                ? await db.TenantMembers
-                    .Where(m => m.TenantId == tenantId)
-                    .SelectMany(m => db.PasskeyCredentials.Where(c => c.SubjectId == m.SubjectId))
-                    .CountAsync(ct)
-                : 0;
-            var oidcCount = memberCount > 0
-                ? await db.TenantMembers
-                    .Where(m => m.TenantId == tenantId)
-                    .SelectMany(m => db.WorkingOidcIdentities().Where(i => i.SubjectId == m.SubjectId))
-                    .CountAsync(ct)
-                : 0;
+            var counts = gate is null
+                ? new Core.Models.Identity.SetupCredentialCounts(0, 0, 0)
+                : await members.CountSetupCredentialsAsync(tenantId, ct);
 
             _logger.LogWarning(
                 "Tenant {TenantId} setup check failed — returning 503 setup_required. " +
-                "Path={Path}, MemberCount={MemberCount}, PasskeyCount={PasskeyCount}, OidcCount={OidcCount}, " +
-                "DbContextTenantId={DbContextTenantId}",
-                tenantId, path, memberCount, passkeyCount, oidcCount, db.TenantId);
+                "Path={Path}, MemberCount={MemberCount}, PasskeyCount={PasskeyCount}, OidcCount={OidcCount}",
+                tenantId, path, counts.Members, counts.Passkeys, counts.OidcIdentities);
 
             return SetupGate.SetupRequired;
         }
 
         if (gate.HasOrphans)
         {
-            var orphanedSubjects = await orphans
-                .Select(s => new { s.Id, s.Name, s.Username })
-                .ToListAsync(ct);
+            var orphanedSubjects = (await members.ListOrphanedMembersAsync(tenantId, ct))
+                .Select(s => new { Id = s.SubjectId, s.Name, s.Username })
+                .ToList();
 
             _logger.LogWarning(
                 "Tenant {TenantId} has orphaned subjects, returning 503 recovery_mode. " +

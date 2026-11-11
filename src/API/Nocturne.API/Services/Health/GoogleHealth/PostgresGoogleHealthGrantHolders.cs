@@ -28,6 +28,7 @@ namespace Nocturne.API.Services.Health.GoogleHealth;
 public sealed class PostgresGoogleHealthGrantHolders(
     IServiceScopeFactory scopes,
     INocturneDbContextFactory contexts,
+    ITenantRepository tenants,
     ILogger<PostgresGoogleHealthGrantHolders> logger) : IGoogleHealthGrantHolders
 {
     private const string AuditEndpoint = "service:google-health";
@@ -94,11 +95,10 @@ public sealed class PostgresGoogleHealthGrantHolders(
         try
         {
             if (adopted) return;
-            List<Guid> unrecorded;
+            HashSet<Guid> recorded;
             await using (var db = await ContextAsync(ct))
-                unrecorded = await db.Tenants.AsNoTracking()
-                    .Where(tenant => !db.GoogleHealthGrantHolders.Any(row => row.TenantId == tenant.Id))
-                    .Select(tenant => tenant.Id).ToListAsync(ct);
+                recorded = (await db.GoogleHealthGrantHolders.AsNoTracking().Select(row => row.TenantId).ToListAsync(ct)).ToHashSet();
+            var unrecorded = (await tenants.ListIdsAsync(activeOnly: false, ct)).Where(id => !recorded.Contains(id)).ToList();
             foreach (var tenantId in unrecorded)
                 await AdoptAsync(tenantId, ct);
             adopted = true;

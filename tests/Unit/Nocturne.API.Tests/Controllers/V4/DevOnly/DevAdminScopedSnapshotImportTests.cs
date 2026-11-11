@@ -7,12 +7,15 @@ using Moq;
 using Nocturne.API.Controllers.V4.DevOnly;
 using Nocturne.API.Models.DevOnly;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.DevOnly;
 
@@ -130,10 +133,26 @@ public class DevAdminScopedSnapshotImportTests : IDisposable
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    private async Task<ActionResult> ImportInto(Guid tenantId, TenantSnapshotDto? snapshot = null)
+    /// <summary>
+    /// An import writes connector configurations past the configuration service, so it tells the
+    /// invalidators itself, as the service does after a write: that is what makes the tenant's
+    /// connector job ledger row due a minute after the import rather than at the end of its park.
+    /// </summary>
+    [Fact]
+    public async Task ImportScopedSnapshot_TellsTheConnectorInvalidatorsOfEachImportedConfiguration()
+    {
+        var invalidator = new Mock<IConnectorCacheInvalidator>();
+
+        (await ImportInto(_tenantA, invalidators: [invalidator.Object])).Should().BeOfType<OkObjectResult>();
+
+        invalidator.Verify(i => i.Invalidate("Dexcom", _tenantA), Times.Once);
+    }
+
+    private async Task<ActionResult> ImportInto(
+        Guid tenantId, TenantSnapshotDto? snapshot = null, IConnectorCacheInvalidator[]? invalidators = null)
     {
         await using var context = _database.CreateContext();
-        return await NewController(context)
+        return await NewController(context, invalidators)
             .ImportScopedSnapshot(tenantId, snapshot ?? Snapshot(), CancellationToken.None);
     }
 
@@ -223,13 +242,16 @@ public class DevAdminScopedSnapshotImportTests : IDisposable
             ],
         };
 
-    private static DevAdminController NewController(NocturneDbContext context) =>
+    private static DevAdminController NewController(NocturneDbContext context, IConnectorCacheInvalidator[]? invalidators = null) =>
         new(
             context.AsFactory(),
+            new TenantMembershipRepository(context.AsFactory()),
+            new SubjectRepository(context.AsFactory()),
+            new PasskeyCredentialRepository(context.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ITenantService>(),
             new MemoryCache(new MemoryCacheOptions()),
-            TimeProvider.System, NullLogger<DevAdminController>.Instance);
+            TimeProvider.System, invalidators ?? [], NullLogger<DevAdminController>.Instance);
 
     private sealed record MemberRoleLink(Guid Id, Guid MemberId, Guid RoleId);
 

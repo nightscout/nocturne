@@ -40,7 +40,7 @@ public class CgmComparisonControllerTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(),
-                It.Is<Guid?>(id => id == patientDeviceId)))
+                It.Is<Guid?>(id => id == patientDeviceId), It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings.Select(r => new SensorGlucose
             {
                 Timestamp = Start.AddMinutes(r.Minutes),
@@ -58,7 +58,7 @@ public class CgmComparisonControllerTests
         _glucose.Verify(g => g.GetForAnalyticsAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()),
             Times.Never);
 
     [Fact]

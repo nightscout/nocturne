@@ -38,6 +38,14 @@ public static class StateSpanMetadataExtensions
     public const string ProfileNameKey = "profileName";
 
     /// <summary>
+    /// Metadata key for the <c>duration</c> in minutes an override, temporary target or profile switch
+    /// was uploaded with, served verbatim as Nightscout does: an open-ended Loop override is uploaded
+    /// with no duration and must be served with none, since NightscoutKit reads any numeric duration
+    /// as a finite override.
+    /// </summary>
+    public const string UploadedDurationKey = "duration";
+
+    /// <summary>
     /// Reads <paramref name="key"/> as a <see cref="decimal"/>; returns <see langword="null"/>
     /// if missing, non-finite, or unparseable. Numeric strings are parsed with
     /// <see cref="CultureInfo.InvariantCulture"/>.
@@ -139,8 +147,8 @@ public static class StateSpanMetadataExtensions
     private static decimal? CoerceDecimal(object v) => v switch
     {
         decimal d => d,
-        double dbl when double.IsFinite(dbl) => (decimal)dbl,
-        float f when float.IsFinite(f) => (decimal)f,
+        double dbl when double.IsFinite(dbl) => dbl.ToDecimal(),
+        float f when float.IsFinite(f) => f.ToDecimal(),
         int i => i,
         long l => l,
         string s when decimal.TryParse(s, CultureInfo.InvariantCulture, out var p) => p,

@@ -16,27 +16,25 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing bolus records. A DeduplicationService participant on top of the sync-key
+/// Repository for managing bolus records. A deduplication participant on top of the sync-key
 /// upsert and keyed delete of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
-/// the extended <c>GetAsync</c> (non-primary LinkedRecords filter + keyset cursor), the read-visibility
-/// filter behind <c>CountAsync</c>, and the post-commit dedup linking.
+/// the extended <c>GetAsync</c> (duplicate filter + keyset cursor) and the read-visibility
+/// filter behind <c>CountAsync</c>.
 /// </summary>
 public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBolusRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="BolusRepository"/> class.
     /// </summary>
     public BolusRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<BolusRepository> logger,
-        IV4RecordBroadcaster<Bolus>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<Bolus>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
     }
 
     /// <inheritdoc />
@@ -48,12 +46,9 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     /// <inheritdoc />
     protected override void ApplyUpdate(BolusEntity target, Bolus source) => BolusMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.Bolus;
-
     /// <summary>
-    /// Routes the base 7-arg form through the extended bolus query (non-primary LinkedRecords
-    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// Routes the base 7-arg form through the extended bolus query (duplicate
+    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>
     public override Task<IEnumerable<Bolus>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
@@ -64,7 +59,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
 
     /// <summary>
     /// Gets bolus records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -105,7 +100,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         if (kind.HasValue)
             query = query.Where(e => e.BolusKind == kind.Value.ToString());
 
-        query = ApplyReadVisibility(query, ctx);
+        query = query.ExcludeDuplicates();
 
         // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
         // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
@@ -118,9 +113,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
                     || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
         }
 
-        query = descending
-            ? query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
-            : query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id);
+        query = query.InObservationOrder(descending);
 
         if (!afterTimestamp.HasValue || !afterId.HasValue)
         {
@@ -134,9 +127,26 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     /// <summary>
     /// Gets bolus records by correlation identifier.
     /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
+    /// <param name="correlationIds">The correlation identifiers.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of bolus records.</returns>
+    public async Task<IEnumerable<Bolus>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds,
+        CancellationToken ct = default
+    )
+    {
+        var ids = correlationIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .Boluses.AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+        return entities.Select(BolusMapper.ToDomainModel).ToList();
+    }
+
     public async Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default
@@ -148,36 +158,6 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(BolusMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Insert-time deduplication runs AFTER commit: the ingested rows are durably persisted first, and
-    /// dedup linking is best-effort (a failure is logged, not allowed to roll back the insert). A row
-    /// missed here is never reconciled, which reads only links, but once older than
-    /// <see cref="DeduplicationService.SingletonLinkRetention"/> later records match it as a group of
-    /// its own. Only runs on newly inserted entities — updated-in-place rows were already linked when first inserted.
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<BolusEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.Bolus, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", inserted.Count);
-        }
     }
 
     /// <inheritdoc />

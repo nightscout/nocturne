@@ -305,6 +305,131 @@ public class StatisticsServiceTDDTests
         delivery.ManualBolusCount.Should().Be(11, "the 8 automatic-flagged records are stored as manual until #2412, so 3 meals + 8 = 11");
     }
 
+    [Fact]
+    public void InsulinDelivery_PerDayFigures_DivideTheWindowTotalsByWindowDays()
+    {
+        var boluses = new[]
+        {
+            MakeBolus(4.5, Day1Mills),
+            MakeBolus(3.0, Day2Mills),
+            MakeBolus(2.0, Day3Mills),
+            MakeBolus(1.5, Day3Mills + 24 * 3_600_000L),
+        };
+        var algorithmBoluses = new[] { MakeBolus(3.5, Day1Mills, automatic: true) };
+        var carbs = new[]
+        {
+            MakeCarbIntake(45, Day1Mills),
+            MakeCarbIntake(30, Day2Mills),
+            MakeCarbIntake(20, Day3Mills),
+        };
+        var tempBasals = new[]
+        {
+            MakeScheduledTempBasal(rate: 1.0, durationMinutes: 24 * 60, mills: Day1Mills),
+        };
+
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            boluses, algorithmBoluses, tempBasals, carbs, StartDate, EndDate, Mills(EndDate));
+
+        result.WindowDays.Should().Be(7);
+        result.TotalBolusPerDay.Should().Be(2.07, "14.5 U over 7 days");
+        result.ScheduledBasalPerDay.Should().Be(3.43, "24 U over 7 days");
+        result.MealBoluses.Should().Be(3);
+        result.CorrectionBoluses.Should().Be(1);
+        result.MealBolusesPerDay.Should().Be(0.4, "3 meal boluses over 7 days");
+        result.CorrectionBolusesPerDay.Should().Be(0.1, "1 correction bolus over 7 days");
+    }
+
+    [Fact]
+    public void InsulinDelivery_MealAndCorrectionPercent_AreSharesOfManualBolusCount()
+    {
+        var boluses = new[]
+        {
+            MakeBolus(4.0, Day1Mills),
+            MakeBolus(3.0, Day2Mills),
+            MakeBolus(2.0, Day3Mills),
+            MakeBolus(1.5, Day3Mills + 24 * 3_600_000L),
+        };
+        var carbs = new[]
+        {
+            MakeCarbIntake(40, Day1Mills),
+            MakeCarbIntake(30, Day2Mills),
+            MakeCarbIntake(20, Day3Mills),
+        };
+
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), carbs, StartDate, EndDate, Mills(EndDate));
+
+        result.ManualBolusCount.Should().Be(4);
+        result.MealBolusPercent.Should().Be(75);
+        result.CorrectionBolusPercent.Should().Be(25);
+    }
+
+    [Fact]
+    public void InsulinDelivery_MealAndCorrectionPercent_RoundToOneDecimal()
+    {
+        var boluses = new[]
+        {
+            MakeBolus(4.0, Day1Mills),
+            MakeBolus(1.0, Day2Mills),
+            MakeBolus(1.0, Day3Mills),
+        };
+        var carbs = new[] { MakeCarbIntake(40, Day1Mills) };
+
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), carbs, StartDate, EndDate, Mills(EndDate));
+
+        result.MealBolusPercent.Should().Be(33.3);
+        result.CorrectionBolusPercent.Should().Be(66.7);
+    }
+
+    [Fact]
+    public void InsulinDelivery_NoManualBoluses_PercentsAreZero()
+    {
+        var algorithmBoluses = new[] { MakeBolus(0.5, Day1Mills, automatic: true) };
+
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            Array.Empty<Bolus>(), algorithmBoluses, Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(),
+            StartDate, EndDate, Mills(EndDate));
+
+        result.ManualBolusCount.Should().Be(0);
+        result.MealBolusPercent.Should().Be(0);
+        result.CorrectionBolusPercent.Should().Be(0);
+        result.MealBolusesPerDay.Should().Be(0);
+        result.CorrectionBolusesPerDay.Should().Be(0);
+        result.TotalBolusPerDay.Should().Be(0.07, "0.5 U over 7 days");
+    }
+
+    [Fact]
+    public void InsulinDelivery_NoBasal_ScheduledBasalPerDayIsZero()
+    {
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            [MakeBolus(2.0, Day1Mills)], Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(),
+            StartDate, EndDate, Mills(EndDate));
+
+        result.ScheduledBasalPerDay.Should().Be(0);
+        result.TotalBasalPerDay.Should().Be(0);
+    }
+
+    [Fact]
+    public void BasalAnalysis_TotalDeliveredPerDay_DividesTotalDeliveredByWindowDays()
+    {
+        var tempBasals = new[] { MakeTempBasal(rate: 1.0, durationMinutes: 600, mills: Day1Mills) };
+
+        var result = _sut.CalculateBasalAnalysis(tempBasals, StartDate, EndDate, Mills(EndDate));
+
+        result.WindowDays.Should().Be(7);
+        result.Stats.TotalDelivered.Should().Be(10);
+        result.Stats.TotalDeliveredPerDay.Should().Be(1.43, "10 U over 7 days");
+    }
+
+    [Fact]
+    public void BasalAnalysis_NoTempBasals_TotalDeliveredPerDayIsZero()
+    {
+        var result = _sut.CalculateBasalAnalysis(Array.Empty<TempBasal>(), StartDate, EndDate, Mills(EndDate));
+
+        result.Stats.TotalDeliveredPerDay.Should().Be(0);
+    }
+
     #region LoopSystem Overlap
 
     [Fact]
@@ -1331,6 +1456,13 @@ public class StatisticsServiceTDDTests
             Carbs = carbs,
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime,
         };
+    }
+
+    private static TempBasal MakeScheduledTempBasal(double rate, double durationMinutes, long mills)
+    {
+        var tempBasal = MakeTempBasal(rate, durationMinutes, mills);
+        tempBasal.Origin = TempBasalOrigin.Scheduled;
+        return tempBasal;
     }
 
     private static TempBasal MakeTempBasal(double rate, double durationMinutes, long? mills = null)

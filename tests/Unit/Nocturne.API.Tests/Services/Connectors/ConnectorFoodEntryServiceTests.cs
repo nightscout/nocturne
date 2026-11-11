@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -40,7 +41,7 @@ public class ConnectorFoodEntryServiceTests
     private NocturneDbContext NewContext() => new(_options) { TenantId = _tenantId };
 
     private ConnectorFoodEntryService NewService(NocturneDbContext context) =>
-        new(context.AsFactory(),
+        new(new ConnectorFoodEntryRepository(context.AsFactory(), Mock.Of<ILogger<ConnectorFoodEntryRepository>>()),
             _mealMatchingMock.Object,
             TimeProvider.System,
             Mock.Of<ILogger<ConnectorFoodEntryService>>());

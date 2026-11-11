@@ -281,6 +281,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// Delete a whole named therapy profile and every schedule record belonging to it.
+    /// The name is matched case-sensitively, with no lenient fallback.
     /// </summary>
     /// <remarks>
     /// The name is matched case-sensitively, with no lenient fallback: this destroys data, so
@@ -354,7 +355,15 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get all therapy settings with optional filtering
     /// </summary>
+    /// <param name="from">Start of the time range to return. Unbounded when omitted.</param>
+    /// <param name="to">End of the time range to return. Unbounded when omitted.</param>
+    /// <param name="limit">Maximum number of records in the page. Defaults to `100`.</param>
+    /// <param name="offset">Number of records to skip before the page. Defaults to `0`.</param>
+    /// <param name="sort">Order by timestamp: `timestamp_desc` or `timestamp_asc`. Any other value is a 400. Defaults to `timestamp_desc`.</param>
+    /// <param name="device">Return only records from this device.</param>
+    /// <param name="source">Return only records from this data source.</param>
     /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("settings")]
     [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
@@ -436,6 +445,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// Create a new therapy settings record
+    /// <c>isDefault: true</c> makes the new record the tenant's only default; <c>false</c> leaves the current default alone.
     /// </summary>
     /// <remarks>
     /// <see cref="TherapySettings.IsDefault"/> <c>true</c> makes the new row the tenant's only default,
@@ -468,6 +478,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// Update an existing therapy settings record
+    /// <c>isDefault: true</c> makes the record the tenant's only default. <c>false</c> keeps the stored flag, so an update never demotes the default; promote another record to move it.
     /// </summary>
     /// <remarks>
     /// <see cref="TherapySettings.IsDefault"/> <c>true</c> makes the row the tenant's only default, as

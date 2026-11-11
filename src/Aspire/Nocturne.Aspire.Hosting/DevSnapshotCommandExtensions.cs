@@ -64,7 +64,7 @@ public static class DevSnapshotCommandExtensions
         IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
-        var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
+        var logger = context.Services.GetRequiredService<ILogger<PostgresServerResource>>();
 
         try
         {
@@ -106,7 +106,7 @@ public static class DevSnapshotCommandExtensions
         IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
-        var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
+        var logger = context.Services.GetRequiredService<ILogger<PostgresServerResource>>();
 
         try
         {
@@ -147,7 +147,7 @@ public static class DevSnapshotCommandExtensions
         IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
-        var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
+        var logger = context.Services.GetRequiredService<ILogger<PostgresServerResource>>();
 
         try
         {

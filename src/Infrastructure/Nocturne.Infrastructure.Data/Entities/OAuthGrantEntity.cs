@@ -171,17 +171,13 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public string? LegacyTokenDigest { get; set; }
 
     /// <summary>
-    /// That this credential was meant to be held to the last 24 hours of every time-series
+    /// That this credential is held to the last 24 hours of every time-series
     /// category. Recorded per credential rather than per membership because one holder carries
     /// every API token on a tenant, so a flag there cannot say that a follower's phone is
     /// restricted while the same person's other tokens are not.
     /// <para>
-    /// <b>Not enforced on any read path.</b> The only place a 24-hour window is applied is the
-    /// public-share branch of <c>AuthenticationMiddleware</c>, which reads the Public subject's
-    /// membership; no member or grant credential is clamped anywhere. This column preserves the
-    /// intent so it is still there when that gap is closed, and
-    /// <c>MemberScopeMiddleware</c> already combines it with the membership's own flag, narrower
-    /// winning.
+    /// <c>MemberScopeMiddleware</c> applies the clamp, combining this flag with the membership's own as
+    /// <see cref="Nocturne.Core.Models.Authorization.MemberScopeResolver.IsHistoryClamped"/> describes.
     /// </para>
     /// </summary>
     [Column("limit_to_24_hours")]

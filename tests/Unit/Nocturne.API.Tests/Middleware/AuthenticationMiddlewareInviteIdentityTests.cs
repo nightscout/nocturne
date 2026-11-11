@@ -19,6 +19,7 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -98,6 +99,7 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddSingleton(inviteService.Object);
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext($"invite_identity_{Guid.NewGuid()}").AsFactory());
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

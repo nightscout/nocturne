@@ -24,7 +24,7 @@ interface InAppNotification {
   sourceId: string;
 }
 
-// The sweep that lifts an expired snooze runs every 30 seconds (AlertSweepService), and a snooze
+// The sweep that lifts an expired snooze runs every 30 seconds (AlertSweepJob), and a snooze
 // is whole minutes, so resumption is observed within snooze + one sweep + slack.
 const RESUME_TIMEOUT = 60_000 + 30_000 + 20_000;
 

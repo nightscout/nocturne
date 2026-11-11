@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services;
+using Nocturne.API.Services.Health.GoogleHealth;
 using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
@@ -46,7 +47,7 @@ public class PlatformSettingsController : ControllerBase
 
     /// <summary>
     /// Upserts platform settings for a category. Blank fields preserve existing values.
-    /// Returns restartRequired: true — the SvelteKit frontend must be restarted for changes to take effect.
+    /// Google Health takes effect on the next request; bot settings require a frontend restart.
     /// </summary>
     [HttpPut("{category}")]
     [RemoteCommand(Invalidates = ["GetAll", "Get"])]
@@ -57,7 +58,7 @@ public class PlatformSettingsController : ControllerBase
         var (success, errors) = await _service.UpsertAsync(category, request.Enabled, request.Fields);
         if (!success)
             return UnprocessableEntity(new { errors });
-        return Ok(new { restartRequired = true });
+        return Ok(new { restartRequired = category != GoogleHealthPlatformSettings.Category });
     }
 
     /// <summary>

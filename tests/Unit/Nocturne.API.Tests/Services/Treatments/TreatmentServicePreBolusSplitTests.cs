@@ -1,7 +1,7 @@
+using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -59,7 +59,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
             Endpoint = "POST /api/v1/treatments",
         };
 
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var factory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = new BolusRepository(factory, dedup, caller, NullLogger<BolusRepository>.Instance);
         var carbRepo = new CarbIntakeRepository(factory, dedup, caller, NullLogger<CarbIntakeRepository>.Instance);
@@ -74,7 +74,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var devices = new Mock<IDeviceService>();
+        var devices = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
         devices
             .Setup(s => s.ResolveAsync(
                 It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -91,7 +91,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
             foods.Object,
             devices.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             caller,
@@ -100,19 +100,16 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
         var projection = new V4ToLegacyProjectionService(
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,
             tempBasalRepo, bolusCalcRepo,
-            Mock.Of<IProfileActivationRepository>(),
+            ProfileActivationTestDeps.Repository(_context),
             foods.Object,
             _context.AsFactory(),
             NullLogger<V4ToLegacyProjectionService>.Instance);
 
-        var pipeline = new DecompositionPipeline(
-            new ServiceCollection().AddSingleton<IDecomposer<Treatment>>(decomposer).BuildServiceProvider(),
-            NullLogger<DecompositionPipeline>.Instance);
 
         var store = new TreatmentReadService(
-            projection, decomposer, pipeline,
+            projection, decomposer,
             tempBasalRepo, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
-            Mock.Of<IProfileActivationRepository>(),
+            ProfileActivationTestDeps.Repository(_context),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
 

@@ -7,11 +7,24 @@ namespace Nocturne.API.Tests.Controllers.V4.TenantAdmin;
 [Trait("Category", "Unit")]
 public class DeduplicationControllerTests
 {
-    private readonly Mock<IDeduplicationService> _deduplicationService = new();
+    private readonly Mock<IDeduplicationAdmin> _deduplication = new();
 
     private DeduplicationController BuildController() => new(
-        _deduplicationService.Object,
+        _deduplication.Object,
         new Mock<ILogger<DeduplicationController>>().Object);
+
+    [Fact]
+    public async Task StartDeduplicationJob_Returns403WhenTheServiceRefusesAHistoryClampedCaller()
+    {
+        _deduplication
+            .Setup(s => s.StartRunAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new UnauthorizedAccessException("history-limited"));
+
+        var result = await BuildController().StartDeduplicationJob();
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(403);
+    }
 
     [Fact]
     public async Task GetRecordLinkedRecords_ReturnsTheWholeGroupForANonPrimaryMember()
@@ -20,7 +33,7 @@ public class DeduplicationControllerTests
         var primaryId = Guid.CreateVersion7();
         var nonPrimaryId = Guid.CreateVersion7();
 
-        _deduplicationService
+        _deduplication
             .Setup(s => s.GetLinkedRecordAsync(RecordType.Bolus, nonPrimaryId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new LinkedRecord
             {
@@ -31,7 +44,7 @@ public class DeduplicationControllerTests
                 RecordId = nonPrimaryId,
                 IsPrimary = false
             });
-        _deduplicationService
+        _deduplication
             .Setup(s => s.GetLinkedRecordsAsync(canonicalId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
@@ -52,7 +65,7 @@ public class DeduplicationControllerTests
     [Fact]
     public async Task GetRecordLinkedRecords_Returns404ForAnUnlinkedRecord()
     {
-        _deduplicationService
+        _deduplication
             .Setup(s => s.GetLinkedRecordAsync(
                 It.IsAny<RecordType>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((LinkedRecord?)null);
@@ -72,7 +85,7 @@ public class DeduplicationControllerTests
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(400);
-        _deduplicationService.Verify(
+        _deduplication.Verify(
             s => s.GetLinkedRecordAsync(
                 It.IsAny<RecordType>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);

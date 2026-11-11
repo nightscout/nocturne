@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Platform;
@@ -203,7 +204,11 @@ public class StatusServiceTests
         var tenantFactory = new Mock<INocturneDbContextFactory>();
         tenantFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
+            .ReturnsAsync(() =>
+            {
+                opened++;
+                return TestDbContextFactory.CreateInMemoryContext(dbName);
+            });
         tenantFactory
             .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => mockFactory.Object.CreateDbContextAsync().GetAwaiter().GetResult());
@@ -212,19 +217,20 @@ public class StatusServiceTests
             .Setup(r => r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences());
 
+        var tenantAccessor = MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object;
         var service = new StatusService(
             _configuration,
             _mockCacheService.Object,
             new CacheFlights(),
             _mockDemoModeService.Object,
             tenantFactory.Object,
+            new TenantRepository(tenantFactory.Object), new SubjectRepository(tenantFactory.Object), new RoleRepository(tenantFactory.Object), new OidcProviderRepository(tenantFactory.Object),
             _httpContextAccessor,
-            MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
+            tenantAccessor,
             TestPublicAccessCache.Create(),
-            _tenants.Object,
-            appearanceReader.Object,
+            new TenantGlucoseUnits(tenantAccessor, appearanceReader.Object, _tenants.Object),
             new GlucoseStatusClassifier(_configuration, NullLogger<GlucoseStatusClassifier>.Instance),
-            new AlertRepository(mockFactory.Object),
+            new AlertRepository(mockFactory.Object.AsNocturneFactory()),
             Mock.Of<ICategoryReadContext>(),
             TimeProvider.System,
             _mockLogger.Object);
@@ -792,8 +798,8 @@ public class StatusServiceTests
     public async Task GetSystemStatusAsync_IgnoresTheLegacyFeaturesUnitsUntilTheOwnerChooses()
     {
         _dbContext.TenantId = MockTenantAccessor.DefaultTenantId;
-        await new UISettingsService(new TestNocturneDbContextFactory(_dbContext), TimeProvider.System, Mock.Of<ILogger<UISettingsService>>()).SaveSectionAsync(
-            "features", new FeatureSettings { Display = new DisplaySettings { Units = "mmol" } });
+        await new UISettingsService(new TestNocturneDbContextFactory(_dbContext), TimeProvider.System, Mock.Of<ILogger<UISettingsService>>()).PatchSectionAsync<FeatureSettings>(
+            "features", JsonDocument.Parse("""{"display":{"units":"mmol"}}""").RootElement);
         var configuration = new ConfigurationBuilder().Build();
 
         var result = await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync();
@@ -1063,23 +1069,28 @@ public class StatusServiceTests
     {
         var alerts = new Mock<IAlertRepository>();
         alerts
-            .Setup(a => a.GetEnabledRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(a => a.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TestDbException());
         var cache = TestTenantCache.Distributed(new MemoryCache(new MemoryCacheOptions()));
         var flights = new CacheFlights();
         StatusService Service() => new(
             _configuration, cache, flights, _mockDemoModeService.Object, Mock.Of<INocturneDbContextFactory>(),
-            _httpContextAccessor, _mockTenantAccessor.Object, TestPublicAccessCache.Create(), _tenants.Object,
-            Mock.Of<ITenantAppearanceReader>(r =>
-                r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())
-                    == Task.FromResult(new UserDisplayPreferences())),
+            new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>()),
+            new RoleRepository(Mock.Of<INocturneDbContextFactory>()), new OidcProviderRepository(Mock.Of<INocturneDbContextFactory>()),
+            _httpContextAccessor, _mockTenantAccessor.Object, TestPublicAccessCache.Create(),
+            new TenantGlucoseUnits(
+                _mockTenantAccessor.Object,
+                Mock.Of<ITenantAppearanceReader>(r =>
+                    r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())
+                        == Task.FromResult(new UserDisplayPreferences())),
+                _tenants.Object),
             new GlucoseStatusClassifier(_configuration, NullLogger<GlucoseStatusClassifier>.Instance),
             alerts.Object, Mock.Of<ICategoryReadContext>(), TimeProvider.System, _mockLogger.Object);
 
         await Service().GetSystemStatusAsync();
         await Service().GetSystemStatusAsync();
 
-        alerts.Verify(a => a.GetEnabledRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        alerts.Verify(a => a.GetEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -1096,7 +1107,7 @@ public class StatusServiceTests
     {
         var alerts = new Mock<IAlertRepository>();
         alerts
-            .Setup(a => a.GetEnabledRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(a => a.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(failure);
         return alerts.Object;
     }
@@ -1493,18 +1504,19 @@ public class StatusServiceTests
         alertContexts
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
-        alertRepository ??= new AlertRepository(alertContexts.Object);
+        tenantAccessor ??= _mockTenantAccessor.Object;
+        alertRepository ??= new AlertRepository(alertContexts.Object.AsNocturneFactory(tenantAccessor.TenantId));
         return new StatusService(
             configuration,
             _mockCacheService.Object,
             flights ?? new CacheFlights(),
             _mockDemoModeService.Object,
             mockTenantDbContextFactory.Object,
+            new TenantRepository(mockTenantDbContextFactory.Object), new SubjectRepository(mockTenantDbContextFactory.Object), new RoleRepository(mockTenantDbContextFactory.Object), new OidcProviderRepository(mockTenantDbContextFactory.Object),
             httpContextAccessor ?? _httpContextAccessor,
-            tenantAccessor ?? _mockTenantAccessor.Object,
+            tenantAccessor,
             TestPublicAccessCache.Create(),
-            _tenants.Object,
-            appearanceReader,
+            new TenantGlucoseUnits(tenantAccessor, appearanceReader, _tenants.Object),
             new GlucoseStatusClassifier(configuration, NullLogger<GlucoseStatusClassifier>.Instance),
             alertRepository,
             categoryReadContext ?? Mock.Of<ICategoryReadContext>(),

@@ -31,9 +31,8 @@
   import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
   import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
   import { TargetStatus } from "#lib/api/generated/nocturne-api-client.js";
-  import { getReportsData } from "#lib/api/reports.remote.js";
   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
-  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { rangeSummaryResources } from "#lib/hooks/range-summary-resources.js";
   import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
   import { formatMinutesDuration } from "#lib/utils/duration.js";
 
@@ -48,17 +47,16 @@
   // Default: 14 days is standard for executive summary reports
   const reportsParams = requireDateParamsContext(14);
 
-  // Create resource with automatic layout registration; `date` carries the
-  // selected range so per-day figures divide by the days the user picked.
-  const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error loading executive summary", dateParams: reportsParams }
-  );
+  // `date` carries the selected range so per-day figures divide by the days the user picked.
+  const { analysis: analysisResource, count: countResource } = rangeSummaryResources(reportsParams, {
+    errorTitle: "Error loading executive summary",
+    registration: "combined",
+  });
 
-  const readingCount = $derived(reportsResource.current?.readingCount ?? 0);
-  const analysis = $derived(reportsResource.current?.analysis);
-  const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
-  const dayCount = $derived(reportsResource.date.dayCount);
+  const readingCount = $derived(countResource.current?.readingCount ?? 0);
+  const analysis = $derived(analysisResource.current?.analysis);
+  const lastUpdated = $derived(analysisResource.current?.dateRange?.lastUpdated);
+  const dayCount = $derived(analysisResource.date.dayCount);
   const cvStatus = $derived(analysis?.clinicalAssessment?.cvAssessment?.status);
   const cvMeetsTarget = $derived(
     cvStatus == null || cvStatus === TargetStatus.NotAssessed
@@ -84,7 +82,7 @@
   </div>
 {/snippet}
 
-{#if reportsResource.current}
+{#if analysisResource.current && countResource.current}
   <div class="@container space-y-8">
     {#if analysis}
       {@const tir = analysis?.timeInRange?.percentages}
@@ -182,7 +180,7 @@
               {/if}
               <ReliabilityBadge
                 reliability={analysis?.reliability}
-                timeZoneUnavailableReason={reportsResource.current?.timeZoneUnavailableReason}
+                timeZoneUnavailableReason={analysisResource.current?.timeZoneUnavailableReason}
               />
             </div>
 

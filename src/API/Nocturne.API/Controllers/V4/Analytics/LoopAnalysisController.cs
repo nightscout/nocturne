@@ -43,6 +43,7 @@ public class LoopAnalysisController(
     /// target range, with the days behind them.
     /// </summary>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("daily-profile")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -57,6 +58,10 @@ public class LoopAnalysisController(
     /// <summary>
     /// How far each prediction curve's values at +30, +60, +90 and +120 minutes landed from the
     /// sensor reading nearest the time they predicted, overall, by local hour of day and by context.
+    /// Error is predicted minus actual, so a positive bias is a prediction that ran high. A horizon
+    /// with no reading within 2.5 minutes is counted as unmatched. Without glucose.read and
+    /// devices.read no curve is returned; without treatments.read the context breakdowns and the oref IOB, zero-temp and
+    /// COB curves are withheld.
     /// </summary>
     /// <remarks>
     /// Only the +30 and +60 minute bias is a sign of the settings a prediction ran on: the reading at
@@ -69,6 +74,7 @@ public class LoopAnalysisController(
     /// in the contexts the algorithm relies on it in.
     /// </remarks>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("prediction-accuracy")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -92,6 +98,7 @@ public class LoopAnalysisController(
     /// <c>max_iob</c>, automatic boluses, suggestions not enacted and the sensitivity ratio.
     /// </summary>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("loop-health")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -114,7 +121,9 @@ public class LoopAnalysisController(
     /// from isolated announced meals, per local time-of-day block. Each figure carries its n, spread,
     /// confidence and the reasons it is not higher, the episodes rejected by each rule, why it has no
     /// value where it has none, and for the primary range the episodes it was read from. These are
-    /// observations, never instructions.
+    /// observations, never instructions. Without glucose.read, treatments.read and therapy.read, or
+    /// for a history-clamped caller, nothing is computed: <c>primary</c> and <c>comparison</c> are
+    /// null and <c>withheldReason</c> says why.
     /// </summary>
     /// <remarks>
     /// The page is withheld whole, with nothing computed, <c>primary</c> and <c>comparison</c> null
@@ -125,6 +134,7 @@ public class LoopAnalysisController(
     /// the rules apply.
     /// </remarks>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("settings-evidence")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -142,12 +152,15 @@ public class LoopAnalysisController(
 
         var served = await ServeAsync<SettingsEvidenceReport>(
             query,
-            withheld is { } reason
-                ? (filter, _, ct) => EnvelopeOnlyAsync(new SettingsEvidenceReport { WithheldReason = reason }, filter, ct)
-                : service.GetSettingsEvidenceAsync,
+            withheld is null
+                ? service.GetSettingsEvidenceAsync
+                : (filter, _, ct) => EnvelopeOnlyAsync(new SettingsEvidenceReport(), filter, ct),
             cancellationToken);
         if (served.Result is OkObjectResult { Value: SettingsEvidenceReport report })
+        {
+            report.WithheldReason = withheld;
             report.Rules = SettingsEvidenceCalculator.Rules();
+        }
         return served;
     }
 
@@ -157,6 +170,7 @@ public class LoopAnalysisController(
     /// the time-zone state and the profiles the <c>profileName</c> filter can be set to.
     /// </summary>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("envelope")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -172,7 +186,11 @@ public class LoopAnalysisController(
     /// Glucose, net loop correction, net insulin above schedule, IOB and COB aligned on up to three
     /// cohorts of events (meals, correction boluses, unannounced rises, and the starts of sensors,
     /// exercise, overrides and temporary targets), each spread across its events in five-minute
-    /// slots from the anchor, with each event's figures and their spread.
+    /// slots from the anchor, with each event's figures and their spread. An event with no reading
+    /// within 5 minutes of its anchor is dropped and counted. A cohort whose anchor or glucose read
+    /// scope the caller lacks is dropped and its <c>anchor{n}</c> reported as ignored; without
+    /// treatments.read the event list and every insulin, IOB and COB series are withheld. Equal start
+    /// and end times of day mean all day, and grams given the wrong way round are swapped.
     /// </summary>
     /// <remarks>
     /// An event is dropped and counted when no reading lies within 5 minutes of its anchor. Every
@@ -184,6 +202,7 @@ public class LoopAnalysisController(
     /// </remarks>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
     /// <param name="events">The cohorts and window (<see cref="EventResponseQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("event-response")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -248,6 +267,14 @@ public class LoopAnalysisController(
 
     /// <summary>A request resolved against the tenant clock and the caller.</summary>
     /// <param name="Filter">Null when <see cref="Zone"/> is: without a zone the dates cannot be placed.</param>
+    /// <param name="Zone">The tenant's time zone; null when it has none to resolve.</param>
+    /// <param name="Reason">Why there is no zone; null when there is one.</param>
+    /// <param name="PrimaryRange">The range analysed; null without a zone.</param>
+    /// <param name="ComparisonRange">The range compared against; null without a zone, when none was asked for, and for a history-clamped caller.</param>
+    /// <param name="Masks">The masks left once those the caller may not use are dropped.</param>
+    /// <param name="IgnoredFilters">The query parameters the caller passed that were dropped or overridden.</param>
+    /// <param name="UnavailableFilters">The filters the caller's scopes do not allow.</param>
+    /// <param name="HistoryClamped">Whether the caller is history-clamped.</param>
     private sealed record LoopAnalysisRequest(
         LoopAnalysisFilter? Filter,
         TimeZoneInfo? Zone,

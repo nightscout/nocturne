@@ -934,6 +934,11 @@ public class GoogleHealthConnectorServiceTests
                 .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
                     secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
                 .Returns(Task.CompletedTask);
+            configurations.Setup(value => value.SaveRuntimeSecretsAsync(
+                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, CancellationToken>((_, values, _) =>
+                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
+                .Returns(Task.CompletedTask);
             configurations.Setup(value => value.GetConfigurationAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => new ConnectorConfigurationResponse

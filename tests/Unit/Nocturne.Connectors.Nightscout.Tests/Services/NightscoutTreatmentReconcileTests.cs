@@ -430,12 +430,18 @@ public class NightscoutTreatmentReconcileTests
             publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
             var metadata = new Mock<IMetadataPublisher>();
             metadata
-                .Setup(m => m.GetBackfillLowWaterMarkAsync(Source, "TreatmentsFullReconcile", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(LastFullReconcile);
+                .Setup(m => m.GetBackfillLowWaterMarksAsync(Source, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => LastFullReconcile is { } at
+                    ? new Dictionary<string, DateTime> { ["TreatmentsFullReconcile"] = at }
+                    : new Dictionary<string, DateTime>());
             metadata
-                .Setup(m => m.SetBackfillLowWaterMarkAsync(
-                    Source, "TreatmentsFullReconcile", It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-                .Callback<string, string, DateTime?, CancellationToken>((_, _, at, _) => FullReconcileRecorded.Add(at))
+                .Setup(m => m.SetBackfillLowWaterMarksAsync(
+                    Source, It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, IReadOnlyDictionary<string, DateTime?>, CancellationToken>((_, changes, _) =>
+                {
+                    if (changes.TryGetValue("TreatmentsFullReconcile", out var at))
+                        FullReconcileRecorded.Add(at);
+                })
                 .Returns(Task.CompletedTask);
             publisher.Setup(p => p.Metadata).Returns(metadata.Object);
 

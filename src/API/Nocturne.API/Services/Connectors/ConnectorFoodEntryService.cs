@@ -1,12 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Mappers;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -18,19 +12,19 @@ namespace Nocturne.API.Services.Connectors;
 /// <seealso cref="IConnectorFoodEntryService"/>
 public class ConnectorFoodEntryService : IConnectorFoodEntryService
 {
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IConnectorFoodEntryRepository _entries;
     private readonly IMealMatchingService _mealMatchingService;
     private readonly TimeProvider _time;
     private readonly ILogger<ConnectorFoodEntryService> _logger;
 
     public ConnectorFoodEntryService(
-        INocturneDbContextFactory contexts,
+        IConnectorFoodEntryRepository entries,
         IMealMatchingService mealMatchingService,
         TimeProvider timeProvider,
         ILogger<ConnectorFoodEntryService> logger
     )
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _entries = entries ?? throw new ArgumentNullException(nameof(entries));
         _mealMatchingService = mealMatchingService ?? throw new ArgumentNullException(nameof(mealMatchingService));
         _time = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -42,203 +36,25 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
         CancellationToken cancellationToken = default
     )
     {
-        await using var db = await _contexts.CreateAsync(cancellationToken);
         var importList = imports?.ToList() ?? new List<ConnectorFoodEntryImport>();
         if (importList.Count == 0)
         {
             return Array.Empty<ConnectorFoodEntry>();
         }
 
-        var results = new List<ConnectorFoodEntry>(importList.Count);
-
-        // Matching sees an entry only when there is something new to match on: created, restored
-        // from a withdrawal, or its consumed time moved. Connectors re-read their whole lookback
-        // window every cycle, so handing over every still-pending row re-matches and re-notifies
-        // all of them every cycle.
-        var idsForMatching = new HashSet<Guid>();
-
-        // Track foods added within this batch to prevent duplicate insertions
-        // Key: "{connectorSource}:{externalFoodId}"
-        var batchFoodCache = new Dictionary<string, FoodEntity>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var import in importList)
-        {
-            if (string.IsNullOrWhiteSpace(import.ConnectorSource))
-            {
-                _logger.LogWarning("Skipping connector food import with missing connector source");
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(import.ExternalEntryId))
-            {
-                _logger.LogWarning("Skipping connector food import with missing external entry id");
-                continue;
-            }
-
-            var connectorSource = import.ConnectorSource.Trim();
-            var externalEntryId = import.ExternalEntryId.Trim();
-            var externalFoodId = import.ExternalFoodId?.Trim() ?? string.Empty;
-
-            FoodEntity? foodEntity = null;
-            if (import.Food != null && !string.IsNullOrWhiteSpace(import.Food.ExternalId))
-            {
-                var foodExternalId = import.Food.ExternalId.Trim();
-                var foodCacheKey = $"{connectorSource}:{foodExternalId}";
-
-                // Check batch cache first (foods added in this batch but not yet saved)
-                if (batchFoodCache.TryGetValue(foodCacheKey, out var cachedFood))
-                {
-                    foodEntity = cachedFood;
-                    UpdateFoodEntity(foodEntity, import.Food);
-                }
-                else
-                {
-                    // A deleted food keeps its external key. The user's delete stands, as it
-                    // does for every other re-imported record; a system sweep's is undone on the
-                    // same row.
-                    var stored = db.Foods.IncludingDeleted().Where(
-                        f => f.ExternalSource == connectorSource && f.ExternalId == foodExternalId);
-                    var blocking = await stored.WhereBlocksRecreation().FirstOrDefaultAsync(cancellationToken);
-
-                    if (blocking is { DeletedAt: not null })
-                    {
-                        foodEntity = null;
-                    }
-                    else if ((blocking ?? await stored.FirstOrDefaultAsync(cancellationToken)) is { } existing)
-                    {
-                        foodEntity = existing;
-                        UpdateFoodEntity(foodEntity, import.Food);
-                        foodEntity.DeletedAt = null;
-                    }
-                    else
-                    {
-                        foodEntity = BuildFoodEntity(import.Food, connectorSource);
-                        db.Foods.Add(foodEntity);
-                        batchFoodCache[foodCacheKey] = foodEntity;
-                    }
-                }
-
-                if (string.IsNullOrWhiteSpace(externalFoodId))
-                {
-                    externalFoodId = foodExternalId;
-                }
-            }
-            else if (!string.IsNullOrWhiteSpace(externalFoodId))
-            {
-                var foodCacheKey = $"{connectorSource}:{externalFoodId}";
-
-                // Check batch cache first
-                if (batchFoodCache.TryGetValue(foodCacheKey, out var cachedFood))
-                {
-                    foodEntity = cachedFood;
-                }
-                else
-                {
-                    foodEntity = await db.Foods.FirstOrDefaultAsync(
-                        f => f.ExternalSource == connectorSource && f.ExternalId == externalFoodId,
-                        cancellationToken
-                    );
-                }
-            }
-
-            var entryEntity = await db.ConnectorFoodEntries.FirstOrDefaultAsync(
-                e => e.ConnectorSource == connectorSource && e.ExternalEntryId == externalEntryId,
-                cancellationToken
-            );
-
-            if (entryEntity == null)
-            {
-                entryEntity = new ConnectorFoodEntryEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    ConnectorSource = connectorSource,
-                    ExternalEntryId = externalEntryId,
-                    ExternalFoodId = externalFoodId,
-                    FoodId = foodEntity?.Id,
-                    ConsumedAt = import.ConsumedAt,
-                    LoggedAt = import.LoggedAt,
-                    MealName = import.MealName ?? string.Empty,
-                    Carbs = import.Carbs,
-                    Protein = import.Protein,
-                    Fat = import.Fat,
-                    Energy = import.Energy,
-                    Servings = import.Servings,
-                    ServingDescription = import.ServingDescription,
-                    Status = ConnectorFoodEntryStatus.Pending,
-                };
-
-                db.ConnectorFoodEntries.Add(entryEntity);
-                idsForMatching.Add(entryEntity.Id);
-            }
-            else
-            {
-                entryEntity.ExternalFoodId = externalFoodId;
-                entryEntity.FoodId = foodEntity?.Id ?? entryEntity.FoodId;
-
-                // The connector reporting the entry is evidence it exists. Nothing else returns a
-                // record to Pending, so a withdrawal that proves wrong is otherwise permanent.
-                if (entryEntity.Status == ConnectorFoodEntryStatus.Deleted)
-                {
-                    entryEntity.Status = ConnectorFoodEntryStatus.Pending;
-                    entryEntity.ResolvedAt = null;
-                    idsForMatching.Add(entryEntity.Id);
-
-                    _logger.LogInformation(
-                        "Restored withdrawn food entry {FoodEntryId} after {ConnectorSource} reported it again",
-                        entryEntity.Id,
-                        connectorSource);
-                }
-
-                // An inferred time is re-derived every sync and can come back worse: MyFitnessPal
-                // recovers the meal name per cycle, so a cycle that fails to would rewrite an 08:00
-                // breakfast to an unnamed midday and move its carbs onto a different bolus. Only
-                // that case is refused; a reported time, or an inferred one that names its meal,
-                // still writes.
-                var wouldReplaceNamedMealWithGuess =
-                    import.IsTimeInferred
-                    && string.IsNullOrWhiteSpace(import.MealName)
-                    && !string.IsNullOrWhiteSpace(entryEntity.MealName);
-
-                if (!wouldReplaceNamedMealWithGuess)
-                {
-                    // Matching keys off the consumed time, and a corrected one arrives as an update
-                    // rather than a create, so this is the only place the change is observable.
-                    if (entryEntity.ConsumedAt != import.ConsumedAt
-                        && entryEntity.Status == ConnectorFoodEntryStatus.Pending)
-                    {
-                        idsForMatching.Add(entryEntity.Id);
-                    }
-
-                    entryEntity.ConsumedAt = import.ConsumedAt;
-                    entryEntity.LoggedAt = import.LoggedAt;
-                    entryEntity.MealName = import.MealName ?? entryEntity.MealName;
-                }
-
-                entryEntity.Carbs = import.Carbs;
-                entryEntity.Protein = import.Protein;
-                entryEntity.Fat = import.Fat;
-                entryEntity.Energy = import.Energy;
-                entryEntity.Servings = import.Servings;
-                entryEntity.ServingDescription = import.ServingDescription;
-            }
-
-            results.Add(MapToDomain(entryEntity, foodEntity));
-        }
-
-        if (results.Count == 0)
+        var upsert = await _entries.UpsertAsync(importList, cancellationToken);
+        if (upsert.Entries.Count == 0)
         {
             return Array.Empty<ConnectorFoodEntry>();
         }
 
-        await db.SaveChangesAsync(cancellationToken);
-
         // Matching raises notifications, which need a subject. The entries and the suggestion list
         // do not, so a tenant with no resolvable owner still gets both.
-        if (idsForMatching.Count > 0 && !string.IsNullOrEmpty(userId))
+        if (upsert.EntriesToMatch.Count > 0 && !string.IsNullOrEmpty(userId))
         {
             try
             {
-                await _mealMatchingService.ProcessNewFoodEntriesAsync(userId, idsForMatching, cancellationToken);
+                await _mealMatchingService.ProcessNewFoodEntriesAsync(userId, upsert.EntriesToMatch, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -247,7 +63,7 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
             }
         }
 
-        return results;
+        return upsert.Entries;
     }
 
     /// <inheritdoc />
@@ -260,7 +76,6 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
         CancellationToken cancellationToken = default
     )
     {
-        await using var db = await _contexts.CreateAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(connectorSource))
         {
             return 0;
@@ -270,40 +85,22 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
         var present = presentExternalEntryIds?.ToHashSet(StringComparer.Ordinal)
                       ?? new HashSet<string>(StringComparer.Ordinal);
 
-        // Only entries still awaiting a decision are withdrawn. A matched or dismissed one has been
-        // acted on and its carbs are linked to a treatment. Pending is also the only status that
-        // produces match suggestions.
-        var candidates = await db.ConnectorFoodEntries
-            .Where(e => e.ConnectorSource == source
-                        && e.Status == ConnectorFoodEntryStatus.Pending
-                        && e.ConsumedAt >= from
-                        && e.ConsumedAt <= to)
-            .ToListAsync(cancellationToken);
-
-        var removed = candidates.Where(e => !present.Contains(e.ExternalEntryId)).ToList();
+        var removed = await _entries.MarkMissingAsDeletedAsync(
+            source, from, to, present, _time.GetUtcNow(), cancellationToken);
         if (removed.Count == 0)
         {
             return 0;
         }
 
-        var now = _time.GetUtcNow();
-        foreach (var entry in removed)
-        {
-            entry.Status = ConnectorFoodEntryStatus.Deleted;
-            entry.ResolvedAt = now;
-        }
-
-        await db.SaveChangesAsync(cancellationToken);
-
         // The suggestion is a separate record from the entry and stays live until withdrawn.
         // A suggestion only exists against a subject, so with none there is nothing to withdraw.
         if (!string.IsNullOrEmpty(userId))
         {
-            foreach (var entry in removed)
+            foreach (var entryId in removed)
             {
                 try
                 {
-                    await _mealMatchingService.WithdrawSuggestionAsync(userId, entry.Id, cancellationToken);
+                    await _mealMatchingService.WithdrawSuggestionAsync(userId, entryId, cancellationToken);
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
@@ -311,7 +108,7 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
                     _logger.LogWarning(
                         ex,
                         "Failed to archive the match notification for withdrawn food entry {FoodEntryId}",
-                        entry.Id);
+                        entryId);
                 }
             }
         }
@@ -322,71 +119,5 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
             source);
 
         return removed.Count;
-    }
-
-    private static FoodEntity BuildFoodEntity(ConnectorFoodImport food, string connectorSource)
-    {
-        return new FoodEntity
-        {
-            Id = Guid.CreateVersion7(),
-            Type = "food",
-            Name = food.Name,
-            Category = food.BrandName ?? string.Empty,
-            Subcategory = string.Empty,
-            Portion = (double)food.Portion,
-            Unit = string.IsNullOrWhiteSpace(food.Unit) ? "g" : TruncateUnit(food.Unit),
-            Carbs = (double)food.Carbs,
-            Protein = (double)food.Protein,
-            Fat = (double)food.Fat,
-            Energy = (double)food.Energy,
-            ExternalSource = connectorSource,
-            ExternalId = food.ExternalId,
-            Gi = GlycemicIndex.Medium,
-        };
-    }
-
-    private static void UpdateFoodEntity(FoodEntity entity, ConnectorFoodImport food)
-    {
-        entity.Name = food.Name;
-        entity.Category = food.BrandName ?? string.Empty;
-        entity.Portion = (double)food.Portion;
-        entity.Unit = string.IsNullOrWhiteSpace(food.Unit) ? entity.Unit : TruncateUnit(food.Unit);
-        entity.Carbs = (double)food.Carbs;
-        entity.Protein = (double)food.Protein;
-        entity.Fat = (double)food.Fat;
-        entity.Energy = (double)food.Energy;
-    }
-
-    private static ConnectorFoodEntry MapToDomain(
-        ConnectorFoodEntryEntity entity,
-        FoodEntity? foodEntity
-    )
-    {
-        return new ConnectorFoodEntry
-        {
-            Id = entity.Id,
-            ConnectorSource = entity.ConnectorSource,
-            ExternalEntryId = entity.ExternalEntryId,
-            ExternalFoodId = entity.ExternalFoodId,
-            FoodId = entity.FoodId,
-            Food = foodEntity != null ? FoodMapper.ToDomainModel(foodEntity) : null,
-            ConsumedAt = entity.ConsumedAt,
-            LoggedAt = entity.LoggedAt,
-            MealName = entity.MealName,
-            Carbs = entity.Carbs,
-            Protein = entity.Protein,
-            Fat = entity.Fat,
-            Energy = entity.Energy,
-            Servings = entity.Servings,
-            ServingDescription = entity.ServingDescription,
-            Status = entity.Status,
-            ResolvedAt = entity.ResolvedAt,
-        };
-    }
-
-    private static string TruncateUnit(string unit)
-    {
-        const int maxLength = 30;
-        return unit.Length <= maxLength ? unit : unit[..maxLength];
     }
 }

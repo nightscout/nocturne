@@ -27,6 +27,10 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Nocturne.Core.Contracts.Auth;
+
 namespace Nocturne.API.Tests.Controllers.V4;
 
 /// <summary>
@@ -169,8 +173,8 @@ public class TenantSettingsControllerRequestValidationTests
         var record = new PatientRecord();
 
         var tenants = new Mock<ITenantService>();
-        tenants.Setup(t => t.SetPatientRelationshipAsync(tenantId, It.IsAny<PatientRelationship>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, PatientRelationship, CancellationToken>((_, value, _) => answer = value)
+        tenants.Setup(t => t.SetPatientRelationshipAsync(tenantId, It.IsAny<PatientRelationship>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, PatientRelationship, Guid?, CancellationToken>((_, value, _, _) => answer = value)
             .Returns(Task.CompletedTask);
         tenants.Setup(t => t.GetPatientRelationshipAsync(tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => answer);
@@ -221,6 +225,7 @@ public class TenantSettingsControllerRequestValidationTests
                     services.AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database));
                     services.AddSingleton<INocturneDbContextFactory>(sp =>
                         sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
+                    services.AddTransient<ISubjectRepository, SubjectRepository>();
                     services.Configure<RouteOptions>(o => o.SuppressCheckForUnhandledSecurityMetadata = true);
                     services.AddControllers().ConfigureApplicationPartManager(manager =>
                     {

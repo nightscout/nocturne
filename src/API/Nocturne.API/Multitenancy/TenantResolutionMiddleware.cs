@@ -1,10 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Multitenancy;
@@ -403,8 +400,8 @@ public class TenantResolutionMiddleware
     /// What the apex needs to know about the tenant table, as one cache entry.
     /// </summary>
     /// <param name="SoleTenant">
-    /// The <see cref="SoleTenantQuery.SoleTenantAsync">sole servable tenant</see>, or null when
-    /// there is none or several.
+    /// The sole servable tenant (<see cref="ITenantRepository.FindSoleTenantAsync"/>), or null
+    /// when there is none or several.
     /// </param>
     /// <param name="AnyTenantExists">
     /// Whether any tenant a caller could be served exists at all, which separates a fresh install
@@ -446,16 +443,12 @@ public class TenantResolutionMiddleware
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
 
-        var factory = services.GetRequiredService<INocturneDbContextFactory>();
-        await using var context = await factory.CreatePlatformAsync();
-
-        var tenant = await context.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Slug == slug);
+        var tenant = await services.GetRequiredService<ITenantRepository>().FindBySlugAsync(slug, CancellationToken.None);
 
         if (tenant == null)
             return null;
 
-        var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
+        var tenantContext = tenant.ToContext();
         _cache.Set(cacheKey, tenantContext, CacheDuration);
         return tenantContext;
     }
@@ -464,8 +457,8 @@ public class TenantResolutionMiddleware
     /// Reads the <see cref="ApexTenants"/> answer, from the rows on a miss.
     /// </summary>
     /// <remarks>
-    /// A demo tenant is an ordinary active tenant, so it would otherwise be counted here; see
-    /// <see cref="DemoExclusionFilter"/>.
+    /// A demo tenant is an ordinary active tenant, so it would otherwise be counted here; the
+    /// repository's directory reads leave it out.
     /// <para>
     /// The fresh-install answer — no tenant exists at all — is deliberately not cached, and is the
     /// one answer worth a query per request. It is true only until an install's first tenant is
@@ -481,16 +474,12 @@ public class TenantResolutionMiddleware
         if (_cache.TryGetValue(SoleTenantCacheKey, out ApexTenants? cached) && cached is not null)
             return cached;
 
-        var factory = services.GetRequiredService<INocturneDbContextFactory>();
-        await using var context = await factory.CreatePlatformAsync();
-
-        var tenant = await context.Tenants.SoleTenantAsync();
+        var tenants = services.GetRequiredService<ITenantRepository>();
+        var tenant = await tenants.FindSoleTenantAsync(CancellationToken.None);
 
         var answer = tenant is null
-            ? new ApexTenants(null, await context.Tenants.AsNoTracking().ExcludeDemo().AnyAsync())
-            : new ApexTenants(
-                new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
-                true);
+            ? new ApexTenants(null, await tenants.AnyNonDemoAsync(CancellationToken.None))
+            : new ApexTenants(tenant.ToContext(), true);
 
         if (answer.AnyTenantExists)
             _cache.Set(SoleTenantCacheKey, answer, CacheDuration);

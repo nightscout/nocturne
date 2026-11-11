@@ -32,6 +32,8 @@ public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
 {
     /// <summary>
     /// Create or update uploader snapshots in bulk (max 1000).
+    /// A snapshot with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other snapshot is inserted. An item whose pair is held by a deleted record is skipped and left out of the response.
+    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing.
     /// </summary>
     /// <remarks>
     /// Array semantics are per-item upsert, not all-or-nothing: each snapshot carrying both

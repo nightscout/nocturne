@@ -2,12 +2,10 @@ using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.Authentication;
 
@@ -38,18 +36,19 @@ namespace Nocturne.API.Controllers.Authentication;
 [Tags("Authentication")]
 public class DirectGrantController : ControllerBase
 {
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly ISubjectRepository _subjects;
     private readonly IDirectGrantService _directGrantService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DirectGrantController"/> class.
     /// </summary>
+    /// <param name="subjects">The repository that finds the tenant's device subject, the holder of its site tokens.</param>
     /// <param name="directGrantService">The service that creates, lists, and revokes direct grants.</param>
     public DirectGrantController(
-        INocturneDbContextFactory contexts,
+        ISubjectRepository subjects,
         IDirectGrantService directGrantService)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _directGrantService = directGrantService;
     }
 
@@ -66,7 +65,6 @@ public class DirectGrantController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CreateDirectGrantResponse>> Create([FromBody] CreateDirectGrantRequest request)
     {
-        await using var db = await _contexts.CreateAsync();
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || auth.SubjectId == null)
         {
@@ -81,7 +79,7 @@ public class DirectGrantController : ControllerBase
         var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
 
         var result = await _directGrantService.CreateAsync(
-            db, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
+            pinnedTenantId: null, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
             limitTo24Hours,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
@@ -106,7 +104,6 @@ public class DirectGrantController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<DirectGrantDto>>> List()
     {
-        await using var db = await _contexts.CreateAsync();
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || auth.SubjectId == null)
         {
@@ -114,11 +111,11 @@ public class DirectGrantController : ControllerBase
         }
 
         var grants = await _directGrantService.ListAsync(
-            db, auth.SubjectId.Value, HttpContext.RequestAborted);
+            pinnedTenantId: null, auth.SubjectId.Value, HttpContext.RequestAborted);
 
         // An imported token authenticates as the holder itself, so a caller can be the holder and
         // would otherwise see every site token twice.
-        foreach (var holderId in await SiteTokenHolderAsync(db))
+        foreach (var holderId in await SiteTokenHolderAsync())
         {
             if (holderId == auth.SubjectId.Value)
             {
@@ -126,7 +123,7 @@ public class DirectGrantController : ControllerBase
             }
 
             grants.AddRange(await _directGrantService.ListAsync(
-                db, holderId, HttpContext.RequestAborted));
+                pinnedTenantId: null, holderId, HttpContext.RequestAborted));
         }
 
         return Ok(grants);
@@ -144,7 +141,6 @@ public class DirectGrantController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Revoke(Guid id)
     {
-        await using var db = await _contexts.CreateAsync();
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || auth.SubjectId == null)
         {
@@ -152,12 +148,12 @@ public class DirectGrantController : ControllerBase
         }
 
         var found = await _directGrantService.RevokeAsync(
-            db, id, auth.SubjectId.Value,
+            pinnedTenantId: null, id, auth.SubjectId.Value,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             ct: HttpContext.RequestAborted);
 
-        foreach (var holderId in await SiteTokenHolderAsync(db))
+        foreach (var holderId in await SiteTokenHolderAsync())
         {
             if (found || holderId == auth.SubjectId.Value)
             {
@@ -165,7 +161,7 @@ public class DirectGrantController : ControllerBase
             }
 
             found = await _directGrantService.RevokeAsync(
-                db, id, holderId,
+                pinnedTenantId: null, id, holderId,
                 HttpContext.Connection.RemoteIpAddress?.ToString(),
                 Request.Headers.UserAgent.ToString(),
                 ct: HttpContext.RequestAborted);
@@ -183,21 +179,20 @@ public class DirectGrantController : ControllerBase
     /// The tenant's device-token holder, when the caller may manage it, and nothing otherwise.
     /// </summary>
     /// <remarks>
-    /// A site's uploader tokens belong to nobody (see <see cref="DeviceSubjectFilter"/>), so no
+    /// A site's uploader tokens belong to nobody (see <see cref="ISubjectRepository.FindDeviceSubjectAsync"/>), so no
     /// person's own list would ever contain them. Revoking a device is the operation someone
     /// reaches for when a phone is lost, so it cannot be the one thing this screen cannot do.
     /// Gated on <see cref="Scope.MembersManage"/> rather than shown to every member, because a
     /// site's tokens are not the business of everyone who can read its data.
     /// </remarks>
-    private async Task<IEnumerable<Guid>> SiteTokenHolderAsync(NocturneDbContext db)
+    private async Task<IEnumerable<Guid>> SiteTokenHolderAsync()
     {
         if (!HttpContext.HasScope(Scope.MembersManage))
         {
             return [];
         }
 
-        return await db.FindDeviceSubjectOf(
-            db.TenantId, HttpContext.RequestAborted) is { } holderId
+        return await _subjects.FindDeviceSubjectAsync(HttpContext.RequestAborted) is { } holderId
             ? [holderId]
             : [];
     }

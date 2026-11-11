@@ -2,7 +2,6 @@ using Nocturne.API.Services.Devices;
 using Nocturne.Core.Clinical.Devices;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -12,7 +11,7 @@ namespace Nocturne.API.Services.Analytics;
 
 /// <summary>
 /// The records <see cref="AidSystemMetrics"/> is assembled from, read for one window; the glucose
-/// readings are the canonical ones (<see cref="ICanonicalGlucoseService"/>).
+/// readings are the canonical ones (<see cref="GlucoseStreams.Canonical"/>).
 /// </summary>
 public sealed record AidSystemMetricsRecords(
     IReadOnlyList<PatientDevice> Devices,
@@ -41,7 +40,6 @@ public sealed class AidSystemMetricsReader(
     ITempBasalRepository tempBasalRepository,
     IDeviceEventRepository deviceEventRepository,
     ISensorGlucoseRepository sensorGlucoseRepository,
-    ICanonicalGlucoseService canonicalGlucose,
     ITargetRangeScheduleRepository targetRangeScheduleRepository,
     IActiveProfileResolver activeProfileResolver,
     IStatisticsService statisticsService,
@@ -51,7 +49,7 @@ public sealed class AidSystemMetricsReader(
 {
     /// <summary>
     /// Every collection is read uncapped, for the reason given on
-    /// <c>StatisticsController.FetchInsulinRecordsAsync</c>. The target range is the active
+    /// <see cref="InsulinDeliveryReader.ReadRecordsAsync"/>. The target range is the active
     /// profile's now (<see cref="ActiveTargetRange"/>) and is left out if it cannot be read.
     /// </summary>
     public async Task<AidSystemMetrics> ReadAsync(DateTime start, DateTime end, CancellationToken ct)
@@ -62,11 +60,11 @@ public sealed class AidSystemMetricsReader(
         var apsTask = apsSnapshotRepository.GetLoopCyclesAsync(start, end, ct);
         var basalTask = tempBasalRepository.GetAsync(StatisticsService.TempBasalReadStart(start), end, null, null, int.MaxValue, descending: false, ct: ct);
         var eventTask = deviceEventRepository.GetAsync(start, end, null, null, int.MaxValue, descending: false, ct: ct);
-        var glucoseTask = sensorGlucoseRepository.GetForAnalyticsAsync(start, end, null, null, int.MaxValue, descending: false, ct: ct);
+        var glucoseTask = sensorGlucoseRepository.GetForAnalyticsAsync(start, end, null, null, int.MaxValue, descending: false, ct: ct, streams: GlucoseStreams.Canonical);
 
         await Task.WhenAll(apsTask, basalTask, eventTask, glucoseTask);
 
-        var glucose = await canonicalGlucose.SelectAsync((await glucoseTask).ToList(), ct);
+        var glucose = (await glucoseTask).ToList();
 
         double? targetLow = null;
         double? targetHigh = null;

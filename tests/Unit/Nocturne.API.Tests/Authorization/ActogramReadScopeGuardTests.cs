@@ -25,6 +25,15 @@ public class ActogramReadScopeGuardTests
         StepCounts = [new StepBubbleDto { Time = 1700000000000, Steps = 900 }],
         StepDayTotals = new() { ["2023-11-14"] = 900 },
         SleepSpans = [new ActogramSleepSpan { StartMills = 1, EndMills = 2, State = "deep" }],
+        HeartRateSummary = new ActogramHeartRateSummary
+        {
+            AverageBpm = 64,
+            RestingBpm = 58,
+            MinBpm = 52,
+            MaxBpm = 120,
+            ReadingCount = 1,
+        },
+        StepSummary = new ActogramStepSummary { TotalSteps = 900, DayCount = 1, DailyAverage = 900 },
     };
 
     private static IReadOnlySet<string> Granted(params string[] scopes) =>
@@ -64,6 +73,47 @@ public class ActogramReadScopeGuardTests
         data.Glucose.Should().BeEmpty();
         data.StepCounts.Should().BeEmpty();
         data.SleepSpans.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Redact_WithoutHeartRateRead_ClearsTheHeartRateSummary()
+    {
+        var data = ActogramReadScopeGuard.Redact(
+            OneRecordPerCategory(), Granted(Scope.GlucoseRead, Scope.StepCountRead, Scope.SleepRead));
+
+        data.HeartRateSummary.Should().BeNull();
+        data.StepSummary!.TotalSteps.Should().Be(900);
+    }
+
+    [Fact]
+    public void Redact_WithoutStepCountRead_ClearsTheStepSummary()
+    {
+        var data = ActogramReadScopeGuard.Redact(
+            OneRecordPerCategory(), Granted(Scope.GlucoseRead, Scope.HeartRateRead, Scope.SleepRead));
+
+        data.StepSummary.Should().BeNull();
+        data.HeartRateSummary.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Redact_WithHeartRateAndStepCountRead_KeepsTheirSummaries()
+    {
+        var data = ActogramReadScopeGuard.Redact(
+            OneRecordPerCategory(), Granted(Scope.HeartRateRead, Scope.StepCountRead));
+
+        data.HeartRateSummary.Should().NotBeNull();
+        data.HeartRateSummary!.RestingBpm.Should().Be(58);
+        data.StepSummary!.TotalSteps.Should().Be(900);
+        data.StepSummary.DailyAverage.Should().Be(900);
+    }
+
+    [Fact]
+    public void Redact_NoScopes_ClearsBothSummaries()
+    {
+        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted());
+
+        data.HeartRateSummary.Should().BeNull();
+        data.StepSummary.Should().BeNull();
     }
 
     /// <summary>
@@ -158,7 +208,7 @@ public class ActogramReadScopeGuardTests
     {
         var service = new Mock<IActogramReportService>();
         service
-            .Setup(s => s.GetAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(OneRecordPerCategory());
 
         var httpContext = new DefaultHttpContext();

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using FluentAssertions;
@@ -60,7 +62,6 @@ public class DataFetchStageTests
     private DataFetchStage CreateStage(TimeProvider now) =>
         new(
             _mockSensorGlucoseRepo.Object,
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             _mockBolusRepo.Object,
             _mockCarbIntakeRepo.Object,
             _mockBgCheckRepo.Object,
@@ -88,7 +89,7 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         _mockBolusRepo
@@ -295,7 +296,7 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .Returns(() => Gated<IEnumerable<SensorGlucose>>(Array.Empty<SensorGlucose>()));
         _mockBolusRepo
             .Setup(r => r.GetAsync(
@@ -373,13 +374,14 @@ public class DataFetchStageTests
     {
         var inFlight = 0;
         var maxInFlight = 0;
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pending = new ConcurrentQueue<TaskCompletionSource>();
 
         async Task<T> Tracked<T>(T result)
         {
             InterlockedMax(ref maxInFlight, Interlocked.Increment(ref inFlight));
-            await release.Task;
-            await Task.Yield();
+            var gate = new TaskCompletionSource();
+            pending.Enqueue(gate);
+            await gate.Task;
             Interlocked.Decrement(ref inFlight);
             return result;
         }
@@ -421,8 +423,18 @@ public class DataFetchStageTests
                 BufferStartTime = BufferStartTime,
             },
             CancellationToken.None);
-        release.SetResult();
-        await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var waited = Stopwatch.StartNew();
+        while (!run.IsCompleted)
+        {
+            if (pending.TryDequeue(out var gate))
+                gate.SetResult();
+            else if (waited.Elapsed > TimeSpan.FromSeconds(30))
+                throw new TimeoutException("The stage stopped starting reads.");
+            else
+                Thread.Yield();
+        }
+        await run;
 
         maxInFlight.Should().Be(1);
     }

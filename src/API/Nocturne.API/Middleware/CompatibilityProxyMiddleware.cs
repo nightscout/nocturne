@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
+using Nocturne.API.Helpers;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Compatibility;
@@ -80,7 +81,7 @@ public class CompatibilityProxyMiddleware
         var clonedRequest = await cloningService.CloneRequestAsync(context.Request);
 
         // Capture the path before the background task (HttpContext will be disposed)
-        // Sanitize to prevent log forging (strip newlines from user-controlled value)
+        // The path is compared and stored as well as logged, so it keeps its full length; line breaks are stripped.
         var path = context.RequestServices.GetRequiredService<IRequestPathRedactor>()
             .Redact(context.Request.Path.ToString())
             .Replace("\r", "").Replace("\n", "");
@@ -111,7 +112,7 @@ public class CompatibilityProxyMiddleware
         {
             _logger.LogDebug(
                 "Skipping compatibility comparison for {Path}: response size {Size} exceeds {Max} byte limit",
-                path, responseBytes.Length, MaxResponseSizeBytes);
+                LogText.Sanitize(path), responseBytes.Length, MaxResponseSizeBytes);
             return;
         }
 
@@ -123,7 +124,7 @@ public class CompatibilityProxyMiddleware
         {
             _logger.LogDebug(
                 "Skipping compatibility comparison for {Path}: the request resolved no tenant to store it under",
-                path);
+                LogText.Sanitize(path));
             return;
         }
 
@@ -175,7 +176,7 @@ public class CompatibilityProxyMiddleware
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Background compatibility comparison failed for {Path}", path);
+                _logger.LogWarning(ex, "Background compatibility comparison failed for {Path}", LogText.Sanitize(path));
             }
         });
     }

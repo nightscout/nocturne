@@ -42,6 +42,7 @@ public class AlertSnoozeServiceTests
     private readonly IDbContextFactory<NocturneDbContext> _factory = new SharedInMemoryFactory($"snooze_{Guid.NewGuid()}");
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(Now));
     private readonly Mock<IAlertRepository> _repository = new();
+    private readonly Mock<IAlertRuleRepository> _rules = new();
     private readonly Mock<IAlertDeliveryService> _delivery = new();
     private readonly Mock<ISensorContextEnricher> _enricher = new();
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
@@ -51,12 +52,12 @@ public class AlertSnoozeServiceTests
     public AlertSnoozeServiceTests()
     {
         _enricher
-            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), Tenant, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, Guid _, CancellationToken _) => ctx);
+            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) => ctx);
         LatestReading(minutesAgo: 2, mgdl: 61, trendRate: -0.4);
-        _repository
-            .Setup(r => r.GetChannelsForRuleAsync(Tenant, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        _rules
+            .Setup(r => r.GetChannelsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<AlertRuleChannelSnapshot>>());
         _repository
             .Setup(r => r.GetTenantAlertContextAsync(Tenant, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAlertContext(Tenant, "Synthetic", "synthetic", "Synthetic", true, null));
@@ -71,6 +72,7 @@ public class AlertSnoozeServiceTests
         _factory.AsNocturneFactory(),
         Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
         _repository.Object,
+        _rules.Object,
         _delivery.Object,
         _enricher.Object,
         _canonical.Object,
@@ -170,7 +172,7 @@ public class AlertSnoozeServiceTests
         await CreateService().SnoozeAsync(seeded.InstanceId, 15, CancellationToken.None);
 
         _repository.Verify(r => r.ExpirePendingDeliveriesAsync(
-            Tenant, It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { seeded.InstanceId })),
+            It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { seeded.InstanceId })),
             It.IsAny<CancellationToken>()), Times.Once);
         _broadcast.Verify(b => b.BroadcastAlertEventAsync("alert_snoozed", It.IsAny<object>()), Times.Once);
     }
@@ -196,7 +198,7 @@ public class AlertSnoozeServiceTests
         var seeded = await SeedAsync();
         await CreateService().SnoozeAsync(seeded.InstanceId, 30, CancellationToken.None);
 
-        var activeAlerts = await new AlertRepository(_factory).GetActiveAlertSnapshotsAsync(Tenant, CancellationToken.None);
+        var activeAlerts = await new AlertRepository(_factory.AsNocturneFactory()).GetActiveAlertSnapshotsAsync(CancellationToken.None);
         var context = new SensorContext
         {
             LatestValue = 61,
@@ -368,8 +370,8 @@ public class AlertSnoozeServiceTests
     {
         var seeded = await SeedAsync();
         _enricher
-            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), Tenant, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, Guid _, CancellationToken _) =>
+            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) =>
                 ctx with { ActiveDndScopes = new HashSet<DndScope> { DndScope.Lows } });
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
@@ -381,8 +383,8 @@ public class AlertSnoozeServiceTests
     {
         var seeded = await SeedAsync(severity: AlertRuleSeverity.Critical);
         _enricher
-            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), Tenant, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, Guid _, CancellationToken _) =>
+            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) =>
                 ctx with { ActiveDndScopes = new HashSet<DndScope> { DndScope.All } });
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
@@ -393,7 +395,7 @@ public class AlertSnoozeServiceTests
     {
         var seeded = await SeedAsync();
         _enricher
-            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), Tenant, It.IsAny<CancellationToken>()))
+            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("synthetic"));
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -18,7 +19,7 @@ public class LabHbA1cResultEntity : ITenantScoped, ISoftDeletable
     [Key]
     public Guid Id { get; set; }
 
-    /// <summary>Local calendar date the blood was drawn, stored at UTC midnight.</summary>
+    /// <summary>Calendar date the blood was drawn, stored at UTC midnight.</summary>
     [Column("measured_at")]
     public DateTime MeasuredAt { get; set; }
 
@@ -28,7 +29,7 @@ public class LabHbA1cResultEntity : ITenantScoped, ISoftDeletable
 
     /// <summary>Optional free-text note (e.g. lab name).</summary>
     [Column("note")]
-    [MaxLength(500)]
+    [MaxLength(LabHbA1cResult.MaxNoteLength)]
     public string? Note { get; set; }
 
     /// <summary>When this row was created.</summary>

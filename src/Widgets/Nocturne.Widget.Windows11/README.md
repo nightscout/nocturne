@@ -11,7 +11,7 @@ A Windows 11 Widgets Board provider that displays real-time glucose data from yo
 ## Requirements
 
 - Windows 11 (Build 22000 or later)
-- .NET 10 SDK
+- .NET 11 SDK
 - PowerShell
 
 ## Install (Development)
@@ -49,13 +49,13 @@ For ARM64 devices, replace `-p:Platform=x64` with `-p:Platform=ARM64`.
 The signed MSIX will be output to:
 
 ```
-src\Widgets\Nocturne.Widget.Windows11\bin\x64\Release\net10.0-windows10.0.22000.0\AppPackages\
+src\Widgets\Nocturne.Widget.Windows11\bin\x64\Release\net11.0-windows10.0.22000.0\AppPackages\
 ```
 
 ### 3. Install the widget
 
 ```powershell
-Add-AppxPackage -Path src\Widgets\Nocturne.Widget.Windows11\bin\x64\Release\net10.0-windows10.0.22000.0\AppPackages\Nocturne.Widget.Windows11_1.0.0.0_x64_Test\Nocturne.Widget.Windows11_1.0.0.0_x64.msix
+Add-AppxPackage -Path src\Widgets\Nocturne.Widget.Windows11\bin\x64\Release\net11.0-windows10.0.22000.0\AppPackages\Nocturne.Widget.Windows11_1.0.0.0_x64_Test\Nocturne.Widget.Windows11_1.0.0.0_x64.msix
 ```
 
 Verify the installation:

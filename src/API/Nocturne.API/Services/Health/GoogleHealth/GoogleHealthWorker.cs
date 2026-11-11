@@ -1,5 +1,4 @@
 using Nocturne.API.Multitenancy;
-using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.Core.Models;
@@ -14,7 +13,6 @@ namespace Nocturne.API.Services.Health.GoogleHealth;
 public sealed class GoogleHealthWorker(
     IServiceScopeFactory scopes,
     GoogleHealthCoordinator coordinator,
-    IOptions<GoogleHealthPlatformOptions> platform,
     TimeProvider time,
     ILogger<GoogleHealthWorker> logger) : BackgroundService
 {
@@ -57,12 +55,12 @@ public sealed class GoogleHealthWorker(
                 try
                 {
                     // Dropped rather than failed; see GoogleHealthConfigurationLoader.
-                    if (!platform.Value.IsConfigured)
+                    using var listing = scopes.CreateScope();
+                    if (!(await listing.ServiceProvider.GetRequiredService<IGoogleHealthPlatformSettings>().GetAsync(ct)).IsConfigured)
                     {
                         completed = true;
                         return;
                     }
-                    using var listing = scopes.CreateScope();
                     var tenant = await listing.ServiceProvider.GetRequiredService<ITenantService>()
                         .GetByIdAsync(tenantId, ct);
                     if (tenant is not { IsActive: true })

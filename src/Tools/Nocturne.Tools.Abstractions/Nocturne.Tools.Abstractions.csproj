@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -20,9 +20,6 @@
         <AdditionalFiles Include="BannedSymbols.txt"/>
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
         <PackageReference Include="MongoDB.Bson"/>
-        <PackageReference Include="System.ComponentModel.Annotations"/>
     </ItemGroup>
 </Project>
