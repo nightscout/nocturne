@@ -7,7 +7,7 @@
 // Usage:
 //   dotnet run scripts/publish-release.cs
 //
-// Requires: .NET 10 SDK, Aspire CLI
+// Requires: .NET 11 SDK, Aspire CLI
 
 #:project Shared/Shared.csproj
 

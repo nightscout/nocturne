@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nocturne is a .NET 10 rewrite of the Nightscout diabetes management API with 1:1 API compatibility with the legacy JavaScript implementation. API versions v1, v2, and v3 maintain compatibility with the original Nightscout API; v4 is new.
+Nocturne is a .NET 11 rewrite of the Nightscout diabetes management API with 1:1 API compatibility with the legacy JavaScript implementation. API versions v1, v2, and v3 maintain compatibility with the original Nightscout API; v4 is new.
 
 ## Development Commands
 
@@ -481,6 +481,11 @@ Design notes:
 - **UI copy is Simplified Technical English (ASD-STE100), in American English.** Follow the
   `simple-english` skill. `cd src/Web && pnpm run lint:copy` runs the Vale rules in
   `.vale/styles/Nocturne` over every extracted string. CI fails on errors.
+- **No raw `double`-to-`decimal` casts and no `Math.Round(double, digits)`.** .NET 11 changed both
+  (`(decimal)1.2` is `1.1999999999999999555910790150`; `Math.Round(0.175, 2)` is `0.17`). Convert
+  with `DecimalConversion.ToDecimal()`, round with `ScaledRounding.Round`, and declare a decimal
+  factor as a decimal constant (`GlucoseConstants.MgdlPerMmolDecimal`): the compiler folds a cast
+  of a `const double` to the same wrong number. Both helpers are in `Nocturne.Core.Models`.
 - **No emoji.** Use Lucide icons for UI elements.
 - **Comments carry only what the code cannot.** No narration, no benefit tails, no change history,
   no step-by-step banners. Rationale lives at one site and is referenced elsewhere with

@@ -1549,10 +1549,10 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         {
             PeriodName = rangeName,
             ReadingCount = values.Count,
-            Mean = Math.Round(mean, 1),
-            Median = Math.Round(median, 1),
-            StandardDeviation = Math.Round(stdDev, 1),
-            TimeInRange = Math.Round(GlucoseCadence.PercentOfCovered(rangeMinutes, coveredMinutes), 1),
+            Mean = ScaledRounding.Round(mean, 1),
+            Median = ScaledRounding.Round(median, 1),
+            StandardDeviation = ScaledRounding.Round(stdDev, 1),
+            TimeInRange = ScaledRounding.Round(GlucoseCadence.PercentOfCovered(rangeMinutes, coveredMinutes), 1),
             Min = values.Min(),
             Max = values.Max(),
         };
@@ -1967,7 +1967,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
     }
 
     private static double RoundedPercent(double minutes, double coveredMinutes) =>
-        Math.Round(GlucoseCadence.PercentOfCovered(minutes, coveredMinutes), 1);
+        ScaledRounding.Round(GlucoseCadence.PercentOfCovered(minutes, coveredMinutes), 1);
 
     /// <inheritdoc/>
     public IEnumerable<WeekdayGlucoseSlot> CalculateWeekdayAverages(
@@ -3425,7 +3425,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 var daysBetween = (siteChanges[i].Mills - siteChanges[i - 1].Mills) / (1000.0 * 60 * 60 * 24);
                 intervals.Add(daysBetween);
             }
-            result.AverageDaysBetweenChanges = Math.Round(intervals.Average(), 1);
+            result.AverageDaysBetweenChanges = ScaledRounding.Round(intervals.Average(), 1);
         }
 
         if (siteChanges.Count < 2)
@@ -3539,14 +3539,14 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 new SiteChangeImpactDataPoint
                 {
                     MinutesFromChange = minutesFromChange,
-                    AverageGlucose = Math.Round(mean, 1),
-                    MedianGlucose = Math.Round(CalculatePercentile(sorted, 50), 1),
-                    StdDev = Math.Round(stdDev, 1),
+                    AverageGlucose = ScaledRounding.Round(mean, 1),
+                    MedianGlucose = ScaledRounding.Round(CalculatePercentile(sorted, 50), 1),
+                    StdDev = ScaledRounding.Round(stdDev, 1),
                     Count = values.Count,
-                    Percentile10 = Math.Round(CalculatePercentile(sorted, 10), 1),
-                    Percentile25 = Math.Round(CalculatePercentile(sorted, 25), 1),
-                    Percentile75 = Math.Round(CalculatePercentile(sorted, 75), 1),
-                    Percentile90 = Math.Round(CalculatePercentile(sorted, 90), 1),
+                    Percentile10 = ScaledRounding.Round(CalculatePercentile(sorted, 10), 1),
+                    Percentile25 = ScaledRounding.Round(CalculatePercentile(sorted, 25), 1),
+                    Percentile75 = ScaledRounding.Round(CalculatePercentile(sorted, 75), 1),
+                    Percentile90 = ScaledRounding.Round(CalculatePercentile(sorted, 90), 1),
                 }
             );
 
@@ -3582,12 +3582,12 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
 
             result.Summary = new SiteChangeImpactSummary
             {
-                AvgGlucoseBeforeChange = Math.Round(avgBefore, 1),
-                AvgGlucoseAfterChange = Math.Round(avgAfter, 1),
-                TimeInRangeBeforeChange = Math.Round(tirBefore, 1),
-                TimeInRangeAfterChange = Math.Round(tirAfter, 1),
-                CvBeforeChange = Math.Round(cvBefore, 1),
-                CvAfterChange = Math.Round(cvAfter, 1),
+                AvgGlucoseBeforeChange = ScaledRounding.Round(avgBefore, 1),
+                AvgGlucoseAfterChange = ScaledRounding.Round(avgAfter, 1),
+                TimeInRangeBeforeChange = ScaledRounding.Round(tirBefore, 1),
+                TimeInRangeAfterChange = ScaledRounding.Round(tirAfter, 1),
+                CvBeforeChange = ScaledRounding.Round(cvBefore, 1),
+                CvAfterChange = ScaledRounding.Round(cvAfter, 1),
             };
         }
 

@@ -17,6 +17,7 @@ namespace Nocturne.API.Services.Health;
 /// </summary>
 /// <seealso cref="IStepCountService"/>
 /// <seealso cref="TimeSeriesEntityService{TModel,TEntity}"/>
+/// <param name="contexts">Factory for the context each operation reads and writes step counts on.</param>
 /// <param name="documentProcessingService">Service that applies field processing before save.</param>
 /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
 /// <param name="timeProvider">Clock that stamps soft deletes.</param>

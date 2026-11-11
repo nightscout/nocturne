@@ -106,7 +106,7 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
         };
     }
 
-    private async Task<List<string?>> HelperRoleSlugsAsync() =>
+    private async Task<List<string>> HelperRoleSlugsAsync() =>
         await _db.TenantMemberRoles.AsNoTracking()
             .Where(mr => mr.TenantMemberId == _helperMemberId)
             .Select(mr => mr.TenantRole!.Slug)

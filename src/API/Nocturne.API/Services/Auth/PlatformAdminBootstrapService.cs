@@ -36,6 +36,7 @@ public class PlatformAdminBootstrapService
     /// independent of any tenant pinned on a request-scoped context.</param>
     /// <param name="subjects">The subjects the flag is read from and granted on, on a platform context.</param>
     /// <param name="options">Platform configuration options, including <c>AdminSubjectIds</c>.</param>
+    /// <param name="logger">Logs each grant, and each grant declined or left unmade.</param>
     public PlatformAdminBootstrapService(
         ITenantRepository tenants,
         ITenantMembershipRepository members,
@@ -127,7 +128,7 @@ public class PlatformAdminBootstrapService
     /// first, and the setup OIDC callback in particular is reachable anonymously.
     /// </para>
     /// <para>
-    /// Single-tenant is counted the way setup counts it (<see cref="DemoExclusionFilter"/>): an
+    /// Single-tenant is counted the way setup counts it (<see cref="Nocturne.Infrastructure.Data.Extensions.DemoExclusionFilter"/>): an
     /// instance serving a demo alongside the operator's one tenant is still a fresh install.
     /// </para>
     /// </remarks>

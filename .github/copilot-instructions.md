@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Nocturne is a modern .NET 10 rewrite of the Nightscout diabetes management API with full feature parity. The goal is 1:1 API compatibility with the legacy JavaScript Nightscout implementation.
+Nocturne is a modern .NET 11 rewrite of the Nightscout diabetes management API with full feature parity. The goal is 1:1 API compatibility with the legacy JavaScript Nightscout implementation.
 
 ## Architecture
 
@@ -73,7 +73,7 @@ dotnet test --filter "Category!=Integration&Category!=Performance"
 # Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
-# Generate TypeScript API client (uses NSwag with .NET 10)
+# Generate TypeScript API client (uses NSwag with .NET 11)
 dotnet build -t:GenerateClient src/API/Nocturne.API
 
 # Or from the web app directory

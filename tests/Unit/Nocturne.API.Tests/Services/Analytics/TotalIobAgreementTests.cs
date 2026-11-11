@@ -72,10 +72,8 @@ public class TotalIobAgreementTests
 {
     private const long Minute = 60 * 1000;
     private const double Total = -0.022;
-    // A literal, not (decimal)Total: the compiler folds that cast with its own runtime's conversion,
-    // which from .NET 11 is exact (-0.02199999...) where the net10.0 cast the alerts reader makes
-    // rounds to 15 significant digits. On a net11.0 runtime the reader stops rounding and this fails:
-    // see #3289.
+    // A literal, not (decimal)Total: the compiler folds that cast to the exact binary value
+    // (-0.02199999...), where the alerts reader converts with DecimalConversion.ToDecimal.
     private const decimal TotalAsDecimal = -0.022m;
     private const double BolusPart = 0.461;
     private const double BasalPart = -0.483;

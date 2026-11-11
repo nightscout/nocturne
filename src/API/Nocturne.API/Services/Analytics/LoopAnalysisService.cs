@@ -266,6 +266,11 @@ internal sealed partial class LoopAnalysisService(
         Common common, IReadOnlyList<ApsLoopState> snapshots, long openEnd) =>
         MaskSources(common.Spans, common.Devices, common.DeviceDates, snapshots, common.ProfileIntervals, openEnd);
 
+    /// <param name="spans">The state spans by category: the override, temporary target, exercise, illness, data exclusion and pump mode masks are read from them.</param>
+    /// <param name="devices">The registered devices; the pumps among them with a known algorithm are open-loop evidence.</param>
+    /// <param name="deviceDates">Turns a pump's start and end dates into the interval it was in use.</param>
+    /// <param name="snapshots">The APS snapshot evidence of the open-loop mask.</param>
+    /// <param name="profiles">When each profile was active, passed through as the mask's profiles.</param>
     /// <param name="openEnd">Where a span still open ends: the end of the time its readers look at.</param>
     private static LoopAnalysisMaskSources MaskSources(
         Dictionary<StateSpanCategory, List<StateSpan>> spans,

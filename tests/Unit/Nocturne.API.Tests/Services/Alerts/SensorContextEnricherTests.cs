@@ -440,7 +440,7 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"flat"}""");
-        decimal? rate = rateInput is null ? null : (decimal)rateInput.Value;
+        decimal? rate = rateInput?.ToDecimal();
 
         var enriched = await enricher.EnrichAsync(BaseContext(trendRate: rate), new[] { rule }, CancellationToken.None);
 

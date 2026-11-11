@@ -210,6 +210,10 @@ public static class LinkedRecordTypes
     /// table outgrows work_mem. Tenant isolation stays on, which the <see cref="ITenantScoped"/>
     /// constraint on <see cref="Phase{TEntity}"/> is what guarantees.
     /// </summary>
+    /// <param name="RecordType">The record type this phase reads.</param>
+    /// <param name="Name">The phase name reported while this type is processed.</param>
+    /// <param name="CountAsync">Counts the type's rows, for the total a run reports progress against.</param>
+    /// <param name="OrphanedLinks">This type's links whose record no longer exists, soft-deleted records counted as existing.</param>
     /// <param name="Unlinked">
     /// <see cref="UnlinkedAsync"/> for this type: its records created before the given instant with no
     /// link, event time within the optional bounds, each as the singleton group it would have been.

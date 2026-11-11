@@ -153,7 +153,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
     [Fact]
     public async Task SetMemberRoles_AuditsOnlyAfterTheChangeIsStored()
     {
-        var rolesWhenAudited = new List<string?>();
+        var rolesWhenAudited = new List<string>();
         _audit.Setup(a => a.LogAsync(
                 It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(),

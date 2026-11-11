@@ -86,7 +86,15 @@ public class NutritionController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get carb intakes with optional filtering
     /// </summary>
+    /// <param name="from">Inclusive start of the date range filter.</param>
+    /// <param name="to">Inclusive end of the date range filter.</param>
+    /// <param name="limit">Maximum number of records to return. Defaults to `100`.</param>
+    /// <param name="offset">Number of records to skip for pagination. Defaults to `0`.</param>
+    /// <param name="sort">Sort order by timestamp: `timestamp_asc` or `timestamp_desc`. Defaults to `timestamp_desc`.</param>
+    /// <param name="device">Optional filter to restrict results to a specific device.</param>
+    /// <param name="source">Optional filter to restrict results to a specific data source.</param>
     /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("carbs")]
     [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<CarbIntake>), StatusCodes.Status200OK)]
@@ -721,7 +729,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
         if (foodEntity == null)
             return null;
 
-        var carbsPerPortion = (decimal)foodEntity.Carbs;
+        var carbsPerPortion = foodEntity.Carbs.ToDecimal();
 
         if (inputMode == CarbIntakeFoodInputMode.Portions)
         {

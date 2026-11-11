@@ -455,6 +455,7 @@ internal sealed class LegacyTreatmentStore(
 
     /// <inheritdoc cref="UpsertKeyAsync(StoredRecord, CancellationToken)"/>
     /// <param name="records">A stored record and those served beside it, as <see cref="ServedTogetherAsync"/> finds them.</param>
+    /// <param name="ct">Cancels the operation.</param>
     private async Task<string> UpsertKeyAsync(IReadOnlyList<StoredRecord> records, CancellationToken ct)
     {
         var key = records.Select(r => r.Record.LegacyId).FirstOrDefault(id => !string.IsNullOrEmpty(id))

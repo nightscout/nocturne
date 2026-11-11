@@ -1,5 +1,6 @@
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models.LoopAnalysis;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Clinical.LoopAnalysis;
 
@@ -42,5 +43,5 @@ public static class SlotSummary
 
     public static LoopAnalysisAggregate? Of(List<double> perDayValues) => Of(perDayValues, perDayValues.Count);
 
-    public static double Round(double value) => Math.Round(value, Decimals);
+    public static double Round(double value) => ScaledRounding.Round(value, Decimals);
 }

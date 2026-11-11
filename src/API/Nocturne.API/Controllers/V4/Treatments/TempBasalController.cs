@@ -43,7 +43,15 @@ public class TempBasalController(
     /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-started
     /// or just-cancelled span must not be invisible until a cached list body expires.
     /// </remarks>
+    /// <param name="from">Start of the time range to list. Unbounded when omitted.</param>
+    /// <param name="to">End of the time range to list. Unbounded when omitted.</param>
+    /// <param name="limit">Maximum number of spans to return. Defaults to `100`.</param>
+    /// <param name="offset">Number of spans to skip before the first one returned. Defaults to `0`.</param>
+    /// <param name="sort">Order by span time: `timestamp_desc` or `timestamp_asc`. Defaults to `timestamp_desc`.</param>
+    /// <param name="device">Return only spans from this device.</param>
+    /// <param name="source">Return only spans from this data source.</param>
     /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RequireScope(Scope.TreatmentsRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]

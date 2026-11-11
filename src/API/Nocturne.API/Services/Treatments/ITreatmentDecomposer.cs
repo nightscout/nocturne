@@ -28,6 +28,7 @@ internal interface ITreatmentDecomposer
     /// A <see cref="WriteOrigin.Live"/> write keeps the caller's attribution; a backfill's is
     /// system-attributed (<see cref="V4.DecomposerBase.SystemAttributedBatchWrites"/>).
     /// </param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <returns>What the batch wrote, and what each treatment of it wrote.</returns>
     Task<TreatmentDecomposition> DecomposeBatchAsync(
         IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default,
@@ -39,6 +40,8 @@ internal interface ITreatmentDecomposer
     /// the event, not one source's report of it.
     /// </summary>
     /// <param name="legacyId">The legacy Treatment ID</param>
+    /// <param name="origin">Write classification of the delete</param>
+    /// <param name="ct">Cancels the operation</param>
     /// <returns>Total number of v4 records deleted across all tables</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
@@ -67,6 +70,8 @@ internal interface ITreatmentDecomposer
     /// Bulk-deletes V4 treatment records matching the optional find filter (time range).
     /// </summary>
     /// <param name="find">Optional Nightscout-compatible find query for time range filtering.</param>
+    /// <param name="origin">Write classification of the delete.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <returns>Total number of V4 records deleted across all treatment tables.</returns>
     Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default);
 }

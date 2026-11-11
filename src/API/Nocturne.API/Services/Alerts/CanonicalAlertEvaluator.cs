@@ -47,9 +47,9 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
     /// </summary>
     internal static SensorContext ContextFor(SensorGlucose latest) => new()
     {
-        LatestValue = (decimal)latest.Mgdl,
+        LatestValue = latest.Mgdl.ToDecimal(),
         LatestTimestamp = latest.Timestamp,
-        TrendRate = (decimal?)latest.TrendRate,
+        TrendRate = latest.TrendRate?.ToDecimal(),
         LastReadingAt = latest.Timestamp,
     };
 

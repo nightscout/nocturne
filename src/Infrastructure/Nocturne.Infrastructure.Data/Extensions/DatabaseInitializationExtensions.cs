@@ -55,6 +55,9 @@ public static class DatabaseInitializationExtensions
     /// takes from the pool has none. Subscribing there is silent, not wrong-looking.
     /// </para>
     /// </summary>
+    /// <param name="dataSource">The migrator's data source, which the context connects through.</param>
+    /// <param name="interceptor">The runtime connection interceptor, attached to the context's connections.</param>
+    /// <param name="logger">Receives each server notice as an information entry.</param>
     /// <param name="ceiling">The last migration the context sees (<see cref="MigrationCeiling"/>), or
     /// null for all of them.</param>
     internal static NocturneDbContext CreateMigratorContext(

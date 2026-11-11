@@ -100,7 +100,7 @@ public class SupportDiagnosticsService(
             GlucoseUnits = settings?.Features.Display.Units,
             TimeFormat = settings?.Features.Display.TimeFormat,
             PatientTimeZone = timeZone,
-            DataSourcePriority = settings?.Devices.CgmConfiguration.DataSourcePriority,
+            DataSourcePriority = settings?.Devices?.CgmConfiguration.DataSourcePriority,
             AlertRuleCount = alertRuleCount,
             Connectors = statuses
                 .Select(s => new SupportConnectorSummary

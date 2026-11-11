@@ -10,6 +10,8 @@ namespace Nocturne.API.Services.Platform.InstanceKey;
 
 public sealed record UndecryptableConnector(string ConnectorName, string DisplayName);
 
+/// <param name="RuleId">The id of the alert rule the channel belongs to.</param>
+/// <param name="RuleName">The name of the alert rule the channel belongs to.</param>
 /// <param name="Destination">
 /// The channel's label, or the hosts it posts to when it has none. Empty when it has neither.
 /// </param>

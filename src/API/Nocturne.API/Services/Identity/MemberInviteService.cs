@@ -45,6 +45,11 @@ public class MemberInviteService : IMemberInviteService
     /// <param name="invites">The stored invites.</param>
     /// <param name="subjects">For the name of the member who minted an invite.</param>
     /// <param name="contexts">For the unit of work an accepted invite commits its use and its membership on.</param>
+    /// <param name="jwtService">Generates the invite token.</param>
+    /// <param name="tenantRoleService">For checking that the granter may grant the roles an invite names.</param>
+    /// <param name="baseDomainOptions">The public origin an invite link is built on when the caller gives no base URL.</param>
+    /// <param name="timeProvider">The clock for an invite's creation, expiry and revocation.</param>
+    /// <param name="logger">Logs the audit line for each invite created, accepted and revoked.</param>
     public MemberInviteService(
         ITenantMembershipRepository members,
         IMemberInviteRepository invites,

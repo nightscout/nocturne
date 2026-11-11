@@ -47,7 +47,7 @@ public class ClearsTenantCacheAttributeTests
     private IEnumerable<string> Cleared() =>
         _cache.Invocations
             .Where(i => i.Method.Name == nameof(ITenantCache.RemoveFamilyAsync))
-            .Select(i => (string)i.Arguments[0]);
+            .Select(i => (string)i.Arguments[0]!);
 
     public static TheoryData<Type, string[]> FamiliesByController() => new()
     {

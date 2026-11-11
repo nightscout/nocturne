@@ -17,6 +17,8 @@ public static class TenantCacheEviction
     /// a tenant row that adds, removes, renames, activates or deactivates it or changes what the
     /// docs paths or a share link resolve to. Evicting a cache a write did not touch costs one read.
     /// </summary>
+    /// <param name="cache">The memory cache the three resolutions keep their copies in.</param>
+    /// <param name="slug">The slug the host resolution and the docs paths cached the tenant under.</param>
     /// <param name="shareTokenHash">The tenant's share-token hash before the write, or null when it has none.</param>
     public static void Evict(IMemoryCache cache, string slug, string? shareTokenHash = null)
     {

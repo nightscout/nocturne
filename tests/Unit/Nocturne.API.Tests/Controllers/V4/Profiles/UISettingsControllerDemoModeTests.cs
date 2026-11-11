@@ -100,7 +100,7 @@ public class UISettingsControllerDemoModeTests
 
         var settings = await ProxiedGet(demoService);
 
-        settings.Devices.ConnectedDevices.Should().ContainSingle().Which.Id.Should()
+        settings.Devices!.ConnectedDevices.Should().ContainSingle().Which.Id.Should()
             .Be(ProxiedDeviceId);
         demoService.RequestUri.Should().Be("http://demo-service/ui-settings");
     }
@@ -120,7 +120,7 @@ public class UISettingsControllerDemoModeTests
     {
         var settings = await ProxiedGet(new StubDemoService(HttpStatusCode.InternalServerError));
 
-        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        settings.Devices!.ConnectedDevices.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class UISettingsControllerDemoModeTests
             new StubDemoService(HttpStatusCode.InternalServerError, ProxiedSettings)
         );
 
-        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        settings.Devices!.ConnectedDevices.Should().NotBeEmpty();
         settings.Devices.ConnectedDevices.Select(d => d.Id).Should().NotContain(ProxiedDeviceId);
     }
 
@@ -141,7 +141,7 @@ public class UISettingsControllerDemoModeTests
 
         var settings = await ProxiedGet(demoService).WaitAsync(DemoUISettingsProxy.ProxyTimeout * 10);
 
-        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        settings.Devices!.ConnectedDevices.Should().NotBeEmpty();
         demoService.Cancelled.Should().BeTrue();
     }
 

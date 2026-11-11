@@ -321,7 +321,13 @@ public class TenantController : ControllerBase
         IssueCodeAsync(
             id, subjectId, LoginCodePurpose.OperatorRecovery, dbContextFactory, loginCodeService, eligibility, ct);
 
+    /// <param name="id">The tenant the member belongs to; the caller must own it.</param>
+    /// <param name="subjectId">The member the code is issued for.</param>
+    /// <param name="purpose">What the code may be redeemed for.</param>
+    /// <param name="dbContextFactory">Opens the context pinned to the tenant that the code is written through.</param>
+    /// <param name="loginCodeService">Issues the code.</param>
     /// <param name="eligibility">For a recovery code: refuses a member who can still sign in.</param>
+    /// <param name="ct">Cancels the operation.</param>
     private async Task<IActionResult> IssueCodeAsync(
         Guid id, Guid subjectId, LoginCodePurpose purpose,
         INocturneDbContextFactory dbContextFactory,

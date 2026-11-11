@@ -202,7 +202,7 @@ public class PropertiesDDataLoadingTests
 
     private int EntryLoads(string type) =>
         _entries.Invocations.Count(i =>
-            i.Method.Name == nameof(IEntryService.QueryEntriesAsync) && ((EntryQuery)i.Arguments[0]).Type == type);
+            i.Method.Name == nameof(IEntryService.QueryEntriesAsync) && ((EntryQuery)i.Arguments[0]!).Type == type);
 
     private IDDataService DDataService() =>
         new Nocturne.API.Services.Legacy.DDataService(

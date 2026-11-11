@@ -21,6 +21,7 @@ public class BodyWeightService
     : SimpleEntityService<BodyWeight, BodyWeightEntity>,
         IBodyWeightService
 {
+    /// <param name="contexts">Factory that opens the context each operation reads and writes body weights on.</param>
     /// <param name="documentProcessingService">Service that applies field processing (e.g. identifier generation) before save.</param>
     /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
     /// <param name="timeProvider">Clock that stamps soft deletes.</param>

@@ -36,6 +36,7 @@ public class ChatIdentityDirectoryController : ControllerBase
     /// <param name="directory">Service for cross-tenant directory candidate lookups.</param>
     /// <param name="pending">Service for pending link token generation and resolution.</param>
     /// <param name="contextFactory">Factory for creating database context instances.</param>
+    /// <param name="tenants">Repository for looking up the slug of each candidate's tenant.</param>
     /// <param name="tenantAccessor">Accessor for the request's resolved tenant.</param>
     /// <param name="acknowledgementService">The one alert acknowledgement decision.</param>
     public ChatIdentityDirectoryController(

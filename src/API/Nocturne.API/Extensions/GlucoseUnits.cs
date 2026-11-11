@@ -1,4 +1,5 @@
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 
 namespace Nocturne.API.Extensions;
 
@@ -14,5 +15,5 @@ internal static class GlucoseUnits
     /// A mg/dL value in the tenant's units: whole mg/dL, or mmol/L to one decimal.
     /// </summary>
     public static double Scale(double mgdl, bool useMmol) =>
-        useMmol ? Math.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : Math.Round(mgdl);
+        useMmol ? ScaledRounding.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : Math.Round(mgdl);
 }

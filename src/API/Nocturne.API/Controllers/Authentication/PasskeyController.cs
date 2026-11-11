@@ -93,7 +93,22 @@ public class PasskeyController : ControllerBase
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
 
+    /// <param name="passkeyService">Generates each ceremony's options, verifies its response, and lists a subject's passkeys.</param>
+    /// <param name="totpService">Tells whether a login needs a second factor, and issues the step-up token when it does.</param>
+    /// <param name="recoveryCodeService">Generates, counts, verifies and voids recovery codes.</param>
+    /// <param name="jwtService">Issues and validates the recovery session's token.</param>
+    /// <param name="sessionService">Issues the session a completed login or invite acceptance signs in with.</param>
+    /// <param name="subjectService">Counts a subject's sign-in factors and removes a passkey under the last-factor check.</param>
+    /// <param name="auditService">Records the login and recovery outcomes in the auth audit log.</param>
+    /// <param name="tenantAccessor">For the id of the request's tenant.</param>
+    /// <param name="tenantService">Stored, and read by no action.</param>
+    /// <param name="tenantMemberService">For the tenants a subject without credentials is a member of.</param>
+    /// <param name="subjects">Reads, creates and updates the subjects the ceremonies enrol or sign in.</param>
+    /// <param name="tenants">Reads the request's tenant and marks its onboarding complete.</param>
+    /// <param name="members">For the owners an access request is announced to.</param>
     /// <param name="dbContextFactory">For the login codes the ceremonies read beside the subjects.</param>
+    /// <param name="oidcOptions">For the cookie settings the session and recovery cookies are written with.</param>
+    /// <param name="logger">Logs failed ceremonies and invite enrolments.</param>
     public PasskeyController(
         IPasskeyService passkeyService,
         ITotpService totpService,
@@ -332,7 +347,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     /// <remarks>
     /// The code is the whole proof. It is single-use, bound to one subject on one tenant, minted
-    /// for <see cref="LoginCodePurpose.Recovery"/>, and only someone with authority over that
+    /// for <see cref="Nocturne.Infrastructure.Data.Entities.LoginCodePurpose.Recovery"/>, and only someone with authority over that
     /// member can mint it: a member administrator
     /// (<see cref="V4.Identity.MemberRecoveryController.IssueRecoveryCode"/>) or the operator
     /// (<see cref="V4.PlatformAdmin.TenantController.IssueRecoveryCode"/>), which is how a tenant

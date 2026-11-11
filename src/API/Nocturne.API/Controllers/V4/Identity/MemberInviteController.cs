@@ -582,7 +582,10 @@ public class MemberInviteController : ControllerBase
     /// Writes one row per role or permission a committed edit removed or added, against the member's
     /// subject, removed rows first.
     /// </summary>
+    /// <param name="subjectId">The subject of the member whose roles or permissions changed.</param>
     /// <param name="detailKey">The detail field that names the item: a role slug or a permission.</param>
+    /// <param name="added">The role slugs or permissions the edit added.</param>
+    /// <param name="removed">The role slugs or permissions the edit removed.</param>
     private async Task AuditMemberChangeAsync(
         Guid subjectId, string detailKey, IEnumerable<string> added, IEnumerable<string> removed)
     {

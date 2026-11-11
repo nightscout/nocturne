@@ -23,9 +23,9 @@ public static class TreatmentFoodMapper
             TimeOffsetMinutes = entity.TimeOffsetMinutes,
             Note = entity.Note,
             FoodName = food?.Name,
-            CarbsPerPortion = food != null ? (decimal)food.Carbs : null,
-            FatPerPortion = food != null ? (decimal)food.Fat : null,
-            ProteinPerPortion = food != null ? (decimal)food.Protein : null,
+            CarbsPerPortion = food?.Carbs.ToDecimal(),
+            FatPerPortion = food?.Fat.ToDecimal(),
+            ProteinPerPortion = food?.Protein.ToDecimal(),
         };
     }
 

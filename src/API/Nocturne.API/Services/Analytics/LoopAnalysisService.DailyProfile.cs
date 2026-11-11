@@ -22,11 +22,16 @@ internal sealed partial class LoopAnalysisService
         return new DailyProfileResponse { Primary = primary, Comparison = comparison, ProfileNames = names };
     }
 
+    /// <param name="Inputs">What <see cref="DailyProfileCalculator"/> computes the window's daily profile from.</param>
+    /// <param name="Sources">The records the filter's mask is built from.</param>
     /// <param name="Timeline">The therapy settings in force over the window, which the IOB/COB was computed against.</param>
     private sealed record DailyProfileLoaded(
         DailyProfileInputs Inputs, LoopAnalysisMaskSources Sources, TherapyTimeline Timeline) : ILoaded;
 
+    /// <param name="window">The range to load, read back further for carbs and device IOB/COB still acting at its start.</param>
+    /// <param name="zone">The time zone the target schedule's times of day are read in, carried on the inputs.</param>
     /// <param name="filter">Gives now, which a temp basal still running stops at, and the history clamp's visible edge.</param>
+    /// <param name="ct">Cancels the operation.</param>
     private async Task<DailyProfileLoaded> LoadDailyProfileAsync(
         Window window, TimeZoneInfo zone, LoopAnalysisFilter filter, CancellationToken ct)
     {

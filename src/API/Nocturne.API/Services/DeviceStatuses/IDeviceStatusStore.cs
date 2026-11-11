@@ -16,6 +16,11 @@ internal interface IDeviceStatusStore
     /// Nightscout evaluates it. The device equality and time bounds filter the store; every
     /// condition is tested against the projected document.
     /// </summary>
+    /// <param name="find">The legacy find conditions a status must meet.</param>
+    /// <param name="count">Maximum number of statuses in the page.</param>
+    /// <param name="skip">Number of matching statuses to pass over before the page starts.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    /// <param name="descending">Whether the newest status comes first.</param>
     /// <param name="sort">
     /// <see cref="ReadSortField.SrvModified"/> orders by modification stamp when the find is empty or
     /// only bounds <c>srvModified</c> from below, which is served by the modified-since pages; any
@@ -37,5 +42,6 @@ internal interface IDeviceStatusStore
     /// </summary>
     /// <param name="lastModified">Unix millisecond timestamp threshold.</param>
     /// <param name="limit">Maximum number of results.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task<IEnumerable<DeviceStatus>> GetModifiedSinceAsync(long lastModified, int limit, CancellationToken ct);
 }

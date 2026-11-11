@@ -19,6 +19,7 @@ public interface ILoopClosedLoopStamper
     /// <param name="starts">
     /// The starts of the Loop settings versions written, and of any settings versions moved or deleted.
     /// </param>
+    /// <param name="ct">Cancels the operation.</param>
     Task AfterLoopSettingsWrittenAsync(IReadOnlyCollection<DateTime> starts, CancellationToken ct);
 }
 
