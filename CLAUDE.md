@@ -166,12 +166,37 @@ Domain models use **mills-first** timestamps. `Entry.Mills` (Unix milliseconds) 
 
 ## Database
 
-- **PostgreSQL** via Entity Framework Core with 70+ migrations
+- **PostgreSQL** via Entity Framework Core: a squashed baseline plus every migration since the last release (see [Migration baseline](#migration-baseline))
 - Domain models → Database entities via mappers in `Infrastructure.Data/Mappers/`
-- EF migrations live in `Nocturne.Infrastructure.Data.Migrations`, which no project references at compile time; the API loads it at runtime from its output directory (so `dotnet watch` never loads the ~1.7M lines of migration Designer files). `dotnet watch` does not see that directory, so after adding a migration restart the API: `aspire resource nocturne-api restart`
+- EF migrations live in `Nocturne.Infrastructure.Data.Migrations`, which no project references at compile time; the API loads it at runtime from its output directory (so `dotnet watch` never loads the migration Designer files). `dotnet watch` does not see that directory, so after adding a migration restart the API: `aspire resource nocturne-api restart`
 - Tables use snake_case (`entries`, `treatments`)
 - UUID v7 for new records; `OriginalId` preserved for MongoDB migration compatibility
 - Row Level Security for multitenancy
+
+### Migration baseline
+
+The first migration, `<id>_Baseline`, is every migration up to the last one of a
+release (now v0.3.0) squashed into the SQL pg_dump takes of a database migrated
+that far (`<id>_Baseline.sql`, embedded). It keeps the id of the last migration it
+replaces, so an instance on that release or later already has it recorded and
+skips it, and a fresh database runs it and then every later migration.
+
+That release is the oldest one the current build upgrades from. An instance
+migrated by an older one has neither the baseline nor the migrations it replaced,
+so `EnsureReachesBaselineAsync` refuses it at startup and names the release to run
+first. The squashed migrations, and their tests, are still readable at the tag.
+
+After tagging release N, squash to the last migration of release N-1, never to one
+only `main` has: an instance on that release has to hold the id the baseline reuses.
+
+```bash
+dotnet run scripts/squash-migrations.cs -- squash <last-migration-id-of-N-1> <vN-1>
+dotnet run scripts/squash-migrations.cs -- verify   # dumps a fresh baseline database and diffs it
+```
+
+Then delete the tests that seed before a squashed migration, and the guard
+allowlist entries that name one. A branch holding a migration dated before the
+baseline must regenerate it, or it sorts ahead of the baseline on a fresh database.
 
 ### Unique indexes over existing data
 
@@ -184,8 +209,9 @@ carry pre-index duplicates are the ones upgrading across several versions.
 **Every unique index over a table the migration did not create in that same
 migration ships with a loser-cleanup step earlier in the same `Up`.** Soft-delete
 (or delete) all but the winner of each duplicate key first;
-`20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots` is the worked example,
-including the per-tenant `set_config` loop that FORCE ROW LEVEL SECURITY requires.
+`20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots` (in the baseline now;
+read it at the v0.3.0 tag) is the worked example, including the per-tenant
+`set_config` loop that FORCE ROW LEVEL SECURITY requires.
 A table created in the same migration is exempt — it holds no rows yet, and a
 cleanup there would be dead code.
 
@@ -206,13 +232,12 @@ Know what it actually checks before trusting it:
   `ADD CONSTRAINT … PRIMARY KEY`, since only the `AddPrimaryKey` builder call is
   matched — the rule above is deliberately broader than the guard; and a cleanup
   that cannot run, e.g. wrapped in `IF false`.
-- **Three of its detection paths redden nothing if they break.** Raw-SQL
-  `CREATE UNIQUE INDEX` does fire on a shipped migration —
-  `20260424051736_AddReadAccessAudit` — but that migration is *exempt*, because it
-  creates the table in the same `Up`, so breaking the regex still leaves the suite
-  green. That migration's exact spacing is load-bearing for a regex nothing tests.
+- **Most of its detection paths redden nothing if they break.** Only the
+  `ConcurrentIndexBuilder.BuildUnique` path fires on a live migration. The fluent
+  `unique: true` `CreateIndex`, raw-SQL `CREATE UNIQUE INDEX`,
   `AddUniqueConstraint`/`AddPrimaryKey` and `ALTER TABLE … ADD CONSTRAINT … UNIQUE`
-  have no live example at all. Treat all three as unexercised.
+  have no live example in an `Up` since the baseline, so breaking their regex leaves
+  the suite green. Treat them as unexercised.
 - **A concurrent unique index goes through `ConcurrentIndexBuilder.BuildUnique`**
   (`ConcurrentIndexBuildGuardTests` forbids writing `CREATE UNIQUE INDEX CONCURRENTLY` in a
   migration). The guard reads its table off the `ON <table>` in the definition, and
@@ -226,9 +251,9 @@ only the index still reports, because the exemption cannot match a create it als
 cannot read. A schema qualifier is not a cause — `public.x` resolves to `x` on
 both sides, so a schema-qualified new table is exempted like any other.
 
-Older migrations that predate the rule are listed in the guard by name; an
-instance whose chain fails on one never reaches a later migration, so nothing can
-repair them and nothing may be added to that list.
+The migrations that predated the rule are in the baseline, whose script the guard
+does not read. Its one allowlist, `WidenedPrimaryKeyMigrations`, holds migrations
+whose unique builds become a primary key that contains the old one.
 
 ### Row Level Security
 

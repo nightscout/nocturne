@@ -22,37 +22,6 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 public class UniqueIndexDeduplicationGuardTests
 {
     /// <summary>
-    /// Migrations that shipped before the rule. Their <c>Up</c> is history — an instance whose
-    /// chain fails here never reaches a later migration, so no new migration can repair them and
-    /// editing them would not re-run. Membership in this list is the only thing separating a
-    /// grandfathered migration from a new one; nothing may be added.
-    /// </summary>
-    private static readonly IReadOnlySet<string> GrandfatheredMigrations = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "20251126040528_AddTreatmentOriginalIdUniqueIndex",
-        "20251229020632_AddConnectorFoodEntries",
-        "20260217005635_MakeV4LegacyIdUnique",
-        "20260227230204_FixConnectorConfigUniqueIndex",
-        "20260228071347_AddRlsWithCheckAndCompositeIndexes",
-        "20260320105641_DeviceIdentityUnification",
-        "20260326215857_UnifyFollowerGrantsWithTenantMembers",
-        "20260405053007_MakePasskeysSubjectScoped",
-        "20260410002642_OAuthTenantScope",
-        "20260416103826_DropCarbIntakeBolusIdAndAddSyncIdentifierIndexes",
-        "20260424052011_AddTenantMemberUsername",
-        "20260514052027_AddSoftDeleteToV4Entities",
-        "20260603134703_MakeDevicesUniqueIndexTenantScoped",
-        "20260607084109_AddTenantShareToken",
-        "20260609093227_AddTimezoneTimelineAndSensorGlucoseSyncId",
-        "20260616124951_AddHealthMetricsSyncDedup",
-        "20260717133302_AddDeviceStatusSnapshotSyncIdentifiers",
-        "20260717141728_AddTempBasalSyncIdentifierAndCarbMacros",
-        "20260802073145_DurableJobRecords",
-        "20260817042048_RestoreUpdateTimestampWritesAndBasalInjectionSoftDeleteIndex",
-        "20260817064038_AddTenantScopedLegacyIdIndexesToMeterGlucoseAndCalibrations",
-    };
-
-    /// <summary>
     /// Migrations whose only unique builds replace a table's primary key with a wider one that
     /// contains it, so there is no loser to clean up. The guard cannot read the old key off the
     /// migration, so <see cref="AWidenedPrimaryKeyMigrationBuildsNoUniqueIndexItDoesNotPromote"/>
@@ -69,8 +38,7 @@ public class UniqueIndexDeduplicationGuardTests
     public void NoNewMigrationCreatesAUniqueIndexOverPreExistingDataWithoutDeduplicating()
     {
         var offenders = MigrationSourceFiles.All()
-            .Where(f => !GrandfatheredMigrations.Contains(MigrationSourceFiles.Name(f))
-                && !WidenedPrimaryKeyMigrations.Contains(MigrationSourceFiles.Name(f)))
+            .Where(f => !WidenedPrimaryKeyMigrations.Contains(MigrationSourceFiles.Name(f)))
             .Select(f => (Migration: MigrationSourceFiles.Name(f), Tables: UndeduplicatedTables(f)))
             .Where(x => x.Tables.Count > 0)
             .Select(x => $"{x.Migration} -> {string.Join(", ", x.Tables)}")
@@ -80,7 +48,8 @@ public class UniqueIndexDeduplicationGuardTests
             "migrations run on API startup, so a unique index that fails on data an upgrading "
             + "instance already holds crash-loops the API with no self-service recovery; soft-delete "
             + "the duplicate losers earlier in the same Up, as "
-            + "20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots does. A table reported as "
+            + "20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots does (squashed into the "
+            + "baseline; read it at the v0.3.0 tag). A table reported as "
             + $"'{UnresolvedTable}' is one the guard could not read off the call; unroll the loop "
             + "so both the CREATE TABLE and the index name it literally — naming only the index "
             + "still reports, because the exemption cannot match a create it also cannot read");
@@ -136,7 +105,7 @@ public class UniqueIndexDeduplicationGuardTests
             .ToList();
 
     [Fact]
-    public void EveryGrandfatheredMigrationStillExistsAndStillLacksDeduplication()
+    public void EveryWidenedPrimaryKeyMigrationStillExistsAndStillLacksDeduplication()
     {
         // Also the discovery check: a moved directory, a changed glob or a detection regex that
         // stopped matching empties this set, and an empty set is not the allowlist.
@@ -145,7 +114,7 @@ public class UniqueIndexDeduplicationGuardTests
             .Select(MigrationSourceFiles.Name)
             .ToHashSet(StringComparer.Ordinal);
 
-        stillOffending.Should().BeEquivalentTo(GrandfatheredMigrations.Union(WidenedPrimaryKeyMigrations),
+        stillOffending.Should().BeEquivalentTo(WidenedPrimaryKeyMigrations,
             "an allowlist entry that no longer matches is stale and hides a regression");
     }
 

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -137,6 +138,7 @@ public static class DatabaseInitializationExtensions
             List<string> pending;
             using (var context = CreateMigratorContext(dataSource, interceptor, logger))
             {
+                await EnsureReachesBaselineAsync(context, cancellationToken);
                 pending = (await context.Database.GetPendingMigrationsAsync(cancellationToken)).ToList();
             }
 
@@ -181,6 +183,46 @@ public static class DatabaseInitializationExtensions
                 await dataSource.DisposeAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Refuses a database whose history stops short of the <see cref="MigrationBaselineAttribute"/>
+    /// migration, with the release to upgrade through first.
+    /// <para>
+    /// EF applies every migration whose id the history lacks, so it would run the baseline over the
+    /// schema that database already has and fail on the first <c>CREATE</c>, on every start. The
+    /// migrations that would have carried it up to the baseline are no longer in the assembly.
+    /// </para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The database predates the baseline.</exception>
+    internal static async Task EnsureReachesBaselineAsync(DbContext context, CancellationToken cancellationToken)
+    {
+        var (baselineId, baseline) = context.GetService<IMigrationsAssembly>().Migrations
+            .MinBy(migration => migration.Key, StringComparer.Ordinal);
+        if (baseline.GetCustomAttribute<MigrationBaselineAttribute>() is not { } marker)
+        {
+            return;
+        }
+
+        var applied = (await context.Database.GetAppliedMigrationsAsync(cancellationToken)).ToList();
+        if (applied.Count == 0 || applied.Contains(baselineId))
+        {
+            return;
+        }
+
+        var last = applied.Max(StringComparer.Ordinal)!;
+        if (string.CompareOrdinal(last, baselineId) > 0)
+        {
+            throw new InvalidOperationException(
+                $"This database was migrated by a newer Nocturne release (its last migration is {last}). " +
+                "Downgrading is not supported: run that release or a later one.");
+        }
+
+        throw new InvalidOperationException(
+            $"This database was last migrated by a Nocturne release older than {marker.Release} " +
+            $"(its last migration is {last}). This release upgrades only from {marker.Release} or later. " +
+            $"Run {marker.Release} against this database once so that it applies its migrations, " +
+            "then start this release.");
     }
 
     /// <summary>
