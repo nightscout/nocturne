@@ -8,6 +8,7 @@
   import { Axis, getChartContext, Line, Rule, Text } from "layerchart";
   import { scaleLinear } from "d3-scale";
   import type { ChartLabels } from "../../labels.js";
+  import type { TextureKey } from "../../print/patterns.js";
   import type { GradientStop, LineColorMode } from "../../view/glucose-gradient-stops.js";
   import { reportGlucoseStops } from "../glucose-scale.js";
   import type { ReportLayer, ReportPanel } from "../types.js";
@@ -36,9 +37,11 @@
     hover?: boolean;
     /** Values each track's sides cover beyond their own, by track id, so small multiples share one scale. */
     valueExtents?: Record<string, SharedSides>;
+    /** The paint of a texture's ink laid over a mark's own fill; none where the layer cannot draw one (a canvas). */
+    texture?: (key: TextureKey) => string | undefined;
   }
 
-  let { panel, labels, lineColorMode, paint, gradient, tickLabels, text, formatTick, hover = false, valueExtents }: Props = $props();
+  let { panel, labels, lineColorMode, paint, gradient, tickLabels, text, formatTick, hover = false, valueExtents, texture }: Props = $props();
 
   const chart = getChartContext();
   const kind = $derived(panel.xKind ?? "time");
@@ -112,11 +115,11 @@
       {#if layer.mark === "line"}
         <MarkLine {layer} {x} y={side.toPixel} {paint} glucoseStops={glucoseStops(side)} {gradient} plotHeight={chart.height} />
       {:else if layer.mark === "area"}
-        <MarkArea {layer} {x} y={side.toPixel} {paint} />
+        <MarkArea {layer} {x} y={side.toPixel} {paint} {texture} />
       {:else if layer.mark === "band"}
-        <MarkBand {layer} {x} y={side.toPixel} {paint} glucoseStops={glucoseStops(side)} {gradient} plotHeight={chart.height} />
+        <MarkBand {layer} {x} y={side.toPixel} {paint} glucoseStops={glucoseStops(side)} {gradient} plotHeight={chart.height} {texture} />
       {:else if layer.mark === "bars"}
-        <MarkBars {layer} {x} y={side.toPixel} {paint} plotWidth={chart.width} />
+        <MarkBars {layer} {x} y={side.toPixel} {paint} plotWidth={chart.width} {texture} />
       {:else if layer.mark === "points"}
         <MarkPoints {layer} {x} y={side.toPixel} {paint} />
       {/if}

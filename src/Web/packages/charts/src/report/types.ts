@@ -42,6 +42,12 @@ export interface ReportField {
   colorField?: string | null;
   /** How the field folds onto a chart's grid. */
   aggregate?: "sum" | "last" | "mean" | "max" | null;
+  /**
+   * A `CHART_TEXTURES` name the field's bars, area or band are hatched with, shown whether or not
+   * patterns are on: the API gives one when the field shares its colour and mark with an earlier
+   * series of its track, so the two differ by more than colour.
+   */
+  texture?: string | null;
 }
 
 /** A treatment marker of a markers layer: its time, kind and amount (U, g or glucose). */
@@ -123,6 +129,8 @@ export interface ReportLayer {
   rows: ReportRow[];
   /** A series hue the API gave the layer, in place of its fields' own colours. */
   color?: ChartColor | null;
+  /** A `CHART_TEXTURES` name for the whole layer, as on a field ({@link ReportField.texture}); a field's own wins. */
+  texture?: string | null;
   facts?: ReportFact[];
   sentence?: string | null;
   /** How the API folded the layer onto the panel's grid ("Basal rate, last value per 1 day"); null when drawn as read. */
@@ -151,6 +159,8 @@ export interface ReportTrack {
 export interface ReportPanel {
   id: string;
   title?: string | null;
+  /** The set the panel is one of: consecutive panels with the same group are one chart's small multiples. */
+  group?: string | null;
   kind: ReportPanelKind;
   status: ReportPanelStatus;
   window: { from: number; to: number };

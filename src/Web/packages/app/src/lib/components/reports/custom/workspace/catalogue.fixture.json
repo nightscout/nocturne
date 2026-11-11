@@ -4889,7 +4889,7 @@
     "id": "basalScheduled",
     "family": "Insulin",
     "lane": null,
-    "color": "insulin-temp-basal",
+    "color": "insulin-scheduled-basal",
     "permitted": true
    },
    {

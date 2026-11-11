@@ -23,15 +23,13 @@
     legend?: boolean;
     /** Draw each panel's figures; the workspace's group rows give an event chart's. */
     facts?: boolean;
-    /** How the panels are laid out; `multiples` for one chart's small multiples. */
-    layout?: "stack" | "multiples";
     /** The workspace's words for a panel's heading, in place of the engine's title. */
     heading?: Snippet<[ReportPanel]>;
     /** Say, once each preview settles, that the block updated: only for the open block, and not a chart, whose view says it with its caption. */
     announce?: boolean;
   }
 
-  let { spec, runner, kind, incomplete = null, legend = true, facts = true, layout = "stack", heading, announce = false }: Props = $props();
+  let { spec, runner, kind, incomplete = null, legend = true, facts = true, heading, announce = false }: Props = $props();
 
   const UPDATED: Record<BlockKind, string> = {
     chart: "Chart updated.",
@@ -76,7 +74,7 @@
         class="transition-opacity duration-150 motion-reduce:transition-none"
         class:opacity-50={stale}
       >
-        <CustomReportRun run={runner.run} {legend} {facts} {layout} {heading} />
+        <CustomReportRun run={runner.run} {legend} {facts} {heading} />
       </div>
       {#if stale}
         <LoaderCircle

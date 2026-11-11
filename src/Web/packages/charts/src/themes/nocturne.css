@@ -82,7 +82,7 @@
   --steps: oklch(0.6 0.15 300);
   /* Sleep, as hours slept and sleep sessions: the hue the sleep report's lanes give deep sleep
      ([data-lane] in @nocturne/ui's theme.css), so sleep reads the same everywhere. */
-  --activity-sleep: var(--chart-3);
+  --activity-sleep: var(--pump-mode-sleep);
 }
 
 @media not print {

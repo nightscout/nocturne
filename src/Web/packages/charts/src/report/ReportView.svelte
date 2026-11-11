@@ -2,7 +2,9 @@
   A report result as a stack of panels: the report's title and warnings, then each panel by its kind
   (a chart of tracks of layers, figures, a table or two periods) and the summary the API wrote for it. Every word is the API's or the host's (`labels`);
   the title, panel titles, warnings and summaries are written as text. Host controls go in
-  `controls`, under each panel's drawing.
+  `controls`, under each panel's drawing. Consecutive panels of one `group` are one chart's small
+  multiples: a grid of small charts (two columns from a medium width) whose tracks share a value
+  scale wherever the unit is the same.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -10,7 +12,7 @@
   import ComparisonChart from "./ComparisonChart.svelte";
   import DataTable from "./DataTable.svelte";
   import LayeredChart from "./LayeredChart.svelte";
-  import { sharedValueExtents } from "./layered/layered-layout.js";
+  import { panelRuns, sharedValueExtents, type SharedSides } from "./layered/layered-layout.js";
   import StatTiles from "./StatTiles.svelte";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import type { ReportViewLabels } from "./report-view-labels.js";
@@ -38,12 +40,6 @@
     /** Draw each panel's figures; a host that shows them itself leaves them out. */
     facts?: boolean;
     /**
-     * `stack`: each panel full size, one under another. `multiples`: the panels are one chart's small
-     * multiples, a grid of small charts (two columns from a medium width) whose tracks share a value
-     * scale wherever the unit is the same.
-     */
-    layout?: "stack" | "multiples";
-    /**
      * The host's words for a panel's heading, in place of the panel's title: a host that names the
      * panels in its own language, such as the groups of small multiples.
      */
@@ -62,7 +58,6 @@
     controls,
     legend = true,
     facts: showFacts = true,
-    layout = "stack",
     heading,
   }: Props = $props();
 
@@ -77,17 +72,21 @@
   }
 
   const zoned = $derived<ChartFormat>({ ...format, timeZone: knownZone(report.timeZone ?? "UTC") });
-  const multiples = $derived(layout === "multiples");
-  const trackHeight = $derived(displayMode === "fullscreen" ? 360 : multiples ? 80 : 240);
-  /** Small multiples that all carry one sentence say it once, under the grid. */
-  const sharedSentence = $derived.by(() => {
-    if (!multiples || report.panels.length < 2) return null;
-    const first = report.panels[0].sentence;
-    return first && report.panels.every((p) => p.sentence === first) ? first : null;
-  });
-  const valueExtents = $derived(
-    multiples ? sharedValueExtents(report.panels.filter((p) => p.kind === "chart" && p.status === "ok")) : undefined,
+  const runs = $derived(
+    panelRuns(report.panels).map((panels) => {
+      const multiples = panels.length > 1;
+      const first = panels[0].sentence;
+      return {
+        key: panels[0].id,
+        panels,
+        multiples,
+        /** Small multiples that all carry one sentence say it once, under the grid. */
+        sentence: multiples && first && panels.every((p) => p.sentence === first) ? first : null,
+        valueExtents: multiples ? sharedValueExtents(panels.filter((p) => p.kind === "chart" && p.status === "ok")) : undefined,
+      };
+    }),
   );
+  const trackHeight = (multiples: boolean) => (displayMode === "fullscreen" ? 360 : multiples ? 80 : 240);
   const tableHeight = $derived(displayMode === "fullscreen" ? "max-h-[45vh]" : "max-h-[280px]");
   const colorMode = $derived(report.glucoseColorMode ?? "continuous");
   const reportHeading = $derived(`h${headingLevel}`);
@@ -134,12 +133,29 @@
       {/each}
     </header>
   {/if}
-  <div class={multiples ? "grid gap-x-6 gap-y-8 @2xl:grid-cols-2" : "contents"} data-testid="report-panels" data-layout={layout}>
-  {#each report.panels as panel, i (panel.id)}
+  {#each runs as run, r (run.key)}
+    {#if run.multiples}
+      <div class={["flex flex-col gap-4", r > 0 && "border-t border-border pt-6"]} data-testid="report-group" data-group={run.panels[0].group}>
+        <div class="grid gap-x-6 gap-y-8 @2xl:grid-cols-2" data-testid="report-panels" data-layout="multiples">
+          {#each run.panels as panel (panel.id)}
+            {@render section(panel, false, true, run.sentence, run.valueExtents)}
+          {/each}
+        </div>
+        {#if run.sentence}
+          <p class="max-w-[65ch] text-sm text-pretty" data-testid="report-sentence">{run.sentence}</p>
+        {/if}
+      </div>
+    {:else}
+      {@render section(run.panels[0], r > 0, false, null, undefined)}
+    {/if}
+  {/each}
+</article>
+
+{#snippet section(panel: ReportPanel, divided: boolean, small: boolean, sharedSentence: string | null, valueExtents: Record<string, SharedSides> | undefined)}
     {@const described = (panel.facts ?? []).length > 0 || !!panel.sentence}
     <section
       aria-labelledby="panel-{panel.id}"
-      class={["flex min-w-0 flex-col gap-3", i > 0 && !multiples && "border-t border-border pt-6"]}
+      class={["flex min-w-0 flex-col gap-3", divided && "border-t border-border pt-6", small && "break-inside-avoid"]}
       data-testid="report-panel"
     >
       <div class="flex flex-col gap-0.5">
@@ -153,7 +169,7 @@
       {#if panel.status !== "ok"}
         <!-- The sentence below says why. -->
       {:else if panel.kind === "chart"}
-        <LayeredChart {panel} format={zoned} {trackHeight} lineColorMode={colorMode} labels={labels.chart} {legend} {valueExtents} />
+        <LayeredChart {panel} format={zoned} trackHeight={trackHeight(small)} lineColorMode={colorMode} labels={labels.chart} {legend} {valueExtents} />
       {:else if panel.kind === "comparison"}
         <ComparisonChart {panel} format={zoned} emptyText={labels.noData} />
       {:else if panel.kind === "stat_tiles"}
@@ -191,9 +207,4 @@
         <p class="max-w-[80ch] text-xs whitespace-pre-line text-muted-foreground">{panel.summary}</p>
       {/if}
     </section>
-  {/each}
-  </div>
-  {#if sharedSentence}
-    <p class="max-w-[65ch] text-sm text-pretty" data-testid="report-sentence">{sharedSentence}</p>
-  {/if}
-</article>
+{/snippet}

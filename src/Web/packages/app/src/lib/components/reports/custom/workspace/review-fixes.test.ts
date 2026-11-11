@@ -73,7 +73,7 @@ describe("the caption", () => {
 });
 
 describe("small multiples", () => {
-  it("heads each small chart with its group's letter and the member's words, and the chart's title once", () => {
+  it("heads each small chart with its group's letter and the member's words, and leaves the saved headings to the engine", () => {
     const report = new Report(liveCatalogue, starter("later-breakfast")!, (m) => `${m / 60}h`);
     const [chart] = report.blocks;
     if (chart.kind !== "chart") throw new Error("chart");
@@ -86,7 +86,9 @@ describe("small multiples", () => {
     expect(chart.ws.groupHeading(3)).toBe("D: All highs");
     const panels: unknown = report.spec().panels;
     const titles = (Array.isArray(panels) ? panels : []).map((p: { title?: string }) => p.title);
-    expect(titles).toEqual(["Breakfasts", undefined, undefined, undefined]);
+    // The saved page heads each small chart with the engine's name for its group, so no panel takes
+    // the chart's title.
+    expect(titles).toEqual([undefined, undefined, undefined, undefined]);
   });
 });
 

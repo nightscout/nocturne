@@ -802,12 +802,13 @@ export class Report {
   spec(): Record<string, unknown> {
     const panels = this.state.blocks.flatMap((block) => {
       const own = block.kind === "chart" ? block.ws.ownRange : block.range;
-      // A chart's title, which the member typed, heads its first panel: its small multiples and lag
-      // chart follow under it.
+      // A chart's title, which the member typed, heads its first panel: its lag chart follows under
+      // it. Small multiples are headed by the engine's name for each group.
       return this.panelsOf(block).map((panel, i) => ({
         ...panel,
         id: `b${block.key}-${String(panel.id)}`,
-        ...(block.kind === "chart" && i === 0 && block.ws.title.trim()
+        ...(panel.group ? { group: `b${block.key}` } : {}),
+        ...(block.kind === "chart" && i === 0 && !panel.group && block.ws.title.trim()
           ? { title: block.ws.title.trim() }
           : {}),
         ...(own !== null && block.kind !== "comparison"

@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import { LinearGradient, Path } from "layerchart";
+  import type { TextureKey } from "../../print/patterns.js";
   import type { GradientStop } from "../../view/glucose-gradient-stops.js";
   import { areaPath, bandSets, glucoseColoured, linePath } from "../layered/layered-layout.js";
   import { boundFields, type ReportLayer } from "../types.js";
@@ -17,9 +18,11 @@
     glucoseStops: GradientStop[] | null;
     gradient?: (stops: GradientStop[], height: number) => string | undefined;
     plotHeight: number;
+    /** The paint of a texture's ink laid over a mark's own fill; none where the layer cannot draw one (a canvas). */
+    texture?: (key: TextureKey) => string | undefined;
   }
 
-  let { layer, x, y, paint, glucoseStops, gradient, plotHeight }: Props = $props();
+  let { layer, x, y, paint, glucoseStops, gradient, plotHeight, texture }: Props = $props();
 
   const xName = $derived(layer.bindings.x ?? "");
   const edges = $derived(layer.bindings.edges ?? []);
@@ -43,12 +46,18 @@
       <Path pathData={linePath(set.rows, xName, { name: low, label: low, kind: "number" }, x, y)} stroke={paint(set.line)} strokeWidth={1} fill="none" opacity={0.55} />
       <Path pathData={linePath(set.rows, xName, { name: high, label: high, kind: "number" }, x, y)} stroke={paint(set.line)} strokeWidth={1} fill="none" opacity={0.55} />
     {:else}
+      {@const ink = set.texture ? texture?.(set.texture) : undefined}
+      {@const fill = areaPath(set.rows, xName, low, high, x, y, step)}
       <Path
-        pathData={areaPath(set.rows, xName, low, high, x, y, step)}
+        pathData={fill}
         fill={paint(which === "outer" ? set.outer : set.inner)}
         stroke="none"
         data-testid="report-layer-band"
+        data-texture={ink ? set.texture : undefined}
       />
+      {#if ink}
+        <Path pathData={fill} fill={ink} stroke="none" class="pointer-events-none" />
+      {/if}
     {/if}
   {/each}
   {#if middle}

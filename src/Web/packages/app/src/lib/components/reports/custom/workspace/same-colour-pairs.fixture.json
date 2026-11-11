@@ -1,0 +1,771 @@
+{
+ "spec": {
+  "version": 1,
+  "title": null,
+  "range": {
+   "hours": 168,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "chart",
+    "title": null,
+    "kind": "chart",
+    "range": {
+     "hours": 168,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "lane-glucose",
+      "title": null,
+      "height": 2,
+      "layers": [
+       {
+        "id": "timeInRange",
+        "title": null,
+        "dataset": {
+         "name": "daily_summary",
+         "days": null
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "timeInRange"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "ranges",
+        "title": null,
+        "dataset": {
+         "name": "daily_summary",
+         "days": null
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "timeBelow",
+          "timeInRange",
+          "timeAbove"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "lane-insulin",
+      "title": null,
+      "height": 0.75,
+      "layers": [
+       {
+        "id": "totalInsulin",
+        "title": null,
+        "dataset": {
+         "name": "daily_summary",
+         "days": null
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "totalInsulin"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "totalBolus",
+        "title": null,
+        "dataset": {
+         "name": "daily_summary",
+         "days": null
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "totalBolus"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "result": {
+  "spec": {
+   "version": 1,
+   "title": null,
+   "range": {
+    "hours": 168,
+    "from": null,
+    "to": null
+   },
+   "panels": [
+    {
+     "id": "chart",
+     "title": null,
+     "kind": "chart",
+     "range": {
+      "hours": 168,
+      "from": null,
+      "to": null
+     },
+     "grid": null,
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "title": null,
+       "height": 2,
+       "layers": [
+        {
+         "id": "timeInRange",
+         "title": null,
+         "dataset": {
+          "name": "daily_summary",
+          "days": null
+         },
+         "derived": null,
+         "mark": "bars",
+         "bindings": {
+          "x": "day",
+          "y": [
+           "timeInRange"
+          ],
+          "edges": null,
+          "series": null,
+          "fit": null,
+          "stacked": true,
+          "orientation": "vertical",
+          "start": null,
+          "end": null,
+          "category": null
+         },
+         "range": null
+        },
+        {
+         "id": "ranges",
+         "title": null,
+         "dataset": {
+          "name": "daily_summary",
+          "days": null
+         },
+         "derived": null,
+         "mark": "bars",
+         "bindings": {
+          "x": "day",
+          "y": [
+           "timeBelow",
+           "timeInRange",
+           "timeAbove"
+          ],
+          "edges": null,
+          "series": null,
+          "fit": null,
+          "stacked": true,
+          "orientation": "vertical",
+          "start": null,
+          "end": null,
+          "category": null
+         },
+         "range": null
+        }
+       ]
+      },
+      {
+       "id": "lane-insulin",
+       "title": null,
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "totalInsulin",
+         "title": null,
+         "dataset": {
+          "name": "daily_summary",
+          "days": null
+         },
+         "derived": null,
+         "mark": "bars",
+         "bindings": {
+          "x": "day",
+          "y": [
+           "totalInsulin"
+          ],
+          "edges": null,
+          "series": null,
+          "fit": null,
+          "stacked": true,
+          "orientation": "vertical",
+          "start": null,
+          "end": null,
+          "category": null
+         },
+         "range": null
+        },
+        {
+         "id": "totalBolus",
+         "title": null,
+         "dataset": {
+          "name": "daily_summary",
+          "days": null
+         },
+         "derived": null,
+         "mark": "bars",
+         "bindings": {
+          "x": "day",
+          "y": [
+           "totalBolus"
+          ],
+          "edges": null,
+          "series": null,
+          "fit": null,
+          "stacked": true,
+          "orientation": "vertical",
+          "start": null,
+          "end": null,
+          "category": null
+         },
+         "range": null
+        }
+       ]
+      }
+     ],
+     "dataset": null,
+     "bindings": null
+    }
+   ]
+  },
+  "units": "mg/dl",
+  "glucoseColorMode": "continuous",
+  "timeZone": "Australia/Sydney",
+  "panels": [
+   {
+    "id": "chart",
+    "title": "Daily summary",
+    "group": null,
+    "kind": "chart",
+    "status": "ok",
+    "window": {
+     "from": 1793825369740,
+     "to": 1794430169740
+    },
+    "dataset": null,
+    "bindings": null,
+    "fields": [],
+    "rows": [],
+    "xKind": "day",
+    "grid": null,
+    "tracks": [
+     {
+      "id": "lane-glucose",
+      "title": null,
+      "height": 2,
+      "layers": [
+       {
+        "id": "timeInRange",
+        "title": "Daily summary \u00c2\u00b7 In range",
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "timeInRange"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "xKind": "day",
+        "unit": "%",
+        "side": "left",
+        "status": "ok",
+        "window": {
+         "from": 1793797200000,
+         "to": 1794488400000
+        },
+        "fields": [
+         {
+          "name": "day",
+          "label": "Day",
+          "kind": "day",
+          "unit": null,
+          "description": "Local midnight at the start of the day, Unix milliseconds.",
+          "scope": null,
+          "color": null,
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": null,
+          "setting": 0,
+          "texture": null,
+          "isNumber": false,
+          "axisKind": "day",
+          "inGlucoseUnit": false
+         },
+         {
+          "name": "timeInRange",
+          "label": "In range",
+          "kind": "percent",
+          "unit": "%",
+          "description": "Percent of the day's covered time in range.",
+          "scope": null,
+          "color": "glucose-in-range",
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": "mean",
+          "setting": 0,
+          "texture": null,
+          "isNumber": true,
+          "axisKind": null,
+          "inGlucoseUnit": false
+         }
+        ],
+        "rows": [
+         {
+          "day": 1794229200000,
+          "timeInRange": 90.6
+         },
+         {
+          "day": 1794315600000,
+          "timeInRange": 93
+         },
+         {
+          "day": 1794402000000,
+          "timeInRange": null
+         }
+        ],
+        "color": null,
+        "facts": [],
+        "sentence": null,
+        "context": null,
+        "limited": false,
+        "sourceCohorts": {},
+        "summary": "",
+        "spans": [],
+        "markers": [],
+        "cohorts": [],
+        "omitted": [],
+        "resolution": null
+       },
+       {
+        "id": "ranges",
+        "title": "Daily summary \u00c2\u00b7 Below range, In range, Above range",
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "timeBelow",
+          "timeInRange",
+          "timeAbove"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "xKind": "day",
+        "unit": "%",
+        "side": "left",
+        "status": "ok",
+        "window": {
+         "from": 1793797200000,
+         "to": 1794488400000
+        },
+        "fields": [
+         {
+          "name": "day",
+          "label": "Day",
+          "kind": "day",
+          "unit": null,
+          "description": "Local midnight at the start of the day, Unix milliseconds.",
+          "scope": null,
+          "color": null,
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": null,
+          "setting": 0,
+          "texture": null,
+          "isNumber": false,
+          "axisKind": "day",
+          "inGlucoseUnit": false
+         },
+         {
+          "name": "timeBelow",
+          "label": "Below range",
+          "kind": "percent",
+          "unit": "%",
+          "description": "Percent of the day's covered time below range (low and very low).",
+          "scope": null,
+          "color": "glucose-low",
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": "mean",
+          "setting": 0,
+          "texture": null,
+          "isNumber": true,
+          "axisKind": null,
+          "inGlucoseUnit": false
+         },
+         {
+          "name": "timeInRange",
+          "label": "In range",
+          "kind": "percent",
+          "unit": "%",
+          "description": "Percent of the day's covered time in range.",
+          "scope": null,
+          "color": "glucose-in-range",
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": "mean",
+          "setting": 0,
+          "texture": "cat-1",
+          "isNumber": true,
+          "axisKind": null,
+          "inGlucoseUnit": false
+         },
+         {
+          "name": "timeAbove",
+          "label": "Above range",
+          "kind": "percent",
+          "unit": "%",
+          "description": "Percent of the day's covered time above range (high and very high).",
+          "scope": null,
+          "color": "glucose-high",
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": "mean",
+          "setting": 0,
+          "texture": null,
+          "isNumber": true,
+          "axisKind": null,
+          "inGlucoseUnit": false
+         }
+        ],
+        "rows": [
+         {
+          "day": 1794229200000,
+          "timeBelow": 0,
+          "timeInRange": 90.6,
+          "timeAbove": 9.4
+         },
+         {
+          "day": 1794315600000,
+          "timeBelow": 0.5,
+          "timeInRange": 93,
+          "timeAbove": 6.5
+         },
+         {
+          "day": 1794402000000,
+          "timeBelow": null,
+          "timeInRange": null,
+          "timeAbove": null
+         }
+        ],
+        "color": null,
+        "facts": [],
+        "sentence": null,
+        "context": null,
+        "limited": false,
+        "sourceCohorts": {},
+        "summary": "",
+        "spans": [],
+        "markers": [],
+        "cohorts": [],
+        "omitted": [],
+        "resolution": null
+       }
+      ]
+     },
+     {
+      "id": "lane-insulin",
+      "title": null,
+      "height": 0.75,
+      "layers": [
+       {
+        "id": "totalInsulin",
+        "title": "Daily summary \u00c2\u00b7 Insulin",
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "totalInsulin"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "xKind": "day",
+        "unit": "U",
+        "side": "left",
+        "status": "ok",
+        "window": {
+         "from": 1793797200000,
+         "to": 1794488400000
+        },
+        "fields": [
+         {
+          "name": "day",
+          "label": "Day",
+          "kind": "day",
+          "unit": null,
+          "description": "Local midnight at the start of the day, Unix milliseconds.",
+          "scope": null,
+          "color": null,
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": null,
+          "setting": 0,
+          "texture": null,
+          "isNumber": false,
+          "axisKind": "day",
+          "inGlucoseUnit": false
+         },
+         {
+          "name": "totalInsulin",
+          "label": "Insulin",
+          "kind": "number",
+          "unit": "U",
+          "description": "The day's insulin, bolus and basal.",
+          "scope": "treatments.read",
+          "color": "insulin-bolus",
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": "sum",
+          "setting": 0,
+          "texture": null,
+          "isNumber": true,
+          "axisKind": null,
+          "inGlucoseUnit": false
+         }
+        ],
+        "rows": [
+         {
+          "day": 1794229200000,
+          "totalInsulin": 32.8
+         },
+         {
+          "day": 1794315600000,
+          "totalInsulin": 28.2
+         },
+         {
+          "day": 1794402000000,
+          "totalInsulin": 0
+         }
+        ],
+        "color": null,
+        "facts": [],
+        "sentence": null,
+        "context": null,
+        "limited": false,
+        "sourceCohorts": {},
+        "summary": "",
+        "spans": [],
+        "markers": [],
+        "cohorts": [],
+        "omitted": [],
+        "resolution": null
+       },
+       {
+        "id": "totalBolus",
+        "title": "Daily summary \u00c2\u00b7 Bolus",
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "totalBolus"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "xKind": "day",
+        "unit": "U",
+        "side": "left",
+        "status": "ok",
+        "window": {
+         "from": 1793797200000,
+         "to": 1794488400000
+        },
+        "fields": [
+         {
+          "name": "day",
+          "label": "Day",
+          "kind": "day",
+          "unit": null,
+          "description": "Local midnight at the start of the day, Unix milliseconds.",
+          "scope": null,
+          "color": null,
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": null,
+          "setting": 0,
+          "texture": null,
+          "isNumber": false,
+          "axisKind": "day",
+          "inGlucoseUnit": false
+         },
+         {
+          "name": "totalBolus",
+          "label": "Bolus",
+          "kind": "number",
+          "unit": "U",
+          "description": "The day's bolus insulin, the algorithm's included.",
+          "scope": "treatments.read",
+          "color": "insulin-bolus",
+          "glucoseScale": false,
+          "marker": null,
+          "step": false,
+          "colorField": null,
+          "companion": false,
+          "aggregate": "sum",
+          "setting": 0,
+          "texture": null,
+          "isNumber": true,
+          "axisKind": null,
+          "inGlucoseUnit": false
+         }
+        ],
+        "rows": [
+         {
+          "day": 1794229200000,
+          "totalBolus": 10.6
+         },
+         {
+          "day": 1794315600000,
+          "totalBolus": 10.3
+         },
+         {
+          "day": 1794402000000,
+          "totalBolus": 0
+         }
+        ],
+        "color": "chart-1",
+        "facts": [],
+        "sentence": null,
+        "context": null,
+        "limited": false,
+        "sourceCohorts": {},
+        "summary": "",
+        "spans": [],
+        "markers": [],
+        "cohorts": [],
+        "omitted": [],
+        "resolution": null
+       }
+      ]
+     }
+    ],
+    "thresholds": null,
+    "summary": "",
+    "limited": false,
+    "omitted": [],
+    "resolution": null,
+    "link": null,
+    "cohorts": [],
+    "facts": [],
+    "sentence": "One row per local day; no figure is averaged across days.",
+    "context": null,
+    "atRangeLimit": false,
+    "rangeLimit": null
+   }
+  ],
+  "summary": "",
+  "warnings": [],
+  "locale": null,
+  "hour12": null
+ },
+ "errors": []
+}

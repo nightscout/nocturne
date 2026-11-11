@@ -3707,5 +3707,269 @@
     }
    ]
   }
+ },
+ "four-groups": {
+  "state": {
+   "title": "What does a later breakfast do?",
+   "rangeHours": 672,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 0,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "Meal",
+        "timeOfDay": {
+         "fromMinute": 360,
+         "toMinute": 510
+        },
+        "key": 3
+       },
+       {
+        "what": "Meal",
+        "timeOfDay": {
+         "fromMinute": 510,
+         "toMinute": 660
+        },
+        "key": 4
+       },
+       {
+        "key": 5,
+        "what": "Meal"
+       },
+       {
+        "key": 6,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "What does a later breakfast do?",
+   "range": {
+    "hours": 672
+   },
+   "panels": [
+    {
+     "id": "b0-chart-1",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose-g1",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "Meal",
+            "timeOfDay": {
+             "fromMinute": 360,
+             "toMinute": 510
+            }
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ],
+     "group": "b0"
+    },
+    {
+     "id": "b0-chart-2",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose-g2",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "Meal",
+            "timeOfDay": {
+             "fromMinute": 510,
+             "toMinute": 660
+            }
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ],
+     "group": "b0"
+    },
+    {
+     "id": "b0-chart-3",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose-g3",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "Meal"
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ],
+     "group": "b0"
+    },
+    {
+     "id": "b0-chart-4",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose-g4",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "Meal"
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ],
+     "group": "b0"
+    }
+   ]
+  }
  }
 }

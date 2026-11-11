@@ -5,11 +5,12 @@
   CategoryBars. Every value, word and colour is the API's.
 -->
 <script lang="ts">
-  import { Chart, Svg, Tooltip } from "layerchart";
+  import { Chart, Pattern, Svg, Tooltip } from "layerchart";
   import { scaleLinear, scaleTime } from "d3-scale";
   import type { ChartFormat } from "../format.js";
   import type { ChartLabels } from "../labels.js";
   import type { LineColorMode } from "../view/glucose-gradient-stops.js";
+  import { inkPattern, inkPatternId, textureBackground, type InkPattern } from "../print/patterns.js";
   import CategoryBars from "./CategoryBars.svelte";
   import LayeredPlot from "./layered/LayeredPlot.svelte";
   import { formatAxisValue } from "./layered/axis-format.js";
@@ -18,6 +19,7 @@
     fieldColor,
     isTimeAxis,
     legend,
+    panelTextures,
     rowMatch,
     rowsAt,
     type SharedSides,
@@ -58,6 +60,8 @@
     return gap || 1;
   });
   const match = $derived(rowMatch(panel, tolerance));
+  /** The ink-only textures the panel's series are hatched with; drawn on screen and on paper alike. */
+  const inks = $derived(panelTextures(panel).map(inkPattern).filter((p): p is InkPattern => p !== null));
   const entries = $derived(legend(panel));
   const xField = $derived.by((): ReportField | undefined => {
     const first = panel.tracks.flatMap((t) => drawnLayers(t))[0];
@@ -108,6 +112,9 @@
 
 {#snippet plot()}
     <Svg>
+      {#each inks as ink (ink.id)}
+        <Pattern id={ink.id} size={ink.size} lines={ink.lines} circles={ink.circles} />
+      {/each}
       <LayeredPlot
         {panel}
         {labels}
@@ -117,6 +124,7 @@
         text={{ muted: { class: "fill-muted-foreground" }, strong: { class: "fill-foreground font-semibold" } }}
         formatTick={tick}
         {valueExtents}
+        texture={(key) => `url(#${inkPatternId(key)})`}
         hover
       />
     </Svg>
@@ -180,7 +188,16 @@
     <ul class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" data-testid="report-legend">
       {#each entries as entry (entry.id)}
         <li class="flex items-center gap-1.5">
-          {#if entry.color}
+          {#if entry.color && entry.texture}
+            {@const hatch = textureBackground(entry.texture)}
+            <span
+              class="inline-block size-3 rounded-xs bg-(--swatch) bg-(image:--hatch) bg-size-(--hatch-size)"
+              style:--swatch={entry.color}
+              style:--hatch={hatch?.image ?? "none"}
+              style:--hatch-size={hatch?.size ?? "auto"}
+              data-texture={entry.texture}
+            ></span>
+          {:else if entry.color}
             <span class="inline-block h-0.5 w-3 bg-(--swatch)" style:--swatch={entry.color}></span>
           {/if}
           {entry.title}{entry.unit ? ` (${entry.unit})` : ""}

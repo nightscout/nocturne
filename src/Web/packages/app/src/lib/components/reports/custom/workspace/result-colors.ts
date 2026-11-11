@@ -1,22 +1,27 @@
 import {
   cohortBands,
   fieldColor,
+  fieldTexture,
+  fillTexture,
   glucoseColoured,
   layerColor,
   valueFields,
   type ReportFact,
   type ReportLayer,
   type ReportResult,
+  type TextureKey,
 } from "@nocturne/charts/core";
 import type { SignalId, Vocabulary } from "./catalogue-vocabulary.js";
 
 /**
  * How a swatch shows the colour the chart drew a thing in: one colour, the
  * glucose range colours (a line coloured by range), or none where the chart
- * draws it in more than one (one hue per group, or one per mode).
+ * draws it in more than one (one hue per group, or one per mode). A solid
+ * swatch carries the hatch the chart laid over the colour, when the result gave
+ * the series one because it shares its colour and mark with another.
  */
 export type Swatch =
-  | { kind: "solid"; color: string }
+  | { kind: "solid"; color: string; texture?: TextureKey | null }
   | { kind: "glucose" }
   | { kind: "none" };
 
@@ -37,7 +42,7 @@ function layerSwatch(layer: ReportLayer): Swatch {
   const lead = valueFields(layer)[0];
   if (layer.mark === "line" && lead && glucoseColoured(layer, lead))
     return { kind: "glucose" };
-  return { kind: "solid", color: layerColor(layer) };
+  return { kind: "solid", color: layerColor(layer), texture: fillTexture(layer) };
 }
 
 /** The colour a layer of the last run was drawn in, or none before a run. */
@@ -57,7 +62,9 @@ export function fieldSwatchOf(
 ): Swatch {
   const layer = findLayer(report, layerId);
   const found = layer?.fields.find((f) => f.name === field);
-  return layer && found ? { kind: "solid", color: fieldColor(layer, found) } : { kind: "none" };
+  return layer && found
+    ? { kind: "solid", color: fieldColor(layer, found), texture: fieldTexture(layer, found) }
+    : { kind: "none" };
 }
 
 /**

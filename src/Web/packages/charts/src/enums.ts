@@ -142,6 +142,7 @@ export const CHART_COLORS = [
 	'insulin-bolus',
 	'insulin-basal',
 	'insulin-temp-basal',
+	'insulin-scheduled-basal',
 	'carbs',
 	'pump-mode-automatic',
 	'pump-mode-limited',

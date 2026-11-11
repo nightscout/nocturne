@@ -52,6 +52,18 @@ describe("a report saved before the vocabulary came from the catalogue", () => {
       expect(reopened!.spec(), id).toEqual(saved.spec);
     }
   });
+
+  // The panels of small multiples carry a `group` since the saved page lays them out as a grid. A
+  // state saved before that reopens unchanged, but its saved spec has no `group`, so it would not
+  // match and would open in the form. Nothing had shipped, so no state needs to: the fixture records
+  // the spec with the group, and no code reads a spec without one.
+  it("names one group on the panels of a chart's small multiples, the block's own", () => {
+    const saved = savedBefore["four-groups"];
+    const panels = Report.fromState(liveCatalogue, BUILDER_VERSION, saved.state)!.spec().panels as { id: string; group?: string; title?: string }[];
+
+    expect(panels.map((p) => p.group)).toEqual(["b0", "b0", "b0", "b0"]);
+    expect(panels.every((p) => p.title === undefined)).toBe(true);
+  });
 });
 
 describe("the catalogue's empty members", () => {

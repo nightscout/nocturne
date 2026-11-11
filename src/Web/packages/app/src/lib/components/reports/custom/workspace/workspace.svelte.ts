@@ -143,6 +143,12 @@ export const GROUP_LETTERS = ["A", "B", "C", "D", "E", "F"];
  */
 export const MAX_OVERLAID_GROUPS = 3;
 
+/**
+ * The `group` the panels of one chart's small multiples carry, so every page that draws the report
+ * lays them out as one grid with one scale. A report of more than one chart gives each its own.
+ */
+export const SMALL_MULTIPLES_GROUP = "groups";
+
 export interface EventOptions {
   before: number;
   after: number;
@@ -669,6 +675,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
         panels.push({
           ...panel,
           id: `chart-${g + 1}`,
+          group: SMALL_MULTIPLES_GROUP,
           tracks: t,
         });
       }

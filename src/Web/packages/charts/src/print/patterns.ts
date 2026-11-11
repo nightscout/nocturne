@@ -200,6 +200,11 @@ function isTextureKey(key: string): key is TextureKey {
 	return Object.hasOwn(CHART_TEXTURES, key);
 }
 
+/** The texture a result names, or null for none or a name this build does not know. */
+export function textureKey(name: string | null | undefined): TextureKey | null {
+	return name && isTextureKey(name) ? name : null;
+}
+
 function entries(): (readonly [TextureKey, TextureSpec])[] {
 	return Object.entries(CHART_TEXTURES).flatMap(([key, spec]) =>
 		isTextureKey(key) ? [[key, spec] as const] : []
@@ -213,23 +218,84 @@ export const TEXTURE_KEYS: readonly TextureKey[] = entries().map(([key]) => key)
  * for elements that cannot use an SVG paint server.
  */
 function cssTexture(texture: Texture): string | null {
+	const important = " !important";
+	const gap = "gap" in texture ? texture.gap : 0;
 	switch (texture.kind) {
 		case "solid":
 			return null;
 		case "lines":
 			// A gradient's stripes run perpendicular to its direction, and CSS angles
 			// are measured from "up", so the stripe angle is the gradient angle + 90.
-			return `background-image: repeating-linear-gradient(${texture.angle + 90}deg, ${INK} 0 1px, transparent 1px ${texture.gap}px) !important;`;
+			return `background-image: repeating-linear-gradient(${texture.angle + 90}deg, ${INK} 0 1px, transparent 1px ${gap}px)${important};`;
 		case "grid":
 			return (
-				`background-image: linear-gradient(${INK} 1px, transparent 1px), linear-gradient(90deg, ${INK} 1px, transparent 1px) !important; ` +
-				`background-size: ${texture.gap}px ${texture.gap}px !important;`
+				`background-image: linear-gradient(${INK} 1px, transparent 1px), linear-gradient(90deg, ${INK} 1px, transparent 1px)${important}; ` +
+				`background-size: ${gap}px ${gap}px${important};`
 			);
 		case "dots":
 			return (
-				`background-image: radial-gradient(${INK} 0.9px, transparent 1.1px) !important; ` +
-				`background-size: ${texture.gap}px ${texture.gap}px !important;`
+				`background-image: radial-gradient(${INK} 0.9px, transparent 1.1px)${important}; ` +
+				`background-size: ${gap}px ${gap}px${important};`
 			);
+	}
+}
+
+/**
+ * A key's texture as a background image and size over an element's own background colour, shown
+ * whether or not patterns are on: the swatch of a series the result textures because it shares its
+ * colour and mark with another. `maxGap` tightens the texture so a small swatch shows more than one
+ * stroke. Null for a solid key.
+ */
+export function textureBackground(key: TextureKey, maxGap = 4): { image: string; size: string } | null {
+	const spec: TextureSpec = CHART_TEXTURES[key];
+	const t = spec.texture;
+	if (t.kind === "solid") return null;
+	const gap = Math.min(t.gap, maxGap);
+	switch (t.kind) {
+		case "lines":
+			return { image: `repeating-linear-gradient(${t.angle + 90}deg, ${INK} 0 1px, transparent 1px ${gap}px)`, size: "auto" };
+		case "grid":
+			return { image: `linear-gradient(${INK} 1px, transparent 1px), linear-gradient(90deg, ${INK} 1px, transparent 1px)`, size: `${gap}px ${gap}px` };
+		case "dots":
+			return { image: `radial-gradient(${INK} 0.9px, transparent 1.1px)`, size: `${gap}px ${gap}px` };
+	}
+}
+
+/**
+ * The id of a key's texture drawn in ink alone, with no colour under it ({@link inkTiles}), laid
+ * over a mark that keeps its own fill.
+ */
+export function inkPatternId(key: TextureKey): string {
+	return `chart-ink-${key}`;
+}
+
+/** A texture in ink alone, as layerchart's `Pattern` draws it: its id, tile size, and lines or dots. */
+export interface InkPattern {
+	id: string;
+	size: number;
+	lines?: { rotate: number; width: string; color: string }[];
+	circles?: { radius: number; color: string };
+}
+
+/**
+ * The key's texture in ink alone, with no colour under it, laid over a mark that keeps its own fill;
+ * null for a solid key. layerchart turns its lines by a different rule: 0 is "—", 90 is "|" and a
+ * positive turn is "\".
+ */
+export function inkPattern(key: TextureKey): InkPattern | null {
+	const spec: TextureSpec = CHART_TEXTURES[key];
+	const t = spec.texture;
+	const id = inkPatternId(key);
+	const line = (rotate: number) => ({ rotate, width: "1.2", color: INK });
+	switch (t.kind) {
+		case "solid":
+			return null;
+		case "lines":
+			return { id, size: t.gap, lines: [line(t.angle === 0 ? 90 : t.angle === 90 ? 0 : -t.angle)] };
+		case "grid":
+			return { id, size: t.gap, lines: [line(0), line(90)] };
+		case "dots":
+			return { id, size: t.gap, circles: { radius: 1.1, color: INK } };
 	}
 }
 

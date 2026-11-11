@@ -313,7 +313,6 @@
           incomplete={ws.incomplete}
           legend={false}
           facts={ws.lens !== "event"}
-          layout={ws.smallMultiples ? "multiples" : "stack"}
           heading={ws.smallMultiples ? groupHeading : undefined}
         />
       </div>

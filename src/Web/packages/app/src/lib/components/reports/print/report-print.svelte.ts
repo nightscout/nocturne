@@ -134,10 +134,37 @@ export function installPrintFitFallback(
       document.documentElement.classList.contains(PRINT_LAYOUT_CLASS)
     )
       return;
-    const limit = millimetresToPx(PAPER_CONTENT_MM);
+    const paper = millimetresToPx(PAPER_CONTENT_MM);
     for (const svg of root.querySelectorAll<SVGSVGElement>("svg")) {
       const { width, height } = svg.getBoundingClientRect();
+      // Small multiples print two to a row, so each has half the paper. A report chart's plot sits in
+      // containers of the width it measured, which a narrower svg alone would not shrink, so the
+      // whole chart is scaled instead: a transform, which the chart does not measure again.
+      const multiple = svg.closest<HTMLElement>(
+        '[data-layout="multiples"] [data-testid="report-layered-chart"]'
+      );
+      const limit = multiple
+        ? (paper - MULTIPLES_GAP_PX) / 2 - MULTIPLES_GAP_PX
+        : paper;
       if (width <= limit || svg.parentElement?.closest("svg")) continue;
+      if (multiple) {
+        const scale = limit / width;
+        const box = multiple.getBoundingClientRect().height;
+        const prev = {
+          transform: multiple.style.transform,
+          origin: multiple.style.transformOrigin,
+          margin: multiple.style.marginBottom,
+        };
+        multiple.style.transform = `scale(${scale})`;
+        multiple.style.transformOrigin = "top left";
+        multiple.style.marginBottom = `${box * (scale - 1)}px`;
+        restore.push(() => {
+          multiple.style.transform = prev.transform;
+          multiple.style.transformOrigin = prev.origin;
+          multiple.style.marginBottom = prev.margin;
+        });
+        continue;
+      }
       const prev = {
         viewBox: svg.getAttribute("viewBox"),
         width: svg.style.width,
@@ -165,6 +192,13 @@ export function installPrintFitFallback(
     unfit();
   };
 }
+
+/**
+ * The gap between two small multiples in a row (the charts' `gap-x-6`), also kept clear at each
+ * one's right edge: the paper a browser prints on can be a little narrower than
+ * {@link PAPER_CONTENT_MM}.
+ */
+const MULTIPLES_GAP_PX = 24;
 
 function millimetresToPx(mm: number): number {
   return (mm * 96) / 25.4;

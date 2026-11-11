@@ -7,6 +7,7 @@ import { area, curveMonotoneX, curveStepAfter, line } from "d3";
 import { scaleLinear } from "d3-scale";
 import { resolveChartColor } from "../../colors.js";
 import { isChartColor } from "../../enums.js";
+import { textureKey, type TextureKey } from "../../print/patterns.js";
 import { cohortBands, type BandColors } from "../percentile-bands.js";
 import { boundFields, type ReportField, type ReportLayer, type ReportPanel, type ReportRow, type ReportTrack, type ReportXKind } from "../types.js";
 
@@ -223,6 +224,16 @@ export function fieldColor(layer: Pick<ReportLayer, "color">, field: Pick<Report
   return "var(--foreground)";
 }
 
+/** The texture a field's fill is hatched with: its own, else its layer's, else none. */
+export function fieldTexture(layer: Pick<ReportLayer, "texture">, field: Pick<ReportField, "texture"> | undefined): TextureKey | null {
+  return textureKey(field?.texture) ?? textureKey(layer.texture);
+}
+
+/** A layer's own texture: its first drawn field's, else the layer's. */
+export function layerTexture(layer: ReportLayer): TextureKey | null {
+  return fieldTexture(layer, valueFields(layer)[0]);
+}
+
 /** Whether a line of the field takes the report's glucose colouring: a glucose field the API gave no hue. */
 export function glucoseColoured(layer: Pick<ReportLayer, "color">, field: Pick<ReportField, "glucoseScale">): boolean {
   return !layer.color && field.glucoseScale === true;
@@ -282,6 +293,8 @@ export interface BandSet {
   outer: string;
   inner: string;
   line: string;
+  /** The hatch over the set's ranges, when the layer's one set shares its colour with another band. */
+  texture: TextureKey | null;
 }
 
 /**
@@ -293,7 +306,7 @@ export function bandSets(layer: ReportLayer): BandSet[] {
   if (!series) {
     const color = layerColor(layer);
     const hue = tints(color);
-    return [{ key: layer.id, label: null, rows: layer.rows, comparison: false, outer: hue.outer, inner: hue.inner, line: hue.median }];
+    return [{ key: layer.id, label: null, rows: layer.rows, comparison: false, outer: hue.outer, inner: hue.inner, line: hue.median, texture: bandTexture(layer) }];
   }
   const sets = new Map<string, BandSet>();
   for (const row of layer.rows) {
@@ -304,7 +317,7 @@ export function bandSets(layer: ReportLayer): BandSet[] {
     if (!set) {
       const cohort = num(row, "cohort");
       const hue = layer.color ? tints(layerColor(layer)) : cohortBands(cohort !== null ? cohort - 1 : sets.size);
-      set = { key, label, rows: [], comparison, outer: hue.outer, inner: hue.inner, line: hue.median };
+      set = { key, label, rows: [], comparison, outer: hue.outer, inner: hue.inner, line: hue.median, texture: null };
       sets.set(key, set);
     }
     set.rows.push(row);
@@ -313,9 +326,39 @@ export function bandSets(layer: ReportLayer): BandSet[] {
   // One group and no comparison range: nothing to tell apart, so the band keeps the field's colour.
   if (all.length === 1 && !all[0].comparison && !layer.color) {
     const hue = tints(layerColor(layer));
-    return [{ ...all[0], outer: hue.outer, inner: hue.inner, line: hue.median }];
+    return [{ ...all[0], outer: hue.outer, inner: hue.inner, line: hue.median, texture: bandTexture(layer) }];
   }
   return all;
+}
+
+/** The hatch over a layer's fill as its swatch shows it: a band's, or a bars or area layer's first field's; none for other marks. */
+export function fillTexture(layer: ReportLayer): TextureKey | null {
+  if (layer.mark === "band") return bandTexture(layer);
+  return layer.mark === "bars" || layer.mark === "area" ? layerTexture(layer) : null;
+}
+
+/** Every texture the panel's bars, areas and bands are hatched with, once each. */
+export function panelTextures(panel: Pick<ReportPanel, "tracks">): TextureKey[] {
+  const keys = new Set<TextureKey>();
+  for (const track of panel.tracks)
+    for (const layer of drawnLayers(track)) {
+      if (layer.mark === "band") {
+        const key = bandTexture(layer);
+        if (key) keys.add(key);
+      } else if (layer.mark === "bars" || layer.mark === "area") {
+        for (const field of boundFields(layer, layer.bindings.y)) {
+          const key = fieldTexture(layer, field);
+          if (key) keys.add(key);
+        }
+      }
+    }
+  return [...keys];
+}
+
+/** A band's texture: the layer's, else its middle field's, else its edges'. */
+function bandTexture(layer: ReportLayer): TextureKey | null {
+  const named = [...(layer.bindings.y ?? []), ...(layer.bindings.edges ?? [])];
+  return textureKey(layer.texture) ?? boundFields(layer, named).map((f) => textureKey(f.texture)).find((t) => t !== null) ?? null;
 }
 
 
@@ -335,6 +378,7 @@ export interface BarRect {
   width: number;
   height: number;
   color: string;
+  texture: TextureKey | null;
 }
 
 /** A bars layer over a continuous axis: each row's fields side by side, or stacked, a slot wide. */
@@ -370,6 +414,7 @@ export function barRects(layer: ReportLayer, x: XPixel, y: YPixel, plotWidth: nu
         width: each,
         height: Math.abs(bottom - top),
         color: fieldColor(layer, field),
+        texture: fieldTexture(layer, field),
       });
     });
   }
@@ -552,6 +597,8 @@ export interface LegendEntry {
   title: string;
   unit: string | null;
   color: string | null;
+  /** The hatch the layer's fill carries over its colour, shown in the swatch. */
+  texture: TextureKey | null;
   mark: ReportLayer["mark"];
   /** How the layer was folded onto the grid, or null. */
   context: string | null;
@@ -566,9 +613,24 @@ export function legend(panel: Pick<ReportPanel, "tracks">): LegendEntry[] {
         title: layer.title,
         unit: layer.unit ?? null,
         color: layer.mark === "markers" || layer.mark === "spans" || (lead && glucoseColoured(layer, lead) && layer.mark === "line") ? null : layerColor(layer),
+        texture: fillTexture(layer),
         mark: layer.mark,
         context: layer.context ?? null,
       };
     }),
   );
+}
+
+/**
+ * The panels in runs: each run of consecutive panels with the same `group` is one chart's small
+ * multiples; every other panel is a run of its own.
+ */
+export function panelRuns<P extends Pick<ReportPanel, "group">>(panels: readonly P[]): P[][] {
+  const runs: P[][] = [];
+  for (const panel of panels) {
+    const last = runs.at(-1);
+    if (last && panel.group && last[0].group === panel.group) last.push(panel);
+    else runs.push([panel]);
+  }
+  return runs;
 }
