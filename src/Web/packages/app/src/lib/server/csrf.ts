@@ -32,14 +32,19 @@ export function isProxiedApiPath(pathname: string): boolean {
  * form sends those methods. A bodyless POST needs no preflight, so it stays refused.
  *
  * Remote function requests have their own check in SvelteKit, which this setting does not change.
+ *
+ * Like SvelteKit, it reads the raw request URL, before `__data.json` and route suffixes are
+ * stripped. SvelteKit's self origin is `kit.paths.origin` when set; nothing sets it, so the request
+ * URL's origin is the same.
  */
-export function isCrossSiteFormRequest(request: Request, selfOrigin: string, pathname: string): boolean {
+export function isCrossSiteFormRequest(request: Request): boolean {
   if (!MUTATING_METHODS.has(request.method)) return false;
-  if (request.headers.get("origin") === selfOrigin) return false;
+  const url = new URL(request.url);
+  if (request.headers.get("origin") === url.origin) return false;
 
   const contentType = request.headers.get("content-type");
   if (contentType === null || contentType === "") {
-    return !(isProxiedApiPath(pathname) && request.method !== "POST");
+    return !(isProxiedApiPath(url.pathname) && request.method !== "POST");
   }
 
   const mediaType = contentType.split(";", 1)[0].trim().toLowerCase();

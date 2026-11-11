@@ -610,7 +610,7 @@ const healthHandle: Handle = async ({ event, resolve }) => {
 
 // SvelteKit skips its own check in dev too.
 const csrfHandle: Handle = async ({ event, resolve }) => {
-  if (!dev && isCrossSiteFormRequest(event.request, event.url.origin, event.url.pathname)) {
+  if (!dev && isCrossSiteFormRequest(event.request)) {
     const message = `Cross-site ${event.request.method} form submissions are forbidden`;
     return event.request.headers.get("accept") === "application/json"
       ? Response.json({ message }, { status: 403 })

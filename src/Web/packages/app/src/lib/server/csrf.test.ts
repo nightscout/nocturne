@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { isCrossSiteFormRequest, isProxiedApiPath } from "./csrf.js";
 
-const SELF = "https://rhys.nocturne.run";
+const SELF = "https://tenant.example";
 
-function req(method: string, path: string, headers: Record<string, string> = {}): [Request, string, string] {
-  return [new Request(`${SELF}${path}`, { method, headers }), SELF, path];
+function req(method: string, path: string, headers: Record<string, string> = {}): [Request] {
+  return [new Request(`${SELF}${path}`, { method, headers })];
 }
 
 describe("isCrossSiteFormRequest", () => {
