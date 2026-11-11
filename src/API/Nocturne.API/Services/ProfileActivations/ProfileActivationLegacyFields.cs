@@ -170,6 +170,8 @@ internal static class ProfileActivationLegacyFields
     {
         JsonElement { ValueKind: JsonValueKind.Number } element when element.TryGetDecimal(out var d) => d,
         JsonElement => null,
+        double value64 when double.IsFinite(value64) => value64.ToDecimal(),
+        float value32 when float.IsFinite(value32) => value32.ToDecimal(),
         IConvertible convertible => convertible.ToDecimal(CultureInfo.InvariantCulture),
         _ => null,
     };

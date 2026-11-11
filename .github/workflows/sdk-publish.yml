@@ -160,7 +160,10 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "8.0.x"
+          # 11.0 satisfies the repository's global.json, which applies to sdk/csharp/out.
+          dotnet-version: |
+            8.0.x
+            11.0.x
 
       - name: Build and pack
         working-directory: sdk/csharp/out
