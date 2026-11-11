@@ -189,7 +189,7 @@ public static class EventResponseCalculator
             Events = listEvents
                 ? [.. membership.Values.SelectMany(members => members
                     .GroupBy(m => m.Episode)
-                    .Select(g => Event(g.Key, [.. g.Select(m => m.Cohort).Distinct().Order()], zone, definition.IncludeTraces)))]
+                    .Select(g => Event(g.Key, [.. g.Select(m => m.Cohort).Distinct().Order()], zone, definition.IncludeTraces, state)))]
                 : [],
         };
     }
@@ -313,7 +313,7 @@ public static class EventResponseCalculator
         }
     }
 
-    private static EventResponseEvent Event(EventEpisode episode, List<int> cohorts, TimeZoneInfo zone, bool trace)
+    private static EventResponseEvent Event(EventEpisode episode, List<int> cohorts, TimeZoneInfo zone, bool trace, AnchorState state)
     {
         var (date, time) = LocalSlotBinning.DayInReview(episode.Anchor.Mills, zone);
         return new EventResponseEvent
@@ -328,6 +328,7 @@ public static class EventResponseCalculator
             GlucoseCoverage = GlucoseCoverage(episode),
             GlucoseTrace = trace ? [.. episode.Slots.Select(s => s.Glucose is { } g ? SlotSummary.Round(g) : (double?)null)] : [],
             Metrics = Rounded(episode.Metrics),
+            MinutesSinceMeal = state.MinutesSinceMeal(episode.Anchor) is { } since ? SlotSummary.Round(since) : null,
         };
     }
 

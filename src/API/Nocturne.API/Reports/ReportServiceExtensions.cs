@@ -10,6 +10,9 @@ internal static class ReportServiceExtensions
         services.AddSingleton<IReportDataset, GlucoseSeriesDataset>();
         services.AddSingleton<IReportDataset, GlucoseStatisticsDataset>();
         services.AddSingleton<IReportDataset, EventResponseDataset>();
+        services.AddSingleton<IReportDataset, EventOutcomesDataset>();
+        services.AddSingleton<IReportDataset, EventOutcomeSpreadDataset>();
+        services.AddSingleton<IReportDataset, EventOccurrenceDataset>();
         services.AddSingleton<IReportDataset, SettingsEvidenceDataset>();
         services.AddSingleton<IReportDataset, DailyProfileDataset>();
         services.AddSingleton<IReportDataset, GlucoseDistributionByHourDataset>();

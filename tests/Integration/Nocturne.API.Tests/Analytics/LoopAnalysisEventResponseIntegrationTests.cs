@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -351,6 +352,75 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
         Record(lunches[2], null, 15);
         await context.SaveChangesAsync();
         return (pasta.Id, rice.Id);
+    }
+
+    /// <summary>
+    /// The custom-report datasets that draw the events one by one, over the seeded week: each event,
+    /// the spread of a figure, and when the events happen.
+    /// </summary>
+    [Fact]
+    public async Task The_report_datasets_of_each_event_draw_the_weeks_meals_and_rises()
+    {
+        await SeedProfileAsync("Australia/Sydney");
+        await SeedWeekAsync(WeekStart);
+        object Layer(string name, string mark, object? bindings = null, string? outcome = null) => new Dictionary<string, object?>
+        {
+            ["dataset"] = new Dictionary<string, object?>
+            {
+                ["name"] = name,
+                ["cohorts"] = new object[] { new { anchor = "Meal" }, new { anchor = "UnannouncedRise" } },
+                ["outcome"] = outcome,
+            }.Where(p => p.Value is not null).ToDictionary(),
+            ["mark"] = mark,
+            ["bindings"] = bindings,
+        }.Where(p => p.Value is not null).ToDictionary();
+        object Panel(string id, object layer) => new { id, kind = "chart", tracks = new[] { new { layers = new[] { layer } } } };
+        var spec = new
+        {
+            version = 1,
+            range = new { from = WeekStart.ToString("o"), to = WeekStart.AddDays(7).ToString("o") },
+            panels = new[]
+            {
+                Panel("each", Layer("event_outcomes", "points", new { x = "timeOfDay", y = new[] { "peakRise" }, fit = "peakRiseFit" })),
+                Panel("spread", Layer("event_outcome_spread", "bars", outcome: "peakRise")),
+                Panel("hours", Layer("event_occurrence", "bars")),
+            },
+        };
+
+        var response = await AuthenticatedClient.PostAsJsonAsync("/api/v4/reports/custom/run", new { spec });
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body.ToString());
+        body.GetProperty("errors").GetArrayLength().Should().Be(0, body.ToString());
+        var layers = body.GetProperty("result").GetProperty("panels").EnumerateArray()
+            .ToDictionary(p => p.GetProperty("id").GetString()!, p => p.GetProperty("tracks")[0].GetProperty("layers")[0]);
+        layers.Values.Should().OnlyContain(l => l.GetProperty("status").GetString() == "ok");
+
+        var each = layers["each"];
+        each.GetProperty("xKind").GetString().Should().Be("time_of_day");
+        var points = each.GetProperty("rows").EnumerateArray().ToList();
+        points.Should().HaveCount(14, "seven lunches and seven rises");
+        points.Select(r => r.GetProperty("timeOfDay").GetInt32()).Distinct().Should().BeEquivalentTo([720, 1140]);
+        points.Where(r => r.GetProperty("timeOfDay").GetInt32() == 720).Select(r => r.GetProperty("peakRise").GetDouble())
+            .Should().OnlyContain(v => v == 80);
+        each.GetProperty("sentence").GetString().Should().StartWith("Peak rise against time of day: r = ");
+
+        var spread = layers["spread"];
+        var ranges = spread.GetProperty("rows").EnumerateArray().ToList();
+        ranges.Sum(r => r.GetProperty("events1").GetInt32()).Should().Be(7);
+        ranges.Sum(r => r.GetProperty("events2").GetInt32()).Should().Be(7);
+        spread.GetProperty("facts")[0].GetProperty("value").GetString().Should().Be("80");
+
+        var hours = layers["hours"].GetProperty("rows").EnumerateArray().ToList();
+        hours.Should().HaveCount(24);
+        hours[12].GetProperty("events1").GetInt32().Should().Be(7);
+        hours[19].GetProperty("events2").GetInt32().Should().Be(7);
+        hours.Sum(r => r.GetProperty("events1").GetInt32() + r.GetProperty("events2").GetInt32()).Should().Be(14);
+
+        using var glucoseOnly = await CreateTokenClientAsync(Scope.ReportsRead, Scope.GlucoseRead);
+        var narrowed = await (await glucoseOnly.PostAsJsonAsync("/api/v4/reports/custom/run", new { spec })).Content.ReadFromJsonAsync<JsonElement>();
+        var narrowedEach = narrowed.GetProperty("result").GetProperty("panels")[0].GetProperty("tracks")[0].GetProperty("layers")[0];
+        narrowedEach.GetProperty("rows").GetArrayLength().Should().Be(0, "the event list needs treatments.read");
     }
 
     /// <summary>

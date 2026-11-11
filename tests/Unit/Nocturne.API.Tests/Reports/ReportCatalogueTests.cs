@@ -21,7 +21,7 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
 {
     private IReportDatasetRegistry Registry => factory.Services.GetRequiredService<IReportDatasetRegistry>();
 
-    private static CustomReportCatalogue Catalogue(bool useMmol = false, params string[] scopes) =>
+    internal static CustomReportCatalogue Catalogue(bool useMmol = false, params string[] scopes) =>
         new ReportCatalogue(ReportSpecValidatorTests.Registry, Validator, null!, null!, null!, null!)
             .Build(new HashSet<string>(scopes), useMmol);
 

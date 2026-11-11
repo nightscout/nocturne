@@ -405,6 +405,13 @@ public class EventResponseEvent
     [JsonIgnore]
     public List<double?> GlucoseTrace { get; set; } = [];
 
+    /// <summary>
+    /// Minutes from the last carb entry strictly before the event; null where none was read before
+    /// it. Not served by the endpoint; a report draws it.
+    /// </summary>
+    [JsonIgnore]
+    public double? MinutesSinceMeal { get; set; }
+
     public EventMetrics Metrics { get; set; } = new();
 }
 

@@ -293,7 +293,7 @@ internal sealed record ReportDateRange
     + "lows and highs), each spread across its events as percentiles in five-minute slots from the event; and each event "
     + "with its figures.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-internal sealed record EventResponseParameters : LoopAnalysisDatasetParameters
+internal record EventResponseParameters : LoopAnalysisDatasetParameters
 {
     public const string Name = "event_response";
 
@@ -402,6 +402,77 @@ internal sealed record EventResponseParameters : LoopAnalysisDatasetParameters
         }
         return query;
     }
+}
+
+/// <summary>
+/// The event groups of <see cref="EventResponseParameters"/> read event by event, for the datasets that
+/// draw each event: the primary range only, since the comparison range's events are not listed.
+/// </summary>
+internal abstract record EventListParameters : EventResponseParameters
+{
+    [Description(
+        "Only the events of this group, by its number in the list of groups. Optional; the events of every group when missing. "
+        + "To set two groups side by side, draw a layer for each.")]
+    [DisplayName("Group")]
+    [Range(1, EventResponseDefinition.MaxCohorts)]
+    public int? Group { get; init; }
+}
+
+[Description(
+    "event_outcomes: each event of up to three groups as one row: its figures (peak rise, drop, lowest reading, minutes to "
+    + "them, net insulin) and the state at the event (glucose, carbs, minutes since the last carbs, IOB, time of day), "
+    + "with the least-squares line of each figure against the value the chart lies along.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record EventOutcomesParameters : EventListParameters
+{
+    public new const string Name = "event_outcomes";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
+}
+
+/// <summary>A figure of each event, as the spread of a group counts it.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<EventOutcome>))]
+internal enum EventOutcome
+{
+    [JsonStringEnumMemberName("peakRise")] PeakRise,
+    [JsonStringEnumMemberName("minutesToPeak")] MinutesToPeak,
+    [JsonStringEnumMemberName("minutesBackToStart")] MinutesBackToStart,
+    [JsonStringEnumMemberName("drop")] Drop,
+    [JsonStringEnumMemberName("nadir")] [Description("Lowest reading")] Nadir,
+    [JsonStringEnumMemberName("minutesToNadir")] [Description("Minutes to lowest")] MinutesToNadir,
+    [JsonStringEnumMemberName("glucoseAt2Hours")] [Description("Glucose 2 hours after")] GlucoseAt2Hours,
+    [JsonStringEnumMemberName("startGlucose")] [Description("Glucose at the event")] StartGlucose,
+    [JsonStringEnumMemberName("netInsulin")] NetInsulin,
+    [JsonStringEnumMemberName("gramsPerUnit")] [Description("Carbs per unit")] GramsPerUnit,
+}
+
+[Description(
+    "event_outcome_spread: how one figure of each event is spread in each group: the events of each group counted in "
+    + "ranges of the figure, drawn as bars, with each group's median and middle half.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record EventOutcomeSpreadParameters : EventListParameters
+{
+    public new const string Name = "event_outcome_spread";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
+
+    [Description(
+        "The figure to count. Peak rise, minutes to peak and minutes back to the start are figures of meals, unannounced "
+        + "rises, sensor starts and high starts; drop, lowest reading and minutes to lowest of the other events.")]
+    [DisplayName("Figure")]
+    public EventOutcome Outcome { get; init; } = EventOutcome.PeakRise;
+}
+
+[Description("event_occurrence: when the events of each group happen: counted by local hour of the day or by local weekday.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record EventOccurrenceParameters : EventListParameters
+{
+    public new const string Name = "event_occurrence";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
 }
 
 /// <summary>Which setting a settings_evidence panel reads.</summary>

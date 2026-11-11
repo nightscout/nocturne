@@ -205,9 +205,23 @@ internal sealed class EventResponseDataset : IReportDataset
         }
     }
 
-    public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// The event groups as computed for a request: the report narrowed for the caller, each shown
+    /// group's label and its number as asked, and the notes on the groups left out.
+    /// </summary>
+    internal sealed record EventRun(
+        EventResponseReport Report,
+        IReadOnlyDictionary<int, string> Labels,
+        IReadOnlyDictionary<int, int> Number,
+        List<string> Notes,
+        IReadOnlyList<string> AskedLabels);
+
+    /// <summary>
+    /// Every event-group dataset's read: the groups the caller may see, as the endpoint computes them,
+    /// with their labels, its read recorded in the audit.
+    /// </summary>
+    internal static async Task<EventRun> ComputeAsync(ReportDatasetRequest request, EventResponseParameters parameters, CancellationToken cancellationToken)
     {
-        var parameters = (EventResponseParameters)request.Parameters;
         var services = request.Services;
         var useMmol = request.UseMmol;
 
@@ -266,11 +280,17 @@ internal sealed class EventResponseDataset : IReportDataset
         var foodNames = await FoodNamesAsync(services, askedDefinition, foodRead, cancellationToken);
         var askedLabels = askedDefinition.Cohorts.Select(c => CohortLabel(c, foodNames, foodRead, useMmol)).ToList();
         var labels = definition.Cohorts.ToDictionary(c => c.Cohort, c => askedLabels[number[c.Cohort] - 1]);
-        var slotMinutes = EventResponseCalculator.SlotMinutes(definition);
-
-        var events = report.Primary.Events;
         RecordReads(request.ReadLog, report, ran: definition.Cohorts.Count > 0 && resolved.Filter is not null && resolved.Zone is not null,
             readFoodNames: foodNames.Count > 0);
+        return new EventRun(report, labels, number, notes, askedLabels);
+    }
+
+    public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
+    {
+        var useMmol = request.UseMmol;
+        var (report, labels, number, notes, askedLabels) = await ComputeAsync(request, (EventResponseParameters)request.Parameters, cancellationToken);
+        var slotMinutes = EventResponseCalculator.SlotMinutes(report.Definition);
+        var events = report.Primary.Events;
 
         var rows = request.Kind == ReportPanelKind.Table
             ? EventRows(events.Take(MaxEvents), labels, number, useMmol)
