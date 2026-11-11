@@ -2,12 +2,14 @@
     import { onMount } from "svelte";
     import ExternalLink from "@lucide/svelte/icons/external-link";
     import { DEMO_ENABLED, DEMO_WEB_URL, SCALAR_API_URL } from "#lib/config.js";
+    import { createDemoTokenSource, type ScalarSecurityEntry } from "#lib/scalar/demo-token.js";
 
-    // This embed is for reading. Sending a request needs a tenant to send it to and a
-    // credential to send with it, and this page is on a different domain to any Nocturne
-    // instance, so point people at the demo's own copy of the reference, which is
-    // same-origin with the demo API and arrives already authorized.
-    const demoScalarUrl = DEMO_ENABLED && DEMO_WEB_URL ? `${DEMO_WEB_URL}/scalar` : null;
+    // With a demo, the specs come from the demo's host, so their server is the demo and
+    // "Send" goes there with a demo token (the API admits this origin; see DocsSiteCorsPolicy).
+    // Without one there is no tenant to send to and nothing to send with, so the reference
+    // is for reading only.
+    const demoUrl = DEMO_ENABLED && DEMO_WEB_URL ? DEMO_WEB_URL : null;
+    const specsUrl = demoUrl ?? SCALAR_API_URL;
 
     // Pinned standalone build. Scalar is a Vue app, so it's loaded at runtime in
     // the browser rather than bundled, which keeps it out of the Svelte SSR/prerender
@@ -31,34 +33,70 @@
     }
 
     let container: HTMLDivElement;
+    let sendsToDemo = $state(false);
+
+    async function demoAuthentication(): Promise<Record<string, unknown> | null> {
+        if (!demoUrl) return null;
+
+        const tokens = createDemoTokenSource(demoUrl);
+        let token: string;
+        try {
+            token = await tokens.token();
+        } catch {
+            // The demo is down or does not admit this origin: fall back to reading only.
+            return null;
+        }
+
+        return {
+            authentication: {
+                // One scheme per document: bearer is the Nocturne document's, apiSecret the
+                // Nightscout document's. Listing two of one document selects both at once.
+                preferredSecurityScheme: ["bearer", "apiSecret"],
+                securitySchemes: { bearer: { token } },
+            },
+            // Scalar resolves credentials into requestBuilder.security; the request it passes
+            // alongside is a copy, so changes to it are not sent.
+            onBeforeRequest: ({ requestBuilder }: { requestBuilder: { security: ScalarSecurityEntry[] } }) =>
+                tokens.refresh(requestBuilder.security),
+        };
+    }
 
     onMount(() => {
         let instance: { destroy?: () => void } | undefined;
+        let disposed = false;
 
-        const config = {
-            theme: "mars",
-            sources: [
-                {
-                    title: "Nocturne API",
-                    slug: "nocturne",
-                    url: `${SCALAR_API_URL}/openapi/nocturne.json`,
-                    default: true,
-                },
-                {
-                    title: "Nightscout API",
-                    slug: "nightscout",
-                    url: `${SCALAR_API_URL}/openapi/nightscout.json`,
-                },
-            ],
-        };
+        const sources = [
+            {
+                title: "Nocturne API",
+                slug: "nocturne",
+                url: `${specsUrl}/openapi/nocturne.json`,
+                default: true,
+            },
+            {
+                title: "Nightscout API",
+                slug: "nightscout",
+                url: `${specsUrl}/openapi/nightscout.json`,
+            },
+        ];
 
-        const script = document.createElement("script");
-        script.src = SCALAR_SCRIPT;
-        script.onload = () => {
+        const scriptLoaded = new Promise<void>((resolve) => {
+            const script = document.createElement("script");
+            script.src = SCALAR_SCRIPT;
+            script.onload = () => resolve();
+            document.head.appendChild(script);
+        });
+
+        Promise.all([demoAuthentication(), scriptLoaded]).then(([demo]) => {
             const scalar: unknown = Reflect.get(window, "Scalar");
-            if (isScalarGlobal(scalar)) instance = scalar.createApiReference(container, config);
-        };
-        document.head.appendChild(script);
+            if (disposed || !isScalarGlobal(scalar)) return;
+
+            sendsToDemo = demo !== null;
+            instance = scalar.createApiReference(container, {
+                theme: "mars",
+                sources,
+                ...(demo ?? { hideTestRequestButton: true, hideClientButton: true }),
+            });
+        });
 
         // Diagrams embedded in the OpenAPI descriptions are rendered by the API's
         // own mermaid lazy-loader, served alongside the specs. Reusing it (rather
@@ -66,18 +104,19 @@
         // It observes the document, so load order relative to Scalar doesn't matter.
         const mermaidCss = document.createElement("link");
         mermaidCss.rel = "stylesheet";
-        mermaidCss.href = `${SCALAR_API_URL}/scalar/mermaid-loader.css`;
+        mermaidCss.href = `${specsUrl}/scalar/mermaid-loader.css`;
         document.head.appendChild(mermaidCss);
 
         const mermaid = document.createElement("script");
         mermaid.type = "module";
         mermaid.crossOrigin = "anonymous";
-        mermaid.src = `${SCALAR_API_URL}/scalar/mermaid-loader.js`;
+        mermaid.src = `${specsUrl}/scalar/mermaid-loader.js`;
         document.head.appendChild(mermaid);
 
         return () => {
+            disposed = true;
             instance?.destroy?.();
-            script.remove();
+            document.head.querySelector(`script[src="${SCALAR_SCRIPT}"]`)?.remove();
             mermaidCss.remove();
             mermaid.remove();
         };
@@ -92,25 +131,27 @@
     />
 </svelte:head>
 
-{#if demoScalarUrl}
+{#if demoUrl}
     <div
         class="px-4 py-2 border-b border-border/60 bg-card/50 flex flex-wrap items-center justify-between gap-2 text-sm"
     >
         <span class="text-muted-foreground">
-            Want to send real requests? Open this reference on the demo instance; it comes
-            already signed in, and the demo resets on a schedule.
+            {#if sendsToDemo}
+                Requests go to the demo instance. It has sample data and resets on a schedule.
+            {:else}
+                To send requests, open this reference on the demo instance. The demo has sample
+                data and resets on a schedule.
+            {/if}
         </span>
         <a
-            href={demoScalarUrl}
+            href={sendsToDemo ? demoUrl : `${demoUrl}/scalar`}
             target="_blank"
             rel="external noopener noreferrer"
             class="inline-flex items-center gap-1.5 font-medium underline underline-offset-4"
         >
-            Try it on the demo
+            {sendsToDemo ? "Open the demo" : "Open the reference on the demo"}
             <ExternalLink class="size-3.5" />
         </a>
     </div>
-    <div bind:this={container} class="h-[calc(100vh-7rem)]"></div>
-{:else}
-    <div bind:this={container} class="h-[calc(100vh-4rem)]"></div>
 {/if}
+<div bind:this={container} class={demoUrl ? "h-[calc(100vh-7rem)]" : "h-[calc(100vh-4rem)]"}></div>
