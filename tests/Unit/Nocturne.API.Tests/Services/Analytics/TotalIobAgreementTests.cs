@@ -74,8 +74,9 @@ public class TotalIobAgreementTests
     private const double Total = -0.022;
     // A literal, not (decimal)Total: the compiler folds that cast with its own runtime's conversion,
     // which from .NET 11 is exact (-0.02199999...) where the net10.0 cast the alerts reader makes
-    // rounds to 15 significant digits.
-    private const decimal TotalUnits = -0.022m;
+    // rounds to 15 significant digits. On a net11.0 runtime the reader stops rounding and this fails:
+    // see #3289.
+    private const decimal TotalAsDecimal = -0.022m;
     private const double BolusPart = 0.461;
     private const double BasalPart = -0.483;
 
@@ -193,7 +194,7 @@ public class TotalIobAgreementTests
         var (retrospective, retrospectiveTimeline) = await RetrospectiveAsync();
 
         (await ChartAsync()).Should().BeApproximately(Total, 1e-9);
-        (await AlertsAsync()).Should().Be(TotalUnits);
+        (await AlertsAsync()).Should().Be(TotalAsDecimal);
         (await WidgetAsync()).Should().Be(-0.02);
         (await PropertiesAsync()).Should().Be(Total);
         (await PebbleAsync()).Should().Be("-0.02");
@@ -247,13 +248,13 @@ public class TotalIobAgreementTests
             });
     }
 
-    private async Task EveryReaderReports(double total, decimal units, double twoDecimals, string display)
+    private async Task EveryReaderReports(double total, decimal totalAsDecimal, double twoDecimals, string display)
     {
         var (v1, v1Hourly) = await V1Async();
         var (retrospective, retrospectiveTimeline) = await RetrospectiveAsync();
 
         (await ChartAsync()).Should().Be(total);
-        (await AlertsAsync()).Should().Be(units);
+        (await AlertsAsync()).Should().Be(totalAsDecimal);
         (await WidgetAsync()).Should().Be(twoDecimals);
         (await PropertiesAsync()).Should().Be(total);
         (await PebbleAsync()).Should().Be(display);
