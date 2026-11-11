@@ -23,8 +23,12 @@ public class ReportSpecEntity : ITenantScoped, IIdentified, ISoftDeletable, IEnt
     [MaxLength(MaxNameLength)]
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>The normalised spec, in the format <see cref="Version"/> names.</summary>
+    /// <summary>
+    /// The normalised spec, in the format <see cref="Version"/> names. Redacted from the mutation audit: it carries
+    /// caller-written state (the builder's) that a reader of the audit log may not otherwise read.
+    /// </summary>
     [Column("spec", TypeName = "jsonb")]
+    [AuditRedacted]
     public string Spec { get; set; } = "{}";
 
     [Column("version")]

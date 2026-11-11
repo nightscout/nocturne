@@ -323,6 +323,57 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task The_mutation_audit_records_a_saved_reports_changes_but_not_its_spec_or_builder_state()
+    {
+        using var a = Session(_slugA, _sessionA);
+        var builder = new { kind = "workspace", version = 1, state = new { secretNote = "builder-only-text" } };
+        var created = await ReadAsync(await a.PostAsJsonAsync(Route, new
+        {
+            name = "Audited",
+            spec = new { version = 1, title = "Spec title text", panels = ((dynamic)Spec()).panels, builder },
+        }), HttpStatusCode.OK);
+        var id = Guid.Parse(created.GetProperty("id").GetString()!);
+        await ReadAsync(await a.PutAsJsonAsync($"{Route}/{id}", new
+        {
+            name = "Audited again",
+            spec = new { version = 1, title = "Changed title text", panels = ((dynamic)Spec()).panels, builder },
+        }), HttpStatusCode.OK);
+        (await a.DeleteAsync($"{Route}/{id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        await using (var tenant = conn.CreateCommand())
+        {
+            tenant.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
+            tenant.Parameters.AddWithValue("tenantId", _tenantAId.ToString());
+            await tenant.ExecuteNonQueryAsync();
+        }
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT action, changes::text FROM mutation_audit_log WHERE entity_id = @id ORDER BY created_at";
+        cmd.Parameters.AddWithValue("id", id);
+        var rows = new List<(string Action, string? Changes)>();
+        await using (var reader = await cmd.ExecuteReaderAsync())
+            while (await reader.ReadAsync())
+                rows.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+
+        rows.Select(r => r.Action).Should().Equal("create", "update", "delete");
+        rows.Should().OnlyContain(r => r.Changes == null || !r.Changes.Contains("builder-only-text") && !r.Changes.Contains("title text")
+            && !r.Changes.Contains("panels"), "neither the spec nor the builder state is in the audit");
+        var update = JsonDocument.Parse(rows[1].Changes!).RootElement;
+        update.GetProperty("Spec").GetProperty("old").GetString().Should().Be("[redacted]", "the audit still says the spec changed");
+        update.GetProperty("Spec").GetProperty("new").GetString().Should().Be("[redacted]");
+        update.GetProperty("Name").GetProperty("old").GetString().Should().Be("Audited");
+        update.GetProperty("Name").GetProperty("new").GetString().Should().Be("Audited again");
+        var deleted = JsonDocument.Parse(rows[2].Changes!).RootElement;
+        deleted.GetProperty("Spec").GetString().Should().Be("[redacted]");
+        deleted.GetProperty("Name").GetString().Should().Be("Audited again");
+
+        var served = await ReadAsync(await a.GetAsync(
+            $"/api/v4/audit/mutations?entityId={id}&from={DateTime.UtcNow.AddHours(-1):o}&to={DateTime.UtcNow.AddHours(1):o}"), HttpStatusCode.OK);
+        served.GetRawText().Should().Contain("[redacted]").And.NotContain("builder-only-text").And.NotContain("title text");
+    }
+
+    [Fact]
     public async Task A_run_writes_a_title_as_data_and_an_oversized_spec_is_refused()
     {
         await PostGlucoseAsync(_slugA, _sessionA, 140, TimeSpan.FromMinutes(5));
