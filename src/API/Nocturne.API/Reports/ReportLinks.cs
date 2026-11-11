@@ -12,13 +12,15 @@ internal static class ReportLinks
 {
     /// <summary>
     /// The link for a panel on <paramref name="origin"/>: the page of its dataset, or of a chart's first
-    /// layer of a dataset; null for none or a dataset with no matching page.
+    /// layer of a dataset; null for none, a dataset with no matching page, or groups the page cannot
+    /// show (<see cref="EventResponseParameters.HasReportOnlyCohorts"/>), which it would show as other groups.
     /// </summary>
     public static string? For(string origin, ReportPanelSpec panel, ReportPanelResult result, string? zoneId)
     {
         var dataset = panel.Dataset ?? (panel.Tracks ?? []).SelectMany(t => t.Layers).Select(l => l.Dataset).FirstOrDefault(d => d is not null);
         var path = dataset switch
         {
+            EventResponseParameters { HasReportOnlyCohorts: true } => null,
             EventResponseParameters => "/reports/loop-analysis/meals-and-events",
             SettingsEvidenceParameters => "/reports/loop-analysis/settings-evidence",
             DailyProfileParameters => "/reports/loop-analysis/daily-profile",

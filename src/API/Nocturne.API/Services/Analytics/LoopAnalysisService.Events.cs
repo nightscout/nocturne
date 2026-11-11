@@ -21,12 +21,15 @@ internal sealed partial class LoopAnalysisService
     /// <see cref="UnannouncedRises.CarbsBeforeMs"/> before it, and from the continuation of an earlier
     /// climb by one up to <see cref="UnannouncedRises.MergeMs"/> before it, found only after a
     /// <see cref="UnannouncedRises.StableMs"/> stretch. Corroboration reads the schedule
-    /// <see cref="UnannouncedRises.CorroborationScheduleMs"/> before a rise.
+    /// <see cref="UnannouncedRises.CorroborationScheduleMs"/> before a rise. A minutes-since-meal
+    /// condition reads carbs <see cref="EventResponseCalculator.ConditionLookbackMs"/> before an anchor.
     /// </summary>
-    private static long EventLookbackMs(EventWindow window) =>
+    private static long EventLookbackMs(EventWindow window, EventResponseDefinition definition) =>
         Math.Max(
-            window.BeforeMs + Math.Max(UnannouncedRises.CarbsBeforeMs, UnannouncedRises.MergeMs + UnannouncedRises.StableMs),
-            UnannouncedRises.CorroborationScheduleMs);
+            Math.Max(
+                window.BeforeMs + Math.Max(UnannouncedRises.CarbsBeforeMs, UnannouncedRises.MergeMs + UnannouncedRises.StableMs),
+                UnannouncedRises.CorroborationScheduleMs),
+            EventResponseCalculator.ConditionLookbackMs(definition));
 
     public async Task<EventResponseReport> GetEventResponseAsync(
         LoopAnalysisFilter filter, EventResponseDefinition definition, TimeZoneInfo zone, CancellationToken ct = default)
@@ -36,7 +39,7 @@ internal sealed partial class LoopAnalysisService
         var mealFoods = definition.Cohorts.Any(c => c.Anchor == EventAnchorKind.Meal && c.HasFoodFilter);
         var (primary, comparison, names) = await ForRangesAsync(
             filter,
-            range => LoadEventsAsync(range, window, zone, sensorStarts, mealFoods, filter, ct),
+            range => LoadEventsAsync(range, window, EventLookbackMs(window, definition), zone, sensorStarts, mealFoods, filter, ct),
             (loaded, range, isPrimary) => EventResponseCalculator.Calculate(
                 loaded.Inputs, Mask(filter, range, zone, loaded.Sources), range.From, range.To, definition,
                 listEvents: isPrimary));
@@ -58,9 +61,9 @@ internal sealed partial class LoopAnalysisService
     /// food records of the carb entries in the range.
     /// </summary>
     private async Task<EventsLoaded> LoadEventsAsync(
-        Window range, EventWindow window, TimeZoneInfo zone, bool sensorStarts, bool mealFoods, LoopAnalysisFilter filter, CancellationToken ct)
+        Window range, EventWindow window, long lookbackMs, TimeZoneInfo zone, bool sensorStarts, bool mealFoods, LoopAnalysisFilter filter, CancellationToken ct)
     {
-        var padded = new Window(range.From - EventLookbackMs(window), range.To + window.AfterMs + EventMarginMs);
+        var padded = new Window(range.From - lookbackMs, range.To + window.AfterMs + EventMarginMs);
         var sensorTask = sensorStarts
             ? deviceEventRepository.GetAsync(
                 ToUtc(range.From - EventAnchors.SensorSessionMergeMs), ToUtc(range.To), null, null, int.MaxValue, descending: false, ct: ct)

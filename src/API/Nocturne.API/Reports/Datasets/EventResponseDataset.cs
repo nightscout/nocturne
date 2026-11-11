@@ -137,13 +137,21 @@ internal sealed class EventResponseDataset : IReportDataset
         }
 
         var cohorts = p.Cohorts ?? [];
+        if (cohorts.Count(c => c.Others) > 1)
+            yield return ("cohorts", "Only one group can be all others. Turn off all others in the other groups.");
         for (var i = 0; i < cohorts.Count && i < EventResponseDefinition.MaxCohorts; i++)
         {
             var c = cohorts[i];
             var at = $"cohorts[{i}]";
             var meal = c.Anchor == EventAnchorKind.Meal;
             if (!Enum.IsDefined(c.Anchor))
-                yield return ($"{at}.anchor", "Send one of: Meal, CorrectionBolus, SensorStart, ExerciseStart, OverrideStart, TemporaryTargetStart, UnannouncedRise.");
+                yield return ($"{at}.anchor", $"Send one of: {string.Join(", ", Enum.GetNames<EventAnchorKind>())}.");
+            if (c.Others && c.IsNarrowed)
+                yield return ($"{at}.others", "A group of all others takes no filter or condition of its own. Remove them, or turn off all others.");
+            if (c.Others && !cohorts.Where((o, j) => j != i && !o.Others && o.Anchor == c.Anchor).Any())
+                yield return ($"{at}.others", "A group of all others needs another group of the same event. Add one, or turn off all others.");
+            foreach (var error in Conditions(c, at))
+                yield return error;
             if (c.TimeOfDay is { } window && (window.FromMinute is < 0 or > 1439 || window.ToMinute is < 0 or > 1439))
                 yield return ($"{at}.timeOfDay", "Send minutes after midnight, 0 to 1439.");
             else if (c.TimeOfDay is { } empty && empty.FromMinute == empty.ToMinute)
@@ -168,14 +176,45 @@ internal sealed class EventResponseDataset : IReportDataset
         }
     }
 
+    /// <summary>The errors in a cohort's conditions on the state at the event.</summary>
+    private static IEnumerable<(string Field, string Message)> Conditions(ReportEventCohort c, string at)
+    {
+        const string order = "Send a lowest that is not above the highest.";
+        static bool Outside(double? value, double low, double high) => value is { } v && (v < low || v > high);
+
+        if (c.MinutesSinceMeal is { } since)
+        {
+            if (Outside(since.Min, 1, EventResponseDefinition.MaxMinutesSinceMeal) || Outside(since.Max, 1, EventResponseDefinition.MaxMinutesSinceMeal))
+                yield return ($"{at}.minutesSinceMeal", $"Send minutes from 1 to {EventResponseDefinition.MaxMinutesSinceMeal}.");
+            else if (since.Min > since.Max)
+                yield return ($"{at}.minutesSinceMeal", order);
+        }
+        if (c.StartGlucose is { } glucose)
+        {
+            if (Outside(glucose.Min, 0, ReportStartGlucose.MaxMgdl) || Outside(glucose.Max, 0, ReportStartGlucose.MaxMgdl))
+                yield return ($"{at}.startGlucose", $"Send glucose in mg/dL, from 0 to {ReportStartGlucose.MaxMgdl}.");
+            else if (glucose.Min > glucose.Max)
+                yield return ($"{at}.startGlucose", order);
+        }
+        if (c.InsulinOnBoard is { } iob)
+        {
+            if (Outside(iob.Min, ReportInsulinOnBoard.Lowest, ReportInsulinOnBoard.Highest) || Outside(iob.Max, ReportInsulinOnBoard.Lowest, ReportInsulinOnBoard.Highest))
+                yield return ($"{at}.insulinOnBoard", string.Create(CultureInfo.InvariantCulture, $"Send units from {ReportInsulinOnBoard.Lowest} to {ReportInsulinOnBoard.Highest}."));
+            else if (iob.Min > iob.Max)
+                yield return ($"{at}.insulinOnBoard", order);
+        }
+    }
+
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var parameters = (EventResponseParameters)request.Parameters;
         var services = request.Services;
         var useMmol = request.UseMmol;
 
-        // A food filter the token cannot read would otherwise widen the cohort to every meal; the cohort is left out instead.
+        // A filter or condition the token cannot read would otherwise widen the cohort; the cohort is
+        // left out instead, and so is an all-others cohort that would take in a left-out one's events.
         var foodRead = request.HasScope(Scope.FoodRead);
+        var treatmentsRead = request.HasScope(Scope.TreatmentsRead);
         var asked = parameters.AppliedCohorts;
         var kept = new List<(ReportEventCohort Cohort, int Number)>();
         var notes = new List<string>();
@@ -183,13 +222,24 @@ internal sealed class EventResponseDataset : IReportDataset
         {
             if (asked[i].HasFoodFilter && !foodRead)
                 notes.Add($"Cohort {i + 1} is not shown: its food filter needs the food.read scope, which this token does not hold.");
+            else if (asked[i].ReadsTreatments && !treatmentsRead)
+                notes.Add($"Cohort {i + 1} is not shown: its condition on carbs or IOB needs the treatments.read scope, which this token does not hold.");
             else
                 kept.Add((asked[i], i + 1));
+        }
+        foreach (var others in kept.Where(k => k.Cohort.Others).ToList())
+        {
+            var missing = Enumerable.Range(0, asked.Count)
+                .FirstOrDefault(j => !asked[j].Others && asked[j].Anchor == others.Cohort.Anchor && kept.All(k => k.Number != j + 1), -1);
+            if (missing < 0)
+                continue;
+            kept.Remove(others);
+            notes.Add($"Cohort {others.Number} is not shown: it holds the events no other group takes in, and cohort {missing + 1} is not shown.");
         }
 
         // With every cohort left out there is nothing to read; an empty query would mean every meal.
         var definition = kept.Count > 0
-            ? parameters.ToEventQuery([.. kept.Select(k => k.Cohort)]).ToDefinition()
+            ? parameters.ToDefinition([.. kept.Select(k => k.Cohort)])
             : new EventResponseDefinition
             {
                 MinutesBefore = parameters.MinutesBefore,
@@ -212,9 +262,9 @@ internal sealed class EventResponseDataset : IReportDataset
         report = Serve(resolved, report, request);
         report.IgnoredFilters.AddRange(ignored);
 
-        var askedDefinition = parameters.ToEventQuery(asked).ToDefinition();
+        var askedDefinition = parameters.ToDefinition(asked);
         var foodNames = await FoodNamesAsync(services, askedDefinition, foodRead, cancellationToken);
-        var askedLabels = askedDefinition.Cohorts.Select(c => CohortLabel(c, foodNames, foodRead)).ToList();
+        var askedLabels = askedDefinition.Cohorts.Select(c => CohortLabel(c, foodNames, foodRead, useMmol)).ToList();
         var labels = definition.Cohorts.ToDictionary(c => c.Cohort, c => askedLabels[number[c.Cohort] - 1]);
         var slotMinutes = EventResponseCalculator.SlotMinutes(definition);
 
@@ -260,13 +310,18 @@ internal sealed class EventResponseDataset : IReportDataset
     }
 
     /// <summary>The category each anchor's events are records of, as the read audit names it.</summary>
-    internal static string AnchorCategory(EventAnchorKind anchor) =>
-        anchor == EventAnchorKind.SensorStart ? "device_events" : "treatments";
+    internal static string AnchorCategory(EventAnchorKind anchor) => anchor switch
+    {
+        EventAnchorKind.SensorStart => "device_events",
+        EventAnchorKind.LowStart or EventAnchorKind.HighStart => "glucose",
+        _ => "treatments",
+    };
 
     /// <summary>
-    /// The read-audit categories of what the panel read: glucose (readings, not counted here), each
-    /// cohort anchor's category with the events it read, treatments for the insulin and carb series
-    /// where they were served, and foods where a food filter ran or names were read.
+    /// The read-audit categories of what the panel read: glucose (readings, not counted here, nor the
+    /// starts of lows and highs read off them), each other cohort anchor's category with the events
+    /// it read, treatments for the insulin and carb series where they were served or a condition
+    /// read carbs or IOB, and foods where a food filter ran or names were read.
     /// </summary>
     internal static void RecordReads(ReportReadLog log, EventResponseReport report, bool ran, bool readFoodNames)
     {
@@ -277,9 +332,13 @@ internal sealed class EventResponseDataset : IReportDataset
         log.Record("glucose", 0);
         var events = report.Primary.Events.Concat(report.Comparison?.Events ?? []).ToList();
         foreach (var anchor in report.Definition.Cohorts.Select(c => c.Anchor).Distinct())
-            log.Record(AnchorCategory(anchor), events.Count(e => e.Anchor == anchor));
+        {
+            var category = AnchorCategory(anchor);
+            log.Record(category, category == "glucose" ? 0 : events.Count(e => e.Anchor == anchor));
+        }
         if (events.Count > 0 && new[] { LoopAnalysisSeries.EventIob, LoopAnalysisSeries.EventCob, LoopAnalysisSeries.EventNetInsulin }
-                .Any(s => !report.WithheldSeries.Contains(s)))
+                .Any(s => !report.WithheldSeries.Contains(s))
+            || report.Definition.Cohorts.Any(c => c.HasMinutesSinceMeal || c.HasIob))
             log.Record("treatments", 0);
         if (report.Definition.Cohorts.Any(c => c.HasFoodFilter))
             log.Record("foods", 0);
@@ -298,11 +357,15 @@ internal sealed class EventResponseDataset : IReportDataset
 
     /// <summary>
     /// A cohort's kind and the filter that sets it apart: "Meal: Penne or Rice, 06:00-10:00, Mon Tue",
-    /// or "Meal: all" with no filter, so two cohorts of one kind never read the same.
+    /// "Exercise start: no carbs in the 4 hours before", "Meal: all others", or "Meal: all" with no
+    /// filter, so two cohorts of one kind never read the same.
     /// </summary>
     /// <param name="foodRead">The token reads foods; without it a food filter is named, not its foods.</param>
-    internal static string CohortLabel(EventCohortDefinition cohort, IReadOnlyDictionary<Guid, string> foodNames, bool foodRead = true)
+    internal static string CohortLabel(
+        EventCohortDefinition cohort, IReadOnlyDictionary<Guid, string> foodNames, bool foodRead = true, bool useMmol = false)
     {
+        if (cohort.Others)
+            return $"{AnchorWords(cohort.Anchor)}: all others";
         var parts = new List<string>();
         if (cohort.HasFoodFilter && !foodRead)
             parts.Add("a food filter");
@@ -320,7 +383,42 @@ internal sealed class EventResponseDataset : IReportDataset
                 : cohort.MinGrams is { } atLeast ? $"at least {Number(atLeast)} g" : $"at most {Number(cohort.MaxGrams!.Value)} g");
         if (cohort.DaysOfWeek is { Count: > 0 } days)
             parts.Add(string.Join(' ', days.Select(d => CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedDayName(d))));
+        if (MinutesSinceMealWords(cohort.MinMinutesSinceMeal, cohort.MaxMinutesSinceMeal) is { } since)
+            parts.Add(since);
+        if (cohort.HasStartGlucose)
+        {
+            var unit = useMmol ? "mmol/L" : "mg/dL";
+            string G(double mgdl) => GlucoseSummary.Format(mgdl, useMmol);
+            parts.Add("glucose at the event " + Bounds(cohort.MinStartGlucose, cohort.MaxStartGlucose, G, unit));
+        }
+        if (cohort.HasIob)
+            parts.Add("IOB " + Bounds(cohort.MinIob, cohort.MaxIob, v => Number(v), "U"));
         return $"{AnchorWords(cohort.Anchor)}: {(parts.Count == 0 ? "all" : string.Join(", ", parts))}";
+    }
+
+    /// <summary>"70 to 180 mg/dL", "at least 180 mg/dL" or "at most 0.5 U".</summary>
+    private static string Bounds(double? min, double? max, Func<double, string> format, string unit) =>
+        min is { } low && max is { } high ? $"{format(low)} to {format(high)} {unit}"
+            : min is { } atLeast ? $"at least {format(atLeast)} {unit}"
+            : $"at most {format(max!.Value)} {unit}";
+
+    /// <summary>
+    /// A minutes-since-meal condition in words: "no carbs in the 4 hours before" (a lowest),
+    /// "carbs in the 90 minutes before" (a highest), "last carbs 2 to 4 hours before" (both).
+    /// </summary>
+    internal static string? MinutesSinceMealWords(int? min, int? max)
+    {
+        static string Span(int minutes) => minutes % 60 == 0
+            ? minutes == 60 ? "1 hour" : $"{minutes / 60} hours"
+            : $"{minutes} minutes";
+        static string The(int minutes) => minutes == 60 ? "the hour" : $"the {Span(minutes)}";
+        return (min, max) switch
+        {
+            ({ } low, { } high) => $"last carbs {Span(low)} to {Span(high)} before",
+            ({ } low, null) => $"no carbs in {The(low)} before",
+            (null, { } high) => $"carbs in {The(high)} before",
+            _ => null,
+        };
     }
 
     /// <summary>The anchor as the start of a sentence or label: "Meal", "Correction bolus".</summary>
@@ -333,6 +431,8 @@ internal sealed class EventResponseDataset : IReportDataset
         EventAnchorKind.OverrideStart => "Override start",
         EventAnchorKind.TemporaryTargetStart => "Temporary target start",
         EventAnchorKind.UnannouncedRise => "Unannounced rise",
+        EventAnchorKind.LowStart => "Low start",
+        EventAnchorKind.HighStart => "High start",
         _ => anchor.ToString(),
     };
 
@@ -451,17 +551,7 @@ internal sealed class EventResponseDataset : IReportDataset
         var m = e.Metrics;
 
         var text = new StringBuilder();
-        text.Append(e.Anchor switch
-        {
-            EventAnchorKind.Meal => e.Grams is { } grams ? $"Meal of {Number(grams)} g" : "Meal",
-            EventAnchorKind.CorrectionBolus => "Correction bolus",
-            EventAnchorKind.SensorStart => "Sensor start",
-            EventAnchorKind.ExerciseStart => "Exercise start",
-            EventAnchorKind.OverrideStart => "Override start",
-            EventAnchorKind.TemporaryTargetStart => "Temporary target start",
-            EventAnchorKind.UnannouncedRise => "Unannounced rise",
-            _ => e.Anchor.ToString(),
-        });
+        text.Append(e.Anchor == EventAnchorKind.Meal && e.Grams is { } grams ? $"Meal of {Number(grams)} g" : AnchorWords(e.Anchor));
         text.Append($" on {e.Date} at {e.Time}");
 
         var clauses = new List<string>();
@@ -535,9 +625,12 @@ internal sealed class EventResponseDataset : IReportDataset
             }
 
             lines.Add($"{label}: {Plural(result.Events, "event")}.");
+            if (cohort.Others)
+                lines.Add("  " + OthersSentence(cohort, report.Definition, number));
             var dropped = new List<string>();
             if (result.NotIsolated > 0) dropped.Add($"{result.NotIsolated} with another event in the window");
             if (result.MissingAnchorGlucose > 0) dropped.Add($"{result.MissingAnchorGlucose} without a reading at the time");
+            if (result.MissingAnchorIob > 0) dropped.Add($"{result.MissingAnchorIob} without an IOB value at the time");
             if (result.BeforeVisibleHistory > 0) dropped.Add($"{result.BeforeVisibleHistory} that reach back before the history this token reads");
             if (dropped.Count > 0)
                 lines.Add($"  Not counted: {string.Join("; ", dropped)}.");
@@ -581,6 +674,21 @@ internal sealed class EventResponseDataset : IReportDataset
         return string.Join('\n', lines);
     }
 
+    /// <summary>
+    /// What an all-others cohort holds: "Every meal event in the range that cohort 1 does not take in,
+    /// meals with carbs only included." The last clause where a sibling's food filter could not apply to them.
+    /// </summary>
+    internal static string OthersSentence(EventCohortDefinition others, EventResponseDefinition definition, IReadOnlyDictionary<int, int> number)
+    {
+        var siblings = definition.Cohorts.Where(c => c != others && !c.Others && c.Anchor == others.Anchor).ToList();
+        var names = siblings.Select(c => number.GetValueOrDefault(c.Cohort, c.Cohort).ToString(CultureInfo.InvariantCulture)).ToList();
+        var who = names.Count == 1 ? $"cohort {names[0]} does" : $"cohorts {string.Join(" and ", names)} do";
+        var carbsOnly = others.Anchor == EventAnchorKind.Meal && siblings.Any(c => c.HasFoodFilter)
+            ? ", meals with carbs only included"
+            : "";
+        return $"Every {AnchorWords(others.Anchor).ToLowerInvariant()} event in the range that {who} not take in{carbsOnly}.";
+    }
+
     /// <summary>Each cohort's events, with its median peak rise (or drop) as the note.</summary>
     internal static IReadOnlyList<ReportFact> FactsOf(EventResponseReport report, IReadOnlyDictionary<int, string> labels, bool useMmol)
     {
@@ -599,7 +707,7 @@ internal sealed class EventResponseDataset : IReportDataset
                     && result.Metrics.MinutesToPeak is { } toPeak)
                     note = $"median rise {(rise.P50 >= 0 ? "+" : "-")}{G(rise.P50)} {unit} at {Number(toPeak.P50, "0")} min";
                 else if (result is { Events: > 0 } && result.Metrics.Drop is { } drop)
-                    note = $"median drop {G(drop.P50)} {unit}";
+                    note = $"median drop {(drop.P50 < 0 ? "-" : "")}{G(drop.P50)} {unit}";
                 return new ReportFact(labels[cohort.Cohort], events.ToString(CultureInfo.InvariantCulture), events == 1 ? "event" : "events", note, [GlucoseFields]);
             }),
         ];

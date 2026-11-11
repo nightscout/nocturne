@@ -585,6 +585,8 @@ public class EventResponseCalculatorTests
         { EventAnchorKind.ExerciseStart, EventResponseKind.Fall },
         { EventAnchorKind.OverrideStart, EventResponseKind.Fall },
         { EventAnchorKind.TemporaryTargetStart, EventResponseKind.Fall },
+        { EventAnchorKind.LowStart, EventResponseKind.Fall },
+        { EventAnchorKind.HighStart, EventResponseKind.Rise },
     };
 
     [Fact]
@@ -601,7 +603,12 @@ public class EventResponseCalculatorTests
 
         var range = Calculate(
             [Cohort(1, anchor)],
-            glucose: Readings(From, To, t => t <= at + 25 * Minute ? 120 : Math.Min(200, 120 + 3 * (t - at - 25 * Minute) / (double)Minute)),
+            glucose: Readings(From, To, anchor switch
+            {
+                EventAnchorKind.LowStart => t => t >= at && t < at + 30 * Minute ? 60 : 120,
+                EventAnchorKind.HighStart => t => t >= at && t < at + 2 * Hour ? 200 : 120,
+                _ => t => t <= at + 25 * Minute ? 120 : Math.Min(200, 120 + 3 * (t - at - 25 * Minute) / (double)Minute),
+            }),
             carbs: anchor == EventAnchorKind.Meal ? [new(at, 40)] : [],
             doses: anchor == EventAnchorKind.CorrectionBolus ? [new(at, 2, false)] : [],
             sources: new LoopAnalysisMaskSources

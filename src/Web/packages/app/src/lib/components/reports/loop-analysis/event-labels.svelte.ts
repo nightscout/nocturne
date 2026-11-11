@@ -13,6 +13,8 @@ export function anchorLabels(): Record<EventAnchorKind, string> {
     [EventAnchorKind.OverrideStart]: "Override starts",
     [EventAnchorKind.TemporaryTargetStart]: "Temporary target starts",
     [EventAnchorKind.UnannouncedRise]: "Unannounced rises",
+    [EventAnchorKind.LowStart]: "Low starts",
+    [EventAnchorKind.HighStart]: "High starts",
   };
 }
 
@@ -58,6 +60,10 @@ export function anchorEventLabel(kind: EventAnchorKind | undefined): string {
       return "Temporary target";
     case EventAnchorKind.UnannouncedRise:
       return "Unannounced rise";
+    case EventAnchorKind.LowStart:
+      return "Low start";
+    case EventAnchorKind.HighStart:
+      return "High start";
     default:
       return "";
   }

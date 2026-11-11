@@ -130,6 +130,9 @@ public partial class AnalyticsReadScopeGuardTests
         { EventAnchorKind.UnannouncedRise, [Scope.GlucoseRead], false },
         { EventAnchorKind.UnannouncedRise, [Scope.TreatmentsRead], false },
         { EventAnchorKind.UnannouncedRise, [Scope.GlucoseRead, Scope.TreatmentsRead], true },
+        { EventAnchorKind.LowStart, [Scope.GlucoseRead], true },
+        { EventAnchorKind.LowStart, [Scope.TreatmentsRead], false },
+        { EventAnchorKind.HighStart, [Scope.GlucoseRead], true },
     };
 
     [Theory]
@@ -162,6 +165,25 @@ public partial class AnalyticsReadScopeGuardTests
         LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted(Scope.GlucoseRead, Scope.FoodRead)).Select(f => f.Filter)
             .Should().Equal("isolatedOnly", "requireCorroboration");
         LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted(Scope.TreatmentsRead, Scope.FoodRead)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void LoopAnalysis_Events_WithoutTreatments_DropACarbOrIobCondition_AndTheAllOthersGroupItWasTheRestOf()
+    {
+        var definition = new EventResponseDefinition
+        {
+            Cohorts =
+            [
+                new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.LowStart, MinMinutesSinceMeal = 240 },
+                new EventCohortDefinition { Cohort = 2, Anchor = EventAnchorKind.LowStart, Others = true },
+                new EventCohortDefinition { Cohort = 3, Anchor = EventAnchorKind.HighStart, MinStartGlucose = 250 },
+            ],
+        };
+
+        var ignored = LoopAnalysisReadScopeGuard.NarrowEvents(definition, Granted(Scope.GlucoseRead));
+
+        ignored.Should().Equal("anchor1", "anchor2");
+        definition.Cohorts.Should().ContainSingle().Which.Cohort.Should().Be(3, "a start glucose condition reads glucose only");
     }
 
     [Fact]

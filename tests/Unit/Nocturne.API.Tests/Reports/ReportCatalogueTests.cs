@@ -352,6 +352,35 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
     }
 
     [Fact]
+    public void An_event_group_offers_all_others_and_its_conditions_with_the_glucose_in_mg_dl()
+    {
+        JsonElement Cohort(bool useMmol) => Catalogue(useMmol).Datasets.Single(d => d.Name == "event_response").Parameters
+            .GetProperty("properties").GetProperty("cohorts").GetProperty("items").GetProperty("properties");
+
+        var cohort = Cohort(useMmol: false);
+        cohort.GetProperty("others").GetProperty("type").GetString().Should().Be("boolean");
+        cohort.GetProperty("others").GetProperty("default").GetBoolean().Should().BeFalse();
+        cohort.GetProperty("others").GetProperty("title").GetString().Should().Be("All others");
+        var since = cohort.GetProperty("minutesSinceMeal");
+        since.GetProperty("x-scope").GetString().Should().Be(Scope.TreatmentsRead);
+        since.GetProperty("properties").GetProperty("min").GetProperty("type").GetString().Should().Be("integer");
+        since.GetProperty("properties").GetProperty("min").GetProperty("maximum").GetDouble().Should().Be(1440);
+        cohort.GetProperty("insulinOnBoard").GetProperty("x-scope").GetString().Should().Be(Scope.TreatmentsRead);
+        cohort.GetProperty("insulinOnBoard").GetProperty("properties").GetProperty("min").GetProperty("minimum").GetDouble().Should().Be(-20);
+        cohort.GetProperty("startGlucose").TryGetProperty("x-scope", out _).Should().BeFalse("it reads glucose, which the dataset needs anyway");
+
+        var mgdl = cohort.GetProperty("startGlucose").GetProperty("properties").GetProperty("min");
+        mgdl.GetProperty("type").GetString().Should().Be("integer");
+        mgdl.GetProperty("description").GetString().Should().Be("Lowest glucose at the event, mg/dL, 0 to 600. Optional.");
+        mgdl.GetProperty("maximum").GetDouble().Should().Be(600);
+        Cohort(useMmol: true).GetProperty("startGlucose").GetRawText().Should().Be(cohort.GetProperty("startGlucose").GetRawText(),
+            "the bound is mg/dL for every tenant");
+
+        cohort.GetProperty("anchor").GetProperty("enum").EnumerateArray().Select(v => v.GetString()).Should().Contain(["LowStart", "HighStart"]);
+        cohort.GetProperty("anchor").GetProperty("x-enumLabels").EnumerateArray().Select(v => v.GetString()).Should().Contain(["Low start", "High start"]);
+    }
+
+    [Fact]
     public void A_nullable_parameter_is_written_as_its_type_without_null()
     {
         var treatments = Catalogue().Datasets.Single(d => d.Name == "treatments").Parameters.GetProperty("properties");

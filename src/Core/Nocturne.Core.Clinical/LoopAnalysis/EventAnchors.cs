@@ -1,4 +1,7 @@
+using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.LoopAnalysis;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Clinical.LoopAnalysis;
 
@@ -19,14 +22,55 @@ public static class EventAnchors
     /// has no expected direction and keeps the rise figures. Exercise is a fall, since a low after it
     /// is the risk. Every override is a fall: the anchor carries no insulin percentage, so one that
     /// asks for less insulin cannot be told apart here; carrying that percentage is where to split it.
+    /// A low start keeps the fall figures (how low it went, and when) and a high start the rise
+    /// figures (how high, and when it came back).
     /// </summary>
     public static EventResponseKind ResponseOf(EventAnchorKind kind) => kind switch
     {
-        EventAnchorKind.Meal or EventAnchorKind.UnannouncedRise or EventAnchorKind.SensorStart => EventResponseKind.Rise,
+        EventAnchorKind.Meal or EventAnchorKind.UnannouncedRise or EventAnchorKind.SensorStart
+            or EventAnchorKind.HighStart => EventResponseKind.Rise,
         EventAnchorKind.CorrectionBolus or EventAnchorKind.ExerciseStart
-            or EventAnchorKind.OverrideStart or EventAnchorKind.TemporaryTargetStart => EventResponseKind.Fall,
+            or EventAnchorKind.OverrideStart or EventAnchorKind.TemporaryTargetStart
+            or EventAnchorKind.LowStart => EventResponseKind.Fall,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
+
+    /// <summary>
+    /// How far before an excursion start the readings that decide it reach: a start is found only
+    /// after the episode before it has closed, 15 minutes back in range, and a reading may stand
+    /// for up to 15 minutes before it.
+    /// </summary>
+    public const long ExcursionLookbackMs = 2 * (long)GlucoseEpisodeDetector.EpisodeMinutes * LocalSlotBinning.MinuteMs;
+
+    /// <summary>
+    /// The first reading of every low (<see cref="EventAnchorKind.LowStart"/>) and high
+    /// (<see cref="EventAnchorKind.HighStart"/>) in <paramref name="readings"/>, by the episode rule
+    /// of the glucose statistics (<see cref="GlucoseEpisodeDetector"/>) over the consensus limits it
+    /// counts them by, 70 and 180 mg/dL, so a report's lows are the statistics' lows.
+    /// </summary>
+    /// <param name="readings">Readings in time order; implausible ones are left out, as the statistics leave them.</param>
+    public static (List<EventAnchor> Lows, List<EventAnchor> Highs) Excursions(IEnumerable<GlucoseSample> readings)
+    {
+        var plausible = readings
+            .Where(r => GlucoseStatistics.IsPlausibleReading(r.Mgdl))
+            .Select(r => new SensorGlucose
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.Mills).UtcDateTime,
+                Mgdl = r.Mgdl,
+            })
+            .ToList();
+        var lows = new List<EventAnchor>();
+        var highs = new List<EventAnchor>();
+        foreach (var episode in GlucoseEpisodeDetector.Detect(plausible, new GlycemicThresholds()))
+        {
+            var mills = new DateTimeOffset(episode.StartAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            if (episode.BelowRange)
+                lows.Add(new EventAnchor(mills, EventAnchorKind.LowStart));
+            else
+                highs.Add(new EventAnchor(mills, EventAnchorKind.HighStart));
+        }
+        return (lows, highs);
+    }
 
     /// <summary>
     /// One anchor per instant with carbs: entries at the same instant, such as a meal logged food by

@@ -24,9 +24,15 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
     private const long Day = 24 * 60 * Minute;
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
 
-    [Fact]
+    /// <param name="excursions">
+    /// Instead: the starts of lows and highs (a low a day at 03:00), all other highs, and a
+    /// minutes-since-meal condition, over the longest window before the event.
+    /// </param>
+    [Theory]
     [Trait("Category", "Performance")]
-    public void NinetyDaysOfMealsAndRises_ComputeWithinBudget()
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NinetyDaysOfMealsAndRises_ComputeWithinBudget(bool excursions)
     {
         var to = new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.FromHours(10)).ToUnixTimeMilliseconds();
         var from = to - 90 * Day;
@@ -47,7 +53,8 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
                 Origin = TempBasalOrigin.Algorithm, Device = "pump",
             });
             var sinceMeal = minuteOfDay % 360;
-            glucose.Add(new GlucoseSample(t, sinceMeal < 60 ? 110 + sinceMeal * 1.5 : Math.Max(110, 200 - (sinceMeal - 60) * 0.6)));
+            glucose.Add(new GlucoseSample(t, excursions && minuteOfDay is >= 180 and < 220 ? 60
+                : sinceMeal < 60 ? 110 + sinceMeal * 1.5 : Math.Max(110, 200 - (sinceMeal - 60) * 0.6)));
             if (minuteOfDay % 360 == 0)
             {
                 boluses.Add(new Bolus { Timestamp = at, Insulin = 4 });
@@ -66,7 +73,17 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
         var timeline = new TherapyTimeline([new TherapySegment(compareFrom - Day, end + 1, snapshot)]);
         var iob = new IobCalculator(null!, null!, null!, null!, null!, null!);
         var cob = new CobCalculator(NullLogger<CobCalculator>.Instance, iob, null!, null!, null!, null!);
-        var definition = new EventResponseDefinition
+        var definition = excursions ? new EventResponseDefinition
+        {
+            MinutesBefore = EventResponseDefinition.MinutesBeforeChoices[^1],
+            MinutesAfter = EventResponseDefinition.MinutesAfterChoices[^1],
+            Cohorts =
+            [
+                new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.LowStart },
+                new EventCohortDefinition { Cohort = 2, Anchor = EventAnchorKind.HighStart, MinMinutesSinceMeal = 240 },
+                new EventCohortDefinition { Cohort = 3, Anchor = EventAnchorKind.HighStart, Others = true },
+            ],
+        } : new EventResponseDefinition
         {
             MinutesAfter = EventResponseDefinition.MinutesAfterChoices[^1],
             Cohorts =
@@ -118,7 +135,9 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
 
         Assert.True(primary.Cohorts[1].Events > 0);
         Assert.True(primary.Cohorts[2].Events > 0, "the unannounced midnight rise is found every day");
-        Assert.Equal(108, primary.Cohorts[0].Slots.Count);
+        Assert.Equal(excursions ? 144 : 108, primary.Cohorts[0].Slots.Count);
+        if (excursions)
+            Assert.True(primary.Cohorts[0].Events >= 89, "a low a day");
         Assert.True(stopwatch.Elapsed < Budget, $"took {stopwatch.Elapsed}, budget {Budget}");
     }
 }

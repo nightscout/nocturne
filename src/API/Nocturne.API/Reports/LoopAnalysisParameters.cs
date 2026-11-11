@@ -138,18 +138,87 @@ internal sealed record ReportGrams
 }
 
 [Description(
+    "Minutes from the last carb entry before the event to the event, inclusive. "
+    + "With only the lowest, 240 says no carbs in the 4 hours before the event.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ReportMinutesSinceMeal
+{
+    [Description("Fewest minutes since the last carbs, 1 to 1440. Optional.")]
+    [Range(1, EventResponseDefinition.MaxMinutesSinceMeal)]
+    public int? Min { get; init; }
+
+    [Description("Most minutes since the last carbs, 1 to 1440. Optional.")]
+    [Range(1, EventResponseDefinition.MaxMinutesSinceMeal)]
+    public int? Max { get; init; }
+
+    [JsonIgnore]
+    public bool IsSet => Min is not null || Max is not null;
+}
+
+[Description(
+    "The glucose at the event, the start glucose of its figures, inclusive. Always in mg/dL, "
+    + "whatever unit the reports show: 70 mg/dL is 3.9 mmol/L, and 180 mg/dL is 10.0 mmol/L.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ReportStartGlucose
+{
+    /// <summary>The highest bound a condition may name, mg/dL: the highest plausible reading.</summary>
+    public const int MaxMgdl = (int)Core.Constants.GlucoseConstants.MaxPlausibleMgdl;
+
+    [Description("Lowest glucose at the event, mg/dL, 0 to 600. Optional.")]
+    [Range(0, MaxMgdl)]
+    public int? Min { get; init; }
+
+    [Description("Highest glucose at the event, mg/dL, 0 to 600. Optional.")]
+    [Range(0, MaxMgdl)]
+    public int? Max { get; init; }
+
+    [JsonIgnore]
+    public bool IsSet => Min is not null || Max is not null;
+}
+
+[Description("The insulin on board at the event, U, inclusive. It can be below 0 when less insulin than the schedule was given.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ReportInsulinOnBoard
+{
+    public const double Lowest = -20;
+    public const double Highest = 100;
+
+    [Description("Least IOB, U, -20 to 100. Optional.")]
+    [Range(Lowest, Highest)]
+    public double? Min { get; init; }
+
+    [Description("Most IOB, U, -20 to 100. Optional.")]
+    [Range(Lowest, Highest)]
+    public double? Max { get; init; }
+
+    [JsonIgnore]
+    public bool IsSet => Min is not null || Max is not null;
+}
+
+[Description(
     "One cohort of events: an anchor kind, narrowed by time of day, weekday and, for meals, by size and by the foods "
-    + "the meal carries a food record of.")]
+    + "the meal carries a food record of, and by the state at the event: time since carbs, glucose and IOB. "
+    + "Or all the events of its kind that the other groups do not take in.")]
 [DisplayName("Event group")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportEventCohort
 {
     [Description(
         "What the events are aligned on: Meal (a carb entry), CorrectionBolus (a manual bolus with no meal near it), "
-        + "SensorStart, ExerciseStart, OverrideStart, TemporaryTargetStart, or UnannouncedRise (a meal-like rise with no carbs logged).")]
+        + "SensorStart, ExerciseStart, OverrideStart, TemporaryTargetStart, UnannouncedRise (a meal-like rise with no carbs logged), "
+        + "LowStart or HighStart. LowStart is the first reading of a low and HighStart the first reading of a high, by the rule "
+        + "the glucose statistics count lows and highs by: a low starts after at least 15 minutes of readings below 70 mg/dL "
+        + "(3.9 mmol/L), a high after at least 15 minutes above 180 mg/dL (10.0 mmol/L), and each ends after at least "
+        + "15 minutes back in range or at a gap in the readings. These limits are the same for everyone, not the profile's target.")]
     [DisplayName("Event")]
     [JsonRequired]
     public EventAnchorKind Anchor { get; init; }
+
+    [Description(
+        "All the events of this kind in the range that no other group of the same kind takes in. "
+        + "It takes no filter or condition of its own, and needs another group of the same kind. One group at most.")]
+    [DisplayName("All others")]
+    public bool Others { get; init; }
 
     [Description("Only events in this local time-of-day window. Optional.")]
     public ReportTimeOfDay? TimeOfDay { get; init; }
@@ -177,8 +246,32 @@ internal sealed record ReportEventCohort
     [ReportInput(ReportInputAttribute.FoodCategory)]
     public string? FoodCategory { get; init; }
 
+    [Description("Only events with this many minutes since the last carb entry before them. Optional.")]
+    [DisplayName("Minutes since carbs")]
+    [ReportNeedsScope(Scope.TreatmentsRead)]
+    public ReportMinutesSinceMeal? MinutesSinceMeal { get; init; }
+
+    [Description("Only events with a glucose at the event in this range, in mg/dL. Optional.")]
+    [DisplayName("Glucose at the event")]
+    public ReportStartGlucose? StartGlucose { get; init; }
+
+    [Description("Only events with this insulin on board at the event. Events with no IOB value at the time are counted apart. Optional.")]
+    [DisplayName("IOB at the event")]
+    [ReportNeedsScope(Scope.TreatmentsRead)]
+    public ReportInsulinOnBoard? InsulinOnBoard { get; init; }
+
     [JsonIgnore]
     public bool HasFoodFilter => Foods is { Count: > 0 } || !string.IsNullOrWhiteSpace(FoodCategory);
+
+    /// <summary>A condition that reads carbs or IOB, which come from treatments.</summary>
+    [JsonIgnore]
+    public bool ReadsTreatments => MinutesSinceMeal is { IsSet: true } || InsulinOnBoard is { IsSet: true };
+
+    /// <summary>Any filter or condition, which an <see cref="Others"/> group may not carry.</summary>
+    [JsonIgnore]
+    public bool IsNarrowed =>
+        TimeOfDay is not null || Grams is not null || DayOfWeek is not null || Foods is not null || FoodCategory is not null
+        || MinutesSinceMeal is not null || StartGlucose is not null || InsulinOnBoard is not null;
 }
 
 [Description("A comparison range of local calendar dates, inclusive.")]
@@ -196,8 +289,9 @@ internal sealed record ReportDateRange
 
 [Description(
     "event_response: glucose, glucose change, IOB, COB and net loop correction aligned on up to three cohorts of events "
-    + "(meals, correction boluses, sensor starts, exercise, overrides, temporary targets, unannounced rises), each spread "
-    + "across its events as percentiles in five-minute slots from the event; and each event with its figures.")]
+    + "(meals, correction boluses, sensor starts, exercise, overrides, temporary targets, unannounced rises, the starts of "
+    + "lows and highs), each spread across its events as percentiles in five-minute slots from the event; and each event "
+    + "with its figures.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record EventResponseParameters : LoopAnalysisDatasetParameters
 {
@@ -212,8 +306,8 @@ internal sealed record EventResponseParameters : LoopAnalysisDatasetParameters
     public IReadOnlyList<ReportEventCohort>? Cohorts { get; init; }
 
     [Description("The part of each event's window before the event.")]
-    [Range(0, 120)]
-    [AllowedValues(0, 30, 60, 90, 120)]
+    [Range(0, 240)]
+    [AllowedValues(0, 30, 60, 90, 120, 180, 240)]
     [DisplayName("Minutes before each event")]
     public int MinutesBefore { get; init; } = EventResponseDefinition.DefaultMinutesBefore;
 
@@ -240,6 +334,32 @@ internal sealed record EventResponseParameters : LoopAnalysisDatasetParameters
     [JsonIgnore]
     public IReadOnlyList<ReportEventCohort> AppliedCohorts =>
         Cohorts is { Count: > 0 } cohorts ? cohorts : [new ReportEventCohort { Anchor = EventAnchorKind.Meal }];
+
+    /// <summary>A group the Meals and events page cannot show: all others, or a condition on the state at the event.</summary>
+    [JsonIgnore]
+    public bool HasReportOnlyCohorts => AppliedCohorts.Any(c =>
+        c.Others || c.MinutesSinceMeal is { IsSet: true } || c.StartGlucose is { IsSet: true } || c.InsulinOnBoard is { IsSet: true });
+
+    /// <summary>
+    /// The definition of these cohorts: the endpoint's (<see cref="ToEventQuery"/>) with what its
+    /// query cannot carry, the all-others group and the conditions, set on each cohort.
+    /// </summary>
+    public EventResponseDefinition ToDefinition(IReadOnlyList<ReportEventCohort> cohorts)
+    {
+        var definition = ToEventQuery(cohorts).ToDefinition();
+        foreach (var cohort in definition.Cohorts)
+        {
+            var asked = cohorts[cohort.Cohort - 1];
+            cohort.Others = asked.Others;
+            cohort.MinMinutesSinceMeal = asked.MinutesSinceMeal?.Min;
+            cohort.MaxMinutesSinceMeal = asked.MinutesSinceMeal?.Max;
+            cohort.MinStartGlucose = asked.StartGlucose?.Min;
+            cohort.MaxStartGlucose = asked.StartGlucose?.Max;
+            cohort.MinIob = asked.InsulinOnBoard?.Min;
+            cohort.MaxIob = asked.InsulinOnBoard?.Max;
+        }
+        return definition;
+    }
 
     /// <summary>
     /// The REST endpoint's query for these cohorts, numbered in order, so the definition is the one

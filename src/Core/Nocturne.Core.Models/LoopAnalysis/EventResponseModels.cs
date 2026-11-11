@@ -24,6 +24,15 @@ public enum EventAnchorKind
     /// see <c>UnannouncedRises</c>.
     /// </summary>
     UnannouncedRise,
+
+    /// <summary>
+    /// The first reading of a low: an episode below range as the glucose statistics count them
+    /// (<c>TimeInRangeEpisodes</c>), at least 15 minutes below 70 mg/dL.
+    /// </summary>
+    LowStart,
+
+    /// <summary>The first reading of a high: an episode above range, at least 15 minutes above 180 mg/dL; see <see cref="LowStart"/>.</summary>
+    HighStart,
 }
 
 /// <summary>Which way glucose is expected to go after an anchor, and so which figures describe it.</summary>
@@ -85,6 +94,50 @@ public class EventCohortDefinition
     /// <summary>Whether the cohort is narrowed by the foods its meals carry.</summary>
     [JsonIgnore]
     public bool HasFoodFilter => FoodIds is { Count: > 0 } || !string.IsNullOrWhiteSpace(FoodCategory);
+
+    /// <summary>
+    /// The anchors of <see cref="Anchor"/> that no other cohort of the definition selects, with no
+    /// filter of its own. The members below are set by a custom report, never by the endpoint's
+    /// query, so they are not served.
+    /// </summary>
+    [JsonIgnore]
+    public bool Others { get; set; }
+
+    /// <summary>
+    /// Fewest minutes from the last carb entry strictly before the anchor, inclusive; an anchor with
+    /// no carb entry that far back qualifies.
+    /// </summary>
+    [JsonIgnore]
+    public int? MinMinutesSinceMeal { get; set; }
+
+    /// <summary>Most minutes from the last carb entry strictly before the anchor, inclusive.</summary>
+    [JsonIgnore]
+    public int? MaxMinutesSinceMeal { get; set; }
+
+    /// <summary>Lowest start glucose (<see cref="EventMetrics.StartGlucose"/>), mg/dL, inclusive.</summary>
+    [JsonIgnore]
+    public double? MinStartGlucose { get; set; }
+
+    /// <summary>Highest start glucose, mg/dL, inclusive.</summary>
+    [JsonIgnore]
+    public double? MaxStartGlucose { get; set; }
+
+    /// <summary>Least IOB at the anchor (<see cref="EventMetrics.IobAtAnchor"/>), U, inclusive.</summary>
+    [JsonIgnore]
+    public double? MinIob { get; set; }
+
+    /// <summary>Most IOB at the anchor, U, inclusive.</summary>
+    [JsonIgnore]
+    public double? MaxIob { get; set; }
+
+    [JsonIgnore]
+    public bool HasMinutesSinceMeal => MinMinutesSinceMeal is not null || MaxMinutesSinceMeal is not null;
+
+    [JsonIgnore]
+    public bool HasStartGlucose => MinStartGlucose is not null || MaxStartGlucose is not null;
+
+    [JsonIgnore]
+    public bool HasIob => MinIob is not null || MaxIob is not null;
 }
 
 /// <summary>The cohorts and window an event response was computed for.</summary>
@@ -104,8 +157,11 @@ public class EventResponseDefinition
     /// <summary>The longest food category a cohort may name.</summary>
     public const int MaxFoodCategoryLength = 100;
 
+    /// <summary>The longest look back a minutes-since-meal condition may ask for: a day.</summary>
+    public const int MaxMinutesSinceMeal = 24 * 60;
+
     /// <summary>The windows before the anchor a request may ask for, in minutes.</summary>
-    public static readonly IReadOnlyList<int> MinutesBeforeChoices = [0, 30, 60, 90, 120];
+    public static readonly IReadOnlyList<int> MinutesBeforeChoices = [0, 30, 60, 90, 120, 180, 240];
 
     /// <summary>The windows after the anchor a request may ask for, in minutes.</summary>
     public static readonly IReadOnlyList<int> MinutesAfterChoices = [120, 180, 240, 300, 360, 420, 480];
@@ -218,6 +274,13 @@ public class EventCohortResult
     /// a sensor start the first reading after its warm-up.
     /// </summary>
     public int MissingAnchorGlucose { get; set; }
+
+    /// <summary>
+    /// Anchors left out of a cohort with an IOB condition because no IOB stood at the anchor, so the
+    /// condition could not be read; not part of <see cref="Anchors"/>. Not served, as the condition is not.
+    /// </summary>
+    [JsonIgnore]
+    public int MissingAnchorIob { get; set; }
 
     /// <summary>
     /// Anchors dropped because what decides them reaches back before the history the caller may

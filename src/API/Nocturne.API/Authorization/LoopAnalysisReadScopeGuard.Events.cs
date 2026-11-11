@@ -6,8 +6,8 @@ namespace Nocturne.API.Authorization;
 /// <summary>
 /// The Meals and events page. An anchor is drawn from a category as a series is: meals, correction
 /// boluses and the starts of exercise, overrides and temporary targets are treatments, sensor
-/// starts are devices, and an unannounced rise is read off glucose and the carbs and loop
-/// correction around it. Every event is also read off glucose, since one counts only with a start
+/// starts are devices, an unannounced rise is read off glucose and the carbs and loop
+/// correction around it, and the start of a low or a high off glucose alone. Every event is also read off glucose, since one counts only with a start
 /// glucose, so every anchor needs <c>glucose.read</c> as well: otherwise the counts would say where
 /// CGM data existed. A caller may ask only for anchors it could read, since the curves and counts
 /// aligned on an anchor would otherwise place each one in time; the controller drops the rest
@@ -28,6 +28,8 @@ internal static partial class LoopAnalysisReadScopeGuard
             [EventAnchorKind.OverrideStart] = [Scope.GlucoseRead, Scope.TreatmentsRead],
             [EventAnchorKind.TemporaryTargetStart] = [Scope.GlucoseRead, Scope.TreatmentsRead],
             [EventAnchorKind.UnannouncedRise] = [Scope.GlucoseRead, Scope.TreatmentsRead],
+            [EventAnchorKind.LowStart] = [Scope.GlucoseRead],
+            [EventAnchorKind.HighStart] = [Scope.GlucoseRead],
         };
 
     /// <summary>The options beside the cohorts, by query parameter, and how to drop each.</summary>
@@ -50,7 +52,9 @@ internal static partial class LoopAnalysisReadScopeGuard
 
     /// <summary>
     /// Drops from <paramref name="definition"/> every cohort whose anchor the caller could not read
-    /// and the options without <c>treatments.read</c>. Without <c>food.read</c> a food-filtered
+    /// and, without <c>treatments.read</c>, the options, every cohort with a condition on carbs or
+    /// IOB, and the <see cref="EventCohortDefinition.Others"/> cohort that was the rest of one, since
+    /// it would take in that cohort's events. Without <c>food.read</c> a food-filtered
     /// cohort loses its filter and is marked <see cref="EventCohortDefinition.FoodFilterWithheld"/>,
     /// so it counts no events rather than every meal.
     /// </summary>
@@ -68,6 +72,9 @@ internal static partial class LoopAnalysisReadScopeGuard
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead))
         {
+            var conditioned = definition.Cohorts.Where(c => c.HasMinutesSinceMeal || c.HasIob).ToList();
+            Drop(conditioned.Contains);
+            Drop(c => c.Others && conditioned.Any(s => s.Anchor == c.Anchor));
             foreach (var option in EventOptions.Where(o => o.IsSet(definition)))
             {
                 option.Clear(definition);
@@ -88,6 +95,12 @@ internal static partial class LoopAnalysisReadScopeGuard
             }
         }
         return ignored;
+
+        void Drop(Predicate<EventCohortDefinition> unreadable)
+        {
+            ignored.AddRange(definition.Cohorts.Where(c => unreadable(c)).Select(c => $"anchor{c.Cohort}"));
+            definition.Cohorts.RemoveAll(unreadable);
+        }
     }
 
     public static List<EventUnavailableAnchor> UnavailableAnchors(IReadOnlySet<string> grantedScopes) =>
