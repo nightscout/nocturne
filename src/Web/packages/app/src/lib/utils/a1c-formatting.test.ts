@@ -25,10 +25,16 @@ describe("A1c presentation", () => {
 
   it("formats the backend supplied value for the selected unit without recalculating it", () => {
     const value = { percent: 7, mmolMol: 53 };
-    expect(formatA1c(value)).toBe("7.0%");
+    expect(formatA1c(value)).toBe("7.00%");
     applyPreferences({ a1cUnits: "mmol/mol" });
-    expect(formatA1c(value)).toBe("53 mmol/mol");
+    expect(formatA1c(value)).toBe("53.0 mmol/mol");
     expect(formatA1c(undefined)).toBe("–");
     expect(formatA1cNumber(NaN)).toBe("–");
+  });
+
+  it("shows one more significant digit than a lab report", () => {
+    expect(formatA1c({ percent: 6.5432, mmolMol: 50.3071 })).toBe("6.54%");
+    applyPreferences({ a1cUnits: "mmol/mol" });
+    expect(formatA1c({ percent: 6.5432, mmolMol: 50.3071 })).toBe("50.3 mmol/mol");
   });
 });

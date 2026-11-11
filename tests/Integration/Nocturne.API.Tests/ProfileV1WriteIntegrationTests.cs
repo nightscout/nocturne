@@ -97,6 +97,38 @@ public class ProfileV1WriteIntegrationTests : ApiIntegrationTestBase
         stored[0].GetProperty("store").EnumerateObject().Select(p => p.Name).Should().Equal("Weekday");
     }
 
+
+    [Fact]
+    public async Task Put_CanRestoreAStorePreviouslyDroppedByTheDocumentReplacement()
+    {
+        var client = CreateAuthenticatedClient();
+        var startDate = DateTimeOffset.UtcNow.AddHours(-1);
+        var original = new
+        {
+            _id = StoredId,
+            defaultProfile = "Default",
+            startDate = startDate.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            mills = startDate.ToUnixTimeMilliseconds(),
+            store = new Dictionary<string, object>
+            {
+                ["Default"] = StoreData(3),
+                ["Weekday"] = StoreData(4),
+            },
+        };
+        await PostDocumentAsync(client, original);
+
+        var withoutWeekday = ProfileDocument(StoredId, "Default", 5, startDate);
+        (await client.PutAsJsonAsync("/api/v1/profile", withoutWeekday)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var restored = await client.PutAsJsonAsync("/api/v1/profile", original);
+
+        restored.StatusCode.Should().Be(HttpStatusCode.OK);
+        var stored = await ListedWithIdAsync(client, StoredId);
+        stored.Should().ContainSingle();
+        stored[0].GetProperty("store").EnumerateObject().Select(p => p.Name)
+            .Should().BeEquivalentTo(["Default", "Weekday"]);
+    }
+
     [Fact]
     public async Task Put_WithoutAStore_IsRefused_AndLeavesTheDocument()
     {
