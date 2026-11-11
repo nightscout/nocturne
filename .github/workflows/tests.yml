@@ -170,6 +170,8 @@ jobs:
       # Unit and Integration each hold a Nocturne.API.Tests and a Nocturne.Infrastructure.Data.Tests,
       # and `dotnet sln add` silently skips a second project of the same name in one folder, hence
       # a folder each and the check that every test project produced its assembly.
+      # From the .NET 11 SDK `dotnet sln add` also adds each project's references, and fails on the
+      # second one of a name; the build finds them through the test projects.
       - name: Build
         run: |
           set -euo pipefail
@@ -179,9 +181,9 @@ jobs:
           fi
           sln="$RUNNER_TEMP/ci/ci.slnx"
           dotnet new sln -n ci -o "$RUNNER_TEMP/ci" --format slnx
-          dotnet sln "$sln" add --solution-folder Unit tests/Unit/*/*.csproj
-          dotnet sln "$sln" add --solution-folder Integration tests/Integration/*/*.csproj
-          dotnet sln "$sln" add --solution-folder Parity \
+          dotnet sln "$sln" add --include-references false --solution-folder Unit tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Integration tests/Integration/*/*.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Parity \
             tests/Parity/Nocturne.Alerts.Corpus/Nocturne.Alerts.Corpus.csproj
           dotnet build "$sln" -p:GenerateNSwagClient=true
           missing=0
@@ -252,7 +254,7 @@ jobs:
           set -euo pipefail
           sln="$RUNNER_TEMP/unit/unit.slnx"
           dotnet new sln -n unit -o "$RUNNER_TEMP/unit" --format slnx
-          dotnet sln "$sln" add tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --include-references false tests/Unit/*/*.csproj
           dotnet test "$sln" --no-build \
             --filter "Category!=Integration" \
             --logger "trx;LogFileName=unit.trx" \
@@ -475,7 +477,7 @@ jobs:
           set -euo pipefail
           sln="$RUNNER_TEMP/integration/integration.slnx"
           dotnet new sln -n integration -o "$RUNNER_TEMP/integration" --format slnx
-          dotnet sln "$sln" add \
+          dotnet sln "$sln" add --include-references false \
             tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
             tests/Integration/Nocturne.Connectors.Tests/Nocturne.Connectors.Tests.csproj
           dotnet test "$sln" --no-build \
