@@ -8,8 +8,822 @@
  "maxNameLength": 120,
  "maxGridMinutes": 1440,
  "panelKinds": [],
- "marks": [],
- "ops": [],
+ "marks": [
+  {
+   "name": "line",
+   "label": "Line",
+   "hasAxis": true,
+   "xKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day",
+    "value",
+    "lag"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time",
+      "offset",
+      "time_of_day",
+      "day",
+      "value",
+      "lag"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Lines",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "series",
+     "label": "One line for each",
+     "input": "field",
+     "accepts": [
+      "category"
+     ],
+     "counts": [],
+     "required": false
+    }
+   ]
+  },
+  {
+   "name": "area",
+   "label": "Area",
+   "hasAxis": true,
+   "xKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day",
+    "value",
+    "lag"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time",
+      "offset",
+      "time_of_day",
+      "day",
+      "value",
+      "lag"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Areas",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "band",
+   "label": "Band",
+   "hasAxis": true,
+   "xKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time",
+      "offset",
+      "time_of_day",
+      "day"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "edges",
+     "label": "Band edges: low and high",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [
+      2,
+      4
+     ],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Middle line",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [
+      1
+     ],
+     "required": false
+    },
+    {
+     "key": "series",
+     "label": "One band for each",
+     "input": "field",
+     "accepts": [
+      "category"
+     ],
+     "counts": [],
+     "required": false
+    }
+   ]
+  },
+  {
+   "name": "bars",
+   "label": "Bars",
+   "hasAxis": true,
+   "xKinds": [
+    "category",
+    "day",
+    "time_of_day",
+    "time",
+    "offset",
+    "lag"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Categories or axis",
+     "input": "field",
+     "accepts": [
+      "category",
+      "day",
+      "time_of_day",
+      "time",
+      "offset",
+      "lag"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Bars",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "stacked",
+     "label": "Stack the bars",
+     "input": "boolean",
+     "accepts": [],
+     "counts": [],
+     "required": false
+    },
+    {
+     "key": "orientation",
+     "label": "Bar direction",
+     "input": "choice",
+     "accepts": [],
+     "counts": [],
+     "required": false
+    }
+   ]
+  },
+  {
+   "name": "points",
+   "label": "Points",
+   "hasAxis": true,
+   "xKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day",
+    "value",
+    "lag"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time",
+      "offset",
+      "time_of_day",
+      "day",
+      "value",
+      "lag"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Points",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "fit",
+     "label": "Line through the points",
+     "input": "field",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": false
+    }
+   ]
+  },
+  {
+   "name": "markers",
+   "label": "Treatment markers",
+   "hasAxis": false,
+   "xKinds": [
+    "time"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Markers",
+     "input": "fields",
+     "accepts": [
+      "marker"
+     ],
+     "counts": [],
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "spans",
+   "label": "Spans in a lane",
+   "hasAxis": false,
+   "xKinds": [
+    "time"
+   ],
+   "slots": [
+    {
+     "key": "start",
+     "label": "Start",
+     "input": "field",
+     "accepts": [
+      "time"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "end",
+     "label": "End",
+     "input": "field",
+     "accepts": [
+      "time"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "category",
+     "label": "Lane",
+     "input": "field",
+     "accepts": [
+      "category"
+     ],
+     "counts": [],
+     "required": true
+    }
+   ]
+  }
+ ],
+ "ops": [
+  {
+   "name": "difference",
+   "label": "Difference",
+   "description": "",
+   "sources": 2,
+   "parameters": {},
+   "xRule": "The sources' axis.",
+   "unitRule": "The sources' unit; both sources must be in one unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "area",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "ratio",
+   "label": "Ratio",
+   "description": "",
+   "sources": 2,
+   "parameters": {},
+   "xRule": "The sources' axis.",
+   "unitRule": "The unit of a over the unit of b; no unit when both are in one unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "scatter",
+   "label": "Scatter",
+   "description": "",
+   "sources": 2,
+   "parameters": {},
+   "xRule": "Values of source a.",
+   "unitRule": "Source b's unit up, source a's along the axis.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "value",
+    "value",
+    "value",
+    "value"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "a",
+      "y": [
+       "b"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": "fit",
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "lag_correlation",
+   "label": "Lag correlation",
+   "description": "",
+   "sources": 2,
+   "parameters": {},
+   "xRule": "Lag, in minutes: b after a when positive.",
+   "unitRule": "r, with no unit.",
+   "sourceXKinds": [
+    "time"
+   ],
+   "outputXKinds": [
+    "lag"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "lag",
+      "y": [
+       "r"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "lag",
+      "y": [
+       "r"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "lag",
+      "y": [
+       "r"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "rolling_mean",
+   "label": "Rolling mean",
+   "description": "",
+   "sources": 1,
+   "parameters": {},
+   "xRule": "The source's axis.",
+   "unitRule": "The source's unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "area",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "trend",
+   "label": "Trend",
+   "description": "",
+   "sources": 1,
+   "parameters": {},
+   "xRule": "The source's axis.",
+   "unitRule": "The source's unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": [
+       "low",
+       "high"
+      ],
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "band_sd",
+   "label": "Mean and standard deviation",
+   "description": "",
+   "sources": 1,
+   "parameters": {},
+   "xRule": "The source's axis.",
+   "unitRule": "The source's unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "mean"
+      ],
+      "edges": [
+       "low",
+       "high"
+      ],
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "mean"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  }
+ ],
  "datasets": [
   {
    "name": "basal_delivery",

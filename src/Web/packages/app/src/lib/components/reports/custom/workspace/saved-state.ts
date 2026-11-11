@@ -6,17 +6,7 @@
  * translate a capitalised literal in a `.svelte.ts` file.
  */
 import { z } from "zod";
-import {
-  ALONGS,
-  ANCHORS,
-  DAY_KINDS,
-  EVENT_SHOWS,
-  FAMILY_LANES,
-  LENSES,
-  OUTCOMES,
-  SIGNALS,
-  WEEKDAY_IDS,
-} from "./vocabulary.js";
+import type { Vocabulary } from "./catalogue-vocabulary.js";
 import type { WorkspaceState } from "./workspace.svelte.js";
 
 /** The `builder.kind` of a report made in the workspace. */
@@ -31,16 +21,12 @@ export const BUILDER_VERSION = 1;
 /** The most of the `builder` member, as UTF-8 JSON, the engine keeps. */
 export const BUILDER_MAX_BYTES = 32 * 1024;
 
-/** One of the given ids. */
-function oneOf<T extends string>(ids: readonly T[]) {
-  return z.custom<T>((v) => ids.some((id) => id === v));
-}
-
-const lensId = oneOf(LENSES.map((l) => l.id));
-const signalId = oneOf(SIGNALS.map((s) => s.id));
-const anchorId = oneOf(ANCHORS.map((a) => a.id));
-const weekday = oneOf(WEEKDAY_IDS);
-const outcome = oneOf(OUTCOMES.map((o) => o.id));
+// Ids are strings here; `knownIds` checks each against the catalogue's vocabulary.
+const lensId = z.string();
+const signalId = z.string();
+const anchorId = z.string();
+const weekday = z.string();
+const outcome = z.string();
 const minute = z.number().int().min(0).max(1440);
 const key = z.number().int().nonnegative();
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -83,7 +69,7 @@ const workspaceState = z.strictObject({
   lanes: z.array(
     z.strictObject({
       id: z.string(),
-      family: oneOf(FAMILY_LANES.map((f) => f.family)),
+      family: z.string(),
       own: z.boolean(),
       signals: z.array(signalId),
     })
@@ -94,7 +80,7 @@ const workspaceState = z.strictObject({
       lens: lensId,
       a: signalId,
       b: signalId,
-      op: z.enum(["difference", "ratio"]),
+      op: z.string(),
       mark: z.string().optional(),
     })
   ),
@@ -102,19 +88,13 @@ const workspaceState = z.strictObject({
   dayGroups: z.array(z.array(weekday).min(1)).min(1),
   dayFilter: z
     .strictObject({
-      kind: oneOf(DAY_KINDS.map((k) => k.id)),
+      kind: z.string(),
       minCarbs: z.number().optional(),
       maxCarbs: z.number().optional(),
     })
     .nullable(),
   findLag: z.boolean(),
-  leaveOut: z.strictObject({
-    overrides: z.boolean(),
-    temporaryTargets: z.boolean(),
-    exercise: z.boolean(),
-    illness: z.boolean(),
-    openLoop: z.boolean(),
-  }),
+  leaveOut: z.record(z.string(), z.boolean()),
   profileName: z.string().max(100).nullable(),
   event: z.strictObject({
     before: minute,
@@ -122,12 +102,12 @@ const workspaceState = z.strictObject({
     isolatedOnly: z.boolean(),
     requireCorroboration: z.boolean(),
     comparison: span.nullable(),
-    show: oneOf(EVENT_SHOWS.map((s) => s.id)),
+    show: z.string(),
     up: outcome,
-    along: oneOf(ALONGS.map((a) => a.id)),
+    along: z.string(),
     fit: z.boolean(),
     figure: outcome,
-    when: z.enum(["hour", "weekday"]),
+    when: z.string(),
   }),
 })
   .superRefine((state, ctx) => {
@@ -195,10 +175,38 @@ export type SavedBlock = z.infer<typeof savedBlock>;
  * The saved state, when it is of `version` and of that version's shape; else null, so a state of
  * another shape is refused, never read as if it were this one.
  */
-export function parseSavedReport(version: unknown, state: unknown): SavedReport | null {
+export function parseSavedReport(version: unknown, state: unknown, vocab: Vocabulary): SavedReport | null {
   if (version !== BUILDER_VERSION) return null;
   const parsed = savedReport.safeParse(state);
-  return parsed.success ? parsed.data : null;
+  return parsed.success && knownIds(parsed.data, vocab) ? parsed.data : null;
+}
+
+/** Whether every id a saved state names is one the catalogue's vocabulary has. */
+function knownIds(saved: SavedReport, vocab: Vocabulary): boolean {
+  const states = saved.blocks.flatMap((b) => (b.kind === "chart" ? [b.chart] : b.kind === "table" && b.events ? [b.events] : []));
+  const lenses = new Set(vocab.lenses);
+  const signals = new Set(vocab.signals.map((s) => s.id));
+  const anchors = new Set(vocab.anchors.map((a) => a.id));
+  const weekdays = new Set(vocab.weekdays);
+  const families = new Set(vocab.families);
+  const outcomes = new Set(vocab.outcomes.map((o) => o.id));
+  const leaveOuts = new Set(vocab.leaveOuts.map((l) => l.id));
+  return states.every(
+    (s) =>
+      lenses.has(s.lens) &&
+      s.placed.every((p) => signals.has(p.id) && Object.keys(p.marks).every((l) => lenses.has(l)) && Object.keys(p.relate).every((l) => lenses.has(l))) &&
+      s.lanes.every((l) => families.has(l.family)) &&
+      s.combos.every((c) => lenses.has(c.lens) && vocab.combineOps.includes(c.op)) &&
+      s.moments.every((m) => anchors.has(m.what) && (m.weekdays ?? []).every((d) => weekdays.has(d))) &&
+      s.dayGroups.every((g) => g.every((d) => weekdays.has(d))) &&
+      (s.dayFilter === null || vocab.dayKinds.some((k) => k.id === s.dayFilter?.kind)) &&
+      Object.keys(s.leaveOut).every((k) => leaveOuts.has(k)) &&
+      vocab.shows.includes(s.event.show) &&
+      outcomes.has(s.event.up) &&
+      outcomes.has(s.event.figure) &&
+      vocab.alongs.includes(s.event.along) &&
+      vocab.whenAxes.includes(s.event.when)
+  );
 }
 
 /** The `builder` member a report made in the workspace carries in its spec. */

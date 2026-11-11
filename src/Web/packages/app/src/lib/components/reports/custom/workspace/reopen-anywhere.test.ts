@@ -3,7 +3,9 @@ import { liveCatalogue } from "./catalogue.fixtures.js";
 import type { Report } from "./report.svelte.js";
 import { BUILDER_VERSION } from "./saved-state.js";
 import { STARTERS } from "./starters.js";
-import { EVENT_SHOWS, LENSES } from "./vocabulary.js";
+import { vocabularyOf } from "./workspace.svelte.js";
+
+const vocab = vocabularyOf(liveCatalogue);
 
 /**
  * A report saved by one member reopens in the workspace for every other only when the spec its state
@@ -20,20 +22,20 @@ function reports(module: ReportModule, clock: (minute: number) => string) {
   const out: { name: string; report: Report }[] = [];
   for (const starter of STARTERS) {
     out.push({ name: starter.id, report: new module.Report(liveCatalogue, starter, clock) });
-    for (const lens of LENSES) {
+    for (const lens of vocab.lenses) {
       const report = new module.Report(liveCatalogue, starter, clock);
       const chart = report.blocks[0];
       if (chart.kind !== "chart") continue;
-      chart.ws.setLens(lens.id);
-      out.push({ name: `${starter.id} as ${lens.id}`, report });
-      if (lens.id !== "event") continue;
-      for (const show of EVENT_SHOWS) {
+      chart.ws.setLens(lens);
+      out.push({ name: `${starter.id} as ${lens}`, report });
+      if (lens !== "event") continue;
+      for (const show of vocab.shows) {
         const shown = new module.Report(liveCatalogue, starter, clock);
         const block = shown.blocks[0];
         if (block.kind !== "chart") continue;
         block.ws.setLens("event");
-        block.ws.setShow(show.id);
-        out.push({ name: `${starter.id} showing ${show.id}`, report: shown });
+        block.ws.setShow(show);
+        out.push({ name: `${starter.id} showing ${show}`, report: shown });
       }
     }
   }

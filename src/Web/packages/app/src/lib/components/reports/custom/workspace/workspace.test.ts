@@ -285,14 +285,15 @@ describe("the events one by one", () => {
 
   it("offers fall figures for lows and rise figures for meals", () => {
     const lows = from("how-far-lows-go");
+    // In the engine's order.
     expect(lows.upChoices.map((o) => o.id)).toEqual([
-      "nadir",
       "drop",
+      "nadir",
       "minutesToNadir",
       "glucoseAt2Hours",
       "netInsulin",
     ]);
-    expect(lows.alongChoices.map((a) => a.id)).not.toContain("grams");
+    expect(lows.alongChoices).not.toContain("grams");
     expect(spec(lows).panels[0].tracks[0].layers[0].bindings).toMatchObject({
       x: "iobAtEvent",
       y: ["nadir"],

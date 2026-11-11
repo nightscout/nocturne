@@ -16,7 +16,6 @@
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
   import DateSpanField from "./DateSpanField.svelte";
-  import { LEAVE_OUTS } from "./vocabulary.js";
   import {
     minutesText,
     windowText,
@@ -34,8 +33,8 @@
   let profileText = $state("");
 
   const isEvent = $derived(ws.lens === "event");
-  const left = $derived(LEAVE_OUTS.filter((l) => ws.leaveOut[l.id]));
-  const notLeft = $derived(LEAVE_OUTS.filter((l) => !ws.leaveOut[l.id]));
+  const left = $derived(ws.vocab.leaveOuts.filter((l) => ws.leaveOut[l.id]));
+  const notLeft = $derived(ws.vocab.leaveOuts.filter((l) => !ws.leaveOut[l.id]));
 
   function saveProfile(event: SubmitEvent) {
     event.preventDefault();

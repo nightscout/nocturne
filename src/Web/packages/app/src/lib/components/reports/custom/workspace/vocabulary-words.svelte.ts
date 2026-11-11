@@ -1,31 +1,22 @@
 /**
- * The words the workspace shows for its vocabulary (signals, lenses, events, views and starting
- * questions), keyed by the ids in `vocabulary.ts` and `starters.ts`. The ids stay in those plain
- * modules, which wuchale does not read, so an id never reaches the spec translated; every word is
- * here, where wuchale extracts it. Each map is built per call, so it is read in the current locale.
+ * The words the workspace shows for the catalogue's vocabulary (signals, lenses, kinds of event,
+ * views) and for its starting questions, keyed by id. The ids come from the API's catalogue and
+ * `starters.ts`; every word is here, where wuchale extracts it. Each map is built per call, so it is
+ * read in the current locale. An id with no word here shows as the id itself, and the vocabulary test
+ * fails until it has one.
  */
 import { EventAnchorKind } from "#lib/api/index.js";
 import { formatLocale } from "#lib/utils/formatting.js";
-import type { StarterGroup } from "./starters.js";
-import {
-  WEEKDAY_IDS,
-  type AnchorGroup,
-  type AnchorId,
-  type Along,
-  type DayGroupPresetId,
-  type EventShow,
-  type Family,
-  type LeaveOutId,
-  type LensId,
-  type MarkWord,
-  type Outcome,
-  type RangePresetId,
-  type SignalId,
-  type Weekday,
-} from "./vocabulary.js";
+import type { Weekday } from "./catalogue-vocabulary.js";
+
+/** The word for `id` in `words`, or the id itself when the web has none yet. */
+function wordOf(words: Record<string, string>, id: string): string {
+  return Object.hasOwn(words, id) ? words[id] : id;
+}
+
 
 /** Each signal's name. */
-export function signalLabels(): Record<SignalId, string> {
+export function signalLabels(): Record<string, string> {
   return {
     glucose: "Glucose",
     target: "Target range",
@@ -65,12 +56,12 @@ export function signalLabels(): Record<SignalId, string> {
   };
 }
 
-export function signalLabel(id: SignalId): string {
-  return signalLabels()[id];
+export function signalLabel(id: string): string {
+  return wordOf(signalLabels(), id);
 }
 
 /** Each lens's name. */
-export function lensLabels(): Record<LensId, string> {
+export function lensLabels(): Record<string, string> {
   return {
     timeline: "Timeline",
     typical_day: "Typical day",
@@ -80,12 +71,12 @@ export function lensLabels(): Record<LensId, string> {
   };
 }
 
-export function lensLabel(id: LensId): string {
-  return lensLabels()[id];
+export function lensLabel(id: string): string {
+  return wordOf(lensLabels(), id);
 }
 
 /** What each lens does, in one sentence. */
-export function lensDescriptions(): Record<LensId, string> {
+export function lensDescriptions(): Record<string, string> {
   return {
     timeline: "Each value at the time it occurred.",
     typical_day: "All days put on top of one day, as the median and middle half.",
@@ -95,12 +86,12 @@ export function lensDescriptions(): Record<LensId, string> {
   };
 }
 
-export function lensDescription(id: LensId): string {
-  return lensDescriptions()[id];
+export function lensDescription(id: string): string {
+  return wordOf(lensDescriptions(), id);
 }
 
 /** Each kind of event, as a heading or a choice: "Meals". */
-export function anchorLabels(): Record<AnchorId, string> {
+export function anchorLabels(): Record<string, string> {
   return {
     [EventAnchorKind.Meal]: "Meals",
     [EventAnchorKind.CorrectionBolus]: "Correction boluses",
@@ -119,12 +110,12 @@ export function anchorLabels(): Record<AnchorId, string> {
   };
 }
 
-export function anchorLabel(id: AnchorId): string {
-  return anchorLabels()[id];
+export function anchorLabel(id: string): string {
+  return wordOf(anchorLabels(), id);
 }
 
 /** Each kind of event inside a sentence: "around meals". */
-export function anchorPhrases(): Record<AnchorId, string> {
+export function anchorPhrases(): Record<string, string> {
   return {
     [EventAnchorKind.Meal]: "meals",
     [EventAnchorKind.CorrectionBolus]: "correction boluses",
@@ -143,12 +134,12 @@ export function anchorPhrases(): Record<AnchorId, string> {
   };
 }
 
-export function anchorPhrase(id: AnchorId): string {
-  return anchorPhrases()[id];
+export function anchorPhrase(id: string): string {
+  return wordOf(anchorPhrases(), id);
 }
 
 /** The headings the event menu lists the kinds of event under. */
-export function anchorGroupLabels(): Record<AnchorGroup, string> {
+export function anchorGroupLabels(): Record<string, string> {
   return {
     food: "Food and insulin",
     glucose: "Glucose",
@@ -157,12 +148,12 @@ export function anchorGroupLabels(): Record<AnchorGroup, string> {
   };
 }
 
-export function anchorGroupLabel(id: AnchorGroup): string {
-  return anchorGroupLabels()[id];
+export function anchorGroupLabel(id: string): string {
+  return wordOf(anchorGroupLabels(), id);
 }
 
 /** Each range preset. */
-export function rangeLabels(): Record<RangePresetId, string> {
+export function rangeLabels(): Record<string, string> {
   return {
     "6h": "6 hours",
     "24h": "24 hours",
@@ -173,12 +164,12 @@ export function rangeLabels(): Record<RangePresetId, string> {
   };
 }
 
-export function rangeLabel(id: RangePresetId): string {
-  return rangeLabels()[id];
+export function rangeLabel(id: string): string {
+  return wordOf(rangeLabels(), id);
 }
 
 /** Each preset of groups of days. */
-export function dayGroupPresetLabels(): Record<DayGroupPresetId, string> {
+export function dayGroupPresetLabels(): Record<string, string> {
   return {
     everyDay: "Every day",
     weekdaysAndWeekend: "Weekdays and the weekend",
@@ -186,12 +177,12 @@ export function dayGroupPresetLabels(): Record<DayGroupPresetId, string> {
   };
 }
 
-export function dayGroupPresetLabel(id: DayGroupPresetId): string {
-  return dayGroupPresetLabels()[id];
+export function dayGroupPresetLabel(id: string): string {
+  return wordOf(dayGroupPresetLabels(), id);
 }
 
 /** Each kind of time a chart can leave out. */
-export function leaveOutLabels(): Record<LeaveOutId, string> {
+export function leaveOutLabels(): Record<string, string> {
   return {
     overrides: "Overrides",
     temporaryTargets: "Temporary targets",
@@ -201,12 +192,12 @@ export function leaveOutLabels(): Record<LeaveOutId, string> {
   };
 }
 
-export function leaveOutLabel(id: LeaveOutId): string {
-  return leaveOutLabels()[id];
+export function leaveOutLabel(id: string): string {
+  return wordOf(leaveOutLabels(), id);
 }
 
 /** Each figure of an event. */
-export function outcomeLabels(): Record<Outcome, string> {
+export function outcomeLabels(): Record<string, string> {
   return {
     peakRise: "Peak rise",
     minutesToPeak: "Time to peak",
@@ -221,12 +212,12 @@ export function outcomeLabels(): Record<Outcome, string> {
   };
 }
 
-export function outcomeLabel(id: Outcome): string {
-  return outcomeLabels()[id];
+export function outcomeLabel(id: string): string {
+  return wordOf(outcomeLabels(), id);
 }
 
 /** What each event can lie along. */
-export function alongLabels(): Record<Along, string> {
+export function alongLabels(): Record<string, string> {
   return {
     startGlucose: "Glucose at the event",
     grams: "Carbs",
@@ -236,12 +227,12 @@ export function alongLabels(): Record<Along, string> {
   };
 }
 
-export function alongLabel(id: Along): string {
-  return alongLabels()[id];
+export function alongLabel(id: string): string {
+  return wordOf(alongLabels(), id);
 }
 
 /** Each way a chart around an event shows the events. */
-export function eventShowLabels(): Record<EventShow, string> {
+export function eventShowLabels(): Record<string, string> {
   return {
     curve: "Over time",
     each: "Each event",
@@ -250,12 +241,12 @@ export function eventShowLabels(): Record<EventShow, string> {
   };
 }
 
-export function eventShowLabel(id: EventShow): string {
-  return eventShowLabels()[id];
+export function eventShowLabel(id: string): string {
+  return wordOf(eventShowLabels(), id);
 }
 
 /** Each family of signals, as the rail's and the chips' headings. */
-export function familyLabels(): Record<Family, string> {
+export function familyLabels(): Record<string, string> {
   return {
     Glucose: "Glucose",
     Insulin: "Insulin",
@@ -267,12 +258,12 @@ export function familyLabels(): Record<Family, string> {
   };
 }
 
-export function familyLabel(id: Family): string {
-  return familyLabels()[id];
+export function familyLabel(id: string): string {
+  return wordOf(familyLabels(), id);
 }
 
 /** Each way a signal can be drawn. */
-export function markLabels(): Record<MarkWord, string> {
+export function markLabels(): Record<string, string> {
   return {
     line: "Line",
     lines: "Lines",
@@ -290,8 +281,8 @@ export function markLabels(): Record<MarkWord, string> {
   };
 }
 
-export function markLabel(id: MarkWord): string {
-  return markLabels()[id];
+export function markLabel(id: string): string {
+  return wordOf(markLabels(), id);
 }
 
 /** The datasets a block of figures or a table reads, named by what they show. */
@@ -314,11 +305,11 @@ export function sourceLabels(): Record<string, string> {
 
 /** A block's source in words; the dataset's own name when the workspace has none for it. */
 export function sourceLabel(dataset: string): string {
-  return sourceLabels()[dataset] ?? dataset;
+  return wordOf(sourceLabels(), dataset);
 }
 
 /** The headings of the starting questions. */
-export function starterGroupLabels(): Record<StarterGroup, string> {
+export function starterGroupLabels(): Record<string, string> {
   return {
     glucose: "Glucose",
     lowsHighs: "Lows and highs",
@@ -327,8 +318,8 @@ export function starterGroupLabels(): Record<StarterGroup, string> {
   };
 }
 
-export function starterGroupLabel(id: StarterGroup): string {
-  return starterGroupLabels()[id];
+export function starterGroupLabel(id: string): string {
+  return wordOf(starterGroupLabels(), id);
 }
 
 /** Each starting question's title and one-line description; a description that names a time of day is written in the member's clock. */
@@ -434,9 +425,95 @@ export function starterWords(clock: (minute: number) => string): Record<string, 
 }
 
 /** A weekday's name in the app's locale; "short" for a toggle. */
-export function weekdayName(day: Weekday, width: "long" | "short" = "long"): string {
-  // 5 January 2026 is a Monday, as WEEKDAY_IDS starts.
-  return new Intl.DateTimeFormat(formatLocale(), { weekday: width, timeZone: "UTC" }).format(
-    Date.UTC(2026, 0, 5 + WEEKDAY_IDS.indexOf(day))
-  );
+export function weekdayName(day: Weekday, weekdays: readonly Weekday[], width: "long" | "short" = "long"): string {
+  // `weekdays` is the catalogue's order, Monday first; 5 January 2026 is a Monday.
+  const at = weekdays.indexOf(day);
+  if (at < 0) return day;
+  return new Intl.DateTimeFormat(formatLocale(), { weekday: width, timeZone: "UTC" }).format(Date.UTC(2026, 0, 5 + at));
+}
+
+/** The access scopes a part of a report reads, in words. */
+export function scopeWords(): Record<string, string> {
+  return {
+    "glucose.read": "glucose",
+    "treatments.read": "treatments",
+    "food.read": "food",
+    "therapy.read": "therapy settings",
+    "devices.read": "devices",
+    "heartrate.read": "heart rate",
+    "sleep.read": "sleep",
+    "stepcount.read": "steps",
+  };
+}
+
+export function scopeWord(scope: string): string {
+  return wordOf(scopeWords(), scope);
+}
+
+/** Why the reader cannot use something that reads `scopes`: its access lacks one of them. */
+export function accessReason(scopes: readonly string[]): string {
+  const words = scopes.map(scopeWord);
+  return words.length > 0
+    ? `Your access cannot read ${words.join(" or ")}, which this needs.`
+    : "Your access cannot read the data this needs.";
+}
+
+/** The verb a "When" chart puts after a kind of event: lows "start", meals "happen". */
+export function anchorVerbs(): Record<string, string> {
+  return {
+    [EventAnchorKind.Meal]: "happen",
+    [EventAnchorKind.CorrectionBolus]: "happen",
+    [EventAnchorKind.AnyBolus]: "happen",
+    [EventAnchorKind.UnannouncedRise]: "start",
+    [EventAnchorKind.LowStart]: "start",
+    [EventAnchorKind.HighStart]: "start",
+    [EventAnchorKind.LowTreatment]: "happen",
+    [EventAnchorKind.ExerciseStart]: "start",
+    [EventAnchorKind.SleepStart]: "start",
+    [EventAnchorKind.Wake]: "happen",
+    [EventAnchorKind.SensorStart]: "start",
+    [EventAnchorKind.SiteChange]: "happen",
+    [EventAnchorKind.OverrideStart]: "start",
+    [EventAnchorKind.TemporaryTargetStart]: "start",
+  };
+}
+
+/** "When lows start", "When meals happen": the verb each kind takes, "start" only when all do. */
+export function whenPhrase(anchors: readonly string[], phrase: string): string {
+  const verbs = anchorVerbs();
+  const start = anchors.length > 0 && anchors.every((a) => verbs[a] === "start");
+  return start ? `When ${phrase} start` : `When ${phrase} happen`;
+}
+
+/** What a "When" chart counts the events by. */
+export function whenAxisLabels(): Record<string, string> {
+  return { hour: "by hour of day", weekday: "by weekday" };
+}
+
+export function whenAxisLabel(id: string): string {
+  return wordOf(whenAxisLabels(), id);
+}
+
+/** The menu labels of what a "When" chart counts by. */
+export function whenAxisChoices(): Record<string, string> {
+  return { hour: "By hour of day", weekday: "By weekday" };
+}
+
+export function whenAxisChoice(id: string): string {
+  return wordOf(whenAxisChoices(), id);
+}
+
+/** What a day can have had, as a choice: the words of a day condition with no amount. */
+export function dayKindLabels(): Record<string, string> {
+  return {
+    exercise: "Days with exercise",
+    illness: "Days with illness",
+    low: "Days with a low",
+    lowOvernight: "Days with a low overnight",
+    carbs: "Days by total carbs",
+  };
+}
+
+export function dayKindLabel(id: string): string {
+  return wordOf(dayKindLabels(), id);
 }

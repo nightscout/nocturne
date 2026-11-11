@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { liveCatalogue } from "./catalogue.fixtures.js";
 import { Report } from "./report.svelte.js";
+import { vocabularyOf } from "./workspace.svelte.js";
 import { openSaved, specToSave, stateTooLarge } from "./saved-report.js";
 import {
   BUILDER_KIND,
@@ -95,7 +96,7 @@ describe("the workspace's saved state", () => {
     const unknownAnchor = { ...state, blocks: [{ ...chart, chart: { ...chart.chart, moments: [{ key: 1, what: "Breakfast" }] } }] };
 
     for (const bad of [older, extra, unknownSignal, unknownAnchor, null, "state", []])
-      expect(parseSavedReport(BUILDER_VERSION, bad)).toBeNull();
+      expect(parseSavedReport(BUILDER_VERSION, bad, vocabularyOf(liveCatalogue))).toBeNull();
   });
 
   it("refuses state the workspace could never have made", () => {
@@ -110,7 +111,7 @@ describe("the workspace's saved state", () => {
       "a group key twice": withChart({ moments: [chart.chart.moments[0], chart.chart.moments[0]] }),
       "a profile name over 100 characters": withChart({ profileName: "p".repeat(101) }),
     };
-    for (const [what, bad] of Object.entries(hidden)) expect(parseSavedReport(BUILDER_VERSION, bad), what).toBeNull();
+    for (const [what, bad] of Object.entries(hidden)) expect(parseSavedReport(BUILDER_VERSION, bad, vocabularyOf(liveCatalogue)), what).toBeNull();
     expect(Report.fromState(liveCatalogue, BUILDER_VERSION, { ...state, title: "t".repeat(liveCatalogue.maxTitleLength + 1) })).toBeNull();
   });
 });

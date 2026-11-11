@@ -5,55 +5,29 @@ import {
   convertToDisplayUnits,
   type GlucoseUnits,
 } from "@nocturne/ui/glucose";
+import { EventAnchorKind } from "#lib/api/index.js";
 import {
-  AGAINST_GRID_MINUTES,
-  ANCHOR_MEAL,
-  ANCHOR_RISE,
-  ALONGS,
-  ALONG_TIME_OF_DAY,
-  NO_UNIT,
-  DAY_KINDS,
-  OCCURRENCE_DATASET,
-  OUTCOMES,
-  OUTCOMES_DATASET,
-  SLEEP_ANCHORS,
-  SPREAD_DATASET,
-  DAY_GROUP_PRESETS,
-  DEFAULT_REPORT_HOURS,
-  EVENT_AFTER_CHOICES,
-  EVENT_BEFORE_CHOICES,
-  EVENT_DATASET,
-  EVENT_MINUTES_AFTER,
-  EVENT_MINUTES_BEFORE,
-  FAMILY_LANES,
-  LEAVE_OUTS,
-  RANGE_PRESETS,
-  SIGNALS,
-  WEEKDAY_IDS,
-  anchor,
-  cellOf,
-  isStartAnchor,
-  lensesOf,
-  signal as signalOf,
+  CURVE,
+  Vocabulary,
+  bindingsOf,
   type Along,
   type AnchorId,
-  type DayKind,
   type Cell,
-  type EventShow,
-  type Outcome,
-  type OutcomeChoice,
-  type WhenAxis,
   type CombineOp,
   type DayGroupPresetId,
+  type DayKind,
+  type EventShow,
   type Family,
   type LeaveOutId,
   type LensId,
   type MarkChoice,
+  type Outcome,
   type RangePresetId,
   type SignalId,
   type Weekday,
-} from "./vocabulary.js";
-import { alongLabel, anchorPhrase, leaveOutLabel, lensLabel, markLabel, outcomeLabel, rangeLabel, signalLabel, weekdayName } from "./vocabulary-words.svelte.js";
+  type WhenAxis,
+} from "./catalogue-vocabulary.js";
+import { accessReason, whenAxisLabel, whenPhrase, alongLabel, anchorPhrase, leaveOutLabel, lensLabel, markLabel, outcomeLabel, rangeLabel, signalLabel, weekdayName } from "./vocabulary-words.svelte.js";
 
 export interface Relate {
   /** Rolling-mean window in minutes, or null for none. */
@@ -291,13 +265,6 @@ export interface WorkspaceHost {
 }
 
 export const MAX_DAY_GROUPS = 3;
-const MAX_MOMENTS_FALLBACK = 3;
-/**
- * The API folds a time axis into at most this many slots, so a window must fit
- * the coarsened step.
- */
-const MAX_SLOTS = 2000;
-const NICE_GRIDS = [5, 10, 15, 20, 30, 60, 120, 240];
 /** The second axis of a track: a track has at most two units. */
 const UNITS_PER_TRACK = 2;
 const OVERFLOW_HEIGHT = 0.75;
@@ -310,18 +277,6 @@ const NO_RELATE: Relate = {
   fromStart: false,
 };
 
-const FALLBACK_LEAVE_OUT: Record<LeaveOutId, boolean> = {
-  overrides: false,
-  temporaryTargets: false,
-  exercise: false,
-  illness: true,
-  openLoop: true,
-};
-
-const STANDALONE: WorkspaceHost = {
-  reportHours: () => DEFAULT_REPORT_HOURS,
-  budget: () => null,
-};
 
 let nextKey = 0;
 
@@ -336,29 +291,15 @@ export function reserveKey(key: number) {
 }
 
 /** The API's defaults for leaving time out, from the catalogue when it gives them. */
-export function leaveOutDefaults(
-  catalogue: CustomReportCatalogue
-): Record<LeaveOutId, boolean> {
+export function leaveOutDefaults(vocab: Vocabulary): Record<LeaveOutId, boolean> {
   const properties: Record<string, { default?: unknown }> | undefined =
-    catalogue.datasets.find((d) => d.name === EVENT_DATASET)?.parameters
-      ?.properties;
-  const value = (id: LeaveOutId): boolean => {
-    const l = LEAVE_OUTS.find((x) => x.id === id)!;
-    const given = properties?.[l.parameter]?.default;
-    return typeof given === "boolean" ? given : l.fallback;
-  };
-  return {
-    overrides: value("overrides"),
-    temporaryTargets: value("temporaryTargets"),
-    exercise: value("exercise"),
-    illness: value("illness"),
-    openLoop: value("openLoop"),
-  };
+    vocab.catalogue.datasets.find((d) => d.name === vocab.eventDataset)?.parameters?.properties;
+  return Object.fromEntries(vocab.leaveOuts.map((l) => [l.id, properties?.[l.parameter]?.default === true]));
 }
 
 /** The catalogue's `x-eventFigures.figures`: each figure with the anchors it applies to. */
-export function eventFiguresOf(catalogue: CustomReportCatalogue): EventFigures {
-  const params: unknown = catalogue.datasets.find((d) => d.name === EVENT_DATASET)?.parameters;
+export function eventFiguresOf(vocab: Vocabulary): EventFigures {
+  const params: unknown = vocab.catalogue.datasets.find((d) => d.name === vocab.eventDataset)?.parameters;
   const figures = objectAt(objectAt(params, "x-eventFigures"), "figures") ?? {};
   const out: EventFigures = {};
   for (const [key, value] of Object.entries(figures))
@@ -367,48 +308,53 @@ export function eventFiguresOf(catalogue: CustomReportCatalogue): EventFigures {
   return out;
 }
 
-function choicesOf(
-  catalogue: CustomReportCatalogue,
-  parameter: string,
-  fallback: number[]
-): number[] {
-  const given: unknown = catalogue.datasets.find(
-    (d) => d.name === EVENT_DATASET
-  )?.parameters?.properties?.[parameter]?.enum;
-  return Array.isArray(given) && given.every((v) => typeof v === "number")
-    ? given
-    : fallback;
-}
-
-export function emptyState(
-  defaults: Record<LeaveOutId, boolean>
-): WorkspaceState {
+export function emptyState(vocab: Vocabulary, defaults: Record<LeaveOutId, boolean>): WorkspaceState {
+  const windows = vocab.windows;
   return {
     title: "",
     range: null,
-    lens: "timeline",
+    lens: vocab.lenses[0] ?? "",
     placed: [],
     lanes: [],
     combos: [],
-    moments: [{ key: freshKey(), what: ANCHOR_MEAL }],
-    dayGroups: DAY_GROUP_PRESETS.everyDay.groups.map((g) => [...g]),
+    moments: [{ key: freshKey(), what: vocab.firstAnchor }],
+    dayGroups: [[...vocab.weekdays]],
     dayFilter: null,
     findLag: false,
     leaveOut: { ...defaults },
     profileName: null,
     event: {
-      before: EVENT_MINUTES_BEFORE,
-      after: EVENT_MINUTES_AFTER,
+      before: windows.defaultBefore,
+      after: windows.defaultAfter,
       isolatedOnly: false,
       requireCorroboration: false,
       comparison: null,
-      show: "curve",
-      up: "peakRise",
-      along: "startGlucose",
+      show: CURVE,
+      up: vocab.outcomes[0]?.id ?? "",
+      along: vocab.alongs[0] ?? "",
       fit: true,
-      figure: "peakRise",
-      when: "hour",
+      figure: vocab.outcomes[0]?.id ?? "",
+      when: vocab.whenAxes[0] ?? "",
     },
+  };
+}
+
+/** A state with nothing in it, which a workspace holds only until its constructor sets its own. */
+function blankState(): WorkspaceState {
+  return {
+    title: "",
+    range: null,
+    lens: "",
+    placed: [],
+    lanes: [],
+    combos: [],
+    moments: [],
+    dayGroups: [],
+    dayFilter: null,
+    findLag: false,
+    leaveOut: {},
+    profileName: null,
+    event: { before: 0, after: 0, isolatedOnly: false, requireCorroboration: false, comparison: null, show: CURVE, up: "", along: "", fit: true, figure: "", when: "" },
   };
 }
 
@@ -435,17 +381,17 @@ function markOf(
  * The signals drawn under the state's lens, in placement order: under
  * `against`, the first two.
  */
-export function shownSignals(state: WorkspaceState): SignalId[] {
+export function shownSignals(state: WorkspaceState, vocab: Vocabulary): SignalId[] {
   const available = state.placed
     .map((p) => p.id)
-    .filter((id) => cellOf(state.lens, id));
+    .filter((id) => vocab.cellOf(state.lens, id));
   return state.lens === "against" ? available.slice(0, 2) : available;
 }
 
 /** The combinations drawn: those of the lens whose two sources are drawn. */
-export function shownCombos(state: WorkspaceState): Combo[] {
+export function shownCombos(state: WorkspaceState, vocab: Vocabulary): Combo[] {
   if (state.lens === "against") return [];
-  const shown = shownSignals(state);
+  const shown = shownSignals(state, vocab);
   return state.combos.filter(
     (c) => c.lens === state.lens && shown.includes(c.a) && shown.includes(c.b)
   );
@@ -455,29 +401,31 @@ export function shownCombos(state: WorkspaceState): Combo[] {
  * The lanes drawn: the state's lanes with only their shown signals, empty ones
  * left out.
  */
-function shownLanes(state: WorkspaceState): Lane[] {
-  const shown = shownSignals(state);
+function shownLanes(state: WorkspaceState, vocab: Vocabulary): Lane[] {
+  const shown = shownSignals(state, vocab);
   return state.lanes
     .map((l) => ({ ...l, signals: l.signals.filter((s) => shown.includes(s)) }))
     .filter((l) => l.signals.length > 0);
 }
 
 /** The unit a placed signal takes an axis in under the lens; null for none. */
-function axisUnit(state: WorkspaceState, id: SignalId): string | null {
-  const cell = cellOf(state.lens, id);
+function axisUnit(state: WorkspaceState, vocab: Vocabulary, id: SignalId): string | null {
+  const cell = vocab.cellOf(state.lens, id);
   const placed = state.placed.find((p) => p.id === id);
   if (!cell || !placed) return null;
-  return markOf(placed, state.lens, cell)?.noAxis || cell.unit === NO_UNIT ? null : cell.unit;
+  const mark = markOf(placed, state.lens, cell);
+  // A count the engine gives no unit takes no unit of a track's two.
+  return (mark && !vocab.hasAxis(mark.mark)) || !cell.unit ? null : cell.unit;
 }
 
 /**
  * The tracks a lane becomes: a track has at most two units, so the signals of
  * a third unit go on a track of their own below.
  */
-function laneTracks(state: WorkspaceState, lane: Lane): SignalId[][] {
+function laneTracks(state: WorkspaceState, vocab: Vocabulary, lane: Lane): SignalId[][] {
   const tracks: { units: string[]; signals: SignalId[] }[] = [];
   for (const id of lane.signals) {
-    const unit = axisUnit(state, id);
+    const unit = axisUnit(state, vocab, id);
     let track = tracks.find(
       (t) =>
         unit === null ||
@@ -494,24 +442,12 @@ function laneTracks(state: WorkspaceState, lane: Lane): SignalId[][] {
   return tracks.map((t) => t.signals);
 }
 
-/**
- * The time-axis grid a smoothed timeline needs, so a window is a whole number
- * of slots at any range.
- */
-function timelineGrid(rangeHours: number): number {
-  const least = Math.ceil((rangeHours * 60) / MAX_SLOTS);
-  return (
-    NICE_GRIDS.find((g) => g >= least) ?? NICE_GRIDS[NICE_GRIDS.length - 1]
-  );
-}
-
 function roundWindow(minutes: number, grid: number): number {
   return Math.ceil(minutes / grid) * grid;
 }
 
-function laneHeight(lane: Lane): number {
-  if (lane.signals.includes("glucose")) return 2;
-  return FAMILY_LANES.find((f) => f.family === lane.family)?.height ?? 1;
+function laneHeight(vocab: Vocabulary, lane: Lane): number {
+  return vocab.laneHeight(lane.family);
 }
 
 function bounds(b: Bounds | undefined): Bounds | undefined {
@@ -523,14 +459,14 @@ function bounds(b: Bounds | undefined): Bounds | undefined {
 }
 
 /** Whether a moment narrows its events at all: a filter or a condition. */
-export function isNarrowed(moment: Moment): boolean {
-  return !moment.everythingElse && Object.keys(cohortJson(moment)).length > 1;
+export function isNarrowed(moment: Moment, vocab: Vocabulary): boolean {
+  return !moment.everythingElse && Object.keys(cohortJson(moment, vocab)).length > 1;
 }
 
 /** A moment as one cohort of the `event_response` query. */
-function cohortJson(moment: Moment): Record<string, unknown> {
+function cohortJson(moment: Moment, vocab: Vocabulary): Record<string, unknown> {
   if (moment.everythingElse) return { anchor: moment.what, others: true };
-  const meal = anchor(moment.what).meal;
+  const meal = vocab.mealNarrowing(moment.what);
   const foods =
     meal && moment.foods && moment.foods.length > 0
       ? moment.foods.map((f) => f.id)
@@ -566,43 +502,45 @@ function appliesToAll(figures: EventFigures, id: string, moments: Moment[]): boo
 
 /** The figures that apply to every group, by the catalogue's `x-eventFigures`. */
 export function outcomesFor(
+  vocab: Vocabulary,
   moments: Moment[],
   forSpread: boolean,
   figures: EventFigures
-): OutcomeChoice[] {
-  return OUTCOMES.filter(
+) {
+  return vocab.outcomes.filter(
     (o) => (forSpread || !o.spreadOnly) && appliesToAll(figures, o.id, moments)
   );
 }
 
 /** What each event can lie along, for these groups. */
-export function alongsFor(moments: Moment[], figures: EventFigures) {
-  return ALONGS.filter((a) => appliesToAll(figures, a.id, moments));
+export function alongsFor(vocab: Vocabulary, moments: Moment[], figures: EventFigures): Along[] {
+  return vocab.alongs.filter((a) => appliesToAll(figures, a, moments));
 }
 
 /** A chosen figure, or the first that applies when it does not. */
 function pickOutcome(
+  vocab: Vocabulary,
   moments: Moment[],
   chosen: Outcome,
   forSpread: boolean,
   figures: EventFigures
 ): Outcome {
-  const list = outcomesFor(moments, forSpread, figures);
+  const list = outcomesFor(vocab, moments, forSpread, figures);
   return list.find((o) => o.id === chosen)?.id ?? list[0]?.id ?? chosen;
 }
 
-function pickAlong(moments: Moment[], chosen: Along, figures: EventFigures): Along {
-  const list = alongsFor(moments, figures);
-  return list.find((a) => a.id === chosen)?.id ?? list[0]?.id ?? chosen;
+function pickAlong(vocab: Vocabulary, moments: Moment[], chosen: Along, figures: EventFigures): Along {
+  const list = alongsFor(vocab, moments, figures);
+  return list.find((a) => a === chosen) ?? list[0] ?? chosen;
 }
 
 /** The cohorts of the moments, one for each, in order. */
-export function eventCohorts(moments: Moment[]): {
+export function eventCohorts(moments: Moment[], vocab: Vocabulary): {
   cohorts: Record<string, unknown>[];
   numbers: number[];
 } {
   return {
-    cohorts: moments.map((m) => cohortJson(m)),
+    cohorts: moments.map((m) => cohortJson(m, vocab)),
     numbers: moments.map((_, i) => i + 1),
   };
 }
@@ -610,10 +548,11 @@ export function eventCohorts(moments: Moment[]): {
 /** The leave-out parameters that differ from the API's defaults, and the profile. */
 function leaveOutParameters(
   state: WorkspaceState,
+  vocab: Vocabulary,
   defaults: Record<LeaveOutId, boolean>
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const l of LEAVE_OUTS)
+  for (const l of vocab.leaveOuts)
     if (state.leaveOut[l.id] !== defaults[l.id])
       out[l.parameter] = state.leaveOut[l.id];
   if (state.profileName?.trim()) out.profileName = state.profileName.trim();
@@ -623,13 +562,12 @@ function leaveOutParameters(
 /** The parameters of the `event_response` query: groups, window and options. */
 export function eventParameters(
   state: WorkspaceState,
+  vocab: Vocabulary,
   defaults: Record<LeaveOutId, boolean>
 ): Record<string, unknown> {
-  const rise = state.moments.some(
-    (m) => !m.everythingElse && m.what === ANCHOR_RISE
-  );
+  const rise = state.moments.some((m) => !m.everythingElse && corroborates(m.what));
   return {
-    cohorts: eventCohorts(state.moments).cohorts,
+    cohorts: eventCohorts(state.moments, vocab).cohorts,
     minutesBefore: state.event.before,
     minutesAfter: state.event.after,
     ...(state.event.isolatedOnly ? { isolatedOnly: true } : {}),
@@ -639,11 +577,21 @@ export function eventParameters(
     ...(state.event.comparison
       ? { comparisonRange: state.event.comparison }
       : {}),
-    ...leaveOutParameters(state, defaults),
+    ...leaveOutParameters(state, vocab, defaults),
   };
 }
 
+/**
+ * Whether the loop's extra insulin can corroborate events of the kind: rises with no carbs. The
+ * catalogue does not say which kinds take `requireCorroboration`, so this is the one kind of event
+ * the model still names.
+ */
+export function corroborates(what: AnchorId): boolean {
+  return what === EventAnchorKind.UnannouncedRise;
+}
+
 export interface BuildContext {
+  vocab: Vocabulary;
   rangeHours: number;
   leaveOut: Record<LeaveOutId, boolean>;
   figures: EventFigures;
@@ -668,6 +616,8 @@ export function dayFilterText(
       const b = boundsText({ min: f.minCarbs, max: f.maxCarbs }, "g");
       return b ? `Days with ${b} of carbs` : "Days by total carbs";
     }
+    default:
+      return f.kind;
   }
 }
 
@@ -676,6 +626,7 @@ export function dayFilterText(
  * change can be tried before it is kept.
  */
 export function build(state: WorkspaceState, ctx: BuildContext): Built {
+  const vocab = ctx.vocab;
   const signalLayers: Partial<Record<SignalId, string[]>> = {};
   const comboLayers: Record<number, string[]> = {};
   const momentCohorts: CohortRef[][] = state.moments.map(() => []);
@@ -698,7 +649,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
     reads: [],
     hours: ctx.rangeHours,
   };
-  const shown = shownSignals(state);
+  const shown = shownSignals(state, vocab);
   const placedOf = (id: SignalId) => state.placed.find((p) => p.id === id)!;
   const read = (dataset: Record<string, unknown>) => {
     const key = JSON.stringify(dataset);
@@ -728,7 +679,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
           tracks: t,
         });
       }
-      for (const sig of SIGNALS) {
+      for (const sig of vocab.signals) {
         const ids = one.signalLayers[sig.id];
         if (ids) (signalLayers[sig.id] ??= []).push(...ids.map(suffix));
       }
@@ -788,14 +739,14 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
     ...cell.parameters,
     ...(cell.leaveOut &&
     (state.lens === "typical_day" || state.lens === "event")
-      ? leaveOutParameters(state, ctx.leaveOut)
+      ? leaveOutParameters(state, vocab, ctx.leaveOut)
       : {}),
     ...extra,
   });
 
   if (state.lens === "against") {
     if (shown.length < 2) return empty;
-    const [a, b] = shown.map((id) => cellOf("against", id)!);
+    const [a, b] = shown.map((id) => vocab.cellOf("against", id)!);
     const source = (cell: Cell) => ({
       dataset: datasetOf(cell),
       field: cell.field,
@@ -807,7 +758,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
       {
         id: "chart",
         kind: "chart",
-        grid: AGAINST_GRID_MINUTES,
+        grid: vocab.againstGridMinutes,
         tracks: [
           {
             id: "against",
@@ -823,7 +774,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
       panels.push({
         id: "lag",
         kind: "chart",
-        grid: AGAINST_GRID_MINUTES,
+        grid: vocab.againstGridMinutes,
         tracks: [
           {
             id: "lag",
@@ -839,18 +790,16 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
   }
 
   if (state.lens === "event" && state.event.show !== "curve") {
-    const { comparisonRange: _comparison, ...params } = eventParameters(
-      state,
-      ctx.leaveOut
+    const { comparisonRange: _comparison, ...params } = eventParameters(state, vocab, ctx.leaveOut
     );
     const groups = state.moments.length;
     const counts = state.moments.map((_, i) => `events${i + 1}`);
     const layers: Record<string, unknown>[] = [];
     if (state.event.show === "each") {
-      const up = pickOutcome(state.moments, state.event.up, false, ctx.figures);
-      const along = pickAlong(state.moments, state.event.along, ctx.figures);
+      const up = pickOutcome(vocab, state.moments, state.event.up, false, ctx.figures);
+      const along = pickAlong(vocab, state.moments, state.event.along, ctx.figures);
       state.moments.forEach((_, i) => {
-        const dataset = { name: OUTCOMES_DATASET, ...params, group: i + 1 };
+        const dataset = { name: vocab.showDataset("each"), ...params, group: i + 1 };
         read(dataset);
         layers.push({
           id: `each-${i + 1}`,
@@ -859,7 +808,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
           bindings: {
             x: along,
             y: [up],
-            ...(state.event.fit && along !== ALONG_TIME_OF_DAY ? { fit: `${up}Fit` } : {}),
+            ...(state.event.fit && vocab.lineAlong(along) ? { fit: `${up}Fit` } : {}),
           },
         });
         momentCohorts[i].push({ layer: `each-${i + 1}`, cohort: i + 1 });
@@ -868,11 +817,11 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
       const spread = state.event.show === "spread";
       const dataset = spread
         ? {
-            name: SPREAD_DATASET,
+            name: vocab.showDataset("spread"),
             ...params,
-            outcome: pickOutcome(state.moments, state.event.figure, true, ctx.figures),
+            outcome: pickOutcome(vocab, state.moments, state.event.figure, true, ctx.figures),
           }
-        : { name: OCCURRENCE_DATASET, ...params };
+        : { name: vocab.showDataset("when"), ...params };
       read(dataset);
       layers.push({
         id: "events",
@@ -895,36 +844,36 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
     return finish([panel], 1, layers.length);
   }
 
-  const lanes = shownLanes(state);
+  const lanes = shownLanes(state, vocab);
   if (lanes.length === 0) return empty;
   let grid: number | undefined;
   let layerCount = 0;
   const useGrid = () => {
-    if (state.lens === "timeline") grid = timelineGrid(ctx.rangeHours);
+    if (state.lens === "timeline") grid = vocab.timelineGrid(ctx.rangeHours);
   };
   const windowOf = (minutes: number) =>
     state.lens === "timeline" ? roundWindow(minutes, grid!) : minutes;
 
   const layersFor = (ids: SignalId[]): Record<string, unknown>[] => {
     const layers: Record<string, unknown>[] = [];
-    const spans = ids.filter((id) => cellOf(state.lens, id)?.spanKind);
+    const spans = ids.filter((id) => vocab.cellOf(state.lens, id)?.spanKind);
     for (const id of ids) {
       const placed = placedOf(id);
-      const cell = cellOf(state.lens, id)!;
+      const cell = vocab.cellOf(state.lens, id)!;
       const relate = relateOf(placed, state.lens);
       const mark = markOf(placed, state.lens, cell)!;
 
       if (cell.spanKind) {
         if (id !== spans[0]) continue;
         const dataset = datasetOf(cell, {
-          kinds: spans.map((s) => cellOf(state.lens, s)!.spanKind),
+          kinds: spans.map((s) => vocab.cellOf(state.lens, s)!.spanKind),
         });
         read(dataset);
         layers.push({
           id: "spans",
           dataset,
           mark: mark.mark,
-          bindings: mark.bindings,
+          bindings: bindingsOf(mark),
         });
         for (const s of spans) own(s, "spans");
         continue;
@@ -940,7 +889,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
           id: layerId,
           dataset,
           mark: mark.mark,
-          bindings: mark.bindings,
+          bindings: bindingsOf(mark),
         });
         own(id, layerId);
         const source = { dataset, field: sourceField };
@@ -991,7 +940,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
         continue;
       }
 
-      if (state.lens === "typical_day" && cell.days && !dayFilterOn) {
+      if (state.lens === "typical_day" && cell.weekdays && !dayFilterOn) {
         state.dayGroups.forEach((days, g) => {
           const layerId = state.dayGroups.length > 1 ? `${id}-${g + 1}` : id;
           const dataset = datasetOf(
@@ -1008,8 +957,8 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
       }
 
       if (state.lens === "event") {
-        add(id, datasetOf(cell, eventParameters(state, ctx.leaveOut)));
-        eventCohorts(state.moments).numbers.forEach((cohort, i) =>
+        add(id, datasetOf(cell, eventParameters(state, vocab, ctx.leaveOut)));
+        eventCohorts(state.moments, vocab).numbers.forEach((cohort, i) =>
           momentCohorts[i].push({ layer: id, cohort })
         );
         continue;
@@ -1022,20 +971,20 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
 
   const tracks: Record<string, unknown>[] = [];
   for (const lane of lanes) {
-    laneTracks(state, lane).forEach((signals, i) => {
+    laneTracks(state, vocab, lane).forEach((signals, i) => {
       const layers = layersFor(signals);
       layerCount += layers.length;
       tracks.push({
         id: i === 0 ? lane.id : `${lane.id}-${i + 1}`,
-        height: i === 0 ? laneHeight({ ...lane, signals }) : OVERFLOW_HEIGHT,
+        height: i === 0 ? laneHeight(vocab, { ...lane, signals }) : OVERFLOW_HEIGHT,
         layers,
       });
     });
   }
 
-  for (const combo of shownCombos(state)) {
-    const cellA = cellOf(state.lens, combo.a)!;
-    const cellB = cellOf(state.lens, combo.b)!;
+  for (const combo of shownCombos(state, vocab)) {
+    const cellA = vocab.cellOf(state.lens, combo.a)!;
+    const cellB = vocab.cellOf(state.lens, combo.b)!;
     const source = (cell: Cell) => {
       const dataset = datasetOf(cell);
       read(dataset);
@@ -1068,10 +1017,6 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
 }
 
 /** The marks a combination can be drawn as: the op's own. */
-export const COMBO_MARKS: Record<CombineOp, string[]> = {
-  difference: ["line", "area", "bars", "points"],
-  ratio: ["line", "bars", "points"],
-};
 
 export function comboLabel(combo: Pick<Combo, "a" | "b" | "op">): string {
   const a = signalLabel(combo.a);
@@ -1079,8 +1024,8 @@ export function comboLabel(combo: Pick<Combo, "a" | "b" | "op">): string {
   return combo.op === "difference" ? `${a} minus ${b}` : `${a} divided by ${b}`;
 }
 
-function weekdayLabel(day: Weekday): string {
-  return weekdayName(day);
+function weekdayLabel(day: Weekday, weekdays: readonly Weekday[]): string {
+  return weekdayName(day, weekdays);
 }
 
 function joinAnd(items: string[]): string {
@@ -1089,8 +1034,8 @@ function joinAnd(items: string[]): string {
 }
 
 /** Weekdays as words: runs of three or more as "Monday to Friday". */
-export function weekdaysText(days: Weekday[]): string {
-  const order = [...WEEKDAY_IDS];
+export function weekdaysText(days: Weekday[], weekdays: readonly Weekday[]): string {
+  const order = [...weekdays];
   const sorted = order.filter((d) => days.includes(d));
   if (sorted.length === 7) return "every day";
   const runs: Weekday[][] = [];
@@ -1103,8 +1048,8 @@ export function weekdaysText(days: Weekday[]): string {
   return joinAnd(
     runs.flatMap((run) =>
       run.length >= 3
-        ? [`${weekdayLabel(run[0])} to ${weekdayLabel(run[run.length - 1])}`]
-        : run.map(weekdayLabel)
+        ? [`${weekdayLabel(run[0], weekdays)} to ${weekdayLabel(run[run.length - 1], weekdays)}`]
+        : run.map((d) => weekdayLabel(d, weekdays))
     )
   );
 }
@@ -1142,7 +1087,8 @@ export function momentText(
   moment: Moment,
   withAnchor: boolean,
   clock: (minute: number) => string,
-  units: GlucoseUnits
+  units: GlucoseUnits,
+  vocab: Vocabulary
 ): string {
   if (moment.everythingElse)
     return withAnchor
@@ -1158,8 +1104,8 @@ export function momentText(
     moment.weekdays.length > 0 &&
     moment.weekdays.length < 7
   )
-    parts.push(`on ${weekdaysText(moment.weekdays)}`);
-  if (anchor(moment.what).meal) {
+    parts.push(`on ${weekdaysText(moment.weekdays, vocab.weekdays)}`);
+  if (vocab.mealNarrowing(moment.what)) {
     const g = moment.grams;
     if (g?.min !== undefined && g.max !== undefined)
       parts.push(`${g.min} to ${g.max} g`);
@@ -1249,8 +1195,8 @@ function sentenceCase(labels: string[]): string {
   return joinAnd(labels.map((l, i) => (i === 0 ? l : lowerFirst(l))));
 }
 
-export function rangeText(hours: number): string {
-  const preset = RANGE_PRESETS.find((p) => p.hours === hours);
+export function rangeText(hours: number, presets: readonly { id: string; hours: number }[]): string {
+  const preset = presets.find((p) => p.hours === hours);
   if (preset) return `over the last ${rangeLabel(preset.id)}`;
   return hours % 24 === 0
     ? `over the last ${hours / 24} days`
@@ -1270,7 +1216,7 @@ function daysText(hours: number): string {
  * operation that is done anyway returns that reason and changes nothing.
  */
 export class Workspace {
-  state = $state<WorkspaceState>(emptyState(FALLBACK_LEAVE_OUT));
+  state = $state<WorkspaceState>(blankState());
 
   /**
    * How the caption writes a minute of the day; the UI sets the member's clock
@@ -1282,6 +1228,7 @@ export class Workspace {
   dates: (span: DateSpan) => string = (span) => `${span.from} to ${span.to}`;
 
   readonly #catalogue: CustomReportCatalogue;
+  readonly #vocab: Vocabulary;
   readonly #host: WorkspaceHost;
   readonly #leaveOut: Record<LeaveOutId, boolean>;
   readonly #figures: EventFigures;
@@ -1291,18 +1238,24 @@ export class Workspace {
   constructor(
     catalogue: CustomReportCatalogue,
     starter?: Starter,
-    host: WorkspaceHost = STANDALONE
+    host?: WorkspaceHost
   ) {
     this.#catalogue = catalogue;
-    this.#host = host;
-    this.#leaveOut = leaveOutDefaults(catalogue);
-    this.#figures = eventFiguresOf(catalogue);
-    this.state = emptyState(this.#leaveOut);
+    this.#vocab = vocabularyOf(catalogue);
+    this.#host = host ?? { reportHours: () => this.#vocab.defaultReportHours, budget: () => null };
+    this.#leaveOut = leaveOutDefaults(this.#vocab);
+    this.#figures = eventFiguresOf(this.#vocab);
+    this.state = emptyState(this.#vocab, this.#leaveOut);
     if (starter) this.load(starter);
   }
 
   get catalogue(): CustomReportCatalogue {
     return this.#catalogue;
+  }
+
+  /** The catalogue's vocabulary: the lenses, signals and kinds of event the chart is built from. */
+  get vocab(): Vocabulary {
+    return this.#vocab;
   }
 
   get leaveOutDefaults(): Record<LeaveOutId, boolean> {
@@ -1311,6 +1264,7 @@ export class Workspace {
 
   #context(state: WorkspaceState): BuildContext {
     return {
+      vocab: this.#vocab,
       rangeHours: this.#hoursOf(state),
       leaveOut: this.#leaveOut,
       figures: this.#figures,
@@ -1370,17 +1324,17 @@ export class Workspace {
 
   get maxMoments(): number {
     const max: unknown = this.#catalogue.datasets.find(
-      (d) => d.name === EVENT_DATASET
+      (d) => d.name === this.#vocab.eventDataset
     )?.parameters?.properties?.cohorts?.maxItems;
-    return typeof max === "number" ? max : MAX_MOMENTS_FALLBACK;
+    return typeof max === "number" ? max : 1;
   }
 
   get beforeChoices(): number[] {
-    return choicesOf(this.#catalogue, "minutesBefore", EVENT_BEFORE_CHOICES);
+    return this.#vocab.windows.before;
   }
 
   get afterChoices(): number[] {
-    return choicesOf(this.#catalogue, "minutesAfter", EVENT_AFTER_CHOICES);
+    return this.#vocab.windows.after;
   }
 
   /** The signals drawn, in lane order. */
@@ -1389,7 +1343,7 @@ export class Workspace {
   }
 
   get combos(): Combo[] {
-    return shownCombos(this.state);
+    return shownCombos(this.state, this.#vocab);
   }
 
   /**
@@ -1397,12 +1351,12 @@ export class Workspace {
    * `shown` in order: along, then up.
    */
   get lanes(): Lane[] {
-    return this.state.lens === "against" ? [] : shownLanes(this.state);
+    return this.state.lens === "against" ? [] : shownLanes(this.state, this.#vocab);
   }
 
   /** The signals under `against`: the first along the axis, the second up. */
   get againstPair(): SignalId[] {
-    return this.state.lens === "against" ? shownSignals(this.state) : [];
+    return this.state.lens === "against" ? shownSignals(this.state, this.#vocab) : [];
   }
 
   /** What a chart around an event shows; always the curve under other lenses. */
@@ -1417,8 +1371,8 @@ export class Workspace {
 
   /** Why a "Show" choice cannot be used now, or null. */
   showReason(show: EventShow): Reason {
-    if (show === "curve" || show === this.state.event.show) return null;
-    const dataset = listDataset(show);
+    if (show === CURVE || show === this.state.event.show) return null;
+    const dataset = this.#vocab.showDataset(show);
     const found = this.#catalogue.datasets.find((d) => d.name === dataset);
     if (!found) return "This report engine cannot show this.";
     if (!found.permitted || found.fields.some((f) => f.scope && !f.permitted))
@@ -1454,33 +1408,33 @@ export class Workspace {
 
   /** Each event: the figures up, and what they lie along, that apply to the groups. */
   get upChoices() {
-    return outcomesFor(this.state.moments, false, this.#figures);
+    return outcomesFor(this.#vocab, this.state.moments, false, this.#figures);
   }
 
   get alongChoices() {
-    return alongsFor(this.state.moments, this.#figures);
+    return alongsFor(this.#vocab, this.state.moments, this.#figures);
   }
 
   get figureChoices() {
-    return outcomesFor(this.state.moments, true, this.#figures);
+    return outcomesFor(this.#vocab, this.state.moments, true, this.#figures);
   }
 
   /** The figure up as drawn: the chosen one, or the first that applies. */
   get up(): Outcome {
-    return pickOutcome(this.state.moments, this.state.event.up, false, this.#figures);
+    return pickOutcome(this.#vocab, this.state.moments, this.state.event.up, false, this.#figures);
   }
 
   get along(): Along {
-    return pickAlong(this.state.moments, this.state.event.along, this.#figures);
+    return pickAlong(this.#vocab, this.state.moments, this.state.event.along, this.#figures);
   }
 
   /** Whether a line can go through the points: not along the time of day, which wraps at midnight. */
   get fitApplies(): boolean {
-    return this.along !== ALONG_TIME_OF_DAY;
+    return this.#vocab.lineAlong(this.along);
   }
 
   get figure(): Outcome {
-    return pickOutcome(this.state.moments, this.state.event.figure, true, this.#figures);
+    return pickOutcome(this.#vocab, this.state.moments, this.state.event.figure, true, this.#figures);
   }
 
   /** Whether the chart draws one small chart for each group: more groups than hues. */
@@ -1490,8 +1444,8 @@ export class Workspace {
 
   /** Why the reader cannot use an anchor, or null: sleep starts and wake-ups need the sleep permission. */
   anchorReason(id: AnchorId): Reason {
-    if (!SLEEP_ANCHORS.includes(id)) return null;
-    return this.#datasetPermitted("sleep") ? null : "Your access cannot read sleep, which this needs.";
+    const a = this.#vocab.anchor(id);
+    return !a || a.permitted ? null : accessReason(a.scopes);
   }
 
   /** The engine's one-line note on an anchor ("a site, cannula or pod change"), or null. */
@@ -1501,7 +1455,7 @@ export class Workspace {
 
   /** The event datasets' notes on each kind of event: the catalogue's `x-eventAnchors`. */
   #anchorNotes(): Partial<Record<string, { description: string | null; rule: string | null }>> {
-    const params: unknown = this.#catalogue.datasets.find((d) => d.name === EVENT_DATASET)?.parameters;
+    const params: unknown = this.#catalogue.datasets.find((d) => d.name === this.#vocab.eventDataset)?.parameters;
     const notes = objectAt(params, "x-eventAnchors") ?? {};
     const text = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
     return Object.fromEntries(
@@ -1512,16 +1466,18 @@ export class Workspace {
     );
   }
 
-  #datasetPermitted(name: string): boolean {
-    return this.#catalogue.datasets.find((d) => d.name === name)?.permitted ?? false;
-  }
 
   /** Signals the lens draws whose data the reader's access cannot read. */
   get noAccess(): SignalId[] {
-    return SIGNALS.filter((s) => {
-      const cell = cellOf(this.state.lens, s.id);
-      return cell && !this.#datasetPermitted(cell.dataset);
-    }).map((s) => s.id);
+    return this.#vocab.signals
+      .filter((s) => this.#vocab.cellOf(this.state.lens, s.id)?.permitted === false)
+      .map((s) => s.id);
+  }
+
+  /** Why the reader cannot read a signal under the lens: the scopes its data needs; null when it can. */
+  accessReasonOf(id: SignalId): Reason {
+    const cell = this.#vocab.cellOf(this.state.lens, id);
+    return !cell || cell.permitted ? null : accessReason(cell.scopes);
   }
 
   /** The chart's options in a few words, for the closed "Options" row. */
@@ -1530,7 +1486,7 @@ export class Workspace {
     const parts: string[] = [];
     if (s.lens === "event") parts.push(lowerFirst(windowText(s.event.before, s.event.after)));
     if (this.leaveOutApplies) {
-      const left = LEAVE_OUTS.filter((l) => s.leaveOut[l.id]).map((l) => lowerFirst(leaveOutLabel(l.id)));
+      const left = this.#vocab.leaveOuts.filter((l) => s.leaveOut[l.id]).map((l) => lowerFirst(leaveOutLabel(l.id)));
       parts.push(left.length > 0 ? `without ${joinAnd(left)}` : "all time");
     }
     return parts.join(", ");
@@ -1547,9 +1503,8 @@ export class Workspace {
 
   /** Why a day condition cannot be used now, or null: exercise, illness and carbs read treatments. */
   dayKindReason(kind: DayKind): Reason {
-    const needs = DAY_KINDS.find((k) => k.id === kind)?.treatments;
-    if (needs && !this.#datasetPermitted("treatments"))
-      return "Your access cannot read treatments, which this needs.";
+    const k = this.#vocab.dayKinds.find((x) => x.id === kind);
+    if (k && !k.permitted) return accessReason(k.scopes);
     return this.#reason((d) => {
       d.dayFilter = { kind };
     });
@@ -1574,13 +1529,13 @@ export class Workspace {
   /** Whether the chart draws nothing yet. */
   get empty(): boolean {
     if (this.eventList) return false;
-    return shownSignals(this.state).length === 0;
+    return shownSignals(this.state, this.#vocab).length === 0;
   }
 
   /** What the member does next before the chart can run, or null. */
   get incomplete(): string | null {
     if (this.eventList) return null;
-    const shown = shownSignals(this.state);
+    const shown = shownSignals(this.state, this.#vocab);
     if (this.state.lens === "against" && shown.length === 1)
       return "Select one more signal.";
     if (shown.length === 0) return "Select a signal.";
@@ -1592,23 +1547,23 @@ export class Workspace {
     if (this.state.lens !== "typical_day" && this.state.lens !== "event")
       return false;
     if (this.eventList) return true;
-    return shownSignals(this.state).some(
-      (id) => cellOf(this.state.lens, id)?.leaveOut
+    return shownSignals(this.state, this.#vocab).some(
+      (id) => this.#vocab.cellOf(this.state.lens, id)?.leaveOut
     );
   }
 
   /** Shown signals that the leave-out options do not narrow. */
   get leaveOutMisses(): SignalId[] {
     if (!this.leaveOutApplies || this.eventList) return [];
-    return shownSignals(this.state).filter(
-      (id) => !cellOf(this.state.lens, id)?.leaveOut
+    return shownSignals(this.state, this.#vocab).filter(
+      (id) => !this.#vocab.cellOf(this.state.lens, id)?.leaveOut
     );
   }
 
   /** Whether a group of events is rises with no carbs. */
   get hasRises(): boolean {
     return this.state.moments.some(
-      (m) => !m.everythingElse && m.what === ANCHOR_RISE
+      (m) => !m.everythingElse && corroborates(m.what)
     );
   }
 
@@ -1635,7 +1590,7 @@ export class Workspace {
       distinct(this.state.moments.map((m) => m.what)).length === 1;
     return this.state.moments.map((m, i) => ({
       ...m,
-      text: momentText(m, !sameAnchor, this.clock, this.glucoseUnits),
+      text: momentText(m, !sameAnchor, this.clock, this.glucoseUnits, this.#vocab),
       cohorts: this.cohortsOf(i),
     }));
   }
@@ -1647,13 +1602,13 @@ export class Workspace {
   groupHeading(index: number): string {
     const m = this.state.moments[index];
     if (!m) return "";
-    return `${GROUP_LETTERS[index]}: ${upperFirst(momentText(m, true, this.clock, this.glucoseUnits))}`;
+    return `${GROUP_LETTERS[index]}: ${upperFirst(momentText(m, true, this.clock, this.glucoseUnits, this.#vocab))}`;
   }
 
   /** The unit the tenant's reports show glucose in: the catalogue's glucose fields carry it. */
   get glucoseUnits(): GlucoseUnits {
     const unit = this.#catalogue.datasets
-      .find((d) => d.name === EVENT_DATASET)
+      .find((d) => d.name === this.#vocab.eventDataset)
       ?.fields.find((f) => f.name === "glucoseP50")?.unit;
     return unit === "mmol/L" ? "mmol" : "mg/dl";
   }
@@ -1675,7 +1630,7 @@ export class Workspace {
   /** The schema of one property of an event group, or undefined. */
   #cohortProperty(name: string): Record<string, unknown> | undefined {
     const cohorts: unknown = this.#catalogue.datasets.find(
-      (d) => d.name === EVENT_DATASET
+      (d) => d.name === this.#vocab.eventDataset
     )?.parameters?.properties?.cohorts;
     const items = objectAt(cohorts, "items");
     return objectAt(objectAt(items, "properties"), name);
@@ -1722,8 +1677,8 @@ export class Workspace {
   /** The signals the lens draws, each with the reason it cannot be placed now. */
   get signals(): SignalOption[] {
     const blocked = this.noAccess;
-    return SIGNALS.filter(
-      (s) => cellOf(this.state.lens, s.id) && !blocked.includes(s.id)
+    return this.#vocab.signals.filter(
+      (s) => this.#vocab.cellOf(this.state.lens, s.id) && !blocked.includes(s.id)
     ).map((s) => {
       const placed = this.state.placed.some((p) => p.id === s.id);
       return {
@@ -1736,9 +1691,9 @@ export class Workspace {
 
   /** Signals only other lenses draw: one option for each lens that draws one. */
   get elsewhere(): ElsewhereOption[] {
-    return SIGNALS.filter((s) => !cellOf(this.state.lens, s.id)).flatMap((s) =>
-      lensesOf(s.id)
-        .filter((lens) => this.#datasetPermitted(cellOf(lens, s.id)!.dataset))
+    return this.#vocab.signals.filter((s) => !this.#vocab.cellOf(this.state.lens, s.id)).flatMap((s) =>
+      this.#vocab.lensesOf(s.id)
+        .filter((lens) => this.#vocab.cellOf(lens, s.id)?.permitted === true)
         .map((lens) => {
         const placed = this.state.placed.some((p) => p.id === s.id);
         return {
@@ -1830,12 +1785,12 @@ export class Workspace {
     };
     // A view of the events one by one draws no signal: only its own dataset limits the range.
     if (state.lens === "event" && state.event.show !== "curve") {
-      const hours = this.#catalogue.datasets.find((d) => d.name === listDataset(state.event.show))?.maxRangeHours;
+      const hours = this.#catalogue.datasets.find((d) => d.name === this.#vocab.showDataset(state.event.show))?.maxRangeHours;
       return hours !== undefined && hours < limit.hours ? { hours, by: null } : limit;
     }
-    for (const id of shownSignals(state)) {
+    for (const id of shownSignals(state, this.#vocab)) {
       const hours = this.#catalogue.datasets.find(
-        (d) => d.name === cellOf(state.lens, id)?.dataset
+        (d) => d.name === this.#vocab.cellOf(state.lens, id)?.dataset
       )?.maxRangeHours;
       if (hours !== undefined && hours < limit.hours) limit = { hours, by: id };
     }
@@ -1852,7 +1807,7 @@ export class Workspace {
 
   /** The presets of the chart's own range, each with why it cannot be chosen. */
   get ranges(): RangeOption[] {
-    return RANGE_PRESETS.map((p) => ({
+    return this.#vocab.rangePresets.map((p) => ({
       ...p,
       label: rangeLabel(p.id),
       reason: this.#reason((d) => {
@@ -1883,12 +1838,12 @@ export class Workspace {
 
   #place(d: WorkspaceState, id: SignalId): Reason {
     if (d.placed.some((p) => p.id === id)) return null;
-    if (!cellOf(d.lens, id))
+    if (!this.#vocab.cellOf(d.lens, id))
       return `${lensLabel(d.lens)} cannot show this signal.`;
-    if (d.lens === "against" && shownSignals(d).length >= 2)
+    if (d.lens === "against" && shownSignals(d, this.#vocab).length >= 2)
       return "This view shows two signals. Remove one first.";
     d.placed.push({ id, marks: {}, relate: {} });
-    placeInFamilyLane(d, id);
+    placeInFamilyLane(d, this.#vocab, id);
     return null;
   }
 
@@ -1916,7 +1871,7 @@ export class Workspace {
   /** Whether the signal can have a lane of its own (spans share one layer). */
   canOwnLane(id: SignalId): boolean {
     return (
-      this.state.lens !== "against" && !cellOf(this.state.lens, id)?.spanKind
+      this.state.lens !== "against" && !this.#vocab.cellOf(this.state.lens, id)?.spanKind
     );
   }
 
@@ -1941,14 +1896,14 @@ export class Workspace {
       d.lanes[from].signals = d.lanes[from].signals.filter((s) => s !== id);
       d.lanes.splice(from + 1, 0, {
         id: `own-${id}`,
-        family: signalOf(id).family,
+        family: this.#vocab.signal(id)?.family ?? "",
         own: true,
         signals: [id],
       });
       d.lanes = d.lanes.filter((l) => l.signals.length > 0);
     } else {
       d.lanes.splice(from, 1);
-      placeInFamilyLane(d, id);
+      placeInFamilyLane(d, this.#vocab, id);
     }
     return null;
   }
@@ -1961,7 +1916,7 @@ export class Workspace {
     id: SignalId
   ): { mark: string; label: string; chosen: boolean; reason: Reason }[] {
     const placed = this.state.placed.find((p) => p.id === id);
-    const cell = cellOf(this.state.lens, id);
+    const cell = this.#vocab.cellOf(this.state.lens, id);
     if (!cell || !placed) return [];
     const chosen = markOf(placed, this.state.lens, cell)?.mark;
     return markChoices(placed, this.state.lens, cell).map((m) => ({
@@ -1977,7 +1932,7 @@ export class Workspace {
 
   #setMark(d: WorkspaceState, id: SignalId, mark: string): Reason {
     const placed = d.placed.find((p) => p.id === id);
-    const cell = cellOf(d.lens, id);
+    const cell = this.#vocab.cellOf(d.lens, id);
     if (!placed || !cell) return "Place the signal first.";
     if (!markChoices(placed, d.lens, cell).some((m) => m.mark === mark))
       return "This signal cannot be drawn that way here.";
@@ -1995,11 +1950,11 @@ export class Workspace {
     trend: boolean;
     fromStart: boolean;
   } {
-    const cell = cellOf(this.state.lens, id);
+    const cell = this.#vocab.cellOf(this.state.lens, id);
     return {
       smooth: cell?.smooth ?? [],
       trend: cell?.trend ?? false,
-      fromStart: cell?.fromStartMarks !== undefined,
+      fromStart: (cell?.fromStartMarks ?? []).length > 0,
     };
   }
 
@@ -2037,22 +1992,22 @@ export class Workspace {
   /** The placed signals `id` can be combined with, under the lens. */
   partnersOf(id: SignalId): SignalId[] {
     if (this.state.lens === "against" || this.state.lens === "event") return [];
-    if (!cellOf(this.state.lens, id)?.combine) return [];
-    return shownSignals(this.state).filter(
-      (other) => other !== id && cellOf(this.state.lens, other)?.combine
+    if (!this.#vocab.cellOf(this.state.lens, id)?.combine) return [];
+    return shownSignals(this.state, this.#vocab).filter(
+      (other) => other !== id && this.#vocab.cellOf(this.state.lens, other)?.combine
     );
   }
 
   /** The ops that can combine `a` with `b` at all: subtract needs one unit. */
   opsFor(a: SignalId, b: SignalId): CombineOp[] {
-    const unitA = cellOf(this.state.lens, a)?.unit;
-    const unitB = cellOf(this.state.lens, b)?.unit;
+    const unitA = this.#vocab.cellOf(this.state.lens, a)?.unit;
+    const unitB = this.#vocab.cellOf(this.state.lens, b)?.unit;
     return unitA === unitB ? ["difference", "ratio"] : ["ratio"];
   }
 
   #combine(d: WorkspaceState, a: SignalId, b: SignalId, op: CombineOp): Reason {
-    const cellA = cellOf(d.lens, a);
-    const cellB = cellOf(d.lens, b);
+    const cellA = this.#vocab.cellOf(d.lens, a);
+    const cellB = this.#vocab.cellOf(d.lens, b);
     if (!cellA?.combine || !cellB?.combine)
       return "These signals cannot be combined here.";
     if (op === "difference" && cellA.unit !== cellB.unit)
@@ -2088,7 +2043,7 @@ export class Workspace {
   #setComboMark(d: WorkspaceState, key: number, mark: string): Reason {
     const combo = d.combos.find((c) => c.key === key);
     if (!combo) return "No such line.";
-    if (!COMBO_MARKS[combo.op].includes(mark))
+    if (!this.#vocab.comboMarks(combo.op).includes(mark))
       return "This line cannot be drawn that way.";
     combo.mark = mark;
     return null;
@@ -2109,7 +2064,7 @@ export class Workspace {
   /** Swaps the two signals of `against`, so the other one lies along the axis. */
   swapAgainst(): Reason {
     return this.#commit((d) => {
-      const pair = shownSignals(d);
+      const pair = shownSignals(d, this.#vocab);
       if (pair.length < 2) return "Select two signals.";
       const a = d.placed.findIndex((p) => p.id === pair[0]);
       const b = d.placed.findIndex((p) => p.id === pair[1]);
@@ -2125,8 +2080,8 @@ export class Workspace {
   #switchLens(d: WorkspaceState, id: LensId) {
     d.lens = id;
     if (d.range !== null && this.#rangeReason(d, d.range)) {
-      const fits = RANGE_PRESETS.filter((p) => !this.#rangeReason(d, p.hours));
-      d.range = fits[fits.length - 1]?.hours ?? RANGE_PRESETS[0].hours;
+      const fits = this.#vocab.rangePresets.filter((p) => !this.#rangeReason(d, p.hours));
+      d.range = fits[fits.length - 1]?.hours ?? this.#vocab.rangePresets[0].hours;
     }
   }
 
@@ -2147,8 +2102,8 @@ export class Workspace {
   #toLens(d: WorkspaceState, id: LensId) {
     this.#switchLens(d, id);
     if (d.range === null && this.#rangeReason(d, this.#hoursOf(d))) {
-      const fits = RANGE_PRESETS.filter((p) => !this.#rangeReason(d, p.hours));
-      d.range = fits[fits.length - 1]?.hours ?? RANGE_PRESETS[0].hours;
+      const fits = this.#vocab.rangePresets.filter((p) => !this.#rangeReason(d, p.hours));
+      d.range = fits[fits.length - 1]?.hours ?? this.#vocab.rangePresets[0].hours;
     }
   }
 
@@ -2156,7 +2111,7 @@ export class Workspace {
     return this.#reason((d) => this.#addMoment(d, d.moments[0]?.what));
   }
 
-  #addMoment(d: WorkspaceState, what: AnchorId = ANCHOR_MEAL): Reason {
+  #addMoment(d: WorkspaceState, what: AnchorId = this.#vocab.firstAnchor): Reason {
     if (d.moments.length >= this.maxMoments)
       return `A chart has at most ${this.maxMoments} groups of events.`;
     if (d.moments.some((m) => m.everythingElse) && d.moments.length >= MAX_OVERLAID_GROUPS)
@@ -2169,7 +2124,7 @@ export class Workspace {
     return null;
   }
 
-  addMoment(what: AnchorId = ANCHOR_MEAL): Reason {
+  addMoment(what: AnchorId = this.#vocab.firstAnchor): Reason {
     return this.#commit((d) => this.#addMoment(d, what));
   }
 
@@ -2178,7 +2133,7 @@ export class Workspace {
    * no group is already everything else.
    */
   get everythingElseApplies(): boolean {
-    return elseTarget(this.state.moments) !== undefined;
+    return elseTarget(this.state.moments, this.#vocab) !== undefined;
   }
 
   get everythingElseReason(): Reason {
@@ -2186,7 +2141,7 @@ export class Workspace {
   }
 
   #addEverythingElse(d: WorkspaceState): Reason {
-    const target = elseTarget(d.moments);
+    const target = elseTarget(d.moments, this.#vocab);
     if (!target) return "Each kind of event here already has its everything else.";
     if (d.moments.length >= this.maxMoments)
       return `A chart has at most ${this.maxMoments} groups of events.`;
@@ -2230,7 +2185,7 @@ export class Workspace {
         (patch.insulinOnBoard && this.conditionReason("insulinOnBoard"))
       )
         return "Your access cannot read treatments, which this needs.";
-      if (!anchor(moment.what).meal) {
+      if (!this.#vocab.mealNarrowing(moment.what)) {
         if (patch.grams || patch.foods || patch.foodCategory)
           return "Only meals can be narrowed by size or food.";
         delete moment.grams;
@@ -2243,13 +2198,13 @@ export class Workspace {
 
   setDayGroupPreset(preset: DayGroupPresetId): Reason {
     return this.setDayGroups(
-      DAY_GROUP_PRESETS[preset].groups.map((g) => [...g])
+      this.#vocab.dayGroupPreset(preset)
     );
   }
 
   dayGroupPresetReason(preset: DayGroupPresetId): Reason {
     return this.#reason((d) => {
-      d.dayGroups = DAY_GROUP_PRESETS[preset].groups.map((g) => [...g]);
+      d.dayGroups = this.#vocab.dayGroupPreset(preset);
     });
   }
 
@@ -2291,7 +2246,7 @@ export class Workspace {
   load(given: Starter, ownRange = true) {
     // A starter held in a component's state is a proxy, which structuredClone refuses.
     const starter = $state.snapshot(given);
-    const state = emptyState(this.#leaveOut);
+    const state = emptyState(this.#vocab, this.#leaveOut);
     state.lens = starter.lens;
     state.range = ownRange ? starter.rangeHours : null;
     for (const s of starter.signals) {
@@ -2302,7 +2257,7 @@ export class Workspace {
           ? { [starter.lens]: { ...NO_RELATE, ...s.relate } }
           : {},
       });
-      placeInFamilyLane(state, s.id);
+      placeInFamilyLane(state, this.#vocab, s.id);
     }
     if (starter.moments)
       state.moments = starter.moments.map((m) => ({
@@ -2323,7 +2278,7 @@ export class Workspace {
     const parts: CaptionPart[] = [];
     if (this.eventList) return this.#eventListCaption();
     if (s.lens === "against") {
-      const pair = shownSignals(s);
+      const pair = shownSignals(s, this.#vocab);
       if (pair.length === 2)
         parts.push({
           kind: "signals",
@@ -2346,7 +2301,7 @@ export class Workspace {
         parts.push({ kind: "signals", text: sentenceCase(names) });
       parts.push({ kind: "lens", text: this.#lensText() });
     }
-    parts.push({ kind: "range", text: rangeText(this.rangeHours) });
+    parts.push({ kind: "range", text: rangeText(this.rangeHours, this.#vocab.rangePresets) });
     const groups = this.#groupsText();
     if (groups) parts.push({ kind: "groups", text: groups });
     const options = this.#optionsText();
@@ -2372,22 +2327,21 @@ export class Workspace {
     else if (s.event.show === "spread")
       head = `How many ${phrase} had each ${lowerFirst(outcomeLabel(this.figure))}`;
     else {
-      const verb = anchors.every((a) => isStartAnchor(a)) ? "start" : "happen";
-      head = `When ${phrase} ${verb}, ${s.event.when === "hour" ? "by hour of day" : "by weekday"}`;
+      head = `${whenPhrase(anchors, phrase)}, ${whenAxisLabel(s.event.when)}`;
     }
     const parts: CaptionPart[] = [{ kind: "signals", text: head }];
     // The groups are worth naming when one narrows its events, or two share an anchor.
     const narrowed =
-      s.moments.some((m) => isNarrowed(m) || m.everythingElse) ||
+      s.moments.some((m) => isNarrowed(m, this.#vocab) || m.everythingElse) ||
       anchors.length < s.moments.length;
     if (narrowed)
       parts.push({
         kind: "groups",
         text: `for ${s.moments
-          .map((m) => momentText(m, true, this.clock, this.glucoseUnits))
+          .map((m) => momentText(m, true, this.clock, this.glucoseUnits, this.#vocab))
           .join(" against ")}`,
       });
-    parts.push({ kind: "range", text: rangeText(this.rangeHours) });
+    parts.push({ kind: "range", text: rangeText(this.rangeHours, this.#vocab.rangePresets) });
     const options = this.#optionsText();
     if (options) parts.push({ kind: "options", text: options });
     return parts;
@@ -2407,9 +2361,8 @@ export class Workspace {
           s.moments.filter((m) => !m.everythingElse).map((m) => m.what)
         );
         const around = `around ${joinAnd(anchors.map((a) => anchorPhrase(a)))}`;
-        const isDefault =
-          s.event.before === EVENT_MINUTES_BEFORE &&
-          s.event.after === EVENT_MINUTES_AFTER;
+        const windows = this.#vocab.windows;
+        const isDefault = s.event.before === windows.defaultBefore && s.event.after === windows.defaultAfter;
         return isDefault
           ? around
           : `${around}, ${lowerFirst(windowText(s.event.before, s.event.after))}`;
@@ -2426,17 +2379,17 @@ export class Workspace {
     if (s.lens === "typical_day") {
       if (s.dayGroups.length === 1 && s.dayGroups[0].length === 7) return null;
       return s.dayGroups
-        .map((g) => upperFirst(weekdaysText(g)))
+        .map((g) => upperFirst(weekdaysText(g, this.#vocab.weekdays)))
         .join(" against ");
     }
     if (s.lens === "event") {
       const sameAnchor = distinct(s.moments.map((m) => m.what)).length === 1;
-      if (s.moments.length === 1 && !isNarrowed(s.moments[0]) && !s.moments[0].everythingElse)
+      if (s.moments.length === 1 && !isNarrowed(s.moments[0], this.#vocab) && !s.moments[0].everythingElse)
         return null;
       // A group that narrows nothing is named by its events, "all meals", not "all".
       return s.moments
         .map((m) =>
-          momentText(m, !sameAnchor || (!isNarrowed(m) && !m.everythingElse), this.clock, this.glucoseUnits)
+          momentText(m, !sameAnchor || (!isNarrowed(m, this.#vocab) && !m.everythingElse), this.clock, this.glucoseUnits, this.#vocab)
         )
         .join(" against ");
     }
@@ -2454,7 +2407,7 @@ export class Workspace {
         parts.push(`against ${this.dates(s.event.comparison)}`);
     }
     if (this.leaveOutApplies) {
-      const left = LEAVE_OUTS.filter((l) => s.leaveOut[l.id]).map((l) =>
+      const left = this.#vocab.leaveOuts.filter((l) => s.leaveOut[l.id]).map((l) =>
         lowerFirst(leaveOutLabel(l.id))
       );
       if (left.length > 0) parts.push(`without ${joinAnd(left)}`);
@@ -2468,9 +2421,9 @@ export class Workspace {
  * The kind of event an "everything else" group would take: the first kind a group narrows that has
  * no everything else yet (the API takes one for each kind), or undefined.
  */
-function elseTarget(moments: Moment[]): AnchorId | undefined {
+function elseTarget(moments: Moment[], vocab: Vocabulary): AnchorId | undefined {
   return moments.find(
-    (m) => isNarrowed(m) && !moments.some((o) => o.everythingElse && o.what === m.what)
+    (m) => isNarrowed(m, vocab) && !moments.some((o) => o.everythingElse && o.what === m.what)
   )?.what;
 }
 
@@ -2490,19 +2443,22 @@ function retargetElse(d: WorkspaceState) {
   }
 }
 
-/** The dataset a view of the events one by one reads. */
-function listDataset(show: EventShow): string {
-  return show === "each" ? OUTCOMES_DATASET : show === "spread" ? SPREAD_DATASET : OCCURRENCE_DATASET;
+/** The vocabulary of a catalogue, made once for each catalogue. */
+const vocabularies = new WeakMap<CustomReportCatalogue, Vocabulary>();
+export function vocabularyOf(catalogue: CustomReportCatalogue): Vocabulary {
+  let found = vocabularies.get(catalogue);
+  if (!found) vocabularies.set(catalogue, (found = new Vocabulary(catalogue)));
+  return found;
 }
 
-function placeInFamilyLane(state: WorkspaceState, id: SignalId) {
-  const family = signalOf(id).lane ?? signalOf(id).family;
+function placeInFamilyLane(state: WorkspaceState, vocab: Vocabulary, id: SignalId) {
+  const family = vocab.laneOf(id);
   const lane = state.lanes.find((l) => l.family === family && !l.own);
   if (lane) {
     if (!lane.signals.includes(id)) lane.signals.push(id);
     return;
   }
-  const order = FAMILY_LANES.map((f) => f.family);
+  const order = vocab.families;
   const at = state.lanes.findIndex(
     (l) => order.indexOf(l.family) > order.indexOf(family)
   );

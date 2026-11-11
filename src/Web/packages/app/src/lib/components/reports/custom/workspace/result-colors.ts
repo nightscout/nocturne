@@ -8,7 +8,7 @@ import {
   type ReportLayer,
   type ReportResult,
 } from "@nocturne/charts/core";
-import { signal as signalOf, type SignalId } from "./vocabulary.js";
+import type { SignalId, Vocabulary } from "./catalogue-vocabulary.js";
 
 /**
  * How a swatch shows the colour the chart drew a thing in: one colour, the
@@ -67,6 +67,7 @@ export function fieldSwatchOf(
  */
 export function signalSwatch(
   report: ReportResult | null,
+  vocab: Vocabulary,
   id: SignalId,
   layers: string[],
   perGroup: boolean
@@ -76,7 +77,7 @@ export function signalSwatch(
   const layer = findLayer(report, main);
   if (layer && layer.mark !== "markers") return layerSwatch(layer);
   if (layer?.mark === "spans" || main === "spans") return { kind: "none" };
-  return { kind: "solid", color: `var(${signalOf(id).color})` };
+  return { kind: "solid", color: vocab.signalColor(id) };
 }
 
 /**

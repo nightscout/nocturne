@@ -11,7 +11,7 @@
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import type { PreviewRunner } from "../builder/preview-runner.svelte.js";
   import CustomReportRun from "../CustomReportRun.svelte";
-  import type { BlockKind } from "./vocabulary.js";
+  import type { BlockKind } from "./report.svelte.js";
 
   interface Props {
     spec: Record<string, unknown> | null;

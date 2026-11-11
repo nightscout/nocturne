@@ -24,9 +24,8 @@
   import Spline from "@lucide/svelte/icons/spline";
   import { signalSwatch } from "./result-colors.js";
   import Swatch from "./Swatch.svelte";
-  import { type SignalId } from "./vocabulary.js";
+  import type { SignalId } from "./catalogue-vocabulary.js";
   import {
-    COMBO_MARKS,
     comboLabel,
     lowerFirst,
     minutesText,
@@ -131,7 +130,7 @@
         {#each ws.combos as combo (combo.key)}
           {@const chosen = combo.mark ?? "line"}
           {@const Glyph = glyph(chosen)}
-          {@const marks = COMBO_MARKS[combo.op].map((mark) => ({
+          {@const marks = ws.vocab.comboMarks(combo.op).map((mark) => ({
             mark,
             label: MARK_LABELS[mark] ?? mark,
             reason:
@@ -244,7 +243,7 @@
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button {...props} variant="outline" size="xs" data-signal-chip={id}>
           <Swatch
-            swatch={signalSwatch(report, id, ws.layersOf(id), perGroup)}
+            swatch={signalSwatch(report, ws.vocab, id, ws.layersOf(id), perGroup)}
           />
           {signalLabel(id)}
           {#if Glyph}

@@ -6,6 +6,7 @@ import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
 import { BUILDER_KIND, BUILDER_VERSION } from "#lib/components/reports/custom/workspace/saved-state.js";
 import { runOf } from "../custom-report-fixtures.js";
+import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
 import { statisticsTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
 
 type Spec = { panels: { id: string; tracks?: { layers: { id: string }[] }[] }[]; builder?: { kind: string; version: number; state: unknown } };
@@ -15,6 +16,10 @@ const calls = vi.hoisted(() => ({ runs: [] as { spec: Spec }[], creates: [] as {
 let refusal: unknown = null;
 /** Whether a preview run fails, as one does when the API cannot be reached. */
 let runsFail = false;
+/** The catalogue the page reads. */
+let known: CustomReportCatalogue = liveCatalogue;
+/** Adds to a run's result what a test needs the engine to say, such as day counts. */
+let decorate: (result: { panels: { tracks?: { layers: Record<string, unknown>[] }[] }[] }) => void = () => {};
 
 vi.mock("#lib/api/report-image.remote.js", () => ({ drawReportPanelImage: () => Promise.resolve("") }));
 
@@ -24,14 +29,16 @@ vi.mock("#lib/api/generated/foods.generated.remote.js", () => ({
 }));
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
-  getCustomReportCatalogue: () => remoteQuery(() => liveCatalogue),
+  getCustomReportCatalogue: () => remoteQuery(() => known),
   getCustomReports: () => remoteQuery(() => []),
   getCustomReportTemplates: () => remoteQuery(() => [statisticsTemplate]),
   runCustomReport: remoteCommand((arg) => {
     const run = arg as { spec: Spec };
     calls.runs.push(run);
     if (runsFail) return Promise.reject(new Error("offline"));
-    return runOf(run.spec as unknown as Record<string, unknown>);
+    const answer = runOf(run.spec as unknown as Record<string, unknown>);
+    decorate(answer.result as never);
+    return answer;
   }),
   createCustomReport: remoteCommand((arg) => {
     const request = arg as { name: string; spec: Spec };
@@ -72,6 +79,8 @@ describe("a new custom report", () => {
     calls.gotos.length = 0;
     refusal = null;
     runsFail = false;
+    known = liveCatalogue;
+    decorate = () => {};
     pageState.data = {};
     await page.viewport(1280, 900);
   });
@@ -197,6 +206,52 @@ describe("a new custom report", () => {
     await expect.element(page.getByText("The preview could not be made.")).toBeVisible();
     await vi.waitFor(() => expect(document.querySelectorAll("[data-testid='chart-preview'] [aria-busy='true']").length).toBe(0));
     expect(document.querySelector("[data-testid='chart-preview'] .animate-spin")).toBeNull();
+  });
+
+  it("writes a group of days' count, and why days are in neither group, from the run's counts", async () => {
+    decorate = (result) => {
+      for (const layer of result.panels.flatMap((p) => p.tracks ?? []).flatMap((t) => t.layers))
+        layer.days = layer.id === "glucose-1"
+          ? { kept: 4, total: 29, matching: 4, notMatching: 24, partial: 1, undecided: 0 }
+          : { kept: 24, total: 29, matching: 4, notMatching: 24, partial: 1, undecided: 2 };
+    };
+    render(NewCustomReportPage, {});
+    await page.getByText("Days with a low against all other days", { exact: true }).click();
+
+    const counts = page.getByTestId("day-count");
+    await expect.element(counts.nth(0)).toHaveTextContent("4 of 29 days. One day is only partly in the range and is in neither group.");
+    await expect.element(counts.nth(1)).toHaveTextContent("24 of 29 days. One day is only partly in the range and is in neither group. 2 days are before the history your access reads.");
+  });
+
+  it("says why a group of events is not shown, from the run's cohorts", async () => {
+    decorate = (result) => {
+      for (const layer of result.panels.flatMap((p) => p.tracks ?? []).flatMap((t) => t.layers))
+        layer.cohorts = [
+          { number: 1, label: "Meal: 06:00-08:30", omitted: { reason: "scope", scope: "food.read" } },
+          { number: 2, label: "Meal: 08:30-11:00", omitted: { reason: "sibling", group: 1 } },
+        ];
+    };
+    await start("What does a later breakfast do?");
+
+    const rows = page.getByTestId("moment-row");
+    await expect.element(rows.nth(0).getByTestId("left-out")).toHaveTextContent("Not shown: your access does not include food.");
+    await expect.element(rows.nth(1).getByTestId("left-out")).toHaveTextContent("Not shown: group A is not shown.");
+  });
+
+  it("puts a signal the reader's access cannot read under Not in your access, with the scope it needs", async () => {
+    const limited: CustomReportCatalogue = structuredClone(liveCatalogue);
+    for (const cell of limited.workspace.cells)
+      if (cell.signal === "heartRate") Object.assign(cell, { permitted: false, scopes: ["heartrate.read"] });
+    known = limited;
+    await start("The last 24 hours");
+
+    const rail = page.getByTestId("signal-rail");
+    await rail.getByTestId("rail-no-access").click();
+    await expect.element(page.getByTestId("rail-no-access")).toHaveTextContent("Not in your access (1)");
+    const item = rail.getByRole("button", { name: "Heart rate" });
+    await expect.element(item).toBeDisabled();
+    const why = document.getElementById(item.element().getAttribute("aria-describedby") ?? "");
+    expect(why?.textContent?.trim()).toBe("Your access cannot read heart rate, which this needs.");
   });
 
   it("lists the API's ready-made reports last, and opens one in the form", async () => {

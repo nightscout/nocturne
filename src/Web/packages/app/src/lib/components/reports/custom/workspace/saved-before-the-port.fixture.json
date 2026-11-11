@@ -1,0 +1,3711 @@
+{
+ "last-24-hours": {
+  "state": {
+   "title": "The last 24 hours",
+   "rangeHours": 24,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 0,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "timeline",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "target",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "iob",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "basal",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "boluses",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "cob",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "carbs",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "pumpModes",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "overrides",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose",
+         "target"
+        ]
+       },
+       {
+        "id": "lane-insulin",
+        "family": "Insulin",
+        "own": false,
+        "signals": [
+         "iob",
+         "basal",
+         "boluses"
+        ]
+       },
+       {
+        "id": "lane-food",
+        "family": "Food",
+        "own": false,
+        "signals": [
+         "cob",
+         "carbs"
+        ]
+       },
+       {
+        "id": "lane-context",
+        "family": "Context",
+        "own": false,
+        "signals": [
+         "pumpModes",
+         "overrides"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 3,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "The last 24 hours",
+   "range": {
+    "hours": 24
+   },
+   "panels": [
+    {
+     "id": "b0-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "glucose_series"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "glucose"
+          ]
+         }
+        },
+        {
+         "id": "target",
+         "dataset": {
+          "name": "glucose_series"
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "time",
+          "edges": [
+           "targetLow",
+           "targetHigh"
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-insulin",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "iob",
+         "dataset": {
+          "name": "glucose_series"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "iob"
+          ]
+         }
+        },
+        {
+         "id": "basal",
+         "dataset": {
+          "name": "basal_delivery"
+         },
+         "mark": "area",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "delivered"
+          ]
+         }
+        },
+        {
+         "id": "boluses",
+         "dataset": {
+          "name": "treatments",
+          "types": [
+           "bolus"
+          ]
+         },
+         "mark": "markers",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "insulin"
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-food",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "cob",
+         "dataset": {
+          "name": "glucose_series"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "cob"
+          ]
+         }
+        },
+        {
+         "id": "carbs",
+         "dataset": {
+          "name": "treatments",
+          "types": [
+           "carbs"
+          ]
+         },
+         "mark": "markers",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "carbs"
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-context",
+       "height": 0.5,
+       "layers": [
+        {
+         "id": "spans",
+         "dataset": {
+          "name": "state_spans",
+          "kinds": [
+           "pump_mode",
+           "override"
+          ]
+         },
+         "mark": "spans",
+         "bindings": {
+          "start": "start",
+          "end": "end",
+          "category": "kind"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "dawn-rise": {
+  "state": {
+   "title": "Is there a dawn rise?",
+   "rangeHours": 336,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 4,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "typical_day",
+      "placed": [
+       {
+        "id": "glucoseWide",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "target",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucoseWide",
+         "glucose",
+         "target"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 7,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Is there a dawn rise?",
+   "range": {
+    "hours": 336
+   },
+   "panels": [
+    {
+     "id": "b4-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucoseWide",
+         "dataset": {
+          "name": "daily_profile"
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minuteOfDay",
+          "edges": [
+           "glucoseP10",
+           "glucoseP90"
+          ]
+         }
+        },
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "daily_profile"
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minuteOfDay",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ]
+         }
+        },
+        {
+         "id": "target",
+         "dataset": {
+          "name": "daily_profile"
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minuteOfDay",
+          "edges": [
+           "targetLow",
+           "targetHigh"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "weekdays-weekend": {
+  "state": {
+   "title": "Weekdays against the weekend",
+   "rangeHours": 672,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 8,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "typical_day",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 11,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+       ],
+       [
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Weekdays against the weekend",
+   "range": {
+    "hours": 672
+   },
+   "panels": [
+    {
+     "id": "b8-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose-1",
+         "dataset": {
+          "name": "daily_profile",
+          "dayOfWeek": [
+           "Mon",
+           "Tue",
+           "Wed",
+           "Thu",
+           "Fri"
+          ]
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minuteOfDay",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ]
+         }
+        },
+        {
+         "id": "glucose-2",
+         "dataset": {
+          "name": "daily_profile",
+          "dayOfWeek": [
+           "Sat",
+           "Sun"
+          ]
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minuteOfDay",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "time-in-range-weekly": {
+  "state": {
+   "title": "Is time in range changing week by week?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 12,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "daily",
+      "placed": [
+       {
+        "id": "timeInRange",
+        "marks": {},
+        "relate": {
+         "daily": {
+          "smooth": 10080,
+          "sd": null,
+          "trend": true,
+          "confidence": false,
+          "fromStart": false
+         }
+        }
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "timeInRange"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 15,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Is time in range changing week by week?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b12-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "timeInRange",
+         "dataset": {
+          "name": "daily_summary"
+         },
+         "mark": "bars",
+         "bindings": {
+          "x": "day",
+          "y": [
+           "timeInRange"
+          ]
+         }
+        },
+        {
+         "id": "timeInRange-smooth",
+         "derived": {
+          "op": "rolling_mean",
+          "minutes": 10080,
+          "a": {
+           "dataset": {
+            "name": "daily_summary"
+           },
+           "field": "timeInRange"
+          }
+         },
+         "mark": "line"
+        },
+        {
+         "id": "timeInRange-trend",
+         "derived": {
+          "op": "trend",
+          "a": {
+           "dataset": {
+            "name": "daily_summary"
+           },
+           "field": "timeInRange"
+          }
+         },
+         "mark": "line"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "sensor-first-day": {
+  "state": {
+   "title": "What does the first day of a sensor look like?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 16,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "SensorStart",
+        "key": 20
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 480,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "What does the first day of a sensor look like?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b16-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "SensorStart"
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 480
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "before-a-low": {
+  "state": {
+   "title": "What happens before a low?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 21,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "iob",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "cob",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       },
+       {
+        "id": "lane-insulin",
+        "family": "Insulin",
+        "own": false,
+        "signals": [
+         "iob"
+        ]
+       },
+       {
+        "id": "lane-food",
+        "family": "Food",
+        "own": false,
+        "signals": [
+         "cob"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "LowStart",
+        "key": 25
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 240,
+       "after": 120,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "What happens before a low?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b21-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "LowStart"
+           }
+          ],
+          "minutesBefore": 240,
+          "minutesAfter": 120
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-insulin",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "iob",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "LowStart"
+           }
+          ],
+          "minutesBefore": 240,
+          "minutesAfter": 120
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "iobP50"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-food",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "cob",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "LowStart"
+           }
+          ],
+          "minutesBefore": 240,
+          "minutesAfter": 120
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "cobP50"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "how-far-lows-go": {
+  "state": {
+   "title": "How far do lows go, and what was on board?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 26,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "LowStart",
+        "key": 30
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "each",
+       "up": "nadir",
+       "along": "iobAtEvent",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "How far do lows go, and what was on board?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b26-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "events",
+       "layers": [
+        {
+         "id": "each-1",
+         "dataset": {
+          "name": "event_outcomes",
+          "cohorts": [
+           {
+            "anchor": "LowStart"
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300,
+          "group": 1
+         },
+         "mark": "points",
+         "bindings": {
+          "x": "iobAtEvent",
+          "y": [
+           "nadir"
+          ],
+          "fit": "nadirFit"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "when-lows-highs": {
+  "state": {
+   "title": "What time of day do lows and highs start?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 31,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "LowStart",
+        "key": 35
+       },
+       {
+        "what": "HighStart",
+        "key": 36
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "when",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "What time of day do lows and highs start?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b31-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "events",
+       "layers": [
+        {
+         "id": "events",
+         "dataset": {
+          "name": "event_occurrence",
+          "cohorts": [
+           {
+            "anchor": "LowStart"
+           },
+           {
+            "anchor": "HighStart"
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "bars",
+         "bindings": {
+          "x": "hour",
+          "y": [
+           "events1",
+           "events2"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "later-breakfast": {
+  "state": {
+   "title": "What does a later breakfast do?",
+   "rangeHours": 672,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 37,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "Meal",
+        "timeOfDay": {
+         "fromMinute": 360,
+         "toMinute": 510
+        },
+        "key": 41,
+        "weekdays": [
+         "Mon",
+         "Tue"
+        ],
+        "startGlucose": {
+         "min": 70
+        }
+       },
+       {
+        "what": "Meal",
+        "timeOfDay": {
+         "fromMinute": 510,
+         "toMinute": 660
+        },
+        "key": 42
+       },
+       {
+        "key": 43,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    },
+    {
+     "kind": "figures",
+     "key": 44,
+     "range": null,
+     "title": "",
+     "source": "glucose_statistics",
+     "columns": [
+      "timeInRangePercent",
+      "timeBelow",
+      "timeAbove",
+      "mean",
+      "gmi",
+      "cv",
+      "sd",
+      "readings",
+      "targetLow",
+      "targetHigh",
+      "tdd",
+      "basalPercent",
+      "carbsPerDay"
+     ]
+    },
+    {
+     "kind": "table",
+     "key": 45,
+     "range": null,
+     "title": "",
+     "source": "treatments",
+     "columns": [
+      "time",
+      "type",
+      "insulin",
+      "injectionUnits",
+      "carbs",
+      "bgCheck",
+      "rate",
+      "durationMinutes",
+      "automatic",
+      "detail"
+     ]
+    },
+    {
+     "kind": "comparison",
+     "key": 48,
+     "range": null,
+     "title": "",
+     "preset": "last14-prior14",
+     "a": null,
+     "b": null
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "What does a later breakfast do?",
+   "range": {
+    "hours": 672
+   },
+   "panels": [
+    {
+     "id": "b37-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "Meal",
+            "timeOfDay": {
+             "fromMinute": 360,
+             "toMinute": 510
+            },
+            "dayOfWeek": [
+             "Mon",
+             "Tue"
+            ],
+            "startGlucose": {
+             "min": 70
+            }
+           },
+           {
+            "anchor": "Meal",
+            "timeOfDay": {
+             "fromMinute": 510,
+             "toMinute": 660
+            }
+           },
+           {
+            "anchor": "Meal"
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "b44-figures",
+     "kind": "stat_tiles",
+     "dataset": {
+      "name": "glucose_statistics"
+     },
+     "bindings": {
+      "columns": [
+       "timeInRangePercent",
+       "timeBelow",
+       "timeAbove",
+       "mean",
+       "gmi",
+       "cv",
+       "sd",
+       "readings",
+       "targetLow",
+       "targetHigh",
+       "tdd",
+       "basalPercent",
+       "carbsPerDay"
+      ]
+     }
+    },
+    {
+     "id": "b45-table",
+     "kind": "table",
+     "dataset": {
+      "name": "treatments"
+     },
+     "bindings": {
+      "columns": [
+       "time",
+       "type",
+       "insulin",
+       "injectionUnits",
+       "carbs",
+       "bgCheck",
+       "rate",
+       "durationMinutes",
+       "automatic",
+       "detail"
+      ]
+     }
+    },
+    {
+     "id": "b48-comparison",
+     "kind": "comparison",
+     "dataset": {
+      "name": "period_comparison",
+      "preset": "last14-prior14"
+     }
+    }
+   ]
+  }
+ },
+ "one-food": {
+  "state": {
+   "title": "One food against everything else",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 49,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {
+         "event": {
+          "smooth": null,
+          "sd": null,
+          "trend": false,
+          "confidence": false,
+          "fromStart": true
+         }
+        }
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "Meal",
+        "foods": [],
+        "key": 53
+       },
+       {
+        "what": "Meal",
+        "everythingElse": true,
+        "key": 54
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "One food against everything else",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b49-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "Meal"
+           },
+           {
+            "anchor": "Meal",
+            "others": true
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "deltaP50"
+          ],
+          "edges": [
+           "deltaP25",
+           "deltaP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "start-and-peak": {
+  "state": {
+   "title": "Does glucose at the start change the peak after a meal?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 55,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "Meal",
+        "key": 59
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "each",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Does glucose at the start change the peak after a meal?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b55-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "events",
+       "layers": [
+        {
+         "id": "each-1",
+         "dataset": {
+          "name": "event_outcomes",
+          "cohorts": [
+           {
+            "anchor": "Meal"
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300,
+          "group": 1
+         },
+         "mark": "points",
+         "bindings": {
+          "x": "startGlucose",
+          "y": [
+           "peakRise"
+          ],
+          "fit": "peakRiseFit"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "meal-rise-spread": {
+  "state": {
+   "title": "How much do meals raise glucose: no carbs in the 4 hours before against other meals",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 60,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "Meal",
+        "minutesSinceMeal": {
+         "min": 240
+        },
+        "key": 64
+       },
+       {
+        "what": "Meal",
+        "everythingElse": true,
+        "key": 65
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "spread",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "How much do meals raise glucose: no carbs in the 4 hours before against other meals",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b60-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "events",
+       "layers": [
+        {
+         "id": "events",
+         "dataset": {
+          "name": "event_outcome_spread",
+          "cohorts": [
+           {
+            "anchor": "Meal",
+            "minutesSinceMeal": {
+             "min": 240
+            }
+           },
+           {
+            "anchor": "Meal",
+            "others": true
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300,
+          "outcome": "peakRise"
+         },
+         "mark": "bars",
+         "bindings": {
+          "x": "range",
+          "y": [
+           "events1",
+           "events2"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "meals-start-high": {
+  "state": {
+   "title": "Meals that start in range against meals that start high",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 66,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {
+         "event": {
+          "smooth": null,
+          "sd": null,
+          "trend": false,
+          "confidence": false,
+          "fromStart": true
+         }
+        }
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "Meal",
+        "startGlucose": {
+         "min": 70,
+         "max": 180
+        },
+        "key": 70
+       },
+       {
+        "what": "Meal",
+        "startGlucose": {
+         "min": 181
+        },
+        "key": 71
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Meals that start in range against meals that start high",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b66-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "Meal",
+            "startGlucose": {
+             "min": 70,
+             "max": 180
+            }
+           },
+           {
+            "anchor": "Meal",
+            "startGlucose": {
+             "min": 181
+            }
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "deltaP50"
+          ],
+          "edges": [
+           "deltaP25",
+           "deltaP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "exercise-no-carbs": {
+  "state": {
+   "title": "Exercise with no carbs in the 4 hours before, against other exercise",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 72,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "ExerciseStart",
+        "minutesSinceMeal": {
+         "min": 240
+        },
+        "key": 76
+       },
+       {
+        "what": "ExerciseStart",
+        "everythingElse": true,
+        "key": 77
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Exercise with no carbs in the 4 hours before, against other exercise",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b72-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "ExerciseStart",
+            "minutesSinceMeal": {
+             "min": 240
+            }
+           },
+           {
+            "anchor": "ExerciseStart",
+            "others": true
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "corrections-night": {
+  "state": {
+   "title": "Do corrections work differently at night?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 78,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {
+         "event": {
+          "smooth": null,
+          "sd": null,
+          "trend": false,
+          "confidence": false,
+          "fromStart": true
+         }
+        }
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "CorrectionBolus",
+        "timeOfDay": {
+         "fromMinute": 1320,
+         "toMinute": 360
+        },
+        "key": 82
+       },
+       {
+        "what": "CorrectionBolus",
+        "timeOfDay": {
+         "fromMinute": 360,
+         "toMinute": 1320
+        },
+        "key": 83
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Do corrections work differently at night?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b78-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "CorrectionBolus",
+            "timeOfDay": {
+             "fromMinute": 1320,
+             "toMinute": 360
+            }
+           },
+           {
+            "anchor": "CorrectionBolus",
+            "timeOfDay": {
+             "fromMinute": 360,
+             "toMinute": 1320
+            }
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 300
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "deltaP50"
+          ],
+          "edges": [
+           "deltaP25",
+           "deltaP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "insulin-glucose": {
+  "state": {
+   "title": "How does glucose follow insulin?",
+   "rangeHours": 336,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 84,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "against",
+      "placed": [
+       {
+        "id": "iob",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       },
+       {
+        "id": "lane-insulin",
+        "family": "Insulin",
+        "own": false,
+        "signals": [
+         "iob"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 87,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": true,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "How does glucose follow insulin?",
+   "range": {
+    "hours": 336
+   },
+   "panels": [
+    {
+     "id": "b84-chart",
+     "kind": "chart",
+     "grid": 15,
+     "tracks": [
+      {
+       "id": "against",
+       "layers": [
+        {
+         "id": "scatter",
+         "derived": {
+          "op": "scatter",
+          "a": {
+           "dataset": {
+            "name": "glucose_series"
+           },
+           "field": "iob"
+          },
+          "b": {
+           "dataset": {
+            "name": "glucose_series"
+           },
+           "field": "glucose"
+          }
+         },
+         "mark": "points"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "b84-lag",
+     "kind": "chart",
+     "grid": 15,
+     "tracks": [
+      {
+       "id": "lag",
+       "layers": [
+        {
+         "id": "lag",
+         "derived": {
+          "op": "lag_correlation",
+          "a": {
+           "dataset": {
+            "name": "glucose_series"
+           },
+           "field": "iob"
+          },
+          "b": {
+           "dataset": {
+            "name": "glucose_series"
+           },
+           "field": "glucose"
+          }
+         },
+         "mark": "line"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "loop-by-hour": {
+  "state": {
+   "title": "How much does the loop add or remove, by hour?",
+   "rangeHours": 672,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 88,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "typical_day",
+      "placed": [
+       {
+        "id": "netLoop",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "basalScheduled",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-insulin",
+        "family": "Insulin",
+        "own": false,
+        "signals": [
+         "netLoop",
+         "basalScheduled"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 91,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "How much does the loop add or remove, by hour?",
+   "range": {
+    "hours": 672
+   },
+   "panels": [
+    {
+     "id": "b88-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-insulin",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "netLoop",
+         "dataset": {
+          "name": "daily_profile"
+         },
+         "mark": "area",
+         "bindings": {
+          "x": "minuteOfDay",
+          "y": [
+           "netLoopCorrection"
+          ]
+         }
+        },
+        {
+         "id": "basalScheduled",
+         "dataset": {
+          "name": "daily_profile"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "minuteOfDay",
+          "y": [
+           "scheduledBasal"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "settings-data": {
+  "state": {
+   "title": "What do the settings look like against the data?",
+   "rangeHours": 672,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 92,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "typical_day",
+      "placed": [
+       {
+        "id": "settingBasal",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "settingIsf",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "settingCarbRatio",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-settings",
+        "family": "Settings",
+        "own": false,
+        "signals": [
+         "settingBasal",
+         "settingIsf",
+         "settingCarbRatio"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 95,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "What do the settings look like against the data?",
+   "range": {
+    "hours": 672
+   },
+   "panels": [
+    {
+     "id": "b92-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-settings",
+       "height": 1,
+       "layers": [
+        {
+         "id": "settingBasal",
+         "dataset": {
+          "name": "settings_evidence",
+          "setting": "basal"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "startMinute",
+          "y": [
+           "basalObserved",
+           "basalProfile"
+          ]
+         }
+        },
+        {
+         "id": "settingIsf",
+         "dataset": {
+          "name": "settings_evidence",
+          "setting": "isf"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "startMinute",
+          "y": [
+           "isfObserved",
+           "isfProfile"
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-settings-2",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "settingCarbRatio",
+         "dataset": {
+          "name": "settings_evidence",
+          "setting": "carb_ratio"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "startMinute",
+          "y": [
+           "carbRatioObserved",
+           "carbRatioProfile"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "reservoir-batteries": {
+  "state": {
+   "title": "Reservoir and batteries",
+   "rangeHours": 168,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 96,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "timeline",
+      "placed": [
+       {
+        "id": "reservoir",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "pumpBattery",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "uploaderBattery",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-devices",
+        "family": "Devices",
+        "own": false,
+        "signals": [
+         "reservoir",
+         "pumpBattery",
+         "uploaderBattery"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 99,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Reservoir and batteries",
+   "range": {
+    "hours": 168
+   },
+   "panels": [
+    {
+     "id": "b96-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-devices",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "reservoir",
+         "dataset": {
+          "name": "device_status"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "reservoir"
+          ]
+         }
+        },
+        {
+         "id": "pumpBattery",
+         "dataset": {
+          "name": "device_status"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "pumpBattery"
+          ]
+         }
+        },
+        {
+         "id": "uploaderBattery",
+         "dataset": {
+          "name": "device_status"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "uploaderBattery"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "days-with-a-low": {
+  "state": {
+   "title": "Days with a low against all other days",
+   "rangeHours": 672,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 100,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "typical_day",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 103,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": {
+       "kind": "low"
+      },
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Days with a low against all other days",
+   "range": {
+    "hours": 672
+   },
+   "panels": [
+    {
+     "id": "b100-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose-1",
+         "dataset": {
+          "name": "daily_profile",
+          "days": {
+           "kind": "low"
+          }
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minuteOfDay",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ]
+         }
+        },
+        {
+         "id": "glucose-2",
+         "dataset": {
+          "name": "daily_profile",
+          "days": {
+           "kind": "low",
+           "others": true
+          }
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minuteOfDay",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "low-treated": {
+  "state": {
+   "title": "What happens after a low is treated?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 104,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "cob",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       },
+       {
+        "id": "lane-food",
+        "family": "Food",
+        "own": false,
+        "signals": [
+         "cob"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "LowTreatment",
+        "key": 108
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 30,
+       "after": 180,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "What happens after a low is treated?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b104-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "LowTreatment"
+           }
+          ],
+          "minutesBefore": 30,
+          "minutesAfter": 180
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-food",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "cob",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "LowTreatment"
+           }
+          ],
+          "minutesBefore": 30,
+          "minutesAfter": 180
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "cobP50"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "heart-rate-glucose": {
+  "state": {
+   "title": "Heart rate and glucose",
+   "rangeHours": 24,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 109,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "timeline",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "target",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "heartRate",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose",
+         "target"
+        ]
+       },
+       {
+        "id": "lane-body",
+        "family": "Body",
+        "own": false,
+        "signals": [
+         "heartRate"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 112,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Heart rate and glucose",
+   "range": {
+    "hours": 24
+   },
+   "panels": [
+    {
+     "id": "b109-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "glucose_series"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "glucose"
+          ]
+         }
+        },
+        {
+         "id": "target",
+         "dataset": {
+          "name": "glucose_series"
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "time",
+          "edges": [
+           "targetLow",
+           "targetHigh"
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-body",
+       "height": 0.75,
+       "layers": [
+        {
+         "id": "heartRate",
+         "dataset": {
+          "name": "heart_rate"
+         },
+         "mark": "line",
+         "bindings": {
+          "x": "time",
+          "y": [
+           "bpm"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "sleep-next-day": {
+  "state": {
+   "title": "Sleep and the next day",
+   "rangeHours": 672,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 113,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "daily",
+      "placed": [
+       {
+        "id": "sleep",
+        "marks": {},
+        "relate": {}
+       },
+       {
+        "id": "timeInRange",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "timeInRange"
+        ]
+       },
+       {
+        "id": "lane-context",
+        "family": "Context",
+        "own": false,
+        "signals": [
+         "sleep"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "key": 116,
+        "what": "Meal"
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 300,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "Sleep and the next day",
+   "range": {
+    "hours": 672
+   },
+   "panels": [
+    {
+     "id": "b113-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "timeInRange",
+         "dataset": {
+          "name": "daily_summary"
+         },
+         "mark": "bars",
+         "bindings": {
+          "x": "day",
+          "y": [
+           "timeInRange"
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "id": "lane-context",
+       "height": 0.5,
+       "layers": [
+        {
+         "id": "sleep",
+         "dataset": {
+          "name": "sleep"
+         },
+         "mark": "bars",
+         "bindings": {
+          "x": "night",
+          "y": [
+           "totalSleep"
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "site-change": {
+  "state": {
+   "title": "What does a site change do?",
+   "rangeHours": 2160,
+   "blocks": [
+    {
+     "kind": "chart",
+     "key": 117,
+     "chart": {
+      "title": "",
+      "range": null,
+      "lens": "event",
+      "placed": [
+       {
+        "id": "glucose",
+        "marks": {},
+        "relate": {}
+       }
+      ],
+      "lanes": [
+       {
+        "id": "lane-glucose",
+        "family": "Glucose",
+        "own": false,
+        "signals": [
+         "glucose"
+        ]
+       }
+      ],
+      "combos": [],
+      "moments": [
+       {
+        "what": "SiteChange",
+        "key": 121
+       }
+      ],
+      "dayGroups": [
+       [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ]
+      ],
+      "dayFilter": null,
+      "findLag": false,
+      "leaveOut": {
+       "overrides": false,
+       "temporaryTargets": false,
+       "exercise": false,
+       "illness": true,
+       "openLoop": true
+      },
+      "profileName": null,
+      "event": {
+       "before": 60,
+       "after": 480,
+       "isolatedOnly": false,
+       "requireCorroboration": false,
+       "comparison": null,
+       "show": "curve",
+       "up": "peakRise",
+       "along": "startGlucose",
+       "fit": true,
+       "figure": "peakRise",
+       "when": "hour"
+      }
+     }
+    }
+   ]
+  },
+  "spec": {
+   "version": 1,
+   "title": "What does a site change do?",
+   "range": {
+    "hours": 2160
+   },
+   "panels": [
+    {
+     "id": "b117-chart",
+     "kind": "chart",
+     "tracks": [
+      {
+       "id": "lane-glucose",
+       "height": 2,
+       "layers": [
+        {
+         "id": "glucose",
+         "dataset": {
+          "name": "event_response",
+          "cohorts": [
+           {
+            "anchor": "SiteChange"
+           }
+          ],
+          "minutesBefore": 60,
+          "minutesAfter": 480
+         },
+         "mark": "band",
+         "bindings": {
+          "x": "minute",
+          "y": [
+           "glucoseP50"
+          ],
+          "edges": [
+           "glucoseP25",
+           "glucoseP75"
+          ],
+          "series": "series"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

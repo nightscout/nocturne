@@ -4,9 +4,10 @@ import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-clie
 import { liveCatalogue } from "./catalogue.fixtures.js";
 import { Report } from "./report.svelte.js";
 import { STARTERS, starter } from "./starters.js";
-import { EVENT_SHOWS, LEAVE_OUTS, LENSES, SIGNALS, type LeaveOutId } from "./vocabulary.js";
 import * as words from "./vocabulary-words.svelte.js";
-import { Workspace, leaveOutDefaults } from "./workspace.svelte.js";
+import { Workspace, leaveOutDefaults, vocabularyOf } from "./workspace.svelte.js";
+
+const vocab = vocabularyOf(liveCatalogue);
 
 describe("the lens switch", () => {
   it("says why a lens cannot take the chart before it is used, and refuses it the same way", () => {
@@ -29,7 +30,7 @@ describe("the lens switch", () => {
 function claims(ws: Workspace): { claim: string; holds: boolean }[] {
   const text = ws.captionText();
   const json = JSON.stringify(ws.toSpec() ?? {});
-  const defaults = leaveOutDefaults(liveCatalogue);
+  const defaults = leaveOutDefaults(vocab);
   const out: { claim: string; holds: boolean }[] = [];
   if (ws.event.comparison && text.includes(ws.dates(ws.event.comparison)))
     out.push({ claim: "an earlier period", holds: json.includes('"comparisonRange"') });
@@ -37,11 +38,11 @@ function claims(ws: Workspace): { claim: string; holds: boolean }[] {
     out.push({ claim: "isolated events", holds: json.includes('"isolatedOnly":true') });
   if (text.includes("only rises the loop answered"))
     out.push({ claim: "corroborated rises", holds: json.includes('"requireCorroboration":true') });
-  for (const l of LEAVE_OUTS) {
+  for (const l of vocab.leaveOuts) {
     const word = words.leaveOutLabel(l.id).toLowerCase();
     const said = new RegExp(`without [^,]*\b${word}\b`).test(text);
     if (!said) continue;
-    const sent = json.includes(`"${l.parameter}":true`) || (defaults[l.id as LeaveOutId] && !json.includes(`"${l.parameter}":false`));
+    const sent = json.includes(`"${l.parameter}":true`) || (defaults[l.id] && !json.includes(`"${l.parameter}":false`));
     out.push({ claim: `without ${word}`, holds: sent });
   }
   return out;
@@ -50,22 +51,22 @@ function claims(ws: Workspace): { claim: string; holds: boolean }[] {
 describe("the caption", () => {
   it("never claims what the spec does not send, for any starter, lens or view", () => {
     for (const s of STARTERS)
-      for (const lens of LENSES)
-        for (const show of EVENT_SHOWS) {
+      for (const lens of vocab.lenses)
+        for (const show of vocab.shows) {
         for (const optionsFirst of [true, false]) {
           const ws = new Workspace(liveCatalogue, s);
-          ws.setLens(lens.id);
+          ws.setLens(lens);
           const options = () => {
             ws.setEvent({ isolatedOnly: true, requireCorroboration: true });
             ws.setEvent({ comparison: { from: "2026-08-01", to: "2026-08-14" } });
             ws.setLeaveOut("exercise", true);
           };
           if (optionsFirst) options();
-          ws.setShow(show.id);
+          ws.setShow(show);
           if (!optionsFirst) options();
           // An empty chart shows no caption.
           if (ws.toSpec() === null) continue;
-          for (const c of claims(ws)) expect(c.holds, `${s.id} ${lens.id} ${show.id}: ${c.claim}`).toBe(true);
+          for (const c of claims(ws)) expect(c.holds, `${s.id} ${lens} ${show}: ${c.claim}`).toBe(true);
         }
         }
   });
@@ -106,24 +107,40 @@ describe("glucose in words", () => {
 });
 
 describe("the words of the vocabulary", () => {
-  it("has a word for every id the workspace shows", () => {
-    for (const s of SIGNALS) expect(words.signalLabel(s.id), s.id).toBeTruthy();
-    for (const l of LENSES) {
-      expect(words.lensLabel(l.id), l.id).toBeTruthy();
-      expect(words.lensDescription(l.id), l.id).toBeTruthy();
-    }
-    for (const a of Object.values(EventAnchorKind)) {
-      expect(words.anchorLabel(a), a).toBeTruthy();
-      expect(words.anchorPhrase(a), a).toBeTruthy();
-    }
-    for (const s of STARTERS) {
-      expect(words.starterWords(String)[s.id]?.title, s.id).toBeTruthy();
-      expect(words.starterGroupLabel(s.group), s.id).toBeTruthy();
-    }
-    for (const [name, fn] of Object.entries(words))
-      if (name.endsWith("Labels") || name.endsWith("Descriptions") || name.endsWith("Phrases"))
-        for (const [id, word] of Object.entries((fn as () => Record<string, string>)()))
-          expect(word, `${name}.${id}`).toBeTruthy();
+  it("has a word for every id the catalogue sends", () => {
+    const ws = vocab.ws;
+    const missing: string[] = [];
+    const check = (kind: string, ids: readonly string[], words: Record<string, string>) => {
+      for (const id of ids) if (!Object.hasOwn(words, id)) missing.push(`${kind} ${id}`);
+    };
+    check("signal", ws.signals.map((s) => s.id), words.signalLabels());
+    check("lens", ws.lenses, words.lensLabels());
+    check("lens description", ws.lenses, words.lensDescriptions());
+    check("family", ws.families.map((f) => f.id), words.familyLabels());
+    check("kind of event", ws.anchors.map((a) => a.id), words.anchorLabels());
+    check("kind of event in a sentence", ws.anchors.map((a) => a.id), words.anchorPhrases());
+    check("verb of a kind of event", ws.anchors.map((a) => a.id), words.anchorVerbs());
+    check("group of kinds of event", ws.anchorGroups, words.anchorGroupLabels());
+    check("day kind", ws.dayKinds.map((k) => k.id), words.dayKindLabels());
+    check("day group preset", ws.dayGroupPresets.map((p) => p.id), words.dayGroupPresetLabels());
+    check("leave out", ws.leaveOuts.map((l) => l.id), words.leaveOutLabels());
+    check("range", ws.rangePresets.map((p) => p.id), words.rangeLabels());
+    check("view", ws.events.shows.map((s) => s.id), words.eventShowLabels());
+    check("figure", ws.events.outcomes.map((o) => o.id), words.outcomeLabels());
+    check("along", ws.events.along, words.alongLabels());
+    check("when axis", ws.events.whenAxes, words.whenAxisLabels());
+    check("when axis choice", ws.events.whenAxes, words.whenAxisChoices());
+    check("mark", ws.cells.flatMap((c) => [...c.marks, ...(c.fromStartMarks ?? [])].map((m) => m.word)), words.markLabels());
+    check("source", [...ws.sources.figures, ...ws.sources.tables], words.sourceLabels());
+    check("scope", [...ws.cells.flatMap((c) => c.scopes), ...ws.anchors.flatMap((a) => a.scopes), ...ws.dayKinds.flatMap((k) => k.scopes)], words.scopeWords());
+    check("starter", STARTERS.map((s) => s.id), Object.fromEntries(Object.entries(words.starterWords(String)).map(([id, w]) => [id, w.title])));
+    check("starter group", STARTERS.map((s) => s.group), words.starterGroupLabels());
+    expect([...new Set(missing)]).toEqual([]);
+  });
+
+  it("shows an id the web has no word for as the id itself", () => {
+    expect(words.signalLabel("ketones")).toBe("ketones");
+    expect(words.anchorLabel("Fasting")).toBe("Fasting");
   });
 });
 

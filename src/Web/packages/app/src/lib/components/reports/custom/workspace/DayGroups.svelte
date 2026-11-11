@@ -13,12 +13,7 @@
   import MealSizeEditor from "./MealSizeEditor.svelte";
   import { dayGroupSwatch, findLayer } from "./result-colors.js";
   import Swatch from "./Swatch.svelte";
-  import {
-    DAY_GROUP_PRESETS,
-    DAY_KINDS,
-    type DayGroupPresetId,
-    type Weekday,
-  } from "./vocabulary.js";
+  import type { Weekday } from "./catalogue-vocabulary.js";
   import WeekdayToggles from "./WeekdayToggles.svelte";
   import {
     GROUP_LETTERS,
@@ -35,11 +30,7 @@
 
   let { ws, report }: Props = $props();
 
-  const PRESET_IDS: DayGroupPresetId[] = [
-    "everyDay",
-    "weekdaysAndWeekend",
-    "fridayAndWeekend",
-  ];
+  const PRESET_IDS = $derived(ws.vocab.dayGroupPresets.map((p) => p.id));
   const WEEKDAY = "weekday";
   const HAPPENED = "happened";
   const EVERY_DAY = "every";
@@ -52,13 +43,13 @@
   const preset = $derived(
     PRESET_IDS.find(
       (id) =>
-        JSON.stringify(DAY_GROUP_PRESETS[id].groups) ===
+        JSON.stringify(ws.vocab.dayGroupPreset(id)) ===
         JSON.stringify(ws.dayGroups)
     ) ?? ""
   );
 
   const kinds = $derived(
-    DAY_KINDS.map((k) => ({
+    ws.vocab.dayKinds.map((k) => ({
       ...k,
       label: dayFilterText({ kind: k.id }, ws.clock),
       reason: ws.dayFilter?.kind === k.id ? null : ws.dayKindReason(k.id),
@@ -170,14 +161,15 @@
                     {...props}
                     variant="outline"
                     size="xs"
-                    aria-label="Weekdays of group {GROUP_LETTERS[g]}: {weekdaysText(days)}"
+                    aria-label="Weekdays of group {GROUP_LETTERS[g]}: {weekdaysText(days, ws.vocab.weekdays)}"
                   >
-                    {upperFirst(weekdaysText(days))}
+                    {upperFirst(weekdaysText(days, ws.vocab.weekdays))}
                   </Button>
                 {/snippet}
               </Popover.Trigger>
               <Popover.Content align="start" class="w-auto">
                 <WeekdayToggles
+                  weekdays={ws.vocab.weekdays}
                   label="Weekdays of group {GROUP_LETTERS[g]}"
                   value={days}
                   onchange={(next) => change(g, next)}

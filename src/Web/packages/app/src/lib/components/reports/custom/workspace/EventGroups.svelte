@@ -28,7 +28,6 @@
   import SinceCarbsEditor from "./SinceCarbsEditor.svelte";
   import Swatch from "./Swatch.svelte";
   import TimeOfDayEditor from "./TimeOfDayEditor.svelte";
-  import { ANCHORS, ANCHOR_GROUPS, WORKDAYS, anchor } from "./vocabulary.js";
   import WeekdayToggles from "./WeekdayToggles.svelte";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
@@ -104,7 +103,7 @@
   }
 
   function setAnchor(index: number, what: string) {
-    const found = ANCHORS.find((a) => a.id === what);
+    const found = ws.vocab.anchors.find((a) => a.id === what);
     if (found) update(index, { what: found.id });
   }
 
@@ -121,7 +120,7 @@
   }
 
   function offered(moment: Moment) {
-    const meal = anchor(moment.what).meal;
+    const meal = ws.vocab.mealNarrowing(moment.what);
     return NARROWINGS.filter(
       (n) =>
         moment[n.kind] === undefined &&
@@ -166,16 +165,17 @@
     return at < 0 ? { first: rule, rest: "" } : { first: rule.slice(0, at + 1), rest: rule.slice(at + 2) };
   }
 
-  const STARTS: Record<Narrowing, MomentPatch> = {
+  const STARTS: Record<Narrowing, MomentPatch> = $derived({
     timeOfDay: { timeOfDay: { fromMinute: 360, toMinute: 600 } },
-    weekdays: { weekdays: [...WORKDAYS] },
+    // A new weekday narrowing starts as Monday to Friday, the first five of the catalogue's week.
+    weekdays: { weekdays: ws.vocab.weekdays.slice(0, 5) },
     foods: { foods: [] },
     foodCategory: { foodCategory: "" },
     grams: { grams: { min: 20 } },
     minutesSinceMeal: { minutesSinceMeal: { min: 240 } },
     startGlucose: { startGlucose: {} },
     insulinOnBoard: { insulinOnBoard: {} },
-  };
+  });
 
   function add(index: number, moment: Moment, kind: Narrowing) {
     update(index, STARTS[kind]);
@@ -223,7 +223,7 @@
           ? windowLabel(moment.timeOfDay.fromMinute, moment.timeOfDay.toMinute)
           : "";
       case "weekdays": {
-        const text = weekdaysText(moment.weekdays ?? []);
+        const text = weekdaysText(moment.weekdays ?? [], ws.vocab.weekdays);
         return text.charAt(0).toUpperCase() + text.slice(1);
       }
       case "foods":
@@ -336,9 +336,9 @@
                     () => moment.what, (what: string) => setAnchor(i, what)
                   }
                 >
-                  {#each ANCHOR_GROUPS as heading (heading)}
+                  {#each ws.vocab.anchorGroups as heading (heading)}
                     <DropdownMenu.Label>{heading}</DropdownMenu.Label>
-                    {#each ANCHORS.filter((a) => a.group === heading) as a (a.id)}
+                    {#each ws.vocab.anchors.filter((a) => a.group === heading) as a (a.id)}
                       {@const why = ws.anchorReason(a.id)}
                       {@const note = ws.anchorNote(a.id)}
                       <DropdownMenu.RadioItem value={a.id} disabled={why !== null}>
@@ -392,6 +392,7 @@
                       />
                     {:else if kind === "weekdays"}
                       <WeekdayToggles
+                        weekdays={ws.vocab.weekdays}
                         label="Weekdays of group {LETTERS[i]}"
                         value={moment.weekdays ?? []}
                         onchange={(weekdays) => update(i, { weekdays })}

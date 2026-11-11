@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReportLayer, ReportPanel, ReportTrack } from "../types.js";
 import {
+  AXIS_CLEARANCE,
   bandSets,
   barRects,
   legend,
@@ -43,11 +44,18 @@ const track = (layers: ReportLayer[], height = 1): ReportTrack => ({ id: "t", he
 
 describe("a layered chart's layout", () => {
   it("shares the plot's height among tracks by their weights, with a gap between them", () => {
-    const bands = trackBands([{ height: 2 }, { height: 1 }, { height: 0.5 }], 370, 10);
+    const bands = trackBands([{ height: 2 }, { height: 1 }, { height: 0.5 }], 378, 10);
 
     expect(bands.map((b) => Math.round(b.height))).toEqual([200, 100, 50]);
     expect(bands[1].top).toBeCloseTo(210);
     expect(bands[2].bottom).toBeCloseTo(370);
+  });
+
+  it("keeps the lowest track clear of the time axis, so its zero does not sit on the axis labels", () => {
+    const [only] = trackBands([{ height: 1 }], 120);
+
+    expect(only.bottom).toBe(120 - AXIS_CLEARANCE);
+    expect(AXIS_CLEARANCE).toBeGreaterThanOrEqual(6);
   });
 
   it("gives a track a left and a right scale, each over its own layers, the glucose side reaching the high limit", () => {

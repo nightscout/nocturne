@@ -18,7 +18,6 @@
   import DateSpanField from "./DateSpanField.svelte";
   import EventGroups from "./EventGroups.svelte";
   import RangeChoices from "./RangeChoices.svelte";
-  import { EVENT_DATASET } from "./vocabulary.js";
   import type {
     ComparisonBlock,
     FiguresBlock,
@@ -169,7 +168,7 @@
         </Select.Content>
       </Select.Root>
     </div>
-    {#if block.source === EVENT_DATASET}
+    {#if block.source === report.vocab.eventDataset}
       <EventGroups ws={block.events} report={null} />
     {/if}
     <Collapsible.Root>

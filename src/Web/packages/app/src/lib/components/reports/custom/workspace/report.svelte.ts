@@ -1,14 +1,13 @@
 import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
-import {
-  COMPARISON_DATASET,
-  DEFAULT_REPORT_HOURS,
-  EVENT_DATASET,
-  FIGURE_SOURCES,
-  RANGE_PRESETS,
-  TABLE_SOURCES,
-  type BlockKind,
-  type Source,
-} from "./vocabulary.js";
+import type { Vocabulary } from "./catalogue-vocabulary.js";
+
+/** The kinds of block a report stacks. */
+export type BlockKind = "chart" | "figures" | "table" | "comparison";
+
+/** A dataset a block of figures or a table reads. */
+export interface Source {
+  dataset: string;
+}
 import { rangeLabel, sourceLabel, starterWords } from "./vocabulary-words.svelte.js";
 import { parseSavedReport, type SavedBlock, type SavedReport } from "./saved-state.js";
 import {
@@ -16,6 +15,7 @@ import {
   eventParameters,
   freshKey,
   reserveKey,
+  vocabularyOf,
   momentText,
   rangeText,
   upperFirst,
@@ -113,12 +113,13 @@ const COMPARISON_FALLBACK_PRESET = "last14-prior14";
 export class Report {
   state = $state<ReportState>({
     title: "",
-    rangeHours: DEFAULT_REPORT_HOURS,
+    rangeHours: 0,
     blocks: [],
     open: null,
   });
 
   readonly #catalogue: CustomReportCatalogue;
+  readonly #vocab: Vocabulary;
   readonly #clock: (minute: number) => string;
 
   /** How captions write two dates: the app's date format on a page. */
@@ -131,11 +132,12 @@ export class Report {
     dates?: (span: DateSpan) => string
   ) {
     this.#catalogue = catalogue;
+    this.#vocab = vocabularyOf(catalogue);
     this.#clock = clock ?? ((m) => String(m));
     this.dates = dates ?? ((span) => `${span.from} to ${span.to}`);
     this.state = {
       title: starter ? (starterWords(this.#clock)[starter.id]?.title ?? "") : "",
-      rangeHours: starter?.rangeHours ?? DEFAULT_REPORT_HOURS,
+      rangeHours: starter?.rangeHours ?? this.#vocab.defaultReportHours,
       blocks: [],
       open: null,
     };
@@ -148,6 +150,10 @@ export class Report {
 
   get catalogue(): CustomReportCatalogue {
     return this.#catalogue;
+  }
+
+  get vocab(): Vocabulary {
+    return this.#vocab;
   }
 
   get title(): string {
@@ -205,7 +211,7 @@ export class Report {
             title: block.title,
             source: block.source,
             columns: [...block.columns],
-            ...(block.source === EVENT_DATASET ? { events: $state.snapshot(block.events.state) } : {}),
+            ...(block.source === this.#vocab.eventDataset ? { events: $state.snapshot(block.events.state) } : {}),
           };
         case "comparison":
           return {
@@ -234,7 +240,7 @@ export class Report {
     clock?: (minute: number) => string,
     dates?: (span: DateSpan) => string
   ): Report | null {
-    const saved = parseSavedReport(version, state);
+    const saved = parseSavedReport(version, state, vocabularyOf(catalogue));
     if (!saved || !Report.#withinLimits(catalogue, saved)) return null;
     for (const block of saved.blocks) {
       reserveKey(block.key);
@@ -319,10 +325,8 @@ export class Report {
             ...(block.title.trim() ? { title: block.title.trim() } : {}),
             dataset: {
               name: block.source,
-              ...(block.source === EVENT_DATASET
-                ? eventParameters(
-                    block.events.state,
-                    block.events.leaveOutDefaults
+              ...(block.source === this.#vocab.eventDataset
+                ? eventParameters(block.events.state, this.#vocab, block.events.leaveOutDefaults
                   )
                 : {}),
             },
@@ -336,7 +340,7 @@ export class Report {
             kind: "comparison",
             ...(block.title.trim() ? { title: block.title.trim() } : {}),
             dataset: {
-              name: COMPARISON_DATASET,
+              name: this.#vocab.comparisonDataset,
               ...(block.preset
                 ? { preset: block.preset }
                 : block.a && block.b
@@ -394,7 +398,7 @@ export class Report {
     if (reads.length > c.maxReads)
       return `A report reads at most ${c.maxReads} sets of data. Remove a block or a signal first.`;
     const comparisons = footprints.filter((f) => f.comparison).length;
-    const maxComparisons = this.#dataset(COMPARISON_DATASET)?.maxReadsPerReport;
+    const maxComparisons = this.#dataset(this.#vocab.comparisonDataset)?.maxReadsPerReport;
     if (maxComparisons !== undefined && comparisons > maxComparisons)
       return `A report has at most ${maxComparisons} comparisons.`;
     return null;
@@ -422,7 +426,7 @@ export class Report {
       case "chart":
         return this.#chart();
       case "figures": {
-        const source = this.figureSources[0]?.dataset ?? FIGURE_SOURCES[0].dataset;
+        const source = this.figureSources[0]?.dataset ?? this.#vocab.figureSources[0] ?? "";
         return {
           kind,
           key,
@@ -433,7 +437,7 @@ export class Report {
         };
       }
       case "table": {
-        const source = this.tableSources[0]?.dataset ?? TABLE_SOURCES[0].dataset;
+        const source = this.tableSources[0]?.dataset ?? this.#vocab.tableSources[0] ?? "";
         return {
           kind,
           key,
@@ -500,7 +504,7 @@ export class Report {
       return "You cannot read the data for a table.";
     if (
       kind === "comparison" &&
-      !this.#dataset(COMPARISON_DATASET)?.permitted
+      !this.#dataset(this.#vocab.comparisonDataset)?.permitted
     )
       return "You cannot read the data for a comparison.";
     return this.#limit([...this.#footprints(), this.#newFootprint(kind)]);
@@ -552,7 +556,7 @@ export class Report {
 
   /** The report's range presets, each with why it cannot be chosen now. */
   get ranges(): RangeOption[] {
-    return RANGE_PRESETS.map((p) => ({ ...p, label: rangeLabel(p.id), reason: this.rangeReason(p.hours) }));
+    return this.#vocab.rangePresets.map((p) => ({ ...p, label: rangeLabel(p.id), reason: this.rangeReason(p.hours) }));
   }
 
   rangeReason(hours: number): Reason {
@@ -587,7 +591,7 @@ export class Report {
     const presets =
       block.kind === "chart"
         ? block.ws.ranges
-        : RANGE_PRESETS.map((p) => ({
+        : this.#vocab.rangePresets.map((p) => ({
             ...p,
             reason: this.#withBlock(block, { range: p.hours }),
           }));
@@ -606,7 +610,7 @@ export class Report {
   blockRangeId(block: Block): string {
     const own = block.kind === "chart" ? block.ws.ownRange : block.range;
     if (own === null) return SAME_AS_REPORT;
-    return RANGE_PRESETS.find((p) => p.hours === own)?.id ?? "";
+    return this.#vocab.rangePresets.find((p) => p.hours === own)?.id ?? "";
   }
 
   setBlockRange(block: Block, hours: number | null): Reason {
@@ -636,19 +640,19 @@ export class Report {
 
   // Figures and tables
 
-  #permittedSources(list: readonly Source[], kind: string): Source[] {
-    return list.filter((s) => {
+  #permittedSources(list: readonly string[], kind: string): Source[] {
+    return list.map((dataset) => ({ dataset })).filter((s) => {
       const d = this.#dataset(s.dataset);
       return d?.permitted && d.panelKinds.some((k) => k.name === kind);
     });
   }
 
   get figureSources(): Source[] {
-    return this.#permittedSources(FIGURE_SOURCES, "stat_tiles");
+    return this.#permittedSources(this.#vocab.figureSources, "stat_tiles");
   }
 
   get tableSources(): Source[] {
-    return this.#permittedSources(TABLE_SOURCES, "table");
+    return this.#permittedSources(this.#vocab.tableSources, "table");
   }
 
   sourceLabel(block: FiguresBlock | TableBlock): string {
@@ -722,7 +726,7 @@ export class Report {
 
   get comparisonPresets(): Choice[] {
     const preset: Record<string, unknown> | undefined = this.#dataset(
-      COMPARISON_DATASET
+      this.#vocab.comparisonDataset
     )?.parameters?.properties?.preset;
     const given = preset?.enum;
     const givenLabels = preset?.["x-enumLabels"];
@@ -763,7 +767,7 @@ export class Report {
 
   /** What the block shows, as one sentence. */
   caption(block: Block): string {
-    const range = rangeText(this.hoursOf(block));
+    const range = rangeText(this.hoursOf(block), this.#vocab.rangePresets);
     switch (block.kind) {
       case "chart":
         return block.ws.empty ? "No signals yet" : block.ws.captionText();
@@ -774,9 +778,9 @@ export class Report {
         return `${this.sourceLabel(block)}: ${labels.length} figures ${range}`;
       }
       case "table":
-        if (block.source === EVENT_DATASET) {
+        if (block.source === this.#vocab.eventDataset) {
           const texts = block.events.moments.map((m) =>
-            momentText(m, true, this.#clock, block.events.glucoseUnits)
+            momentText(m, true, this.#clock, block.events.glucoseUnits, this.#vocab)
           );
           return `${upperFirst(texts.join(" against "))}, one row for each event ${range}`;
         }

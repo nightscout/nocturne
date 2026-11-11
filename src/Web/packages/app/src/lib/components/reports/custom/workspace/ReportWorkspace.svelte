@@ -30,7 +30,7 @@
   import { describe } from "./describe.js";
   import RangeChoices from "./RangeChoices.svelte";
   import type { Block, Report } from "./report.svelte.js";
-  import type { BlockKind } from "./vocabulary.js";
+  import type { BlockKind } from "./report.svelte.js";
   import WorkspaceView from "./WorkspaceView.svelte";
 
   interface Props {

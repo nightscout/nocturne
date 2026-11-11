@@ -27,11 +27,6 @@
   import SignalChips from "./SignalChips.svelte";
   import SignalRail from "./SignalRail.svelte";
   import EventViewRail from "./EventViewRail.svelte";
-  import {
-    EVENT_SHOWS,
-    LENSES,
-    type LensId,
-  } from "./vocabulary.js";
   import { captionJoin, lowerFirst } from "./workspace.svelte.js";
   import { describe } from "./describe.js";
   import type { ChartBlock, Report } from "./report.svelte.js";
@@ -56,7 +51,8 @@
   // svelte-ignore state_referenced_locally
   let railOpen = $state(block.ws.empty);
 
-  const LENS_ICONS: Record<LensId, typeof ChartLine> = {
+  /** Each lens's icon; a lens the web has none for yet takes the timeline's. */
+  const LENS_ICONS: Record<string, typeof ChartLine> = {
     timeline: ChartLine,
     typical_day: Clock,
     event: Flag,
@@ -83,15 +79,14 @@
       : `Chart updated. ${untrack(() => ws.captionText())}.`
   );
 
-  const lenses = $derived(LENSES.map((l) => ({ id: l.id, reason: ws.lensReason(l.id) })));
+  const lenses = $derived(ws.vocab.lenses.map((id) => ({ id, reason: ws.lensReason(id) })));
   /** Each reason a lens cannot be used, once. */
   const lensReasons = $derived(
     lenses.flatMap((l) => (l.reason ? [l.reason] : [])).filter((r, i, all) => all.indexOf(r) === i)
   );
 
   function setLens(id: string) {
-    const found = LENSES.find((l) => l.id === id);
-    if (found) ws.setLens(found.id);
+    if (ws.vocab.lenses.includes(id)) ws.setLens(id);
   }
 
   /** The control that owns each part of the caption. */
@@ -214,7 +209,7 @@
         bind:value={() => ws.lens, (id: string) => id && setLens(id)}
       >
         {#each lenses as lens (lens.id)}
-          {@const Icon = LENS_ICONS[lens.id]}
+          {@const Icon = LENS_ICONS[lens.id] ?? ChartLine}
           <ToggleGroup.Item
             value={lens.id}
             disabled={lens.reason !== null}
@@ -231,7 +226,7 @@
         </p>
       {/each}
       {#if ws.lens === "event"}
-        {@const shows = EVENT_SHOWS.map((o) => ({ ...o, reason: ws.showReason(o.id) }))}
+        {@const shows = ws.vocab.shows.map((id) => ({ id, reason: ws.showReason(id) }))}
         <div class="space-y-1 pt-2">
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-xs text-muted-foreground" id="event-show-label">Show</span>
@@ -246,8 +241,7 @@
               bind:value={
                 () => ws.show,
                 (v: string) => {
-                  const found = EVENT_SHOWS.find((o) => o.id === v);
-                  if (found) ws.setShow(found.id);
+                  if (ws.vocab.shows.includes(v)) ws.setShow(v);
                 }
               }
             >

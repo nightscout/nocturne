@@ -4,19 +4,17 @@
 <script lang="ts">
   import { weekdayName } from "./vocabulary-words.svelte.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
-  import { WEEKDAYS, type Weekday } from "./vocabulary.js";
+  import type { Weekday } from "./catalogue-vocabulary.js";
 
   interface Props {
     value: Weekday[];
     onchange: (days: Weekday[]) => void;
     label: string;
+    /** The weekdays in order: the catalogue's. */
+    weekdays: readonly Weekday[];
   }
 
-  let { value, onchange, label }: Props = $props();
-
-  function isWeekday(day: string): day is Weekday {
-    return WEEKDAYS.some((w) => w.id === day);
-  }
+  let { value, onchange, label, weekdays }: Props = $props();
 </script>
 
 <ToggleGroup.Root
@@ -29,15 +27,14 @@
   bind:value={
     () => value,
     (days: string[]) => {
-      const picked = days.filter(isWeekday);
-      if (picked.length > 0)
-        onchange(WEEKDAYS.map((w) => w.id).filter((d) => picked.includes(d)));
+      const picked = days.filter((d) => weekdays.includes(d));
+      if (picked.length > 0) onchange(weekdays.filter((d) => picked.includes(d)));
     }
   }
 >
-  {#each WEEKDAYS as day (day.id)}
-    <ToggleGroup.Item value={day.id} aria-label={weekdayName(day.id)}>
-      {weekdayName(day.id, "short")}
+  {#each weekdays as day (day)}
+    <ToggleGroup.Item value={day} aria-label={weekdayName(day, weekdays)}>
+      {weekdayName(day, weekdays, "short")}
     </ToggleGroup.Item>
   {/each}
 </ToggleGroup.Root>

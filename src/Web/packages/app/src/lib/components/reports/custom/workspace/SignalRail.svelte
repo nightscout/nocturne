@@ -13,12 +13,7 @@
   import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Swatch from "./Swatch.svelte";
-  import {
-    FAMILY_LANES,
-    signal as signalOf,
-    type Family,
-    type SignalId,
-  } from "./vocabulary.js";
+  import type { Family, SignalId } from "./catalogue-vocabulary.js";
   import type { Workspace } from "./workspace.svelte.js";
 
   interface Props {
@@ -57,16 +52,16 @@
   // svelte-ignore state_referenced_locally
   const placedFamilies = options
     .filter((o) => o.placed)
-    .map((o) => signalOf(o.id).family);
+    .map((o) => ws.vocab.signal(o.id)?.family ?? "");
   // svelte-ignore state_referenced_locally
   const openFamilies = new SvelteSet<Family>(
     placedFamilies.length > 0
       ? placedFamilies
-      : options.slice(0, 1).map((o) => signalOf(o.id).family)
+      : options.slice(0, 1).map((o) => ws.vocab.signal(o.id)?.family ?? "")
   );
 
   function swatch(id: SignalId) {
-    return { kind: "solid" as const, color: `var(${signalOf(id).color})` };
+    return { kind: "solid" as const, color: ws.vocab.signalColor(id) };
   }
 </script>
 
@@ -88,8 +83,8 @@
   {/each}
 
   <div class="space-y-1">
-    {#each FAMILY_LANES as { family } (family)}
-      {@const rows = visible.filter((o) => signalOf(o.id).family === family)}
+    {#each ws.vocab.families as family (family)}
+      {@const rows = visible.filter((o) => (ws.vocab.signal(o.id)?.family ?? "") === family)}
       {#if rows.length > 0}
         <Collapsible.Root
           bind:open={
@@ -189,16 +184,16 @@
           <ul class="space-y-0.5 pt-1">
             {#each ws.noAccess as id (id)}
               <li>
-                <Button variant="menu" size="menu" disabled aria-describedby="rail-no-access-why">
+                <Button variant="menu" size="menu" disabled aria-describedby="rail-no-access-{id}" data-no-access={id}>
                   <Swatch swatch={swatch(id)} />
                   <span class="truncate">{signalLabel(id)}</span>
                 </Button>
+                <p id="rail-no-access-{id}" class="px-2 pb-1 pl-8 text-xs text-muted-foreground">
+                  {ws.accessReasonOf(id)}
+                </p>
               </li>
             {/each}
           </ul>
-          <p id="rail-no-access-why" class="px-2 pt-1 text-xs text-muted-foreground">
-            Your access cannot read this data.
-          </p>
         </Collapsible.Content>
       </Collapsible.Root>
     </div>

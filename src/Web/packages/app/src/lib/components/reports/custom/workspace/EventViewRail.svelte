@@ -8,7 +8,7 @@
   import { Label } from "#lib/components/ui/label/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
-  import type { Along, Outcome, WhenAxis } from "./vocabulary.js";
+  import { whenAxisChoice } from "./vocabulary-words.svelte.js";
   import type { Workspace } from "./workspace.svelte.js";
 
   interface Props {
@@ -17,19 +17,16 @@
 
   let { ws }: Props = $props();
 
-  const WHENS: { id: WhenAxis; label: string }[] = [
-    { id: "hour", label: "By hour of day" },
-    { id: "weekday", label: "By weekday" },
-  ];
+  const whens = $derived(ws.vocab.whenAxes.map((id) => ({ id, label: whenAxisChoice(id) })));
 
   function pickUp(v: string) {
     const found = ws.upChoices.find((o) => o.id === v);
-    if (found) ws.setEvent({ up: found.id satisfies Outcome });
+    if (found) ws.setEvent({ up: found.id });
   }
 
   function pickAlong(v: string) {
-    const found = ws.alongChoices.find((a) => a.id === v);
-    if (found) ws.setEvent({ along: found.id satisfies Along });
+    const found = ws.alongChoices.find((a) => a === v);
+    if (found) ws.setEvent({ along: found });
   }
 
   function pickFigure(v: string) {
@@ -38,8 +35,7 @@
   }
 
   function pickWhen(v: string) {
-    const found = WHENS.find((w) => w.id === v);
-    if (found) ws.setEvent({ when: found.id });
+    if (ws.vocab.whenAxes.includes(v)) ws.setEvent({ when: v });
   }
 </script>
 
@@ -74,7 +70,7 @@
 <nav aria-label="What the chart shows" class="space-y-4" data-testid="event-view-rail">
   {#if ws.show === "each"}
     {@render list("rail-up", "Up", ws.upChoices.map((o) => ({ id: o.id, label: outcomeLabel(o.id) })), ws.up, pickUp)}
-    {@render list("rail-along", "Along", ws.alongChoices.map((a) => ({ id: a.id, label: alongLabel(a.id) })), ws.along, pickAlong)}
+    {@render list("rail-along", "Along", ws.alongChoices.map((a) => ({ id: a, label: alongLabel(a) })), ws.along, pickAlong)}
     {#if ws.fitApplies}
       <div class="flex items-center gap-2 px-2">
         <Switch
@@ -90,6 +86,6 @@
   {:else if ws.show === "spread"}
     {@render list("rail-figure", "Figure", ws.figureChoices.map((o) => ({ id: o.id, label: outcomeLabel(o.id) })), ws.figure, pickFigure)}
   {:else if ws.show === "when"}
-    {@render list("rail-when", "Count the events", WHENS, ws.event.when, pickWhen)}
+    {@render list("rail-when", "Count the events", whens, ws.event.when, pickWhen)}
   {/if}
 </nav>

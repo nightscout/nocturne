@@ -95,11 +95,17 @@ export interface TrackBand {
   height: number;
 }
 
-/** Each track's band in a plot of `height` pixels, sized by its share. */
+/**
+ * The pixels left clear under the lowest track, so the lowest value axis label ("0") sits above the
+ * time axis's labels instead of on them; on a small chart they would touch.
+ */
+export const AXIS_CLEARANCE = 8;
+
+/** Each track's band in a plot of `height` pixels, sized by its share, clear of the time axis. */
 export function trackBands(tracks: readonly Pick<ReportTrack, "height">[], height: number, gap = TRACK_GAP): TrackBand[] {
   const weights = tracks.map((t) => Math.max(0.1, t.height));
   const total = weights.reduce((a, b) => a + b, 0);
-  const room = Math.max(0, height - gap * Math.max(0, tracks.length - 1));
+  const room = Math.max(0, height - AXIS_CLEARANCE - gap * Math.max(0, tracks.length - 1));
   let top = 0;
   return weights.map((w) => {
     const h = (room * w) / total;
