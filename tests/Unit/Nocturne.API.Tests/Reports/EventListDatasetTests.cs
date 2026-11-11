@@ -34,12 +34,13 @@ public class EventListDatasetTests
 
     [Theory]
     [InlineData("minutesSinceMeal", "drop", "dropFit", "value")]
-    [InlineData("timeOfDay", "nadir", "nadirFit", "time_of_day")]
+    [InlineData("timeOfDay", "nadir", null, "time_of_day")]
     [InlineData("iobAtEvent", "minutesBackToStart", "minutesBackToStartFit", "value")]
     [InlineData("grams", "netInsulin", "netInsulinFit", "value")]
-    public void A_figure_may_lie_against_any_value_at_the_event(string x, string y, string fit, string kind)
+    public void A_figure_may_lie_against_any_value_at_the_event(string x, string y, string? fit, string kind)
     {
-        var validation = Layer("""{ "name": "event_outcomes", "group": 1 }""", "points", $$""", "bindings": { "x": "{{x}}", "y": ["{{y}}"], "fit": "{{fit}}" }""");
+        var line = fit is null ? "" : $$""", "fit": "{{fit}}" """;
+        var validation = Layer("""{ "name": "event_outcomes", "group": 1 }""", "points", $$""", "bindings": { "x": "{{x}}", "y": ["{{y}}"] {{line}} }""");
 
         validation.Errors.Should().BeEmpty();
         ReportWire.Name(validation.Spec!.Panels[0].Tracks![0].Layers[0].XKind).Should().Be(kind);
@@ -180,10 +181,11 @@ public class EventListDatasetTests
         EventResponseDataset.GroupHue(1).Should().Be(ChartColor.Profile);
         EventResponseDataset.GroupHue(2).Should().Be(ChartColor.Chart3);
         EventResponseDataset.GroupHue(3).Should().Be(ChartColor.Override);
-        EventResponseDataset.GroupHue(4).Should().Be(ChartColor.Profile, "the charts' cohort hues repeat after three");
+        EventResponseDataset.GroupHue(4).Should().Be(ChartColor.Chart4);
+        EventResponseDataset.GroupHue(6).Should().Be(ChartColor.Profile, "the palette has five chart hues");
         foreach (var dataset in new IReportDataset[] { new EventOutcomeSpreadDataset(), new EventOccurrenceDataset() })
             dataset.Fields.Where(f => f.Name.StartsWith("events", StringComparison.Ordinal))
-                .Select(f => f.Color).Should().Equal(ChartColor.Profile, ChartColor.Chart3, ChartColor.Override, ChartColor.Profile, ChartColor.Chart3, ChartColor.Override);
+                .Select(f => f.Color).Should().Equal(ChartColor.Profile, ChartColor.Chart3, ChartColor.Override, ChartColor.Chart4, ChartColor.Chart5, ChartColor.Profile);
     }
 
     [Fact]
@@ -228,5 +230,72 @@ public class EventListDatasetTests
             For("gramsPerUnit").Should().Equal("Meal");
             For("startGlucose").Should().HaveCount(Enum.GetValues<EventAnchorKind>().Length);
         }
+    }
+
+    [Fact]
+    public void An_event_list_the_token_cannot_read_is_not_shown_rather_than_counted_as_no_events()
+    {
+        var report = new EventResponseReport
+        {
+            Definition = new EventResponseDefinition { Cohorts = [new EventCohortDefinition { Cohort = 1 }] },
+            Primary = new EventResponseRange { Cohorts = [new EventCohortResult { Cohort = 1, Events = 4 }] },
+        };
+        report.WithheldSeries.Add(LoopAnalysisSeries.EventList);
+        var run = new EventResponseDataset.EventRun(report, new Dictionary<int, string> { [1] = "Meal: all" }, new Dictionary<int, int> { [1] = 1 }, [], ["Meal: all"]);
+
+        var output = EventListDataset.Output(run, [], "Meal: all: 0 events.", [ReportFacts.Count("Meal: all", 0, "events")], "0 events.", new EventOccurrenceDataset().Fields, 0);
+
+        output.Facts.Should().BeEmpty();
+        output.Summary.Should().Be("Not shown: the events are drawn one by one only with the treatments.read scope, which this token does not hold.");
+        output.Omitted.Select(o => o.Field).Should().Contain("events1");
+    }
+
+    [Fact]
+    public void The_spread_never_cuts_more_ranges_than_its_maximum()
+    {
+        var random = new Random(7);
+        var outcome = EventOutcomeInfo.Of(EventOutcome.Nadir);
+        for (var i = 0; i < 20_000; i++)
+        {
+            var scale = Math.Pow(10, random.Next(-2, 4));
+            var low = Math.Round((random.NextDouble() - 0.3) * scale, 2);
+            var high = Math.Round(low + random.NextDouble() * scale, 2);
+            var rows = EventOutcomeSpreadDataset.Rows(new Dictionary<int, List<double>> { [1] = [low, high] }, outcome, "u", ["A"], useMmol: false);
+            rows.Count.Should().BeLessThanOrEqualTo(EventOutcomeSpreadDataset.MaxBins, $"values {low} and {high}");
+            rows.Sum(r => (int)r["events1"]!).Should().Be(2, $"values {low} and {high} are each in a range");
+        }
+    }
+
+    [Fact]
+    public void No_straight_line_is_drawn_along_the_time_of_day()
+    {
+        Layer("""{ "name": "event_outcomes" }""", "points", """, "bindings": { "x": "timeOfDay", "y": ["peakRise"], "fit": "peakRiseFit" }""")
+            .Errors.Should().ContainSingle().Which.Should().Be(new ReportSpecError(
+                "panels[0].tracks[0].layers[0].bindings.fit",
+                "A straight line does not fit along the time of day, which starts again at midnight. Remove the line, or lie the points along another value."));
+        new EventOutcomesDataset().Fields.Single(f => f.Name == "peakRiseFit").Description.Should().Contain("none along the time of day");
+    }
+
+    [Fact]
+    public void Events_with_no_carbs_read_before_them_say_why_for_a_clamped_token()
+    {
+        var x = new EventOutcomesDataset().Fields.Single(f => f.Name == "minutesSinceMeal");
+
+        EventOutcomesDataset.MissingNote(x, 1, clamped: false)
+            .Should().Be("1 event with no carbs read before it is not drawn: no carbs were logged before it in the range read.");
+        EventOutcomesDataset.MissingNote(x, 3, clamped: true)
+            .Should().Be("3 events with no carbs read before them are not drawn: this token reads only the last 24 hours, so carbs logged before that are not read.");
+    }
+
+    [Fact]
+    public void The_line_through_the_points_is_the_line_of_the_figure_they_draw()
+    {
+        Layer("""{ "name": "event_outcomes" }""", "points", """, "bindings": { "x": "startGlucose", "y": ["nadir"], "fit": "peakRiseFit" }""")
+            .Errors.Should().ContainSingle().Which.Message.Should().Be("'peakRiseFit' is the line of another figure. Send nadirFit, or remove the line.");
+        var unnamed = Layer("""{ "name": "event_outcomes" }""", "points", """, "bindings": { "x": "startGlucose", "y": ["nadir"] }""");
+        unnamed.Errors.Should().BeEmpty();
+        unnamed.Spec!.Panels[0].Tracks![0].Layers[0].Bindings.Fit.Should().BeNull("the default line is peak rise's, which these points do not draw");
+        Layer("""{ "name": "event_outcomes" }""", "points", """, "bindings": { "x": "timeOfDay", "y": ["peakRise"] }""")
+            .Errors.Should().BeEmpty("the default line is along the glucose at the event, not along the time of day");
     }
 }

@@ -22,6 +22,16 @@ internal sealed partial class ReportSpecValidator
     /// of panel, the field it is laid along and what the dataset reads differently by (<see cref="IReportDataset.ReadVariant"/>).
     /// Two layers or sources with the same key read once; the runner reads by this key and the cap counts it.
     /// </summary>
+    /// <summary>
+    /// The key a read counts under against the cap: <see cref="ReadKey"/>, or for a read that shares its costly part
+    /// with others (<see cref="IReportDataset.SharedRead"/>) that part's key and range, so it counts once.
+    /// </summary>
+    internal static string CountKey(
+        IReportDataset dataset, ReportDatasetParameters parameters, ReportRange range, ReportPanelKind kind, string? x, ReportReadShape shape) =>
+        dataset.SharedRead(parameters) is { } shared
+            ? $"shared|{shared}|{JsonSerializer.Serialize(range, KeyOptions)}"
+            : ReadKey(dataset, parameters, range, kind, x, shape);
+
     internal static string ReadKey(
         IReportDataset dataset, ReportDatasetParameters parameters, ReportRange range, ReportPanelKind kind, string? x, ReportReadShape shape) =>
         $"{parameters.DatasetName}|{JsonSerializer.Serialize(parameters, parameters.GetType(), KeyOptions)}|{JsonSerializer.Serialize(range, KeyOptions)}|{ReportWire.Name(kind)}|{x}"
@@ -217,7 +227,7 @@ internal sealed partial class ReportSpecValidator
         var columns = ReadColumns(panel, $"{at}.bindings", dataset, fields, error);
         if (parameters is null || columns is null)
             return null;
-        reads.TryAdd(ReadKey(dataset, parameters, range, kind, null, ReportReadShape.Panel), dataset);
+        reads.TryAdd(CountKey(dataset, parameters, range, kind, null, ReportReadShape.Panel), dataset);
         return new ReportPanelSpec
         {
             Kind = kind,
@@ -343,7 +353,7 @@ internal sealed partial class ReportSpecValidator
             foreach (var read in layer.Reads)
             {
                 CheckSpan(read.Dataset, layerRange, layer.Spec.Range is null ? $"{at}.range" : $"{layer.At}.range", Error);
-                reads.TryAdd(ReadKey(read.Dataset, read.Parameters, layerRange, ReportPanelKind.Chart, read.X, read.Shape), read.Dataset);
+                reads.TryAdd(CountKey(read.Dataset, read.Parameters, layerRange, ReportPanelKind.Chart, read.X, read.Shape), read.Dataset);
             }
             if (layer.Spec.Derived is { } derived)
             {
@@ -534,7 +544,13 @@ internal sealed partial class ReportSpecValidator
             return null;
 
         if (dataset is not null)
+        {
+            foreach (var (field, message) in dataset.ValidateBindings(bindings.Value.Bindings))
+                Error($"{at}.bindings.{field}", message);
+            if (failed)
+                return null;
             reads = [new LayerRead(dataset, parameters!, bindings.Value.Bindings.X, ReportSpecRunner.LayerShape(bindings.Value.Bindings))];
+        }
 
         if (id is null)
         {
@@ -889,7 +905,11 @@ internal sealed partial class ReportSpecValidator
         var y = List("y", fallbackY) ?? [];
         var edges = mark == ReportMark.Band ? List("edges", defaults?.Edges) : null;
         var series = slots.Any(s => s.Key == "series") ? Text("series", defaults?.Series) : null;
-        var fit = mark == ReportMark.Points ? Text("fit", defaults?.Fit) : null;
+        // The default line belongs with the default points on the default axis: a layer that draws other points, or lays
+        // them along another axis, draws a line only when it names one.
+        var fit = mark == ReportMark.Points
+            ? Text("fit", y.SequenceEqual(defaults?.Y ?? []) && xName == defaults?.X ? defaults?.Fit : null)
+            : null;
 
         if (ySlot.Required && y.Count == 0)
             Error($"{at}.y", mark == ReportMark.Markers

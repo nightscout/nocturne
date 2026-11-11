@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -61,6 +62,7 @@ public class RecordDatasetTests
         public readonly Mock<IDeviceAgeService> Age = new();
         public readonly Mock<IChartDataService> Chart = new();
         public readonly Mock<ILoopAnalysisService> Loop = new();
+        public readonly Mock<IStateSpanRepository> StateSpans = new();
 
         public Harness(string? zone = "UTC")
         {
@@ -76,6 +78,19 @@ public class RecordDatasetTests
             Canonical.Setup(c => c.SelectAsync(It.IsAny<IReadOnlyList<SensorGlucose>>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IReadOnlyList<SensorGlucose> r, CancellationToken _) => r);
             Therapy.Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(zone);
+            StateSpans.Setup(s => s.GetByCategories(It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Dictionary<StateSpanCategory, List<StateSpan>>());
+        }
+
+        /// <summary>Glucose every five minutes over 15 days from <paramref name="mgdl"/> of the reading's time in place of the cycle.</summary>
+        public void WithGlucose(Func<DateTimeOffset, double> mgdl)
+        {
+            var readings = Enumerable.Range(0, 15 * 288).Select(i => Now.AddMinutes(-5 * i))
+                .Select(at => new SensorGlucose { Timestamp = at.UtcDateTime, Mgdl = mgdl(at) }).ToList();
+            Glucose.Setup(g => g.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), It.IsAny<int>(),
+                    It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+                .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, DateTime? _, Guid? _, CancellationToken _, Guid? _) =>
+                    readings.Where(r => r.Timestamp >= from && r.Timestamp < to).OrderBy(r => r.Timestamp).ToList());
         }
 
         public (ReportSpecRunner Runner, ReportRunContext Context, ReportReadLog ReadLog) Arrange(params string[] scopes) =>
@@ -90,7 +105,7 @@ public class RecordDatasetTests
                 .AddSingleton(Glucose.Object).AddSingleton(Canonical.Object).AddSingleton(Therapy.Object)
                 .AddSingleton(Boluses.Object).AddSingleton(Carbs.Object).AddSingleton(Temps.Object).AddSingleton(Injections.Object)
                 .AddSingleton(Notes.Object).AddSingleton(Spans.Object).AddSingleton(Pump.Object).AddSingleton(Uploader.Object)
-                .AddSingleton(Age.Object).AddSingleton(Chart.Object).AddSingleton(Loop.Object)
+                .AddSingleton(Age.Object).AddSingleton(Chart.Object).AddSingleton(Loop.Object).AddSingleton(StateSpans.Object)
                 .AddSingleton(new TenantClockResolver(Therapy.Object, new CategoryReadContext(), NullLogger<TenantClockResolver>.Instance))
                 .AddSingleton<IStatisticsService>(new StatisticsService(new FixedTime(Now)))
                 .AddSingleton<TimeProvider>(new FixedTime(Now))

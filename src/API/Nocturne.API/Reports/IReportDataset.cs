@@ -61,6 +61,10 @@ internal enum ReportAggregate
 
     [JsonStringEnumMemberName("max")]
     Max,
+
+    /// <summary>The lowest value in the slot: a range's low edge.</summary>
+    [JsonStringEnumMemberName("min")]
+    Min,
 }
 
 /// <summary>One field of a dataset's rows, as the catalogue and the result describe it.</summary>
@@ -195,6 +199,12 @@ internal interface IReportDataset
     string? ReadVariant(ReportReadShape shape) => null;
 
     /// <summary>
+    /// The key of a costly read several datasets share, or null: reads with one shared key over one range
+    /// compute once, and the read cap counts them once (<see cref="Datasets.EventResponseDataset.SharedReadKey"/>).
+    /// </summary>
+    string? SharedRead(ReportDatasetParameters parameters) => null;
+
+    /// <summary>
     /// The fields the rows' sentence companion (<see cref="ReportField.SentenceField"/>) is about
     /// (<see cref="ReportAbout"/>); a chart layer carries it only when it draws them. Null for a sentence about the whole row.
     /// </summary>
@@ -211,6 +221,9 @@ internal interface IReportDataset
 
     /// <summary>Errors in the parameters, as messages naming the parameter.</summary>
     IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters);
+
+    /// <summary>Errors in a chart layer's bindings that only the dataset knows of, by the binding they name.</summary>
+    IEnumerable<(string Field, string Message)> ValidateBindings(ReportLayerBindings bindings) => [];
 
     Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken);
 }

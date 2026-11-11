@@ -24,12 +24,14 @@ internal sealed class ReportRunCache
     private const int ChartIntervalMinutes = 5;
 
     private readonly Dictionary<string, Task<ReportDatasetOutput>> _reads = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _counted = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Task<EventResponseDataset.EventRun>> _events = new(StringComparer.Ordinal);
     private readonly Dictionary<(long From, long To), IReadOnlyList<SensorGlucose>> _glucose = [];
     private readonly Dictionary<(long From, long To), ExtendedGlucoseAnalytics> _analysis = [];
     private readonly Dictionary<(long From, long To), DashboardChartData> _chart = [];
 
-    /// <summary>The dataset reads made so far.</summary>
-    public int Reads => _reads.Count;
+    /// <summary>The dataset reads made so far, reads that share their costly part (<see cref="IReportDataset.SharedRead"/>) once.</summary>
+    public int Reads => _counted.Count;
 
     /// <summary>Whether the read <paramref name="key"/> names has been made, so a run past its deadline still draws what it read.</summary>
     public bool Has(string key) => _reads.TryGetValue(key, out var task) && task.IsCompletedSuccessfully;
@@ -38,12 +40,28 @@ internal sealed class ReportRunCache
     /// The output of the read <paramref name="key"/> names, read the first time it is asked for. A read
     /// that failed or ran out of time stays so for every layer that names it; it is not read again.
     /// </summary>
-    public Task<ReportDatasetOutput> ReadAsync(string key, Func<Task<ReportDatasetOutput>> read)
+    /// <param name="countKey">The key the read counts under (<see cref="ReportSpecValidator.CountKey"/>).</param>
+    public Task<ReportDatasetOutput> ReadAsync(string key, string countKey, Func<Task<ReportDatasetOutput>> read)
     {
+        _counted.Add(countKey);
         if (!_reads.TryGetValue(key, out var task))
         {
             task = read();
             _reads[key] = task;
+        }
+        return task;
+    }
+
+    /// <summary>
+    /// The event groups' analysis for <paramref name="key"/>, computed and audited the first time only: every
+    /// event dataset over the same groups and range reads it (<see cref="EventResponseDataset.ComputeAsync"/>).
+    /// </summary>
+    public Task<EventResponseDataset.EventRun> EventsAsync(string key, Func<Task<EventResponseDataset.EventRun>> compute)
+    {
+        if (!_events.TryGetValue(key, out var task))
+        {
+            task = compute();
+            _events[key] = task;
         }
         return task;
     }

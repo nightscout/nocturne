@@ -21,12 +21,14 @@ public class DayConditionsTests
         Func<long, double>? glucose = null,
         IEnumerable<CarbEvent>? carbs = null,
         IEnumerable<MillsInterval>? exercise = null,
-        long? visibleFrom = null)
+        long? visibleFrom = null,
+        long? coveredTo = null)
     {
         var readings = new List<GlucoseSample>();
         for (var t = Starts[0]; t < Starts[^1]; t += 5 * Minute)
             readings.Add(new GlucoseSample(t, (glucose ?? (_ => 120))(t)));
-        return DayConditions.Select(condition, First, Starts, Sydney, readings, carbs ?? [], exercise ?? [], [], visibleFrom);
+        return DayConditions.Select(condition, First, Starts, Sydney, readings, carbs ?? [], exercise ?? [], [], visibleFrom,
+            new MillsInterval(Starts[0], coveredTo ?? Starts[^1]));
     }
 
     [Fact]
@@ -93,5 +95,18 @@ public class DayConditionsTests
         instants.Contains(Local(11, 23, 59)).Should().BeTrue();
         instants.Contains(Local(12, 12)).Should().BeFalse();
         instants.Contains(Local(13, 12)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ADayTheRangeCoversOnlyInPart_IsInNeitherGroup()
+    {
+        var today = Local(13, 15);
+
+        var with = Select(new DayCondition { Kind = DayConditionKind.Exercise }, exercise: [new(Local(13, 9), Local(13, 10))], coveredTo: today);
+        var without = Select(new DayCondition { Kind = DayConditionKind.Exercise, Others = true }, coveredTo: today);
+
+        with.Kept.Should().BeEmpty("today is not over, so its exercise does not decide it");
+        with.Partial.Should().Be(1);
+        without.Kept.Select(d => d.Day).Should().Equal(10, 11, 12);
     }
 }

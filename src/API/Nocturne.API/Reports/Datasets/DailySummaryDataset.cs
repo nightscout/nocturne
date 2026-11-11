@@ -178,23 +178,33 @@ internal sealed class DailySummaryDataset : IReportDataset
         var starts = days.Select(d => d.Timestamp).Append(days[^1].EndTimestamp).ToList();
         var firstDay = DateOnly.ParseExact(days[0].Date, "yyyy-MM-dd", CultureInfo.InvariantCulture);
         var end = starts[^1];
-        List<MillsInterval> exercise = [], illness = [];
-        if (filter.Kind is ReportDayKind.Exercise or ReportDayKind.Illness)
+        // Lows are read off the readings outside the data exclusions, as the typical day reads them.
+        var category = filter.Kind switch
         {
-            var category = filter.Kind == ReportDayKind.Exercise ? StateSpanCategory.Exercise : StateSpanCategory.Illness;
-            var spans = await request.Services.GetRequiredService<IStateSpanRepository>().GetByCategories(
-                [category], DateTimeOffset.FromUnixTimeMilliseconds(starts[0]).UtcDateTime,
+            ReportDayKind.Exercise => StateSpanCategory.Exercise,
+            ReportDayKind.Illness => StateSpanCategory.Illness,
+            ReportDayKind.Low or ReportDayKind.LowOvernight => StateSpanCategory.DataExclusion,
+            _ => (StateSpanCategory?)null,
+        };
+        List<MillsInterval> spans = [];
+        if (category is { } read)
+        {
+            var found = await request.Services.GetRequiredService<IStateSpanRepository>().GetByCategories(
+                [read], DateTimeOffset.FromUnixTimeMilliseconds(starts[0]).UtcDateTime,
                 DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime, cancellationToken);
-            var intervals = spans.GetValueOrDefault(category, []).Select(s => new MillsInterval(s.StartMills, s.EndMills ?? end)).ToList();
-            request.ReadLog.Record("state_spans", intervals.Count);
-            (filter.Kind == ReportDayKind.Exercise ? exercise : illness).AddRange(intervals);
+            spans = [.. found.GetValueOrDefault(read, []).Select(s => new MillsInterval(s.StartMills, s.EndMills ?? end))];
+            request.ReadLog.Record("state_spans", spans.Count);
         }
+        var exclusions = category == StateSpanCategory.DataExclusion ? IntervalSet.Of(spans) : IntervalSet.Empty;
+        var now = request.Services.GetRequiredService<TimeProvider>().GetUtcNow().ToUnixTimeMilliseconds();
         return DayConditions.Select(
             filter.ToCondition(), firstDay, starts, zone,
-            [.. glucose.Select(g => new GlucoseSample(g.Mills, g.Mgdl)).OrderBy(g => g.Mills)],
+            [.. glucose.Where(g => !exclusions.Contains(g.Mills)).Select(g => new GlucoseSample(g.Mills, g.Mgdl)).OrderBy(g => g.Mills)],
             records.Carbs.Select(c => new CarbEvent(c.Mills, c.Carbs)),
-            exercise, illness,
-            request.HistoryClamped ? request.From.ToUnixTimeMilliseconds() : null);
+            filter.Kind == ReportDayKind.Exercise ? spans : [],
+            filter.Kind == ReportDayKind.Illness ? spans : [],
+            request.HistoryClamped ? request.From.ToUnixTimeMilliseconds() : null,
+            new MillsInterval(starts[0], Math.Min(end, now)));
     }
 
     /// <summary>The extremes across the days, each with its date as the note.</summary>

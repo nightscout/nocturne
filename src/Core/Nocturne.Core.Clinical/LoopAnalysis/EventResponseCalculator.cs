@@ -57,15 +57,25 @@ public static class EventResponseCalculator
     /// <summary>
     /// How far before an anchor what decides it reaches: the window shown before it, the carbs
     /// that announce a rise, the carbs that make a bolus a meal's rather than a correction, the
-    /// readings that decide an excursion start, and the carbs a minutes-since-meal condition reads
-    /// (<see cref="ConditionLookbackMs"/>).
+    /// readings that decide an excursion start, and the carbs the cohort's minutes-since-meal
+    /// condition reads (<see cref="CohortConditionLookbackMs"/>).
     /// </summary>
-    public static long HistoryLookbackMs(EventWindow window, EventResponseDefinition? definition = null) =>
+    public static long HistoryLookbackMs(EventWindow window, EventResponseDefinition? definition = null, EventCohortDefinition? cohort = null) =>
         new[]
         {
             window.BeforeMs, UnannouncedRises.CarbsBeforeMs, EventAnchors.BolusAfterMealMs,
-            EventAnchors.ExcursionLookbackMs, definition is null ? 0 : ConditionLookbackMs(definition),
+            EventAnchors.ExcursionLookbackMs, definition is null || cohort is null ? 0 : CohortConditionLookbackMs(definition, cohort),
         }.Max();
+
+    /// <summary>
+    /// How far before an anchor <paramref name="cohort"/>'s condition reads carbs; an all-others cohort
+    /// reads its siblings' conditions, so it looks back as far as the furthest of them.
+    /// </summary>
+    public static long CohortConditionLookbackMs(EventResponseDefinition definition, EventCohortDefinition cohort) =>
+        (cohort.Others ? Siblings(definition, cohort) : [cohort])
+            .Select(c => (long)Math.Max(c.MinMinutesSinceMeal ?? 0, c.MaxMinutesSinceMeal ?? 0))
+            .DefaultIfEmpty(0)
+            .Max() * LocalSlotBinning.MinuteMs;
 
     /// <summary>
     /// How far before an anchor the cohorts' minutes-since-meal conditions read carbs: the largest
@@ -88,7 +98,6 @@ public static class EventResponseCalculator
     {
         var zone = inputs.Series.Zone;
         var window = EventWindow.Of(definition);
-        var visibleFrom = VisibleHistory.ReadableFrom(inputs.HistoryVisibleFrom, HistoryLookbackMs(window, definition));
         var exclusions = IntervalSet.Of(inputs.Sources.DataExclusions);
         var series = new EventSeries(inputs.Series, exclusions);
         var anchors = new AnchorSource(inputs, series, exclusions, definition.RequireCorroboration);
@@ -112,6 +121,7 @@ public static class EventResponseCalculator
             var counted = new List<EventEpisode>();
             var siblings = cohort.Others ? Siblings(definition, cohort) : [];
             var withheld = cohort.FoodFilterWithheld || siblings.Any(s => s.FoodFilterWithheld);
+            var visibleFrom = VisibleHistory.ReadableFrom(inputs.HistoryVisibleFrom, HistoryLookbackMs(window, definition, cohort));
             foreach (var anchor in withheld ? [] : anchors.Of(cohort.Anchor))
             {
                 if (anchor.Mills < from || anchor.Mills >= to || anchor.Mills + window.AfterMs > inputs.Now

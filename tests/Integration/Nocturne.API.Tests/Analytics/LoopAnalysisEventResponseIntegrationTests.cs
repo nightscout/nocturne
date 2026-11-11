@@ -381,7 +381,7 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
             range = new { from = WeekStart.ToString("o"), to = WeekStart.AddDays(7).ToString("o") },
             panels = new[]
             {
-                Panel("each", Layer("event_outcomes", "points", new { x = "timeOfDay", y = new[] { "peakRise" }, fit = "peakRiseFit" })),
+                Panel("each", Layer("event_outcomes", "points", new { x = "timeOfDay", y = new[] { "peakRise" } })),
                 Panel("spread", Layer("event_outcome_spread", "bars", outcome: "peakRise")),
                 Panel("hours", Layer("event_occurrence", "bars")),
             },
@@ -403,7 +403,7 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
         points.Select(r => r.GetProperty("timeOfDay").GetInt32()).Distinct().Should().BeEquivalentTo([720, 1140]);
         points.Where(r => r.GetProperty("timeOfDay").GetInt32() == 720).Select(r => r.GetProperty("peakRise").GetDouble())
             .Should().OnlyContain(v => v == 80);
-        each.GetProperty("sentence").GetString().Should().StartWith("Peak rise against time of day: r = ");
+        each.GetProperty("sentence").GetString().Should().Be("14 events, each drawn as a point.", "no line is fitted along the time of day");
 
         var spread = layers["spread"];
         var ranges = spread.GetProperty("rows").EnumerateArray().ToList();
@@ -421,6 +421,8 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
         var narrowed = await (await glucoseOnly.PostAsJsonAsync("/api/v4/reports/custom/run", new { spec })).Content.ReadFromJsonAsync<JsonElement>();
         var narrowedEach = narrowed.GetProperty("result").GetProperty("panels")[0].GetProperty("tracks")[0].GetProperty("layers")[0];
         narrowedEach.GetProperty("rows").GetArrayLength().Should().Be(0, "the event list needs treatments.read");
+        narrowedEach.GetProperty("facts").GetArrayLength().Should().Be(0, "no false count of 0 events");
+        narrowedEach.GetProperty("summary").GetString().Should().StartWith("Not shown:").And.Contain("treatments");
     }
 
     /// <summary>

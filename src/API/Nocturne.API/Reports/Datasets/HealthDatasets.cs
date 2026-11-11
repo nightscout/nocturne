@@ -37,7 +37,7 @@ internal sealed class HeartRateDataset : IReportDataset
     [
         new("time", "Time", ReportFieldKind.Time, null, "Start of the slot, Unix milliseconds."),
         new("bpm", "Heart rate", ReportFieldKind.Number, "bpm", "The mean of the minute averages in the slot.", Color: ChartColor.HeartRate, Aggregate: ReportAggregate.Mean),
-        new("bpmMin", "Heart rate, lowest", ReportFieldKind.Number, "bpm", "The lowest minute average in the slot.", Aggregate: ReportAggregate.Mean),
+        new("bpmMin", "Heart rate, lowest", ReportFieldKind.Number, "bpm", "The lowest minute average in the slot.", Aggregate: ReportAggregate.Min),
         new("bpmMax", "Heart rate, highest", ReportFieldKind.Number, "bpm", "The highest minute average in the slot.", Aggregate: ReportAggregate.Max),
     ];
 

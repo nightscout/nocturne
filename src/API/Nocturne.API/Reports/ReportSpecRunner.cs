@@ -172,7 +172,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             return new Read(null, ReportPanelStatus.TimedOut, "Not shown: the report ran out of time before this was read.");
         try
         {
-            var output = await context.Cache.ReadAsync(key, () => dataset.RunAsync(
+            var output = await context.Cache.ReadAsync(key, ReportSpecValidator.CountKey(dataset, parameters, range, kind, x, shape), () => dataset.RunAsync(
                 new ReportDatasetRequest(parameters, kind, from, to, context.UseMmol, context.GrantedScopes, context.Services, context.ReadLog,
                     context.HistoryClamped, context.Cache, run.Now, x, context.Zone, shape.Fields, shape.Whole),
                 run.Token));
@@ -361,6 +361,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         ReportAggregate.Sum => "total",
         ReportAggregate.Mean => "mean",
         ReportAggregate.Max => "highest value",
+        ReportAggregate.Min => "lowest value",
         ReportAggregate.Last => "last value",
         _ => throw new ArgumentOutOfRangeException(nameof(aggregate), aggregate, null),
     };

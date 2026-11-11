@@ -28,9 +28,9 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
     /// Instead: the starts of lows and highs (a low a day at 03:00), all other highs, and a
     /// minutes-since-meal condition, over the longest window before the event.
     /// </param>
+    /// <param name="sixGroups">Instead: six groups, the most a custom report asks for, over the longest window both ways.</param>
     [Theory]
     [Trait("Category", "Performance")]
-    /// <param name="sixGroups">Instead: six groups, the most a custom report asks for, over the longest window both ways.</param>
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]

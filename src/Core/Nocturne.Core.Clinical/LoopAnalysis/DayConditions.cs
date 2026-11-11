@@ -19,6 +19,7 @@ public static class DayConditions
 {
     /// <param name="dayStarts">Each local day's start, Unix ms, and the end of the last: one more than the days.</param>
     /// <param name="readings">Readings in time order, those under a data exclusion left out.</param>
+    /// <param name="covered">The time the data was read over; a day it does not cover whole is undecided.</param>
     public static DaySelection Select(
         DayCondition condition,
         DateOnly firstDay,
@@ -28,7 +29,8 @@ public static class DayConditions
         IEnumerable<CarbEvent> carbs,
         IEnumerable<MillsInterval> exercise,
         IEnumerable<MillsInterval> illness,
-        long? historyVisibleFrom)
+        long? historyVisibleFrom,
+        MillsInterval covered)
     {
         var days = dayStarts.Count - 1;
         var had = new bool[days];
@@ -61,7 +63,7 @@ public static class DayConditions
         }
 
         var kept = new List<DateOnly>();
-        int matching = 0, notMatching = 0, undecided = 0;
+        int matching = 0, notMatching = 0, undecided = 0, partial = 0;
         for (var d = 0; d < days; d++)
         {
             if (historyVisibleFrom is { } edge && dayStarts[d] < edge)
@@ -69,11 +71,16 @@ public static class DayConditions
                 undecided++;
                 continue;
             }
+            if (dayStarts[d] < covered.Start || dayStarts[d + 1] > covered.End)
+            {
+                partial++;
+                continue;
+            }
             if (had[d]) matching++; else notMatching++;
             if (had[d] != condition.Others)
                 kept.Add(firstDay.AddDays(d));
         }
-        return new DaySelection(kept, matching, notMatching, undecided);
+        return new DaySelection(kept, matching, notMatching, undecided, partial);
     }
 
     /// <summary>The kept days of <paramref name="selection"/> as instants.</summary>

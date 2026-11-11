@@ -34,6 +34,7 @@ public class LoopAnalysisServiceReadTests
     private readonly List<ScaleFactorInterval> _seriesOverrides = [];
     private readonly List<StateSpan> _overrideSpans = [];
     private readonly List<long> _timelineStarts = [];
+    private readonly Mock<ISleepSessionRepository> _sleep = new();
 
     public LoopAnalysisServiceReadTests()
     {
@@ -116,7 +117,7 @@ public class LoopAnalysisServiceReadTests
             deviceDates: DeviceDateClockDoubles.Utc(),
             deviceEventRepository: Mock.Of<IDeviceEventRepository>(),
             treatmentFoodRepository: Mock.Of<ITreatmentFoodRepository>(),
-            sleepSessionRepository: Mock.Of<ISleepSessionRepository>());
+            sleepSessionRepository: _sleep.Object);
     }
 
     [Fact]
@@ -257,5 +258,34 @@ public class LoopAnalysisServiceReadTests
 
         active.Should().BeSameAs(schedule);
         profiles.Verify(r => r.GetProfileNameAsync(now.ToUnixTimeMilliseconds(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(EventAnchorKind.SleepStart, true)]
+    [InlineData(EventAnchorKind.Wake, true)]
+    [InlineData(EventAnchorKind.Meal, false)]
+    public async Task EventResponse_ReadsEverySleepSessionOfTheRange_OnlyForSleepAnchors(EventAnchorKind anchor, bool read)
+    {
+        _sleep.Setup(s => s.GetSessionsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), 0, false, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        await Service().GetEventResponseAsync(new LoopAnalysisFilter { From = From, To = To, Now = To },
+            new EventResponseDefinition { Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = anchor }] }, Utc);
+
+        _sleep.Verify(s => s.GetSessionsAsync(From, To, null, null, int.MaxValue, 0, false, false, It.IsAny<CancellationToken>()),
+            read ? Times.Once : Times.Never, "a capped read would drop sessions without saying so");
+    }
+
+    [Fact]
+    public async Task DailyProfileForDays_SaysHowTheRangesDaysFell_AndKeepsOnlyThem()
+    {
+        var with = await Service().GetDailyProfileForDaysAsync(new LoopAnalysisFilter { From = From, To = To, Now = To }, Utc,
+            new DayCondition { Kind = DayConditionKind.Carbs, MinCarbs = 10 });
+        var without = await Service().GetDailyProfileForDaysAsync(new LoopAnalysisFilter { From = From, To = To, Now = To }, Utc,
+            new DayCondition { Kind = DayConditionKind.Carbs, MinCarbs = 10, Others = true });
+
+        var days = (int)Math.Round((To - From).TotalDays);
+        with.Primary.DaySelection.Should().BeEquivalentTo(new DaySelection([], 0, days, 0, 0));
+        without.Primary.DaySelection!.Kept.Should().HaveCount(days, "no carbs were logged, so every day is a day without 10 g");
     }
 }

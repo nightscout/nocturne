@@ -12,8 +12,6 @@ internal sealed partial class LoopAnalysisService
     private static readonly DeviceEventType[] SiteChangeTypes =
         [DeviceEventType.SiteChange, DeviceEventType.CannulaChange, DeviceEventType.PodChange, DeviceEventType.PodActivated];
 
-    /// <summary>The most sleep sessions one range reads: several a night over the longest range.</summary>
-    private const int MaxSleepSessions = 2000;
 
     /// <summary>
     /// How far past the window's end each load reads, so an anchor at the end of a range has the
@@ -79,7 +77,7 @@ internal sealed partial class LoopAnalysisService
     {
         var padded = new Window(range.From - lookbackMs, range.To + window.AfterMs + EventMarginMs);
         var sleepTask = reads.Sleep
-            ? sleepSessionRepository.GetSessionsAsync(ToUtc(range.From), ToUtc(range.To), limit: MaxSleepSessions, descending: false, cancellationToken: ct)
+            ? sleepSessionRepository.GetSessionsAsync(ToUtc(range.From), ToUtc(range.To), limit: int.MaxValue, descending: false, cancellationToken: ct)
             : Task.FromResult(Enumerable.Empty<SleepSession>());
         var sensorTask = reads.SensorStarts || reads.SiteChanges
             ? deviceEventRepository.GetAsync(

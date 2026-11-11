@@ -198,11 +198,14 @@ internal sealed record ReportDayFilter
     {
         if (selection is null)
             return $"Only {Words()}.";
-        var decided = selection.Matching + selection.NotMatching;
+        var decided = selection.Matching + selection.NotMatching + selection.Undecided + selection.Partial;
         var line = $"Only {Words()}: {selection.Kept.Count} of {(decided == 1 ? "1 day" : $"{decided} days")}.";
         if (selection.Undecided > 0)
             line += $" {(selection.Undecided == 1 ? "1 day starts" : $"{selection.Undecided} days start")} before the history this token reads, "
-                + "so it is in neither group.";
+                + $"so {(selection.Undecided == 1 ? "it is" : "they are")} in neither group.";
+        if (selection.Partial > 0)
+            line += $" {(selection.Partial == 1 ? "1 day is" : $"{selection.Partial} days are")} only partly in the range, "
+                + $"so {(selection.Partial == 1 ? "it is" : "they are")} in neither group.";
         return line;
     }
 
@@ -335,7 +338,7 @@ internal sealed record ReportEventCohort
 
     [Description(
         "All the events of this kind in the range that no other group of the same kind takes in. "
-        + "It takes no filter or condition of its own, and needs another group of the same kind. One group at most.")]
+        + "It takes no filter or condition of its own, and needs another group of the same kind. One such group for each kind at most.")]
     [DisplayName("All others")]
     public bool Others { get; init; }
 
@@ -426,7 +429,9 @@ internal record EventResponseParameters : LoopAnalysisDatasetParameters
     /// </summary>
     public const int MaxGroups = 6;
 
-    [Description("The cohorts, 1 to 6. Optional; every meal when missing. The Meals and events page shows at most 3.")]
+    [Description(
+        "The cohorts, 1 to 6. Optional; every meal when missing. The Meals and events page shows at most 3. Groups 1 to 5 each "
+        + "have their own color; group 6 has the color of group 1.")]
     [Length(1, MaxGroups)]
     [DisplayName("Event groups")]
     public IReadOnlyList<ReportEventCohort>? Cohorts { get; init; }

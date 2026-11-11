@@ -136,6 +136,8 @@ internal sealed class DailyProfileDataset : IReportDataset
         var readings = report.Primary.Slots.Sum(s => s.Glucose?.N ?? 0);
         if (readings > 0)
             request.ReadLog.Record("glucose", readings);
+        if (dayFilter is not null && report.Primary.DaySelection is not null)
+            request.ReadLog.Record(DayFilterCategory(dayFilter), 0);
         if (report.Primary.Days.Count > 0)
         {
             // Categories by the series served; their slot values are aggregates, so no count is given.
@@ -168,6 +170,17 @@ internal sealed class DailyProfileDataset : IReportDataset
     /// <summary>Each number field's label with the days kept, so two layers of one dataset read apart: "Glucose median, days with exercise".</summary>
     internal static IReadOnlyDictionary<string, string>? DayFieldLabels(IEnumerable<ReportField> fields, ReportDayFilter? days) =>
         days is null ? null : fields.Where(f => f.IsNumber && !f.Companion).ToDictionary(f => f.Name, f => $"{f.Label}, {days.Words()}");
+
+    /// <summary>
+    /// The read-audit category that decided which days a filter kept, whether or not it kept any: the spans for
+    /// exercise and illness, the carb records for carbs, the readings for lows.
+    /// </summary>
+    internal static string DayFilterCategory(ReportDayFilter days) => days.Kind switch
+    {
+        ReportDayKind.Exercise or ReportDayKind.Illness => "state_spans",
+        ReportDayKind.Carbs => "treatments",
+        _ => "glucose",
+    };
 
     /// <summary>The panel of a day filter the token cannot read: no data, never every day.</summary>
     internal static ReportDatasetOutput DayFilterWithheld(string what, ReportDayFilter days)

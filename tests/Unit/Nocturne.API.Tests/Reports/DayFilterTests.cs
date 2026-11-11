@@ -51,7 +51,7 @@ public class DayFilterTests
         var filter = new ReportDayFilter { Kind = ReportDayKind.Exercise };
 
         filter.Summary(new DaySelection([new DateOnly(2026, 10, 2)], 1, 12, 1))
-            .Should().Be("Only days with exercise: 1 of 13 days. 1 day starts before the history this token reads, so it is in neither group.");
+            .Should().Be("Only days with exercise: 1 of 14 days. 1 day starts before the history this token reads, so it is in neither group.");
     }
 
     [Fact]
@@ -115,9 +115,80 @@ public class DayFilterTests
         var low = await Rows(""", "days": { "kind": "low" }""");
         var others = await Rows(""", "days": { "kind": "low", "others": true }""");
 
-        (low.Count + others.Count).Should().Be(every.Count);
+        (low.Count + others.Count).Should().Be(every.Count - 1, "today is only partly in the range, so it is in neither group");
         low.Select(r => r["date"]).Should().NotIntersectWith(others.Select(r => r["date"]));
         low.Should().BeEmpty("the harness's glucose is under 70 mg/dL for 10 minutes at a time, and a low needs 15");
-        others.Should().HaveCount(every.Count);
+        others.Should().HaveCount(every.Count - 1);
+    }
+
+    private static DailyProfileResponse ProfileOf(DaySelection selection) => new()
+    {
+        Primary = new DailyProfileRange
+        {
+            Slots = [new DailyProfileSlot { MinuteOfDay = 0 }],
+            Summary = new DailyProfileSummary(),
+            DaySelection = selection,
+        },
+    };
+
+    [Theory]
+    [InlineData("""{ "kind": "exercise" }""", "state_spans")]
+    [InlineData("""{ "kind": "carbs", "minCarbs": 400 }""", "treatments")]
+    public async Task A_typical_day_audits_what_decided_its_days_even_when_it_keeps_none(string days, string category)
+    {
+        var harness = new RecordDatasetTests.Harness();
+        harness.Loop.Setup(l => l.GetDailyProfileForDaysAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<DayCondition>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ProfileOf(new DaySelection([], 0, 14, 0)));
+        var (runner, context, log) = harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
+
+        await runner.RunAsync(Spec($$"""
+            { "version": 1, "range": { "hours": 336 }, "panels": [ { "kind": "chart", "tracks": [ { "layers": [
+              { "dataset": { "name": "daily_profile", "days": {{days}} }, "mark": "band" } ] } ] } ] }
+            """), context, CancellationToken.None);
+
+        log.Datasets.Should().Contain(category);
+    }
+
+    [Fact]
+    public void A_typical_day_of_only_some_days_has_no_link_to_the_page_of_every_day()
+    {
+        var panel = new ReportPanelSpec { Id = "p", Kind = ReportPanelKind.Table, Dataset = new DailyProfileParameters { Days = new ReportDayFilter { Kind = ReportDayKind.Low } } };
+        var result = new ReportPanelResult { Id = "p", Kind = ReportPanelKind.Table, Status = ReportPanelStatus.Ok, Summary = "", Window = new ReportWindow(0, 86_400_000) };
+
+        ReportLinks.For("https://x", panel, result, "UTC").Should().BeNull();
+        ReportLinks.For("https://x", panel with { Dataset = new DailyProfileParameters() }, result, "UTC").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void The_summary_line_counts_the_days_only_partly_in_the_range()
+    {
+        new ReportDayFilter { Kind = ReportDayKind.Low }.Summary(new DaySelection([new DateOnly(2026, 10, 2)], 1, 12, 0, 1))
+            .Should().Be("Only days with a low: 1 of 14 days. 1 day is only partly in the range, so it is in neither group.");
+    }
+
+    [Fact]
+    public async Task The_day_rows_read_lows_without_the_readings_under_a_data_exclusion_as_the_typical_day_does()
+    {
+        var low = RecordDatasetTests.Now.AddDays(-3).AddHours(-9);
+        async Task<int> LowDays(bool excluded)
+        {
+            var harness = new RecordDatasetTests.Harness();
+            harness.WithGlucose(at => at >= low && at < low.AddMinutes(30) ? 55 : 120);
+            if (excluded)
+                harness.StateSpans.Setup(s => s.GetByCategories(It.IsAny<IEnumerable<Nocturne.Core.Models.StateSpanCategory>>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(new Dictionary<Nocturne.Core.Models.StateSpanCategory, List<Nocturne.Core.Models.StateSpan>>
+                    {
+                        [Nocturne.Core.Models.StateSpanCategory.DataExclusion] =
+                            [new Nocturne.Core.Models.StateSpan { Category = Nocturne.Core.Models.StateSpanCategory.DataExclusion, StartTimestamp = low.UtcDateTime, EndTimestamp = low.AddMinutes(40).UtcDateTime }],
+                    });
+            var (runner, context, _) = harness.Arrange(Scope.GlucoseRead);
+            var result = await runner.RunAsync(Spec("""
+                { "version": 1, "range": { "hours": 168 }, "panels": [ { "kind": "table", "dataset": { "name": "daily_summary", "days": { "kind": "low" } } } ] }
+                """), context, CancellationToken.None);
+            return result.Panels[0].Rows.Count;
+        }
+
+        (await LowDays(excluded: false)).Should().Be(1);
+        (await LowDays(excluded: true)).Should().Be(0, "a compression low under a data exclusion is not a low");
     }
 }

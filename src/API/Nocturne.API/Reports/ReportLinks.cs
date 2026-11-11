@@ -13,7 +13,8 @@ internal static class ReportLinks
     /// <summary>
     /// The link for a panel on <paramref name="origin"/>: the page of its dataset, or of a chart's first
     /// layer of a dataset; null for none, a dataset with no matching page, or groups the page cannot
-    /// show (<see cref="EventResponseParameters.HasReportOnlyCohorts"/>), which it would show as other groups.
+    /// show (<see cref="EventResponseParameters.HasReportOnlyCohorts"/>), which it would show as other groups,
+    /// or a typical day of only some days, which the page would show over every day.
     /// </summary>
     public static string? For(string origin, ReportPanelSpec panel, ReportPanelResult result, string? zoneId)
     {
@@ -23,6 +24,7 @@ internal static class ReportLinks
             EventResponseParameters { HasReportOnlyCohorts: true } => null,
             EventResponseParameters => "/reports/loop-analysis/meals-and-events",
             SettingsEvidenceParameters => "/reports/loop-analysis/settings-evidence",
+            DailyProfileParameters { Days: not null } => null,
             DailyProfileParameters => "/reports/loop-analysis/daily-profile",
             GlucoseDistributionByHourParameters => "/reports/glucose-distribution",
             GlucoseStatisticsParameters => "/reports/glucose-distribution",

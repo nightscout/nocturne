@@ -48,4 +48,8 @@ public sealed class DayCondition
 /// Days whose data the reader cannot see in full (before the history it may read), which are kept by
 /// neither the condition nor its <see cref="DayCondition.Others"/>.
 /// </param>
-public sealed record DaySelection(IReadOnlyList<DateOnly> Kept, int Matching, int NotMatching, int Undecided);
+/// <param name="Partial">
+/// Days the range covers only in part, today say, which are kept by neither group either: what is
+/// not read yet could change the answer.
+/// </param>
+public sealed record DaySelection(IReadOnlyList<DateOnly> Kept, int Matching, int NotMatching, int Undecided, int Partial = 0);

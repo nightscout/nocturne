@@ -105,4 +105,22 @@ public class HealthDatasetTests
         ReportCatalogueTests.Catalogue(false, Scope.GlucoseRead, Scope.TreatmentsRead).Datasets.Single(d => d.Name == name).Permitted.Should().BeFalse();
         ReportCatalogueTests.Catalogue(false, scope).Datasets.Single(d => d.Name == name).Permitted.Should().BeTrue();
     }
+
+    [Fact]
+    public void The_lowest_heart_rate_folds_onto_a_grid_as_the_lowest_and_the_highest_as_the_highest()
+    {
+        var fields = new HeartRateDataset().Fields;
+        fields.Single(f => f.Name == "bpmMin").Aggregate.Should().Be(ReportAggregate.Min);
+        fields.Single(f => f.Name == "bpmMax").Aggregate.Should().Be(ReportAggregate.Max);
+
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
+        [
+            new Dictionary<string, object?> { ["time"] = 0L, ["bpmMin"] = 60.0, ["bpmMax"] = 90.0 },
+            new Dictionary<string, object?> { ["time"] = 60_000L, ["bpmMin"] = 50.0, ["bpmMax"] = 120.0 },
+        ];
+        var folded = ReportGrid.FoldRows(rows, "time", [.. fields.Where(f => f.Name is "bpmMin" or "bpmMax")], null, [], ReportXKind.Time, 15, 0, 3_600_000);
+
+        folded.Should().ContainSingle();
+        (folded[0]["bpmMin"], folded[0]["bpmMax"]).Should().Be(((object?)50.0, (object?)120.0));
+    }
 }

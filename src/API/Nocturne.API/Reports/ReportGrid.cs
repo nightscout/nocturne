@@ -81,6 +81,7 @@ internal static class ReportGrid
             ReportAggregate.Sum => values.Sum(),
             ReportAggregate.Mean => values.Average(),
             ReportAggregate.Max => values.Max(),
+            ReportAggregate.Min => values.Min(),
             ReportAggregate.Last => values[^1],
             _ => throw new ArgumentOutOfRangeException(nameof(aggregate), aggregate, null),
         };

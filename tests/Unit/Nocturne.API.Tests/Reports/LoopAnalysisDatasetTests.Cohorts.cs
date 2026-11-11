@@ -27,7 +27,7 @@ public partial class LoopAnalysisDatasetTests
     [InlineData("""[ { "anchor": "ExerciseStart" }, { "anchor": "Meal", "others": true } ]""", "cohorts[1].others", "needs another group of the same event")]
     [InlineData("""[ { "anchor": "Meal", "grams": { "min": 40 } }, { "anchor": "Meal", "others": true, "dayOfWeek": ["Mon"] } ]""", "cohorts[1].others", "takes no filter or condition")]
     [InlineData("""[ { "anchor": "Meal", "grams": { "min": 40 } }, { "anchor": "Meal", "others": true, "startGlucose": { "min": 100 } } ]""", "cohorts[1].others", "takes no filter or condition")]
-    [InlineData("""[ { "anchor": "Meal" }, { "anchor": "Meal", "others": true }, { "anchor": "Meal", "others": true } ]""", "cohorts", "Only one group can be all others")]
+    [InlineData("""[ { "anchor": "Meal" }, { "anchor": "Meal", "others": true }, { "anchor": "Meal", "others": true } ]""", "cohorts", "Only one group of each event can be all others")]
     public void A_group_of_all_others_is_refused_where_it_could_not_be_the_rest_of_one_group(string cohorts, string path, string message)
     {
         CohortErrors(cohorts).Should().Contain(e => e.Path == $"panels[0].dataset.{path}" && e.Message.Contains(message));
@@ -265,5 +265,21 @@ public partial class LoopAnalysisDatasetTests
         definition.Cohorts.Select(c => c.Cohort).Should().Equal(1, 2, 3, 4, 5, 6);
         (definition.Cohorts[5].MinGrams, definition.Cohorts[5].MaxGrams).Should().Be((20, 80), "grams the wrong way round are swapped, as on the endpoint");
         parameters.HasReportOnlyCohorts.Should().BeTrue("the Meals and events page shows at most three groups");
+    }
+
+    [Fact]
+    public void Each_event_may_have_its_own_group_of_all_others()
+    {
+        CohortErrors("""
+            [ { "anchor": "Meal", "grams": { "min": 40 } }, { "anchor": "Meal", "others": true },
+              { "anchor": "LowStart", "startGlucose": { "max": 60 } }, { "anchor": "LowStart", "others": true } ]
+            """).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_condition_of_one_minute_is_said_in_the_singular()
+    {
+        EventResponseDataset.MinutesSinceMealWords(1, null).Should().Be("no carbs in the minute before");
+        EventResponseDataset.MinutesSinceMealWords(1, 90).Should().Be("last carbs 1 minute to 90 minutes before");
     }
 }

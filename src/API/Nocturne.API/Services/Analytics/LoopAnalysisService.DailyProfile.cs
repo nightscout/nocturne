@@ -36,7 +36,8 @@ internal sealed partial class LoopAnalysisService
                 var selection = DayConditions.Select(
                     days, firstDay, starts, zone,
                     [.. loaded.Inputs.Glucose.Where(g => !exclusions.Contains(g.Mills)).OrderBy(g => g.Mills)],
-                    loaded.Inputs.Carbs, loaded.Sources.Exercise, loaded.Sources.Illness, loaded.Inputs.HistoryVisibleFrom);
+                    loaded.Inputs.Carbs, loaded.Sources.Exercise, loaded.Sources.Illness, loaded.Inputs.HistoryVisibleFrom,
+                    new MillsInterval(window.From, window.To));
                 var kept = DayConditions.Instants(selection, firstDay, starts);
                 var range = DailyProfileCalculator.Calculate(
                     loaded.Inputs, mask with { Analysed = mask.Analysed.Intersect(kept), Glucose = mask.Glucose.Intersect(kept) },

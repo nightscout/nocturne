@@ -320,9 +320,28 @@ public class EventResponseCohortConditionTests
         var cohort = range.Cohorts.Single();
         cohort.BeforeVisibleHistory.Should().Be(1, "8 hours before the early start reach past what the reader sees");
         cohort.Events.Should().Be(1);
-        EventResponseCalculator.HistoryLookbackMs(EventWindow.Of(new EventResponseDefinition()),
-                new EventResponseDefinition { Cohorts = [new EventCohortDefinition { MinMinutesSinceMeal = 480 }] })
-            .Should().Be(8 * Hour);
+    }
+
+    [Fact]
+    public void ForAClampedReader_OneGroupsLongLookBack_DoesNotHideAnotherGroupsEvents_ButAllOthersTakesItsSiblingsLookBack()
+    {
+        var visibleFrom = Local(11, 0);
+        var early = visibleFrom + 5 * Hour;
+        var late = visibleFrom + 10 * Hour;
+
+        var range = Calculate(
+            [
+                new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.ExerciseStart, MinMinutesSinceMeal = 480 },
+                new EventCohortDefinition { Cohort = 2, Anchor = EventAnchorKind.ExerciseStart, Others = true },
+                new EventCohortDefinition { Cohort = 3, Anchor = EventAnchorKind.ExerciseStart },
+            ],
+            sources: ExerciseAt(early, late), historyVisibleFrom: visibleFrom);
+
+        range.Cohorts[2].Events.Should().Be(2, "a group with no condition looks back only its own window and carbs");
+        range.Cohorts[2].BeforeVisibleHistory.Should().Be(0);
+        (range.Cohorts[0].Events + range.Cohorts[1].Events).Should().Be(1);
+        (range.Cohorts[0].BeforeVisibleHistory + range.Cohorts[1].BeforeVisibleHistory).Should().Be(1,
+            "all others reads its sibling's condition, so it looks back as far");
     }
 
     [Theory]

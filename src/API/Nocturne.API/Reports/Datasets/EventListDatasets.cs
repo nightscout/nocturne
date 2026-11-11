@@ -108,6 +108,12 @@ internal abstract class EventListDataset : IReportDataset
 
     public abstract ReportLayerBindings? DefaultBindings(ReportMark mark);
 
+    public string? SharedRead(ReportDatasetParameters parameters) => EventResponseDataset.SharedReadKey((EventResponseParameters)parameters);
+
+    public virtual string? ReadVariant(ReportReadShape shape) => null;
+
+    public virtual IEnumerable<(string Field, string Message)> ValidateBindings(ReportLayerBindings bindings) => [];
+
     public TimeSpan DefaultRange => TimeSpan.FromDays(30);
 
     public TimeSpan MaxRange => LoopAnalysisDatasetRun.MaxRange;
@@ -152,14 +158,33 @@ internal abstract class EventListDataset : IReportDataset
     /// <summary>The note for an event list the caller's scopes withheld, or null.</summary>
     internal static string? Withheld(EventResponseReport report) =>
         report.WithheldSeries.Contains(LoopAnalysisSeries.EventList) && report.Definition.Cohorts.Count > 0
-            ? "The events are not drawn one by one: the event list needs the treatments.read scope, which this token does not hold."
+            ? "Not shown: the events are drawn one by one only with the treatments.read scope, which this token does not hold."
             : null;
 
     /// <summary>The panel's full text: the groups as Meals and events states them, then the notes of this view.</summary>
     internal static string Summary(EventResponseDataset.EventRun run, bool useMmol, IEnumerable<string> lines) =>
         string.Join('\n', new[] { EventResponseDataset.Summarise(run.Report, run.Labels, run.Number, run.Notes, useMmol) }.Concat(lines));
 
+    /// <remarks>
+    /// With the event list withheld the output is not shown, with the reason: no rows and no figures, never a count
+    /// of 0 events where the groups have events the caller cannot see one by one.
+    /// </remarks>
     internal static ReportDatasetOutput Output(
+        EventResponseDataset.EventRun run, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, string summary,
+        IReadOnlyList<ReportFact> facts, string sentence, IReadOnlyList<ReportField> fields, int counted) =>
+        Withheld(run.Report) is { } withheld ? NotShown(run, withheld, fields) : Shown(run, rows, summary, facts, sentence, fields, counted);
+
+    private static ReportDatasetOutput NotShown(EventResponseDataset.EventRun run, string reason, IReadOnlyList<ReportField> fields) => new()
+    {
+        Rows = [],
+        Summary = reason,
+        Sentence = reason,
+        Omitted = [.. fields.Where(f => f.Scope == Scope.TreatmentsRead).Select(f => new ReportOmittedField(f.Name, Scope.TreatmentsRead))],
+        Window = Window(run.Report),
+        Cohorts = [.. run.AskedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
+    };
+
+    private static ReportDatasetOutput Shown(
         EventResponseDataset.EventRun run, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, string summary,
         IReadOnlyList<ReportFact> facts, string sentence, IReadOnlyList<ReportField> fields, int counted) => new()
     {
@@ -203,6 +228,22 @@ internal sealed class EventOutcomesDataset : EventListDataset
 
     internal static string FitField(EventOutcomeInfo outcome) => outcome.Name + "Fit";
 
+    /// <summary>The axis no straight line is fitted along: the time of day starts again at midnight, so 23:50 and 00:10 lie far apart on it.</summary>
+    private const string WrappingAxis = "timeOfDay";
+
+    public override IEnumerable<(string Field, string Message)> ValidateBindings(ReportLayerBindings bindings)
+    {
+        if (bindings.X == WrappingAxis && bindings.Fit is not null)
+            yield return ("fit", "A straight line does not fit along the time of day, which starts again at midnight. "
+                + "Remove the line, or lie the points along another value.");
+        else if (bindings.Fit is { } fit && bindings.Y is [var drawn, ..] && Outcomes.Any(o => o.Name == drawn) && fit != drawn + "Fit")
+            yield return ("fit", $"'{fit}' is the line of another figure. Send {drawn}Fit, or remove the line.");
+    }
+
+    /// <summary>The figure the layer draws, which its sentence and facts state; the axis is in the read key already.</summary>
+    public override string? ReadVariant(ReportReadShape shape) =>
+        Outcomes.FirstOrDefault(o => shape.Fields?.Contains(o.Name) == true)?.Name;
+
     private static readonly IReadOnlyList<ReportField> AxisFields =
     [
         new("startGlucose", "Glucose at the event", ReportFieldKind.Value, ReportField.GlucoseUnit, "The reading nearest the event, within 5 minutes.", Scope.TreatmentsRead),
@@ -220,7 +261,8 @@ internal sealed class EventOutcomesDataset : EventListDataset
             o.Insulin ? ChartColor.InsulinBolus : null, Aggregate: ReportAggregate.Mean,
             Setting: o.Insulin ? ReportSetting.ProfileRelative : ReportSetting.None)),
         .. Outcomes.Select(o => new ReportField(FitField(o), $"{o.Label}: least-squares line", ReportFieldKind.Number, o.Unit,
-            $"The least-squares line of {o.Label.ToLowerInvariant()} on the value the chart lies along, at the event.", Scope.TreatmentsRead,
+            $"The least-squares line of {o.Label.ToLowerInvariant()} on the value the chart lies along, at the event; none along the time of day, "
+            + "which starts again at midnight.", Scope.TreatmentsRead,
             ChartColor.MutedForeground, Aggregate: ReportAggregate.Mean,
             Setting: o.Insulin ? ReportSetting.ProfileRelative : ReportSetting.None)),
         new("groups", "Groups", ReportFieldKind.Category, null, "The groups that count the event, by number.", Scope.TreatmentsRead, Companion: true),
@@ -253,8 +295,8 @@ internal sealed class EventOutcomesDataset : EventListDataset
             var missing = rows.Count(r => r[x.Name] is null);
             rows = [.. rows.Where(r => r[x.Name] is not null).OrderBy(r => Convert.ToDouble(r[x.Name], CultureInfo.InvariantCulture))];
             if (missing > 0)
-                lines.Add($"{ReportFacts.Plural(missing, "event")} with no value of {Lower(x.Label)} are not drawn.");
-            foreach (var outcome in Outcomes)
+                lines.Add(MissingNote(x, missing, run.Report.HistoryClamped));
+            foreach (var outcome in x.Name == WrappingAxis ? [] : Outcomes)
             {
                 var line = Fit(rows, x.Name, outcome, out var pairs, out var r);
                 foreach (var row in rows)
@@ -309,6 +351,21 @@ internal sealed class EventOutcomesDataset : EventListDataset
         pairs = points.Count;
         r = DerivedMath.Pearson(points);
         return DerivedMath.LeastSquares(points);
+    }
+
+    /// <summary>
+    /// Why events are not drawn along <paramref name="x"/>. With minutes since carbs, none means no carbs were read
+    /// before the event: for a history-clamped token that can be carbs it does not read, so the note says which.
+    /// </summary>
+    internal static string MissingNote(ReportField x, int missing, bool clamped)
+    {
+        var (it, isAre) = missing == 1 ? ("it", "is") : ("them", "are");
+        return x.Name == "minutesSinceMeal"
+            ? $"{ReportFacts.Plural(missing, "event")} with no carbs read before {it} {isAre} not drawn: "
+                + (clamped
+                    ? "this token reads only the last 24 hours, so carbs logged before that are not read."
+                    : $"no carbs were logged before {it} in the range read.")
+            : $"{ReportFacts.Plural(missing, "event")} with no value of {Lower(x.Label)} {isAre} not drawn.";
     }
 
     /// <summary>A label inside a sentence: "Time of day" as "time of day", "IOB at the event" kept.</summary>
@@ -416,20 +473,19 @@ internal sealed class EventOutcomeSpreadDataset : EventListDataset
         if (all.Count == 0)
             return [];
         var width = Width(all.Min(), all.Max());
-        var first = Math.Floor(all.Min() / width) * width;
-        var count = (int)Math.Floor((all.Max() - first) / width) + 1;
+        var first = Index(all.Min(), width);
+        var count = (int)(Index(all.Max(), width) - first) + 1;
         string F(double v) => Number(Math.Round(v, 6), outcome.IsGlucose && useMmol ? "0.0" : "0.##");
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         for (var i = 0; i < count; i++)
         {
-            var low = first + i * width;
+            var low = (first + i) * width;
             var high = low + width;
-            var range = $"{F(low)} to {F(high)} {unit}";
-            var row = new Dictionary<string, object?> { ["range"] = range };
+            var row = new Dictionary<string, object?> { ["range"] = $"{F(low)} to {F(high)} {unit}" };
             var counts = new List<string>();
             foreach (var (group, list) in values)
             {
-                var n = list.Count(v => v >= low - 1e-9 && v < high - 1e-9);
+                var n = list.Count(v => Index(v, width) == first + i);
                 row[EventsField(group)] = n;
                 counts.Add($"{labels[group - 1]} {ReportFacts.Plural(n, "event")}");
             }
@@ -439,15 +495,21 @@ internal sealed class EventOutcomeSpreadDataset : EventListDataset
         return rows;
     }
 
-    /// <summary>A round width (1, 2 or 5 times a power of ten) that cuts the values into at most <see cref="MaxBins"/> ranges.</summary>
+    /// <summary>
+    /// The range a value falls in, counted in widths from 0. The tolerance keeps a value on an edge, 1.4 in ranges of
+    /// 0.2 say, in the range it starts rather than the one before it, which binary fractions would put it in.
+    /// </summary>
+    private static long Index(double value, double width) => (long)Math.Floor(value / width + 1e-9);
+
+    /// <summary>The finest round width (1, 2 or 5 times a power of ten) that cuts the values into at most <see cref="MaxBins"/> ranges.</summary>
     internal static double Width(double min, double max)
     {
         var span = max - min;
-        if (span <= 0)
-            return Math.Max(1e-6, Math.Pow(10, Math.Floor(Math.Log10(Math.Max(Math.Abs(max), 1)))) / 10);
-        var raw = span / (MaxBins - 1);
-        var power = Math.Pow(10, Math.Floor(Math.Log10(raw)));
-        return new[] { 1, 2, 5, 10 }.Select(m => m * power).First(w => w >= raw);
+        var power = Math.Pow(10, Math.Floor(Math.Log10(span > 0 ? span / (MaxBins - 1) : Math.Max(Math.Abs(max), 1) / 10)));
+        foreach (var width in new[] { 1, 2, 5, 10, 20, 50, 100 }.Select(m => m * power))
+            if (Index(max, width) - Index(min, width) + 1 <= MaxBins)
+                return width;
+        return 100 * power;
     }
 }
 

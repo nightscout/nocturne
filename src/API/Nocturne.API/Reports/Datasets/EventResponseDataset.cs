@@ -25,9 +25,11 @@ internal sealed class EventResponseDataset : IReportDataset
 
     /// <summary>
     /// Each group's hue, by its number from 1, in the order the event curves draw groups in (the
-    /// charts' cohort hues), so a group reads the same in every chart of it.
+    /// charts' cohort hues), so a group reads the same in every chart of it. The palette has five chart
+    /// hues, so group 6 takes group 1's.
     /// </summary>
-    internal static readonly IReadOnlyList<ChartColor> GroupHues = [ChartColor.Profile, ChartColor.Chart3, ChartColor.Override];
+    internal static readonly IReadOnlyList<ChartColor> GroupHues =
+        [ChartColor.Profile, ChartColor.Chart3, ChartColor.Override, ChartColor.Chart4, ChartColor.Chart5];
 
     internal static ChartColor GroupHue(int group) => GroupHues[(group - 1) % GroupHues.Count];
 
@@ -145,8 +147,8 @@ internal sealed class EventResponseDataset : IReportDataset
         }
 
         var cohorts = p.Cohorts ?? [];
-        if (cohorts.Count(c => c.Others) > 1)
-            yield return ("cohorts", "Only one group can be all others. Turn off all others in the other groups.");
+        if (cohorts.Where(c => c.Others).GroupBy(c => c.Anchor).Any(g => g.Count() > 1))
+            yield return ("cohorts", "Only one group of each event can be all others. Turn off all others in the other groups of that event.");
         for (var i = 0; i < cohorts.Count && i < EventResponseParameters.MaxGroups; i++)
         {
             var c = cohorts[i];
@@ -224,11 +226,29 @@ internal sealed class EventResponseDataset : IReportDataset
         List<string> Notes,
         IReadOnlyList<string> AskedLabels);
 
+    private static readonly System.Text.Json.JsonSerializerOptions SharedKeyOptions = new() { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+
+    /// <summary>
+    /// The event analysis the parameters ask for, whichever event dataset reads it: the groups, window and
+    /// masks of <see cref="EventResponseParameters"/>, without what a dataset only draws differently
+    /// (a group to draw, a figure to count).
+    /// </summary>
+    internal static string SharedReadKey(EventResponseParameters parameters) =>
+        "events|" + System.Text.Json.JsonSerializer.Serialize(parameters, typeof(EventResponseParameters), SharedKeyOptions);
+
+    public string? SharedRead(ReportDatasetParameters parameters) => SharedReadKey((EventResponseParameters)parameters);
+
     /// <summary>
     /// Every event-group dataset's read: the groups the caller may see, as the endpoint computes them,
-    /// with their labels, its read recorded in the audit.
+    /// with their labels, its read recorded in the audit. Computed once per run for the same groups and
+    /// range (<see cref="ReportRunCache.EventsAsync"/>).
     /// </summary>
-    internal static async Task<EventRun> ComputeAsync(ReportDatasetRequest request, EventResponseParameters parameters, CancellationToken cancellationToken)
+    internal static Task<EventRun> ComputeAsync(ReportDatasetRequest request, EventResponseParameters parameters, CancellationToken cancellationToken) =>
+        request.Cache.EventsAsync(
+            $"{SharedReadKey(parameters)}|{request.From.ToUnixTimeMilliseconds()}|{request.To.ToUnixTimeMilliseconds()}",
+            () => ComputeOnceAsync(request, parameters, cancellationToken));
+
+    private static async Task<EventRun> ComputeOnceAsync(ReportDatasetRequest request, EventResponseParameters parameters, CancellationToken cancellationToken)
     {
         var services = request.Services;
         var useMmol = request.UseMmol;
@@ -296,7 +316,8 @@ internal sealed class EventResponseDataset : IReportDataset
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var useMmol = request.UseMmol;
-        var (report, labels, number, notes, askedLabels) = await ComputeAsync(request, (EventResponseParameters)request.Parameters, cancellationToken);
+        var (report, labels, number, shared, askedLabels) = await ComputeAsync(request, (EventResponseParameters)request.Parameters, cancellationToken);
+        var notes = new List<string>(shared);
         var slotMinutes = EventResponseCalculator.SlotMinutes(report.Definition);
         var events = report.Primary.Events;
 
@@ -439,8 +460,13 @@ internal sealed class EventResponseDataset : IReportDataset
     {
         static string Span(int minutes) => minutes % 60 == 0
             ? minutes == 60 ? "1 hour" : $"{minutes / 60} hours"
-            : $"{minutes} minutes";
-        static string The(int minutes) => minutes == 60 ? "the hour" : $"the {Span(minutes)}";
+            : minutes == 1 ? "1 minute" : $"{minutes} minutes";
+        static string The(int minutes) => minutes switch
+        {
+            1 => "the minute",
+            60 => "the hour",
+            _ => $"the {Span(minutes)}",
+        };
         return (min, max) switch
         {
             ({ } low, { } high) => $"last carbs {Span(low)} to {Span(high)} before",
