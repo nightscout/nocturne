@@ -1,15 +1,18 @@
+<script lang="ts" module>
+    import { DEMO_ENABLED, DEMO_WEB_URL } from "#lib/config.js";
+    import { createDemoTokenSource } from "#lib/scalar/demo-token.js";
+
+    const demoUrl = DEMO_ENABLED && DEMO_WEB_URL ? DEMO_WEB_URL : null;
+
+    // One source per page load, so leaving and returning to this route opens no new demo session.
+    const demoTokens = demoUrl ? createDemoTokenSource(demoUrl) : null;
+</script>
+
 <script lang="ts">
     import { onMount } from "svelte";
     import ExternalLink from "@lucide/svelte/icons/external-link";
-    import { DEMO_ENABLED, DEMO_WEB_URL, SCALAR_API_URL } from "#lib/config.js";
-    import { createDemoTokenSource, type ScalarSecurityEntry } from "#lib/scalar/demo-token.js";
-
-    // With a demo, the specs come from the demo's host, so their server is the demo and
-    // "Send" goes there with a demo token (the API admits this origin; see DocsSiteCorsPolicy).
-    // Without one there is no tenant to send to and nothing to send with, so the reference
-    // is for reading only.
-    const demoUrl = DEMO_ENABLED && DEMO_WEB_URL ? DEMO_WEB_URL : null;
-    const specsUrl = demoUrl ?? SCALAR_API_URL;
+    import { SCALAR_API_URL } from "#lib/config.js";
+    import { DEMO_TOKEN_PLACEHOLDER, type ScalarSecurityEntry } from "#lib/scalar/demo-token.js";
 
     // Pinned standalone build. Scalar is a Vue app, so it's loaded at runtime in
     // the browser rather than bundled, which keeps it out of the Svelte SSR/prerender
@@ -33,92 +36,94 @@
     }
 
     let container: HTMLDivElement;
-    let sendsToDemo = $state(false);
 
-    async function demoAuthentication(): Promise<Record<string, unknown> | null> {
-        if (!demoUrl) return null;
+    // With the demo reachable, the specs come from its host, so their server is the demo and
+    // "Send" goes there with a demo token (the API admits this origin on the demo only; see
+    // DocsSiteCorsPolicy). Otherwise there is no tenant to send to, so the reference is for reading.
+    let mode = $state<"pending" | "demo" | "read-only">("pending");
 
-        const tokens = createDemoTokenSource(demoUrl);
-        let token: string;
-        try {
-            token = await tokens.token();
-        } catch {
-            // The demo is down or does not admit this origin: fall back to reading only.
-            return null;
+    function scalarConfig(sendsToDemo: boolean): Record<string, unknown> {
+        const specsUrl = sendsToDemo && demoUrl ? demoUrl : SCALAR_API_URL;
+        const sources = [
+            { title: "Nocturne API", slug: "nocturne", url: `${specsUrl}/openapi/nocturne.json`, default: true },
+            { title: "Nightscout API", slug: "nightscout", url: `${specsUrl}/openapi/nightscout.json` },
+        ];
+
+        if (!sendsToDemo || !demoTokens) {
+            return { theme: "mars", sources, hideTestRequestButton: true, hideClientButton: true };
         }
 
         return {
+            theme: "mars",
+            sources,
             authentication: {
                 // One scheme per document: bearer is the Nocturne document's, apiSecret the
                 // Nightscout document's. Listing two of one document selects both at once.
                 preferredSecurityScheme: ["bearer", "apiSecret"],
-                securitySchemes: { bearer: { token } },
+                securitySchemes: { bearer: { token: DEMO_TOKEN_PLACEHOLDER } },
             },
             // Scalar resolves credentials into requestBuilder.security; the request it passes
             // alongside is a copy, so changes to it are not sent.
             onBeforeRequest: ({ requestBuilder }: { requestBuilder: { security: ScalarSecurityEntry[] } }) =>
-                tokens.refresh(requestBuilder.security),
+                demoTokens.refresh(requestBuilder.security),
+        };
+    }
+
+    function loadScript(src: string): Promise<void> {
+        return new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src = src;
+            script.onload = () => resolve();
+            document.head.appendChild(script);
+        });
+    }
+
+    function addMermaid(baseUrl: string): () => void {
+        // Diagrams embedded in the OpenAPI descriptions are rendered by the API's own mermaid
+        // lazy-loader, served alongside the specs, so rendering stays in sync with the API.
+        // It observes the document, so load order relative to Scalar doesn't matter.
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = `${baseUrl}/scalar/mermaid-loader.css`;
+        document.head.appendChild(css);
+
+        const script = document.createElement("script");
+        script.type = "module";
+        script.crossOrigin = "anonymous";
+        script.src = `${baseUrl}/scalar/mermaid-loader.js`;
+        document.head.appendChild(script);
+
+        return () => {
+            css.remove();
+            script.remove();
         };
     }
 
     onMount(() => {
         let instance: { destroy?: () => void } | undefined;
-        let disposed = false;
+        let removeMermaid: (() => void) | undefined;
+        const abort = new AbortController();
 
-        const sources = [
-            {
-                title: "Nocturne API",
-                slug: "nocturne",
-                url: `${specsUrl}/openapi/nocturne.json`,
-                default: true,
-            },
-            {
-                title: "Nightscout API",
-                slug: "nightscout",
-                url: `${specsUrl}/openapi/nightscout.json`,
-            },
-        ];
+        const reachable = demoTokens ? demoTokens.reachable(abort.signal) : Promise.resolve(false);
 
-        const scriptLoaded = new Promise<void>((resolve) => {
-            const script = document.createElement("script");
-            script.src = SCALAR_SCRIPT;
-            script.onload = () => resolve();
-            document.head.appendChild(script);
-        });
+        Promise.all([reachable, loadScript(SCALAR_SCRIPT)])
+            .then(([sendsToDemo]) => {
+                const scalar: unknown = Reflect.get(window, "Scalar");
+                if (abort.signal.aborted || !isScalarGlobal(scalar)) return;
 
-        Promise.all([demoAuthentication(), scriptLoaded]).then(([demo]) => {
-            const scalar: unknown = Reflect.get(window, "Scalar");
-            if (disposed || !isScalarGlobal(scalar)) return;
-
-            sendsToDemo = demo !== null;
-            instance = scalar.createApiReference(container, {
-                theme: "mars",
-                sources,
-                ...(demo ?? { hideTestRequestButton: true, hideClientButton: true }),
+                mode = sendsToDemo ? "demo" : "read-only";
+                removeMermaid = addMermaid(sendsToDemo && demoUrl ? demoUrl : SCALAR_API_URL);
+                instance = scalar.createApiReference(container, scalarConfig(sendsToDemo));
+            })
+            .catch((error: unknown) => {
+                if (!(error instanceof DOMException && error.name === "AbortError")) throw error;
             });
-        });
-
-        // Diagrams embedded in the OpenAPI descriptions are rendered by the API's
-        // own mermaid lazy-loader, served alongside the specs. Reusing it (rather
-        // than forking a copy into the portal) keeps rendering in sync with the API.
-        // It observes the document, so load order relative to Scalar doesn't matter.
-        const mermaidCss = document.createElement("link");
-        mermaidCss.rel = "stylesheet";
-        mermaidCss.href = `${specsUrl}/scalar/mermaid-loader.css`;
-        document.head.appendChild(mermaidCss);
-
-        const mermaid = document.createElement("script");
-        mermaid.type = "module";
-        mermaid.crossOrigin = "anonymous";
-        mermaid.src = `${specsUrl}/scalar/mermaid-loader.js`;
-        document.head.appendChild(mermaid);
 
         return () => {
-            disposed = true;
+            abort.abort();
             instance?.destroy?.();
+            removeMermaid?.();
             document.head.querySelector(`script[src="${SCALAR_SCRIPT}"]`)?.remove();
-            mermaidCss.remove();
-            mermaid.remove();
         };
     });
 </script>
@@ -133,25 +138,27 @@
 
 {#if demoUrl}
     <div
-        class="px-4 py-2 border-b border-border/60 bg-card/50 flex flex-wrap items-center justify-between gap-2 text-sm"
+        class="min-h-10 px-4 py-2 border-b border-border/60 bg-card/50 flex flex-wrap items-center justify-between gap-2 text-sm"
     >
-        <span class="text-muted-foreground">
-            {#if sendsToDemo}
-                Requests go to the demo instance. It has sample data and resets on a schedule.
-            {:else}
-                To send requests, open this reference on the demo instance. The demo has sample
-                data and resets on a schedule.
-            {/if}
-        </span>
-        <a
-            href={sendsToDemo ? demoUrl : `${demoUrl}/scalar`}
-            target="_blank"
-            rel="external noopener noreferrer"
-            class="inline-flex items-center gap-1.5 font-medium underline underline-offset-4"
-        >
-            {sendsToDemo ? "Open the demo" : "Open the reference on the demo"}
-            <ExternalLink class="size-3.5" />
-        </a>
+        {#if mode !== "pending"}
+            <span class="text-muted-foreground">
+                {#if mode === "demo"}
+                    Requests go to the demo instance. It has sample data and resets on a schedule.
+                {:else}
+                    To send requests, open this reference on the demo instance. The demo has sample
+                    data and resets on a schedule.
+                {/if}
+            </span>
+            <a
+                href={mode === "demo" ? demoUrl : `${demoUrl}/scalar`}
+                target="_blank"
+                rel="external noopener noreferrer"
+                class="inline-flex items-center gap-1.5 font-medium underline underline-offset-4"
+            >
+                {mode === "demo" ? "Open the demo" : "Open the reference on the demo"}
+                <ExternalLink class="size-3.5" />
+            </a>
+        {/if}
     </div>
 {/if}
 <div bind:this={container} class={demoUrl ? "h-[calc(100vh-7rem)]" : "h-[calc(100vh-4rem)]"}></div>

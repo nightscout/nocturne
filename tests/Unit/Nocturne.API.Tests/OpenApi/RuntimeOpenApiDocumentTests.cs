@@ -1,8 +1,11 @@
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using Microsoft.OpenApi;
 using Nocturne.API.OpenApi;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Models;
 using Xunit;
 
 namespace Nocturne.API.Tests.OpenApi;
@@ -24,15 +27,33 @@ public sealed class RuntimeOpenApiDocumentTests : IClassFixture<AuthenticationTe
         return json.RootElement.Clone();
     }
 
+    /// <summary>Schemas of the models that accept quoted numbers on purpose.</summary>
+    private static readonly HashSet<string> QuotedNumberSchemas = typeof(Food).Assembly.GetTypes()
+        .Where(t => t.GetCustomAttribute<JsonNumberHandlingAttribute>()?.Handling
+            .HasFlag(JsonNumberHandling.AllowReadingFromString) == true)
+        .Select(t => $"$.components.schemas.{t.Name}.")
+        .ToHashSet();
+
     [Theory]
     [InlineData("nocturne")]
     [InlineData("nightscout")]
-    public async Task No_schema_types_a_number_as_a_string(string name)
+    public async Task Only_a_model_that_accepts_quoted_numbers_types_a_number_as_a_string(string name)
     {
         var mixed = new List<string>();
         Walk(await DocumentAsync(name), "$", mixed);
 
-        mixed.Should().BeEmpty();
+        mixed.Where(path => !QuotedNumberSchemas.Any(path.StartsWith)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_model_that_accepts_quoted_numbers_keeps_the_string_form()
+    {
+        var portion = (await DocumentAsync("nocturne"))
+            .GetProperty("components").GetProperty("schemas").GetProperty("Food")
+            .GetProperty("properties").GetProperty("portion");
+
+        portion.GetProperty("type").EnumerateArray().Select(t => t.GetString())
+            .Should().Contain(["number", "string"]);
     }
 
     [Fact]

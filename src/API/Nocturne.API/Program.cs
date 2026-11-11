@@ -355,24 +355,24 @@ else
 app.UseSecurityHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-// Documentation paths get the any-origin policy, a listed documentation site DocsSiteCorsPolicy,
-// foreign origins on the legacy API LegacyApiCorsPolicy when the instance enables cors, and
-// everything else the credentialed default.
+// Documentation paths get the any-origin policy, foreign origins on the legacy API get
+// LegacyApiCorsPolicy when the instance enables cors, everything else the credentialed default.
+// A listed documentation site is decided after tenant resolution instead; see DocsSiteCorsPolicy.
 // The branches are complementary so exactly one CORS middleware ever runs per request:
 // chaining two would emit conflicting Access-Control-Allow-Origin headers. All sit ahead of
 // UseStaticFiles so the Scalar assets under wwwroot/scalar are covered, and ahead of
 // UseRouting so preflights short-circuit.
-bool UsesDocsSiteCors(HttpContext context) =>
-    !PublicDocsMiddleware.IsPublicDocsPath(context) && DocsSiteCorsPolicy.Applies(context, docsSiteOrigins);
+bool FromDocsSite(HttpContext context) =>
+    !PublicDocsMiddleware.IsPublicDocsPath(context)
+    && DocsSiteCorsPolicy.IsListedOrigin(context, docsSiteOrigins, corsBaseDomain, corsAllowLocalhost);
 bool UsesLegacyApiCors(HttpContext context) =>
-    !PublicDocsMiddleware.IsPublicDocsPath(context) && !UsesDocsSiteCors(context)
-    && LegacyApiCorsPolicy.Applies(context, app.Configuration, corsBaseDomain, corsAllowLocalhost);
+    LegacyApiCorsPolicy.Applies(context, app.Configuration, corsBaseDomain, corsAllowLocalhost);
 app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
-app.UseWhen(UsesDocsSiteCors, branch => branch.UseCors(DocsSiteCorsPolicy.Name));
-app.UseWhen(UsesLegacyApiCors, branch => branch.UseCors(LegacyApiCorsPolicy.Name));
 app.UseWhen(
-    context => !PublicDocsMiddleware.IsPublicDocsPath(context) && !UsesDocsSiteCors(context)
-        && !UsesLegacyApiCors(context),
+    context => !FromDocsSite(context) && !PublicDocsMiddleware.IsPublicDocsPath(context) && UsesLegacyApiCors(context),
+    branch => branch.UseCors(LegacyApiCorsPolicy.Name));
+app.UseWhen(
+    context => !FromDocsSite(context) && !PublicDocsMiddleware.IsPublicDocsPath(context) && !UsesLegacyApiCors(context),
     branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseNocturneForwardedHeaders(builder.Configuration);
@@ -400,6 +400,15 @@ app.UseRateLimiter();
 app.UseMiddleware<PublicDocsMiddleware>();
 app.UseMiddleware<ApexCallbackRelayMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseWhen(
+    context => FromDocsSite(context) && DocsSiteCorsPolicy.AdmitsTenant(context),
+    branch => branch.UseCors(DocsSiteCorsPolicy.Name));
+app.UseWhen(
+    context => FromDocsSite(context) && !DocsSiteCorsPolicy.AdmitsTenant(context) && UsesLegacyApiCors(context),
+    branch => branch.UseCors(LegacyApiCorsPolicy.Name));
+app.UseWhen(
+    context => FromDocsSite(context) && !DocsSiteCorsPolicy.AdmitsTenant(context) && !UsesLegacyApiCors(context),
+    branch => branch.UseCors());
 app.UseMiddleware<TenantSetupMiddleware>();
 app.UseMiddleware<AuthenticationMiddleware>();
 app.UseMiddleware<MemberScopeMiddleware>();
@@ -467,8 +476,8 @@ app.MapScalarApiReference((options, httpContext) =>
     // Scalar selects every listed scheme that a document defines, all at once, and an
     // unauthorized oauth2 then sends an empty "Authorization: Bearer" over any bearer token.
     // So the list names exactly one scheme per document: apiSecret is the Nightscout
-    // document's, the other the Nocturne document's. AddPreferredSecuritySchemes appends,
-    // so it is called once.
+    // document's, the other the Nocturne document's. AddPreferredSecuritySchemes appends to
+    // the list rather than replacing it.
     options
         .AddPreferredSecuritySchemes(
             demoToken is null ? SecuritySchemeDefinitions.OAuth2 : SecuritySchemeDefinitions.Bearer,
