@@ -101,6 +101,8 @@
     <PackageVersion Include="System.ComponentModel.Annotations" Version="5.0.0" />
     <!-- Security fix: pin transitive dependency to patch CVE-2026-26127 (Base64Url DoS) -->
     <PackageVersion Include="Microsoft.Bcl.Memory" Version="9.0.23" />
+    <!-- Security fix: pin Fido2's transitive System.Formats.Cbor (GHSA-vmv3-wvjp-wqpj) -->
+    <PackageVersion Include="System.Formats.Cbor" Version="11.0.0" />
     <!-- Security fix: pin StreamJsonRpc's transitive MessagePack (GHSA-hv8m-jj95-wg3x, GHSA-vh6j-jc39-fggf, GHSA-qhrr-8q5h-9q3h) -->
     <PackageVersion Include="MessagePack" Version="2.5.307" />
     <!-- Security fix: pin EF Core Sqlite's transitive SQLite native bundle (GHSA-2m69-gcr7-jv3q) -->

@@ -46,6 +46,9 @@
   <ItemGroup>
     <PackageReference Include="Alexa.NET" />
     <PackageReference Include="Microsoft.Bcl.Memory" />
+    <!-- The shared framework supplies this to the API, hence NU1510; the reference is for projects
+         that reference the API without the framework and would restore Fido2's vulnerable 9.0.0. -->
+    <PackageReference Include="System.Formats.Cbor" NoWarn="NU1510" />
     <PackageReference Include="dotAPNS" />
     <PackageReference Include="Fido2.AspNet" />
     <PackageReference Include="FluentValidation.AspNetCore" />
