@@ -47,7 +47,7 @@ A given record normally carries **one** of these keys, not both.
 
 #### `syncIdentifier` — client-owned
 
-Clients that integrate over the REST API supply their own stable identifier on each write, scoped by `dataSource`. On create, if a record with the same `(dataSource, syncIdentifier)` already exists, the endpoint returns the existing record unchanged — an idempotent upsert — instead of inserting a duplicate. Enforced by a unique index on `(tenant_id, data_source, sync_identifier)`.
+Clients that integrate over the REST API supply their own stable identifier on each write, scoped by `dataSource`. On create, if a record with the same `(dataSource, syncIdentifier)` already exists, the endpoint updates that record in place — an idempotent upsert — instead of inserting a duplicate. Enforced by a unique index on `(tenant_id, data_source, sync_identifier)`.
 
 Use this when **you** control the writer and can guarantee a stable ID that survives retries.
 

@@ -13,9 +13,11 @@ using Nocturne.Core.Contracts.Repositories;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Food controller that provides 1:1 compatibility with Nightscout food endpoints.
-/// Implements the /api/v1/food/* endpoints from the legacy JavaScript implementation.
+/// Nightscout food: food records and quick picks. A client can list, read, create, update and delete food records.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/food/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IFoodRepository"/>
 [ApiController]
 [Tags("V1")]

@@ -20,8 +20,8 @@ using Nocturne.Core.Models.V4;
 using System.Linq;
 namespace Nocturne.API.Controllers.V4.Analytics;
 /// <summary>
-/// Controller providing retrospective (day-in-review) diabetes data.
-/// Combines IOB, COB, interpolated glucose, and basal rate at any historical point in time.
+/// Day-in-review data: IOB, COB, interpolated glucose and basal rate at a point in time, or across
+/// a day as a timeline.
 /// </summary>
 /// <remarks>
 /// Three endpoints are exposed:

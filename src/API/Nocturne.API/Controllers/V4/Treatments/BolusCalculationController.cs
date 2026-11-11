@@ -9,10 +9,11 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for managing bolus calculation records.
-/// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
+/// Bolus calculation records. List, read, create, update, and delete calculations, and restore deleted ones.
 /// </summary>
 /// <remarks>
+/// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
+///
 /// Create and update use the same <see cref="UpsertBolusCalculationRequest"/> shape.
 /// On update, the immutable fields <see cref="V4RecordBase.CorrelationId"/>,
 /// <see cref="V4RecordBase.LegacyId"/>, <see cref="V4RecordBase.CreatedAt"/>,
@@ -22,6 +23,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="BolusCalculation"/>
 /// <seealso cref="UpsertBolusCalculationRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Bolus Calculations")]
 [Tags("Treatments")]
 [Route("api/v4/insulin/calculations")]
 [RequireScope(Scope.TreatmentsRead)]

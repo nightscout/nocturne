@@ -14,11 +14,14 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// IOB (Insulin on Board) controller providing calculation endpoints.
-/// Implements IOB calculation endpoints compatible with Nightscout legacy behavior.
+/// Nightscout IOB: insulin on board values. A client can read the current IOB, IOB from treatments, and hourly IOB.
 /// </summary>
+/// <remarks>
+/// Implements IOB calculation endpoints compatible with Nightscout legacy behavior.
+/// </remarks>
 /// <seealso cref="IIobCalculator"/>
 [ApiController]
+[System.ComponentModel.DisplayName("IOB")]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
 [Produces("application/json")]

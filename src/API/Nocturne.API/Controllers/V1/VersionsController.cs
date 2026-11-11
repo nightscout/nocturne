@@ -7,8 +7,11 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Versions controller that provides 1:1 compatibility with Nightscout versions endpoint.
+/// Nightscout versions: the server version information. A client can read it without signing in.
 /// </summary>
+/// <remarks>
+/// Provides 1:1 compatibility with Nightscout versions endpoint.
+/// </remarks>
 /// <seealso cref="IVersionService"/>
 /// <seealso cref="VersionsResponse"/>
 [ApiController]

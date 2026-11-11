@@ -114,7 +114,7 @@
     <PackageVersion Include="OpenApiRemoteCodegen.Attributes" Version="0.1.0" />
     <PackageVersion Include="NSwag.MSBuild" Version="14.6.3" />
     <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.13.1" />
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.11.1" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.20.0" />
     <PackageVersion Include="YamlDotNet" Version="17.0.1" />
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
     <!-- Extension packages -->

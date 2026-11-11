@@ -13,7 +13,8 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for managing tenants on the instance.
+/// Tenants on the instance. List, read, create, update and deactivate tenants. Add and remove
+/// members, manage their sign-in credentials, and issue login and recovery codes.
 /// </summary>
 /// <remarks>
 /// In multi-tenant deployments, platform administrators can create new tenants, update tenant
@@ -22,6 +23,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 /// </remarks>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Tenants")]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/tenants")]
 [Produces("application/json")]

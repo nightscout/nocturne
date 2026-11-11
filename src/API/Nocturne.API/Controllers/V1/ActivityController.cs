@@ -16,10 +16,13 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Controller for managing Nightscout activity data.
-/// Delegates to <see cref="IActivityService"/> which routes sensor data (heart rate, step count)
-/// to dedicated tables and regular activities to StateSpans.
+/// Nightscout activity: heart rate, step count and other activity records. A client can list, read, create,
+/// update and delete them.
 /// </summary>
+/// <remarks>
+/// Delegates to <see cref="IActivityService"/>, which routes sensor data (heart rate, step count) to dedicated
+/// tables and regular activities to StateSpans.
+/// </remarks>
 /// <seealso cref="IActivityService"/>
 [ApiController]
 [Tags("V1")]

@@ -16,14 +16,16 @@ using Nocturne.Core.Models.Services;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Services controller for managing data sources, connectors, and integrations.
-/// Provides information about connected data sources, available connectors,
-/// sync status for connectors, and setup instructions for uploaders like xDrip+, Loop, AAPS, etc.
+/// Data sources, connectors, and uploaders for the tenant. Read their status and capabilities, and get
+/// setup instructions for uploaders such as xDrip+, Loop and AAPS. Start syncs, reset sync cursors,
+/// and delete data.
 /// </summary>
 /// <seealso cref="IDataSourceService"/>
 /// <seealso cref="IConnectorHealthService"/>
 /// <seealso cref="IConnectorSyncService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Data Sources and Sync")]
+[Tags("Connectors")]
 [Route("api/v4/services")]
 [Produces("application/json")]
 [Authorize]

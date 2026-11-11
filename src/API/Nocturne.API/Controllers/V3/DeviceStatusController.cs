@@ -14,8 +14,12 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 DeviceStatus controller that provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// Nightscout device status documents. A client can list, read, create, update and delete them, and read changes
+/// since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// </remarks>
 /// <seealso cref="IDeviceStatusService"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]

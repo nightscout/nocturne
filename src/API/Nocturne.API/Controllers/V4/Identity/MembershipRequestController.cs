@@ -10,10 +10,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Endpoints for membership request lifecycle: users request to join a tenant,
-/// and members with <c>members.manage</c> permission approve or deny them.
+/// Requests to join the tenant, and their approval. A caller can ask to join, list its own requests,
+/// and read or change the request settings. Members with the <c>members.manage</c> permission can
+/// list, approve and deny requests.
 /// </summary>
 [ApiController]
+[System.ComponentModel.DisplayName("Membership Requests")]
 [Tags("Identity")]
 [Route("api/v4/membership-requests")]
 [Produces("application/json")]

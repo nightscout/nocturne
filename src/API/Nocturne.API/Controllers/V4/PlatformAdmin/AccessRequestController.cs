@@ -14,7 +14,8 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for reviewing and actioning user access requests.
+/// Access requests from users who want to join the instance. List pending requests, then approve or
+/// deny them.
 /// </summary>
 /// <remarks>
 /// Access requests are created when an unauthenticated user completes the
@@ -25,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 /// <seealso cref="ISubjectService"/>
 /// <seealso cref="IAccessRequestService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Access Requests")]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/access-requests")]
 [Authorize(Roles = "platform_admin")]

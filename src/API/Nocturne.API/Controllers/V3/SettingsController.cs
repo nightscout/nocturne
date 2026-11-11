@@ -14,10 +14,12 @@ using Nocturne.Core.Contracts.Repositories;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Settings controller that provides full V3 API compatibility with Nightscout settings endpoints.
-/// Implements the /api/v3/settings endpoints with pagination, field selection, sorting, and advanced filtering.
-/// Settings require admin permissions following legacy API v3 behavior.
+/// Nightscout settings, with paging, field selection, sorting and filtering. A client can list, read, create,
+/// update and delete settings. Settings require admin permissions following legacy API v3 behavior.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout settings endpoints, at /api/v3/settings.
+/// </remarks>
 /// <seealso cref="ISettingsRepository"/>
 /// <seealso cref="Settings"/>
 /// <seealso cref="BaseV3Controller{T}"/>

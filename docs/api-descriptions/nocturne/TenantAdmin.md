@@ -1,16 +1,11 @@
 ---
 displayName: Tenant Admin
 ---
-Administrative operations for tenant data management, migration, and maintenance.
+Maintenance of the data of one tenant: migration from Nightscout, deduplication and review of data quality.
 
-- **Migration** — Import data from a Nightscout MongoDB instance.
-- **Nightscout Transition** — Aggregated migration progress and write-compatibility status for the migration dashboard.
-- **Backfill** — Decompose all existing legacy entries and treatments into V4 granular tables.
-- **Deduplication** — Run and monitor deduplication jobs across data tables.
-- **Discrepancy** — Compatibility analysis between legacy and V4 data representations.
-- **Compression Low** — Detect and review compression low artefacts in CGM data.
-- **Processing** — Async processing job status tracking.
-- **OIDC Provider Admin** — Manage OIDC identity provider configurations for the tenant.
-- **Subject Admin** — Manage user/subject records within the tenant.
+```resources Tenant Admin
+```
 
-> **Footgun:** The Backfill endpoint decomposes *all* legacy data. On large datasets this is a long-running operation — it runs asynchronously and progress can be tracked via the Processing endpoints.
+## Good to know
+
+- Deduplication and migration run as background jobs. The start operation returns at once, and the status operation reports progress.

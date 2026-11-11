@@ -12,9 +12,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Manages temporary guest access links for read-only data sharing.
+/// Temporary guest links that give a person read-only access to the tenant's data. A caller can
+/// create, list and revoke links, read the scope options a link can grant, activate a link,
+/// dismiss a link and list pending links.
 /// </summary>
 [ApiController]
+[System.ComponentModel.DisplayName("Guest Links")]
 [Tags("Identity")]
 [Route("api/v4/guest-links")]
 [Produces("application/json")]

@@ -35,7 +35,13 @@ public record TranslationCatalogSourceResponse
     public required string CatalogBaseUrl { get; init; }
 }
 
+/// <summary>
+/// Translation drafts and contributions for each locale. Save, read, delete and submit drafts, or
+/// relay a contribution from an instance without its own access token. Read where the translation
+/// catalogs are published.
+/// </summary>
 [ApiController]
+[Tags("Platform")]
 [Authorize]
 [Route("api/v4/translations")]
 public partial class TranslationsController(

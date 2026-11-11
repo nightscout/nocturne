@@ -15,7 +15,7 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Controller for managing alert invite links (create, validate, redeem, revoke).
+/// Invite links that add a follower to an alert rule channel. Create, validate, redeem and revoke invites.
 /// </summary>
 /// <remarks>
 /// An invite attaches a follower to an alert rule channel, so creating, redeeming and revoking one

@@ -11,7 +11,7 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Controller for testing outbound webhook delivery.
+/// Outbound webhook notification settings. Read and update the settings, and send a test payload to a webhook.
 /// </summary>
 /// <remarks>
 /// The <c>POST /test</c> endpoint sends a test payload via <see cref="WebhookRequestSender"/>.

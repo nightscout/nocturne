@@ -19,7 +19,8 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// Controller for managing patient record data: clinical records, associated devices, and insulin configurations.
+/// The patient record: its timezone, the devices linked to it, and its insulin configurations.
+/// Callers can read and change each of them.
 /// </summary>
 /// <remarks>
 /// Three resource types are exposed under <c>/api/v4/patient-record</c>:

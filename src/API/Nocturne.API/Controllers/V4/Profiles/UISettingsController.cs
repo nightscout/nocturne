@@ -16,10 +16,13 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// UI Settings controller providing frontend configuration data.
-/// This endpoint provides aggregated settings for all frontend settings pages.
-/// Supports GET (read), PUT (whole configuration) and PATCH (one section) operations for settings persistence.
+/// Web app settings for all settings pages. Read the whole configuration or one section, replace the whole
+/// configuration, update one section, and manage alarm profiles.
 /// </summary>
+/// <remarks>
+/// Aggregated settings for all frontend settings pages. Supports GET (read), PUT (whole configuration) and
+/// PATCH (one section) operations for settings persistence.
+/// </remarks>
 /// <seealso cref="IUISettingsService"/>
 [ApiController]
 [Tags("Profiles")]

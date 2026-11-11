@@ -1,136 +1,212 @@
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
+using Nocturne.API.OpenApi;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
 namespace Nocturne.API.Configuration;
 
 /// <summary>
-/// Adds human-readable descriptions to OpenAPI tags so Scalar displays an overview
-/// for each controller group. Descriptions use GitHub-flavored markdown and are
-/// authored as folder-based markdown files under <c>docs/api-descriptions</c>
-/// (loaded by <see cref="TagDescriptionLoader"/>). Embeds ER diagrams from the diagram
-/// manifest into matching tag descriptions.
+/// Builds the Scalar sidebar. Each controller is one entry, described by its class summary and
+/// grouped by its <c>[Tags]</c> area (<see cref="ControllerDocs"/>). The markdown pages under
+/// <c>docs/api-descriptions</c> (<see cref="TagDescriptionLoader"/>) add what a controller cannot
+/// say: a page named after an area is the overview of that group, and a <c>standalone</c> page is
+/// an entry of one of the <see cref="Sidebar"/> page groups. Diagrams mapped to a page in the
+/// diagram manifest are appended to it.
 /// </summary>
 public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransformer
 {
-    private readonly Dictionary<string, List<DiagramRef>> _tagDiagrams;
-
-    /// <summary>Tag name → markdown description, loaded from <c>docs/api-descriptions</c>.</summary>
-    private readonly Dictionary<string, string> _descriptions;
-
-    /// <summary>Tag name → sidebar label override (<c>x-displayName</c>).</summary>
-    private readonly Dictionary<string, string> _displayNames;
-
     /// <summary>
-    /// Conceptual guide tags that have no operations of their own but still render as a
-    /// standalone sidebar page from their description (and any diagrams mapped to them),
-    /// keyed by the OpenAPI document they belong to. The Nocturne document carries the
-    /// <c>Syncing</c> guide; the Nightscout document carries the legacy-to-v4 model-mapping
-    /// pages, one per legacy collection. Both are marked <c>standalone: true</c> in their
-    /// markdown frontmatter.
+    /// The order of the sidebar groups of a document. An entry with pages is a group of standalone
+    /// pages; an entry without is an area. An area that is not listed is shown last.
     /// </summary>
-    private readonly Dictionary<string, string[]> _standaloneDocTagsByDocument;
+    public static readonly IReadOnlyDictionary<string, (string Group, string[]? Pages)[]> Sidebar =
+        new Dictionary<string, (string, string[]?)[]>
+        {
+            ["nocturne"] =
+            [
+                ("Guides",
+                [
+                    "guide-authentication", "guide-data-model", "Syncing", "guide-realtime",
+                    "guide-sharing", "guide-nightscout",
+                ]),
+                ("Authentication", null),
+                ("Identity", null),
+                ("Glucose", null),
+                ("Treatments", null),
+                ("Devices", null),
+                ("Health", null),
+                ("Analytics", null),
+                ("Monitoring", null),
+                ("Profiles", null),
+                ("Metadata", null),
+                ("Connectors", null),
+                ("Platform", null),
+                ("TenantAdmin", null),
+                ("PlatformAdmin", null),
+                ("Architecture",
+                    ["arch-codebase", "arch-request-flow", "arch-deployment", "arch-type-safety"]),
+            ],
+            ["nightscout"] =
+            [
+                ("V1", null),
+                ("V2", null),
+                ("V3", null),
+                ("Data Model",
+                    ["ns-model-entries", "ns-model-treatments", "ns-model-devicestatus", "ns-model-profile"]),
+            ],
+        };
+
+    private const string OverviewLabel = "Overview";
+    private const string NoArea = "Other";
+
+    private readonly Dictionary<string, List<DiagramRef>> _pageDiagrams;
+    private readonly IReadOnlyList<TagDescriptionLoader.TagDescription> _pages;
 
     public TagDescriptionDocumentTransformer(IWebHostEnvironment env)
     {
-        _tagDiagrams = BuildTagDiagramMap(env);
-
-        var loaded = TagDescriptionLoader.Load(env);
-        _descriptions = loaded.ToDictionary(d => d.TagName, d => d.Markdown, StringComparer.Ordinal);
-        _displayNames = loaded
-            .Where(d => d.DisplayName is not null)
-            .ToDictionary(d => d.TagName, d => d.DisplayName!, StringComparer.Ordinal);
-        _standaloneDocTagsByDocument = loaded
-            .Where(d => d.Standalone)
-            .GroupBy(d => d.Document, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Select(d => d.TagName).ToArray(), StringComparer.Ordinal);
+        _pageDiagrams = BuildTagDiagramMap(env);
+        _pages = TagDescriptionLoader.Load(env);
     }
+
+    /// <summary>The tag of the overview page of an area.</summary>
+    public static string OverviewTag(string area) => "overview-" + ControllerDocs.Slug(area);
 
     public Task TransformAsync(
         OpenApiDocument document,
         OpenApiDocumentTransformerContext context,
         CancellationToken cancellationToken)
     {
-        // Collect every tag name already referenced by operations.
-        var usedTags = new HashSet<string>(StringComparer.Ordinal);
+        var used = UsedTags(document);
+        var controllers = context.DescriptionGroups
+            .SelectMany(group => group.Items)
+            .Select(ControllerDocs.For)
+            .OfType<ControllerDocs.Entry>()
+            .Where(entry => used.Contains(entry.Tag))
+            .DistinctBy(entry => entry.Tag)
+            .OrderBy(entry => entry.Label, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        foreach (var pathItem in document.Paths.Values)
+        var pages = _pages
+            .Where(page => page.Document == context.DocumentName)
+            .ToDictionary(page => page.TagName, StringComparer.Ordinal);
+
+        var tags = new List<OpenApiTag>();
+        var groups = new JsonArray();
+        var areas = controllers.Select(entry => entry.Area ?? NoArea).Distinct().ToList();
+
+        foreach (var (group, standalone) in Sidebar.GetValueOrDefault(context.DocumentName, []))
         {
-            if (pathItem.Operations is null) continue;
-            foreach (var operation in pathItem.Operations.Values)
+            if (standalone is not null)
+            {
+                var present = standalone.Where(pages.ContainsKey).ToList();
+                foreach (var name in present)
+                    tags.Add(Tag(name, PageBody(pages[name]), pages[name].DisplayName));
+                AddGroup(groups, group, present);
+            }
+            else if (areas.Remove(group))
+            {
+                AddArea(group);
+            }
+        }
+
+        foreach (var area in areas.OrderBy(area => area, StringComparer.OrdinalIgnoreCase).ToList())
+            AddArea(area);
+
+        document.Tags = new HashSet<OpenApiTag>(tags);
+        document.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+        document.Extensions["x-tagGroups"] = new JsonNodeExtension(groups);
+
+        return Task.CompletedTask;
+
+        void AddArea(string area)
+        {
+            var members = new List<string>();
+            var label = area;
+
+            if (pages.TryGetValue(area, out var overview) && !overview.Standalone)
+            {
+                label = overview.DisplayName ?? area;
+                tags.Add(Tag(OverviewTag(area), PageBody(overview), OverviewLabel));
+                members.Add(OverviewTag(area));
+            }
+
+            foreach (var entry in controllers.Where(entry => (entry.Area ?? NoArea) == area))
+            {
+                tags.Add(Tag(entry.Tag, entry.Summary, entry.Label == entry.Tag ? null : entry.Label));
+                members.Add(entry.Tag);
+            }
+
+            AddGroup(groups, label, members);
+        }
+    }
+
+    private string? PageBody(TagDescriptionLoader.TagDescription page)
+    {
+        if (!_pageDiagrams.TryGetValue(page.TagName, out var diagrams))
+            return page.Markdown;
+
+        var body = new System.Text.StringBuilder(page.Markdown).AppendLine().AppendLine();
+        body.AppendLine("## Data Model").AppendLine();
+
+        foreach (var diagram in diagrams)
+        {
+            body.AppendLine($"**{diagram.Title}**");
+            if (!string.IsNullOrWhiteSpace(diagram.Description))
+                body.AppendLine($"_{diagram.Description}_");
+            body.AppendLine();
+            body.AppendLine("```mermaid");
+            body.AppendLine(diagram.MermaidSource);
+            body.AppendLine("```");
+            body.AppendLine();
+        }
+
+        return body.ToString().TrimEnd();
+    }
+
+    private static OpenApiTag Tag(string name, string? description, string? displayName)
+    {
+        var tag = new OpenApiTag { Name = name, Description = description };
+        if (displayName is not null)
+        {
+            tag.Extensions = new Dictionary<string, IOpenApiExtension>
+            {
+                ["x-displayName"] = new JsonNodeExtension(JsonValue.Create(displayName)),
+            };
+        }
+
+        return tag;
+    }
+
+    private static void AddGroup(JsonArray groups, string name, IReadOnlyCollection<string> members)
+    {
+        if (members.Count == 0)
+            return;
+
+        var tags = new JsonArray();
+        foreach (var member in members)
+            tags.Add(JsonValue.Create(member));
+
+        groups.Add(new JsonObject { ["name"] = name, ["tags"] = tags });
+    }
+
+    private static HashSet<string> UsedTags(OpenApiDocument document)
+    {
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in document.Paths.Values)
+        {
+            if (path.Operations is null) continue;
+            foreach (var operation in path.Operations.Values)
             {
                 if (operation.Tags is null) continue;
                 foreach (var tag in operation.Tags)
-                {
-                    if (tag is IOpenApiTag openApiTag && openApiTag.Name is not null)
-                        usedTags.Add(openApiTag.Name);
-                }
+                    if (tag.Name is not null)
+                        used.Add(tag.Name);
             }
         }
 
-        // Standalone conceptual guide pages have no operations but still render as
-        // their own sidebar entry. Surface only the ones belonging to this document.
-        if (_standaloneDocTagsByDocument.TryGetValue(context.DocumentName, out var standaloneTags))
-        {
-            foreach (var docTag in standaloneTags)
-                usedTags.Add(docTag);
-        }
-
-        // Build the document-level tag set with descriptions.
-        var tags = new HashSet<OpenApiTag>(TagNameComparer.Instance);
-
-        foreach (var tagName in usedTags.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
-        {
-            _descriptions.TryGetValue(tagName, out var description);
-
-            // Append any ER diagrams mapped to this tag.
-            if (_tagDiagrams.TryGetValue(tagName, out var diagrams))
-            {
-                var sb = new System.Text.StringBuilder();
-                if (!string.IsNullOrWhiteSpace(description))
-                {
-                    sb.AppendLine(description);
-                    sb.AppendLine();
-                }
-
-                sb.AppendLine("## Data Model");
-                sb.AppendLine();
-
-                foreach (var diagram in diagrams)
-                {
-                    sb.AppendLine($"**{diagram.Title}**");
-                    if (!string.IsNullOrWhiteSpace(diagram.Description))
-                        sb.AppendLine($"_{diagram.Description}_");
-                    sb.AppendLine();
-                    sb.AppendLine("```mermaid");
-                    sb.AppendLine(diagram.MermaidSource);
-                    sb.AppendLine("```");
-                    sb.AppendLine();
-                }
-
-                description = sb.ToString().TrimEnd();
-            }
-
-            var tagObj = new OpenApiTag
-            {
-                Name = tagName,
-                Description = description,
-            };
-
-            if (_displayNames.TryGetValue(tagName, out var displayName))
-            {
-                tagObj.Extensions ??= new Dictionary<string, IOpenApiExtension>();
-                tagObj.Extensions["x-displayName"] = new JsonNodeExtension(JsonValue.Create(displayName));
-            }
-
-            tags.Add(tagObj);
-        }
-
-        document.Tags = tags;
-
-        return Task.CompletedTask;
+        return used;
     }
 
     private static Dictionary<string, List<DiagramRef>> BuildTagDiagramMap(IWebHostEnvironment env)
@@ -188,16 +264,5 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
         public List<string>? Tags { get; set; }
         public string? Auto { get; set; }
         public string? Module { get; set; }
-    }
-
-    private sealed class TagNameComparer : IEqualityComparer<OpenApiTag>
-    {
-        public static readonly TagNameComparer Instance = new();
-
-        public bool Equals(OpenApiTag? x, OpenApiTag? y) =>
-            string.Equals(x?.Name, y?.Name, StringComparison.Ordinal);
-
-        public int GetHashCode(OpenApiTag obj) =>
-            obj.Name?.GetHashCode(StringComparison.Ordinal) ?? 0;
     }
 }

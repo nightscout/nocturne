@@ -10,7 +10,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// Controller for body weight tracking data.
+/// Body weight readings from connected health apps, as a time series. Callers can list, read, add
+/// singly or in batches, update and delete readings.
 /// </summary>
 /// <remarks>
 /// Provides time-series weight readings sourced from connected health apps.

@@ -8,8 +8,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for managing local analytics collection and providing transparency.
-/// Allows users to view, configure, and control their usage analytics data.
+/// Usage analytics collection for the tenant. Callers can read the collection status and metrics,
+/// check pending data, and change the collection settings.
 /// </summary>
 /// <remarks>
 /// All analytics data is stored locally and never transmitted externally.
@@ -20,6 +20,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="IAnalyticsService"/>
 [Authorize]
 [ApiController]
+[System.ComponentModel.DisplayName("Usage Analytics")]
 [Tags("Analytics")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]

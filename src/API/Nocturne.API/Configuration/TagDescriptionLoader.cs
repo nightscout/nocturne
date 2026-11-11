@@ -10,9 +10,13 @@ namespace Nocturne.API.Configuration;
 /// belongs to (<c>nocturne</c> or <c>nightscout</c>). Deeper subfolders are purely
 /// organizational. Optional YAML frontmatter carries <c>displayName</c> (sidebar label
 /// override) and <c>standalone</c> (a conceptual page with no operations of its own).
+/// A file named <c>_introduction.md</c> is not a tag: it is its document's introduction.
+/// Every page may place a diagram inline (<see cref="MermaidSourceLoader.EmbedDiagrams"/>).
 /// </summary>
 internal static class TagDescriptionLoader
 {
+    private const string IntroductionName = "_introduction";
+
     public sealed record TagDescription(
         string TagName,
         string Document,
@@ -35,11 +39,22 @@ internal static class TagDescriptionLoader
         return Path.Combine(env.WebRootPath, "api-descriptions");
     }
 
-    public static IReadOnlyList<TagDescription> Load(IWebHostEnvironment env)
+    public static IReadOnlyList<TagDescription> Load(IWebHostEnvironment env) =>
+        [.. LoadPages(env).Where(page => page.TagName != IntroductionName)];
+
+    /// <summary>OpenAPI document name → the markdown of its introduction.</summary>
+    public static IReadOnlyDictionary<string, string> LoadIntroductions(IWebHostEnvironment env) =>
+        LoadPages(env)
+            .Where(page => page.TagName == IntroductionName)
+            .ToDictionary(page => page.Document, page => page.Markdown, StringComparer.Ordinal);
+
+    private static List<TagDescription> LoadPages(IWebHostEnvironment env)
     {
         var dir = ResolveDescriptionsDir(env);
         if (!Directory.Exists(dir))
             return [];
+
+        var diagramsDir = MermaidSourceLoader.ResolveDiagramsDir(env);
 
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -72,7 +87,7 @@ internal static class TagDescriptionLoader
                 document,
                 string.IsNullOrWhiteSpace(meta.DisplayName) ? null : meta.DisplayName,
                 meta.Standalone,
-                body.Trim()));
+                MermaidSourceLoader.EmbedDiagrams(body, diagramsDir).Trim()));
         }
 
         return results;

@@ -15,7 +15,12 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Health;
 
+/// <summary>
+/// The tenant's connection to Google Health. Callers can read the connection status, save its options,
+/// start and complete the Google sign-in, sync, disconnect, and preview or purge its data.
+/// </summary>
 [ApiController, Authorize, DenyDemoSubject, RequireScope(Scope.TenantSettings)]
+[Tags("Connectors")]
 [Route("api/v4/google-health")]
 [ProducesResponseType(typeof(ProblemDetails), 400)]
 [ProducesResponseType(typeof(ProblemDetails), 429)]

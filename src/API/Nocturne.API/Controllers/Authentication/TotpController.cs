@@ -16,8 +16,8 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Controller for TOTP (Time-based One-Time Password) authenticator management and login.
-/// Handles setup, verification, credential listing/removal, and TOTP-based authentication.
+/// Authenticator app codes (TOTP) for sign-in. A caller can set up an authenticator, verify it, list and
+/// remove authenticators, and sign in with a code.
 /// </summary>
 /// <remarks>
 /// TOTP is never a sole factor: <see cref="Setup"/> requires at least one primary auth factor
@@ -33,6 +33,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="IAuthAuditService"/>
 [ApiController]
 [Route("api/auth/totp")]
+[System.ComponentModel.DisplayName("TOTP")]
 [Tags("Authentication")]
 [AllowDuringSetup]
 public class TotpController : ControllerBase

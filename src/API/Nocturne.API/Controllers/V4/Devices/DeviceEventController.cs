@@ -14,10 +14,12 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Controller for managing device event observations.
-/// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
+/// Device events for consumable and hardware changes, such as site changes, sensor starts and changes,
+/// reservoir changes, and battery changes. List, read, create, update, and delete events, and restore
+/// deleted ones.
 /// </summary>
 /// <remarks>
+/// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// Device events record consumable changes and hardware lifecycle events such as
 /// site changes (CAGE), sensor starts/changes (SAGE), reservoir changes (IAGE),
 /// and battery changes (BAGE). These records feed the <see cref="DeviceAgeController"/>
@@ -36,6 +38,8 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="UpsertDeviceEventRequest"/>
 /// <seealso cref="DeviceAgeController"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Device Events")]
+[Tags("Devices")]
 [Route("api/v4/observations/device-events")]
 [RequireScope(Scope.DevicesRead)]
 [Produces("application/json")]

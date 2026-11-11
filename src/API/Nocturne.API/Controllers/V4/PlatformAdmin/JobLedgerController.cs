@@ -6,7 +6,7 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
-/// <summary>Platform-admin view of the job ledger: every scheduled job's row, failing ones included.</summary>
+/// <summary>The job ledger, with one row for each scheduled job. Failing jobs are included.</summary>
 [ApiController]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/jobs")]

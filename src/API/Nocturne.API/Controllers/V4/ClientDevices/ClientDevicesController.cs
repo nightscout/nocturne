@@ -12,12 +12,17 @@ using Nocturne.Core.Models.ClientDevices;
 namespace Nocturne.API.Controllers.V4.ClientDevices;
 
 /// <summary>
-/// Manages registered client app installs (Prelude, the desktop Companion) that can be alert-engine
-/// actuation targets. Distinct from <c>api/v4/devices</c> (the telemetry device catalog).
+/// The client apps installed on a caller's devices, such as Prelude and the desktop Companion. A
+/// caller can register a device, list devices and their capabilities, rename a device, revoke a
+/// device and list a device's active intents.
 /// </summary>
+/// <remarks>
+/// Registered installs can be alert-engine actuation targets. Distinct from <c>api/v4/devices</c>,
+/// the telemetry device catalog.
+/// </remarks>
 /// <seealso cref="IClientDeviceService"/>
 [ApiController]
-[Tags("Client Devices")]
+[Tags("Identity")]
 [Route("api/v4/client-devices")]
 public class ClientDevicesController : ControllerBase
 {

@@ -11,8 +11,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// The records uploaders sent that Nocturne answered but could not store, so the owner can see
-/// what an uploader believes it saved and act on it.
+/// Records that uploaders sent, which Nocturne accepted but could not store. List these records, and clear them.
 /// </summary>
 /// <remarks>
 /// Owner or <see cref="Scope.TenantSettings"/> only, and never a history-clamped caller: a rejected

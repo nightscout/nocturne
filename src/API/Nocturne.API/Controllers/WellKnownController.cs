@@ -13,10 +13,12 @@ using Nocturne.Core.Constants;
 namespace Nocturne.API.Controllers;
 
 /// <summary>
-/// OIDC well-known endpoints for the built-in local identity provider.
-/// Makes Nocturne act as its own OAuth 2.0 / OIDC issuer.
+/// OpenID Connect discovery documents for this server's built-in identity provider. Clients read the
+/// provider metadata, the signing keys, and the OAuth 2.0 server metadata.
 /// </summary>
 /// <remarks>
+/// Nocturne acts as its own OAuth 2.0 / OIDC issuer.
+///
 /// Implements the OpenID Connect Discovery 1.0 specification:
 /// <list type="bullet">
 ///   <item><description><c>GET /.well-known/openid-configuration</c> — provider metadata document.</description></item>
@@ -29,7 +31,8 @@ namespace Nocturne.API.Controllers;
 /// <seealso cref="JwtOptions"/>
 [ApiController]
 [Route(".well-known")]
-[Tags("OIDC Discovery")]
+[System.ComponentModel.DisplayName("Discovery Documents")]
+[Tags("Authentication")]
 [ClientPropertyName("oidcDiscovery")]
 [AllowAnonymous]
 public class WellKnownController : ControllerBase

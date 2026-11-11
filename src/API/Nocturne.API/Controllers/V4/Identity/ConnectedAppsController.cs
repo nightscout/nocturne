@@ -9,9 +9,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Manages OAuth app grants ("connected apps") for the authenticated user.
-/// Filters to grant_type='app' so direct/follower grants are managed elsewhere.
+/// The OAuth apps the signed-in account has connected. A caller can list these apps and revoke an
+/// app's access.
 /// </summary>
+/// <remarks>
+/// Filters to <c>grant_type = 'app'</c> so direct and follower grants are managed elsewhere.
+/// </remarks>
 /// <seealso cref="IOAuthGrantService"/>
 /// <seealso cref="IOAuthTokenService"/>
 [ApiController]

@@ -18,11 +18,13 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Controller for managing CGM sensor glucose readings.
-/// Provides CRUD operations and bulk creation for <see cref="SensorGlucose"/> records.
-/// After creation, evaluates glucose alerts against the canonical stream via
-/// <see cref="ICanonicalAlertEvaluator"/>.
+/// Continuous glucose monitor (CGM) sensor readings. List, read, create, update, and delete readings, create
+/// readings in bulk, and restore deleted ones. Glucose alerts are checked after each creation.
 /// </summary>
+/// <remarks>
+/// CRUD operations and bulk creation for <see cref="SensorGlucose"/> records. After creation, glucose alerts
+/// are evaluated against the canonical stream via <see cref="ICanonicalAlertEvaluator"/>.
+/// </remarks>
 /// <seealso cref="ISensorGlucoseRepository"/>
 /// <seealso cref="SensorGlucose"/>
 /// <seealso cref="UpsertSensorGlucoseRequest"/>

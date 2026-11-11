@@ -27,7 +27,7 @@ public sealed class PublicDocsCorsTests : IClassFixture<AuthenticationTestFactor
 
     [Theory]
     [InlineData("/openapi/nocturne.json")]      // spec fetched by the embedded reference
-    [InlineData("/scalar/mermaid-loader.js")]   // wwwroot asset, loaded as a crossorigin module
+    [InlineData("/scalar/nocturne-plugin.js")]  // wwwroot asset, imported as a cross-origin module
     public async Task Documentation_paths_are_readable_from_any_origin(string path)
     {
         var client = CreateClient();

@@ -21,7 +21,8 @@ using Nocturne.API.Services.Realtime;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Controller for flexible tracker management (consumables, appointments, reminders).
+/// Trackers for consumables, appointments and reminders. Manage tracker definitions and presets,
+/// and start, complete, acknowledge and delete tracker instances.
 /// </summary>
 /// <seealso cref="ITrackerRepository"/>
 /// <seealso cref="ISignalRBroadcastService"/>

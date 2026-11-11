@@ -8,6 +8,10 @@ using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
+/// <summary>
+/// Glucose processing settings: whether glucose is shown smoothed or unsmoothed, and the default processing
+/// for each data source. Read and set the preferred processing, and read and set the source defaults.
+/// </summary>
 [ApiController]
 [Tags("Profiles")]
 [Route("api/v4/settings/glucose-processing")]

@@ -15,8 +15,9 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Controller for managing V4 profile data: therapy settings, basal schedules,
-/// carb ratio schedules, sensitivity schedules, and target range schedules.
+/// Therapy profiles: their settings, and their basal, carb ratio, sensitivity, and target range schedules.
+/// Read the profile summary, active schedules, and profile records. Create, update, and delete settings and
+/// schedules, and set the default profile.
 /// </summary>
 /// <seealso cref="ITherapySettingsRepository"/>
 /// <seealso cref="IBasalScheduleRepository"/>
@@ -24,6 +25,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 /// <seealso cref="ISensitivityScheduleRepository"/>
 /// <seealso cref="ITargetRangeScheduleRepository"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Therapy Profiles")]
 [Tags("Profiles")]
 [Route("api/v4/profile")]
 [Authorize]

@@ -9,10 +9,13 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Status controller that provides 1:1 compatibility with Nightscout status endpoint.
-/// Returns HTML "STATUS OK" by default (matching Nightscout), or JSON when requested via Accept header.
-/// For detailed JSON status, use the V4 status endpoint at /api/v4/status.
+/// Nightscout status: returns <c>STATUS OK</c> as HTML by default. A client that asks for JSON in the Accept header
+/// receives the status as JSON.
 /// </summary>
+/// <remarks>
+/// Provides 1:1 compatibility with Nightscout status endpoint. For detailed JSON status, use the V4 status
+/// endpoint at <c>/api/v4/status</c>.
+/// </remarks>
 /// <seealso cref="IStatusService"/>
 /// <seealso cref="StatusResponse"/>
 [ApiController]

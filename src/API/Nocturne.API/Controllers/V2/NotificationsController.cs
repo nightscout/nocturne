@@ -11,10 +11,13 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// V2 Notifications controller providing enhanced notifications system endpoints.
+/// Nightscout notifications v2: send notifications and read their status. A client can post a notification,
+/// post a Loop notification, and read the notification status.
+/// </summary>
+/// <remarks>
 /// Implements the legacy /api/v2/notifications endpoints with 1:1 backwards compatibility.
 /// Based on the legacy notifications-v2.js implementation.
-/// </summary>
+/// </remarks>
 /// <seealso cref="INotificationV2Service"/>
 [ApiController]
 [Tags("V2")]

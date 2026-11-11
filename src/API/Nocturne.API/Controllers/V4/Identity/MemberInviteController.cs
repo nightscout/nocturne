@@ -17,13 +17,15 @@ using Nocturne.Infrastructure.Data.Extensions;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Public-facing member invite endpoints for accepting invites and listing members.
-/// Also provides member role/permission management endpoints.
+/// Invites to join the tenant, and the tenant's members. A caller can send, list and revoke invites,
+/// accept an invite, list members, change a member's roles or permissions, set a member's 24-hour
+/// history limit, and step themselves down to a more limited role.
 /// </summary>
 /// <seealso cref="IMemberInviteService"/>
 /// <seealso cref="ITenantService"/>
 /// <seealso cref="ITenantRoleService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Members and Invites")]
 [Tags("Identity")]
 [Route("api/v4/member-invites")]
 [Produces("application/json")]

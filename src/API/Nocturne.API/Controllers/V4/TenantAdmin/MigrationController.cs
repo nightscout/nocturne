@@ -9,7 +9,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Migration endpoints for importing data from Nightscout.
+/// Import data from Nightscout. Test a source, start an import, check or cancel a job, and list past
+/// jobs and sources.
 /// </summary>
 /// <seealso cref="IMigrationJobService"/>
 /// <seealso cref="IConnectorConfigurationService"/>

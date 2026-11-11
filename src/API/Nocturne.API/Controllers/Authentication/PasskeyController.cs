@@ -21,10 +21,12 @@ using Nocturne.Infrastructure.Data.Extensions;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Controller for WebAuthn/FIDO2 passkey authentication ceremonies.
-/// Handles registration, login (both discoverable and non-discoverable), and recovery code verification.
+/// Passkey sign-in, registration and recovery. A caller can register a passkey, sign in with one, use a
+/// recovery code, and list, delete or regenerate passkeys and recovery codes.
 /// </summary>
 /// <remarks>
+/// Implements WebAuthn/FIDO2 ceremonies.
+///
 /// Authentication flows:
 /// <list type="bullet">
 ///   <item><description><b>Registration</b> (authenticated, enrols onto the caller's own account): <c>POST /register/options</c> → <c>POST /register/complete</c></description></item>
@@ -50,6 +52,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="IAuthAuditService"/>
 [ApiController]
 [Route("api/auth/passkey")]
+[System.ComponentModel.DisplayName("Passkeys")]
 [Tags("Authentication")]
 [AllowDuringSetup]
 public class PasskeyController : ControllerBase

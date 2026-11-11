@@ -13,10 +13,13 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Reads the <see cref="ProfileActivation"/>s, each one stored and the one in force, and writes the
-/// profile switches a person records in Nocturne (<see cref="NativeProfileSwitches"/>).
+/// Profile switches recorded for a person. List switches, read the switch in force and the current status,
+/// and create, renew, end, and delete switches.
 /// </summary>
 /// <remarks>
+/// Reads the <see cref="ProfileActivation"/>s, each one stored and the one in force, and writes the
+/// profile switches a person records in Nocturne (<see cref="NativeProfileSwitches"/>).
+///
 /// Never response-cached: an activation an uploader posts must read back on the next poll, and the
 /// one in force changes with it. See <see cref="ProfileController.GetProfileSummary"/>.
 /// </remarks>

@@ -7,7 +7,7 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Platform-admin controller for managing subject (user) accounts across the instance.
+/// User accounts on the instance. List accounts, deactivate them, and change platform admin roles.
 /// </summary>
 /// <remarks>
 /// Provides administrative operations on user accounts: listing, deactivation, and role changes.

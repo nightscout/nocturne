@@ -13,11 +13,13 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Time query controller that provides 1:1 compatibility with Nightscout time-based endpoints.
-/// Supports bash-style brace expansion for complex time pattern matching.
+/// Nightscout time queries: find documents by time pattern, with bash-style brace expansion. A client can query
+/// by time pattern and slice documents by field.
 /// </summary>
 /// <seealso cref="ITimeQueryService"/>
 /// <remarks>
+/// Provides 1:1 compatibility with Nightscout time-based endpoints.
+///
 /// The <c>slice</c> and <c>echo</c> actions take the collection as a route or query value, so
 /// their governing scope is resolved per request through <see cref="LegacyStorageReadScopes"/>; a
 /// class-level OR would let a caller holding one category read another's records. The <c>times</c>

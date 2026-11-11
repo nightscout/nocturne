@@ -11,11 +11,13 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// CRUD for long-acting basal insulin injections (MDI).
-/// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>,
-/// with additional validation and idempotent upsert on (<see cref="V4RecordBase.DataSource"/>, <see cref="BasalInjection.SyncIdentifier"/>).
+/// Long-acting basal insulin injections for multiple daily injection (MDI) therapy. List, read, create,
+/// update, and delete injections, and restore deleted ones.
 /// </summary>
 /// <remarks>
+/// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>,
+/// with additional validation and idempotent upsert on (<see cref="V4RecordBase.DataSource"/>, <see cref="BasalInjection.SyncIdentifier"/>).
+///
 /// Both create and update enforce the same rules: <see cref="BasalInjection.Units"/> must be in (0, 500],
 /// <see cref="V4RecordBase.Timestamp"/> must be set and no more than five minutes in the future, and —
 /// when the request carries a <c>PatientInsulinId</c> — the referenced <see cref="PatientInsulin"/> must
@@ -36,6 +38,8 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="CreateBasalInjectionRequest"/>
 /// <seealso cref="UpdateBasalInjectionRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Basal Injections")]
+[Tags("Treatments")]
 [Route("api/v4/insulin/basal-injections")]
 [RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]

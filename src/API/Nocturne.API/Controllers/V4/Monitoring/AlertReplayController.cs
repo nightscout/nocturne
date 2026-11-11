@@ -11,8 +11,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// What-if replay of the tenant's enabled alert rules over a historical window.
-/// Returns the events that <em>would</em> have fired had the current rule set been active.
+/// Replay of the enabled alert rules over a past time window. Each result lists the alerts that
+/// would have fired under the current rules.
 /// </summary>
 /// <seealso cref="AlertReplayReadScopeGuard"/>
 [ApiController]

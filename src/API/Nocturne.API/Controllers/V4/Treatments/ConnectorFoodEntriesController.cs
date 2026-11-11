@@ -8,7 +8,7 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for connector food entry imports.
+/// Food entries imported from connected third-party health apps. Import a batch of food entries for the signed-in user.
 /// </summary>
 /// <remarks>
 /// Connector food entries are raw nutritional records imported from third-party health apps

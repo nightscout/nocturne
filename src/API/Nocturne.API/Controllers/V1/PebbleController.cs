@@ -17,11 +17,12 @@ using Nocturne.Core.Contracts.Entries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Pebble endpoint providing 1:1 compatibility with Nightscout's /pebble endpoint.
-/// Used by smartwatch apps, Loop, and other CGM monitoring applications.
-/// Based on the legacy pebble.js implementation.
+/// Nightscout Pebble: glucose, IOB, COB and uploader battery for smartwatch and CGM monitoring apps.
 /// </summary>
 /// <remarks>
+/// Provides 1:1 compatibility with Nightscout's /pebble endpoint. Used by smartwatch apps, Loop, and other CGM
+/// monitoring applications. Based on the legacy pebble.js implementation.
+///
 /// The action requires only <c>glucose.read</c> while the response also carries IOB and COB, from the
 /// AID system or treatments (<see cref="IIobCobReader"/>), and the uploader battery. This is
 /// the accepted narrowing described on <see cref="V2.PropertiesController"/>, which names the

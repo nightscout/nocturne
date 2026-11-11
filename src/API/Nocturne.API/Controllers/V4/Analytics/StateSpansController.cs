@@ -13,8 +13,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for managing time-ranged system states such as pump modes, connectivity periods,
-/// temporary targets, overrides, and user-annotated activity periods (exercise, illness, travel).
+/// Time-ranged states, such as pump modes, connectivity, temporary targets, overrides and activity
+/// periods (exercise, illness and travel). Callers can list, read, add, update, delete and restore them.
 /// </summary>
 /// <remarks>
 /// <see cref="StateSpan"/> records are created automatically by connector-based ingest pipelines
@@ -33,7 +33,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="StateSpan"/>
 /// <seealso cref="StateSpanCategory"/>
 [ApiController]
-[Tags("State Spans")]
+[Tags("Treatments")]
 [Route("api/v4/state-spans")]
 [Authorize]
 public class StateSpansController : ControllerBase

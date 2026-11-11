@@ -11,10 +11,13 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Cross-tenant directory endpoints for chat platform identity routing.
-/// Called server-to-server by the Discord bot from the apex host (no subdomain).
-/// Instance-key authenticated only.
+/// Routing lookups that connect chat platform accounts to tenants. Only the instance key can call
+/// these endpoints. A caller can resolve a chat account to its tenant, create a pending link,
+/// delete a link and acknowledge alert excursions for a chat account.
 /// </summary>
+/// <remarks>
+/// Called server-to-server by the Discord bot from the apex host (no subdomain).
+/// </remarks>
 /// <seealso cref="ChatIdentityDirectoryService"/>
 /// <seealso cref="ChatIdentityPendingLinkService"/>
 [ApiController]

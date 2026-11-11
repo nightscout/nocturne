@@ -22,11 +22,15 @@ using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Two-step setup endpoints for bootstrapping a fresh Nocturne install.
+/// The first-run setup of a new install. A caller creates the first tenant, checks whether a
+/// username can be used, and then creates the owner account for that tenant. These endpoints need
+/// no sign-in.
+/// </summary>
+/// <remarks>
 /// These operate without a resolved tenant and without authentication.
 /// Step 1: Create the first tenant (POST /api/v4/setup/tenant).
 /// Step 2: Create the owner account for that tenant (POST /api/v4/setup/owner/*).
-/// </summary>
+/// </remarks>
 [ApiController]
 [Tags("Identity")]
 [Route("api/v4/setup")]

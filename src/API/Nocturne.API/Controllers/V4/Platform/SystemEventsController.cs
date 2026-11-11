@@ -9,7 +9,7 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Controller for managing point-in-time system events (alarms, warnings, info).
+/// Point-in-time system events, such as alarms, warnings and info notices. List, read, create and delete events.
 /// </summary>
 /// <seealso cref="ISystemEventRepository"/>
 [ApiController]

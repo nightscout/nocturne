@@ -15,9 +15,11 @@ using Nocturne.Infrastructure.Data;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Treatments controller that provides 1:1 compatibility with Nightscout treatments endpoints.
-/// Implements the /api/v1/treatments/* endpoints from the legacy JavaScript implementation.
+/// Nightscout treatments: treatment records. A client can list, read, create, update and delete treatments.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/treatments/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="ITreatmentService"/>
 /// <seealso cref="IDocumentProcessingService"/>
 [ApiController]

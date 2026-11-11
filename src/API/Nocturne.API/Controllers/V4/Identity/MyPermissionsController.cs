@@ -7,11 +7,12 @@ using Nocturne.Core.Contracts.Multitenancy;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Returns the caller's effective permissions for the resolved tenant.
-/// Permissions are populated by MemberScopeMiddleware from the user's roles
-/// and direct permissions, intersected with their auth token scopes.
+/// The signed-in caller's effective permissions in the tenant the request resolves to. A caller can
+/// read the scopes and permissions its own access grants.
 /// </summary>
 /// <remarks>
+/// Permissions are populated by MemberScopeMiddleware from the user's roles
+/// and direct permissions, intersected with their auth token scopes.
 /// Gated by the default-deny fallback policy — a non-empty permission trie — rather than by
 /// <c>[Authorize]</c>. A public share link ({token}.share.{baseDomain}) is deliberately
 /// unauthenticated, yet AuthenticationMiddleware resolves its Public subject to

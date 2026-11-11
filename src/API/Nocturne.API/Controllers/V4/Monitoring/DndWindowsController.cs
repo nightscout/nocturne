@@ -14,12 +14,15 @@ using Nocturne.API.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Scoped Do Not Disturb windows (ADR 0004): a user mutes <c>lows</c> / <c>highs</c> / <c>all</c>
-/// non-critical alerts for a span of time. The alert still fires and is recorded — only delivery
-/// is suppressed (the orchestrator gate reads the resolved active scopes). A window's "active"
-/// state is computed on read, never stored; rows are retained after clear/expiry for audit.
+/// Do Not Disturb windows that mute <c>lows</c>, <c>highs</c> or <c>all</c> non-critical alerts for a span of time.
+/// Alerts still fire and are recorded. Only delivery is muted. Create windows, list the active ones, and clear them.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Scoped Do Not Disturb windows (ADR 0004). The orchestrator gate reads the resolved active scopes
+/// to suppress delivery. A window's "active" state is computed on read, never stored; rows are
+/// retained after clear/expiry for audit.
+/// </para>
 /// <para>
 /// One active window per scope <em>at any instant</em> is enforced here: creating a window
 /// reconciles the same-scope windows whose span overlaps it — an earlier one is truncated to end
@@ -37,6 +40,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </remarks>
 /// <seealso cref="AlertRulesController"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Do Not Disturb")]
 [Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/alerts/dnd/windows")]

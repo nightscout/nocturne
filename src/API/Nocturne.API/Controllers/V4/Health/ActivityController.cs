@@ -16,7 +16,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// Controller for activity data including exercise, heart rate, and step count records.
+/// Exercise, heart rate, step count and sleep activity records. Callers can list, read, add, update
+/// and delete them.
 /// </summary>
 /// <remarks>
 /// This endpoint merges several data categories: writes are routed by record content to the

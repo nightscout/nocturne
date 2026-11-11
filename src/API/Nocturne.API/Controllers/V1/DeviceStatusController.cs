@@ -15,9 +15,11 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Device Status controller that provides 1:1 compatibility with Nightscout device status endpoints.
-/// Implements the /api/v1/devicestatus/* endpoints from the legacy JavaScript implementation.
+/// Nightscout device status documents. A client can list, create and delete them.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/devicestatus/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IDeviceStatusService"/>
 [ApiController]
 [Tags("V1")]
