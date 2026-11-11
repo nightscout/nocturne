@@ -26,14 +26,25 @@ internal sealed record ReportSpec
     public const int MaxIdLength = 32;
     public const string IdPattern = "^[A-Za-z0-9_-]{1,32}$";
 
-    /// <summary>The largest spec, as UTF-8 JSON, a request may carry.</summary>
+    /// <summary>The largest spec, as UTF-8 JSON, a request may carry, its <see cref="Builder"/> apart.</summary>
     public const int MaxSpecBytes = 16 * 1024;
+
+    /// <summary>The largest <see cref="Builder"/>, as UTF-8 JSON; a spec with both at their limits is 48 kB.</summary>
+    public const int MaxBuilderBytes = 32 * 1024;
 
     internal const string TooLarge = "The report is too large. A report spec can be at most 16 kB.";
 
-    /// <summary>Whether <paramref name="spec"/>, as its JSON text, is within <see cref="MaxSpecBytes"/>.</summary>
-    public static bool WithinLimit(System.Text.Json.JsonElement spec) =>
-        System.Text.Encoding.UTF8.GetByteCount(spec.GetRawText()) <= MaxSpecBytes;
+    /// <summary>
+    /// Whether <paramref name="spec"/>, as its JSON text less its <c>builder</c>, is within <see cref="MaxSpecBytes"/>.
+    /// The builder has a limit of its own (<see cref="MaxBuilderBytes"/>), which the validator checks.
+    /// </summary>
+    public static bool WithinLimit(System.Text.Json.JsonElement spec)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(spec.GetRawText());
+        if (spec.ValueKind == System.Text.Json.JsonValueKind.Object && spec.TryGetProperty("builder", out var builder))
+            bytes -= System.Text.Encoding.UTF8.GetByteCount(builder.GetRawText());
+        return bytes <= MaxSpecBytes;
+    }
 
     /// <summary>The longest range any dataset covers; each dataset may allow less.</summary>
     public const int MaxRangeHours = V4ReadLimits.MaxAnalyticsSpanDays * 24;
@@ -53,6 +64,31 @@ internal sealed record ReportSpec
     [JsonRequired]
     [Length(1, MaxPanels)]
     public IReadOnlyList<ReportPanelSpec> Panels { get; init; } = [];
+
+    /// <summary>
+    /// The state of the tool that built the report, so it reopens as it was left. Stored and returned as sent; the
+    /// engine reads nothing in it, so it changes no read, result or image.
+    /// </summary>
+    [Description("The report builder's own state, returned as sent and read by nothing else. Optional.")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ReportBuilderState? Builder { get; init; }
+}
+
+/// <summary>A report builder's state: which builder, its format version, and its state as it wrote it.</summary>
+[Description("A report builder's state: 'kind' names the builder, 'version' its format, 'state' a JSON object it alone reads.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ReportBuilderState
+{
+    public const int MaxKindLength = 40;
+
+    [JsonRequired]
+    public string Kind { get; init; } = "";
+
+    [JsonRequired]
+    public int Version { get; init; }
+
+    [JsonRequired]
+    public JsonElement State { get; init; }
 }
 
 /// <summary>Either the last <see cref="Hours"/> hours, or <see cref="From"/> to <see cref="To"/>.</summary>

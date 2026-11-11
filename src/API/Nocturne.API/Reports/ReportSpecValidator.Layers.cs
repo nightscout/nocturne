@@ -6,7 +6,8 @@ namespace Nocturne.API.Reports;
 
 internal sealed partial class ReportSpecValidator
 {
-    private static readonly string[] SpecKeys = ["version", "title", "range", "panels"];
+    private static readonly string[] SpecKeys = ["version", "title", "range", "panels", "builder"];
+    private static readonly string[] BuilderKeys = ["kind", "version", "state"];
     private static readonly string[] ChartPanelKeys = ["id", "title", "kind", "range", "grid", "tracks"];
     private static readonly string[] DatasetPanelKeys = ["id", "title", "kind", "range", "dataset", "bindings"];
     private static readonly string[] TrackKeys = ["id", "title", "height", "layers"];
@@ -74,6 +75,7 @@ internal sealed partial class ReportSpecValidator
 
         var title = OptionalString(spec, "title", "title", ReportSpec.MaxTitleLength, Error);
         var reportRange = spec.TryGetProperty("range", out var r) ? ReadRange(r, "range", now, Error) : null;
+        var builder = spec.TryGetProperty("builder", out var b) && b.ValueKind != JsonValueKind.Null ? ReadBuilder(b, Error) : null;
 
         var panels = new List<ReportPanelSpec>();
         var reads = new Dictionary<string, IReportDataset>(StringComparer.Ordinal);
@@ -126,8 +128,42 @@ internal sealed partial class ReportSpecValidator
             return new ReportSpecValidation(null, errors);
 
         return new ReportSpecValidation(
-            new ReportSpec { Version = ReportSpec.CurrentVersion, Title = title, Range = reportRange, Panels = panels },
+            new ReportSpec { Version = ReportSpec.CurrentVersion, Title = title, Range = reportRange, Panels = panels, Builder = builder },
             errors) { Reads = reads.Count };
+    }
+
+    /// <summary>The builder's state, its shape checked and its <c>state</c> kept as sent; nothing in it is read.</summary>
+    private static ReportBuilderState? ReadBuilder(JsonElement builder, Action<string, string> error)
+    {
+        if (builder.ValueKind != JsonValueKind.Object)
+        {
+            error("builder", "Send 'builder' as an object with 'kind', 'version' and 'state'.");
+            return null;
+        }
+        var failed = false;
+        void Error(string path, string message)
+        {
+            failed = true;
+            error(path, message);
+        }
+        if (System.Text.Encoding.UTF8.GetByteCount(builder.GetRawText()) > ReportSpec.MaxBuilderBytes)
+        {
+            Error("builder", $"The builder state is too large. It can be at most {ReportSpec.MaxBuilderBytes / 1024} kB.");
+            return null;
+        }
+        UnknownKeys(builder, "builder", BuilderKeys, Error);
+        string? kind = null;
+        if (!builder.TryGetProperty("kind", out var k) || k.ValueKind != JsonValueKind.String
+            || k.GetString() is not { Length: > 0 and <= ReportBuilderState.MaxKindLength } named)
+            Error("builder.kind", $"Send the builder's name as text of 1 to {ReportBuilderState.MaxKindLength} characters.");
+        else
+            kind = named;
+        var version = 0;
+        if (!builder.TryGetProperty("version", out var v) || v.ValueKind != JsonValueKind.Number || !v.TryGetInt32(out version) || version < 1)
+            Error("builder.version", "Send the builder's format version as a whole number from 1.");
+        if (!builder.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.Object)
+            Error("builder.state", "Send the builder's state as a JSON object.");
+        return failed ? null : new ReportBuilderState { Kind = kind!, Version = version, State = state.Clone() };
     }
 
     private ReportPanelSpec? ReadPanel(

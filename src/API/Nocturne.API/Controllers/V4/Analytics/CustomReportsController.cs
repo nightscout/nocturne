@@ -37,8 +37,8 @@ public class CustomReportsController(
     ICustomReportRunner runner,
     ICustomReportCatalogue catalogue) : ControllerBase
 {
-    /// <summary>The largest request body: a spec at its limit, a name and the JSON around them.</summary>
-    private const long MaxBodyBytes = ReportSpec.MaxSpecBytes + 4 * 1024;
+    /// <summary>The largest request body: a spec and its builder state at their limits, a name and the JSON around them.</summary>
+    private const long MaxBodyBytes = ReportSpec.MaxSpecBytes + ReportSpec.MaxBuilderBytes + 4 * 1024;
 
     /// <summary>
     /// What a report may hold: every dataset with its parameters as JSON Schema, its fields, the

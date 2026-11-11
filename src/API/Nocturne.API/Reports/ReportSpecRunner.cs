@@ -100,7 +100,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
         return new ReportResult
         {
-            Spec = spec,
+            Spec = spec with { Builder = null },
             Units = context.UseMmol ? "mmol" : "mg/dl",
             GlucoseColorMode = ReportResult.DefaultGlucoseColorMode,
             Panels = panels,

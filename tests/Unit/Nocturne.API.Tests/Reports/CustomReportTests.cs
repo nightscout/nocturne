@@ -249,4 +249,20 @@ public class CustomReportTests
         (await store.DeleteAsync(saved.Id, owner, default)).Should().Be(CustomReportWriteStatus.Saved);
         (await store.DeleteAsync(saved.Id, owner, default)).Should().Be(CustomReportWriteStatus.NotFound);
     }
+
+    [Fact]
+    public async Task A_saved_spec_keeps_its_builder_state_through_save_and_load()
+    {
+        var repository = new FakeRepository();
+        var store = Store(repository);
+        var spec = JsonDocument.Parse(ReportBuilderStateTests.Spec(ReportBuilderStateTests.State)).RootElement;
+
+        var saved = await store.CreateAsync("Kept", spec, Member, default);
+        var loaded = await store.GetAsync(saved.Report!.Id, Member, default);
+
+        saved.Status.Should().Be(CustomReportWriteStatus.Saved);
+        JsonNode.DeepEquals(JsonNode.Parse(repository.Rows.Single().SpecJson)!["builder"], JsonNode.Parse(ReportBuilderStateTests.State)).Should().BeTrue();
+        loaded!.Errors.Should().BeEmpty();
+        JsonNode.DeepEquals(JsonNode.Parse(loaded.Spec.GetProperty("builder").GetRawText()), JsonNode.Parse(ReportBuilderStateTests.State)).Should().BeTrue();
+    }
 }

@@ -286,6 +286,43 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task A_spec_keeps_the_builders_state_through_save_load_update_and_run_and_the_run_ignores_it()
+    {
+        using var a = Session(_slugA, _sessionA);
+        var state = System.Text.Json.Nodes.JsonNode.Parse(
+            "{\"zeta\":[3,1],\"alpha\":{\"b\":2,\"a\":1},\"pad\":\"" + new string('x', 20 * 1024) + "\"}")!;
+        var builder = new { kind = "workspace", version = 1, state };
+        var spec = new { version = 1, title = "Restored", panels = ((dynamic)Spec()).panels, builder };
+
+        var saved = await ReadAsync(await a.PostAsJsonAsync(Route, new { name = "Builder state", spec }), HttpStatusCode.OK);
+        var id = saved.GetProperty("id").GetString();
+        var loaded = await ReadAsync(await a.GetAsync($"{Route}/{id}"), HttpStatusCode.OK);
+        var run = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = loaded.GetProperty("spec") }), HttpStatusCode.OK);
+        var plain = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec("Restored") }), HttpStatusCode.OK);
+
+        bool Same(JsonElement element) =>
+            System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(element.GetRawText()), state);
+        Same(saved.GetProperty("spec").GetProperty("builder").GetProperty("state")).Should().BeTrue();
+        Same(loaded.GetProperty("spec").GetProperty("builder").GetProperty("state")).Should().BeTrue("it comes back as sent, its members in any order");
+        loaded.GetProperty("spec").GetProperty("builder").GetProperty("kind").GetString().Should().Be("workspace");
+        run.GetProperty("errors").GetArrayLength().Should().Be(0);
+        Same(run.GetProperty("spec").GetProperty("builder").GetProperty("state")).Should().BeTrue();
+        run.GetProperty("result").GetProperty("spec").TryGetProperty("builder", out _).Should().BeFalse("the result reads nothing of it");
+        static IEnumerable<string> Drawn(JsonElement response) => response.GetProperty("result").GetProperty("panels").EnumerateArray()
+            .SelectMany(p => p.GetProperty("tracks").EnumerateArray().SelectMany(t => t.GetProperty("layers").EnumerateArray()))
+            .Select(l => $"{l.GetProperty("status").GetString()}|{l.GetProperty("rows").GetArrayLength()}|{l.GetProperty("summary").GetString()}");
+        Drawn(run).Should().Equal(Drawn(plain), "the run reads and draws the same with builder state as without");
+
+        var cleared = await ReadAsync(await a.PutAsJsonAsync($"{Route}/{id}", new { spec = Spec("Restored") }), HttpStatusCode.OK);
+        cleared.GetProperty("spec").TryGetProperty("builder", out _).Should().BeFalse("a spec saved without builder state has none");
+
+        var refused = await a.PostAsJsonAsync(Route, new { name = "Too much", spec = new { version = 1, panels = ((dynamic)Spec()).panels,
+            builder = new { kind = "workspace", version = 1, state = new { pad = new string('x', 33 * 1024) } } } });
+        refused.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await refused.Content.ReadAsStringAsync()).Should().Contain("The builder state is too large. It can be at most 32 kB.");
+    }
+
+    [Fact]
     public async Task A_run_writes_a_title_as_data_and_an_oversized_spec_is_refused()
     {
         await PostGlucoseAsync(_slugA, _sessionA, 140, TimeSpan.FromMinutes(5));
