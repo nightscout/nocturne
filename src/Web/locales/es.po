@@ -14747,9 +14747,8 @@ msgstr "Técnico"
 msgid "What technology stack does Nocturne use?"
 msgstr "¿Qué tecnologías utiliza Nocturne?"
 
-#: ../portal/src/routes/faq/+page.svelte
-msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
-msgstr "Nocturne utiliza .NET 10 para la API del backend, PostgreSQL para el almacenamiento de datos y SvelteKit 2 con Svelte 5 para el frontend. Utiliza .NET Aspire para la orquestación y observabilidad de servicios."
+#~ msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+#~ msgstr "Nocturne utiliza .NET 10 para la API del backend, PostgreSQL para el almacenamiento de datos y SvelteKit 2 con Svelte 5 para el frontend. Utiliza .NET Aspire para la orquestación y observabilidad de servicios."
 
 #: ../portal/src/routes/faq/+page.svelte
 msgid "How do data connectors work?"
@@ -19325,13 +19324,11 @@ msgstr "Explora la demostración y después ejecuta tu propia copia con Docker C
 msgid "Interactive Nocturne API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne."
 msgstr "Documentación interactiva de la API de Nocturne mediante Scalar. Explora endpoints, prueba solicitudes e integra Nocturne."
 
-#: ../portal/src/routes/scalar/+page.svelte
-msgid "Want to send real requests? Open this reference on the demo instance; it comes already signed in, and the demo resets on a schedule."
-msgstr "¿Quieres enviar solicitudes reales? Abre esta referencia en la instancia de demostración; ya viene con la sesión iniciada y la demostración se restablece periódicamente."
+#~ msgid "Want to send real requests? Open this reference on the demo instance; it comes already signed in, and the demo resets on a schedule."
+#~ msgstr "¿Quieres enviar solicitudes reales? Abre esta referencia en la instancia de demostración; ya viene con la sesión iniciada y la demostración se restablece periódicamente."
 
-#: ../portal/src/routes/scalar/+page.svelte
-msgid "Try it on the demo <0/>"
-msgstr "Pruébalo en la demostración <0/>"
+#~ msgid "Try it on the demo <0/>"
+#~ msgstr "Pruébalo en la demostración <0/>"
 
 #~ msgid "Error Loading Test Report"
 #~ msgstr "Error al cargar el informe de prueba"
@@ -38529,4 +38526,24 @@ msgstr ""
 
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 msgid "The callback URL ends in /api/v4/google-health/oauth/callback."
+msgstr ""
+
+#: ../portal/src/routes/faq/+page.svelte
+msgid "Nocturne is built on .NET 11 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Requests go to the demo instance. It has sample data and resets on a schedule."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "To send requests, open this reference on the demo instance. The demo has sample data and resets on a schedule."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Open the demo"
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Open the reference on the demo"
 msgstr ""

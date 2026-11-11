@@ -14747,9 +14747,8 @@ msgstr "Technické"
 msgid "What technology stack does Nocturne use?"
 msgstr "Jaké technologie Nocturne používá?"
 
-#: ../portal/src/routes/faq/+page.svelte
-msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
-msgstr "Backendové API Nocturne je postavené na .NET 10, data jsou ukládána v PostgreSQL a frontend využívá SvelteKit 2 se Svelte 5. Pro orchestraci služeb a observabilitu se používá .NET Aspire."
+#~ msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+#~ msgstr "Backendové API Nocturne je postavené na .NET 10, data jsou ukládána v PostgreSQL a frontend využívá SvelteKit 2 se Svelte 5. Pro orchestraci služeb a observabilitu se používá .NET Aspire."
 
 #: ../portal/src/routes/faq/+page.svelte
 msgid "How do data connectors work?"
@@ -19325,13 +19324,11 @@ msgstr "Vyzkoušejte demo a poté spusťte vlastní instanci pomocí Docker Comp
 msgid "Interactive Nocturne API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne."
 msgstr "Interaktivní dokumentace Nocturne API využívající Scalar. Procházejte endpointy, testujte požadavky a integrujte Nocturne."
 
-#: ../portal/src/routes/scalar/+page.svelte
-msgid "Want to send real requests? Open this reference on the demo instance; it comes already signed in, and the demo resets on a schedule."
-msgstr "Chcete posílat skutečné požadavky? Otevřete tuto dokumentaci v demo instanci – je již přihlášená a pravidelně se obnovuje."
+#~ msgid "Want to send real requests? Open this reference on the demo instance; it comes already signed in, and the demo resets on a schedule."
+#~ msgstr "Chcete posílat skutečné požadavky? Otevřete tuto dokumentaci v demo instanci – je již přihlášená a pravidelně se obnovuje."
 
-#: ../portal/src/routes/scalar/+page.svelte
-msgid "Try it on the demo <0/>"
-msgstr "Vyzkoušet v demu <0/>"
+#~ msgid "Try it on the demo <0/>"
+#~ msgstr "Vyzkoušet v demu <0/>"
 
 #~ msgid "Error Loading Test Report"
 #~ msgstr "Chyba při načítání testovacího reportu"
@@ -38529,4 +38526,24 @@ msgstr ""
 
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 msgid "The callback URL ends in /api/v4/google-health/oauth/callback."
+msgstr ""
+
+#: ../portal/src/routes/faq/+page.svelte
+msgid "Nocturne is built on .NET 11 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Requests go to the demo instance. It has sample data and resets on a schedule."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "To send requests, open this reference on the demo instance. The demo has sample data and resets on a schedule."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Open the demo"
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Open the reference on the demo"
 msgstr ""
