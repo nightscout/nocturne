@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDemoTokenSource, DEMO_TOKEN_PLACEHOLDER } from "./demo-token.js";
+import { createDemoTokenSource, DEMO_TOKEN_PLACEHOLDER, isAbort } from "./demo-token.js";
 
 const DEMO = "https://demo.example";
 
@@ -128,6 +128,7 @@ describe("createDemoTokenSource", () => {
             }),
         );
 
-        await expect(source.reachable()).rejects.toThrow("aborted");
+        const error = await source.reachable().catch((e: unknown) => e);
+        expect(isAbort(error)).toBe(true);
     });
 });

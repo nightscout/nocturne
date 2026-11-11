@@ -12,7 +12,7 @@
     import { onMount } from "svelte";
     import ExternalLink from "@lucide/svelte/icons/external-link";
     import { SCALAR_API_URL } from "#lib/config.js";
-    import { DEMO_TOKEN_PLACEHOLDER, type ScalarSecurityEntry } from "#lib/scalar/demo-token.js";
+    import { DEMO_TOKEN_PLACEHOLDER, isAbort, type ScalarSecurityEntry } from "#lib/scalar/demo-token.js";
 
     // Pinned standalone build. Scalar is a Vue app, so it's loaded at runtime in
     // the browser rather than bundled, which keeps it out of the Svelte SSR/prerender
@@ -116,7 +116,7 @@
                 instance = scalar.createApiReference(container, scalarConfig(sendsToDemo));
             })
             .catch((error: unknown) => {
-                if (!(error instanceof DOMException && error.name === "AbortError")) throw error;
+                if (!isAbort(error)) throw error;
             });
 
         return () => {

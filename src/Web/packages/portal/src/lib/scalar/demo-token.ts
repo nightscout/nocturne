@@ -9,6 +9,11 @@ type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
  */
 export const DEMO_TOKEN_PLACEHOLDER = "demo-token";
 
+/** Whether a rejection is a fetch aborted through its signal. */
+export function isAbort(error: unknown): boolean {
+    return error instanceof DOMException && error.name === "AbortError";
+}
+
 /** Renew this long before expiry, so a request never leaves with a token about to lapse. */
 const RENEW_MARGIN_MS = 60_000;
 
