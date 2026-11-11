@@ -127,6 +127,16 @@ export class Vocabulary {
     return this.ws.anchors.find((a) => a.id === id);
   }
 
+  /** Whether the loop's extra insulin can corroborate events of the kind, so `requireCorroboration` applies. */
+  corroborates(id: AnchorId): boolean {
+    return this.anchor(id)?.corroboration ?? false;
+  }
+
+  /** The most units a track's value axes take: the engine's limit. */
+  get maxUnitsPerTrack(): number {
+    return this.catalogue.maxUnitsPerTrack;
+  }
+
   /** Whether events of the kind can be narrowed by meal size and food. */
   mealNarrowing(id: AnchorId): boolean {
     return this.anchor(id)?.mealNarrowing ?? false;

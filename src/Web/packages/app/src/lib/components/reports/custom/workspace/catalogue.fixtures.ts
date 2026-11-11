@@ -28,6 +28,7 @@ export const CATALOGUE_MEMBERS = {
   maxRangeHours: true,
   maxNameLength: true,
   maxGridMinutes: true,
+  maxUnitsPerTrack: true,
   panelKinds: true,
   marks: true,
   ops: true,

@@ -2,6 +2,7 @@
  "maxPanels": 6,
  "maxTracks": 4,
  "maxLayers": 8,
+ "maxUnitsPerTrack": 2,
  "maxReads": 16,
  "maxTitleLength": 200,
  "maxRangeHours": 2160,
@@ -4839,7 +4840,7 @@
     "id": "timeInRange",
     "family": "Glucose",
     "lane": null,
-    "color": "glucose-tight-range",
+    "color": "glucose-in-range",
     "permitted": true
    },
    {
@@ -4874,21 +4875,21 @@
     "id": "iob",
     "family": "Insulin",
     "lane": null,
-    "color": "insulin",
+    "color": "insulin-bolus",
     "permitted": true
    },
    {
     "id": "basal",
     "family": "Insulin",
     "lane": null,
-    "color": "basal",
+    "color": "insulin-basal",
     "permitted": true
    },
    {
     "id": "basalScheduled",
     "family": "Insulin",
     "lane": null,
-    "color": "insulin-scheduled-basal",
+    "color": "insulin-temp-basal",
     "permitted": true
    },
    {
@@ -4909,14 +4910,14 @@
     "id": "netLoop",
     "family": "Insulin",
     "lane": null,
-    "color": "insulin-additional-basal",
+    "color": "insulin-basal",
     "permitted": true
    },
    {
     "id": "totalInsulin",
     "family": "Insulin",
     "lane": null,
-    "color": "insulin",
+    "color": "insulin-bolus",
     "permitted": true
    },
    {
@@ -4930,14 +4931,14 @@
     "id": "totalBasal",
     "family": "Insulin",
     "lane": null,
-    "color": "basal",
+    "color": "insulin-basal",
     "permitted": true
    },
    {
     "id": "cob",
     "family": "Food",
     "lane": null,
-    "color": "carbs-on-board",
+    "color": "carbs",
     "permitted": true
    },
    {
@@ -4951,7 +4952,7 @@
     "id": "reservoir",
     "family": "Devices",
     "lane": null,
-    "color": "insulin-basal",
+    "color": "insulin-bolus",
     "permitted": true
    },
    {
@@ -4972,14 +4973,14 @@
     "id": "settingBasal",
     "family": "Settings",
     "lane": null,
-    "color": "basal",
+    "color": "insulin-basal",
     "permitted": true
    },
    {
     "id": "settingIsf",
     "family": "Settings",
     "lane": null,
-    "color": "insulin",
+    "color": "insulin-bolus",
     "permitted": true
    },
    {
@@ -5007,7 +5008,7 @@
     "id": "sleep",
     "family": "Body",
     "lane": "Context",
-    "color": "pump-mode-sleep",
+    "color": "activity-sleep",
     "permitted": true
    },
    {
@@ -8295,6 +8296,7 @@
     "id": "Meal",
     "group": "food",
     "mealNarrowing": true,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "treatments.read"
@@ -8305,6 +8307,7 @@
     "id": "CorrectionBolus",
     "group": "food",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "treatments.read"
@@ -8315,6 +8318,7 @@
     "id": "AnyBolus",
     "group": "food",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "treatments.read"
@@ -8325,6 +8329,7 @@
     "id": "UnannouncedRise",
     "group": "food",
     "mealNarrowing": false,
+    "corroboration": true,
     "scopes": [
      "glucose.read",
      "treatments.read"
@@ -8335,6 +8340,7 @@
     "id": "LowStart",
     "group": "glucose",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read"
     ],
@@ -8344,6 +8350,7 @@
     "id": "HighStart",
     "group": "glucose",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read"
     ],
@@ -8353,6 +8360,7 @@
     "id": "LowTreatment",
     "group": "glucose",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "treatments.read"
@@ -8363,6 +8371,7 @@
     "id": "ExerciseStart",
     "group": "activity",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "treatments.read"
@@ -8373,6 +8382,7 @@
     "id": "SleepStart",
     "group": "activity",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "sleep.read"
@@ -8383,6 +8393,7 @@
     "id": "Wake",
     "group": "activity",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "sleep.read"
@@ -8393,6 +8404,7 @@
     "id": "SensorStart",
     "group": "devices",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "devices.read"
@@ -8403,6 +8415,7 @@
     "id": "SiteChange",
     "group": "devices",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "devices.read"
@@ -8413,6 +8426,7 @@
     "id": "OverrideStart",
     "group": "devices",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "treatments.read"
@@ -8423,6 +8437,7 @@
     "id": "TemporaryTargetStart",
     "group": "devices",
     "mealNarrowing": false,
+    "corroboration": false,
     "scopes": [
      "glucose.read",
      "treatments.read"
@@ -8516,23 +8531,43 @@
   "leaveOuts": [
    {
     "id": "overrides",
-    "parameter": "excludeOverrides"
+    "parameter": "excludeOverrides",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
    },
    {
     "id": "temporaryTargets",
-    "parameter": "excludeTemporaryTargets"
+    "parameter": "excludeTemporaryTargets",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
    },
    {
     "id": "exercise",
-    "parameter": "excludeExercise"
+    "parameter": "excludeExercise",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
    },
    {
     "id": "illness",
-    "parameter": "excludeIllness"
+    "parameter": "excludeIllness",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
    },
    {
     "id": "openLoop",
-    "parameter": "excludeOpenLoop"
+    "parameter": "excludeOpenLoop",
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true
    }
   ],
   "rangePresets": [

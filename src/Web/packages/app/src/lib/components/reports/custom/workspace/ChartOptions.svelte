@@ -230,8 +230,14 @@
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="start">
               {#each notLeft as l (l.id)}
-                <DropdownMenu.Item onSelect={() => ws.setLeaveOut(l.id, true)}>
-                  {leaveOutLabel(l.id)}
+                {@const why = ws.leaveOutReason(l.id)}
+                <DropdownMenu.Item disabled={why !== null} onSelect={() => ws.setLeaveOut(l.id, true)} data-leave-out={l.id}>
+                  <span class="flex flex-col">
+                    {leaveOutLabel(l.id)}
+                    {#if why}
+                      <span class="text-xs text-muted-foreground">{why}</span>
+                    {/if}
+                  </span>
                 </DropdownMenu.Item>
               {/each}
               {#if !ws.profileName}

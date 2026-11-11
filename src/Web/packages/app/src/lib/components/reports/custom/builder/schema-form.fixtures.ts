@@ -107,6 +107,7 @@ export const catalogue: CustomReportCatalogue = {
   maxRangeHours: 2160,
   maxNameLength: 120,
   maxGridMinutes: 1440,
+  maxUnitsPerTrack: 2,
   panelKinds: [
     { name: "chart", label: "Chart" },
     { name: "stat_tiles", label: "Statistics tiles" },

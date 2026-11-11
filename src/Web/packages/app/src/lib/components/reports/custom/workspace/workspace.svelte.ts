@@ -5,7 +5,6 @@ import {
   convertToDisplayUnits,
   type GlucoseUnits,
 } from "@nocturne/ui/glucose";
-import { EventAnchorKind } from "#lib/api/index.js";
 import {
   CURVE,
   Vocabulary,
@@ -264,9 +263,11 @@ export interface WorkspaceHost {
   budget(built: Built): Reason;
 }
 
+/**
+ * The most groups of days a typical day compares. More bands over one day cannot be told apart; a
+ * rule of reading the web keeps, not a limit of the engine.
+ */
 export const MAX_DAY_GROUPS = 3;
-/** The second axis of a track: a track has at most two units. */
-const UNITS_PER_TRACK = 2;
 const OVERFLOW_HEIGHT = 0.75;
 
 const NO_RELATE: Relate = {
@@ -430,7 +431,7 @@ function laneTracks(state: WorkspaceState, vocab: Vocabulary, lane: Lane): Signa
       (t) =>
         unit === null ||
         t.units.includes(unit) ||
-        t.units.length < UNITS_PER_TRACK
+        t.units.length < vocab.maxUnitsPerTrack
     );
     if (!track) {
       track = { units: [], signals: [] };
@@ -565,7 +566,7 @@ export function eventParameters(
   vocab: Vocabulary,
   defaults: Record<LeaveOutId, boolean>
 ): Record<string, unknown> {
-  const rise = state.moments.some((m) => !m.everythingElse && corroborates(m.what));
+  const rise = state.moments.some((m) => !m.everythingElse && vocab.corroborates(m.what));
   return {
     cohorts: eventCohorts(state.moments, vocab).cohorts,
     minutesBefore: state.event.before,
@@ -581,14 +582,6 @@ export function eventParameters(
   };
 }
 
-/**
- * Whether the loop's extra insulin can corroborate events of the kind: rises with no carbs. The
- * catalogue does not say which kinds take `requireCorroboration`, so this is the one kind of event
- * the model still names.
- */
-export function corroborates(what: AnchorId): boolean {
-  return what === EventAnchorKind.UnannouncedRise;
-}
 
 export interface BuildContext {
   vocab: Vocabulary;
@@ -1563,7 +1556,7 @@ export class Workspace {
   /** Whether a group of events is rises with no carbs. */
   get hasRises(): boolean {
     return this.state.moments.some(
-      (m) => !m.everythingElse && corroborates(m.what)
+      (m) => !m.everythingElse && this.#vocab.corroborates(m.what)
     );
   }
 
@@ -2230,7 +2223,15 @@ export class Workspace {
     });
   }
 
+  /** Why time of this kind cannot be left out now, or null: the reader's access lacks what it reads. */
+  leaveOutReason(id: LeaveOutId): Reason {
+    const l = this.#vocab.leaveOuts.find((x) => x.id === id);
+    return !l || l.permitted ? null : accessReason(l.scopes);
+  }
+
   setLeaveOut(id: LeaveOutId, on: boolean): Reason {
+    const reason = on ? this.leaveOutReason(id) : null;
+    if (reason) return reason;
     return this.#commit((d) => {
       d.leaveOut[id] = on;
     });

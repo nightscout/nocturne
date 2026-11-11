@@ -111,6 +111,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
             { href: "/docs/reports/steps", label: "Step count" },
             { href: "/docs/reports/heart-rate", label: "Heart rate" },
             { href: "/docs/reports/sleep", label: "Sleep & overnight" },
+            { href: "/docs/reports/custom", label: "Custom reports" },
         ],
     },
     {
