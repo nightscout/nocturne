@@ -72,7 +72,7 @@ jobs:
         if: steps.merge.outputs.changed == 'true'
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "10.0.x"
+          global-json-file: global.json
 
       - name: Compile the merge
         if: steps.merge.outputs.changed == 'true'
