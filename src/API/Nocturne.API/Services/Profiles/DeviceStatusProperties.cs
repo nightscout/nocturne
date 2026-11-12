@@ -28,6 +28,9 @@ internal static class DeviceStatusProperties
 
     public sealed record Result(JsonObject Pump, JsonObject Loop, JsonObject OpenAps);
 
+    /// <param name="statuses">The device statuses to read; those older than the recent window are left out.</param>
+    /// <param name="now">The time the properties are built for, in Unix milliseconds.</param>
+    /// <param name="prefs">The pump preferences; its urgent clock threshold can widen the recent window.</param>
     /// <param name="offline">Whether an <c>OpenAPS Offline</c> treatment covers <paramref name="now"/>.</param>
     public static Result Build(IEnumerable<DeviceStatus> statuses, long now, PumpPreferences prefs, bool offline)
     {
@@ -473,7 +476,7 @@ internal static class DeviceStatusProperties
             return "0.00";
 
         var exponent = (int)Math.Floor(Math.Log10(Math.Abs(value)));
-        if (exponent is >= -6 and < 3 && Math.Abs(Math.Round(value, 2 - exponent, MidpointRounding.AwayFromZero)) >= Math.Pow(10, exponent + 1))
+        if (exponent is >= -6 and < 3 && Math.Abs(ScaledRounding.Round(value, 2 - exponent, MidpointRounding.AwayFromZero)) >= Math.Pow(10, exponent + 1))
             exponent++;
         if (exponent is < -6 or >= 3)
             return $"{ToFixed(value / Math.Pow(10, exponent), 2)}e{(exponent < 0 ? "-" : "+")}{Math.Abs(exponent)}";
@@ -490,7 +493,7 @@ internal static class DeviceStatusProperties
     /// </summary>
     private static double RoundLikeJs(double value, int digits) =>
         Math.IEEERemainder(value * Math.Pow(2, digits + 1), 2) is 1 or -1
-            ? Math.Round(value, digits, MidpointRounding.AwayFromZero)
+            ? ScaledRounding.Round(value, digits, MidpointRounding.AwayFromZero)
             : value;
 
     private static IEnumerable<JsonObject> Recent(List<JsonObject> documents, string key, long now, long window) =>

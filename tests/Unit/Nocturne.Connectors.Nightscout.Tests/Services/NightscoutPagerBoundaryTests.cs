@@ -281,7 +281,7 @@ public class NightscoutPagerBoundaryTests
             Logger.Verify(l => l.Log(
                     LogLevel.Warning,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((state, _) => naming.All(n => state.ToString()!.Contains(n))),
+                    It.Is<It.IsAnyType>((state, _) => naming.All(n => state!.ToString()!.Contains(n))),
                     It.IsAny<Exception?>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 times);

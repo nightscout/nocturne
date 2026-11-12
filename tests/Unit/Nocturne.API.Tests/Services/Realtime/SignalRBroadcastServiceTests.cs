@@ -195,7 +195,7 @@ public class SignalRBroadcastServiceTests
         _mockHaProxy.Verify(
             x => x.SendCoreAsync(
                 "glucose_reading",
-                It.Is<object[]>(args => args.Length == 1 && args[0] == reading),
+                It.Is<object[]>(args => args.Length == 1 && ReferenceEquals(args[0], reading)),
                 default),
             Times.Once);
     }
@@ -454,7 +454,7 @@ public class SignalRBroadcastServiceTests
                     LogLevel.Error,
                     It.IsAny<EventId>(),
                     It.Is<It.IsAnyType>(
-                        (v, t) => v.ToString()!.Contains("Error broadcasting storage create event")
+                        (v, t) => v!.ToString()!.Contains("Error broadcasting storage create event")
                     ),
                     It.IsAny<Exception?>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()

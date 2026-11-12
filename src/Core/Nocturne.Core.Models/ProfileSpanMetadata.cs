@@ -171,7 +171,7 @@ public sealed record ProfileSpanMetadata
     }
 
     public static double ToHours(double timeshift, ProfileTimeshiftUnit unit) =>
-        unit == ProfileTimeshiftUnit.Milliseconds ? Math.Round(timeshift / MillisPerHour, 4) : timeshift;
+        unit == ProfileTimeshiftUnit.Milliseconds ? ScaledRounding.Round(timeshift / MillisPerHour, 4) : timeshift;
 
     public static string UnitName(ProfileTimeshiftUnit unit) =>
         unit == ProfileTimeshiftUnit.Milliseconds ? "ms" : "h";

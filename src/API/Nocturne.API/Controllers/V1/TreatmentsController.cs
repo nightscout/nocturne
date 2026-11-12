@@ -249,7 +249,7 @@ public class TreatmentsController : ControllerBase
 
     /// <summary>
     /// Save the treatment identified by the <c>identifier</c> or <c>_id</c> in the body, inserting it
-    /// when that id is not already stored
+    /// when that id is not already stored. A treatment the user deleted is not restored: the response is 200 with an empty array.
     /// </summary>
     /// <remarks>
     /// Nightscout's save takes one document and matches on <c>identifier</c> before <c>_id</c>; see

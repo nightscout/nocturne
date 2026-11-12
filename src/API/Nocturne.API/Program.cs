@@ -25,6 +25,7 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
 using Nocturne.Connectors.Core.Interfaces;
@@ -197,6 +198,7 @@ builder.Services.AddOpenApi("nocturne", options =>
     options.ShouldInclude = ApiDocumentMembership.InNocturneDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
+    options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
     options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
@@ -208,6 +210,7 @@ builder.Services.AddOpenApi("nightscout", options =>
     options.ShouldInclude = ApiDocumentMembership.InNightscoutDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
+    options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
     options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
@@ -299,8 +302,12 @@ builder.Services.AddCors(options =>
 
     options.AddPolicy(LegacyApiCorsPolicy.Name, LegacyApiCorsPolicy.Configure);
 });
+builder.Services.AddOptions<CorsOptions>().Configure<IConfiguration>((options, configuration) =>
+    options.AddPolicy(DocsSiteCorsPolicy.Name, policy =>
+        DocsSiteCorsPolicy.Configure(policy, DocsSiteCorsPolicy.Origins(configuration))));
 
 var app = builder.Build();
+var docsSiteOrigins = DocsSiteCorsPolicy.Origins(app.Configuration);
 
 var loopApnsKeyId = app.Services.GetRequiredService<IOptions<LoopConfiguration>>().Value.ApnsKeyId;
 app.Logger.LogInformation(
@@ -350,16 +357,22 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 // Documentation paths get the any-origin policy, foreign origins on the legacy API get
 // LegacyApiCorsPolicy when the instance enables cors, everything else the credentialed default.
+// A listed documentation site is decided after tenant resolution instead; see DocsSiteCorsPolicy.
 // The branches are complementary so exactly one CORS middleware ever runs per request:
 // chaining two would emit conflicting Access-Control-Allow-Origin headers. All sit ahead of
 // UseStaticFiles so the Scalar assets under wwwroot/scalar are covered, and ahead of
 // UseRouting so preflights short-circuit.
+bool FromDocsSite(HttpContext context) =>
+    !PublicDocsMiddleware.IsPublicDocsPath(context)
+    && DocsSiteCorsPolicy.IsListedOrigin(context, docsSiteOrigins, corsBaseDomain, corsAllowLocalhost);
 bool UsesLegacyApiCors(HttpContext context) =>
     LegacyApiCorsPolicy.Applies(context, app.Configuration, corsBaseDomain, corsAllowLocalhost);
 app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
-app.UseWhen(UsesLegacyApiCors, branch => branch.UseCors(LegacyApiCorsPolicy.Name));
 app.UseWhen(
-    context => !PublicDocsMiddleware.IsPublicDocsPath(context) && !UsesLegacyApiCors(context),
+    context => !FromDocsSite(context) && !PublicDocsMiddleware.IsPublicDocsPath(context) && UsesLegacyApiCors(context),
+    branch => branch.UseCors(LegacyApiCorsPolicy.Name));
+app.UseWhen(
+    context => !FromDocsSite(context) && !PublicDocsMiddleware.IsPublicDocsPath(context) && !UsesLegacyApiCors(context),
     branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseNocturneForwardedHeaders(builder.Configuration);
@@ -387,6 +400,15 @@ app.UseRateLimiter();
 app.UseMiddleware<PublicDocsMiddleware>();
 app.UseMiddleware<ApexCallbackRelayMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseWhen(
+    context => FromDocsSite(context) && DocsSiteCorsPolicy.AdmitsTenant(context),
+    branch => branch.UseCors(DocsSiteCorsPolicy.Name));
+app.UseWhen(
+    context => FromDocsSite(context) && !DocsSiteCorsPolicy.AdmitsTenant(context) && UsesLegacyApiCors(context),
+    branch => branch.UseCors(LegacyApiCorsPolicy.Name));
+app.UseWhen(
+    context => FromDocsSite(context) && !DocsSiteCorsPolicy.AdmitsTenant(context) && !UsesLegacyApiCors(context),
+    branch => branch.UseCors());
 app.UseMiddleware<TenantSetupMiddleware>();
 app.UseMiddleware<AuthenticationMiddleware>();
 app.UseMiddleware<MemberScopeMiddleware>();
@@ -449,11 +471,18 @@ app.MapScalarApiReference((options, httpContext) =>
     // tenant (a bare instance, or a share host), in which case the reference still
     // renders and only "Send request" is unusable.
     var scalarAuth = httpContext.Items[ScalarAuthContext.HttpContextItemKey] as ScalarAuthContext;
+    var demoToken = scalarAuth?.BearerToken is { Length: > 0 } token ? token : null;
 
-    // Pre-configure authentication so Scalar's "Authorize" UI works out of the box.
+    // Scalar selects every listed scheme that a document defines, all at once, and an
+    // unauthorized oauth2 then sends an empty "Authorization: Bearer" over any bearer token.
+    // So the list names exactly one scheme per document: apiSecret is the Nightscout
+    // document's, the other the Nocturne document's. AddPreferredSecuritySchemes appends to
+    // the list rather than replacing it.
     options
-        .AddPreferredSecuritySchemes("oauth2", "bearer", "apiSecret")
-        .AddAuthorizationCodeFlow("oauth2", flow =>
+        .AddPreferredSecuritySchemes(
+            demoToken is null ? SecuritySchemeDefinitions.OAuth2 : SecuritySchemeDefinitions.Bearer,
+            SecuritySchemeDefinitions.ApiSecret)
+        .AddAuthorizationCodeFlow(SecuritySchemeDefinitions.OAuth2, flow =>
         {
             // The client is registered per tenant against this exact redirect URI;
             // authorize-time matching is byte-exact. Left unset when no tenant resolved,
@@ -472,19 +501,15 @@ app.MapScalarApiReference((options, httpContext) =>
             flow.Pkce = Pkce.Sha256;
             flow.SelectedScopes = [Scope.FullAccess];
         })
-        .AddApiKeyAuthentication("apiSecret", apiKey =>
+        .AddApiKeyAuthentication(SecuritySchemeDefinitions.ApiSecret, apiKey =>
         {
             apiKey.Value = string.Empty;
         });
 
     // On a demo tenant, hand Scalar a token for the shared demo member so requests work
     // with no sign-in step. Never populated for a real tenant.
-    if (scalarAuth?.BearerToken is { Length: > 0 } demoToken)
-    {
-        options
-            .AddPreferredSecuritySchemes("bearer", "oauth2", "apiSecret")
-            .AddHttpAuthentication("bearer", bearer => bearer.Token = demoToken);
-    }
+    if (demoToken is not null)
+        options.AddHttpAuthentication(SecuritySchemeDefinitions.Bearer, bearer => bearer.Token = demoToken);
 }).RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
 // Add root endpoint to serve a basic info page. The payload includes the tenant's latest

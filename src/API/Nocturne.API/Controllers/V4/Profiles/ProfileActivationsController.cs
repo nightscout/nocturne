@@ -53,6 +53,7 @@ public class ProfileActivationsController : ControllerBase
     /// Only the activations in force at some moment of the window, as the profile resolvers select them,
     /// each whole: what another instance replicates to read the same profile at every moment.
     /// </param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RemoteQuery]
     [RequireScope(Scope.TherapyRead)]
@@ -87,6 +88,7 @@ public class ProfileActivationsController : ControllerBase
 
     /// <summary>The activation in force at <paramref name="at"/>, or no content when the profile store's default is.</summary>
     /// <param name="at">The moment; now when omitted.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("active")]
     [RequireScope(Scope.TherapyRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]

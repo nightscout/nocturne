@@ -108,6 +108,12 @@ internal sealed class ActiveProfileSchedulesService : IActiveProfileSchedulesSer
     private sealed record Slice<TEntry>(long StartMills, long EndMills, List<TEntry> Entries, string Key);
 
     /// <param name="profileSpans">One profile's spans, in order.</param>
+    /// <param name="toMs">Upper bound in Unix milliseconds. Versions at or after it are ignored, and open spans end here.</param>
+    /// <param name="repo">The repository that supplies the stored record versions for the profile.</param>
+    /// <param name="storedEntries">Reads the entries of a stored record version.</param>
+    /// <param name="snapshotEntries">Reads the entries of an activation snapshot, or null when it has none.</param>
+    /// <param name="entryKey">Gives the time and values that identify an entry when schedules are compared.</param>
+    /// <param name="ct">Cancels the operation.</param>
     private async Task<(List<TEntry> Entries, ScheduleChangeInfo Changes)> InForceAsync<TRecord, TEntry>(
         List<ProfileSpan> profileSpans,
         long toMs,

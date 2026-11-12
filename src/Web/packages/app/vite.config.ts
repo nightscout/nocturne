@@ -89,6 +89,8 @@ export default defineConfig(({ mode }) => {
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },
         adapter: adapter({ out: "build", precompress: true }),
+        // Turns off SvelteKit's form origin check; csrfHandle in hooks.server.ts runs it instead.
+        csrf: { trustedOrigins: ["*"] },
         experimental: { remoteFunctions: true },
         tracing: { server: true },
       }),

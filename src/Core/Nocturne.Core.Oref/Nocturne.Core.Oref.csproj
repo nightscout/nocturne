@@ -1,15 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <Description>P/Invoke bindings for the oref Rust library (OpenAPS Reference Implementation)</Description>
     </PropertyGroup>
 
-    <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
-    </ItemGroup>
 
     <!-- Native library deployment - the oref library will be built and placed in runtimes folder -->
     <ItemGroup Condition="Exists('..\oref\target\release\oref.dll')">

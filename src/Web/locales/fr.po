@@ -14750,9 +14750,8 @@ msgstr ""
 msgid "What technology stack does Nocturne use?"
 msgstr ""
 
-#: ../portal/src/routes/faq/+page.svelte
-msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
-msgstr ""
+#~ msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+#~ msgstr ""
 
 #: ../portal/src/routes/faq/+page.svelte
 msgid "How do data connectors work?"
@@ -19328,13 +19327,11 @@ msgstr ""
 msgid "Interactive Nocturne API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne."
 msgstr ""
 
-#: ../portal/src/routes/scalar/+page.svelte
-msgid "Want to send real requests? Open this reference on the demo instance; it comes already signed in, and the demo resets on a schedule."
-msgstr ""
+#~ msgid "Want to send real requests? Open this reference on the demo instance; it comes already signed in, and the demo resets on a schedule."
+#~ msgstr ""
 
-#: ../portal/src/routes/scalar/+page.svelte
-msgid "Try it on the demo <0/>"
-msgstr ""
+#~ msgid "Try it on the demo <0/>"
+#~ msgstr ""
 
 #~ msgid "Error Loading Test Report"
 #~ msgstr ""
@@ -38516,4 +38513,40 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/admin/+page.svelte
 msgid "<0/> Jobs"
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The client ID must end in .apps.googleusercontent.com."
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The callback URL must be an https address that ends in /api/v4/google-health/oauth/callback."
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Google Health settings saved. No restart required."
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The callback URL ends in /api/v4/google-health/oauth/callback."
+msgstr ""
+
+#: ../portal/src/routes/faq/+page.svelte
+msgid "Nocturne is built on .NET 11 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Requests go to the demo instance. It has sample data and resets on a schedule."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "To send requests, open this reference on the demo instance. The demo has sample data and resets on a schedule."
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Open the demo"
+msgstr ""
+
+#: ../portal/src/routes/scalar/+page.svelte
+msgid "Open the reference on the demo"
 msgstr ""

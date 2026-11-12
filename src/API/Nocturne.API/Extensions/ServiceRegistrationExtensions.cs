@@ -627,8 +627,8 @@ public static class ServiceRegistrationExtensions
         var origin = $"https://{baseDomain}";
         services.AddFido2(options =>
         {
-            options.ServerDomain = rpId;
-            options.ServerName = "Nocturne";
+            options.RPID = rpId;
+            options.RPName = "Nocturne";
             options.Origins = new HashSet<string> { origin };
         });
 

@@ -895,7 +895,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             {
                 PatientInsulinId = Guid.Empty,
                 InsulinName = label,
-                Dia = Math.Round(endTimeMs / 3_600_000.0, 1),
+                Dia = ScaledRounding.Round(endTimeMs / 3_600_000.0, 1),
                 Peak = (int)(peakTimeMs / 60_000),
                 Concentration = (int)Math.Round(concentrationRatio * 100),
                 Curve = "rapid-acting",
@@ -1835,7 +1835,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             CarbIntakeId = c.Carbs.Id,
             Portions = 0m,
-            Carbs = (decimal)c.Treatment!.Carbs!.Value,
+            Carbs = c.Treatment!.Carbs!.Value.ToDecimal(),
             TimeOffsetMinutes = 0,
             Note = c.Treatment.FoodType,
         })];
@@ -2535,7 +2535,12 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         Type Model { get; }
 
+        /// <param name="db">The context whose rows are deleted.</param>
+        /// <param name="legacyIds">The legacy ids whose rows are deleted.</param>
         /// <param name="source">Only this data source's rows, or every source's when null.</param>
+        /// <param name="scope">The scope the delete is recorded under.</param>
+        /// <param name="duplicates">How duplicate copies of the deleted rows are handled.</param>
+        /// <param name="ct">Cancels the operation.</param>
         /// <remarks>
         /// A legacy id fans out to a handful of correlated rows, so even a batch's ids reach few. The
         /// per-record audit rows <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteWithEntitiesAsync{T}"/>

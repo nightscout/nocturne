@@ -124,7 +124,7 @@ public class UISettingsControllerSectionTests
         settings.Algorithm.Should().BeEquivalentTo(new AlgorithmSettings());
         settings.Notifications.Should().BeEquivalentTo(new NotificationSettings());
         settings.DataQuality.Should().BeEquivalentTo(new DataQualitySettings());
-        settings.Services.SyncSettings.Should().BeEquivalentTo(new SyncSettings());
+        settings.Services!.SyncSettings.Should().BeEquivalentTo(new SyncSettings());
     }
 
     [Fact]
@@ -134,8 +134,8 @@ public class UISettingsControllerSectionTests
 
         var settings = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
 
-        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
-        settings.Services.ConnectedServices.Should().NotBeEmpty();
+        settings.Devices!.ConnectedDevices.Should().NotBeEmpty();
+        settings.Services!.ConnectedServices.Should().NotBeEmpty();
         settings.Features.Plugins.Should().ContainKey("delta");
     }
 }

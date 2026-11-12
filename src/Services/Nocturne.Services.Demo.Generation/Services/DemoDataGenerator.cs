@@ -145,13 +145,13 @@ public class DemoDataGenerator : IDemoDataGenerator
                 Mills = mills,
                 Date = now,
                 DateString = now.ToString("o"),
-                Mgdl = Math.Round(_currentGlucose, 0),
-                Sgv = Math.Round(_currentGlucose, 0),
+                Mgdl = ScaledRounding.Round(_currentGlucose, 0),
+                Sgv = ScaledRounding.Round(_currentGlucose, 0),
                 Direction = direction.ToString(),
-                Delta = Math.Round(change, 1),
+                Delta = ScaledRounding.Round(change, 1),
                 DataSource = DataSources.DemoService,
-                Filtered = Math.Round(_currentGlucose + (_random.NextDouble() - 0.5) * 2, 0),
-                Unfiltered = Math.Round(_currentGlucose + (_random.NextDouble() - 0.5) * 5, 0),
+                Filtered = ScaledRounding.Round(_currentGlucose + (_random.NextDouble() - 0.5) * 2, 0),
+                Unfiltered = ScaledRounding.Round(_currentGlucose + (_random.NextDouble() - 0.5) * 5, 0),
                 Rssi = _random.Next(0, 101),
                 Noise = _random.Next(0, 5),
                 CreatedAt = now.ToString("o"),
@@ -1007,13 +1007,13 @@ public class DemoDataGenerator : IDemoDataGenerator
             Mills = utc.ToMills(),
             Date = utc,
             DateString = utc.ToString("o"),
-            Mgdl = Math.Round(glucose, 0),
-            Sgv = Math.Round(glucose, 0),
+            Mgdl = ScaledRounding.Round(glucose, 0),
+            Sgv = ScaledRounding.Round(glucose, 0),
             Direction = direction.ToString(),
-            Delta = delta.HasValue ? Math.Round(delta.Value, 1) : null,
+            Delta = delta.HasValue ? ScaledRounding.Round(delta.Value, 1) : null,
             DataSource = DataSources.DemoService,
-            Filtered = Math.Round(glucose + (_random.NextDouble() - 0.5) * 2, 0),
-            Unfiltered = Math.Round(glucose + (_random.NextDouble() - 0.5) * 5, 0),
+            Filtered = ScaledRounding.Round(glucose + (_random.NextDouble() - 0.5) * 2, 0),
+            Unfiltered = ScaledRounding.Round(glucose + (_random.NextDouble() - 0.5) * 5, 0),
             Rssi = _random.Next(0, 101),
             Noise = _random.Next(0, 3),
             CreatedAt = utc.ToString("o"),
@@ -1218,7 +1218,7 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// <summary>Fingerstick (mbg) entry near the CGM value, with meter-scale noise.</summary>
     private Entry CreateFingerstickEntry(DateTime time, double cgmGlucose)
     {
-        var value = Math.Round(cgmGlucose * (0.92 + _random.NextDouble() * 0.16) + (_random.NextDouble() - 0.5) * 6, 0);
+        var value = ScaledRounding.Round(cgmGlucose * (0.92 + _random.NextDouble() * 0.16) + (_random.NextDouble() - 0.5) * 6, 0);
         value = Math.Max(40, value);
         var utc = _clock.ToUtc(time);
 
@@ -1264,7 +1264,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         return new Treatment
         {
             EventType = "BG Check",
-            Glucose = Math.Max(40, Math.Round(glucose + (_random.NextDouble() - 0.5) * 8, 0)),
+            Glucose = Math.Max(40, ScaledRounding.Round(glucose + (_random.NextDouble() - 0.5) * 8, 0)),
             GlucoseType = "Finger",
             Units = "mg/dl",
             Mills = utc.ToMills(),

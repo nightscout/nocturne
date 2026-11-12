@@ -31,7 +31,7 @@ public class SignalREntryEventSinkTests
     private List<string> ClearedFamilies() =>
         _cache.Invocations
             .Where(i => i.Method.Name == nameof(ITenantCache.RemoveFamilyAsync))
-            .Select(i => (string)i.Arguments[0])
+            .Select(i => (string)i.Arguments[0]!)
             .ToList();
 
     [Fact]

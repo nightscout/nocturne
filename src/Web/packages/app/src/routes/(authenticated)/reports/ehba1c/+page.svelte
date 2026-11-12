@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { SvelteMap } from "svelte/reactivity";
+  import { MediaQuery, SvelteMap } from "svelte/reactivity";
   import { LineChart, Tooltip } from "layerchart";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Activity from "@lucide/svelte/icons/activity";
@@ -246,6 +246,42 @@
     }))
   );
 
+  /**
+   * CSS pixels around a lab marker, across and up or down, within which the tooltip shows
+   * that lab draw. Kept tight so the days around a lab draw, and the date axis below it, stay
+   * readable.
+   */
+  const LAB_SNAP_PX = { fine: 12, coarse: 16 };
+  const coarsePointer = new MediaQuery("pointer: coarse");
+
+  /**
+   * A lab draw is one day wide on a year of daily estimates, so the tooltip snaps to the
+   * nearest lab marker when the pointer is within {@link LAB_SNAP_PX} of it, and shows lab
+   * results only then. `pointerX` and `pointerY` are in the plot coordinates of the scales.
+   */
+  function snapToLab(
+    hovered: Date,
+    pointerX: number,
+    pointerY: number,
+    xScale: (value: Date) => number,
+    yScale: (value: number) => number
+  ): { date: Date; labs: typeof labChartPoints } {
+    const reach = coarsePointer.current ? LAB_SNAP_PX.coarse : LAB_SNAP_PX.fine;
+    let nearest: Date | null = null;
+    let nearestDistance = reach;
+    for (const labPoint of labChartPoints) {
+      if (Math.abs(yScale(labPoint.displayValue) - pointerY) > reach) continue;
+      const distance = Math.abs(xScale(labPoint.date) - pointerX);
+      if (distance <= nearestDistance) {
+        nearest = labPoint.date;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest) return { date: hovered, labs: [] };
+    const key = dateKey(nearest);
+    return { date: nearest, labs: labChartPoints.filter((point) => dateKey(point.date) === key) };
+  }
+
   function displayValueForChartDate(date: Date): number | null {
     if (chartData.length === 0) return null;
     const timestamp = date.getTime();
@@ -429,10 +465,17 @@
             {#snippet tooltip({ context })}
               <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg">
                 {#snippet children({ data })}
-                  {@const hoveredDate = context.x(data)}
+                  {@const snapped = snapToLab(
+                    context.x(data),
+                    context.tooltip.x - context.padding.left,
+                    context.tooltip.y - context.padding.top,
+                    context.xScale,
+                    context.yScale
+                  )}
+                  {@const hoveredDate = snapped.date}
                   {@const hoveredDateKey = dateKey(hoveredDate)}
                   {@const eHbA1cPoint = chartData.find((point) => dateKey(point.date) === hoveredDateKey)}
-                  {@const labResultsForDate = labChartPoints.filter((point) => dateKey(point.date) === hoveredDateKey)}
+                  {@const labResultsForDate = snapped.labs}
                   <div class="mb-2 text-sm font-semibold">{formatLongDate(hoveredDate)}</div>
                   <div class="min-w-56 space-y-1.5 text-sm" data-testid="ehba1c-tooltip">
                     {#if eHbA1cPoint}
@@ -540,16 +583,16 @@
           <Input
             id="lab-value"
             type="number"
-            step={a1cUnits.current === "percent" ? "0.1" : "1"}
+            step={a1cUnits.current === "percent" ? "0.01" : "0.1"}
             bind:value={newLabValue}
             placeholder={a1cUnits.current === "percent"
-              ? "e.g. 7.0"
-              : "e.g. 53"}
+              ? "e.g. 6.54"
+              : "e.g. 50.3"}
           />
         </div>
         <div class="space-y-1.5">
           <Label for="lab-note">Note (optional)</Label>
-          <Input id="lab-note" type="text" bind:value={newLabNote} placeholder="e.g. GP lab" />
+          <Input id="lab-note" type="text" maxlength={500} bind:value={newLabNote} placeholder="e.g. GP lab" />
         </div>
       </div>
 

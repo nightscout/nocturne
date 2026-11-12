@@ -103,7 +103,11 @@ public class SleepController : ControllerBase
     }
 
     /// <summary>
-    /// Create or upsert sleep sessions in bulk (max 100)
+    /// Create or upsert sleep sessions in bulk (max 100). Sessions are upserted one by one, so a
+    /// retried batch is idempotent. A session matching one the user deleted is left out of the
+    /// write and of the response, where the single create answers `409 Conflict`. On a concurrent
+    /// insert conflict the request fails with `409 Conflict`; sessions upserted before it stay saved,
+    /// and retrying the whole batch is safe.
     /// </summary>
     /// <remarks>
     /// Sessions are upserted one by one with the same dedup semantics as the single create, so a

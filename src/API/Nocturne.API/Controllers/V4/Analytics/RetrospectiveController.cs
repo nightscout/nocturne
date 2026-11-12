@@ -294,10 +294,10 @@ public class RetrospectiveController : ControllerBase
                 TimeLabel = timestamp.ToString("HH:mm"),
                 Glucose = glucose?.Value,
                 GlucoseDirection = glucose?.Direction,
-                Iob = Math.Round(tick.Iob, 3),
-                BolusIob = Math.Round(tick.BolusIob ?? 0, 3),
-                BasalIob = Math.Round(tick.BasalIob ?? 0, 3),
-                Cob = Math.Round(tick.Cob, 1),
+                Iob = ScaledRounding.Round(tick.Iob, 3),
+                BolusIob = ScaledRounding.Round(tick.BolusIob ?? 0, 3),
+                BasalIob = ScaledRounding.Round(tick.BasalIob ?? 0, 3),
+                Cob = ScaledRounding.Round(tick.Cob, 1),
                 BasalRate = basal.Rate,
                 IsTemp = basal.IsTemp
             });

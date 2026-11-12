@@ -747,8 +747,8 @@ public class SampleDataSeeder
                         Id = Guid.CreateVersion7(),
                         CarbIntakeId = intake.Id,
                         FoodId = food.Id,
-                        Portions = seed.Carbs > 0 ? Math.Round((decimal)(intake.Carbs / seed.Carbs), 2) : 1,
-                        Carbs = (decimal)intake.Carbs,
+                        Portions = seed.Carbs > 0 ? Math.Round((intake.Carbs / seed.Carbs).ToDecimal(), 2) : 1,
+                        Carbs = intake.Carbs.ToDecimal(),
                     });
                 }
             }
@@ -1027,7 +1027,7 @@ public class SampleDataSeeder
                 Id = Guid.CreateVersion7(),
                 TenantId = db.TenantId,
                 Mills = new DateTimeOffset(clock.ToUtc(weighIn)).ToUnixTimeMilliseconds(),
-                WeightKg = (decimal)DemoLifestyleSeeds.WeightKgOn(day),
+                WeightKg = DemoLifestyleSeeds.WeightKgOn(day).ToDecimal(),
                 Device = "Demo Scale",
                 DataSource = dataSource,
                 SyncIdentifier = syncId,

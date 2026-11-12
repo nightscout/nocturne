@@ -119,7 +119,7 @@ public class UISettingsServiceTests
         await service.SaveAlarmConfigurationAsync(AlarmConfiguration("first", 55));
 
         var settings = (await service.GetSettingsAsync())!;
-        settings.Notifications.AlarmConfiguration = AlarmConfiguration("second", 123);
+        settings.Notifications!.AlarmConfiguration = AlarmConfiguration("second", 123);
         await service.SaveSettingsAsync(settings);
 
         foreach (var config in await EveryAlarmReadPath(service))
@@ -201,12 +201,12 @@ public class UISettingsServiceTests
 
         var stored = (await service.GetSettingsAsync())!;
 
-        stored.Devices.AutoConnect.Should().BeFalse();
+        stored.Devices!.AutoConnect.Should().BeFalse();
         stored.Algorithm.Prediction.Minutes.Should().Be(45);
         stored.Features.Display.Units.Should().Be("mmol/L");
-        stored.Notifications.AlarmConfiguration.Profiles.Should().ContainSingle()
+        stored.Notifications!.AlarmConfiguration.Profiles.Should().ContainSingle()
             .Which.Threshold.Should().Be(123);
-        stored.Services.SyncSettings.AutoSync.Should().BeFalse();
+        stored.Services!.SyncSettings.AutoSync.Should().BeFalse();
         stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
     }
 
@@ -530,7 +530,7 @@ public class UISettingsServiceTests
             .BeEmpty();
 
         var stored = (await service.GetSettingsAsync())!;
-        stored.Services.AvailableServices.Should().BeEmpty();
+        stored.Services!.AvailableServices.Should().BeEmpty();
         stored.Services.SyncSettings.AutoSync.Should().BeFalse();
     }
 
@@ -628,7 +628,7 @@ public class UISettingsServiceTests
         var stored = (await NewService(context).GetSettingsAsync())!;
 
         stored.Features.Widgets.Should().BeEmpty();
-        stored.Devices.AutoConnect.Should().BeFalse();
+        stored.Devices!.AutoConnect.Should().BeFalse();
     }
 
     [Fact]
@@ -687,7 +687,7 @@ public class UISettingsServiceTests
         return
         [
             (await service.GetAlarmConfigurationAsync())!,
-            (await service.GetSettingsAsync())!.Notifications.AlarmConfiguration,
+            (await service.GetSettingsAsync())!.Notifications!.AlarmConfiguration,
             (await service.GetNotificationSettingsAsync()).AlarmConfiguration,
             (await service.GetSectionAsync<NotificationSettings>("notifications"))!
                 .AlarmConfiguration,

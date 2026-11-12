@@ -107,6 +107,10 @@ internal abstract class ConnectorPublisherBase
     /// <paramref name="heldBy"/> holds. Records without an id are dropped: nothing could tell them
     /// apart from what is stored.
     /// </summary>
+    /// <param name="records">The candidate records, held or not.</param>
+    /// <param name="legacyIdOf">Reads a record's legacy id, or null or empty when it has none.</param>
+    /// <param name="publish">Writes the unheld records and returns whether the write succeeded.</param>
+    /// <param name="source">The connector source named in the failure log.</param>
     /// <param name="heldBy">One lookup per table the record type decomposes into.</param>
     /// <returns>How many were written, or null when a lookup or the write failed.</returns>
     protected Task<int?> PublishUnheldAsync<TRecord>(

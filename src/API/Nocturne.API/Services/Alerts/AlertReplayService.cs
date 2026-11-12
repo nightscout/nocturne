@@ -118,9 +118,9 @@ internal sealed class AlertReplayService(
 
             var baseContext = new SensorContext
             {
-                LatestValue = hasReadingForTick ? (decimal)current!.Mgdl : null,
+                LatestValue = hasReadingForTick ? current!.Mgdl.ToDecimal() : null,
                 LatestTimestamp = hasReadingForTick ? current!.Timestamp : null,
-                TrendRate = hasReadingForTick && current!.TrendRate is { } tr ? (decimal)tr : null,
+                TrendRate = hasReadingForTick && current!.TrendRate is { } tr ? tr.ToDecimal() : null,
                 // A tick before the window's first reading reads as fresh rather than as never
                 // having had one (engine-semantics.md §8).
                 LastReadingAt = hasReadingForTick ? current!.Timestamp : tick,
@@ -357,9 +357,9 @@ internal sealed class AlertReplayService(
             {
                 // Direct takes decimal properties; bool flags are projected as 0/1.
                 ReplayFactConversion.Direct => raw is bool flag ? (flag ? 1m : 0m) : (decimal)raw,
-                ReplayFactConversion.MinutesSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalMinutes,
-                ReplayFactConversion.HoursSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalHours,
-                ReplayFactConversion.DaysSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalDays,
+                ReplayFactConversion.MinutesSinceNow => (tickUtc - (DateTime)raw).TotalMinutes.ToDecimal(),
+                ReplayFactConversion.HoursSinceNow => (tickUtc - (DateTime)raw).TotalHours.ToDecimal(),
+                ReplayFactConversion.DaysSinceNow => (tickUtc - (DateTime)raw).TotalDays.ToDecimal(),
                 _ => (decimal?)null,
             };
             if (projected is not { } value) continue;
@@ -407,8 +407,8 @@ internal sealed class AlertReplayService(
 
         var localStart = localDate.Value.ToDateTime(TimeOnly.MinValue);
         var localEnd = localStart.AddDays(1);
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localStart, DateTimeKind.Unspecified), tz);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localEnd, DateTimeKind.Unspecified), tz);
+        var startUtc = TimeZoneHelper.ConvertTimeToUtc(DateTime.SpecifyKind(localStart, DateTimeKind.Unspecified), tz);
+        var endUtc = TimeZoneHelper.ConvertTimeToUtc(DateTime.SpecifyKind(localEnd, DateTimeKind.Unspecified), tz);
         return (startUtc, endUtc);
     }
 

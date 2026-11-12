@@ -395,8 +395,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         return GlucoseBucketResolver.Compute(
             glucoseMgdl,
-            (decimal)active.Low,
-            (decimal)active.High,
+            active.Low.ToDecimal(),
+            active.High.ToDecimal(),
             active.VeryLow,
             active.TightHigh,
             active.VeryHigh);
@@ -517,8 +517,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
     private static TempBasalSnapshot ProjectTempBasal(TempBasal t, double rate) =>
         new(
-            Rate: (decimal)rate,
-            ScheduledRate: t.ScheduledRate.HasValue ? (decimal?)t.ScheduledRate.Value : null,
+            Rate: rate.ToDecimal(),
+            ScheduledRate: t.ScheduledRate?.ToDecimal(),
             StartedAt: t.StartTimestamp);
 
     /// <summary>
@@ -561,7 +561,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             _logger.LogDebug(
                 "IOB compute @ {Now}: boluses={BolusCount}, tempBasals={TempBasalCount}, result.Iob={Iob}, source={Source}",
                 now, inputs.Boluses.Count, inputs.TempBasals.Count, result.Iob, result.Source ?? "(none)");
-            return (decimal)result.Iob;
+            return result.Iob.ToDecimal();
         }
         catch (Exception ex)
         {
@@ -579,7 +579,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             _logger.LogDebug(
                 "COB compute @ {Now}: carbIntakes={CarbCount}, result.Cob={Cob}, source={Source}",
                 now, inputs.CarbIntakes.Count, result.Cob, result.Source ?? "(none)");
-            return (decimal)result.Cob;
+            return result.Cob.ToDecimal();
         }
         catch (Exception ex)
         {
@@ -625,7 +625,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             // Curve index 0 is "now"; first forward step is index 1. Offset minutes are measured
             // from the current reading; the engine filters by WithinMinutes.
             var offsetMinutes = (i + 1) * interval;
-            points.Add(new PredictedGlucosePoint(offsetMinutes, (decimal)curve[i]));
+            points.Add(new PredictedGlucosePoint(offsetMinutes, curve[i].ToDecimal()));
         }
         return points;
     }

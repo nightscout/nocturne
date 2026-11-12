@@ -77,7 +77,7 @@
             questions: [
                 {
                     question: "What technology stack does Nocturne use?",
-                    answer: "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability.",
+                    answer: "Nocturne is built on .NET 11 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability.",
                 },
                 {
                     question: "How do data connectors work?",

@@ -156,8 +156,10 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         var pass = Task.Run(() => Service(reconcile).ReconcileNewLinksAsync(5000, 4));
         await Task.WhenAll(job, pass);
 
-        job.Result.Success.Should().BeTrue(job.Result.ErrorMessage);
-        (job.Result.DuplicateGroupsFound + pass.Result.GroupsMerged).Should().Be(1);
+        var jobResult = await job;
+        var passResult = await pass;
+        jobResult.Success.Should().BeTrue(jobResult.ErrorMessage);
+        (jobResult.DuplicateGroupsFound + passResult.GroupsMerged).Should().Be(1);
 
         await using var check = Context(tenant);
         var links = await check.LinkedRecords.AsNoTracking().ToListAsync();

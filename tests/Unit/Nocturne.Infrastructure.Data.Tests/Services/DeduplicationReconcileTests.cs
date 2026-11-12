@@ -1004,7 +1004,7 @@ public class DeduplicationReconcileTests : IDisposable
                 LogLevel.Error,
                 It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((v, _) =>
-                    v.ToString()!.Contains(TestTenantId.ToString())
+                    v!.ToString()!.Contains(TestTenantId.ToString())
                     && v.ToString()!.Contains(nameof(RecordType.CarbIntake))
                     && v.ToString()!.Contains(cursor.Id.ToString())),
                 It.IsAny<InvalidOperationException>(),

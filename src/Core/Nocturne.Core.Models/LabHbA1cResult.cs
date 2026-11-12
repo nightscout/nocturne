@@ -6,6 +6,9 @@ namespace Nocturne.Core.Models;
 /// </summary>
 public class LabHbA1cResult
 {
+    /// <summary>The longest <see cref="Note"/> the store holds.</summary>
+    public const int MaxNoteLength = 500;
+
     /// <summary>Primary key.</summary>
     public Guid Id { get; set; }
 

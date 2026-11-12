@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
@@ -368,6 +369,6 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             .OrderByDescending(e => e.Timestamp)
             .Select(e => e.SensitivityRatio)
             .FirstOrDefaultAsync(ct);
-        return value is double v && double.IsFinite(v) ? (decimal)v : null;
+        return value is double v && double.IsFinite(v) ? v.ToDecimal() : null;
     }
 }

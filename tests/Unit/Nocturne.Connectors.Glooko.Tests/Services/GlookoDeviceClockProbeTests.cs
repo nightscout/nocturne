@@ -181,7 +181,7 @@ public class GlookoDeviceClockProbeTests
         public IReadOnlyList<DeviceClockObservation> RecordedObservations() =>
             DeviceClock.Invocations
                 .Where(i => i.Method.Name == nameof(IDeviceClockService.RecordObservationsAsync))
-                .SelectMany(i => (IReadOnlyList<DeviceClockObservation>)i.Arguments[1])
+                .SelectMany(i => (IReadOnlyList<DeviceClockObservation>)i.Arguments[1]!)
                 .ToList();
     }
 

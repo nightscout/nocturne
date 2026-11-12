@@ -56,6 +56,10 @@ public class DevAdminController : ControllerBase
     /// <summary>
     /// Initializes a new instance of <see cref="DevAdminController"/>.
     /// </summary>
+    /// <param name="contexts">Opens the context each action reads and writes on.</param>
+    /// <param name="members">Lists a tenant's members, to pick the one that sample data or recovery mode targets.</param>
+    /// <param name="subjects">Where the dev identity fixture's subjects are seeded.</param>
+    /// <param name="passkeys">Where the dev identity fixture's passkeys are seeded.</param>
     /// <param name="encryption">Service for secret encryption/decryption in snapshots.</param>
     /// <param name="tenantService">Service for tenant lifecycle management.</param>
     /// <param name="cache">Tenant-resolution cache, which a restored snapshot invalidates.</param>

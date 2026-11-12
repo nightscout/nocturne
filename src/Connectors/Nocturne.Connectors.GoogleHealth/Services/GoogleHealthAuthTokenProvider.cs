@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -16,7 +15,7 @@ public sealed class GoogleHealthAuthTokenProvider(
     IConnectorTokenCache tokenCache,
     IConnectorServerResolver<GoogleHealthConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
-    IOptions<GoogleHealthPlatformOptions> platformOptions,
+    IGoogleHealthPlatformSettings platformOptions,
     ILogger<GoogleHealthAuthTokenProvider> logger,
     TimeProvider? timeProvider = null)
     : AuthTokenProviderBase<GoogleHealthConnectorConfiguration>(
@@ -31,7 +30,6 @@ public sealed class GoogleHealthAuthTokenProvider(
     private const string ExpiresAtKey = "AccessTokenExpiresAt";
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private readonly GoogleHealthOAuthClient oauth = new(httpClient, timeProvider);
-    private readonly GoogleHealthPlatformOptions platform = platformOptions.Value;
 
     protected override string ConnectorName => GoogleHealthConnectorService.ConnectorName;
     protected override int TokenLifetimeBufferMinutes => 1;
@@ -93,6 +91,7 @@ public sealed class GoogleHealthAuthTokenProvider(
         IReadOnlyCollection<string> requestedScopes,
         CancellationToken cancellationToken)
     {
+        var platform = await platformOptions.GetAsync(cancellationToken);
         var response = await oauth.ExchangeAuthorizationCodeAsync(new()
         {
             ["grant_type"] = "authorization_code",
@@ -123,6 +122,7 @@ public sealed class GoogleHealthAuthTokenProvider(
         if (string.IsNullOrWhiteSpace(refreshToken))
             return (null, DateTime.MinValue, null);
 
+        var platform = await platformOptions.GetAsync(cancellationToken);
         var response = await oauth.RefreshAccessTokenAsync(new()
         {
             ["grant_type"] = "refresh_token",

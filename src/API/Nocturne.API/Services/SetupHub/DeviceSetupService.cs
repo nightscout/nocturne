@@ -331,6 +331,8 @@ public partial class DeviceSetupService(
     }
 
     /// <summary>The offer of <paramref name="kind"/> and the tracker it stands for.</summary>
+    /// <param name="kind">The offer to find among those of the recorded devices.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <param name="db">The caller's transaction context, so the offer reads what it holds.</param>
     private async Task<(TrackerOffer Offer, ConsumableTrackerSpec Spec)> OfferAsync(
         TrackerOfferKind kind, CancellationToken ct, NocturneDbContext? db = null)

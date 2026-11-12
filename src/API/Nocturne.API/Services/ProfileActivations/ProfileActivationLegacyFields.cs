@@ -54,6 +54,8 @@ internal static class ProfileActivationLegacyFields
     /// The activation a Profile span's metadata describes. Its source, origin, and provenance beyond
     /// <c>app</c> and <c>enteredBy</c> are the caller's to set.
     /// </summary>
+    /// <param name="metadata">The Profile span's metadata: the typed columns are read from it and the rest is kept as the residue.</param>
+    /// <param name="start">The span's start, which becomes the activation's.</param>
     /// <param name="end">The end the span carries, which only an old span with no uploaded duration needs.</param>
     /// <param name="superseded">Whether that end is a later switch's start rather than the switch's own length.</param>
     public static ProfileActivation FromSpanMetadata(
@@ -168,6 +170,8 @@ internal static class ProfileActivationLegacyFields
     {
         JsonElement { ValueKind: JsonValueKind.Number } element when element.TryGetDecimal(out var d) => d,
         JsonElement => null,
+        double value64 when double.IsFinite(value64) => value64.ToDecimal(),
+        float value32 when float.IsFinite(value32) => value32.ToDecimal(),
         IConvertible convertible => convertible.ToDecimal(CultureInfo.InvariantCulture),
         _ => null,
     };

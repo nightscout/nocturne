@@ -489,6 +489,7 @@ public class ServicesController : ControllerBase
 
     /// <summary>
     /// Reset a connector's sync cursor for the current tenant and re-pull historical data.
+    /// Re-ingested records are deduplicated. The request runs synchronously: a full-history re-pull can take minutes and may exceed proxy or browser timeouts, so limit it with <c>from</c> or <c>dataTypes</c>.
     /// </summary>
     /// <remarks>
     /// Nocturne does not persist a sync cursor — each data type resumes from the latest record

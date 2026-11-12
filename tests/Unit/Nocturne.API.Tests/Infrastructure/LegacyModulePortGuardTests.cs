@@ -89,7 +89,6 @@ public class LegacyModulePortGuardTests
         InMember("src/API/Nocturne.API/Services/ConnectorPublishing/TreatmentPublisher.cs", "TreatmentPublisher.PublishTreatmentsAsync", "TreatmentDecomposer", "calls the decomposer's static upstream fingerprint"),
         InMember("src/API/Nocturne.API/Services/Caching/LegacyReadCacheInvalidation.cs", "LegacyReadCacheInvalidation.FamiliesByModel", "LegacyTreatmentTables", "lists the models the treatment tables serve, which no module service exposes"),
         InTest("tests/Integration/Nocturne.API.Tests/TreatmentBatchFailureIntegrationTests.cs", "TreatmentReadService", "builds the store over a decomposer whose note repository fails, to test its batch writes"),
-        InTest("tests/Integration/Nocturne.API.Tests/Migration/AddProfileActivationsMigrationTests.cs", "LegacyTreatmentTables", "compares the treatments a migrated activation is served as with the expected ones"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/Caching/LegacyReadCacheInvalidationTests.cs", "LegacyTreatmentTables", "checks the invalidation covers every model the treatment tables serve"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/ProfileActivations/NativeProfileSwitchesTests.cs", "LegacyProfileActivationTable", "reads the rows the profile activation table serves as treatments"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/ProfileActivations/ProfileActivationLegacyFieldsTests.cs", "LegacyTreatmentTables", "projects an activation through the treatment table that serves it"),

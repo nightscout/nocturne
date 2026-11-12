@@ -111,7 +111,7 @@ public static class JsNumber
     public static string ToFixed2(double value)
     {
         var rounded = Math.IEEERemainder(value * 8, 2) is 1 or -1
-            ? Math.Round(value, 2, MidpointRounding.AwayFromZero)
+            ? ScaledRounding.Round(value, 2, MidpointRounding.AwayFromZero)
             : value;
         return rounded.ToString("F2", CultureInfo.InvariantCulture);
     }

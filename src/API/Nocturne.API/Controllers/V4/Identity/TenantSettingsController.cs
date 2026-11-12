@@ -149,6 +149,7 @@ public class TenantSettingsController : ControllerBase
     /// </summary>
     /// <param name="locale">The browser's language tag (e.g. "en-AU"), for the units default.</param>
     /// <param name="fromNightscout">Also read the saved Nightscout instance's settings.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("units-and-timezone")]
     [RequireScope(Scope.FullAccess)]
     [RemoteQuery]

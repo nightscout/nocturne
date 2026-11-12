@@ -70,6 +70,7 @@ public class StateSpanRepository : IStateSpanRepository
     /// <summary>
     /// Initializes a new instance of the StateSpanRepository class
     /// </summary>
+    /// <param name="contexts">Creates the contexts the repository reads and writes through</param>
     /// <param name="linker">Links committed inserts into their duplicate groups</param>
     /// <param name="auditContext">The audit context for tracking mutations</param>
     /// <param name="logger">Logger instance</param>
@@ -629,6 +630,9 @@ public class StateSpanRepository : IStateSpanRepository
     /// <summary>
     /// Ends an open span inserted behind a later, conflicting span at that span's start.
     /// </summary>
+    /// <param name="db">The context that reads stored successors and tracks the batch's changes.</param>
+    /// <param name="entity">The open span to end.</param>
+    /// <param name="metadata">The metadata of the span, passed to the supersession check.</param>
     /// <param name="batch">
     /// Rows this batch loaded or added, whose changes the store does not hold until the save. Stored
     /// rows a stored successor closed join it, so the save writes them and the batch detaches them.
@@ -638,6 +642,7 @@ public class StateSpanRepository : IStateSpanRepository
     /// this point would: the batch saves nothing until it is applied. The store is read again only when
     /// every candidate read for the span is passed over.
     /// </param>
+    /// <param name="cancellationToken">The cancellation token.</param>
     private static async Task EndAtSuccessorAsync(
         NocturneDbContext db, StateSpanEntity entity, IDictionary<string, object>? metadata,
         HashSet<StateSpanEntity> batch, Successors successors, CancellationToken cancellationToken)
@@ -1066,6 +1071,8 @@ public class StateSpanRepository : IStateSpanRepository
     /// </summary>
     /// <param name="count">The maximum number of spans to return.</param>
     /// <param name="skip">The number of spans to skip.</param>
+    /// <param name="from">The earliest start time to include, inclusive.</param>
+    /// <param name="to">The latest start time to include, inclusive.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A collection of state spans representing activities.</returns>
     public async Task<IEnumerable<StateSpan>> GetActivityStateSpansAsync(

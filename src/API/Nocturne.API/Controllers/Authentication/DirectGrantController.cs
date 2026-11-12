@@ -42,6 +42,7 @@ public class DirectGrantController : ControllerBase
     /// <summary>
     /// Initializes a new instance of the <see cref="DirectGrantController"/> class.
     /// </summary>
+    /// <param name="subjects">The repository that finds the tenant's device subject, the holder of its site tokens.</param>
     /// <param name="directGrantService">The service that creates, lists, and revokes direct grants.</param>
     public DirectGrantController(
         ISubjectRepository subjects,

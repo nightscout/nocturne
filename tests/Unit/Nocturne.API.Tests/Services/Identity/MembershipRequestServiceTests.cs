@@ -244,8 +244,8 @@ public class MembershipRequestServiceTests : IDisposable
     private IReadOnlyList<string> NotifiedSubjectIds() =>
         _notificationService.Invocations
             .Where(i => i.Method.Name == nameof(IInAppNotificationService.CreateNotificationAsync)
-                && (string)i.Arguments[1] == "membership.requested")
-            .Select(i => (string)i.Arguments[0])
+                && (string)i.Arguments[1]! == "membership.requested")
+            .Select(i => (string)i.Arguments[0]!)
             .ToList();
 
     // ──────────────────────────────────────────────
@@ -309,7 +309,7 @@ public class MembershipRequestServiceTests : IDisposable
     private IReadOnlyList<IInvocation> ApprovalNotifications() =>
         _notificationService.Invocations
             .Where(i => i.Method.Name == nameof(IInAppNotificationService.CreateNotificationAsync)
-                && (string)i.Arguments[1] == "membership.approved")
+                && (string)i.Arguments[1]! == "membership.approved")
             .ToList();
 
     [Fact]

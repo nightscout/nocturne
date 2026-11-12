@@ -37,6 +37,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     /// <summary>
     /// Initializes a new instance of <see cref="SimpleEntityService{TDomain,TEntity}"/>.
     /// </summary>
+    /// <param name="contexts">Factory that opens the context each operation runs on.</param>
     /// <param name="documentProcessingService">Service for HTML sanitization and document preprocessing.</param>
     /// <param name="signalRBroadcastService">Service for broadcasting storage events to connected clients.</param>
     /// <param name="timeProvider">The clock that stamps soft deletes.</param>

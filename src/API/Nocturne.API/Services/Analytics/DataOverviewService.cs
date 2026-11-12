@@ -321,7 +321,7 @@ public class DataOverviewService : IDataOverviewService
 
             if (day.TotalBolusUnits.HasValue || day.TotalBasalUnits.HasValue)
             {
-                day.TotalDailyDose = Math.Round((day.TotalBolusUnits ?? 0) + (day.TotalBasalUnits ?? 0), 2);
+                day.TotalDailyDose = ScaledRounding.Round((day.TotalBolusUnits ?? 0) + (day.TotalBasalUnits ?? 0), 2);
             }
         }
 
@@ -562,8 +562,8 @@ public class DataOverviewService : IDataOverviewService
         var localYearEnd = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
         var localRangeStart = localYearStart.AddDays(-EHbA1cWindowDays);
 
-        var lookbackStartUtc = TimeZoneInfo.ConvertTimeToUtc(localRangeStart, tz);
-        var yearEndUtc = TimeZoneInfo.ConvertTimeToUtc(localYearEnd, tz);
+        var lookbackStartUtc = TimeZoneHelper.ConvertTimeToUtc(localRangeStart, tz);
+        var yearEndUtc = TimeZoneHelper.ConvertTimeToUtc(localYearEnd, tz);
 
         var allReadings = new List<(DateTime Timestamp, double Mgdl)>();
 
@@ -706,8 +706,8 @@ public class DataOverviewService : IDataOverviewService
                 new EHbA1cPoint
                 {
                     Date = rangeStart.AddDays(i).ToString("yyyy-MM-dd"),
-                    EstimatedA1cPercent = Math.Round(estimatedA1c, 2),
-                    WeightedAverageGlucoseMgdl = Math.Round(weightedMeanMgdl, 1),
+                    EstimatedA1cPercent = ScaledRounding.Round(estimatedA1c, 2),
+                    WeightedAverageGlucoseMgdl = ScaledRounding.Round(weightedMeanMgdl, 1),
                     ReadingCount = rawCount,
                     DaysWithData = daysWithData,
                 }
@@ -734,8 +734,8 @@ public class DataOverviewService : IDataOverviewService
         var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
 
         return (
-            TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz),
-            TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz)
+            TimeZoneHelper.ConvertTimeToUtc(localYearStart, tz),
+            TimeZoneHelper.ConvertTimeToUtc(localNextYearStart, tz)
         );
     }
 
@@ -824,8 +824,8 @@ public class DataOverviewService : IDataOverviewService
 
     /// <summary>
     /// Time in range over the covered minutes of <paramref name="readings"/> at the consensus
-    /// bounds rather than the tenant's thresholds: <see cref="GetGriTimelineAsync"/> and
-    /// <see cref="GetDailySummaryAsync"/> take no <c>GlycemicThresholds</c>, so no caller can move
+    /// bounds rather than the tenant's thresholds: <see cref="GetGriTimelineAsync(int, string[], CancellationToken)"/> and
+    /// <see cref="GetDailySummaryAsync(int, string[], CancellationToken)"/> take no <c>GlycemicThresholds</c>, so no caller can move
     /// them.
     /// </summary>
     private TimeInRangeMetrics TimeInRangeOf(IEnumerable<(DateTime Timestamp, double Mgdl)> readings) =>
@@ -861,7 +861,7 @@ public class DataOverviewService : IDataOverviewService
         var timeInRange = TimeInRangeOf(glucoseReadings);
 
         var gri = _statisticsService.CalculateGRI(timeInRange);
-        var averageGlucose = Math.Round(glucoseReadings.Average(reading => reading.Mgdl), 1);
+        var averageGlucose = ScaledRounding.Round(glucoseReadings.Average(reading => reading.Mgdl), 1);
 
         // Compute TDD for the month
         var localMonthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Unspecified);
@@ -880,13 +880,13 @@ public class DataOverviewService : IDataOverviewService
         if (totalBolusUnits > 0 || totalBasalUnits > 0)
         {
             var totalInsulin = totalBolusUnits + totalBasalUnits;
-            totalDailyDose = Math.Round(totalInsulin / daysInMonth, 2);
+            totalDailyDose = ScaledRounding.Round(totalInsulin / daysInMonth, 2);
         }
 
         // Average daily carbs for the month
         double? averageDailyCarbs = null;
         if (carbsByMonth.TryGetValue(month, out var carbSum) && carbSum > 0)
-            averageDailyCarbs = Math.Round(carbSum / daysInMonth, 1);
+            averageDailyCarbs = ScaledRounding.Round(carbSum / daysInMonth, 1);
 
         var periodStartStr = localMonthStart.ToString("yyyy-MM-dd");
         var periodEndStr = localMonthEnd.AddDays(-1).ToString("yyyy-MM-dd");
@@ -1031,7 +1031,7 @@ public class DataOverviewService : IDataOverviewService
                 {
                     Date = g.Key.ToString("yyyy-MM-dd"),
                     AvgMgdl = readings.Average(r => r.Mgdl),
-                    TimeInRangePercent = Math.Round(TimeInRangeOf(readings).Percentages.Target, 1),
+                    TimeInRangePercent = ScaledRounding.Round(TimeInRangeOf(readings).Percentages.Target, 1),
                 };
             });
 
@@ -1043,7 +1043,7 @@ public class DataOverviewService : IDataOverviewService
                 dayMap[group.Date] = day;
             }
 
-            day.AverageGlucoseMgdl = Math.Round(group.AvgMgdl, 1);
+            day.AverageGlucoseMgdl = ScaledRounding.Round(group.AvgMgdl, 1);
             day.TimeInRangePercent = group.TimeInRangePercent;
         }
     }
@@ -1092,7 +1092,7 @@ public class DataOverviewService : IDataOverviewService
                     }
 
                     if (group.BolusUnits > 0)
-                        day.TotalBolusUnits = Math.Round(group.BolusUnits, 2);
+                        day.TotalBolusUnits = ScaledRounding.Round(group.BolusUnits, 2);
                 }
             }
         }
@@ -1128,7 +1128,7 @@ public class DataOverviewService : IDataOverviewService
                         dayMap[group.Date] = day;
                     }
 
-                    day.TotalBolusUnits = Math.Round(
+                    day.TotalBolusUnits = ScaledRounding.Round(
                         (day.TotalBolusUnits ?? 0) + group.BolusUnits,
                         2
                     );
@@ -1188,7 +1188,7 @@ public class DataOverviewService : IDataOverviewService
                         dayMap[group.Date] = day;
                     }
 
-                    day.TotalBasalUnits = Math.Round(
+                    day.TotalBasalUnits = ScaledRounding.Round(
                         (day.TotalBasalUnits ?? 0) + group.TotalBasal,
                         2
                     );
@@ -1242,7 +1242,7 @@ public class DataOverviewService : IDataOverviewService
                     dayMap[group.Date] = day;
                 }
 
-                day.TotalCarbs = Math.Round(group.TotalCarbs, 1);
+                day.TotalCarbs = ScaledRounding.Round(group.TotalCarbs, 1);
             }
         }
         catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))

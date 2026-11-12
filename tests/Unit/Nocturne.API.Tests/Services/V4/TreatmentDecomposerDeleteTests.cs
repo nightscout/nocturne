@@ -244,7 +244,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
         logger.Invocations
             .Where(i => i.Method.Name == nameof(Microsoft.Extensions.Logging.ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().Contain(m => m!.Contains("has no conditions"));
     }
 
@@ -262,7 +262,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
         logger.Invocations
             .Where(i => i.Method.Name == nameof(Microsoft.Extensions.Logging.ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().NotBeEmpty()
             .And.NotContain(m => m!.Contains("secret-value"));
     }

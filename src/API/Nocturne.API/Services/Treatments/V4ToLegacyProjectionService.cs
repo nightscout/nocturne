@@ -474,6 +474,12 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// (<see cref="LegacyTreatmentTables.NotesServedWithAnotherRecord"/>), stamped no older than the
     /// Note's row, deleted or not, so a conditional read sees an edit of the notes alone.
     /// </summary>
+    /// <param name="db">
+    /// The read's context, on which the records holding the page's Notes and the Notes those records
+    /// wrote are read.
+    /// </param>
+    /// <param name="rows">The fetched rows of the page, deleted ones included.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <param name="historyCursor">
     /// The newest row stamp of a history page, or null for any other read. A history page also serves:
     /// the records holding a Note on it that the page does not, since editing only the notes moves the

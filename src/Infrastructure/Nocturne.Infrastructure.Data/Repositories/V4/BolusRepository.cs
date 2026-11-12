@@ -127,7 +127,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     /// <summary>
     /// Gets bolus records by correlation identifier.
     /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
+    /// <param name="correlationIds">The correlation identifiers.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of bolus records.</returns>
     public async Task<IEnumerable<Bolus>> GetByCorrelationIdsAsync(

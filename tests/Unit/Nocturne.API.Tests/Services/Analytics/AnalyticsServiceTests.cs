@@ -84,7 +84,7 @@ public class AnalyticsServiceTests
                     LogLevel.Information,
                     It.IsAny<EventId>(),
                     It.Is<It.IsAnyType>(
-                        (v, t) => v.ToString()!.Contains("Analytics service initialized")
+                        (v, t) => v!.ToString()!.Contains("Analytics service initialized")
                     ),
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()

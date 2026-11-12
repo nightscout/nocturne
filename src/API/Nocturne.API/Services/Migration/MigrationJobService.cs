@@ -142,7 +142,7 @@ public class MigrationJobService : IMigrationJobService
         // One migration per tenant at a time: two runs over the same target race on their inserts.
         // The lease is held for the whole run and records the job id, so a refused start can report
         // which job it collided with rather than a bare conflict.
-        IDisposable lease;
+        IDisposable? lease;
         var terminalHolderDeadline = _timeProvider.GetUtcNow().UtcDateTime + TerminalHolderWait;
         while ((lease = _runGuard.TryAcquire(tenantId, MigrationRunName, jobId)) is null)
         {

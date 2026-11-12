@@ -23,7 +23,9 @@ public class FoodRepository : IFoodRepository
     /// <summary>
     /// Initializes a new instance of the FoodRepository class
     /// </summary>
+    /// <param name="contexts">Opens the context each operation runs on</param>
     /// <param name="logger">The logger</param>
+    /// <param name="legacyReads">Told of each committed food write, when registered</param>
     public FoodRepository(
         INocturneDbContextFactory contexts,
         ILogger<FoodRepository> logger,
