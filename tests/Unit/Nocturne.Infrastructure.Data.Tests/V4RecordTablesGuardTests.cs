@@ -3,8 +3,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 namespace Nocturne.Infrastructure.Data.Tests;
 
 /// <summary>
-/// Every entity a source can own is in <see cref="V4RecordTables"/>, or named in
-/// <see cref="V4RecordTables.Unregistered"/> with the reason. A record table left out of the
+/// Every entity a source can own is in <see cref="V4RecordTables"/>. A record table left out of the
 /// registry is left out of every list over the record tables at once.
 /// </summary>
 [Trait("Category", "Unit")]
@@ -23,35 +22,22 @@ public class V4RecordTablesGuardTests
         || (typeof(ISourcedEntity).IsAssignableFrom(entity) && typeof(ISoftDeletable).IsAssignableFrom(entity));
 
     private static List<Type> Unaccounted(IEnumerable<Type> entities, IEnumerable<Type> registered) =>
-        [.. entities.Where(IsSourcedRecord).Except(registered).Except(V4RecordTables.Unregistered.Keys)];
+        [.. entities.Where(IsSourcedRecord).Except(registered)];
 
     [Fact]
-    public void EverySourcedRecordEntityIsRegisteredOrExempt()
+    public void EverySourcedRecordEntityIsRegistered()
     {
         Unaccounted(ContextEntities, Registered).Should().BeEmpty(
             "a sourced, soft-deletable entity is a V4 record table every per-table list must see");
     }
 
     [Fact]
-    public void TheGuardReportsAnEntityThatIsNeitherRegisteredNorExempt()
+    public void TheGuardReportsAnEntityThatIsNotRegistered()
     {
         Unaccounted([.. ContextEntities, typeof(UnregisteredReading)], Registered)
             .Should().Equal(typeof(UnregisteredReading));
         Unaccounted(ContextEntities, Registered.Where(e => e != typeof(BolusEntity)))
             .Should().Equal(typeof(BolusEntity));
-    }
-
-    [Fact]
-    public void EveryExemptionIsASourcedRecordOfTheContextOutsideTheRegistryWithAReason()
-    {
-        V4RecordTables.Unregistered.Should().NotBeEmpty();
-        foreach (var (entity, reason) in V4RecordTables.Unregistered)
-        {
-            ContextEntities.Should().Contain(entity);
-            IsSourcedRecord(entity).Should().BeTrue($"{entity.Name} needs no exemption otherwise");
-            Registered.Should().NotContain(entity);
-            reason.Should().NotBeNullOrWhiteSpace();
-        }
     }
 
     [Fact]

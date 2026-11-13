@@ -34,7 +34,7 @@ public class DataOverviewTablesTests
     {
         DataOverviewTables.All.Select(t => t.CountsKey).Should().Equal(
             "Glucose", "ManualBG", "Boluses", "CarbIntake", "BolusCalculations", "Notes", "DeviceEvents",
-            "StateSpans", "DeviceStatus", "BGChecks", "TempBasals");
+            "StateSpans", "DeviceStatus", "BGChecks", "TempBasals", "BasalInjections");
     }
 
     [Fact]

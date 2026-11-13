@@ -30,7 +30,7 @@ public class DemoDataPurgeParityTests : IDisposable
     private static readonly TenantContext Tenant = new(TenantId, "demo", "Nocturne Demo", true, true);
 
     /// <summary>Number of rows <see cref="SeedOneDemoRowOfEveryType"/> writes.</summary>
-    private const int SeededRows = 14;
+    private const int SeededRows = 17;
 
     private readonly SqliteTestDatabase _db;
     private readonly List<(Guid? Tenant, IReadOnlyCollection<Type> Models)> _tenantReports = [];
@@ -85,7 +85,7 @@ public class DemoDataPurgeParityTests : IDisposable
     private DemoDataPurgeRepository ScopePurgeOver(NocturneDbContext context) =>
         new(context.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>(), _scopeReads.Object);
 
-    /// <summary>One demo row in every table the demo seeder and the realtime tick write to.</summary>
+    /// <summary>One demo row in every table the demo purge reaches.</summary>
     private void SeedOneDemoRowOfEveryType(bool softDeleted = false)
     {
         var timestamp = DateTime.UtcNow;
@@ -172,6 +172,21 @@ public class DemoDataPurgeParityTests : IDisposable
             Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
             Device = "trio-rig", Timestamp = timestamp, AidAlgorithm = "Trio", DeletedAt = deletedAt,
         });
+        db.BasalInjections.Add(new BasalInjectionEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+            Timestamp = timestamp, Units = 10, DeletedAt = deletedAt,
+        });
+        db.PumpSnapshots.Add(new PumpSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+            Timestamp = timestamp, DeletedAt = deletedAt,
+        });
+        db.UploaderSnapshots.Add(new UploaderSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+            Timestamp = timestamp, DeletedAt = deletedAt,
+        });
         db.SaveChanges();
     }
 
@@ -190,7 +205,10 @@ public class DemoDataPurgeParityTests : IDisposable
             + await db.TempBasals.IgnoreQueryFilters().LongCountAsync()
             + await db.StateSpans.IgnoreQueryFilters().LongCountAsync()
             + await db.CompressionLowSuggestions.IgnoreQueryFilters().LongCountAsync()
-            + await db.ApsSnapshots.IgnoreQueryFilters().LongCountAsync();
+            + await db.ApsSnapshots.IgnoreQueryFilters().LongCountAsync()
+            + await db.BasalInjections.IgnoreQueryFilters().LongCountAsync()
+            + await db.PumpSnapshots.IgnoreQueryFilters().LongCountAsync()
+            + await db.UploaderSnapshots.IgnoreQueryFilters().LongCountAsync();
     }
 
     private async Task<long> TenantPurgeAsync()
@@ -240,8 +258,8 @@ public class DemoDataPurgeParityTests : IDisposable
         var counts = await ScopePurge().PurgeAsync(default);
 
         counts.Glucose.Should().Be(3);
-        counts.Treatments.Should().Be(10);
-        counts.DeviceStatus.Should().Be(1);
+        counts.Treatments.Should().Be(11);
+        counts.DeviceStatus.Should().Be(3);
     }
 
     [Fact]
@@ -255,6 +273,7 @@ public class DemoDataPurgeParityTests : IDisposable
             typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration),
             typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(Note), typeof(DeviceEvent),
             typeof(BolusCalculation), typeof(TempBasal), typeof(StateSpan), typeof(ApsSnapshot),
+            typeof(BasalInjection), typeof(PumpSnapshot), typeof(UploaderSnapshot),
         ]);
     }
 
@@ -317,6 +336,7 @@ public class DemoDataPurgeParityTests : IDisposable
             typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(Note), typeof(DeviceEvent),
             typeof(BolusCalculation), typeof(TempBasal), typeof(ProfileActivation), typeof(StateSpan),
             typeof(CompressionLowSuggestion), typeof(LabHbA1cResult), typeof(ApsSnapshot),
+            typeof(BasalInjection), typeof(PumpSnapshot), typeof(UploaderSnapshot),
         ]);
     }
 
