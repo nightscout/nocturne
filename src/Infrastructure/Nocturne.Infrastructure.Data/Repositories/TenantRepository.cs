@@ -195,6 +195,8 @@ public class TenantRepository : ITenantRepository
 
         if (edit.DisplayName is not null)
             entity.DisplayName = edit.DisplayName;
+        if (edit.Slug is not null)
+            entity.Slug = edit.Slug;
         if (edit.IsActive is { } active)
             entity.IsActive = active;
         if (edit.IsDemo is { } demo)

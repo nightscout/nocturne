@@ -2,11 +2,14 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -32,17 +35,23 @@ public class TenantSettingsController : ControllerBase
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IPatientRecordRepository _patientRecords;
     private readonly IUnitsAndTimezoneService _unitsAndTimezone;
+    private readonly IPlatformPolicyRepository _platformPolicy;
+    private readonly BaseDomainOptions _baseDomain;
 
     public TenantSettingsController(
         ITenantService tenantService,
         ITenantAccessor tenantAccessor,
         IPatientRecordRepository patientRecords,
-        IUnitsAndTimezoneService unitsAndTimezone)
+        IUnitsAndTimezoneService unitsAndTimezone,
+        IPlatformPolicyRepository platformPolicy,
+        IOptions<BaseDomainOptions> baseDomain)
     {
         _tenantService = tenantService;
         _tenantAccessor = tenantAccessor;
         _patientRecords = patientRecords;
         _unitsAndTimezone = unitsAndTimezone;
+        _platformPolicy = platformPolicy;
+        _baseDomain = baseDomain.Value;
     }
 
     [HttpGet]
@@ -92,6 +101,54 @@ public class TenantSettingsController : ControllerBase
             return Problem(detail: "The display name must not be blank.", statusCode: 400, title: "Bad Request");
 
         return Ok(await _tenantService.SetDisplayNameAsync(_tenantAccessor.TenantId, name, ct));
+    }
+
+    /// <summary>
+    /// The tenant's subdomain and address, and whether the caller may change it: an owner may when
+    /// the platform policy allows owners to, and an owner who is a platform admin always may.
+    /// </summary>
+    [HttpGet("subdomain")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TenantSubdomainDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TenantSubdomainDto>> GetSubdomain(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.TenantSettings))
+            return Forbid();
+
+        var settings = await _tenantService.GetSettingsAsync(_tenantAccessor.TenantId, ct);
+        return Ok(new TenantSubdomainDto(
+            settings.Slug, _baseDomain.TenantOrigin(settings.Slug), _baseDomain.BaseDomain, await CanChangeSubdomainAsync(ct)));
+    }
+
+    /// <inheritdoc cref="ITenantService.ChangeSlugAsync"/>
+    [DenyDemoSubject]
+    [HttpPut("subdomain")]
+    [RemoteCommand(Invalidates = ["GetSubdomain", "GetTenantSettings"])]
+    [ProducesResponseType(typeof(TenantSubdomainDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TenantSubdomainDto>> ChangeSubdomain(
+        [FromBody] ChangeSubdomainRequest request, CancellationToken ct)
+    {
+        if (!await CanChangeSubdomainAsync(ct))
+            return Forbid();
+
+        var result = await _tenantService.ChangeSlugAsync(_tenantAccessor.TenantId, request.Slug, ct);
+        if (!result.IsValid)
+            return Problem(detail: result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
+
+        var slug = request.Slug.Trim().ToLowerInvariant();
+        return Ok(new TenantSubdomainDto(slug, _baseDomain.TenantOrigin(slug), _baseDomain.BaseDomain, true));
+    }
+
+    private async Task<bool> CanChangeSubdomainAsync(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess) || string.IsNullOrEmpty(_baseDomain.BaseDomain))
+            return false;
+
+        return HttpContext.GetAuthContext()?.IsPlatformAdmin == true
+            || (await _platformPolicy.GetAsync(ct)).AllowOwnerSlugChange;
     }
 
     /// <summary>
@@ -239,3 +296,11 @@ public record SetUnitsAndTimezoneRequest
     [MaxLength(64)]
     public string Timezone { get; init; } = "";
 }
+
+/// <param name="Slug">The tenant's subdomain.</param>
+/// <param name="Address">The tenant's origin, or null when no base domain is configured.</param>
+/// <param name="BaseDomain">The domain every subdomain sits under.</param>
+/// <param name="CanChange">Whether the caller may change the subdomain.</param>
+public record TenantSubdomainDto(string Slug, string? Address, string BaseDomain, bool CanChange);
+
+public record ChangeSubdomainRequest(string Slug);

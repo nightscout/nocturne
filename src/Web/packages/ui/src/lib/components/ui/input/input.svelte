@@ -62,7 +62,7 @@
     data-slot="input"
     data-size={size}
     data-valid={valid || undefined}
-    class={cn(inputVariants({ size, variant }), "bg-background py-1", className)}
+    class={cn(inputVariants({ size, variant }), variant !== "inline" && "bg-background py-1", className)}
     {type}
     bind:value
     {...restProps}
