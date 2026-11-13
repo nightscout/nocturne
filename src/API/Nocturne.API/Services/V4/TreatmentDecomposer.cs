@@ -2242,7 +2242,6 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         });
 
         await ReportWrittenAsync([.. DecomposedTables.Select(t => t.Model), typeof(StateSpan)]);
-        await _profileActivationWriter.InvalidateAsync(ct);
         return rekeyed;
     }
 

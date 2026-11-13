@@ -82,7 +82,7 @@ public class MetadataPublisherTests
             new ActivityDedupRepository(contexts),
             new ConnectorConfigurationRepository(contexts),
             Mock.Of<IProfileActivationRepository>(),
-            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance

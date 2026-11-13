@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.API.Tests.Infrastructure;
@@ -511,7 +512,8 @@ public sealed class ProfileActivationResolverTests : IDisposable
         await resolver.GetAtAsync(T0 + Hour);
 
         var written = Store(0, "Rhys");
-        await new ProfileActivationWriter(_repository.Object, cache, TempBasalTestDeps.NoReresolution()).InvalidateAsync(CancellationToken.None);
+        await new LegacyReadCacheInvalidation(cache, NullLogger<LegacyReadCacheInvalidation>.Instance)
+            .WrittenAsync([typeof(ProfileActivation)]);
 
         (await Resolver(cache).GetAtAsync(T0 + Hour))!.Activation.Id.Should().Be(written.Id);
     }

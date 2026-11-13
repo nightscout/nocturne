@@ -61,8 +61,7 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
 
     /// <summary>
     /// What a source owns in one table: the buckets discovery groups it into (none for a table
-    /// discovery does not list), a count by source, the profile names a purge must refresh, and the
-    /// delete and re-import release.
+    /// discovery does not list), a count by source, and the delete and re-import release.
     /// </summary>
     private interface IOwnedTable
     {
@@ -76,8 +75,6 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
 
         Task<long> CountAsync(NocturneDbContext db, string source, CancellationToken ct);
 
-        Task<List<string>> ProfileNamesAsync(NocturneDbContext db, string source, CancellationToken ct);
-
         Task<int> SoftDeleteAsync(
             NocturneDbContext db, string source, IAuditContext? audit, string scope, CancellationToken ct);
 
@@ -90,8 +87,7 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
         Type model,
         Func<NocturneDbContext, IQueryable<T>> rows,
         Func<string, Expression<Func<T, bool>>> ownedBy,
-        Func<string, IQueryable<T>, DateTime, DateTime, CancellationToken, Task<List<SourceBucket>>>? buckets = null,
-        Expression<Func<T, string>>? profileName = null)
+        Func<string, IQueryable<T>, DateTime, DateTime, CancellationToken, Task<List<SourceBucket>>>? buckets = null)
         : IOwnedTable where T : class, ITenantScoped, ISoftDeletable
     {
         public string Type => type;
@@ -106,11 +102,6 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
 
         public Task<long> CountAsync(NocturneDbContext db, string source, CancellationToken ct) =>
             rows(db).Where(ownedBy(source)).LongCountAsync(ct);
-
-        public Task<List<string>> ProfileNamesAsync(NocturneDbContext db, string source, CancellationToken ct) =>
-            profileName is null
-                ? Task.FromResult(new List<string>())
-                : rows(db).Where(ownedBy(source)).Select(profileName).Distinct().ToListAsync(ct);
 
         public Task<int> SoftDeleteAsync(
             NocturneDbContext db, string source, IAuditContext? audit, string scope, CancellationToken ct) =>
@@ -145,20 +136,15 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
         new OwnedTable<BodyWeightEntity>(
             SourceDataTypes.BodyWeight, typeof(BodyWeight), db => db.BodyWeights, SourceFilter.For<BodyWeightEntity>, BodyWeightBuckets),
         new OwnedTable<TherapySettingsEntity>(
-            SourceDataTypes.Profiles, typeof(TherapySettings), db => db.TherapySettings, SourceFilter.For<TherapySettingsEntity>,
-            profileName: e => e.ProfileName),
+            SourceDataTypes.Profiles, typeof(TherapySettings), db => db.TherapySettings, SourceFilter.For<TherapySettingsEntity>),
         new OwnedTable<BasalScheduleEntity>(
-            SourceDataTypes.Profiles, typeof(BasalSchedule), db => db.BasalSchedules, SourceFilter.For<BasalScheduleEntity>,
-            profileName: e => e.ProfileName),
+            SourceDataTypes.Profiles, typeof(BasalSchedule), db => db.BasalSchedules, SourceFilter.For<BasalScheduleEntity>),
         new OwnedTable<CarbRatioScheduleEntity>(
-            SourceDataTypes.Profiles, typeof(CarbRatioSchedule), db => db.CarbRatioSchedules, SourceFilter.For<CarbRatioScheduleEntity>,
-            profileName: e => e.ProfileName),
+            SourceDataTypes.Profiles, typeof(CarbRatioSchedule), db => db.CarbRatioSchedules, SourceFilter.For<CarbRatioScheduleEntity>),
         new OwnedTable<SensitivityScheduleEntity>(
-            SourceDataTypes.Profiles, typeof(SensitivitySchedule), db => db.SensitivitySchedules, SourceFilter.For<SensitivityScheduleEntity>,
-            profileName: e => e.ProfileName),
+            SourceDataTypes.Profiles, typeof(SensitivitySchedule), db => db.SensitivitySchedules, SourceFilter.For<SensitivityScheduleEntity>),
         new OwnedTable<TargetRangeScheduleEntity>(
-            SourceDataTypes.Profiles, typeof(TargetRangeSchedule), db => db.TargetRangeSchedules, SourceFilter.For<TargetRangeScheduleEntity>,
-            profileName: e => e.ProfileName),
+            SourceDataTypes.Profiles, typeof(TargetRangeSchedule), db => db.TargetRangeSchedules, SourceFilter.For<TargetRangeScheduleEntity>),
     ];
 
     private static SourceHandle HandleOf(bool fromDataSource) =>
@@ -426,13 +412,11 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
     {
         await using var db = await _contexts.CreateAsync(ct);
         var deleted = new Dictionary<string, long>();
-        var profileNames = new HashSet<string>();
         var written = new HashSet<Type>();
         try
         {
             foreach (var table in OwnedTables)
             {
-                profileNames.UnionWith(await table.ProfileNamesAsync(db, source, ct));
                 var count = await table.SoftDeleteAsync(db, source, _audit, scope, ct);
                 if (count <= 0) continue;
 
@@ -445,7 +429,7 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
             await ReportWrittenAsync(written);
         }
 
-        return new SourcePurgeResult(deleted, profileNames);
+        return new SourcePurgeResult(deleted);
     }
 
     /// <inheritdoc/>
