@@ -1876,13 +1876,11 @@ msgstr "<0/> Back"
 msgid "Clock name"
 msgstr "Clock name"
 
-#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-msgid "Undo (Ctrl+Z)"
-msgstr "Undo (Ctrl+Z)"
+#~ msgid "Undo (Ctrl+Z)"
+#~ msgstr "Undo (Ctrl+Z)"
 
-#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-msgid "Redo (Ctrl+Shift+Z)"
-msgstr "Redo (Ctrl+Shift+Z)"
+#~ msgid "Redo (Ctrl+Shift+Z)"
+#~ msgstr "Redo (Ctrl+Shift+Z)"
 
 #: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
@@ -7923,9 +7921,8 @@ msgstr "<0/> {0} fat, protein, category..."
 #~ msgid "Subcategory"
 #~ msgstr "Subcategory"
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Save & add another <0>⌘+Enter</0>"
-msgstr "Save & add another <0>⌘+Enter</0>"
+#~ msgid "Save & add another <0>⌘+Enter</0>"
+#~ msgstr "Save & add another <0>⌘+Enter</0>"
 
 #~ msgid "Showing {0} of {1} — scroll or refine search to see more"
 #~ msgstr "Showing {0} of {1} — scroll or refine search to see more"
@@ -19375,9 +19372,8 @@ msgstr "Match my language"
 msgid "Tracker data is unavailable, so site and sensor changes are not shown."
 msgstr "Tracker data is unavailable, so site and sensor changes are not shown."
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
-msgstr "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
+#~ msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
+#~ msgstr "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
 
 #~ msgid "Name <0/><1>(required)</1>"
 #~ msgstr "Name <0/><1>(required)</1>"
@@ -38547,3 +38543,23 @@ msgstr "Open the demo"
 #: ../portal/src/routes/scalar/+page.svelte
 msgid "Open the reference on the demo"
 msgstr "Open the reference on the demo"
+
+#. 0: modifier.label
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Undo ({0}+Z)"
+msgstr "Undo ({0}+Z)"
+
+#. 0: modifier.label
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Redo ({0}+Shift+Z)"
+msgstr "Redo ({0}+Shift+Z)"
+
+#. 0: modifier.label
+#: src/routes/(authenticated)/food/Composer.svelte
+msgid "Tab through fields · Enter to save · {0}+Enter to save and add another · Esc to close"
+msgstr "Tab through fields · Enter to save · {0}+Enter to save and add another · Esc to close"
+
+#. 0.0: modifier.label
+#: src/routes/(authenticated)/food/Composer.svelte
+msgid "Save & add another <0>{0}+Enter</0>"
+msgstr "Save & add another <0>{0}+Enter</0>"

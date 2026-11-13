@@ -1876,13 +1876,11 @@ msgstr ""
 msgid "Clock name"
 msgstr ""
 
-#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-msgid "Undo (Ctrl+Z)"
-msgstr ""
+#~ msgid "Undo (Ctrl+Z)"
+#~ msgstr ""
 
-#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-msgid "Redo (Ctrl+Shift+Z)"
-msgstr ""
+#~ msgid "Redo (Ctrl+Shift+Z)"
+#~ msgstr ""
 
 #: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
@@ -7925,9 +7923,8 @@ msgstr ""
 #~ msgid "Subcategory"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Save & add another <0>⌘+Enter</0>"
-msgstr ""
+#~ msgid "Save & add another <0>⌘+Enter</0>"
+#~ msgstr ""
 
 #~ msgid "Showing {0} of {1} — scroll or refine search to see more"
 #~ msgstr ""
@@ -19378,9 +19375,8 @@ msgstr ""
 msgid "Tracker data is unavailable, so site and sensor changes are not shown."
 msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
-msgstr ""
+#~ msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
+#~ msgstr ""
 
 #~ msgid "Name <0/><1>(required)</1>"
 #~ msgstr ""
@@ -38549,4 +38545,24 @@ msgstr ""
 
 #: ../portal/src/routes/scalar/+page.svelte
 msgid "Open the reference on the demo"
+msgstr ""
+
+#. 0: modifier.label
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Undo ({0}+Z)"
+msgstr ""
+
+#. 0: modifier.label
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Redo ({0}+Shift+Z)"
+msgstr ""
+
+#. 0: modifier.label
+#: src/routes/(authenticated)/food/Composer.svelte
+msgid "Tab through fields · Enter to save · {0}+Enter to save and add another · Esc to close"
+msgstr ""
+
+#. 0.0: modifier.label
+#: src/routes/(authenticated)/food/Composer.svelte
+msgid "Save & add another <0>{0}+Enter</0>"
 msgstr ""

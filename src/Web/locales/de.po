@@ -1876,13 +1876,11 @@ msgstr "<0/> Zurück"
 msgid "Clock name"
 msgstr "Uhrname"
 
-#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-msgid "Undo (Ctrl+Z)"
-msgstr "Rückgängig (Strg+Z)"
+#~ msgid "Undo (Ctrl+Z)"
+#~ msgstr "Rückgängig (Strg+Z)"
 
-#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-msgid "Redo (Ctrl+Shift+Z)"
-msgstr "Wiederholen (Strg+Umschalt+Z)"
+#~ msgid "Redo (Ctrl+Shift+Z)"
+#~ msgstr "Wiederholen (Strg+Umschalt+Z)"
 
 #: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
@@ -7923,9 +7921,8 @@ msgstr "<0/> {0} Fett, Eiweiß, Kategorie..."
 #~ msgid "Subcategory"
 #~ msgstr "Unterkategorie"
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Save & add another <0>⌘+Enter</0>"
-msgstr "Speichern & weiteres hinzufügen <0>⌘+Enter</0>"
+#~ msgid "Save & add another <0>⌘+Enter</0>"
+#~ msgstr "Speichern & weiteres hinzufügen <0>⌘+Enter</0>"
 
 #~ msgid "Showing {0} of {1} — scroll or refine search to see more"
 #~ msgstr "Es werden {0} von {1} angezeigt – scrolle oder verfeinere die Suche, um mehr zu sehen"
@@ -19375,9 +19372,8 @@ msgstr ""
 msgid "Tracker data is unavailable, so site and sensor changes are not shown."
 msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
-msgstr ""
+#~ msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
+#~ msgstr ""
 
 #~ msgid "Name <0/><1>(required)</1>"
 #~ msgstr ""
@@ -38546,4 +38542,24 @@ msgstr ""
 
 #: ../portal/src/routes/scalar/+page.svelte
 msgid "Open the reference on the demo"
+msgstr ""
+
+#. 0: modifier.label
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Undo ({0}+Z)"
+msgstr ""
+
+#. 0: modifier.label
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Redo ({0}+Shift+Z)"
+msgstr ""
+
+#. 0: modifier.label
+#: src/routes/(authenticated)/food/Composer.svelte
+msgid "Tab through fields · Enter to save · {0}+Enter to save and add another · Esc to close"
+msgstr ""
+
+#. 0.0: modifier.label
+#: src/routes/(authenticated)/food/Composer.svelte
+msgid "Save & add another <0>{0}+Enter</0>"
 msgstr ""
