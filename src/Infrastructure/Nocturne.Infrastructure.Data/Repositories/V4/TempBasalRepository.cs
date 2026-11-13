@@ -17,7 +17,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for temporary basal records: a sync-key upsert participant and a deduplication
-/// participant, keeping only the span-specific queries, the non-primary read filter and the field
+/// participant, keeping only the span-specific queries and the field
 /// preservation of <see cref="ApplySyncUpsert"/>.
 /// </summary>
 public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasalEntity>, ITempBasalRepository
@@ -50,33 +50,6 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
 
     /// <inheritdoc />
     protected override void ApplyUpdate(TempBasalEntity target, TempBasal source) => TempBasalMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// The base query with the duplicate filter, which
-    /// <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/> applies too.
-    /// </summary>
-    public override async Task<IEnumerable<TempBasal>> GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.TempBasals.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null)
-            query = query.Where(e => e.Device == device);
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-
-        query = query.ExcludeDuplicates();
-
-        query = query.InObservationOrder(descending);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
-        return entities.Select(TempBasalMapper.ToDomainModel);
-    }
 
     /// <summary>
     /// Keeps the stored value of every field the write path cannot express.

@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
@@ -43,22 +42,6 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     /// <inheritdoc />
     protected override void ApplyUpdate(MeterGlucoseEntity target, MeterGlucose source) =>
         MeterGlucoseMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// Gets meter glucose records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of meter glucose records.</returns>
-    public async Task<IEnumerable<MeterGlucose>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.MeterGlucose
-            .AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(MeterGlucoseMapper.ToDomainModel);
-    }
 
     /// <summary>
     /// Deletes all meter glucose records for the given data source.

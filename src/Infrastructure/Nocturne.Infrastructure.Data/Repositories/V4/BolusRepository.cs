@@ -18,8 +18,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <summary>
 /// Repository for managing bolus records. A deduplication participant on top of the sync-key
 /// upsert and keyed delete of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
-/// the extended <c>GetAsync</c> (duplicate filter + keyset cursor) and the read-visibility
-/// filter behind <c>CountAsync</c>.
+/// the <c>GetAsync</c> overload that adds a bolus kind and a keyset cursor to the base read.
 /// </summary>
 public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBolusRepository
 {
@@ -45,17 +44,6 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
 
     /// <inheritdoc />
     protected override void ApplyUpdate(BolusEntity target, Bolus source) => BolusMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// Routes the base 7-arg form through the extended bolus query (duplicate
-    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
-    /// </summary>
-    public override Task<IEnumerable<Bolus>> GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
-        => GetAsync(from, to, device, source, limit, offset, descending,
-            kind: null, afterTimestamp: null, afterId: null, ct);
 
     /// <summary>
     /// Gets bolus records based on filter criteria.
@@ -88,75 +76,10 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.Boluses.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null)
-            query = query.Where(e => e.Device == device);
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        if (kind.HasValue)
-            query = query.Where(e => e.BolusKind == kind.Value.ToString());
-
-        query = query.ExcludeDuplicates();
-
-        // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
-        // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
-        if (afterTimestamp.HasValue && afterId.HasValue)
-        {
-            query = descending
-                ? query.Where(e => e.Timestamp < afterTimestamp.Value
-                    || (e.Timestamp == afterTimestamp.Value && e.Id < afterId.Value))
-                : query.Where(e => e.Timestamp > afterTimestamp.Value
-                    || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
-        }
-
-        query = query.InObservationOrder(descending);
-
-        if (!afterTimestamp.HasValue || !afterId.HasValue)
-        {
-            query = query.Skip(offset);
-        }
-
-        var entities = await query.Take(limit).ToListAsync(ct);
-        return entities.Select(BolusMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets bolus records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationIds">The correlation identifiers.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of bolus records.</returns>
-    public async Task<IEnumerable<Bolus>> GetByCorrelationIdsAsync(
-        IEnumerable<Guid> correlationIds,
-        CancellationToken ct = default
-    )
-    {
-        var ids = correlationIds.Distinct().ToList();
-        if (ids.Count == 0)
-            return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .Boluses.AsNoTracking()
-            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
-            .ToListAsync(ct);
-        return entities.Select(BolusMapper.ToDomainModel).ToList();
-    }
-
-    public async Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(
-        Guid correlationId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .Boluses.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
+        var entities = await PagedRead(
+            ctx.Boluses.AsNoTracking(), from, to, device, source, limit, offset, descending,
+            query => kind.HasValue ? query.Where(e => e.BolusKind == kind.Value.ToString()) : query,
+            afterTimestamp, afterId).ToListAsync(ct);
         return entities.Select(BolusMapper.ToDomainModel);
     }
 
