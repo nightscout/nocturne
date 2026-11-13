@@ -37,6 +37,23 @@ public static class SoftDeleteDedupExtensions
         => source.Where(e => e.DeletedAt == null || EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty));
 
     /// <summary>
+    /// <see cref="WhereBlocksRecreation{TEntity}"/> for a row <paramref name="ctx"/> already tracks:
+    /// true for a live row and for a user tombstone, false for a row the system swept.
+    /// </summary>
+    public static bool BlocksRecreation<TEntity>(this NocturneDbContext ctx, TEntity row)
+        where TEntity : class, ISoftDeletable
+    {
+        if (row.DeletedAt == null)
+            return true;
+
+        var entry = ctx.Entry(row);
+        return entry.State == EntityState.Detached
+            ? throw new InvalidOperationException(
+                $"{typeof(TEntity).Name} is not tracked, so its user-delete flag cannot be read.")
+            : entry.Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue;
+    }
+
+    /// <summary>
     /// <see cref="WhereBlocksRecreation{TEntity}"/> for state spans. A span whose category is not
     /// current (<see cref="StateSpanMapper.WhereCategoryIsCurrent"/>) is retired and blocks nothing,
     /// even when the user deleted it, so a re-upload of its legacy id writes a new span.

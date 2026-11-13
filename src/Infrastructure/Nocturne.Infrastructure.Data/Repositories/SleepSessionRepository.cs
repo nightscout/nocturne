@@ -19,15 +19,18 @@ public class SleepSessionRepository : ISleepSessionRepository
 {
     private readonly INocturneDbContextFactory? _contextFactory;
     private readonly DbUnitOfWork? _unit;
+    private readonly TimeProvider _time;
 
-    public SleepSessionRepository(INocturneDbContextFactory contextFactory)
+    public SleepSessionRepository(INocturneDbContextFactory contextFactory, TimeProvider? time = null)
     {
         _contextFactory = contextFactory;
+        _time = time ?? TimeProvider.System;
     }
 
-    internal SleepSessionRepository(DbUnitOfWork unit)
+    internal SleepSessionRepository(DbUnitOfWork unit, TimeProvider? time = null)
     {
         _unit = unit ?? throw new ArgumentNullException(nameof(unit));
+        _time = time ?? TimeProvider.System;
     }
 
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) =>
@@ -125,7 +128,7 @@ public class SleepSessionRepository : ISleepSessionRepository
             await LockIdAsync(ctx, entity.Id, token);
             var existing = await WithSoftDeleted(ctx).FirstOrDefaultAsync(s => s.Id == entity.Id, token);
 
-            if (existing is { DeletedAt: not null } && ctx.Entry(existing).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue)
+            if (existing is { DeletedAt: not null } && ctx.BlocksRecreation(existing))
             {
                 throw new RecreationBlockedException(
                     "sleep session", $"original id '{existing.OriginalId}' from '{existing.Source}', which the user deleted");
@@ -194,7 +197,7 @@ public class SleepSessionRepository : ISleepSessionRepository
                         s => s.Id != id && s.Source == entity.Source && s.OriginalId == entity.OriginalId, token);
                 if (holder is not null)
                 {
-                    if (holder.DeletedAt is null || ctx.Entry(holder).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue)
+                    if (ctx.BlocksRecreation(holder))
                     {
                         throw new RecreationBlockedException(
                             "sleep session",
@@ -233,7 +236,7 @@ public class SleepSessionRepository : ISleepSessionRepository
             if (existing is null)
                 return false;
 
-            existing.DeletedAt = DateTime.UtcNow;
+            existing.DeletedAt = _time.GetUtcNow().UtcDateTime;
             await ctx.SaveChangesAsync(token);
             return true;
         }, ct: cancellationToken);

@@ -19,7 +19,7 @@ public sealed class HealthRecordTransactions(INocturneDbContextFactory contexts,
             new HeartRateRepository(unit, time),
             new StepCountRepository(unit, time),
             new BodyWeightRepository(unit, time),
-            new SleepSessionRepository(unit));
+            new SleepSessionRepository(unit, time));
         await unit.CommitAsync(token => work(repositories, token), ct);
     }
 }
