@@ -155,7 +155,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             new ActivityDedupRepository(_context.AsFactory()),
             new ConnectorConfigurationRepository(_context.AsFactory()),
             Mock.Of<IProfileActivationRepository>(),
-            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);

@@ -944,7 +944,7 @@ public class DataSourceService : IDataSourceService
         var purged = await _sourcePurge.SoftDeleteBySourceAsync(source, scope, cancellationToken);
         foreach (var (type, deleted) in purged.DeletedCounts)
             Add(type, deleted);
-        await _profileActivationWriter.AfterBulkRemovalAsync(purged.ProfileNames, cancellationToken);
+        await _profileActivationWriter.AfterBulkRemovalAsync(cancellationToken);
 
         if (allowReimport)
             await _sourcePurge.AllowReimportBySourceAsync(source, scope, cancellationToken);

@@ -45,6 +45,9 @@ public class LegacyReadCacheInvalidationTests : IDisposable
 
     private static readonly Type[] GlucoseModels = [typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration)];
 
+    private static readonly Type[] ProfileScopedModels =
+        [typeof(TherapySettings), typeof(BasalSchedule), typeof(CarbRatioSchedule), typeof(SensitivitySchedule), typeof(TargetRangeSchedule)];
+
     private static IEnumerable<Type> TreatmentModels =>
         LegacyTreatmentTables.All.Select(t => t.Model)
             .Append(typeof(TreatmentFood)).Append(typeof(Nocturne.Core.Models.Food)).Distinct();
@@ -59,9 +62,9 @@ public class LegacyReadCacheInvalidationTests : IDisposable
     }
 
     [Fact]
-    public void Every_registry_table_and_the_food_breakdown_map_to_treatments_only()
+    public void Every_registry_table_but_the_activation_and_the_food_breakdown_map_to_treatments_only()
     {
-        foreach (var model in TreatmentModels)
+        foreach (var model in TreatmentModels.Where(m => m != typeof(ProfileActivation)))
             LegacyReadCacheInvalidation.FamiliesByModel[model].Should().Equal([TenantCacheFamily.Treatments], model.Name);
     }
 
@@ -73,10 +76,24 @@ public class LegacyReadCacheInvalidationTests : IDisposable
     }
 
     [Fact]
+    public void Every_profile_scoped_model_maps_to_profile_versions_only()
+    {
+        foreach (var model in ProfileScopedModels)
+            LegacyReadCacheInvalidation.FamiliesByModel[model].Should().Equal([TenantCacheFamily.ProfileVersions], model.Name);
+    }
+
+    [Fact]
+    public void A_profile_activation_maps_to_treatments_and_profile_activations()
+    {
+        LegacyReadCacheInvalidation.FamiliesByModel[typeof(ProfileActivation)]
+            .Should().BeEquivalentTo([TenantCacheFamily.Treatments, TenantCacheFamily.ProfileActivations]);
+    }
+
+    [Fact]
     public void Nothing_else_maps_to_a_family()
     {
         LegacyReadCacheInvalidation.FamiliesByModel.Keys
-            .Should().BeEquivalentTo(TreatmentModels.Concat(GlucoseModels));
+            .Should().BeEquivalentTo(TreatmentModels.Concat(GlucoseModels).Concat(ProfileScopedModels));
     }
 
     /// <summary>
@@ -157,6 +174,42 @@ public class LegacyReadCacheInvalidationTests : IDisposable
             .Invoke(repository, [record, WriteOrigin.Backfill, CancellationToken.None])!;
 
         _written.Models.Should().NotBeEmpty().And.OnlyContain(written => written == model);
+    }
+
+    public static TheoryData<Type> ProfileScopedRepositoryModels()
+    {
+        var data = new TheoryData<Type>();
+        foreach (var model in ProfileScopedModels)
+            data.Add(model);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(ProfileScopedRepositoryModels))]
+    public async Task A_profile_scoped_create_reports_its_model(Type model)
+    {
+        var repository = Repository(model);
+        var record = (IV4Record)Activator.CreateInstance(model)!;
+        record.Timestamp = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        record.LegacyId = "doc:1";
+        var interfaceType = typeof(IV4Repository<>).MakeGenericType(model);
+        await (Task)interfaceType.GetMethod("CreateAsync")!
+            .Invoke(repository, [record, WriteOrigin.Live, CancellationToken.None])!;
+        _written.Models.Should().NotBeEmpty().And.OnlyContain(written => written == model);
+    }
+
+    [Fact]
+    public async Task Setting_the_default_therapy_settings_reports_therapy_settings()
+    {
+        var repository = (TherapySettingsRepository)Repository(typeof(TherapySettings));
+        var settings = await repository.CreateAsync(
+            new TherapySettings { Timestamp = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc), ProfileName = "Default" },
+            WriteOrigin.Live);
+        _written.Models.Clear();
+
+        await repository.SetDefaultAsync(settings.Id);
+
+        _written.Models.Should().Equal(typeof(TherapySettings));
     }
 
     [Fact]

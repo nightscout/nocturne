@@ -6,12 +6,14 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Caching;
 
 /// <summary>
-/// Clears the legacy read families a written model type projects into: <see cref="TenantCacheFamily.Entries"/>
+/// Clears the cache families a written model type feeds: <see cref="TenantCacheFamily.Entries"/>
 /// for the glucose tables, <see cref="TenantCacheFamily.Treatments"/> for every table of
 /// <see cref="LegacyTreatmentTables.All"/> and for the <see cref="TreatmentFood"/> breakdown a carb
 /// intake is served with (<see cref="CarbFoodIndex"/>) and for the <see cref="Food"/> whose name that
 /// breakdown reads. Every state span category clears treatments, though only the categories of
 /// <see cref="LegacyTreatmentTables.StateSpanTables"/> are served as one.
+/// The five profile-scoped schedule models clear <see cref="TenantCacheFamily.ProfileVersions"/>, and
+/// <see cref="ProfileActivation"/> clears <see cref="TenantCacheFamily.ProfileActivations"/>.
 /// </summary>
 internal sealed class LegacyReadCacheInvalidation(
     ITenantCache cache, ILogger<LegacyReadCacheInvalidation> logger) : ILegacyReadCacheInvalidation
@@ -23,6 +25,13 @@ internal sealed class LegacyReadCacheInvalidation(
             .Select(model => (Model: model, Family: TenantCacheFamily.Treatments))
             .Concat(new[] { typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration) }
                 .Select(model => (Model: model, Family: TenantCacheFamily.Entries)))
+            .Concat(new[]
+                {
+                    typeof(TherapySettings), typeof(BasalSchedule), typeof(CarbRatioSchedule),
+                    typeof(SensitivitySchedule), typeof(TargetRangeSchedule),
+                }
+                .Select(model => (Model: model, Family: TenantCacheFamily.ProfileVersions)))
+            .Append((Model: typeof(ProfileActivation), Family: TenantCacheFamily.ProfileActivations))
             .GroupBy(pair => pair.Model)
             .ToDictionary(g => g.Key, g => g.Select(pair => pair.Family).Distinct().ToArray());
 

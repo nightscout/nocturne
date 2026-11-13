@@ -139,7 +139,7 @@ public class PatientRecordController : ControllerBase
         if (!string.Equals(storedTimezone, updated.Timezone, StringComparison.Ordinal))
         {
             await _tenantCache.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, cancellationToken);
-            await _tempBasalRates.AfterProfilesChangedAsync([], cancellationToken);
+            await _tempBasalRates.AfterProfilesChangedAsync(cancellationToken);
         }
         return Ok(updated);
     }

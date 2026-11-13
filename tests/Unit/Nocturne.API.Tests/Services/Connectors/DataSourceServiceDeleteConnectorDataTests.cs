@@ -406,7 +406,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         await using (var ctx = NewContext())
         {
             var writer = new ProfileActivationWriter(
-                ProfileActivationTestDeps.Repository(ctx), TestTenantCache.Create(), reresolver.Object);
+                ProfileActivationTestDeps.Repository(ctx), reresolver.Object);
             var service = new DataSourceService(
                 new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
                 new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
@@ -416,9 +416,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             (await service.DeleteConnectorDataAsync(ConnectorId)).Success.Should().BeTrue();
         }
 
-        reresolver.Verify(r => r.AfterProfilesChangedAsync(
-            It.Is<IReadOnlyCollection<string>>(names => names.SequenceEqual(new[] { "Imported" })),
-            It.IsAny<CancellationToken>()), Times.Once);
+        reresolver.Verify(r => r.AfterProfilesChangedAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

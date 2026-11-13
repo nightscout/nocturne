@@ -24,7 +24,7 @@ internal sealed class ProfileVersionsMovedJob(ILogger<ProfileVersionsMovedJob> l
     public async Task<JobOutcome> RunAsync(JobRun run, CancellationToken ct)
     {
         var tenantId = run.Tenant!.TenantId;
-        await run.Services.GetRequiredService<ITempBasalRateReresolver>().AfterProfilesChangedAsync([], ct);
+        await run.Services.GetRequiredService<ITempBasalRateReresolver>().AfterProfilesChangedAsync(ct);
         await run.Services.GetRequiredService<ITenantCache>().RemoveTenantAsync(tenantId, ct);
         logger.LogInformation(
             "Re-resolved the percent temp basal rates of tenant {TenantId}, whose profile versions a migration moved",

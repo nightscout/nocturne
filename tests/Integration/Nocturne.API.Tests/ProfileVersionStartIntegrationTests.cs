@@ -268,7 +268,6 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
             var second = (await schedules.GetByProfileNameAsync(store)).Single(v => v.Entries.Single().Value == 2.0);
             second.Timestamp = DaysAgo(10).UtcDateTime;
             await schedules.UpdateAsync(second.Id, second, WriteOrigin.Live);
-            await sp.GetRequiredService<ProfileVersionCache>().RefreshAsync(schedules, store, default);
             return 0;
         });
 

@@ -28,8 +28,9 @@ public abstract class ProfileScopedRepositoryBase<TModel, TEntity> : V4Repositor
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
-        IV4RecordBroadcaster<TModel>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<TModel>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
     {
     }
 
@@ -78,9 +79,11 @@ public abstract class ProfileScopedRepositoryBase<TModel, TEntity> : V4Repositor
         string prefix, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
+        var deleted = await ctx.AuditedSoftDeleteAsync(
             ctx.Set<TEntity>().Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix)),
             AuditContext, $"legacy_id_prefix={prefix}", ct);
+        await ReportWrittenAsync();
+        return deleted;
     }
 
     /// <inheritdoc cref="IProfileScopedRepository{TRecord}.GetByCorrelationIdsAsync" />
