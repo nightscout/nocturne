@@ -123,6 +123,17 @@ public class HostPersistenceGuardTests
                 new("src/API/Nocturne.API/Authorization/ActogramReadScopeGuard.cs",
                     "clears the actogram response's HeartRates and StepCounts, which share the DbSets' names"),
             ]),
+        new("audit logs (#3351)",
+            ["MutationAuditLogEntity", "ReadAccessLogEntity"],
+            ["MutationAuditLog", "ReadAccessLog"],
+            [
+                new("src/API/Nocturne.API/Filters/ReadAccessAuditFilter.cs",
+                    "host-side writer that builds the read access log row of a request for the queue",
+                    CoversMembers: true),
+                new("src/API/Nocturne.API/Filters/ReadAccessLogWriter.cs",
+                    "host-side writer that queues read access log rows and saves them in batches after the request ends",
+                    CoversMembers: true),
+            ]),
     ];
 
     private const string Host = "src/API/Nocturne.API";
