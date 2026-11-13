@@ -80,7 +80,7 @@ public class TreatmentsPostUpsertTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             bolusRepo, tempBasalRepo.Object,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),

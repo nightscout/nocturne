@@ -34,10 +34,10 @@ public class ActivityServiceTests
     private readonly ActivityService _activityService;
 
     private static readonly Nocturne.API.Services.V4.ActivityDecomposer Classifier = new(
-        Mock.Of<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(),
+        Mock.Of<Nocturne.Core.Contracts.Repositories.IActivityRecordRepository>(),
         Mock.Of<Nocturne.Core.Contracts.Repositories.IStateSpanRepository>(),
         Mock.Of<ISleepService>(),
-        TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<Nocturne.API.Services.V4.ActivityDecomposer>.Instance);
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<Nocturne.API.Services.V4.ActivityDecomposer>.Instance);
 
     public ActivityServiceTests()
     {

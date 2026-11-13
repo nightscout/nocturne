@@ -31,8 +31,14 @@ namespace Nocturne.API.Tests.Infrastructure;
 [Trait("Category", "Unit")]
 public class LegacyModulePortGuardTests
 {
-    private sealed record Module(string Folder, string Concept, string[] Ports)
+    /// <param name="ContractPorts">
+    /// Public Core contracts into the module's storage that only the module may take. Infrastructure
+    /// implements them, so they cannot be declared in the module's folder.
+    /// </param>
+    private sealed record Module(string Folder, string Concept, string[] Ports, string[]? ContractPorts = null)
     {
+        public string[] Contracts => ContractPorts ?? [];
+
         public bool Owns(string path) =>
             path.StartsWith($"src/API/Nocturne.API/Services/{Folder}/", StringComparison.Ordinal)
             || path.StartsWith($"src/API/Nocturne.API/Services/V4/{Concept}Decomposer", StringComparison.Ordinal)
@@ -45,7 +51,7 @@ public class LegacyModulePortGuardTests
     private static readonly Module[] Modules =
     [
         new("Entries", "Entry", ["IEntryStore", "IEntryCache", "IEntryDecomposer"]),
-        new("Treatments", "Treatment", ["ITreatmentStore", "ITreatmentCache", "ITreatmentDecomposer"]),
+        new("Treatments", "Treatment", ["ITreatmentStore", "ITreatmentCache", "ITreatmentDecomposer"], ["IDecomposedTreatmentKeys"]),
         new("DeviceStatuses", "DeviceStatus", ["IDeviceStatusStore", "IDeviceStatusDecomposer"]),
     ];
 
@@ -54,7 +60,14 @@ public class LegacyModulePortGuardTests
     private static readonly string[] ReflectedSources = ["src/API/Nocturne.API", "tests/Unit/Nocturne.API.Tests"];
 
     private static readonly IReadOnlyDictionary<string, Module> ModuleOfPort =
-        Modules.SelectMany(m => m.Ports.Select(p => (p, m))).ToDictionary(x => x.p, x => x.m);
+        Modules.SelectMany(m => m.Ports.Concat(m.Contracts).Select(p => (p, m))).ToDictionary(x => x.p, x => x.m);
+
+    private static readonly IReadOnlyDictionary<string, Module> ModuleOfContractPort =
+        Modules.SelectMany(m => m.Contracts.Select(p => (p, m))).ToDictionary(x => x.p, x => x.m);
+
+    /// <summary>The host sources a contract port may not be named in outside its module.</summary>
+    private static readonly string[] ContractPortScope =
+        ["src/API/Nocturne.API", "tests/Unit/Nocturne.API.Tests", "tests/Integration/Nocturne.API.Tests"];
 
     private static readonly IReadOnlyList<(string Name, Module Module)> Declared =
         Modules.SelectMany(m => RepoSources.Src
@@ -153,6 +166,26 @@ public class LegacyModulePortGuardTests
     }
 
     [Fact]
+    public void NothingNamesAContractPortOutsideItsModule()
+    {
+        var namers = ContractPortScope.SelectMany(RepoSources.Under)
+            .Where(s => s.Path != Registration)
+            .SelectMany(s => NamedContractPorts(s.Tree)
+                .Where(name => !ModuleOfContractPort[name].Owns(s.Path))
+                .Select(name => $"{s.Path}({name})"))
+            .Distinct();
+
+        string.Join(Environment.NewLine, namers).Should().BeEmpty("the module's storage is reached through the module's service");
+    }
+
+    [Theory]
+    [InlineData("class C { readonly Mock<IDecomposedTreatmentKeys> _keys = new(); }", "IDecomposedTreatmentKeys")]
+    [InlineData("class C { object M(IServiceProvider sp) => sp.GetRequiredService<IDecomposedTreatmentKeys>(); }", "IDecomposedTreatmentKeys")]
+    [InlineData("/// <see cref=\"IDecomposedTreatmentKeys\"/>\nclass C { string S = \"IDecomposedTreatmentKeys\"; }", "")]
+    public void DetectsANamedContractPort(string source, string expected) =>
+        string.Join(",", NamedContractPorts(CSharpSyntaxTree.ParseText(source))).Should().Be(expected);
+
+    [Fact]
     public void EveryExemptionStillNamesItsType()
     {
         var sources = Sources("src").Concat(Sources("tests")).ToDictionary(s => s.Path);
@@ -205,7 +238,10 @@ public class LegacyModulePortGuardTests
             .ToList();
 
         declared.Select(t => t.Name).Should().BeEquivalentTo(ModuleOfPort.Keys, "a renamed port would drop out of the guard");
-        declared.Should().OnlyContain(t => !t.IsPublic && t.Assembly == Api);
+        declared.Where(t => !ModuleOfContractPort.ContainsKey(t.Name))
+            .Should().OnlyContain(t => !t.IsPublic && t.Assembly == Api);
+        declared.Where(t => ModuleOfContractPort.ContainsKey(t.Name))
+            .Should().OnlyContain(t => t.IsPublic && t.Assembly == contracts, "a contract port is one Infrastructure implements");
     }
 
     [Fact]
@@ -331,6 +367,12 @@ public class LegacyModulePortGuardTests
         tree.GetRoot().DescendantNodes().OfType<SimpleNameSyntax>()
             .Where(name => ModuleOfName.ContainsKey(name.Identifier.ValueText))
             .Select(name => (MemberOf(name), name.Identifier.ValueText))
+            .Distinct();
+
+    private static IEnumerable<string> NamedContractPorts(SyntaxTree tree) =>
+        tree.GetRoot().DescendantNodes().OfType<SimpleNameSyntax>()
+            .Select(name => name.Identifier.ValueText)
+            .Where(ModuleOfContractPort.ContainsKey)
             .Distinct();
 
     /// <summary>

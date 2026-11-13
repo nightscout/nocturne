@@ -10,6 +10,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -41,10 +42,9 @@ public class ActivityDecomposerBatchTests : IDisposable
             });
 
         _decomposer = new ActivityDecomposer(
-            _context.AsFactory(),
+            new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System),
             _stateSpanRepoMock.Object,
-            _sleepServiceMock.Object,
-            TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+            _sleepServiceMock.Object, NullLogger<ActivityDecomposer>.Instance);
     }
 
     public void Dispose()

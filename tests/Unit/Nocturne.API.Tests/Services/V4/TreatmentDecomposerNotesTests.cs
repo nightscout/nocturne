@@ -53,7 +53,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
         var insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
         _decomposer = new TreatmentDecomposer(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             bolusRepo, tempBasalRepoMock.Object,
             carbIntakeRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             stateSpanServiceMock.Object,
