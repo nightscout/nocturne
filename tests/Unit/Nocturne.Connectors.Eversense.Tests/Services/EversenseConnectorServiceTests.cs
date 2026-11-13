@@ -136,7 +136,6 @@ public class EversenseConnectorServiceTests
                 CurrentGlucose = 120,
                 GlucoseTrend = 3, // Flat
                 CgTime = DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"),
-                Units = 0, // mg/dL
                 IsTransmitterConnected = true
             }
         };
@@ -188,7 +187,6 @@ public class EversenseConnectorServiceTests
                 CurrentGlucose = 120,
                 GlucoseTrend = 3,
                 CgTime = DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"),
-                Units = 0,
                 IsTransmitterConnected = true
             }
         };
@@ -227,7 +225,6 @@ public class EversenseConnectorServiceTests
                 CurrentGlucose = 120,
                 GlucoseTrend = 3,
                 CgTime = DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"),
-                Units = 0,
                 IsTransmitterConnected = false
             }
         };
@@ -324,7 +321,6 @@ public class EversenseConnectorServiceTests
                 CurrentGlucose = 120,
                 GlucoseTrend = 3,
                 CgTime = DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"),
-                Units = 0,
                 IsTransmitterConnected = true
             },
             new()
@@ -333,7 +329,6 @@ public class EversenseConnectorServiceTests
                 CurrentGlucose = 130,
                 GlucoseTrend = 4,
                 CgTime = DateTimeOffset.UtcNow.AddMinutes(-1).ToString("O"),
-                Units = 0,
                 IsTransmitterConnected = true
             }
         };
@@ -583,7 +578,6 @@ public class EversenseConnectorServiceTests
         CurrentGlucose = glucose,
         GlucoseTrend = 3,
         CgTime = cgTime,
-        Units = 0,
         IsTransmitterConnected = true
     };
 

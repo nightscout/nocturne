@@ -13,9 +13,6 @@ public class EversensePatientDatum
     [JsonPropertyName("CGTime")]
     public string CgTime { get; set; } = string.Empty;
 
-    [JsonPropertyName("Units")]
-    public int Units { get; set; }
-
     /// <summary>
     /// Null for a patient whose app has not reported a transmitter connection.
     /// </summary>

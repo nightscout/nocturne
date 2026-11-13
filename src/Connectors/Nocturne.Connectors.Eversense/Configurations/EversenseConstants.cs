@@ -28,6 +28,12 @@ public static class EversenseConstants
     public const int SensorGlucoseEventType = 1;
 
     /// <summary>
+    ///     The care API's value for 'no glucose right now', which the Eversense NOW app shows as
+    ///     <c>---</c>. Values outside 40 to 400 mg/dL are kept: they mean the sensor's LO and HI.
+    /// </summary>
+    public const int NoGlucose = 65535;
+
+    /// <summary>
     ///     <c>error_code</c> of a token refusal. The Eversense apps read a refused password as
     ///     400 <c>invalid_grant</c> with code 6008 and
     ///     <c>error_description</c> "invalid credentials.RemainingAttempt:N"; after three refusals
