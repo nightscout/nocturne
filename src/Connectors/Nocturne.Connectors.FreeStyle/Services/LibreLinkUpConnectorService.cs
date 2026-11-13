@@ -8,7 +8,6 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Mappers;
 using Nocturne.Connectors.FreeStyle.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -65,7 +64,6 @@ public class LibreConnectorService(
     }
 
     public override string ServiceName => "LibreLinkUp";
-    protected override string ConnectorSource => DataSources.LibreConnector;
 
     private async Task<bool> AuthenticateWithConfigAsync(
         LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)

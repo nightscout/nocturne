@@ -9,7 +9,6 @@ public class TidepoolConnectorInstaller()
     : ConnectorInstaller<TidepoolConnectorConfiguration, TidepoolConnectorService, TidepoolAuthTokenProvider>(
         new ConnectorOptions
         {
-            ConnectorName = "Tidepool",
             ServerMapping = new Dictionary<string, string>
             {
                 ["US"] = TidepoolConstants.Servers.Us,

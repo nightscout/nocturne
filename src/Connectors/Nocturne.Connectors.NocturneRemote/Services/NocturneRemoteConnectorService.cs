@@ -32,7 +32,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     {
     }
 
-    protected override string ConnectorSource => DataSources.NocturneRemoteConnector;
     public override string ServiceName => "Nocturne Remote";
 
     /// <summary>

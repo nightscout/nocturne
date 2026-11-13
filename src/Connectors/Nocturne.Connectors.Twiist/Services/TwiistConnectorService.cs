@@ -8,7 +8,6 @@ using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Mappers;
 using Nocturne.Connectors.Twiist.Models;
 using Nocturne.Connectors.Twiist.Utilities;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Twiist.Services;
@@ -41,7 +40,6 @@ public class TwiistConnectorService
         _tempBasalMapper = new TwiistTempBasalMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.TwiistConnector;
     public override string ServiceName => "Twiist Insight";
 
 

@@ -10,7 +10,6 @@ public class GlookoConnectorInstaller()
     : ConnectorInstaller<GlookoConnectorConfiguration, GlookoConnectorService, GlookoAuthTokenProvider>(
         new ConnectorOptions
         {
-            ConnectorName = "Glooko",
             Timeout = TimeSpan.FromMinutes(5),
             ConnectTimeout = TimeSpan.FromSeconds(15),
             AddResilience = true,

@@ -16,11 +16,6 @@ namespace Nocturne.Connectors.Core.Extensions;
 public sealed class ConnectorOptions
 {
     /// <summary>
-    ///     The connector name used in configuration paths (e.g., "Dexcom", "LibreLinkUp")
-    /// </summary>
-    public required string ConnectorName { get; init; }
-
-    /// <summary>
     ///     Server mapping for region-based server resolution.
     ///     Key: region code (e.g., "US", "EU"), Value: server URL
     /// </summary>
@@ -74,10 +69,15 @@ public static class ConnectorServiceCollectionExtensions
             return services;
         }
 
-        public TConfig AddConnectorConfiguration<TConfig>(IConfiguration configuration,
-            string connectorName)
+        /// <summary>
+        ///     Binds the connector's startup configuration under the name its
+        ///     <see cref="ConnectorRegistrationAttribute"/> declares, and registers it as the frozen
+        ///     defaults the configuration loader starts from.
+        /// </summary>
+        public TConfig AddConnectorConfiguration<TConfig>(IConfiguration configuration)
             where TConfig : BaseConnectorConfiguration, new()
         {
+            var connectorName = ConnectorRegistrationAttribute.DeclaredOn(typeof(TConfig)).ConnectorName;
             var config = new TConfig();
             configuration.BindConnectorConfiguration(config, connectorName);
 
@@ -108,10 +108,7 @@ public static class ConnectorServiceCollectionExtensions
             where TTokenProvider : class
         {
             // Register configuration
-            var config = services.AddConnectorConfiguration<TConfig>(
-                configuration,
-                options.ConnectorName
-            );
+            var config = services.AddConnectorConfiguration<TConfig>(configuration);
 
             // Skip registration if disabled
             if (!config.Enabled)

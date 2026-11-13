@@ -41,7 +41,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         _currentConfig = registration?.Defaults ?? throw new ArgumentNullException(nameof(registration));
     }
 
-    protected override string ConnectorSource => DataSources.NightscoutConnector;
     public override string ServiceName => "Nightscout";
 
     // A Nightscout instance is a full data export, so the initial sync (no prior data) imports the

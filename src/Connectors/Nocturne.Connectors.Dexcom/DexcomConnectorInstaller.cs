@@ -9,7 +9,6 @@ public class DexcomConnectorInstaller()
     : ConnectorInstaller<DexcomConnectorConfiguration, DexcomConnectorService, DexcomAuthTokenProvider>(
         new ConnectorOptions
         {
-            ConnectorName = "Dexcom",
             ServerMapping = new Dictionary<string, string>
             {
                 ["US"] = DexcomConstants.Servers.Us,

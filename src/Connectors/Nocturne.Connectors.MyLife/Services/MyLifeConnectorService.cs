@@ -7,7 +7,6 @@ using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -35,7 +34,6 @@ public class MyLifeConnectorService(
 {
 
     public override string ServiceName => "MyLife";
-    protected override string ConnectorSource => DataSources.MyLifeConnector;
 
     /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session

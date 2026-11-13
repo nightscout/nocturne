@@ -7,7 +7,6 @@ using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Connectors.Tandem.Mappers;
 using Nocturne.Connectors.Tandem.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Tandem.Services;
@@ -41,7 +40,6 @@ public class TandemConnectorService
         _apiClient = new TandemSourceApiClient(httpClient, logger);
     }
 
-    protected override string ConnectorSource => DataSources.TConnectSyncConnector;
     public override string ServiceName => "Tandem Source";
 
 

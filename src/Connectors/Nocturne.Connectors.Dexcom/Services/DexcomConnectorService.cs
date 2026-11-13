@@ -8,7 +8,6 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Mappers;
 using Nocturne.Connectors.Dexcom.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -36,7 +35,6 @@ public class DexcomConnectorService
         _sensorGlucoseMapper = new DexcomSensorGlucoseMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.DexcomConnector;
     public override string ServiceName => "Dexcom Share";
 
     /// <summary>

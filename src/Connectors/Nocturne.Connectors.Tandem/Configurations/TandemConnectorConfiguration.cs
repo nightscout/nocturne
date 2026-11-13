@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.Tandem.Configurations;
 /// or Mobi pump. Feature parity reference: the open-source <c>tconnectsync</c> project.
 /// </summary>
 [ConnectorRegistration(
-    "Tandem",
+    TandemConstants.ConnectorName,
     ServiceNames.TConnectSyncConnector,
     "TANDEM",
     "ConnectSource.Tandem",

@@ -9,7 +9,7 @@ namespace Nocturne.Connectors.Eversense.Configurations;
     ServiceNames.EversenseConnector,
     "EVERSENSE",
     "ConnectSource.Eversense",
-    "eversense-connector",
+    DataSources.EversenseConnector,
     "eversense",
     ConnectorCategory.Cgm,
     "Connect to Eversense Now",

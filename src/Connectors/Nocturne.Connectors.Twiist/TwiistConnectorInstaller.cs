@@ -7,4 +7,4 @@ namespace Nocturne.Connectors.Twiist;
 
 public class TwiistConnectorInstaller()
     : ConnectorInstaller<TwiistConnectorConfiguration, TwiistConnectorService, TwiistAuthTokenProvider>(
-        new ConnectorOptions { ConnectorName = "Twiist" });
+        new ConnectorOptions());

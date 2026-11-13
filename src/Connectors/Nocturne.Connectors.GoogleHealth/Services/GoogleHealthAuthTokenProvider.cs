@@ -33,7 +33,6 @@ public sealed class GoogleHealthAuthTokenProvider(
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private readonly GoogleHealthOAuthClient oauth = new(httpClient, timeProvider);
 
-    protected override string ConnectorName => GoogleHealthConnectorService.ConnectorName;
     protected override int TokenLifetimeBufferMinutes => 1;
     protected override bool RethrowTokenAcquisitionExceptions => true;
 

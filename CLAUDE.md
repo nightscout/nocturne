@@ -133,7 +133,7 @@ Nocturne follows Clean Architecture.
 ```
 src/
 ├── API/Nocturne.API             # ASP.NET Core REST API (controllers for v1-v4 + admin)
-├── Aspire/                      # .NET Aspire orchestration (AppHost, ServiceDefaults, SourceGenerators)
+├── Aspire/                      # .NET Aspire orchestration (AppHost, ServiceDefaults, Hosting)
 ├── Connectors/                  # Data source integrations (Dexcom, Glooko, Libre, etc.)
 ├── Core/
 │   ├── Nocturne.Core.Clinical   # Clinical calculators (statistics, IOB/COB, sleep)
