@@ -223,6 +223,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStateSpanRepository, StateSpanRepository>();
         services.AddScoped<ISleepSessionRepository, SleepSessionRepository>();
         services.AddScoped<IActivityDedupRepository, ActivityDedupRepository>();
+        services.AddScoped<IActivityRecordRepository, ActivityRecordRepository>();
         services.AddScoped<IHeartRateRepository, HeartRateRepository>();
         services.AddScoped<IObservedHealthSeriesRepository<StepCount>, StepCountRepository>();
         services.AddScoped<IHealthSeriesRepository<BodyWeight>, BodyWeightRepository>();

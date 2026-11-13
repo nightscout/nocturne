@@ -112,6 +112,16 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.DeviceEvents.IncludingDeleted().AsNoTracking()
+            .Where(e => ids.Contains(e.Id))
+            .ToListAsync(ct);
+        return entities.Select(DeviceEventMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DeviceEvent>> GetUserDeletedAsync(
         DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default)
     {

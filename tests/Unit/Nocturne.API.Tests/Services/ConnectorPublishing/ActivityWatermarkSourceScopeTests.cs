@@ -133,7 +133,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IDataEventSink<Activity>>(),
             new ActivityDecomposer(
-                _context.AsFactory(), stateSpanRepository, sleepService, TimeProvider.System, NullLogger<ActivityDecomposer>.Instance),
+                new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), stateSpanRepository, sleepService, NullLogger<ActivityDecomposer>.Instance),
             heartRateService,
             stepCountService,
             NullLogger<ActivityService>.Instance);

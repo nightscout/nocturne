@@ -82,6 +82,9 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     Task<IReadOnlyList<DeviceEvent>> GetAllCopiesAsync(
         DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default);
 
+    /// <summary>The events with <paramref name="ids"/>, deleted ones included, in no particular order.</summary>
+    Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     /// <summary>
     /// The events of <paramref name="eventTypes"/> in [<paramref name="from"/>, <paramref name="to"/>)
     /// that the user deleted, oldest first.

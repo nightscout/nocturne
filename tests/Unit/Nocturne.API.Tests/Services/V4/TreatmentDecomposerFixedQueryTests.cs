@@ -211,6 +211,7 @@ public class TreatmentDecomposerFixedQueryTests : IDisposable
 
         return new TreatmentDecomposer(
             new CountingContexts(new TestNocturneDbContextFactory(_context), () => _contextOpens++),
+            Double<IDecomposedTreatmentKeys>().Object,
             Table<IBolusRepository, V4Models.Bolus>().Object,
             Table<ITempBasalRepository, V4Models.TempBasal>().Object,
             carbs.Object,

@@ -22,6 +22,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -110,7 +111,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
     private TreatmentDecomposer CreateDecomposer(IDeviceService deviceService)
     {
         return new TreatmentDecomposer(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             _bolusRepoMock.Object,
             _tempBasalRepoMock.Object,
             _carbRepoMock.Object,

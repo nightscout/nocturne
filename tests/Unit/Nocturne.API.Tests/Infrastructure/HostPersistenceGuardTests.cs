@@ -114,8 +114,6 @@ public class HostPersistenceGuardTests
             ["BodyWeightEntity", "HeartRateEntity", "StepCountEntity"],
             ["BodyWeights", "HeartRates", "StepCounts"],
             [
-                new("src/API/Nocturne.API/Services/V4/ActivityDecomposer.cs",
-                    "decomposes an activity batch into heart rates and step counts beside its state spans in one transaction"),
                 new("src/API/Nocturne.API/Services/Seeding/SampleDataSeeder.cs",
                     "seeds sample body weights straight into the table alongside every other seeded series"),
                 new("src/API/Nocturne.API/Authorization/ActogramReadScopeGuard.cs",
@@ -136,8 +134,6 @@ public class HostPersistenceGuardTests
             ["SleepSessionEntity", "SleepStageEntity", "SleepBiometricSampleEntity"],
             ["SleepSessions", "SleepStages", "SleepBiometricSamples"],
             [
-                new("src/API/Nocturne.API/Services/V4/ActivityDecomposer.cs",
-                    "checks the user's sleep session tombstones beside its state spans in one transaction"),
                 new("src/API/Nocturne.API/Services/ChartData/Stages/DtoMappingStage.cs",
                     "reads the chart context's SleepSessions, which shares the DbSet's name"),
                 new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
