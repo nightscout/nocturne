@@ -84,7 +84,6 @@ public class LibreLinkUpSignInFailureTests
             resolver,
             NullLogger<LibreConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             provider);
 
         return await service.SyncDataAsync(

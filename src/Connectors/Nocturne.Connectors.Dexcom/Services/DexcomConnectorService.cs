@@ -20,7 +20,6 @@ namespace Nocturne.Connectors.Dexcom.Services;
 public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfiguration>
 {
     private readonly DexcomSensorGlucoseMapper _sensorGlucoseMapper;
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly DexcomAuthTokenProvider _tokenProvider;
 
@@ -29,7 +28,6 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         IConnectorServerResolver<DexcomConnectorConfiguration> serverResolver,
         ILogger<DexcomConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         DexcomAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
@@ -38,9 +36,6 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
     {
         _retryDelayStrategy =
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy =
-            rateLimitingStrategy
-            ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider =
             tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _sensorGlucoseMapper = new DexcomSensorGlucoseMapper(logger);
@@ -117,8 +112,6 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
             TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
-
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var fetched = await ExecuteWithRetryAsync(
             async () => await FetchRawDataCoreAsync(config, sessionId, since, cancellationToken),

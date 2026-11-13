@@ -23,7 +23,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     private readonly TwiistInsulinMapper _insulinMapper;
     private readonly TwiistMealMapper _mealMapper;
     private readonly TwiistTempBasalMapper _tempBasalMapper;
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TwiistAuthTokenProvider _tokenProvider;
 
@@ -32,14 +31,12 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         IConnectorServerResolver<TwiistConnectorConfiguration> serverResolver,
         ILogger<TwiistConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         TwiistAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null)
         : base(httpClient, serverResolver, logger, publisher, timeProvider)
     {
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _glucoseMapper = new TwiistGlucoseMapper(logger);
         _insulinMapper = new TwiistInsulinMapper(logger);
@@ -229,8 +226,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             return null;
         }
 
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
-
         return await ExecuteWithRetryAsync(
             async () => await FetchOverviewsCoreAsync(accessToken, cancellationToken),
             _retryDelayStrategy,
@@ -266,8 +261,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
-
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
             async () => await FetchPackageCoreAsync(accessToken, pwdId, cancellationToken),

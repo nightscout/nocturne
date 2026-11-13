@@ -25,7 +25,6 @@ public class NightscoutBackgroundSyncAuthTests
             new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(startupDefaults, "Nightscout"),
             publisher: null);
     }
@@ -40,7 +39,6 @@ public class NightscoutBackgroundSyncAuthTests
             new ConnectorServerResolver<GlurooConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<GlurooConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new ConnectorRegistration<GlurooConnectorConfiguration>(startupDefaults, "Gluroo"),
             publisher: null);
     }

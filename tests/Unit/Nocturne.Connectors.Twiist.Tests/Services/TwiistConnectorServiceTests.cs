@@ -235,7 +235,6 @@ public class TwiistConnectorServiceTests
                 new ConnectorServerResolver<TwiistConnectorConfiguration>(null, null, null),
                 NullLogger<TwiistConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 new FakeTwiistAuthTokenProvider(token),
                 publisher.Object);
         }

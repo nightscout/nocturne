@@ -27,38 +27,42 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 {
     private readonly IConnectorPublisher? _connectorPublisher;
     private readonly IMealMatchingService? _mealMatchingService;
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly GlookoAuthTokenProvider _tokenProvider;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
     private readonly IConnectorSyncCursorStore? _cursorStore;
     private readonly ILogger<GlookoConnectorService> _glookoLogger;
+    private readonly TimeSpan _endpointPause;
+
+    // Glooko answers a burst of v2 requests with 422, its rate limit, so each request after the first
+    // in a window waits this long.
+    private static readonly TimeSpan DefaultEndpointPause = TimeSpan.FromSeconds(5);
 
     public GlookoConnectorService(
         HttpClient httpClient,
         IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
         ILogger<GlookoConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         GlookoAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         IMealMatchingService? mealMatchingService = null,
         ITimezoneTimelineService? timezoneTimelineService = null,
         IDeviceClockService? deviceClockService = null,
         IConnectorSyncCursorStore? cursorStore = null,
-        TimeProvider? timeProvider = null
+        TimeProvider? timeProvider = null,
+        TimeSpan? endpointPause = null
     )
         : base(httpClient, serverResolver, logger, publisher, timeProvider)
     {
         _connectorPublisher = publisher;
         _mealMatchingService = mealMatchingService;
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _timezoneTimelineService = timezoneTimelineService;
         _deviceClockService = deviceClockService;
         _cursorStore = cursorStore;
+        _endpointPause = endpointPause ?? DefaultEndpointPause;
         _glookoLogger = logger;
     }
 
@@ -983,7 +987,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             var (endpoint, types, handler) = endpointDefinitions[i];
             var url = ConstructV2Url(context, endpoint, fromDate, toDate);
 
-            await _rateLimitingStrategy.ApplyDelayAsync(i);
+            if (i > 0)
+                await Task.Delay(_endpointPause, Clock, context.CancellationToken);
 
             try
             {

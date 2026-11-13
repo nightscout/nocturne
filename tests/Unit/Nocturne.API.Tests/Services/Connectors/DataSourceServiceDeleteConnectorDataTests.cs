@@ -601,7 +601,6 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
             NullLogger<Nocturne.Connectors.Nightscout.Services.NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             publisher.Object);
 

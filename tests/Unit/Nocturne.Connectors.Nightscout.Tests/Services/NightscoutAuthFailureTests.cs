@@ -240,7 +240,6 @@ public class NightscoutAuthFailureTests
             Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
             NullLogger<NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             registration.Object,
             Mock.Of<IConnectorPublisher>());
     }

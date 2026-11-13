@@ -99,7 +99,6 @@ public class NightscoutBackfillResumeTests
             new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             publisherMock.Object);
 

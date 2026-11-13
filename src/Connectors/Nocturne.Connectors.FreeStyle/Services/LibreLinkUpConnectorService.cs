@@ -22,7 +22,6 @@ public class LibreConnectorService(
     IConnectorServerResolver<LibreLinkUpConnectorConfiguration> serverResolver,
     ILogger<LibreConnectorService> logger,
     IRetryDelayStrategy retryDelayStrategy,
-    IRateLimitingStrategy rateLimitingStrategy,
     LibreLinkAuthTokenProvider tokenProvider,
     IConnectorPublisher? publisher = null,
     TimeProvider? timeProvider = null
@@ -36,9 +35,6 @@ public class LibreConnectorService(
     )
 {
     private readonly LibreSensorGlucoseMapper _sensorGlucoseMapper = new(logger);
-
-    private readonly IRateLimitingStrategy _rateLimitingStrategy =
-        rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
 
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
@@ -130,8 +126,6 @@ public class LibreConnectorService(
 
         var url = _serverResolver.BuildUrl(config,
             string.Format(LibreLinkUpConstants.ApiPaths.GraphData, _selectedConnection.PatientId));
-
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
             async () => await FetchSensorGlucoseCoreAsync(url, since, cancellationToken),

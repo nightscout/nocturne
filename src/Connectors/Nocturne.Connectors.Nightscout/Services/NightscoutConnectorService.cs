@@ -19,8 +19,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     where TConfig : NightscoutConnectorConfiguration
 {
     private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
-
     // Starts as the startup defaults (from IConnectorRegistration); replaced with the
     // per-tenant config when AuthenticateWithConfigAsync runs at the start of a sync.
     // Per-instance, no concurrency: connectors are resolved into a fresh DI scope per
@@ -34,7 +32,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         IConnectorServerResolver<TConfig> serverResolver,
         ILogger logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         IConnectorRegistration<TConfig> registration,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
@@ -42,7 +39,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         : base(httpClient, serverResolver, logger, publisher, timeProvider)
     {
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _currentConfig = registration?.Defaults ?? throw new ArgumentNullException(nameof(registration));
     }
 
@@ -825,8 +821,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
     private async Task<T?> FetchDataAsync<T>(string url, string operationName) where T : class
     {
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
-
         return await ExecuteWithRetryAsync(
             async () => await FetchDataCoreAsync<T>(url),
             _retryDelayStrategy,
@@ -934,9 +928,8 @@ public class NightscoutConnectorService : NightscoutConnectorServiceBase<Nightsc
         IConnectorServerResolver<NightscoutConnectorConfiguration> serverResolver,
         ILogger<NightscoutConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         IConnectorRegistration<NightscoutConnectorConfiguration> registration,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
-    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, registration, publisher, timeProvider) { }
+    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, registration, publisher, timeProvider) { }
 }

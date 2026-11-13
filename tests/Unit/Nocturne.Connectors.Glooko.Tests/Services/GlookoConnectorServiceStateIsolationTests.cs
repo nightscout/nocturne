@@ -166,7 +166,6 @@ public class GlookoConnectorServiceStateIsolationTests
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new PerTenantGlookoTokenProvider(),
             timezoneTimelineService);
 
@@ -181,10 +180,9 @@ public class GlookoConnectorServiceStateIsolationTests
             IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
             ILogger<GlookoConnectorService> logger,
             IRetryDelayStrategy retryDelayStrategy,
-            IRateLimitingStrategy rateLimitingStrategy,
             GlookoAuthTokenProvider tokenProvider,
             ITimezoneTimelineService? timezoneTimelineService)
-            : this(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, tokenProvider,
+            : this(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider,
                 timezoneTimelineService, new ConcurrentBag<(Guid TenantId, DateTime Timestamp)>())
         {
         }
@@ -194,12 +192,11 @@ public class GlookoConnectorServiceStateIsolationTests
             IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
             ILogger<GlookoConnectorService> logger,
             IRetryDelayStrategy retryDelayStrategy,
-            IRateLimitingStrategy rateLimitingStrategy,
             GlookoAuthTokenProvider tokenProvider,
             ITimezoneTimelineService? timezoneTimelineService,
             ConcurrentBag<(Guid TenantId, DateTime Timestamp)> published)
-            : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, tokenProvider,
-                CapturingPublisher(published), timezoneTimelineService: timezoneTimelineService)
+            : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider,
+                CapturingPublisher(published), timezoneTimelineService: timezoneTimelineService, endpointPause: TimeSpan.Zero)
         {
             PublishedGlucose = published;
         }

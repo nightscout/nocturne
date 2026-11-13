@@ -293,7 +293,6 @@ public class LibreConnectorServiceTests
                 new ConnectorServerResolver<LibreLinkUpConnectorConfiguration>(null, null, null),
                 NullLogger<LibreConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 tokenProvider,
                 Publisher.Object,
                 clock);
