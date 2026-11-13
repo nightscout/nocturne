@@ -93,8 +93,8 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         {
             var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From, cancellationToken);
 
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                sensorGlucose.ToList(), config, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {

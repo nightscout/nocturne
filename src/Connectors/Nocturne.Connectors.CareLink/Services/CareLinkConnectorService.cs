@@ -245,8 +245,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
         try
         {
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                _sgMapper.Map(data, now), PublishSensorGlucoseDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                _sgMapper.Map(data, now), config, cancellationToken);
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
@@ -283,8 +283,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             List<Nocturne.Core.Models.DeviceStatus> deviceStatuses =
                 CareLinkDeviceStatusMapper.Map(data, now) is { } deviceStatus ? [deviceStatus] : [];
 
-            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
-                deviceStatuses, PublishDeviceStatusAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                deviceStatuses, config, cancellationToken);
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
@@ -305,7 +305,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     ///     Publishes the latest alarm as a SystemEvent, deduped by datetime+code. An alarm that did
     ///     not reach the tenant leaves the dedup key behind so the next cycle retries it;
     ///     a transport exception is only logged, matching the pre-existing policy for this step.
-    ///     Gating and counting follow <see cref="PublishSystemEventDataAsync"/>.
+    ///     System events gate and count under <see cref="SyncDataType.DeviceEvents"/>.
     /// </summary>
     private async Task PublishAlarmStepAsync(
         CareLinkData data,
@@ -327,8 +327,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                     data.MedicalDeviceTime ?? "", data.CurrentServerTime);
                 var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime, now);
                 if (systemEvent != null
-                    && await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-                        [systemEvent], PublishSystemEventDataAsync, config, cancellationToken,
+                    && await PublishRecordTypeAsync(result, activeTypes,
+                        [systemEvent], config, cancellationToken,
                         context: "from the last alarm"))
                     _lastAlarmKey = alarmKey;
             }
@@ -362,21 +362,18 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
                 data.MedicalDeviceTime ?? "", data.CurrentServerTime);
 
-            await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs, now), PublishBolusDataAsync,
-                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs, now), config, cancellationToken);
 
-            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs, now), PublishCarbIntakeDataAsync,
-                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs, now), config, cancellationToken);
 
-            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
-                CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs, now), PublishTempBasalDataAsync,
-                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs, now), config, cancellationToken);
 
-            await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
+            await PublishRecordTypeAsync(result, activeTypes,
                 CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs, now),
-                PublishSystemEventDataAsync, config, cancellationToken,
+                config, cancellationToken,
                 context: "from notification history");
         }
         catch (OperationCanceledException) { throw; }
