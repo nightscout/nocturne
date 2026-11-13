@@ -37,13 +37,13 @@
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
   import { getEngineHost } from "water-ui";
   import { deferredWatercolour } from "#lib/watercolour-deferral.svelte.js";
-  import { CoachMarkProvider } from "@nocturne/coach";
+  import { CoachMarkProvider, coachmark } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
   import { createCoachMarkAdapter } from "#lib/coach-marks/adapter.js";
   import { createCoachRouter } from "#lib/coach-marks/router.js";
-  import { ONBOARDING_CORE_GATE, sequences } from "#lib/coach-marks/sequences.js";
-  import { coachLabels } from "#lib/coach-marks/copy.svelte.js";
+  import { ONBOARDING_CORE_GATE, coachAudience, sequences } from "#lib/coach-marks/sequences.js";
+  import { coachFor, coachLabels } from "#lib/coach-marks/copy.svelte.js";
   import CoachParamHandler from "#lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
   import ChartPrintPatterns from "#lib/components/charts/print/ChartPrintPatterns.svelte";
@@ -118,7 +118,10 @@
   });
   let bannerStripHeight = $state(0);
 
-  const coachMarkAdapter = createCoachMarkAdapter(tenantless);
+  const audience = $derived(coachAudience(data));
+  // The coach-mark endpoints keep marks per subject, and a guest or a share viewer has none.
+  // svelte-ignore state_referenced_locally
+  const coachMarkAdapter = createCoachMarkAdapter(tenantless || audience !== "member");
   const coachRouter = createCoachRouter();
 
   // Title/Favicon service for dynamic updates
@@ -275,6 +278,7 @@
   adapter={coachMarkAdapter}
   labels={coachLabels()}
   {sequences}
+  {audience}
   gates={{ [ONBOARDING_CORE_GATE]: data.onboardingComplete }}
   router={coachRouter}
 >
@@ -298,7 +302,9 @@
             <DemoBanner nextResetAt={data.nextResetAt} />
           {/if}
           {#if data.isGuestSession && data.guestExpiresAt}
-            <GuestBanner expiresAt={data.guestExpiresAt} />
+            <div {@attach coachmark(coachFor("guest-tour.access"))}>
+              <GuestBanner expiresAt={data.guestExpiresAt} />
+            </div>
           {/if}
           {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
             <BackupSignInPrompt show={data.showBackupSignInPrompt} />

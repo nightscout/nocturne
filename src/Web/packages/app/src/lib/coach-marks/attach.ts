@@ -1,13 +1,4 @@
-import { page } from "$app/state";
 import type { Attachment } from "svelte/attachments";
-
-/**
- * A share viewer or a guest is not toured: the tour's backdrop covers a page
- * they only look at.
- */
-export function toured(): boolean {
-  return !!page.data.user && !page.data.isGuestSession;
-}
 
 type Visibility = (shown: boolean) => void;
 

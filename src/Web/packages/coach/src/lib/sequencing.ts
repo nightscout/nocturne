@@ -1,4 +1,4 @@
-import type { CoachGates, MarkState, MarkRegistration, SequenceConfig } from "./types.js";
+import type { CoachGates, MarkState, MarkRegistration, SequenceConfig, SequenceDefinition } from "./types.js";
 
 export interface SelectionResult {
   key: string;
@@ -10,6 +10,7 @@ export function selectActiveMark(
   registrations: MarkRegistration[],
   sequences: SequenceConfig,
   gates: CoachGates = {},
+  audience?: string,
 ): SelectionResult | null {
   const mountedMarkKeys = new Set(registrations.map((r) => r.key));
 
@@ -19,7 +20,7 @@ export function selectActiveMark(
   );
 
   for (const [, seq] of sortedSequences) {
-    if (seq.startOnly) continue;
+    if (seq.startOnly || !isForAudience(seq, audience)) continue;
     if (seq.prerequisite && !isPrerequisiteMet(seq.prerequisite, sequences, states, gates)) {
       continue;
     }
@@ -61,6 +62,10 @@ export function selectActiveMark(
   }
 
   return null;
+}
+
+export function isForAudience(seq: SequenceDefinition, audience: string | undefined): boolean {
+  return seq.audience === undefined || seq.audience === audience;
 }
 
 /**
