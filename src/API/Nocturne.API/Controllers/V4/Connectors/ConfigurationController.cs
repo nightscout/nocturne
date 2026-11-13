@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -78,8 +79,31 @@ public class ConfigurationController : ControllerBase
             return NotFound(new { message = $"No configuration found for connector '{connectorName}'" });
         }
 
-        return Ok(config);
+        return Ok(await WithoutUnknownKeysAsync(connectorName, config, ct));
     }
+
+    /// <summary>
+    /// Drops the stored keys the connector's configuration type does not bind, so a client that
+    /// sends the document back is not refused for a key an earlier save stored.
+    /// </summary>
+    private async Task<ConnectorConfigurationResponse> WithoutUnknownKeysAsync(
+        string connectorName,
+        ConnectorConfigurationResponse config,
+        CancellationToken ct)
+    {
+        var known = await _configService.GetBoundKeysAsync(connectorName, ct);
+        if (known is null || JsonNode.Parse(config.Configuration.RootElement.GetRawText()) is not JsonObject stored)
+            return config;
+
+        foreach (var key in stored.Select(property => property.Key).Where(key => IsUnknownKey(key, known)).ToList())
+            stored.Remove(key);
+
+        config.Configuration = JsonDocument.Parse(stored.ToJsonString());
+        return config;
+    }
+
+    private static bool IsUnknownKey(string key, IReadOnlySet<string> known) =>
+        !known.Contains(key) && !ConnectorEnabledKey.Matches(key);
 
     /// <summary>
     /// Gets the JSON Schema for a connector's configuration.
@@ -212,6 +236,14 @@ public class ConfigurationController : ControllerBase
         CancellationToken ct)
     {
         var errors = new List<string>();
+
+        var known = await _configService.GetBoundKeysAsync(connectorName, ct);
+        if (known is not null && configuration.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            errors.AddRange(configuration.RootElement.EnumerateObject()
+                .Where(property => IsUnknownKey(property.Name, known))
+                .Select(property => $"Unknown field '{property.Name}'"));
+        }
 
         // Get the schema for this connector
         var schema = await _configService.GetSchemaAsync(connectorName, ct);
