@@ -48,7 +48,7 @@ public sealed class GoogleHealthGrantHoldersTests : IDisposable
 
     private PostgresGoogleHealthGrantHolders Holders() => new(
         provider.GetRequiredService<IServiceScopeFactory>(),
-        provider.GetRequiredService<INocturneDbContextFactory>(),
+        new GoogleHealthGrantHolderRepository(provider.GetRequiredService<INocturneDbContextFactory>()),
         new TenantRepository(provider.GetRequiredService<INocturneDbContextFactory>()),
         NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 

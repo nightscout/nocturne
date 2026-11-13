@@ -10,19 +10,33 @@ namespace Nocturne.Infrastructure.Data.Repositories.Health;
 /// </summary>
 /// <typeparam name="TModel">The domain record type.</typeparam>
 /// <typeparam name="TEntity">The entity backing <typeparamref name="TModel"/>.</typeparam>
-public abstract class ObservedHealthSeriesRepository<TModel, TEntity>(INocturneDbContextFactory contexts, TimeProvider time)
-    : HealthSeriesRepository<TModel, TEntity>(contexts, time), IObservedHealthSeriesRepository<TModel>
+public abstract class ObservedHealthSeriesRepository<TModel, TEntity>
+    : HealthSeriesRepository<TModel, TEntity>, IObservedHealthSeriesRepository<TModel>
     where TModel : class
     where TEntity : class, IOriginalIdentified, ITenantScoped, ISoftDeletable, ISyncDedupable, IObservationTimestamped
 {
+    protected ObservedHealthSeriesRepository(INocturneDbContextFactory contexts, TimeProvider time)
+        : base(contexts, time)
+    {
+    }
+
+    protected ObservedHealthSeriesRepository(DbUnitOfWork unit, TimeProvider time)
+        : base(unit, time)
+    {
+    }
+
     protected sealed override IOrderedQueryable<TEntity> NewestFirst(IQueryable<TEntity> query) =>
         query.OrderByDescending(e => e.Timestamp);
+
+    protected sealed override IQueryable<TEntity> ObservedIn(IQueryable<TEntity> query, DateTime from, DateTime to) =>
+        query.Where(e => e.Timestamp >= from && e.Timestamp < to);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<TModel>> GetNewestFirstAsync(
         int count, int skip, DateTime? from, DateTime? to, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
         var query = Set(db).AsNoTracking();
         if (from is { } fromValue)
             query = query.Where(e => e.Timestamp >= fromValue);
@@ -40,7 +54,8 @@ public abstract class ObservedHealthSeriesRepository<TModel, TEntity>(INocturneD
     public async Task<IReadOnlyList<TModel>> GetByDateRangeAsync(
         DateTime from, DateTime to, int? count, int skip, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
         var query = Set(db)
             .AsNoTracking()
             .Where(e => e.Timestamp >= from && e.Timestamp < to)
@@ -57,7 +72,8 @@ public abstract class ObservedHealthSeriesRepository<TModel, TEntity>(INocturneD
     /// <inheritdoc />
     public async Task<DateTime?> GetLatestTimestampAsync(string source, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
         return await Set(db)
             .AsNoTracking()
             .Where(e => e.DataSource == source)

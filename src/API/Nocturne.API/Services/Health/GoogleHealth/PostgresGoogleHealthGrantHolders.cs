@@ -1,20 +1,17 @@
 using System.Data.Common;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
 /// <summary>
-/// Keeps <see cref="IGoogleHealthGrantHolders"/> in the platform table
-/// <c>google_health_grant_holders</c>, one row per tenant whose state has been recorded.
+/// Keeps <see cref="IGoogleHealthGrantHolders"/> in <see cref="IGoogleHealthGrantHolderRepository"/>,
+/// one row per tenant whose state has been recorded.
 /// </summary>
 /// <remarks>
 /// A token stored before the table existed has no row. Before its first answer the process
@@ -27,7 +24,7 @@ namespace Nocturne.API.Services.Health.GoogleHealth;
 /// </remarks>
 public sealed class PostgresGoogleHealthGrantHolders(
     IServiceScopeFactory scopes,
-    INocturneDbContextFactory contexts,
+    IGoogleHealthGrantHolderRepository holders,
     ITenantRepository tenants,
     ILogger<PostgresGoogleHealthGrantHolders> logger) : IGoogleHealthGrantHolders
 {
@@ -36,18 +33,16 @@ public sealed class PostgresGoogleHealthGrantHolders(
     private volatile bool adopted;
 
     public Task HoldAsync(Guid tenantId, string accountKey, CancellationToken ct) =>
-        RecordAsync(tenantId, accountKey, ct);
+        holders.RecordAsync(tenantId, accountKey, ct);
 
-    public Task ReleaseAsync(Guid tenantId, CancellationToken ct) => RecordAsync(tenantId, null, ct);
+    public Task ReleaseAsync(Guid tenantId, CancellationToken ct) => holders.RecordAsync(tenantId, null, ct);
 
     public async Task<GoogleHealthGrantSharing> SharingAsync(Guid tenantId, string accountKey, CancellationToken ct)
     {
         try
         {
             await AdoptStoredTokensAsync(ct);
-            await using var db = await ContextAsync(ct);
-            return await db.GoogleHealthGrantHolders
-                .AnyAsync(row => row.AccountKey == accountKey && row.TenantId != tenantId, ct)
+            return await holders.IsHeldByAnotherTenantAsync(tenantId, accountKey, ct)
                 ? GoogleHealthGrantSharing.Shared
                 : GoogleHealthGrantSharing.NotShared;
         }
@@ -59,35 +54,6 @@ public sealed class PostgresGoogleHealthGrantHolders(
         }
     }
 
-    private async Task RecordAsync(Guid tenantId, string? accountKey, CancellationToken ct)
-    {
-        await using var db = await ContextAsync(ct);
-        if (await UpdateAsync(db, tenantId, accountKey, ct) > 0) return;
-        if (!await TryInsertAsync(db, tenantId, accountKey, ct) &&
-            await UpdateAsync(db, tenantId, accountKey, ct) == 0)
-            throw new InvalidOperationException($"Google Health could not record the grant holder state of tenant {tenantId}");
-    }
-
-    private static Task<int> UpdateAsync(NocturneDbContext db, Guid tenantId, string? accountKey, CancellationToken ct) =>
-        db.GoogleHealthGrantHolders.Where(row => row.TenantId == tenantId)
-            .ExecuteUpdateAsync(row => row.SetProperty(holder => holder.AccountKey, accountKey), ct);
-
-    /// <returns>False when another writer inserted the tenant's row first, or the tenant is gone.</returns>
-    private static async Task<bool> TryInsertAsync(NocturneDbContext db, Guid tenantId, string? accountKey, CancellationToken ct)
-    {
-        var row = db.GoogleHealthGrantHolders.Add(new GoogleHealthGrantHolderEntity { TenantId = tenantId, AccountKey = accountKey });
-        try
-        {
-            await db.SaveChangesAsync(ct);
-            return true;
-        }
-        catch (DbUpdateException)
-        {
-            row.State = EntityState.Detached;
-            return false;
-        }
-    }
-
     private async Task AdoptStoredTokensAsync(CancellationToken ct)
     {
         if (adopted) return;
@@ -95,9 +61,7 @@ public sealed class PostgresGoogleHealthGrantHolders(
         try
         {
             if (adopted) return;
-            HashSet<Guid> recorded;
-            await using (var db = await ContextAsync(ct))
-                recorded = (await db.GoogleHealthGrantHolders.AsNoTracking().Select(row => row.TenantId).ToListAsync(ct)).ToHashSet();
+            var recorded = await holders.GetRecordedTenantsAsync(ct);
             var unrecorded = (await tenants.ListIdsAsync(activeOnly: false, ct)).Where(id => !recorded.Contains(id)).ToList();
             foreach (var tenantId in unrecorded)
                 await AdoptAsync(tenantId, ct);
@@ -118,8 +82,7 @@ public sealed class PostgresGoogleHealthGrantHolders(
             var secrets = await scope.ServiceProvider.GetRequiredService<IConnectorConfigurationService>()
                 .GetSecretsAsync(GoogleHealthConnectorService.ConnectorName, ct);
             if (GoogleHealthSessionStore.HeldAccount(secrets) is not { } account) return;
-            await using var db = await ContextAsync(ct);
-            await TryInsertAsync(db, tenantId, account, ct);
+            await holders.TryAddAsync(tenantId, account, ct);
         }
         catch (Exception ex) when (ex is DbException or JsonException or InvalidOperationException)
         {
@@ -128,6 +91,4 @@ public sealed class PostgresGoogleHealthGrantHolders(
                 tenantId);
         }
     }
-
-    private ValueTask<NocturneDbContext> ContextAsync(CancellationToken ct) => contexts.CreatePlatformAsync(ct);
 }
