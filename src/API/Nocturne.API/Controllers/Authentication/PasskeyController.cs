@@ -92,7 +92,6 @@ public class PasskeyController : ControllerBase
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
-    private readonly TimeProvider _timeProvider;
 
     /// <param name="passkeyService">Generates each ceremony's options, verifies its response, and lists a subject's passkeys.</param>
     /// <param name="totpService">Tells whether a login needs a second factor, and issues the step-up token when it does.</param>
@@ -110,7 +109,6 @@ public class PasskeyController : ControllerBase
     /// <param name="dbContextFactory">For the login codes the ceremonies read beside the subjects.</param>
     /// <param name="oidcOptions">For the cookie settings the session and recovery cookies are written with.</param>
     /// <param name="logger">Logs failed ceremonies and invite enrolments.</param>
-    /// <param name="timeProvider">Clock the outstanding recovery codes are spent against.</param>
     public PasskeyController(
         IPasskeyService passkeyService,
         ITotpService totpService,
@@ -127,8 +125,7 @@ public class PasskeyController : ControllerBase
         ITenantMembershipRepository members,
         INocturneDbContextFactory dbContextFactory,
         IOptions<OidcOptions> oidcOptions,
-        ILogger<PasskeyController> logger,
-        TimeProvider timeProvider)
+        ILogger<PasskeyController> logger)
     {
         _passkeyService = passkeyService;
         _totpService = totpService;
@@ -146,7 +143,6 @@ public class PasskeyController : ControllerBase
         _dbContextFactory = dbContextFactory;
         _oidcOptions = oidcOptions.Value;
         _logger = logger;
-        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -330,7 +326,7 @@ public class PasskeyController : ControllerBase
         try
         {
             await using var db = await _dbContextFactory.CreateAsync();
-            await LoginCodeService.VoidRecoveryCodesAsync(db, subjectId.Value, _timeProvider.GetUtcNow(), HttpContext.RequestAborted);
+            await LoginCodeService.VoidRecoveryCodesAsync(db, subjectId.Value, HttpContext.RequestAborted);
         }
         catch (Exception ex)
         {

@@ -52,8 +52,7 @@ public class PasskeyCeremonyHostExtensionsTests
             new EphemeralDataProtectionProvider(),
             Options.Create(fido2Config),
             NullLogger<PasskeyService>.Instance,
-            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"),
-            TimeProvider.System);
+            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"));
     }
 
     [Fact]

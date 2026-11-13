@@ -45,7 +45,12 @@ public class ClockReadGuardTests
         "src/API/Nocturne.API/Services/Docs",
         "src/API/Nocturne.API/Services/DevOnly",
         "src/API/Nocturne.API/Services/Jobs",
-        "src/API/Nocturne.API/Services/Auth",
+    ];
+
+    /// <summary>Migrated files whose folder is not yet migrated as a whole.</summary>
+    private static readonly string[] Files =
+    [
+        "src/API/Nocturne.API/Services/Auth/JwtService.cs",
     ];
 
     /// <summary>
@@ -82,6 +87,21 @@ public class ClockReadGuardTests
                 if (inQueryOnly && Violations(source).Count - violations.Count != permitted)
                     reads.Add($"{relative}: holds {Violations(source).Count - violations.Count} query-lambda clock reads, not {permitted}");
             }
+        }
+
+        reads.Should().BeEmpty("these read a static clock or the system clock; inject TimeProvider instead");
+    }
+
+    [Fact]
+    public void A_migrated_file_reads_no_static_clock()
+    {
+        var reads = new List<string>();
+
+        foreach (var file in Files)
+        {
+            var source = RepoSources.Src.SingleOrDefault(s => s.Path == file);
+            source.Should().NotBeNull($"{file} is listed in {nameof(Files)}");
+            reads.AddRange(Violations(source!.Text).Select(v => $"{file}:{v}"));
         }
 
         reads.Should().BeEmpty("these read a static clock or the system clock; inject TimeProvider instead");

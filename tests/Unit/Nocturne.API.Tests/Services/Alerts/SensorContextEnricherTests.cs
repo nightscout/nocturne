@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Tests.Infrastructure;
@@ -670,7 +671,8 @@ public class SensorContextEnricherTests
             .ReturnsAsync((decimal?)null);
         var deps2 = new SensorContextEnricherDependencies(
             new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
-                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null),
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, Mock.Of<ITherapyTimelineResolver>(), Mock.Of<IStateSpanRepository>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+                TestTenantCache.Create(partition: null),
                 NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object, _cobCalculator.Object, _treatmentService.Object,
             _deviceEventRepository.Object, _pumpSnapshotRepository.Object,
@@ -974,6 +976,7 @@ public class SensorContextEnricherTests
         var deps = new SensorContextEnricherDependencies(
             new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
                 _tempBasalRepository.Object, _carbIntakeRepository.Object,
+                Mock.Of<ITherapyTimelineResolver>(), Mock.Of<IStateSpanRepository>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
                 iobCobCache ?? TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,

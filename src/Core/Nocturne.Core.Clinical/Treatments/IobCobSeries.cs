@@ -22,6 +22,7 @@ public readonly record struct IobCobTick(
 /// </summary>
 /// <remarks>
 /// <para>
+/// Its inputs are read over the bounds <see cref="IobCobSeriesWindow"/> gives.
 /// Each tick takes, per component, the device value <see cref="DeviceReadings.At"/> chooses, as
 /// every other IOB and COB reader does, and calculates the rest. The tick holding now is read live.
 /// </para>

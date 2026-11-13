@@ -97,6 +97,5 @@ public class OidcAuthServiceRefreshTests
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions { Session = new() { RotateRefreshTokens = rotate } }),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcAuthService>.Instance,
-            TimeProvider.System);
+            NullLogger<OidcAuthService>.Instance);
 }

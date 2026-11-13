@@ -195,8 +195,7 @@ public class RefreshTokenRotationPersistenceTests : IDisposable
             _jwtService.Object,
             _successorCache,
             Options.Create(new JwtOptions { RefreshTokenLifetimeDays = 7 }),
-            NullLogger<RefreshTokenService>.Instance,
-            TimeProvider.System);
+            NullLogger<RefreshTokenService>.Instance);
 
     private sealed class OptionsFactory(DbContextOptions<NocturneDbContext> options)
         : IDbContextFactory<NocturneDbContext>

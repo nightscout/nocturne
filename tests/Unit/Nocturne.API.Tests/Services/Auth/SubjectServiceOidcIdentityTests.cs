@@ -30,8 +30,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
             new SubjectRepository(_db.AsFactory()),
             _audit.Object,
             Mock.Of<IRecoveryCodeService>(),
-            NullLogger<SubjectService>.Instance,
-            TimeProvider.System
+            NullLogger<SubjectService>.Instance
         );
     }
 

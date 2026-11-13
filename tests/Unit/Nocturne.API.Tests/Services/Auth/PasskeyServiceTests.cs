@@ -459,8 +459,7 @@ public class PasskeyServiceTests
         var contexts = _dbContext.AsFactory();
         return new PasskeyService(
             new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts), new TenantMemberService(new TenantMembershipRepository(contexts)),
-            fido2, dataProtectionProvider, fido2Options, logger, environment,
-            TimeProvider.System);
+            fido2, dataProtectionProvider, fido2Options, logger, environment);
     }
 
     private static PasskeyCredentialEntity CreateCredentialEntity(

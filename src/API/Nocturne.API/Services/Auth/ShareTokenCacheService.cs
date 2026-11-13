@@ -23,20 +23,17 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
     private readonly IMemoryCache _cache;
     private readonly ITenantRepository _tenants;
     private readonly ILogger<ShareTokenCacheService> _logger;
-    private readonly TimeProvider _timeProvider;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
 
     public ShareTokenCacheService(
         IMemoryCache cache,
         ITenantRepository tenants,
-        ILogger<ShareTokenCacheService> logger,
-        TimeProvider timeProvider)
+        ILogger<ShareTokenCacheService> logger)
     {
         _cache = cache;
         _tenants = tenants;
         _logger = logger;
-        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -73,7 +70,7 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
         {
             try
             {
-                await _tenants.RecordShareAccessAsync(tenant.Id, _timeProvider.GetUtcNow().UtcDateTime, ct);
+                await _tenants.RecordShareAccessAsync(tenant.Id, DateTime.UtcNow, ct);
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
             {
