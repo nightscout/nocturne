@@ -1,8 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Health;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
@@ -16,7 +16,7 @@ namespace Nocturne.API.Tests.Services.Health;
 /// Every health record is addressable by two ids: the primary key it was assigned, and the
 /// MongoDB ObjectId it carried in from the pre-migration database. The routes take the id as a
 /// bare string for exactly that reason, and the resolution now lives once on
-/// <c>SimpleEntityService</c> — so read, update and delete are each proven to reach a row through
+/// <see cref="HealthSeriesRepository{TModel,TEntity}"/>, so read, update and delete are each proven to reach a row through
 /// either one.
 /// </summary>
 [Trait("Category", "Unit")]
@@ -48,10 +48,9 @@ public class HealthRecordIdResolutionTests
         var context = Context();
         return (
             new HeartRateService(
-                context.AsFactory(),
+                new HeartRateRepository(context.AsFactory(), TimeProvider.System),
                 PassThrough<HeartRate>(),
-                Mock.Of<ISignalRBroadcastService>(),
-                TimeProvider.System, NullLogger<HeartRateService>.Instance),
+                Mock.Of<ISignalRBroadcastService>()),
             context);
     }
 
@@ -60,10 +59,9 @@ public class HealthRecordIdResolutionTests
         var context = Context();
         return (
             new StepCountService(
-                context.AsFactory(),
+                new StepCountRepository(context.AsFactory(), TimeProvider.System),
                 PassThrough<StepCount>(),
-                Mock.Of<ISignalRBroadcastService>(),
-                TimeProvider.System, NullLogger<StepCountService>.Instance),
+                Mock.Of<ISignalRBroadcastService>()),
             context);
     }
 
@@ -72,10 +70,9 @@ public class HealthRecordIdResolutionTests
         var context = Context();
         return (
             new BodyWeightService(
-                context.AsFactory(),
+                new BodyWeightRepository(context.AsFactory(), TimeProvider.System),
                 PassThrough<BodyWeight>(),
-                Mock.Of<ISignalRBroadcastService>(),
-                TimeProvider.System, NullLogger<BodyWeightService>.Instance),
+                Mock.Of<ISignalRBroadcastService>()),
             context);
     }
 

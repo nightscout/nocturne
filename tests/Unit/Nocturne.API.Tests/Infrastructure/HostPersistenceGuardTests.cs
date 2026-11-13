@@ -110,6 +110,19 @@ public class HostPersistenceGuardTests
             ["JobLedgerEntity"],
             ["JobLedger"],
             []),
+        new("health series (#3346)",
+            ["BodyWeightEntity", "HeartRateEntity", "StepCountEntity"],
+            ["BodyWeights", "HeartRates", "StepCounts"],
+            [
+                new("src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthReadingWriter.cs",
+                    "reconciles a Google Health pull against the stored rows of each series in one context"),
+                new("src/API/Nocturne.API/Services/V4/ActivityDecomposer.cs",
+                    "decomposes an activity batch into heart rates and step counts beside its state spans in one transaction"),
+                new("src/API/Nocturne.API/Services/Seeding/SampleDataSeeder.cs",
+                    "seeds sample body weights straight into the table alongside every other seeded series"),
+                new("src/API/Nocturne.API/Authorization/ActogramReadScopeGuard.cs",
+                    "clears the actogram response's HeartRates and StepCounts, which share the DbSets' names"),
+            ]),
     ];
 
     private const string Host = "src/API/Nocturne.API";

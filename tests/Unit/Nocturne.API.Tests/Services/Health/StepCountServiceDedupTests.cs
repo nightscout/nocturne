@@ -1,8 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Health;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
@@ -14,8 +14,8 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Health;
 
 /// <summary>
-/// Verifies the sync-identifier upsert that <see cref="StepCountService"/> inherits from
-/// <c>SimpleEntityService</c>: a create whose (DataSource, SyncIdentifier) matches an existing
+/// Verifies the sync-identifier upsert that <see cref="StepCountService"/> reaches through
+/// <see cref="HealthSeriesRepository{TModel,TEntity}"/>: a create whose (DataSource, SyncIdentifier) matches an existing
 /// row updates it in place, making repeated uploads of the same bucket idempotent.
 /// </summary>
 public class StepCountServiceDedupTests
@@ -33,10 +33,9 @@ public class StepCountServiceDedupTests
             .Returns((IEnumerable<StepCount> docs) => docs);
 
         var service = new StepCountService(
-            context.AsFactory(),
+            new StepCountRepository(context.AsFactory(), TimeProvider.System),
             processing.Object,
-            Mock.Of<ISignalRBroadcastService>(),
-            TimeProvider.System, NullLogger<StepCountService>.Instance);
+            Mock.Of<ISignalRBroadcastService>());
 
         return (service, context);
     }

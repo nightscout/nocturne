@@ -3,6 +3,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -78,8 +79,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         });
         await db.SaveChangesAsync();
         await UseTenantAsync(db, tenantId);
-        var service = new HeartRateService(db.AsFactory(), Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger<HeartRateService>.Instance);
+        var service = new HeartRateService(new HeartRateRepository(db.AsFactory(), TimeProvider.System), Mock.Of<IDocumentProcessingService>(),
+            Mock.Of<ISignalRBroadcastService>());
 
         var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(start, end)).ToArray();
 
@@ -109,8 +110,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
                 DataSource = GoogleHealthReadingWriter.Source
             });
         await db.SaveChangesAsync();
-        var service = new HeartRateService(db.AsFactory(), Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger<HeartRateService>.Instance);
+        var service = new HeartRateService(new HeartRateRepository(db.AsFactory(), TimeProvider.System), Mock.Of<IDocumentProcessingService>(),
+            Mock.Of<ISignalRBroadcastService>());
 
         var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(
             new DateTime(2025, 11, 2, 5, 0, 0, DateTimeKind.Utc),
