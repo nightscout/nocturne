@@ -298,7 +298,7 @@ public static class AuditedBulkDeleteExtensions
             var updated = await query.ExecuteUpdateAsync(
                 s => s
                     .SetProperty(e => e.DeletedAt, deletedAt)
-                    .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete), ct);
+                    .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete), ct);
             return (updated, []);
         }
 
@@ -322,19 +322,19 @@ public static class AuditedBulkDeleteExtensions
                 nameof(ISystemTimestamped.SysUpdatedAt) => await rows.ExecuteUpdateAsync(
                     s => s
                         .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete)
+                        .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete)
                         .SetProperty(e => EF.Property<DateTime>(e, nameof(ISystemTimestamped.SysUpdatedAt)), stamp),
                     ct),
                 nameof(IEntityTimestamped.UpdatedAt) => await rows.ExecuteUpdateAsync(
                     s => s
                         .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete)
+                        .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete)
                         .SetProperty(e => EF.Property<DateTime>(e, nameof(IEntityTimestamped.UpdatedAt)), stamp),
                     ct),
                 _ => await rows.ExecuteUpdateAsync(
                     s => s
                         .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete),
+                        .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete),
                     ct),
             };
         }
@@ -378,7 +378,7 @@ public static class AuditedBulkDeleteExtensions
         => await context.ExecuteInTransactionAsync(async token =>
         {
             var released = await query.UserTombstones(context).ExecuteUpdateAsync(
-                s => s.SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), false), token);
+                s => s.SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), false), token);
             await WriteBulkSummaryAsync<T>(context, "allow_reimport", released, scope, auditContext, token);
             return released;
         }, ct: ct);

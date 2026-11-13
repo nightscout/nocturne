@@ -73,7 +73,7 @@ public class StepCountServiceDedupTests
         await service.CreateStepCountsAsync([Bucket("prelude-steps-5m-1000", 100)]);
         var row = await context.StepCounts.SingleAsync();
         row.DeletedAt = DateTime.UtcNow;
-        context.Entry(row).Property<bool>("DeletedByUser").CurrentValue = deletedByUser;
+        context.Entry(row).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue = deletedByUser;
         await context.SaveChangesAsync();
 
         await service.CreateStepCountsAsync([Bucket("prelude-steps-5m-1000", 175)]);
@@ -81,6 +81,29 @@ public class StepCountServiceDedupTests
         var rows = await context.StepCounts.IgnoreQueryFilters().AsNoTracking().ToListAsync();
         rows.Should().HaveCount(expectedRows);
         rows.Count(r => r.DeletedAt == null).Should().Be(expectedRows - 1);
+    }
+
+    [Fact]
+    public async Task A_row_another_tenant_deleted_does_not_block_the_same_sync_id()
+    {
+        var (service, context) = CreateService();
+        var tenantId = context.TenantId;
+        context.TenantId = Guid.NewGuid();
+        var tombstone = context.StepCounts.Add(new StepCountEntity
+        {
+            Id = Guid.CreateVersion7(), Timestamp = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc), Metric = 100,
+            DataSource = "prelude", SyncIdentifier = "prelude-steps-5m-1000", DeletedAt = DateTime.UtcNow,
+        });
+        tombstone.Property(NocturneDbContext.DeletedByUserProperty).CurrentValue = true;
+        await context.SaveChangesAsync();
+        context.TenantId = tenantId;
+        context.ChangeTracker.Clear();
+
+        await service.CreateStepCountsAsync([Bucket("prelude-steps-5m-1000", 175)]);
+
+        var own = await context.StepCounts.AsNoTracking().ToListAsync();
+        own.Should().ContainSingle().Which.Metric.Should().Be(175);
+        (await context.StepCounts.IncludingDeleted().CountAsync()).Should().Be(1);
     }
 
     private const string GlookoId = "6f1c0a52-3b8e-5d4a-9c2e-1f0b7a6d4e21";
@@ -102,7 +125,7 @@ public class StepCountServiceDedupTests
         await service.CreateStepCountsAsync([GlookoShaped(100)]);
         var row = await context.StepCounts.SingleAsync();
         row.DeletedAt = DateTime.UtcNow;
-        context.Entry(row).Property<bool>("DeletedByUser").CurrentValue = deletedByUser;
+        context.Entry(row).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue = deletedByUser;
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
 
@@ -134,7 +157,7 @@ public class StepCountServiceDedupTests
             DeletedAt = DateTime.UtcNow,
         };
         context.StepCounts.Add(tombstone);
-        context.Entry(tombstone).Property<bool>("DeletedByUser").CurrentValue = true;
+        context.Entry(tombstone).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue = true;
         var live = new StepCountEntity
         {
             Id = Guid.NewGuid(), Timestamp = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc), Metric = 50, DataSource = "prelude", SyncIdentifier = "prelude-steps-5m-1000",

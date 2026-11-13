@@ -503,9 +503,8 @@ public class ActivityDecomposer : IActivityDecomposer
         var wanted = ids.ToHashSet(StringComparer.Ordinal);
         var idsByKey = recordIds.ToLookup(r => r.Key, r => r.Id);
         var keys = recordIds.Select(r => r.Key).Distinct().ToList();
-        var candidates = await set.IgnoreQueryFilters()
-            .Where(e => e.TenantId == db.TenantId
-                && ((e.OriginalId != null && ids.Contains(e.OriginalId)) || keys.Contains(e.Id)))
+        var candidates = await set.IncludingDeleted()
+            .Where(e => ((e.OriginalId != null && ids.Contains(e.OriginalId)) || keys.Contains(e.Id)))
             .ToListAsync(ct);
 
         var named = candidates
@@ -518,7 +517,7 @@ public class ActivityDecomposer : IActivityDecomposer
         {
             if (group.FirstOrDefault(e => e.DeletedAt == null) is { } live)
                 rows[group.Key] = live;
-            else if (group.Any(e => db.Entry(e).Property<bool>("DeletedByUser").CurrentValue))
+            else if (group.Any(e => db.Entry(e).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue))
                 userDeleted.Add(group.Key);
             else
                 rows[group.Key] = group.First();
@@ -545,8 +544,8 @@ public class ActivityDecomposer : IActivityDecomposer
             return (rows, userDeleted);
 
         var ids = syncIdentifiers.ToList();
-        var candidates = await set.IgnoreQueryFilters()
-            .Where(e => e.TenantId == db.TenantId && e.SyncIdentifier != null && ids.Contains(e.SyncIdentifier))
+        var candidates = await set.IncludingDeleted()
+            .Where(e => e.SyncIdentifier != null && ids.Contains(e.SyncIdentifier))
             .WhereBlocksRecreation()
             .ToListAsync(ct);
 

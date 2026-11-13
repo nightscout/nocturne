@@ -43,6 +43,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public const string SoftDeleteFilterKey = "soft_delete";
 
     /// <summary>
+    /// Name of the shadow property flagging a user-initiated soft delete.
+    /// </summary>
+    public const string DeletedByUserProperty = "DeletedByUser";
+
+    /// <summary>
     /// The most rows of one entity type a single save will stamp with the same
     /// <see cref="ISystemTimestamped.SysUpdatedAt"/> millisecond. A bulk import of one type wider
     /// than this spreads onto successive milliseconds, so one tie group can never drag a
@@ -3332,7 +3337,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             // re-creating a user-deleted row, while a system-sweep delete stays re-creatable.
             // A shadow property so it lands on every soft-deletable table without a per-entity edit.
             entityBuilder
-                .Property<bool>("DeletedByUser")
+                .Property<bool>(DeletedByUserProperty)
                 .HasColumnName("deleted_by_user")
                 .HasDefaultValue(false);
         }
