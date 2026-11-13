@@ -76,6 +76,16 @@ internal sealed class FakeCursorStore : IConnectorSyncCursorStore
         throw new NotSupportedException();
 }
 
+/// <summary>How Glooko answers a request whose session has expired.</summary>
+public enum ExpiredSessionAnswer
+{
+    /// <summary>A 200 carrying the sign-in page the redirect lands on.</summary>
+    SignInPage,
+
+    /// <summary>A 401.</summary>
+    Unauthorized,
+}
+
 /// <summary>
 /// The publishes a Glooko sync reaches. System events have no <see cref="SyncDataType"/> of their
 /// own and profile state spans share the state-span publish, so both are named separately here.
@@ -156,6 +166,9 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
     /// <summary>How many logins the sync has driven; a second one is a re-authentication.</summary>
     public int AcquireCount { get; private set; }
 
+    /// <summary>The session cookie the <paramref name="login"/>th login (from one) issues.</summary>
+    public static string CookieFor(int login) => $"_logbook-web_session=sess{login}";
+
     private readonly TimeProvider _clock;
 
     public StaticGlookoTokenProvider(TimeProvider? clock = null)
@@ -176,7 +189,7 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
     {
         AcquireCount++;
 
-        const string cookie = "_logbook-web_session=sess";
+        var cookie = CookieFor(AcquireCount);
         var userData = JsonSerializer.Serialize(
             new GlookoUserData { User = new GlookoUserLogin { GlookoCode = GlookoSyncHarness.PatientCode } });
 
@@ -222,6 +235,10 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 ///     Whether every broken path starts serving normally once a 403 has been issued — the account
 ///     state a re-authentication repairs, and what tells a retried pass apart from the first.
 /// </param>
+/// <param name="expiredFirstSession">
+///     How Glooko answers a request carrying the first login's cookie, standing in for a session that
+///     expired while it was cached. Null serves it like any other.
+/// </param>
 /// <param name="withHistoryMeals">
 ///     Whether the histories endpoint carries one meal (one food, 30g of carbs), which is what
 ///     switches on the V3 path's meal carbs and food entries.
@@ -232,13 +249,21 @@ internal sealed class GlookoEndpointHandler(
     IReadOnlyCollection<string>? forbiddenPaths = null,
     IReadOnlyCollection<string>? malformedPaths = null,
     bool recoversAfterForbidden = false,
-    bool withHistoryMeals = false) : HttpMessageHandler
+    bool withHistoryMeals = false,
+    ExpiredSessionAnswer? expiredFirstSession = null) : HttpMessageHandler
 {
     private readonly Func<int, int> _recordsPerWindow = recordsPerWindow ?? (_ => 1);
     private readonly List<(string Start, string End)> _windows = [];
     private readonly List<string> _requested = [];
     private readonly Lock _gate = new();
     private bool _forbiddenIssued;
+    private int _expiredRequests;
+
+    /// <summary>How many requests were answered as an expired session.</summary>
+    public int ExpiredRequests
+    {
+        get { lock (_gate) return _expiredRequests; }
+    }
 
     private const string DeviceSettingsTimestamp = "2026-01-10T00:00:00Z";
 
@@ -270,6 +295,21 @@ internal sealed class GlookoEndpointHandler(
         {
             _requested.Add(path);
             healed = recoversAfterForbidden && _forbiddenIssued;
+        }
+
+        if (expiredFirstSession is { } answer
+            && request.Headers.TryGetValues("Cookie", out var cookies)
+            && cookies.Contains(StaticGlookoTokenProvider.CookieFor(1)))
+        {
+            lock (_gate) _expiredRequests++;
+            return Task.FromResult(answer == ExpiredSessionAnswer.Unauthorized
+                ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "<!DOCTYPE html><html><head><title>Sign in | Glooko</title></head><body></body></html>",
+                        Encoding.UTF8, "text/html"),
+                });
         }
 
         if (!healed && forbiddenPaths?.Any(forbidden => Matches(path, forbidden)) == true)
