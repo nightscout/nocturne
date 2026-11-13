@@ -16,7 +16,7 @@ import {
   glucoseUnits,
   predictionMinutes,
 } from "#lib/stores/appearance-store.svelte.js";
-import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import type { TransformedChartData } from "@nocturne/charts/core";
 
 type Cookies = { get(name: string): string | undefined };
 

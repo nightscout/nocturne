@@ -5,7 +5,7 @@ import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
 import { TRACKER_SHOW_OPTIONS } from "#lib/clock-builder/index.js";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { formatLocale } from "#lib/utils/formatting.js";
-import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { resolveChartThresholds } from "@nocturne/charts/core";
 import Harness from "./ClockFaceRendererHarness.test.svelte";
 
 const WHITE = "rgb(255, 255, 255)";

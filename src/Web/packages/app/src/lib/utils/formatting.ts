@@ -23,6 +23,12 @@ import {
   type RelativeTimeOptions,
 } from "@nocturne/ui/relative-time";
 import type { OverallAverages, Treatment, TreatmentSummary } from "#lib/api/generated/nocturne-api-client.js";
+import {
+  formatClockTime,
+  formatHourLabel,
+  formatWeekdayDate as formatChartWeekdayDate,
+  type ChartFormat,
+} from "@nocturne/charts/core";
 
 // Re-export for backward compatibility
 export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };
@@ -157,6 +163,11 @@ export function prefersHour12(): boolean {
   return timeFormat.current !== "24";
 }
 
+/** The viewer's time-format and regional-format preferences, as the chart package takes them. */
+export function chartFormat(): ChartFormat {
+  return { locale: formatLocale(), hour12: prefersHour12() };
+}
+
 /**
  * Format a time using the global time format and language preferences
  * @param date - Date object or Unix milliseconds
@@ -168,34 +179,12 @@ export function time(
   date: Date | string | number | null | undefined,
   opts: { compact?: boolean; seconds?: boolean } = {}
 ): string {
-  // Coerced for the reason {@link toDate} gives.
-  if (date == null) return "—";
-  const d = date instanceof Date ? date : new Date(date);
-  if (Number.isNaN(d.getTime())) return "—";
-  const options: Intl.DateTimeFormatOptions = {
-    hour: "numeric",
-    minute: opts.compact && prefersHour12() ? "numeric" : "2-digit",
-    hour12: prefersHour12(),
-  };
-  if (opts.seconds) options.second = "2-digit";
-  return d.toLocaleTimeString(formatLocale(), options);
+  return formatClockTime(date, chartFormat(), opts);
 }
 
-/**
- * Format an hour-granularity label using the global time format and language
- * preferences. Chart time axes tick on the hour, where `time`'s minutes are
- * noise; layerchart's own `format="hour"` emits no hour12 token and so falls
- * back to the browser locale, ignoring the preference entirely.
- * @param date - Date object or Unix milliseconds
- * @returns Formatted hour string (e.g. "2 pm", or "14" — 24-hour output is
- * zero-padded and may carry a locale suffix, e.g. "09" or "09 Uhr")
- */
+/** A time axis's hour label under the viewer's preferences; see {@link formatHourLabel}. */
 export function hourLabel(date: Date | number): string {
-  const d = typeof date === "number" ? new Date(date) : date;
-  return d.toLocaleTimeString(formatLocale(), {
-    hour: "numeric",
-    hour12: prefersHour12(),
-  });
+  return formatHourLabel(date, chartFormat());
 }
 
 /**
@@ -301,12 +290,7 @@ export function formatDateDetailed(dateString: string | undefined): string {
  * follow the regional format.
  */
 export function formatWeekdayDate(date: Date | string | number): string {
-  const d = date instanceof Date ? date : new Date(date);
-  return d.toLocaleDateString(formatLocale(), {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  return formatChartWeekdayDate(date, chartFormat());
 }
 
 /**
@@ -517,29 +501,7 @@ export function formatDateTimeCompact(date: Date | string | number | undefined):
 // Treatment & Insulin Formatting
 // =============================================================================
 
-/**
- * Formats an insulin value for display.
- * @param insulin The insulin value.
- * @returns The formatted insulin string.
- */
-export function formatInsulinDisplay(insulin: number | null | undefined): string {
-  if (insulin === undefined || insulin === null) {
-    return "N/A";
-  }
-  return insulin.toFixed(2);
-}
-
-/**
- * Formats a carb value for display.
- * @param carbs The carb value.
- * @returns The formatted carb string.
- */
-export function formatCarbDisplay(carbs: number | undefined): string {
-  if (carbs === undefined || carbs === null) {
-    return "N/A";
-  }
-  return carbs.toFixed(0);
-}
+export { formatInsulinDisplay, formatCarbDisplay } from "@nocturne/charts/core";
 
 export function formatInsulinToCarbRatio(
   gramsPerUnit: number | null | undefined,

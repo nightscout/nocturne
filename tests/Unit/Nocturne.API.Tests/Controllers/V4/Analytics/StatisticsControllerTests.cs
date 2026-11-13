@@ -2598,6 +2598,35 @@ public partial class StatisticsControllerTests
     }
 
     [Fact]
+    public async Task GetAidSystemMetrics_ForAClampedMember_CutsARangeThatEndsInsideTheWindowAtItsEnd()
+    {
+        SetupAidMetricsEcho();
+        var reads = new CategoryReadContext();
+        reads.ClampMemberHistory();
+        var now = DefaultNow.UtcDateTime;
+
+        await CreateClampedController(reads).GetAidSystemMetrics(now.AddDays(-30), now.AddHours(-6));
+
+        VerifyAidMetricsWindow(now.AddHours(-HistoryClamp.WindowHours), now.AddHours(-6));
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_ForAClampedMember_ReadsNothingForARangeBeforeTheWindow_AndSaysSo()
+    {
+        SetupAidMetricsEcho();
+        var reads = new CategoryReadContext();
+        reads.ClampMemberHistory();
+        var now = DefaultNow.UtcDateTime;
+
+        var result = await CreateClampedController(reads).GetAidSystemMetrics(now.AddDays(-30), now.AddDays(-2));
+
+        var metrics = (AidSystemMetrics)((OkObjectResult)result.Result!).Value!;
+        metrics.RangeOutsideHistory.Should().BeTrue();
+        metrics.SiteChangeCount.Should().BeNull();
+        _aidMetricsServiceMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task GetAidSystemMetrics_ForAShareWithoutFullHistory_MeasuresTheLast24Hours()
     {
         SetupAidMetricsEcho();

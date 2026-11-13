@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -25,6 +26,7 @@ using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Content;
+using Nocturne.Core.Contracts.Reports;
 using Nocturne.Core.Contracts.Translations;
 using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
@@ -529,6 +531,11 @@ public static class ServiceRegistrationExtensions
             options.OnRejected = async (context, ct) =>
             {
                 context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                {
+                    context.HttpContext.Response.Headers.RetryAfter =
+                        ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+                }
                 await context.HttpContext.Response.WriteAsJsonAsync(
                     new
                     {
@@ -964,6 +971,7 @@ public static class ServiceRegistrationExtensions
 
         // Manually-entered lab results (outside the V4 sync/dedup family)
         services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();
+        services.AddScoped<IReportSpecRepository, ReportSpecRepository>();
 
         // V4 Snapshot Repositories
         services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();

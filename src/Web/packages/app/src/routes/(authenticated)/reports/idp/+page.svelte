@@ -29,8 +29,8 @@
   import ScheduleFooter from "#lib/components/reports/ScheduleFooter.svelte";
   import ActiveProfileHeading from "#lib/components/reports/ActiveProfileHeading.svelte";
   import AidSystemUseCard from "#lib/components/reports/AidSystemUseCard.svelte";
-  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
-  import { bgPatternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { TextureSwatch } from "@nocturne/charts/print";
+  import { bgPatternClass } from "@nocturne/charts/core";
   import { getIdpData } from "#lib/api/idp.remote.js";
   import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";

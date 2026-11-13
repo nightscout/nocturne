@@ -2257,6 +2257,15 @@ public class AidSystemMetrics
     /// null when they followed the tenant's timezone.
     /// </summary>
     public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
+
+    /// <summary>
+    /// The caller may read only its last <see cref="HistoryWindowHours"/> hours and the period asked
+    /// for ends before them, so nothing was read.
+    /// </summary>
+    public bool RangeOutsideHistory { get; set; }
+
+    /// <summary>The hours of history a history-clamped caller may read.</summary>
+    public int HistoryWindowHours => Authorization.HistoryClamp.WindowHours;
 }
 
 /// <summary>

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { error, invalid, redirect } from "@sveltejs/kit";
 import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
 import { describeSubmitError } from "#lib/forms/submit-error.js";
+import { getOriginalHost, getOriginalProto } from "#lib/server/request-host.js";
 
 async function fetchDeviceInfo(userCode: string) {
   const { apiClient } = getRequestEvent().locals;
@@ -154,12 +155,14 @@ export const consentForm = form(consentSchema, async (data, issue) => {
     body.set("limit_to_24_hours", data.limit_to_24_hours);
   }
 
-  // Forward Host (for tenant resolution) and Cookie (for authentication)
-  // since the API is a different origin from the incoming request
+  // Forward the client-facing host and scheme (tenant resolution, and the origins the API builds
+  // its redirects from) and the Cookie (authentication), since the API is a different origin from
+  // the incoming request
   const headers: Record<string, string> = {
     "Content-Type": "application/x-www-form-urlencoded",
+    "X-Forwarded-Proto": getOriginalProto(event.request),
   };
-  const consentHost = event.request.headers.get("host");
+  const consentHost = getOriginalHost(event.request);
   if (consentHost) {
     headers["X-Forwarded-Host"] = consentHost;
   }
@@ -194,5 +197,5 @@ export const consentForm = form(consentSchema, async (data, issue) => {
     throw redirect(303, "/auth/login");
   }
 
-  throw error(500, "Unexpected response from authorization server.");
+  throw error(502, `The authorization server sent an unexpected response (status ${response.status}).`);
 });

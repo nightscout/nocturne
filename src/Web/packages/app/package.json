@@ -36,8 +36,9 @@
     "dev:demo": "vite dev --mode demo",
     "dev:prod": "vite dev --mode production",
     "dev:test": "vite dev --mode test",
-    "build": "vite build",
-    "build:sveltekit": "vite build",
+    "build": "vite build && pnpm run build:report-image-worker",
+    "build:sveltekit": "vite build && pnpm run build:report-image-worker",
+    "build:report-image-worker": "vite build -c vite.report-image-worker.config.ts",
     "dev:sveltekit": "vite dev",
     "dev:sveltekit:prod": "vite dev --mode production",
     "dev:sveltekit:test": "vite dev --mode test",
@@ -98,7 +99,9 @@
     "vitest-browser-svelte": "^2.1.1"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.1.0",
     "@nocturne/bot": "workspace:*",
+    "@nocturne/charts": "workspace:*",
     "@nocturne/bridge": "workspace:*",
     "@nocturne/cms": "workspace:*",
     "@nocturne/coach": "workspace:*",

@@ -22,6 +22,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
 using Nocturne.API.Hubs;
+using Nocturne.API.Reports;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
@@ -226,6 +227,7 @@ builder.Services.AddRealTimeAndNotifications(builder.Configuration);
 builder.Services.AddAlertingAndMonitoring(builder.Configuration);
 builder.Services.AddConnectorInfrastructure(builder.Configuration);
 builder.Services.AddMigrationServices();
+builder.Services.AddCustomReports();
 
 
 // Configure JWT authentication - derive signing key from instance key
@@ -353,7 +355,14 @@ else
 
 // Configure middleware pipeline
 app.UseSecurityHeaders();
-app.UseExceptionHandler();
+// A request Kestrel refuses while the action reads it (a body over [RequestSizeLimit]) keeps its
+// own status, 413 say, rather than reading as a server failure.
+app.UseExceptionHandler(new ExceptionHandlerOptions
+{
+    StatusCodeSelector = exception => exception is BadHttpRequestException refused
+        ? refused.StatusCode
+        : StatusCodes.Status500InternalServerError,
+});
 app.UseStatusCodePages();
 // Documentation paths get the any-origin policy, foreign origins on the legacy API get
 // LegacyApiCorsPolicy when the instance enables cors, everything else the credentialed default.

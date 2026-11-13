@@ -647,6 +647,15 @@ public class MutationAuditInterceptorTests : IDisposable
     }
 
     [Fact]
+    public void A_saved_reports_spec_is_redacted_since_it_carries_the_builders_state()
+    {
+        typeof(ReportSpecEntity).GetProperty(nameof(ReportSpecEntity.Spec))!
+            .IsDefined(typeof(AuditRedactedAttribute), inherit: true).Should().BeTrue();
+        typeof(ReportSpecEntity).GetProperty(nameof(ReportSpecEntity.Name))!
+            .IsDefined(typeof(AuditRedactedAttribute), inherit: true).Should().BeFalse("the name stays in the audit, as it was");
+    }
+
+    [Fact]
     public async Task EntityTypeNaming_RemovesEntitySuffix()
     {
         using var context = CreateContext();

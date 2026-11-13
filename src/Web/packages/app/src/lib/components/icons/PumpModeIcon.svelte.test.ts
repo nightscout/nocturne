@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect } from "vitest";
 import { PumpModeState } from "#lib/api/index.js";
-import PumpModeIcon from "./PumpModeIcon.svelte";
+import { PumpModeIcon } from "@nocturne/charts/icons";
 
 function iconClass(state: string): string {
   const { container } = render(PumpModeIcon, { state });

@@ -22,11 +22,38 @@ internal sealed partial class LoopAnalysisService
         return new DailyProfileResponse { Primary = primary, Comparison = comparison, ProfileNames = names };
     }
 
+    public async Task<DailyProfileResponse> GetDailyProfileForDaysAsync(
+        LoopAnalysisFilter filter, TimeZoneInfo zone, DayCondition days, CancellationToken ct = default)
+    {
+        var (primary, comparison, names) = await ForRangesAsync(
+            filter,
+            window => LoadDailyProfileAsync(window, zone, filter, ct),
+            (loaded, window) =>
+            {
+                var mask = Mask(filter, window, zone, loaded.Sources);
+                var (firstDay, starts) = LocalSlotBinning.DayStarts(window.From, window.To, zone);
+                var exclusions = IntervalSet.Of(loaded.Sources.DataExclusions);
+                var selection = DayConditions.Select(
+                    days, firstDay, starts, zone,
+                    [.. loaded.Inputs.Glucose.Where(g => !exclusions.Contains(g.Mills)).OrderBy(g => g.Mills)],
+                    loaded.Inputs.Carbs, loaded.Sources.Exercise, loaded.Sources.Illness, loaded.Inputs.HistoryVisibleFrom,
+                    new MillsInterval(window.From, window.To));
+                var kept = DayConditions.Instants(selection, firstDay, starts);
+                var range = DailyProfileCalculator.Calculate(
+                    loaded.Inputs, mask with { Analysed = mask.Analysed.Intersect(kept), Glucose = mask.Glucose.Intersect(kept) },
+                    window.From, window.To);
+                range.DaySelection = selection;
+                return range;
+            });
+        return new DailyProfileResponse { Primary = primary, Comparison = comparison, ProfileNames = names };
+    }
+
     /// <param name="Inputs">What <see cref="DailyProfileCalculator"/> computes the window's daily profile from.</param>
     /// <param name="Sources">The records the filter's mask is built from.</param>
     /// <param name="Timeline">The therapy settings in force over the window, which the IOB/COB was computed against.</param>
+    /// <param name="CarbIntakes">The carb entries read, from before the window for the carbs still acting.</param>
     private sealed record DailyProfileLoaded(
-        DailyProfileInputs Inputs, LoopAnalysisMaskSources Sources, TherapyTimeline Timeline) : ILoaded;
+        DailyProfileInputs Inputs, LoopAnalysisMaskSources Sources, TherapyTimeline Timeline, List<CarbIntake> CarbIntakes) : ILoaded;
 
     /// <param name="window">The range to load, read back further for carbs and device IOB/COB still acting at its start.</param>
     /// <param name="zone">The time zone the target schedule's times of day are read in, carried on the inputs.</param>
@@ -78,7 +105,8 @@ internal sealed partial class LoopAnalysisService
                 delivery.HasTherapy ? common.Profiles : [], ActiveTemporaryTargets(common.Spans, to), zone, to, ct),
         };
 
-        return new DailyProfileLoaded(inputs, Sources(common, LoopStates(apsPoints.Where(p => p.Timestamp <= ToUtc(to))), to), delivery.Timeline);
+        return new DailyProfileLoaded(
+            inputs, Sources(common, LoopStates(apsPoints.Where(p => p.Timestamp <= ToUtc(to))), to), delivery.Timeline, carbs);
     }
 
     /// <summary>

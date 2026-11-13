@@ -22,6 +22,17 @@ public abstract class LoopAnalysisIntegrationTestBase(ApiIntegrationTestFixture 
     /// <summary>The local week from <see cref="WeekStart"/>, as query parameters.</summary>
     protected const string Week = "startDate=2024-06-10&endDate=2024-06-16";
 
+    /// <summary>The last <paramref name="days"/> local days in Sydney, through today, as query parameters.</summary>
+    protected static string RecentDays(int days, int endDaysAgo = 0)
+    {
+        var end = SydneyToday().AddDays(-endDaysAgo);
+        return $"startDate={end.AddDays(1 - days):yyyy-MM-dd}&endDate={end:yyyy-MM-dd}";
+    }
+
+    /// <summary>Today in Sydney.</summary>
+    protected static DateOnly SydneyToday() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+        DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney")));
+
     /// <summary>A scope whose database contexts write as the fixture's tenant.</summary>
     protected IServiceScope TenantScope()
     {

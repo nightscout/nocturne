@@ -13,7 +13,7 @@
     glucoseUnits,
   } from "#lib/stores/appearance-store.svelte.js";
   import { getUiSettings } from "#lib/api/ui-settings.remote.js";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,

@@ -10,9 +10,8 @@
     import * as ToggleGroup from "@nocturne/ui/ui/toggle-group";
     import { glucoseUnits } from "@nocturne/app/stores/appearance-store.svelte";
     import ReplayView from "@nocturne/app/components/alerts/ReplayView.svelte";
-    import { createStaticChartEngine } from "@nocturne/app/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts";
+    import { createStaticChartView, type TransformedChartData } from "@nocturne/charts";
     import type { AlertReplayResult } from "@nocturne/app/api-client";
-    import type { TransformedChartData } from "@nocturne/app/utils/chart-data-transform";
     import { replay, validate } from "./engine";
     import type { GroupNode, SimRule, ValidationIssue } from "./wire";
     import { SCENARIOS, ticksFor, type ScenarioId } from "./fixtures";
@@ -155,7 +154,7 @@
                 seriesFromRules
                 fixedRules
                 chartEngine={({ range, onDataReady }) =>
-                    createStaticChartEngine({ data: current.chart, range, onDataReady })}
+                    createStaticChartView({ data: current.chart, range, onDataReady })}
             />
         {:else if !failure}
             <div class="h-[280px] animate-pulse rounded-md border bg-muted/30"></div>

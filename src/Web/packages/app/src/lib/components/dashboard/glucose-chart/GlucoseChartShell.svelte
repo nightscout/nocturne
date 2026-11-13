@@ -1,188 +1,37 @@
+<!--
+  The chart package's shell with the app's words, time format, units preference and print
+  state, so a page composing its own tracks passes only the data.
+-->
 <script lang="ts">
-  import type { Snippet } from "svelte";
-  import { Chart, Svg, Axis, BrushContext } from "layerchart";
-  import { scaleTime } from "d3-scale";
-  import type { ChartDataEngine } from "./engine/chart-data-view.svelte";
-  import type { PointInspection } from "./engine/point-inspection.svelte";
-  import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
-  import { setGlucoseChartContext } from "./chart-context.svelte";
-  import { computeTrackLayout } from "./engine/track-layout";
-  import { formatWeekdayDate, hourLabel } from "#lib/utils/formatting.js";
-  import { hourTicks } from "./engine/axis-ticks";
-  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import type { ComponentProps } from "svelte";
+  import { GlucoseChartShell, type ChartDataView } from "@nocturne/charts";
+  import {
+    glucoseUnits as glucoseUnitsPreference,
+    type GlucoseUnits,
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { chartFormat } from "#lib/utils/formatting.js";
   import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
+  import { glucoseChartLabels } from "./chart-labels.svelte";
 
-  interface Props {
-    engine: ChartDataEngine;
-    inspection?: PointInspection;
-    legend?: LegendState;
-    brushDomain?: [Date, Date] | null;
-    heightClass?: string;
-    padding?: { left: number; right: number; top: number; bottom: number };
-    selectionDomain?: [Date, Date] | null;
-    onSelectionChange?: (domain: [Date, Date] | null) => void;
-    showTimeAxis?: boolean;
+  type Props = Omit<
+    ComponentProps<typeof GlucoseChartShell>,
+    "view" | "glucoseUnits" | "labels" | "format" | "printing"
+  > & {
+    engine: ChartDataView;
+    /** Units the chart's glucose values are written in. Unset means the viewer's preference. */
     glucoseUnits?: GlucoseUnits;
-    tracks: Snippet<[GlucoseChartContext]>;
-    /** HTML overlays rendered after Svg but inside Chart (tooltips, etc.) */
-    overlays?: Snippet<[GlucoseChartContext]>;
-    /** Draws at this size instead of measuring its box, which lets the server render it. */
-    size?: { width: number; height: number };
-  }
-
-  const {
-    engine,
-    inspection,
-    legend,
-    brushDomain,
-    heightClass = "h-full",
-    padding = { left: 48, bottom: 30, top: 8, right: 48 },
-    selectionDomain,
-    onSelectionChange,
-    showTimeAxis = true,
-    glucoseUnits,
-    tracks,
-    overlays,
-    size,
-  }: Props = $props();
-
-  let chartHeight = $state(0);
-  const print = new PrintMode();
-
-  const layout = $derived(
-    computeTrackLayout(
-      chartHeight,
-      engine.thresholds.glucoseYMax,
-      engine.maxBasalRate,
-      engine.maxIOB,
-      {
-        basal: legend?.basal ?? true,
-        iob: legend?.iob ?? true,
-        cob: legend?.cob ?? true,
-      },
-      {
-        pumpMode:
-          (legend?.pumpModes ?? true) &&
-          engine.displayPumpModeSpans.length > 0,
-        override:
-          (legend?.overrideSpans ?? false) &&
-          engine.displayOverrideSpans.length > 0,
-        profile:
-          (legend?.profileSpans ?? false) &&
-          engine.displayProfileSpans.length > 0,
-        activity:
-          (legend?.activitySpans ?? false) &&
-          engine.displayActivitySpans.length > 0,
-      },
-      engine.minIOB
-    )
-  );
-
-  // Paper carries no forecast, so its axis ends where the period does.
-  const chartXDomain = $derived({
-    from: brushDomain?.[0] ?? engine.displayDateRange.from,
-    to:
-      brushDomain?.[1] ??
-      (print.active ? engine.displayDateRange.to : engine.displayDateRangeWithPredictions.to),
-  });
-
-  // Past a day and a half the ticks land on midnights, which read as a row of
-  // identical "12 AM"s unless they name the day.
-  const multiDay = $derived(
-    chartXDomain.to.getTime() - chartXDomain.from.getTime() > 36 * 60 * 60 * 1000
-  );
-
-  function tickLabel(v: unknown): string {
-    if (!(v instanceof Date)) return String(v);
-    const midnight = v.getHours() === 0 && v.getMinutes() === 0;
-    return multiDay && midnight ? formatWeekdayDate(v) : hourLabel(v);
-  }
-
-  const ctx: GlucoseChartContext = {
-    get engine() {
-      return engine;
-    },
-    get layout() {
-      return layout;
-    },
-    get inspection() {
-      return inspection;
-    },
-    get legend() {
-      return legend;
-    },
-    get printing() {
-      return print.active;
-    },
-    get glucoseUnits() {
-      return glucoseUnits;
-    },
   };
-  setGlucoseChartContext(ctx);
+
+  let { engine, glucoseUnits, ...rest }: Props = $props();
+
+  const print = new PrintMode();
 </script>
 
-<!-- print:break-inside-auto lets a tall multi-day chart flow across pages instead of being clipped by the global break-inside:avoid on svg. -->
-<div class="{heightClass} w-full @container print:break-inside-auto">
-  <Chart
-    data={engine.glucoseData}
-    x={(d) => d.time}
-    y="sgv"
-    xScale={scaleTime()}
-    xDomain={[chartXDomain.from, chartXDomain.to]}
-    yDomain={[0, engine.thresholds.glucoseYMax]}
-    {padding}
-    tooltipContext={{ mode: "quadtree-x" }}
-    ssr={size !== undefined}
-    width={size?.width}
-    height={size?.height}
-  >
-    {#snippet children({ context })}
-      {(chartHeight = context.height, "")}
-
-      <Svg>
-        {#if chartHeight > 0}
-          {@render tracks(ctx)}
-        {/if}
-
-        {#if showTimeAxis}
-          <Axis
-            placement="bottom"
-            ticks={hourTicks}
-            format={tickLabel}
-            tickOcclusion
-            tickLabelProps={{ class: "text-xs fill-muted-foreground", fontSize: 12 }}
-          />
-        {/if}
-      </Svg>
-
-      {#if chartHeight > 0}
-        {@render overlays?.(ctx)}
-      {/if}
-
-      {#if engine.chartDataError}
-        <div class="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
-          <p role="alert" class="text-center text-sm text-destructive">
-            {engine.chartDataError}
-          </p>
-        </div>
-      {/if}
-
-      {#if onSelectionChange}
-        <BrushContext
-          axis="x"
-          x={selectionDomain ?? [chartXDomain.from, chartXDomain.to]}
-          onChange={(e) => {
-            const [start, end] = e.brush.x ?? [];
-            if (start != null && end != null) {
-              onSelectionChange?.([new Date(start), new Date(end)]);
-            }
-          }}
-          classes={{
-            range: "bg-warning/30 border border-warning/60 rounded print:border-dashed print:border-foreground",
-            handle: "bg-warning hover:bg-warning/80 rounded-sm print:hidden",
-          }}
-        />
-      {/if}
-    {/snippet}
-  </Chart>
-</div>
+<GlucoseChartShell
+  view={engine}
+  glucoseUnits={glucoseUnits ?? glucoseUnitsPreference.current}
+  labels={glucoseChartLabels()}
+  format={chartFormat()}
+  printing={print.active}
+  {...rest}
+/>

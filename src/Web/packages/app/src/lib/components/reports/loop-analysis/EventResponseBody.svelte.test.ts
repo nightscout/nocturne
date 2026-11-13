@@ -192,8 +192,17 @@ describe("EventResponseBody", () => {
     response.ignoredFilters = ["startDate", "anchor2", "isolatedOnly"];
     render(EventResponseBody, { props: { response } });
 
-    await expect.element(page.getByText(/This page uses only the last 24 hours/)).toBeVisible();
+    await expect.element(page.getByText(/This page uses only the data from the last 24 hours/)).toBeVisible();
     await expect.element(page.getByText(/Cohort 2, Isolated events only\./)).toBeVisible();
+  });
+
+  it("says a cohort with a food filter the access does not include shows no events", async () => {
+    const response = eventResponse();
+    response.ignoredFilters = ["foodIds1", "isolatedOnly"];
+    render(EventResponseBody, { props: { response } });
+
+    await expect.element(page.getByText(/does not include food data, so these cohorts show no events:\s+Cohort 1, foods\./)).toBeVisible();
+    await expect.element(page.getByText(/so the report did not use them:\s+Isolated events only\./)).toBeVisible();
   });
 
   it("says so when no cohort is left to align, as without glucose", async () => {

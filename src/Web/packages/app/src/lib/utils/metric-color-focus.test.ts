@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getGlucoseHeatmapFill } from "./chart-colors";
+import { getGlucoseHeatmapFill } from "@nocturne/charts/core";
 import {
   addColorBoundary,
   insertSliderSteps,

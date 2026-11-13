@@ -60,27 +60,34 @@ internal sealed class ApiErrorEnvelopeHandler : IExceptionHandler
             return false;
         }
 
+        // A request Kestrel refused while the action read it (a body over [RequestSizeLimit]) is the
+        // caller's error, answered with its own status and logged below Error.
+        var refused = exception as BadHttpRequestException;
+        var status = refused?.StatusCode ?? StatusCodes.Status500InternalServerError;
+
         // The raw path is not logged: some routes carry a credential as a segment, e.g. the v2
         // token exchange at request/{accessToken}.
-        _logger.LogError(
+        _logger.Log(
+            refused is null ? LogLevel.Error : LogLevel.Warning,
             exception,
             "Unhandled exception serving {Method} {Route}",
             httpContext.Request.Method,
             (endpoint as RouteEndpoint)?.RoutePattern.RawText ?? endpoint.DisplayName
         );
 
+        var phrase = Microsoft.AspNetCore.WebUtilities.ReasonPhrases.GetReasonPhrase(status);
         var (body, options) = ApiErrorEnvelope.Create(
             httpContext,
             _problemDetailsFactory,
             _mvcOptions,
-            StatusCodes.Status500InternalServerError,
-            Title,
-            Detail,
+            status,
+            refused is null ? Title : phrase,
+            refused is null ? Detail : phrase,
             type: "internal",
             error: exception.Message
         );
 
-        httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        httpContext.Response.StatusCode = status;
         await httpContext.Response.WriteAsJsonAsync(
             body,
             options,

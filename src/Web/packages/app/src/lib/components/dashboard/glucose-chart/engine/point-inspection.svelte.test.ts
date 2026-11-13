@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { untrack } from "svelte";
 import { glucoseUnits, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
-import type { SeriesFinders } from "./chart-data-view.svelte";
+import type { SeriesFinders } from "@nocturne/charts";
 import { createPointInspection, type PointInspection } from "./point-inspection.svelte";
 
 const no_context_finders: SeriesFinders = {

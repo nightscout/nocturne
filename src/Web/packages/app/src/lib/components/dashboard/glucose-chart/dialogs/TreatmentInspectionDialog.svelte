@@ -14,7 +14,8 @@
   } from "#lib/utils/formatting.js";
   import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { entrySummary } from "#lib/utils/entry-summary.js";
-  import type { BolusCalculation, MealPeriod } from "#lib/api/index.js";
+  import type { BolusCalculation } from "#lib/api/index.js";
+  import type { MealPeriod } from "@nocturne/charts/core";
   import { CalculationType } from "#lib/api/index.js";
   import type { EntryRecord } from "#lib/constants/entry-categories.js";
   import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";

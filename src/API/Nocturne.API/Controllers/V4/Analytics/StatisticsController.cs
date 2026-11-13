@@ -7,6 +7,7 @@ using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Caching;
@@ -1031,9 +1032,11 @@ public class StatisticsController : ControllerBase
     /// CGM active time comes from <see cref="IStatisticsService.CalculateCgmActivePercent"/>,
     /// measured against the registered CGMs' windows where the tenant has registered any. The target
     /// range is optional; the report goes without it if it cannot be read. Each figure is narrowed to
-    /// the caller's categories by <see cref="AidSystemMetricsReadScopeGuard"/>. A history-clamped
-    /// caller reads the last <see cref="HistoryClamp.WindowHours"/> hours whatever the dates, as in
-    /// <see cref="LoopAnalysisRanges.Clamped"/>, and a window ending in the future stops at now.
+    /// the caller's categories by <see cref="AidSystemMetricsReadScopeGuard"/>. A window ending in
+    /// the future stops at now. A history-clamped caller reads the part of the window inside its last
+    /// <see cref="HistoryClamp.WindowHours"/> hours (<see cref="LoopAnalysisRanges.Intersect"/>); a
+    /// window that ends before them reads nothing and is flagged
+    /// <see cref="AidSystemMetrics.RangeOutsideHistory"/>.
     /// </remarks>
     [HttpGet("aid-system-metrics")]
     [RequireScope(Scope.ReportsRead)]
@@ -1047,17 +1050,19 @@ public class StatisticsController : ControllerBase
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        if (HttpContext.IsCallerHistoryClamped())
+        var clamped = HttpContext.IsCallerHistoryClamped();
+        if (!clamped && this.RejectDateSpan(startDt, endDt) is { } overlong)
+            return overlong;
+        if (endDt > now)
+            endDt = now;
+        if (clamped)
         {
-            var window = LoopAnalysisRanges.Clamped(now, HistoryClamp.Window, TimeZoneInfo.Utc);
-            (startDt, endDt) = (window.From, window.To);
-        }
-        else
-        {
-            if (this.RejectDateSpan(startDt, endDt) is { } overlong)
-                return overlong;
-            if (endDt > now)
-                endDt = now;
+            var windowStart = now - HistoryClamp.Window;
+            var cut = LoopAnalysisRanges.Intersect(
+                new LoopAnalysisResolvedRange { From = startDt, To = endDt }, windowStart, now, TimeZoneInfo.Utc);
+            if (cut.To <= cut.From)
+                return Ok(new AidSystemMetrics { RangeOutsideHistory = endDt <= windowStart });
+            (startDt, endDt) = (cut.From, cut.To);
         }
 
         return Ok(AidSystemMetricsReadScopeGuard.Redact(

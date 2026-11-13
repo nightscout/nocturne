@@ -31,7 +31,6 @@ Nocturne/
 │   ├── Infrastructure/             # EF Core data access, caching, security
 │   ├── Portal/                     # Marketing website
 │   ├── Services/                   # Background services
-│   ├── Tools/                      # CLI tools and MCP server
 │   ├── Web/                        # pnpm monorepo (SvelteKit frontend, bot, bridge)
 │   └── Widgets/                    # Embeddable widgets
 └── tests/                          # Comprehensive test suite

@@ -11,7 +11,7 @@ import {
   type ProfileActivationDto,
   type BasalDeliverySpanDto,
 } from "#lib/api/index.js";
-import { profileActivationLabel } from "#lib/utils/profile-activation-label.js";
+import { profileActivationLabel } from "@nocturne/charts/core";
 import { readable } from "#lib/server/patient-timezone.js";
 
 /**

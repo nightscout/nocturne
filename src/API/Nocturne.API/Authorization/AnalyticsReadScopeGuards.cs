@@ -94,8 +94,12 @@ internal static class ChartDataReadScopeGuard
             || !AnalyticsReadScopes.Allows(grantedScopes, Scope.DevicesRead))
             data.LastPumpSyncMills = null;
 
+        // The target lines are the active profile's target, therapy data like the profile spans.
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TherapyRead))
+        {
             data.ProfileSpans = [];
+            data.Thresholds = data.Thresholds with { TargetLow = null, TargetHigh = null };
+        }
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.HeartRateRead))
             data.HeartRateSeries = [];

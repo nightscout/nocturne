@@ -46,7 +46,7 @@ public partial class AnalyticsReadScopeGuardTests
             [
                 .. new[]
                 {
-                    "HistoryClamped", "TimeZoneUnavailableReason", "PrimaryRange", "ComparisonRange", "AppliedFilters",
+                    "HistoryClamped", "RangeOutsideHistory", "NarrowerThanHistoryWindow", "TimeZoneUnavailableReason", "PrimaryRange", "ComparisonRange", "AppliedFilters",
                     "IgnoredFilters", "WithheldSeries", "UnavailableFilters", "ProfileNames", "WithheldReason", "Rules",
                     "HistoryWindowHours",
                 }.Select(p => $"{nameof(SettingsEvidenceReport)}.{p}"),

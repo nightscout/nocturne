@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
 import type { DashboardChartData } from "#lib/api/generated/nocturne-api-client.js";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
-import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
-import { createStaticChartEngine, type ChartDataEngine } from "./chart-data-view.svelte";
+import { transformChartData } from "@nocturne/charts/core";
+import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
+import { createStaticChartView, type ChartDataView } from "@nocturne/charts";
 
 const MINUTE = 60_000;
 const FROM = Date.UTC(2026, 0, 6, 0, 0);
@@ -13,11 +13,11 @@ const date = (minutes: number) => new Date(at(minutes));
 
 const roots: Array<() => void> = [];
 
-function engineFor(dto: DashboardChartData, onDataReady?: () => void): ChartDataEngine {
-  let engine!: ChartDataEngine;
+function engineFor(dto: DashboardChartData, onDataReady?: () => void): ChartDataView {
+  let engine!: ChartDataView;
   roots.push(
     $effect.root(() => {
-      engine = createStaticChartEngine({
+      engine = createStaticChartView({
         data: transformChartData(dto),
         range: { from: new Date(FROM), to: new Date(TO) },
         onDataReady,
@@ -32,7 +32,7 @@ afterEach(() => {
   while (roots.length) roots.pop()!();
 });
 
-describe("createStaticChartEngine", () => {
+describe("createStaticChartView", () => {
   it("names the window it was given and reports ready once", () => {
     const onDataReady = vi.fn();
     const engine = engineFor({ glucoseData: [{ time: at(0), sgv: 100 }] }, onDataReady);

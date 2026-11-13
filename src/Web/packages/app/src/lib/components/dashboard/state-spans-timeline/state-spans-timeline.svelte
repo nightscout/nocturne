@@ -6,7 +6,7 @@
   import type { ProcessedSpan } from "../../../../routes/(authenticated)/time-spans/data.remote";
   import { BasalDeliveryOrigin, type BasalDeliverySpanDto } from "#lib/api/index.js";
   import { randomUUID } from "#lib/utils/index.js";
-  import { resolveChartColor } from "#lib/utils/chart-colors.js";
+  import { resolveChartColor } from "@nocturne/charts/core";
   import { formatDateTimeCompact } from "#lib/utils/formatting.js";
   import { formatElapsedDuration } from "#lib/utils/duration.js";
 

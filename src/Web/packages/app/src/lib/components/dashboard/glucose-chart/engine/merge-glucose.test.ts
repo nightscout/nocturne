@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 import type { Entry } from "#lib/websocket/types.js";
 import { mergeRealtimeGlucose } from "./merge-glucose";
 

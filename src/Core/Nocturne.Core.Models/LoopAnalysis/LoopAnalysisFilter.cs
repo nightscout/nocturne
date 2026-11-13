@@ -184,10 +184,22 @@ public enum LoopAnalysisSeries
 public class LoopAnalysisResponse
 {
     /// <summary>
-    /// The caller may read only its last 24 hours, so the range is that window whatever dates were
-    /// asked for, and there is no comparison.
+    /// The caller may read only its last 24 hours, so the range is the part of the dates asked for
+    /// inside that window, and there is no comparison.
     /// </summary>
     public bool HistoryClamped { get; set; }
+
+    /// <summary>
+    /// The caller is <see cref="HistoryClamped"/> and the range asked for ends before its window, so
+    /// nothing was analysed: the primary range is empty, at the window's start.
+    /// </summary>
+    public bool RangeOutsideHistory { get; set; }
+
+    /// <summary>
+    /// The caller is <see cref="HistoryClamped"/> and the range covers only part of its window: the
+    /// dates or the report panel asked for less than all of it.
+    /// </summary>
+    public bool NarrowerThanHistoryWindow { get; set; }
 
     /// <summary>The hours of history a clamped caller may read.</summary>
     public int HistoryWindowHours => HistoryClamp.WindowHours;
@@ -210,7 +222,7 @@ public class LoopAnalysisResponse
     /// <summary>
     /// Query parameters the caller sent but could not use: a profile name without therapy.read,
     /// the masks drawn from treatments or devices without those scopes, and for a history-clamped
-    /// caller the dates and the comparison.
+    /// caller the comparison and each date its window moved.
     /// </summary>
     public List<string> IgnoredFilters { get; set; } = [];
 

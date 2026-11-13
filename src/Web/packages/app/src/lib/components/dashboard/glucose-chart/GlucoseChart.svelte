@@ -2,9 +2,9 @@
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
   import { findNearbyEntries } from "./engine/nearby-entries";
   import type { Snippet } from "svelte";
-  import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+  import type { TransformedChartData } from "@nocturne/charts/core";
   import type { PredictionData } from "#lib/api/predictions.remote.js";
-  import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
+  import type { GlucoseChartContext, LegendState } from "@nocturne/charts";
   import type { EntryRecord } from "#lib/constants/entry-categories.js";
   import {
     createChartDataEngine,
@@ -19,23 +19,14 @@
     chartShowPoints,
     chartAreaMode,
     chartAreaOpacity,
+    predictionDisplayMode,
+    predictionEnabled,
   } from "#lib/stores/appearance-store.svelte.js";
   import { getEntryByTreatmentId } from "#lib/api/entries.remote.js";
 
   // Shell & tracks
   import GlucoseChartShell from "./GlucoseChartShell.svelte";
-  import BasalTrack from "./tracks/BasalTrack.svelte";
-  import SwimLaneTrack from "./tracks/SwimLaneTrack.svelte";
-  import ThresholdRules from "./tracks/ThresholdRules.svelte";
-  import GlucoseTrack from "./tracks/GlucoseTrack.svelte";
-  import PredictionTrack from "./tracks/PredictionTrack.svelte";
-  import IobCobTrack from "./tracks/IobCobTrack.svelte";
-  import DeviceEventMarkers from "./markers/DeviceEventMarkers.svelte";
-  import SystemEventMarkers from "./markers/SystemEventMarkers.svelte";
-  import TrackerMarkers from "./markers/TrackerMarkers.svelte";
-  import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
-  import ChartHighlight from "./tracks/ChartHighlight.svelte";
-  import ChartTooltip from "./ChartTooltip.svelte";
+  import { BasalTrack, SwimLaneTrack, ThresholdRules, GlucoseTrack, PredictionTrack, IobCobTrack, DeviceEventMarkers, SystemEventMarkers, TrackerMarkers, BgCheckMarkers, ChartHighlight, ChartTooltip } from "@nocturne/charts";
   import { openDayInReview } from "./day-in-review";
 
   import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
@@ -214,7 +205,7 @@
     />
     <BgCheckMarkers />
     {#if enablePredictions !== false}
-      <PredictionTrack />
+      <PredictionTrack displayMode={predictionDisplayMode.current} enabled={predictionEnabled.current} />
     {/if}
     <IobCobTrack
       onMarkerClick={enableInspection ? handleMarkerClick : undefined}

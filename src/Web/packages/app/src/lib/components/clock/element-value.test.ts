@@ -4,7 +4,7 @@ import type {
   GlucoseUnits,
   TimeFormat,
 } from "#lib/stores/appearance-store.svelte.js";
-import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { resolveChartThresholds } from "@nocturne/charts/core";
 import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
 
 // formatting.ts pulls in appearance-store, which pulls in mode-watcher (no node

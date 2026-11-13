@@ -329,7 +329,9 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
-          toolchain: stable
+          # Pinned below 1.100: cargo-llvm-cov 0.9.1 reads Cargo 1.100's build-dir layout on Windows
+          # as an uninstrumented binary and fails the report ("no coverage data found").
+          toolchain: 1.99.1
           components: clippy, rustfmt, llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -382,7 +384,7 @@ jobs:
       - name: Typecheck Svelte packages
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
-          pnpm --filter @nightscout/glucose-chart --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
+          pnpm --filter @nocturne/charts --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
       - name: Typecheck app
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/app run check
@@ -409,6 +411,9 @@ jobs:
       - name: CMS unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/cms exec vitest run --coverage
+      - name: Charts unit tests
+        if: ${{ !cancelled() && steps.client.outcome == 'success' }}
+        run: pnpm --filter @nocturne/charts exec vitest run
       # Renders pages through the translation transform. The build cannot see
       # what that transform does to code that only runs at render time, and the
       # E2E suite that would is opt-in, so this is the only gate on it.

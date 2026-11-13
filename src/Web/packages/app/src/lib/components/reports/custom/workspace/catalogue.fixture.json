@@ -1,0 +1,8713 @@
+{
+ "maxPanels": 6,
+ "maxTracks": 4,
+ "maxLayers": 8,
+ "maxUnitsPerTrack": 2,
+ "maxReads": 16,
+ "maxTitleLength": 200,
+ "maxRangeHours": 2160,
+ "maxNameLength": 120,
+ "maxGridMinutes": 1440,
+ "panelKinds": [],
+ "marks": [
+  {
+   "name": "line",
+   "label": "Line",
+   "hasAxis": true,
+   "xKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day",
+    "value",
+    "lag"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time",
+      "offset",
+      "time_of_day",
+      "day",
+      "value",
+      "lag"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Lines",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "series",
+     "label": "One line for each",
+     "input": "field",
+     "accepts": [
+      "category"
+     ],
+     "counts": [],
+     "required": false
+    }
+   ]
+  },
+  {
+   "name": "area",
+   "label": "Area",
+   "hasAxis": true,
+   "xKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day",
+    "value",
+    "lag"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time",
+      "offset",
+      "time_of_day",
+      "day",
+      "value",
+      "lag"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Areas",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "band",
+   "label": "Band",
+   "hasAxis": true,
+   "xKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time",
+      "offset",
+      "time_of_day",
+      "day"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "edges",
+     "label": "Band edges: low and high",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [
+      2,
+      4
+     ],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Middle line",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [
+      1
+     ],
+     "required": false
+    },
+    {
+     "key": "series",
+     "label": "One band for each",
+     "input": "field",
+     "accepts": [
+      "category"
+     ],
+     "counts": [],
+     "required": false
+    }
+   ]
+  },
+  {
+   "name": "bars",
+   "label": "Bars",
+   "hasAxis": true,
+   "xKinds": [
+    "category",
+    "day",
+    "time_of_day",
+    "time",
+    "offset",
+    "lag"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Categories or axis",
+     "input": "field",
+     "accepts": [
+      "category",
+      "day",
+      "time_of_day",
+      "time",
+      "offset",
+      "lag"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Bars",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "stacked",
+     "label": "Stack the bars",
+     "input": "boolean",
+     "accepts": [],
+     "counts": [],
+     "required": false
+    },
+    {
+     "key": "orientation",
+     "label": "Bar direction",
+     "input": "choice",
+     "accepts": [],
+     "counts": [],
+     "required": false
+    }
+   ]
+  },
+  {
+   "name": "points",
+   "label": "Points",
+   "hasAxis": true,
+   "xKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day",
+    "value",
+    "lag"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time",
+      "offset",
+      "time_of_day",
+      "day",
+      "value",
+      "lag"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Points",
+     "input": "fields",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "fit",
+     "label": "Line through the points",
+     "input": "field",
+     "accepts": [
+      "number",
+      "percent"
+     ],
+     "counts": [],
+     "required": false
+    }
+   ]
+  },
+  {
+   "name": "markers",
+   "label": "Treatment markers",
+   "hasAxis": false,
+   "xKinds": [
+    "time"
+   ],
+   "slots": [
+    {
+     "key": "x",
+     "label": "Horizontal axis",
+     "input": "field",
+     "accepts": [
+      "time"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "y",
+     "label": "Markers",
+     "input": "fields",
+     "accepts": [
+      "marker"
+     ],
+     "counts": [],
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "spans",
+   "label": "Spans in a lane",
+   "hasAxis": false,
+   "xKinds": [
+    "time"
+   ],
+   "slots": [
+    {
+     "key": "start",
+     "label": "Start",
+     "input": "field",
+     "accepts": [
+      "time"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "end",
+     "label": "End",
+     "input": "field",
+     "accepts": [
+      "time"
+     ],
+     "counts": [],
+     "required": true
+    },
+    {
+     "key": "category",
+     "label": "Lane",
+     "input": "field",
+     "accepts": [
+      "category"
+     ],
+     "counts": [],
+     "required": true
+    }
+   ]
+  }
+ ],
+ "ops": [
+  {
+   "name": "difference",
+   "label": "Difference",
+   "description": "",
+   "sources": 2,
+   "parameters": {},
+   "xRule": "The sources' axis.",
+   "unitRule": "The sources' unit; both sources must be in one unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "area",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "ratio",
+   "label": "Ratio",
+   "description": "",
+   "sources": 2,
+   "parameters": {},
+   "xRule": "The sources' axis.",
+   "unitRule": "The unit of a over the unit of b; no unit when both are in one unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "scatter",
+   "label": "Scatter",
+   "description": "",
+   "sources": 2,
+   "parameters": {},
+   "xRule": "Values of source a.",
+   "unitRule": "Source b's unit up, source a's along the axis.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "value",
+    "value",
+    "value",
+    "value"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "a",
+      "y": [
+       "b"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": "fit",
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "lag_correlation",
+   "label": "Lag correlation",
+   "description": "",
+   "sources": 2,
+   "parameters": {},
+   "xRule": "Lag, in minutes: b after a when positive.",
+   "unitRule": "r, with no unit.",
+   "sourceXKinds": [
+    "time"
+   ],
+   "outputXKinds": [
+    "lag"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "lag",
+      "y": [
+       "r"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "lag",
+      "y": [
+       "r"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "lag",
+      "y": [
+       "r"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "rolling_mean",
+   "label": "Rolling mean",
+   "description": "",
+   "sources": 1,
+   "parameters": {},
+   "xRule": "The source's axis.",
+   "unitRule": "The source's unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "area",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "trend",
+   "label": "Trend",
+   "description": "",
+   "sources": 1,
+   "parameters": {},
+   "xRule": "The source's axis.",
+   "unitRule": "The source's unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "value"
+      ],
+      "edges": [
+       "low",
+       "high"
+      ],
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "band_sd",
+   "label": "Mean and standard deviation",
+   "description": "",
+   "sources": 1,
+   "parameters": {},
+   "xRule": "The source's axis.",
+   "unitRule": "The source's unit.",
+   "sourceXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "outputXKinds": [
+    "time",
+    "offset",
+    "time_of_day",
+    "day"
+   ],
+   "sourceFieldKinds": [
+    "number",
+    "percent"
+   ],
+   "marks": [
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "mean"
+      ],
+      "edges": [
+       "low",
+       "high"
+      ],
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "x",
+      "y": [
+       "mean"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     }
+    }
+   ]
+  }
+ ],
+ "datasets": [
+  {
+   "name": "basal_delivery",
+   "label": "Basal delivery",
+   "description": "",
+   "requiredScope": "treatments.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "delivered",
+     "label": "Delivered basal",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "scheduled",
+     "label": "Scheduled basal",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": "therapy.read",
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "origin",
+     "label": "Origin",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "delivered",
+      "scheduled",
+      "origin"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 24,
+   "maxRangeHours": 336,
+   "rangeLimit": "This data covers at most 14 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "daily_profile",
+   "label": "Daily profile",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "minuteOfDay",
+     "label": "Time of day",
+     "kind": "time_of_day",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP10",
+     "label": "Glucose P10",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP25",
+     "label": "Glucose P25",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP50",
+     "label": "Glucose median",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP75",
+     "label": "Glucose P75",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP90",
+     "label": "Glucose P90",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "readings",
+     "label": "Readings",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "scheduledBasal",
+     "label": "Scheduled basal",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": "therapy.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "deliveredBasal",
+     "label": "Delivered basal",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "netLoopCorrection",
+     "label": "Net loop correction",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "iob",
+     "label": "IOB median",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "cob",
+     "label": "COB median",
+     "kind": "number",
+     "unit": "g",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "targetLow",
+     "label": "Target low",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "therapy.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "targetHigh",
+     "label": "Target high",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "therapy.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "sentence",
+     "label": "Sentence",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "minuteOfDay",
+      "glucoseP10",
+      "glucoseP25",
+      "glucoseP50",
+      "glucoseP75",
+      "glucoseP90",
+      "readings",
+      "scheduledBasal",
+      "deliveredBasal",
+      "netLoopCorrection",
+      "iob",
+      "cob",
+      "targetLow",
+      "targetHigh"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "daily_summary",
+   "label": "Daily summary",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "date",
+     "label": "Date",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "day",
+     "label": "Day",
+     "kind": "day",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "readings",
+     "label": "Readings",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "timeInRange",
+     "label": "In range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "timeBelow",
+     "label": "Below range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "timeAbove",
+     "label": "Above range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "mean",
+     "label": "Mean glucose",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "totalInsulin",
+     "label": "Insulin",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "totalBolus",
+     "label": "Bolus",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "totalBasal",
+     "label": "Basal",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "totalCarbs",
+     "label": "Carbs",
+     "kind": "number",
+     "unit": "g",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "partial",
+     "label": "Partial day",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "date",
+      "day",
+      "readings",
+      "timeInRange",
+      "timeBelow",
+      "timeAbove",
+      "mean",
+      "totalInsulin",
+      "totalBolus",
+      "totalBasal",
+      "totalCarbs",
+      "partial"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "device_status",
+   "label": "Device status",
+   "description": "",
+   "requiredScope": "devices.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "reservoir",
+     "label": "Reservoir",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "pumpBattery",
+     "label": "Pump battery",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "uploaderBattery",
+     "label": "Uploader battery",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "sensorAgeHours",
+     "label": "Sensor age now",
+     "kind": "number",
+     "unit": "h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "stat_tiles",
+     "columns": [
+      "reservoir",
+      "pumpBattery",
+      "uploaderBattery",
+      "sensorAgeHours"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 24,
+   "maxRangeHours": 720,
+   "rangeLimit": "This data covers at most 30 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "event_occurrence",
+   "label": "When events happen",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "hour",
+     "label": "Hour of the day",
+     "kind": "time_of_day",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "weekday",
+     "label": "Weekday",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events1",
+     "label": "Group 1",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events2",
+     "label": "Group 2",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events3",
+     "label": "Group 3",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events4",
+     "label": "Group 4",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events5",
+     "label": "Group 5",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events6",
+     "label": "Group 6",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "sentence",
+     "label": "Sentence",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [],
+   "marks": [],
+   "defaultRangeHours": 720,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "event_outcome_spread",
+   "label": "Event outcome spread",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "range",
+     "label": "Range",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events1",
+     "label": "Group 1",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events2",
+     "label": "Group 2",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events3",
+     "label": "Group 3",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events4",
+     "label": "Group 4",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events5",
+     "label": "Group 5",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "events6",
+     "label": "Group 6",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "sentence",
+     "label": "Sentence",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [],
+   "marks": [],
+   "defaultRangeHours": 720,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "event_outcomes",
+   "label": "Each event",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "startGlucose",
+     "label": "Glucose at the event",
+     "kind": "value",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "grams",
+     "label": "Carbs",
+     "kind": "value",
+     "unit": "g",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesSinceMeal",
+     "label": "Minutes since carbs",
+     "kind": "value",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "iobAtEvent",
+     "label": "IOB at the event",
+     "kind": "value",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "timeOfDay",
+     "label": "Time of day",
+     "kind": "time_of_day",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "peakRise",
+     "label": "Peak rise",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesToPeak",
+     "label": "Time to peak",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesBackToStart",
+     "label": "Back to start",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "drop",
+     "label": "Drop",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "nadir",
+     "label": "Lowest",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesToNadir",
+     "label": "Time to lowest",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseAt2Hours",
+     "label": "Glucose at 2 hours",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "netInsulin",
+     "label": "Net insulin",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "gramsPerUnit",
+     "label": "Carbs per unit",
+     "kind": "number",
+     "unit": "g/U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "peakRiseFit",
+     "label": "Peak rise: least-squares line",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesToPeakFit",
+     "label": "Time to peak: least-squares line",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesBackToStartFit",
+     "label": "Back to start: least-squares line",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "dropFit",
+     "label": "Drop: least-squares line",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "nadirFit",
+     "label": "Lowest: least-squares line",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesToNadirFit",
+     "label": "Time to lowest: least-squares line",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseAt2HoursFit",
+     "label": "Glucose at 2 hours: least-squares line",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "netInsulinFit",
+     "label": "Net insulin: least-squares line",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "gramsPerUnitFit",
+     "label": "Carbs per unit: least-squares line",
+     "kind": "number",
+     "unit": "g/U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "groups",
+     "label": "Groups",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "sentence",
+     "label": "Sentence",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [],
+   "marks": [],
+   "defaultRangeHours": 720,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "event_response",
+   "label": "Meals and events",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "cohorts": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "anchor": {
+         "enum": [
+          "Meal",
+          "CorrectionBolus",
+          "SensorStart",
+          "ExerciseStart",
+          "OverrideStart",
+          "TemporaryTargetStart",
+          "UnannouncedRise",
+          "LowStart",
+          "HighStart",
+          "SiteChange",
+          "SleepStart",
+          "Wake",
+          "LowTreatment",
+          "AnyBolus"
+         ],
+         "type": "string",
+         "x-enumLabels": [
+          "Meal",
+          "Correction bolus",
+          "Sensor start",
+          "Exercise start",
+          "Override start",
+          "Temporary target start",
+          "Unannounced rise",
+          "Low start",
+          "High start",
+          "Site change",
+          "Sleep start",
+          "Wake",
+          "Low treatment",
+          "Any bolus"
+         ],
+         "title": "Event",
+         "description": "What the events are aligned on: Meal (a carb entry), CorrectionBolus (a manual bolus with no meal near it), SensorStart, ExerciseStart, OverrideStart, TemporaryTargetStart, UnannouncedRise (a meal-like rise with no carbs logged), LowStart, HighStart, SiteChange (a site, cannula or pod change), SleepStart and Wake (the start and end of a sleep session, naps included; need the sleep permission), LowTreatment (the first carbs logged during a low) or AnyBolus (every manual bolus, for a meal or not). LowStart is the first reading of a low and HighStart the first reading of a high, by the rule the glucose statistics count lows and highs by: a low starts after at least 15 minutes of readings below 70 mg/dL (3.9 mmol/L), a high after at least 15 minutes above 180 mg/dL (10.0 mmol/L), and each ends after at least 15 minutes back in range or at a gap in the readings. These limits are the same for everyone, not the profile's target."
+        },
+        "others": {
+         "type": "boolean",
+         "title": "All others",
+         "description": "All the events of this kind in the range that no other group of the same kind takes in. It takes no filter or condition of its own, and needs another group of the same kind. One such group for each kind at most.",
+         "default": false
+        },
+        "timeOfDay": {
+         "type": "object",
+         "properties": {
+          "fromMinute": {
+           "type": "integer",
+           "title": "From",
+           "description": "Start, minutes after local midnight, 0 to 1439.",
+           "minimum": 0,
+           "maximum": 1439,
+           "x-input": "minute-of-day"
+          },
+          "toMinute": {
+           "type": "integer",
+           "title": "To",
+           "description": "End, exclusive, minutes after local midnight, 0 to 1439.",
+           "minimum": 0,
+           "maximum": 1439,
+           "x-input": "minute-of-day"
+          }
+         },
+         "required": [
+          "fromMinute",
+          "toMinute"
+         ],
+         "additionalProperties": false,
+         "title": "Time of day",
+         "description": "Only events in this local time-of-day window. Optional."
+        },
+        "grams": {
+         "type": "object",
+         "properties": {
+          "min": {
+           "type": "number",
+           "title": "Min",
+           "description": "Smallest meal, g, 0 to 1000. Optional.",
+           "minimum": 0,
+           "maximum": 1000
+          },
+          "max": {
+           "type": "number",
+           "title": "Max",
+           "description": "Largest meal, g, 0 to 1000. Optional.",
+           "minimum": 0,
+           "maximum": 1000
+          }
+         },
+         "additionalProperties": false,
+         "title": "Meal size (g)",
+         "description": "Meal cohorts only: only meals of this size. Optional."
+        },
+        "dayOfWeek": {
+         "type": "array",
+         "items": {
+          "enum": [
+           "Mon",
+           "Tue",
+           "Wed",
+           "Thu",
+           "Fri",
+           "Sat",
+           "Sun"
+          ],
+          "type": "string",
+          "x-enumLabels": [
+           "Mon",
+           "Tue",
+           "Wed",
+           "Thu",
+           "Fri",
+           "Sat",
+           "Sun"
+          ]
+         },
+         "title": "Weekdays",
+         "description": "Only events on these local weekdays. Optional; every day when missing.",
+         "minItems": 1,
+         "maxItems": 7
+        },
+        "foods": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "format": "uuid"
+         },
+         "title": "Foods",
+         "description": "Meal groups only: the foods to match. A meal matches when it has a food record of one of them. Meals with carbs only and no food record cannot match and are counted apart. Needs the food permission.",
+         "minItems": 1,
+         "maxItems": 20,
+         "x-input": "foods",
+         "x-scope": "food.read"
+        },
+        "foodCategory": {
+         "type": "string",
+         "title": "Food category",
+         "description": "Meal groups only: a food category. A meal matches when it has a food record of that category. Needs the food permission.",
+         "maxLength": 100,
+         "x-input": "food-category",
+         "x-scope": "food.read"
+        },
+        "minutesSinceMeal": {
+         "type": "object",
+         "properties": {
+          "min": {
+           "type": "integer",
+           "title": "Min",
+           "description": "Fewest minutes since the last carbs, 1 to 1440. Optional.",
+           "minimum": 1,
+           "maximum": 1440
+          },
+          "max": {
+           "type": "integer",
+           "title": "Max",
+           "description": "Most minutes since the last carbs, 1 to 1440. Optional.",
+           "minimum": 1,
+           "maximum": 1440
+          }
+         },
+         "additionalProperties": false,
+         "title": "Minutes since carbs",
+         "description": "Only events with this many minutes since the last carb entry before them. Optional. Needs the treatments permission.",
+         "x-scope": "treatments.read"
+        },
+        "startGlucose": {
+         "type": "object",
+         "properties": {
+          "min": {
+           "type": "integer",
+           "title": "Min",
+           "description": "Lowest glucose at the event, mg/dL, 0 to 600. Optional.",
+           "minimum": 0,
+           "maximum": 600
+          },
+          "max": {
+           "type": "integer",
+           "title": "Max",
+           "description": "Highest glucose at the event, mg/dL, 0 to 600. Optional.",
+           "minimum": 0,
+           "maximum": 600
+          }
+         },
+         "additionalProperties": false,
+         "title": "Glucose at the event",
+         "description": "Only events with a glucose at the event in this range, in mg/dL. Optional."
+        },
+        "insulinOnBoard": {
+         "type": "object",
+         "properties": {
+          "min": {
+           "type": "number",
+           "title": "Min",
+           "description": "Least IOB, U, -20 to 100. Optional.",
+           "minimum": -20,
+           "maximum": 100
+          },
+          "max": {
+           "type": "number",
+           "title": "Max",
+           "description": "Most IOB, U, -20 to 100. Optional.",
+           "minimum": -20,
+           "maximum": 100
+          }
+         },
+         "additionalProperties": false,
+         "title": "IOB at the event",
+         "description": "Only events with this insulin on board at the event. Events with no IOB value at the time are counted apart. Optional. Needs the treatments permission.",
+         "x-scope": "treatments.read"
+        }
+       },
+       "required": [
+        "anchor"
+       ],
+       "additionalProperties": false,
+       "title": "Event group"
+      },
+      "title": "Event groups",
+      "description": "The cohorts, 1 to 6. Optional; every meal when missing. The Meals and events page shows at most 3. Groups 1 to 5 each have their own color; group 6 has the color of group 1.",
+      "minItems": 1,
+      "maxItems": 6
+     },
+     "minutesBefore": {
+      "type": "integer",
+      "title": "Minutes before each event",
+      "description": "The part of each event's window before the event.",
+      "minimum": 0,
+      "maximum": 240,
+      "enum": [
+       0,
+       30,
+       60,
+       90,
+       120,
+       180,
+       240
+      ],
+      "x-enumLabels": [
+       "0",
+       "30",
+       "60",
+       "90",
+       "120",
+       "180",
+       "240"
+      ],
+      "default": 60
+     },
+     "minutesAfter": {
+      "type": "integer",
+      "title": "Minutes after each event",
+      "description": "The part of each event's window after the event.",
+      "minimum": 120,
+      "maximum": 480,
+      "enum": [
+       120,
+       180,
+       240,
+       300,
+       360,
+       420,
+       480
+      ],
+      "x-enumLabels": [
+       "120",
+       "180",
+       "240",
+       "300",
+       "360",
+       "420",
+       "480"
+      ],
+      "default": 300
+     },
+     "isolatedOnly": {
+      "type": "boolean",
+      "title": "Only events with nothing else near them",
+      "description": "Only events with no other meal, correction bolus or unannounced rise in their window. Needs the treatments permission.",
+      "x-scope": "treatments.read",
+      "default": false
+     },
+     "requireCorroboration": {
+      "type": "boolean",
+      "title": "Count only rises with extra insulin",
+      "description": "Count an unannounced rise only where the loop answered it with extra insulin. Needs the treatments permission.",
+      "x-scope": "treatments.read",
+      "default": false
+     },
+     "comparisonRange": {
+      "type": "object",
+      "properties": {
+       "from": {
+        "type": "string",
+        "format": "date",
+        "title": "From",
+        "description": "First local date, yyyy-MM-dd."
+       },
+       "to": {
+        "type": "string",
+        "format": "date",
+        "title": "To",
+        "description": "Last local date, inclusive, yyyy-MM-dd."
+       }
+      },
+      "required": [
+       "from",
+       "to"
+      ],
+      "additionalProperties": false,
+      "title": "Comparison range",
+      "description": "A second range of local dates to compare with, drawn as its own series. Optional."
+     },
+     "excludeOverrides": {
+      "type": "boolean",
+      "title": "Exclude overrides",
+      "description": "Leave out time an override ran. Needs the treatments permission.",
+      "x-scope": "treatments.read",
+      "default": false
+     },
+     "excludeTemporaryTargets": {
+      "type": "boolean",
+      "title": "Exclude temporary targets",
+      "description": "Leave out time a temporary target ran. Needs the treatments permission.",
+      "x-scope": "treatments.read",
+      "default": false
+     },
+     "excludeExercise": {
+      "type": "boolean",
+      "title": "Exclude exercise",
+      "description": "Leave out exercise time. Needs the treatments permission.",
+      "x-scope": "treatments.read",
+      "default": false
+     },
+     "excludeIllness": {
+      "type": "boolean",
+      "title": "Exclude illness",
+      "description": "Leave out illness time. Needs the treatments permission.",
+      "x-scope": "treatments.read",
+      "default": true
+     },
+     "excludeOpenLoop": {
+      "type": "boolean",
+      "title": "Exclude manual mode",
+      "description": "Leave out time the pump was in manual mode or had no AID algorithm. Needs the devices permission.",
+      "x-scope": "devices.read",
+      "default": true
+     },
+     "profileName": {
+      "type": "string",
+      "title": "Profile name",
+      "description": "Analyze only time this profile was active. Optional. Needs the therapy settings permission.",
+      "maxLength": 100,
+      "x-scope": "therapy.read"
+     }
+    },
+    "additionalProperties": false,
+    "x-eventFigures": {
+     "responses": {
+      "Meal": "rise",
+      "CorrectionBolus": "fall",
+      "SensorStart": "rise",
+      "ExerciseStart": "fall",
+      "OverrideStart": "fall",
+      "TemporaryTargetStart": "fall",
+      "UnannouncedRise": "rise",
+      "LowStart": "fall",
+      "HighStart": "rise",
+      "SiteChange": "rise",
+      "SleepStart": "rise",
+      "Wake": "rise",
+      "LowTreatment": "rise",
+      "AnyBolus": "fall"
+     },
+     "figures": {
+      "peakRise": [
+       "Meal",
+       "SensorStart",
+       "UnannouncedRise",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment"
+      ],
+      "minutesToPeak": [
+       "Meal",
+       "SensorStart",
+       "UnannouncedRise",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment"
+      ],
+      "minutesBackToStart": [
+       "Meal",
+       "SensorStart",
+       "UnannouncedRise",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment"
+      ],
+      "drop": [
+       "CorrectionBolus",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "LowStart",
+       "AnyBolus"
+      ],
+      "nadir": [
+       "CorrectionBolus",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "LowStart",
+       "AnyBolus"
+      ],
+      "minutesToNadir": [
+       "CorrectionBolus",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "LowStart",
+       "AnyBolus"
+      ],
+      "glucoseAt2Hours": [
+       "Meal",
+       "CorrectionBolus",
+       "SensorStart",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "UnannouncedRise",
+       "LowStart",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment",
+       "AnyBolus"
+      ],
+      "startGlucose": [
+       "Meal",
+       "CorrectionBolus",
+       "SensorStart",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "UnannouncedRise",
+       "LowStart",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment",
+       "AnyBolus"
+      ],
+      "netInsulin": [
+       "Meal",
+       "CorrectionBolus",
+       "SensorStart",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "UnannouncedRise",
+       "LowStart",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment",
+       "AnyBolus"
+      ],
+      "gramsPerUnit": [
+       "Meal"
+      ],
+      "grams": [
+       "Meal"
+      ],
+      "minutesSinceMeal": [
+       "Meal",
+       "CorrectionBolus",
+       "SensorStart",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "UnannouncedRise",
+       "LowStart",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment",
+       "AnyBolus"
+      ],
+      "iobAtEvent": [
+       "Meal",
+       "CorrectionBolus",
+       "SensorStart",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "UnannouncedRise",
+       "LowStart",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment",
+       "AnyBolus"
+      ],
+      "timeOfDay": [
+       "Meal",
+       "CorrectionBolus",
+       "SensorStart",
+       "ExerciseStart",
+       "OverrideStart",
+       "TemporaryTargetStart",
+       "UnannouncedRise",
+       "LowStart",
+       "HighStart",
+       "SiteChange",
+       "SleepStart",
+       "Wake",
+       "LowTreatment",
+       "AnyBolus"
+      ]
+     }
+    },
+    "x-eventAnchors": {
+     "Meal": {
+      "description": "A carb entry; entries at the same instant are one meal.",
+      "rule": null
+     },
+     "CorrectionBolus": {
+      "description": "A manual bolus with no carbs logged from 30 minutes before it to an hour after it.",
+      "rule": null
+     },
+     "SensorStart": {
+      "description": "A CGM sensor start or change; records within two hours are one new sensor.",
+      "rule": null
+     },
+     "ExerciseStart": {
+      "description": "The start of an exercise span.",
+      "rule": null
+     },
+     "OverrideStart": {
+      "description": "The start of an override.",
+      "rule": null
+     },
+     "TemporaryTargetStart": {
+      "description": "The start of a temporary target.",
+      "rule": null
+     },
+     "UnannouncedRise": {
+      "description": "A meal-like glucose rise with no carbs logged near it.",
+      "rule": null
+     },
+     "LowStart": {
+      "description": "The first reading of a low.",
+      "rule": "A low starts after at least 15 minutes of readings below 70 mg/dL (3.9 mmol/L), a high after at least 15 minutes above 180 mg/dL (10.0 mmol/L), and each ends after at least 15 minutes back in range or at a gap in the readings. These limits are the same for everyone, not the profile's target."
+     },
+     "HighStart": {
+      "description": "The first reading of a high.",
+      "rule": "A low starts after at least 15 minutes of readings below 70 mg/dL (3.9 mmol/L), a high after at least 15 minutes above 180 mg/dL (10.0 mmol/L), and each ends after at least 15 minutes back in range or at a gap in the readings. These limits are the same for everyone, not the profile's target."
+     },
+     "SiteChange": {
+      "description": "An infusion site, cannula or pod change, or a pod activated; records within two hours are one change.",
+      "rule": null
+     },
+     "SleepStart": {
+      "description": "The start of a sleep session, naps included.",
+      "rule": null
+     },
+     "Wake": {
+      "description": "The end of a sleep session.",
+      "rule": null
+     },
+     "LowTreatment": {
+      "description": "The first carbs logged during a low.",
+      "rule": "A low starts after at least 15 minutes of readings below 70 mg/dL (3.9 mmol/L), a high after at least 15 minutes above 180 mg/dL (10.0 mmol/L), and each ends after at least 15 minutes back in range or at a gap in the readings. These limits are the same for everyone, not the profile's target."
+     },
+     "AnyBolus": {
+      "description": "Every manual bolus, for a meal or not; automatic boluses are not.",
+      "rule": null
+     }
+    }
+   },
+   "fields": [
+    {
+     "name": "series",
+     "label": "Series",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "cohort",
+     "label": "Cohort",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "range",
+     "label": "Range",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minute",
+     "label": "Minutes from event",
+     "kind": "offset",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP10",
+     "label": "Glucose P10",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP25",
+     "label": "Glucose P25",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP50",
+     "label": "Glucose median",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP75",
+     "label": "Glucose P75",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP90",
+     "label": "Glucose P90",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "deltaP10",
+     "label": "Change P10",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "deltaP25",
+     "label": "Change P25",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "deltaP50",
+     "label": "Change median",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "deltaP75",
+     "label": "Change P75",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "deltaP90",
+     "label": "Change P90",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "iobP50",
+     "label": "IOB median",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "cobP50",
+     "label": "COB median",
+     "kind": "number",
+     "unit": "g",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "netLoopCorrectionP50",
+     "label": "Net loop correction median",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "events",
+     "label": "Events",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "sentence",
+     "label": "Sentence",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "at",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "anchor",
+     "label": "Event",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "grams",
+     "label": "Carbs",
+     "kind": "number",
+     "unit": "g",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "cohorts",
+     "label": "Cohorts",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "startGlucose",
+     "label": "Start glucose",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "peakRise",
+     "label": "Peak rise",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesToPeak",
+     "label": "Time to peak",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesBackToStart",
+     "label": "Back to start",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "drop",
+     "label": "Drop",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "nadir",
+     "label": "Lowest",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutesToNadir",
+     "label": "Time to lowest",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "netInsulin",
+     "label": "Net insulin",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "gramsPerUnit",
+     "label": "Carbs per unit",
+     "kind": "number",
+     "unit": "g/U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "summary",
+     "label": "Summary",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "at",
+      "anchor",
+      "grams",
+      "cohorts",
+      "startGlucose",
+      "peakRise",
+      "minutesToPeak",
+      "minutesBackToStart",
+      "drop",
+      "nadir",
+      "minutesToNadir",
+      "netInsulin",
+      "gramsPerUnit",
+      "summary"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 720,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": "cohort",
+   "seriesParameter": "cohorts",
+   "defaultSeriesCount": 1
+  },
+  {
+   "name": "glucose_distribution",
+   "label": "Time in each glucose range",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "band",
+     "label": "Band",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "range",
+     "label": "Range",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "percent",
+     "label": "Time",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minutes",
+     "label": "Minutes",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "period",
+     "label": "Period",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "veryLow",
+     "label": "Very low",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "low",
+     "label": "Low",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "inRange",
+     "label": "In range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "high",
+     "label": "High",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "veryHigh",
+     "label": "Very high",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "stat_tiles",
+     "columns": [
+      "veryLow",
+      "low",
+      "inRange",
+      "high",
+      "veryHigh"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "glucose_distribution_by_hour",
+   "label": "Glucose by hour of day",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "hour",
+     "label": "Hour",
+     "kind": "time_of_day",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP10",
+     "label": "Glucose P10",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP25",
+     "label": "Glucose P25",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP50",
+     "label": "Glucose median",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP75",
+     "label": "Glucose P75",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseP90",
+     "label": "Glucose P90",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "mean",
+     "label": "Mean",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "readings",
+     "label": "Readings",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "days",
+     "label": "Days",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "max",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "veryLow",
+     "label": "Very low",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "low",
+     "label": "Low",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "tightRange",
+     "label": "Tight range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "aboveTightRange",
+     "label": "Above tight range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "high",
+     "label": "High",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "veryHigh",
+     "label": "Very high",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "sentence",
+     "label": "Sentence",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "hour",
+      "glucoseP10",
+      "glucoseP25",
+      "glucoseP50",
+      "glucoseP75",
+      "glucoseP90",
+      "mean",
+      "readings",
+      "days",
+      "veryLow",
+      "low",
+      "tightRange",
+      "aboveTightRange",
+      "high",
+      "veryHigh"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "glucose_series",
+   "label": "Glucose readings",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucose",
+     "label": "Glucose",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "glucoseMgdl",
+     "label": "Glucose (mg/dL)",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "direction",
+     "label": "Trend",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "targetLow",
+     "label": "Range low",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "targetHigh",
+     "label": "Range high",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "iob",
+     "label": "IOB",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "cob",
+     "label": "COB",
+     "kind": "number",
+     "unit": "g",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "basalRate",
+     "label": "Basal rate",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "glucose",
+      "glucoseMgdl",
+      "direction",
+      "targetLow",
+      "targetHigh",
+      "iob",
+      "cob",
+      "basalRate"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 6,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "glucose_statistics",
+   "label": "Glucose statistics",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "timeInRangePercent",
+     "label": "Time in range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "timeBelow",
+     "label": "Time below range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "timeAbove",
+     "label": "Time above range",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "mean",
+     "label": "Mean glucose",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "gmi",
+     "label": "GMI",
+     "kind": "number",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "cv",
+     "label": "CV",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "sd",
+     "label": "SD",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "readings",
+     "label": "Readings",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "targetLow",
+     "label": "Range low",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "targetHigh",
+     "label": "Range high",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "tdd",
+     "label": "Insulin per day",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "basalPercent",
+     "label": "Basal share",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "carbsPerDay",
+     "label": "Carbs per day",
+     "kind": "number",
+     "unit": "g",
+     "description": "",
+     "scope": "treatments.read",
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "stat_tiles",
+     "columns": [
+      "timeInRangePercent",
+      "timeBelow",
+      "timeAbove",
+      "mean",
+      "gmi",
+      "cv",
+      "sd",
+      "readings",
+      "targetLow",
+      "targetHigh",
+      "tdd",
+      "basalPercent",
+      "carbsPerDay"
+     ]
+    },
+    {
+     "name": "table",
+     "columns": [
+      "timeInRangePercent",
+      "timeBelow",
+      "timeAbove",
+      "mean",
+      "gmi",
+      "cv",
+      "sd",
+      "readings",
+      "targetLow",
+      "targetHigh",
+      "tdd",
+      "basalPercent",
+      "carbsPerDay"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "heart_rate",
+   "label": "Heart rate",
+   "description": "",
+   "requiredScope": "heartrate.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "bpm",
+     "label": "Heart rate",
+     "kind": "number",
+     "unit": "bpm",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "bpmMin",
+     "label": "Heart rate, lowest",
+     "kind": "number",
+     "unit": "bpm",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "min",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "bpmMax",
+     "label": "Heart rate, highest",
+     "kind": "number",
+     "unit": "bpm",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "max",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "bpm",
+      "bpmMin",
+      "bpmMax"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 24,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "period_comparison",
+   "label": "Period comparison",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "preset": {
+      "enum": [
+       "last7-prior7",
+       "last14-prior14",
+       "last30-prior30",
+       "thisMonth-lastMonth"
+      ],
+      "type": "string",
+      "x-enumLabels": [
+       "Last 7 days and the 7 days before",
+       "Last 14 days and the 14 days before",
+       "Last 30 days and the 30 days before",
+       "This month and last month"
+      ],
+      "title": "Preset",
+      "description": "A pair of periods ending today: last7-prior7, last14-prior14 (the default), last30-prior30 or thisMonth-lastMonth. Do not send with 'a' and 'b'."
+     },
+     "a": {
+      "type": "object",
+      "properties": {
+       "from": {
+        "type": "string",
+        "format": "date",
+        "title": "From",
+        "description": "The first day, yyyy-MM-dd."
+       },
+       "to": {
+        "type": "string",
+        "format": "date",
+        "title": "To",
+        "description": "The last day, yyyy-MM-dd, counted."
+       }
+      },
+      "required": [
+       "from",
+       "to"
+      ],
+      "additionalProperties": false,
+      "title": "Period A",
+      "description": "Period A, the earlier or reference period. Send with 'b', in place of 'preset'."
+     },
+     "b": {
+      "type": "object",
+      "properties": {
+       "from": {
+        "type": "string",
+        "format": "date",
+        "title": "From",
+        "description": "The first day, yyyy-MM-dd."
+       },
+       "to": {
+        "type": "string",
+        "format": "date",
+        "title": "To",
+        "description": "The last day, yyyy-MM-dd, counted."
+       }
+      },
+      "required": [
+       "from",
+       "to"
+      ],
+      "additionalProperties": false,
+      "title": "Period B",
+      "description": "Period B, compared with A. Send with 'a', in place of 'preset'."
+     }
+    },
+    "additionalProperties": false
+   },
+   "fields": [
+    {
+     "name": "metric",
+     "label": "Figure key",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "group",
+     "label": "Group",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Figure",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "a",
+     "label": "Period A",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "b",
+     "label": "Period B",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "delta",
+     "label": "Change",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "changePercent",
+     "label": "Change (%)",
+     "kind": "number",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "direction",
+     "label": "Direction",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "unit",
+     "label": "Unit",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "verdict",
+     "label": "Verdict",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "comparison",
+     "columns": [
+      "metric",
+      "group",
+      "label",
+      "a",
+      "b",
+      "delta",
+      "changePercent",
+      "direction",
+      "unit",
+      "verdict",
+      "color"
+     ]
+    },
+    {
+     "name": "table",
+     "columns": [
+      "metric",
+      "group",
+      "label",
+      "a",
+      "b",
+      "delta",
+      "changePercent",
+      "direction",
+      "unit",
+      "verdict",
+      "color"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 672,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 2,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "settings_evidence",
+   "label": "Settings evidence",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "setting",
+     "label": "Setting",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "block",
+     "label": "Block",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "startMinute",
+     "label": "Block start",
+     "kind": "time_of_day",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "basalObserved",
+     "label": "Basal observed",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "basalProfile",
+     "label": "Basal in profile",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "isfObserved",
+     "label": "ISF observed",
+     "kind": "number",
+     "unit": "mg/dL/U",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "isfProfile",
+     "label": "ISF in profile",
+     "kind": "number",
+     "unit": "mg/dL/U",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "carbRatioObserved",
+     "label": "Carb ratio observed",
+     "kind": "number",
+     "unit": "g/U",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "carbRatioProfile",
+     "label": "Carb ratio in profile",
+     "kind": "number",
+     "unit": "g/U",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": true
+    },
+    {
+     "name": "episodes",
+     "label": "Episodes",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "spread",
+     "label": "Middle half",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "confidence",
+     "label": "Confidence",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "confidenceReasons",
+     "label": "Why not higher",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "noValueReason",
+     "label": "Why no value",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "rejected",
+     "label": "Rejected",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "rejections",
+     "label": "Rejected by",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "setting",
+      "block",
+      "startMinute",
+      "basalObserved",
+      "basalProfile",
+      "isfObserved",
+      "isfProfile",
+      "carbRatioObserved",
+      "carbRatioProfile",
+      "episodes",
+      "spread",
+      "confidence",
+      "confidenceReasons",
+      "noValueReason",
+      "rejected",
+      "rejections"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 720,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "sleep",
+   "label": "Sleep",
+   "description": "",
+   "requiredScope": "sleep.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "start",
+     "label": "Start",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "night",
+     "label": "Night",
+     "kind": "day",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "totalSleep",
+     "label": "Sleep",
+     "kind": "number",
+     "unit": "h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "deepSleep",
+     "label": "Deep sleep",
+     "kind": "number",
+     "unit": "h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "lightSleep",
+     "label": "Light sleep",
+     "kind": "number",
+     "unit": "h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "remSleep",
+     "label": "REM sleep",
+     "kind": "number",
+     "unit": "h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "awake",
+     "label": "Awake",
+     "kind": "number",
+     "unit": "h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "start",
+      "end",
+      "kind",
+      "night",
+      "totalSleep",
+      "deepSleep",
+      "lightSleep",
+      "remSleep",
+      "awake",
+      "color"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "state_spans",
+   "label": "State spans",
+   "description": "",
+   "requiredScope": "treatments.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Start",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 24,
+   "maxRangeHours": 336,
+   "rangeLimit": "This data covers at most 14 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "steps",
+   "label": "Steps",
+   "description": "",
+   "requiredScope": "stepcount.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "steps",
+     "label": "Steps",
+     "kind": "number",
+     "unit": "steps",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "steps"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 168,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "treatments",
+   "label": "Treatments",
+   "description": "",
+   "requiredScope": "treatments.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "type",
+     "label": "Type",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "insulin",
+     "label": "Bolus",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": "bolus",
+     "setting": false
+    },
+    {
+     "name": "injectionUnits",
+     "label": "Injection",
+     "kind": "number",
+     "unit": "U",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": "basal_injection",
+     "setting": false
+    },
+    {
+     "name": "carbs",
+     "label": "Carbs",
+     "kind": "number",
+     "unit": "g",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": "carbs",
+     "setting": false
+    },
+    {
+     "name": "bgCheck",
+     "label": "BG check",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": "glucose.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": "bg_check",
+     "setting": false
+    },
+    {
+     "name": "rate",
+     "label": "Rate",
+     "kind": "number",
+     "unit": "U/h",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "durationMinutes",
+     "label": "Duration",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "max",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "automatic",
+     "label": "Automatic",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "detail",
+     "label": "Detail",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "type",
+      "insulin",
+      "injectionUnits",
+      "carbs",
+      "bgCheck",
+      "rate",
+      "durationMinutes",
+      "automatic",
+      "detail"
+     ]
+    }
+   ],
+   "marks": [],
+   "defaultRangeHours": 24,
+   "maxRangeHours": 336,
+   "rangeLimit": "This data covers at most 14 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  }
+ ],
+ "workspace": {
+  "lenses": [
+   "timeline",
+   "typical_day",
+   "event",
+   "daily",
+   "against"
+  ],
+  "families": [
+   {
+    "id": "Glucose",
+    "laneHeight": 2
+   },
+   {
+    "id": "Insulin",
+    "laneHeight": 0.75
+   },
+   {
+    "id": "Food",
+    "laneHeight": 0.75
+   },
+   {
+    "id": "Devices",
+    "laneHeight": 0.75
+   },
+   {
+    "id": "Settings",
+    "laneHeight": 1
+   },
+   {
+    "id": "Body",
+    "laneHeight": 0.75
+   },
+   {
+    "id": "Context",
+    "laneHeight": 0.5
+   }
+  ],
+  "signals": [
+   {
+    "id": "glucose",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-in-range",
+    "permitted": true
+   },
+   {
+    "id": "target",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-tight-range",
+    "permitted": true
+   },
+   {
+    "id": "glucoseWide",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-in-range",
+    "permitted": true
+   },
+   {
+    "id": "mean",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-in-range",
+    "permitted": true
+   },
+   {
+    "id": "timeInRange",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-in-range",
+    "permitted": true
+   },
+   {
+    "id": "timeBelow",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-low",
+    "permitted": true
+   },
+   {
+    "id": "timeAbove",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-high",
+    "permitted": true
+   },
+   {
+    "id": "ranges",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-in-range",
+    "permitted": true
+   },
+   {
+    "id": "readings",
+    "family": "Glucose",
+    "lane": null,
+    "color": "system-event-info",
+    "permitted": true
+   },
+   {
+    "id": "iob",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-bolus",
+    "permitted": true
+   },
+   {
+    "id": "basal",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-basal",
+    "permitted": true
+   },
+   {
+    "id": "basalScheduled",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-scheduled-basal",
+    "permitted": true
+   },
+   {
+    "id": "boluses",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-bolus",
+    "permitted": true
+   },
+   {
+    "id": "injections",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-basal",
+    "permitted": true
+   },
+   {
+    "id": "netLoop",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-basal",
+    "permitted": true
+   },
+   {
+    "id": "totalInsulin",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-bolus",
+    "permitted": true
+   },
+   {
+    "id": "totalBolus",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-bolus",
+    "permitted": true
+   },
+   {
+    "id": "totalBasal",
+    "family": "Insulin",
+    "lane": null,
+    "color": "insulin-basal",
+    "permitted": true
+   },
+   {
+    "id": "cob",
+    "family": "Food",
+    "lane": null,
+    "color": "carbs",
+    "permitted": true
+   },
+   {
+    "id": "carbs",
+    "family": "Food",
+    "lane": null,
+    "color": "carbs",
+    "permitted": true
+   },
+   {
+    "id": "reservoir",
+    "family": "Devices",
+    "lane": null,
+    "color": "insulin-bolus",
+    "permitted": true
+   },
+   {
+    "id": "pumpBattery",
+    "family": "Devices",
+    "lane": null,
+    "color": "pump-mode-boost",
+    "permitted": true
+   },
+   {
+    "id": "uploaderBattery",
+    "family": "Devices",
+    "lane": null,
+    "color": "pump-mode-sleep",
+    "permitted": true
+   },
+   {
+    "id": "settingBasal",
+    "family": "Settings",
+    "lane": null,
+    "color": "insulin-basal",
+    "permitted": true
+   },
+   {
+    "id": "settingIsf",
+    "family": "Settings",
+    "lane": null,
+    "color": "insulin-bolus",
+    "permitted": true
+   },
+   {
+    "id": "settingCarbRatio",
+    "family": "Settings",
+    "lane": null,
+    "color": "carbs",
+    "permitted": true
+   },
+   {
+    "id": "heartRate",
+    "family": "Body",
+    "lane": null,
+    "color": "heart-rate",
+    "permitted": true
+   },
+   {
+    "id": "steps",
+    "family": "Body",
+    "lane": null,
+    "color": "steps",
+    "permitted": true
+   },
+   {
+    "id": "sleep",
+    "family": "Body",
+    "lane": "Context",
+    "color": "activity-sleep",
+    "permitted": true
+   },
+   {
+    "id": "pumpModes",
+    "family": "Context",
+    "lane": null,
+    "color": "pump-mode-automatic",
+    "permitted": true
+   },
+   {
+    "id": "profiles",
+    "family": "Context",
+    "lane": null,
+    "color": "pump-mode-liberty",
+    "permitted": true
+   },
+   {
+    "id": "overrides",
+    "family": "Context",
+    "lane": null,
+    "color": "pump-mode-boost",
+    "permitted": true
+   },
+   {
+    "id": "activities",
+    "family": "Context",
+    "lane": null,
+    "color": "pump-mode-exercise",
+    "permitted": true
+   },
+   {
+    "id": "tempBasals",
+    "family": "Context",
+    "lane": null,
+    "color": "insulin-temp-basal",
+    "permitted": true
+   },
+   {
+    "id": "bgChecks",
+    "family": "Context",
+    "lane": null,
+    "color": "glucose-in-range",
+    "permitted": true
+   }
+  ],
+  "cells": [
+   {
+    "lens": "timeline",
+    "signal": "glucose",
+    "dataset": "glucose_series",
+    "parameters": null,
+    "field": "glucose",
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "glucose"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "glucose"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "target",
+    "dataset": "glucose_series",
+    "parameters": null,
+    "field": null,
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "band",
+      "word": "band",
+      "bindings": {
+       "x": "time",
+       "y": null,
+       "edges": [
+        "targetLow",
+        "targetHigh"
+       ],
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "iob",
+    "dataset": "glucose_series",
+    "parameters": null,
+    "field": "iob",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "iob"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "iob"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "cob",
+    "dataset": "glucose_series",
+    "parameters": null,
+    "field": "cob",
+    "unit": "g",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "cob"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "cob"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "basal",
+    "dataset": "basal_delivery",
+    "parameters": null,
+    "field": "delivered",
+    "unit": "U/h",
+    "marks": [
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "delivered"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "delivered"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "basalScheduled",
+    "dataset": "basal_delivery",
+    "parameters": null,
+    "field": "scheduled",
+    "unit": "U/h",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "scheduled"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "scheduled"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "treatments.read",
+     "therapy.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "boluses",
+    "dataset": "treatments",
+    "parameters": {
+     "types": [
+      "bolus"
+     ]
+    },
+    "field": "insulin",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "markers",
+      "word": "markers",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "insulin"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "insulin"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "injections",
+    "dataset": "treatments",
+    "parameters": {
+     "types": [
+      "basal_injection"
+     ]
+    },
+    "field": "injectionUnits",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "markers",
+      "word": "markers",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "injectionUnits"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "injectionUnits"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "carbs",
+    "dataset": "treatments",
+    "parameters": {
+     "types": [
+      "carbs"
+     ]
+    },
+    "field": "carbs",
+    "unit": "g",
+    "marks": [
+     {
+      "mark": "markers",
+      "word": "markers",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "carbs"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "carbs"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "bgChecks",
+    "dataset": "treatments",
+    "parameters": {
+     "types": [
+      "bg_check"
+     ]
+    },
+    "field": "bgCheck",
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "markers",
+      "word": "markers",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "bgCheck"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "bgCheck"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "treatments.read",
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "reservoir",
+    "dataset": "device_status",
+    "parameters": null,
+    "field": "reservoir",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "reservoir"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "reservoir"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "pumpBattery",
+    "dataset": "device_status",
+    "parameters": null,
+    "field": "pumpBattery",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "pumpBattery"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "pumpBattery"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "uploaderBattery",
+    "dataset": "device_status",
+    "parameters": null,
+    "field": "uploaderBattery",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "uploaderBattery"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "uploaderBattery"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "heartRate",
+    "dataset": "heart_rate",
+    "parameters": null,
+    "field": "bpm",
+    "unit": "bpm",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "bpm"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "band",
+      "word": "range",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "bpm"
+       ],
+       "edges": [
+        "bpmMin",
+        "bpmMax"
+       ],
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "heartrate.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "steps",
+    "dataset": "steps",
+    "parameters": null,
+    "field": "steps",
+    "unit": "steps",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "steps"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "steps"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "stepcount.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "sleep",
+    "dataset": "sleep",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "pumpModes",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "pump_mode"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "pump_mode",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "profiles",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "profile"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "profile",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "overrides",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "override"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "override",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "activities",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "activity"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "activity",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "timeline",
+    "signal": "tempBasals",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "temp_basal"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "temp_basal",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "glucose",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": "glucoseP50",
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "band",
+      "word": "medianBand",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "glucoseP50"
+       ],
+       "edges": [
+        "glucoseP25",
+        "glucoseP75"
+       ],
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "median",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "glucoseP50"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "target",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": null,
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "band",
+      "word": "band",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": null,
+       "edges": [
+        "targetLow",
+        "targetHigh"
+       ],
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "therapy.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "glucoseWide",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": null,
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "band",
+      "word": "percentiles",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": null,
+       "edges": [
+        "glucoseP10",
+        "glucoseP90"
+       ],
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "readings",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": "readings",
+    "unit": null,
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "readings"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "readings"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": true,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "ranges",
+    "dataset": "glucose_distribution_by_hour",
+    "parameters": null,
+    "field": null,
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "stacked",
+      "bindings": {
+       "x": "hour",
+       "y": [
+        "veryLow",
+        "low",
+        "tightRange",
+        "aboveTightRange",
+        "high",
+        "veryHigh"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": true,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": true,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "mean",
+    "dataset": "glucose_distribution_by_hour",
+    "parameters": null,
+    "field": "mean",
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "hour",
+       "y": [
+        "mean"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "hour",
+       "y": [
+        "mean"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": true,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "iob",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": "iob",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "iob"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "iob"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "cob",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": "cob",
+    "unit": "g",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "cob"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "cob"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "basal",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": "deliveredBasal",
+    "unit": "U/h",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "deliveredBasal"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "deliveredBasal"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "basalScheduled",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": "scheduledBasal",
+    "unit": "U/h",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "scheduledBasal"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "scheduledBasal"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "therapy.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "netLoop",
+    "dataset": "daily_profile",
+    "parameters": null,
+    "field": "netLoopCorrection",
+    "unit": "U/h",
+    "marks": [
+     {
+      "mark": "area",
+      "word": "area",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "netLoopCorrection"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "minuteOfDay",
+       "y": [
+        "netLoopCorrection"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": true,
+    "happened": true,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "settingBasal",
+    "dataset": "settings_evidence",
+    "parameters": {
+     "setting": "basal"
+    },
+    "field": "basalObserved",
+    "unit": "U/h",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "lines",
+      "bindings": {
+       "x": "startMinute",
+       "y": [
+        "basalObserved",
+        "basalProfile"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "startMinute",
+       "y": [
+        "basalObserved",
+        "basalProfile"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "settingIsf",
+    "dataset": "settings_evidence",
+    "parameters": {
+     "setting": "isf"
+    },
+    "field": "isfObserved",
+    "unit": "glucose/U",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "lines",
+      "bindings": {
+       "x": "startMinute",
+       "y": [
+        "isfObserved",
+        "isfProfile"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "startMinute",
+       "y": [
+        "isfObserved",
+        "isfProfile"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "typical_day",
+    "signal": "settingCarbRatio",
+    "dataset": "settings_evidence",
+    "parameters": {
+     "setting": "carb_ratio"
+    },
+    "field": "carbRatioObserved",
+    "unit": "g/U",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "lines",
+      "bindings": {
+       "x": "startMinute",
+       "y": [
+        "carbRatioObserved",
+        "carbRatioProfile"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "startMinute",
+       "y": [
+        "carbRatioObserved",
+        "carbRatioProfile"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "event",
+    "signal": "glucose",
+    "dataset": "event_response",
+    "parameters": null,
+    "field": "glucoseP50",
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "band",
+      "word": "medianBand",
+      "bindings": {
+       "x": "minute",
+       "y": [
+        "glucoseP50"
+       ],
+       "edges": [
+        "glucoseP25",
+        "glucoseP75"
+       ],
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "median",
+      "bindings": {
+       "x": "minute",
+       "y": [
+        "glucoseP50"
+       ],
+       "edges": null,
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": "deltaP50",
+    "fromStartMarks": [
+     {
+      "mark": "band",
+      "word": "medianBand",
+      "bindings": {
+       "x": "minute",
+       "y": [
+        "deltaP50"
+       ],
+       "edges": [
+        "deltaP25",
+        "deltaP75"
+       ],
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "median",
+      "bindings": {
+       "x": "minute",
+       "y": [
+        "deltaP50"
+       ],
+       "edges": null,
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "event",
+    "signal": "glucoseWide",
+    "dataset": "event_response",
+    "parameters": null,
+    "field": null,
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "band",
+      "word": "percentiles",
+      "bindings": {
+       "x": "minute",
+       "y": null,
+       "edges": [
+        "glucoseP10",
+        "glucoseP90"
+       ],
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": [
+     {
+      "mark": "band",
+      "word": "percentiles",
+      "bindings": {
+       "x": "minute",
+       "y": null,
+       "edges": [
+        "deltaP10",
+        "deltaP90"
+       ],
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "event",
+    "signal": "iob",
+    "dataset": "event_response",
+    "parameters": null,
+    "field": "iobP50",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "median",
+      "bindings": {
+       "x": "minute",
+       "y": [
+        "iobP50"
+       ],
+       "edges": null,
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "event",
+    "signal": "cob",
+    "dataset": "event_response",
+    "parameters": null,
+    "field": "cobP50",
+    "unit": "g",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "median",
+      "bindings": {
+       "x": "minute",
+       "y": [
+        "cobP50"
+       ],
+       "edges": null,
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "event",
+    "signal": "netLoop",
+    "dataset": "event_response",
+    "parameters": null,
+    "field": "netLoopCorrectionP50",
+    "unit": "U/h",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "median",
+      "bindings": {
+       "x": "minute",
+       "y": [
+        "netLoopCorrectionP50"
+       ],
+       "edges": null,
+       "series": "series",
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": true,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "timeInRange",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "timeInRange",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeInRange"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeInRange"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeInRange"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     4320,
+     10080
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "timeBelow",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "timeBelow",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeBelow"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeBelow"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeBelow"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     4320,
+     10080
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "timeAbove",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "timeAbove",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeAbove"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeAbove"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeAbove"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     4320,
+     10080
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "ranges",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": null,
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "stacked",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "timeBelow",
+        "timeInRange",
+        "timeAbove"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": true,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "mean",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "mean",
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "mean"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "mean"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "mean"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     4320,
+     10080
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "readings",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "readings",
+    "unit": null,
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "readings"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "readings"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "readings"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "totalInsulin",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "totalInsulin",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalInsulin"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalInsulin"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalInsulin"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     4320,
+     10080
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "totalBolus",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "totalBolus",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalBolus"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalBolus"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalBolus"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     4320,
+     10080
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "totalBasal",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "totalBasal",
+    "unit": "U",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalBasal"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalBasal"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalBasal"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     4320,
+     10080
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "carbs",
+    "dataset": "daily_summary",
+    "parameters": null,
+    "field": "totalCarbs",
+    "unit": "g",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalCarbs"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalCarbs"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "totalCarbs"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     4320,
+     10080
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": true,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "daily",
+    "signal": "sleep",
+    "dataset": "sleep",
+    "parameters": null,
+    "field": "totalSleep",
+    "unit": "h",
+    "marks": [
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "totalSleep"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "stacked",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "deepSleep",
+        "lightSleep",
+        "remSleep",
+        "awake"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": true,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "against",
+    "signal": "glucose",
+    "dataset": "glucose_series",
+    "parameters": null,
+    "field": "glucose",
+    "unit": "glucose",
+    "marks": [],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "against",
+    "signal": "iob",
+    "dataset": "glucose_series",
+    "parameters": null,
+    "field": "iob",
+    "unit": "U",
+    "marks": [],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "against",
+    "signal": "cob",
+    "dataset": "glucose_series",
+    "parameters": null,
+    "field": "cob",
+    "unit": "g",
+    "marks": [],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "against",
+    "signal": "basal",
+    "dataset": "basal_delivery",
+    "parameters": null,
+    "field": "delivered",
+    "unit": "U/h",
+    "marks": [],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "lens": "against",
+    "signal": "heartRate",
+    "dataset": "heart_rate",
+    "parameters": null,
+    "field": "bpm",
+    "unit": "bpm",
+    "marks": [],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "heartrate.read"
+    ],
+    "permitted": true
+   }
+  ],
+  "anchorGroups": [
+   "food",
+   "glucose",
+   "activity",
+   "devices"
+  ],
+  "anchors": [
+   {
+    "id": "Meal",
+    "group": "food",
+    "mealNarrowing": true,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "CorrectionBolus",
+    "group": "food",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "AnyBolus",
+    "group": "food",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "UnannouncedRise",
+    "group": "food",
+    "mealNarrowing": false,
+    "corroboration": true,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "LowStart",
+    "group": "glucose",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "HighStart",
+    "group": "glucose",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "LowTreatment",
+    "group": "glucose",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "ExerciseStart",
+    "group": "activity",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "SleepStart",
+    "group": "activity",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "sleep.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "Wake",
+    "group": "activity",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "sleep.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "SensorStart",
+    "group": "devices",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "devices.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "SiteChange",
+    "group": "devices",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "devices.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "OverrideStart",
+    "group": "devices",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "TemporaryTargetStart",
+    "group": "devices",
+    "mealNarrowing": false,
+    "corroboration": false,
+    "scopes": [
+     "glucose.read",
+     "treatments.read"
+    ],
+    "permitted": true
+   }
+  ],
+  "dayKinds": [
+   {
+    "id": "exercise",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "illness",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "low",
+    "scopes": [],
+    "permitted": true
+   },
+   {
+    "id": "lowOvernight",
+    "scopes": [],
+    "permitted": true
+   },
+   {
+    "id": "carbs",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   }
+  ],
+  "dayGroupPresets": [
+   {
+    "id": "everyDay",
+    "groups": [
+     [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+     ]
+    ]
+   },
+   {
+    "id": "weekdaysAndWeekend",
+    "groups": [
+     [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ],
+     [
+      "Sat",
+      "Sun"
+     ]
+    ]
+   },
+   {
+    "id": "fridayAndWeekend",
+    "groups": [
+     [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu"
+     ],
+     [
+      "Fri"
+     ],
+     [
+      "Sat",
+      "Sun"
+     ]
+    ]
+   }
+  ],
+  "leaveOuts": [
+   {
+    "id": "overrides",
+    "parameter": "excludeOverrides",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "temporaryTargets",
+    "parameter": "excludeTemporaryTargets",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "exercise",
+    "parameter": "excludeExercise",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "illness",
+    "parameter": "excludeIllness",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true
+   },
+   {
+    "id": "openLoop",
+    "parameter": "excludeOpenLoop",
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true
+   }
+  ],
+  "rangePresets": [
+   {
+    "id": "6h",
+    "hours": 6
+   },
+   {
+    "id": "24h",
+    "hours": 24
+   },
+   {
+    "id": "7d",
+    "hours": 168
+   },
+   {
+    "id": "14d",
+    "hours": 336
+   },
+   {
+    "id": "28d",
+    "hours": 672
+   },
+   {
+    "id": "90d",
+    "hours": 2160
+   }
+  ],
+  "defaultReportHours": 336,
+  "combineOps": [
+   "difference",
+   "ratio"
+  ],
+  "againstGridMinutes": 15,
+  "timelineGrids": [
+   5,
+   10,
+   15,
+   20,
+   30,
+   60,
+   120,
+   240
+  ],
+  "maxTimeSlots": 2000,
+  "events": {
+   "shows": [
+    {
+     "id": "curve",
+     "dataset": "event_response"
+    },
+    {
+     "id": "each",
+     "dataset": "event_outcomes"
+    },
+    {
+     "id": "spread",
+     "dataset": "event_outcome_spread"
+    },
+    {
+     "id": "when",
+     "dataset": "event_occurrence"
+    }
+   ],
+   "outcomes": [
+    {
+     "id": "peakRise",
+     "spreadOnly": false
+    },
+    {
+     "id": "minutesToPeak",
+     "spreadOnly": false
+    },
+    {
+     "id": "minutesBackToStart",
+     "spreadOnly": false
+    },
+    {
+     "id": "drop",
+     "spreadOnly": false
+    },
+    {
+     "id": "nadir",
+     "spreadOnly": false
+    },
+    {
+     "id": "minutesToNadir",
+     "spreadOnly": false
+    },
+    {
+     "id": "glucoseAt2Hours",
+     "spreadOnly": false
+    },
+    {
+     "id": "startGlucose",
+     "spreadOnly": true
+    },
+    {
+     "id": "netInsulin",
+     "spreadOnly": false
+    },
+    {
+     "id": "gramsPerUnit",
+     "spreadOnly": false
+    }
+   ],
+   "along": [
+    "startGlucose",
+    "grams",
+    "minutesSinceMeal",
+    "iobAtEvent",
+    "timeOfDay"
+   ],
+   "noLineAlong": [
+    "timeOfDay"
+   ],
+   "whenAxes": [
+    "hour",
+    "weekday"
+   ]
+  },
+  "sources": {
+   "figures": [
+    "glucose_statistics",
+    "glucose_distribution",
+    "device_status"
+   ],
+   "tables": [
+    "treatments",
+    "daily_summary",
+    "event_response",
+    "glucose_series",
+    "basal_delivery",
+    "state_spans",
+    "glucose_distribution_by_hour",
+    "daily_profile",
+    "settings_evidence",
+    "glucose_statistics"
+   ],
+   "comparison": "period_comparison"
+  }
+ }
+}

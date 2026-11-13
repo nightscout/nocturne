@@ -88,7 +88,7 @@ import { toIsoString } from "#lib/utils/api-date.js";
 import {
   resolveChartThresholds,
   type ChartThresholds,
-} from "#lib/constants/glucose-thresholds.js";
+} from "@nocturne/charts/core";
 
 /** The tracker levels loud enough for the notifications list; Info stays on the pill. */
 const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | "hazard" | "urgent">> = {

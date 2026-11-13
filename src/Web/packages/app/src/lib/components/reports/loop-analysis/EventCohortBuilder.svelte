@@ -1,12 +1,15 @@
 <!--
-  The Meals & events builder: up to three cohorts, each an anchor kind narrowed by time of day and,
-  for meals, by size, plus the window and the isolation and corroboration options. It is bound to
-  the URL; with no cohorts there, it shows the cohorts the API applied by default.
+  The Meals & events builder: up to three cohorts, each an anchor kind narrowed by time of day and
+  day of the week and, for meals, by size and by the foods they carry, plus the window and the
+  isolation and corroboration options. It is bound to the URL; with no cohorts there, it shows the
+  cohorts the API applied by default.
 -->
 <script lang="ts">
   import {
+    DayOfWeek,
     EventAnchorKind,
     type EventCohortDefinition,
+    type Food,
     type EventResponseDefinition,
     type EventResponseLimits,
     type EventUnavailableAnchor,
@@ -17,11 +20,15 @@
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { weekdayLabel } from "#lib/utils/formatting.js";
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
   import {
     ANCHOR_KINDS,
     clockToMinute,
+    FOOD_CATEGORY,
+    FOOD_IDS,
     ISOLATED_ONLY,
     minuteToClock,
     normalisedCohort,
@@ -33,6 +40,7 @@
   import { anchorLabels } from "./event-labels.svelte";
   import { eventOptionLabels, eventWindowLabels, missingScopeReason } from "./filter-labels.svelte";
   import { loopAnalysisMark } from "./loop-analysis-tour.svelte";
+  import { toWeekdays } from "./loop-analysis-filter";
 
   interface Props {
     value: EventResponseState;
@@ -43,9 +51,19 @@
     limits: EventResponseLimits | undefined;
     unavailableAnchors?: EventUnavailableAnchor[] | null;
     unavailableFilters?: LoopAnalysisUnavailableFilter[] | null;
+    /** The food catalogue a meal cohort's foods and category are picked from; null while it loads or when the viewer cannot read it. */
+    foods?: Food[] | null;
   }
 
-  let { value, onchange, applied = null, limits, unavailableAnchors = null, unavailableFilters = null }: Props = $props();
+  let {
+    value,
+    onchange,
+    applied = null,
+    limits,
+    unavailableAnchors = null,
+    unavailableFilters = null,
+    foods = null,
+  }: Props = $props();
 
   const labels = $derived(anchorLabels());
   const options = $derived(eventOptionLabels());
@@ -54,6 +72,28 @@
   const anchorScope = $derived(new Map((unavailableAnchors ?? []).map((a) => [a.anchor, a.requiredScope ?? ""])));
   const filterScope = $derived(new Map((unavailableFilters ?? []).map((f) => [f.filter ?? "", f.requiredScope ?? ""])));
   const available = $derived(ANCHOR_KINDS.filter((kind) => !anchorScope.has(kind)));
+
+  const WEEKDAYS = [
+    DayOfWeek.Monday,
+    DayOfWeek.Tuesday,
+    DayOfWeek.Wednesday,
+    DayOfWeek.Thursday,
+    DayOfWeek.Friday,
+    DayOfWeek.Saturday,
+    DayOfWeek.Sunday,
+  ];
+  const weekdays = $derived(WEEKDAYS.map((day) => ({ day, label: weekdayLabel(day) })));
+
+  const catalogue = $derived(
+    (foods ?? [])
+      .flatMap((f) => (f._id ? [{ id: f._id, name: f.name ?? "", category: f.category?.trim() ?? "" }] : []))
+      .toSorted((a, b) => a.name.localeCompare(b.name))
+  );
+  const foodName = $derived(new Map(catalogue.map((f) => [f.id, f.name])));
+  const categories = $derived(
+    [...new Set(catalogue.map((f) => f.category).filter((c) => c !== ""))].toSorted((a, b) => a.localeCompare(b))
+  );
+  const ANY_CATEGORY = "";
 
   // What the URL sets is shown as set; with no cohorts there, the API's echo once it has answered.
   const cohorts = $derived<EventCohortDefinition[]>(
@@ -90,6 +130,13 @@
   const removeCohort = (index: number) => update({ cohorts: cohorts.filter((_, i) => i !== index) });
 
   const grams = (value: string) => (value === "" ? undefined : Math.max(0, Number(value)));
+
+  function foodsText(ids: string[] | null | undefined): string {
+    const picked = ids ?? [];
+    if (picked.length === 0) return "Any food";
+    if (picked.length === 1) return foodName.get(picked[0]) ?? "1 food";
+    return `${picked.length} foods`;
+  }
 </script>
 
 <section
@@ -176,6 +223,69 @@
             />
           </div>
         {/if}
+        {#if isMeal}
+          {@const foodsScope = filterScope.get(FOOD_IDS)}
+          {@const categoryScope = filterScope.get(FOOD_CATEGORY)}
+          <div class="space-y-1.5">
+            <Label for="event-foods-{i}" size="sm" variant="muted">Foods</Label>
+            <Select.Root
+              type="multiple"
+              value={cohort.foodIds ?? []}
+              disabled={foodsScope != null || catalogue.length === 0}
+              onValueChange={(ids: string[]) => setCohort(i, { foodIds: ids.length > 0 ? ids : undefined })}
+            >
+              <Select.Trigger id="event-foods-{i}" aria-label="Cohort {i + 1} foods" class="w-44" size="sm">
+                {foodsText(cohort.foodIds)}
+              </Select.Trigger>
+              <Select.Content>
+                {#each catalogue as food (food.id)}
+                  <Select.Item value={food.id} label={food.name}>{food.name}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div class="space-y-1.5">
+            <Label for="event-food-category-{i}" size="sm" variant="muted">Food category</Label>
+            <Select.Root
+              type="single"
+              value={cohort.foodCategory ?? ANY_CATEGORY}
+              disabled={categoryScope != null || categories.length === 0}
+              onValueChange={(category: string) => setCohort(i, { foodCategory: category === ANY_CATEGORY ? undefined : category })}
+            >
+              <Select.Trigger id="event-food-category-{i}" aria-label="Cohort {i + 1} food category" class="w-40" size="sm">
+                {cohort.foodCategory ?? "Any category"}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value={ANY_CATEGORY} label="Any category">Any category</Select.Item>
+                {#each categories as category (category)}
+                  <Select.Item value={category} label={category}>{category}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          {#if foodsScope != null}
+            <span class="mb-2 text-xs text-muted-foreground">({missingScopeReason(foodsScope)})</span>
+          {/if}
+        {/if}
+        <div class="space-y-1.5">
+          <span id="event-days-{i}" class="text-xs font-medium text-muted-foreground">Days</span>
+          <ToggleGroup.Root
+            type="multiple"
+            variant="outline"
+            size="sm"
+            class="flex-wrap"
+            aria-labelledby="event-days-{i}"
+            value={(cohort.daysOfWeek ?? []).map(String)}
+            onValueChange={(days: string[]) => {
+              const picked = toWeekdays(days);
+              setCohort(i, { daysOfWeek: picked.length > 0 ? picked : undefined });
+            }}
+          >
+            {#each weekdays as { day, label } (day)}
+              <ToggleGroup.Item value={String(day)} aria-label="Cohort {i + 1} {label}">{label}</ToggleGroup.Item>
+            {/each}
+          </ToggleGroup.Root>
+        </div>
         {#if cohorts.length > 1}
           <Button variant="ghost" size="icon-sm" onclick={() => removeCohort(i)} aria-label="Remove cohort {i + 1}">
             <X class="size-4" />
@@ -263,6 +373,8 @@
   </div>
   <p class="text-xs text-muted-foreground">
     Isolated events have no other meal, correction bolus or unannounced rise in their window. A
-    window across midnight, for example 22:00 to 02:00, continues into the next day.
+    window across midnight, for example 22:00 to 02:00, continues into the next day. A food filter
+    uses only meals with a food record. Meals with only carbs are not included, and the page shows
+    how many there are.
   </p>
 </section>

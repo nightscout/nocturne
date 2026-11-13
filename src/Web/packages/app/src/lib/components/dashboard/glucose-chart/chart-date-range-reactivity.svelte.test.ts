@@ -19,7 +19,7 @@ vi.mock("#lib/api/predictions.remote.js", () => ({
   getPredictionStatus: vi.fn(async () => ({ available: false })),
 }));
 
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 import Harness from "./GlucoseChartRangeHarness.test.svelte";
 
 // The payload is irrelevant: the assertion is on the request, not the response.

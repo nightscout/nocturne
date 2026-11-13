@@ -8,6 +8,9 @@ export const toggleVariants = tv({
       default: "bg-transparent",
       outline:
         "border-input shadow-xs hover:bg-accent hover:text-accent-foreground border bg-transparent",
+      // One answer among spaced chips, e.g. a report builder's range or window: the chosen chip is filled, so it reads at a glance.
+      choice:
+        "border-input hover:bg-accent hover:text-accent-foreground border bg-transparent data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary/90 data-[state=on]:hover:text-primary-foreground",
     },
     size: {
       default: "h-9 min-w-9 px-2",

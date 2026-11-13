@@ -16,13 +16,30 @@ public sealed record EventResponseInputs
 
     public IReadOnlyList<long> SensorStarts { get; init; } = [];
 
+    /// <summary>Site, cannula and pod changes and pod activations; read only when a cohort asks for site changes.</summary>
+    public IReadOnlyList<long> SiteChanges { get; init; } = [];
+
+    /// <summary>Sleep sessions; read only when a cohort asks for sleep starts or wake-ups.</summary>
+    public IReadOnlyList<MillsInterval> SleepSessions { get; init; } = [];
+
     /// <inheritdoc cref="LoopAnalysisFilter.HistoryVisibleFrom"/>
     public long? HistoryVisibleFrom { get; init; }
 
     /// <inheritdoc cref="LoopAnalysisFilter.Now"/>
     /// <remarks>An event whose window ends after it is still under way, so it is not counted.</remarks>
     public long Now { get; init; } = long.MaxValue;
+
+    /// <summary>
+    /// The food records of each carb entry, by its instant, so a meal carries those of every entry it
+    /// sums. Read only when a cohort has a food filter; an instant with none is a meal of carbs only.
+    /// </summary>
+    public IReadOnlyDictionary<long, IReadOnlyList<MealFood>> MealFoods { get; init; } =
+        new Dictionary<long, IReadOnlyList<MealFood>>();
 }
+
+/// <summary>One food record of a carb entry: the food it names, if any, and that food's category.</summary>
+/// <param name="FoodId">Null for a record of unspecified carbs.</param>
+public readonly record struct MealFood(Guid? FoodId, string? Category);
 
 /// <summary>
 /// The Meals and events page: each cohort's events aligned on their anchors, every series spread
@@ -39,10 +56,36 @@ public static class EventResponseCalculator
 {
     /// <summary>
     /// How far before an anchor what decides it reaches: the window shown before it, the carbs
-    /// that announce a rise, and the carbs that make a bolus a meal's rather than a correction.
+    /// that announce a rise, the carbs that make a bolus a meal's rather than a correction, the
+    /// readings that decide an excursion start, and the carbs the cohort's minutes-since-meal
+    /// condition reads (<see cref="CohortConditionLookbackMs"/>).
     /// </summary>
-    public static long HistoryLookbackMs(EventWindow window) =>
-        Math.Max(window.BeforeMs, Math.Max(UnannouncedRises.CarbsBeforeMs, EventAnchors.BolusAfterMealMs));
+    public static long HistoryLookbackMs(EventWindow window, EventResponseDefinition? definition = null, EventCohortDefinition? cohort = null) =>
+        new[]
+        {
+            window.BeforeMs, UnannouncedRises.CarbsBeforeMs, EventAnchors.BolusAfterMealMs,
+            EventAnchors.ExcursionLookbackMs, definition is null || cohort is null ? 0 : CohortConditionLookbackMs(definition, cohort),
+        }.Max();
+
+    /// <summary>
+    /// How far before an anchor <paramref name="cohort"/>'s condition reads carbs; an all-others cohort
+    /// reads its siblings' conditions, so it looks back as far as the furthest of them.
+    /// </summary>
+    public static long CohortConditionLookbackMs(EventResponseDefinition definition, EventCohortDefinition cohort) =>
+        (cohort.Others ? Siblings(definition, cohort) : [cohort])
+            .Select(c => (long)Math.Max(c.MinMinutesSinceMeal ?? 0, c.MaxMinutesSinceMeal ?? 0))
+            .DefaultIfEmpty(0)
+            .Max() * LocalSlotBinning.MinuteMs;
+
+    /// <summary>
+    /// How far before an anchor the cohorts' minutes-since-meal conditions read carbs: the largest
+    /// bound any of them names. A carb entry further back decides none of them.
+    /// </summary>
+    public static long ConditionLookbackMs(EventResponseDefinition definition) =>
+        definition.Cohorts
+            .Select(c => Math.Max(c.MinMinutesSinceMeal ?? 0, c.MaxMinutesSinceMeal ?? 0))
+            .DefaultIfEmpty(0)
+            .Max() * LocalSlotBinning.MinuteMs;
 
     /// <param name="listEvents">Whether to list the events; the comparison range's are not shown.</param>
     public static EventResponseRange Calculate(
@@ -55,10 +98,10 @@ public static class EventResponseCalculator
     {
         var zone = inputs.Series.Zone;
         var window = EventWindow.Of(definition);
-        var visibleFrom = VisibleHistory.ReadableFrom(inputs.HistoryVisibleFrom, HistoryLookbackMs(window));
         var exclusions = IntervalSet.Of(inputs.Sources.DataExclusions);
         var series = new EventSeries(inputs.Series, exclusions);
         var anchors = new AnchorSource(inputs, series, exclusions, definition.RequireCorroboration);
+        var state = new AnchorState(series, EventAnchors.CarbMills(inputs.Series.Carbs));
         long[] isolating =
         [
             .. anchors.Of(EventAnchorKind.Meal)
@@ -76,11 +119,42 @@ public static class EventResponseCalculator
         {
             var result = new EventCohortResult { Cohort = cohort.Cohort, Response = EventAnchors.ResponseOf(cohort.Anchor) };
             var counted = new List<EventEpisode>();
-            foreach (var anchor in anchors.Of(cohort.Anchor))
+            var siblings = cohort.Others ? Siblings(definition, cohort) : [];
+            var withheld = cohort.FoodFilterWithheld || siblings.Any(s => s.FoodFilterWithheld);
+            var visibleFrom = VisibleHistory.ReadableFrom(inputs.HistoryVisibleFrom, HistoryLookbackMs(window, definition, cohort));
+            foreach (var anchor in withheld ? [] : anchors.Of(cohort.Anchor))
             {
                 if (anchor.Mills < from || anchor.Mills >= to || anchor.Mills + window.AfterMs > inputs.Now
-                    || !mask.Analysed.Contains(anchor.Mills) || !Matches(cohort, anchor, zone))
+                    || !mask.Analysed.Contains(anchor.Mills))
                     continue;
+                if (cohort.Others)
+                {
+                    if (siblings.Any(s => Selects(s, anchor, zone, inputs.MealFoods, state)))
+                        continue;
+                }
+                else
+                {
+                    if (!Matches(cohort, anchor, zone))
+                        continue;
+                    if (anchor.Kind == EventAnchorKind.Meal && cohort.HasFoodFilter)
+                    {
+                        if (FoodRecords(inputs.MealFoods, anchor) is not { } foods)
+                        {
+                            result.MealsWithoutFoodRecord++;
+                            continue;
+                        }
+                        result.MealsWithFoodRecord++;
+                        if (!MatchesFoods(cohort, foods))
+                            continue;
+                    }
+                    if (cohort.HasIob && state.Iob(anchor) is null)
+                    {
+                        result.MissingAnchorIob++;
+                        continue;
+                    }
+                    if (!MatchesConditions(cohort, anchor, state))
+                        continue;
+                }
                 result.Anchors++;
                 if (anchor.Mills < visibleFrom)
                 {
@@ -131,7 +205,7 @@ public static class EventResponseCalculator
             Events = listEvents
                 ? [.. membership.Values.SelectMany(members => members
                     .GroupBy(m => m.Episode)
-                    .Select(g => Event(g.Key, [.. g.Select(m => m.Cohort).Distinct().Order()], zone)))]
+                    .Select(g => Event(g.Key, [.. g.Select(m => m.Cohort).Distinct().Order()], zone, definition.IncludeTraces, state)))]
                 : [],
         };
     }
@@ -143,22 +217,119 @@ public static class EventResponseCalculator
         return [.. Enumerable.Range(0, window.SlotCount).Select(k => (int)(window.SlotOffset(k) / LocalSlotBinning.MinuteMs))];
     }
 
-    /// <summary>Whether an anchor falls in the cohort's local time-of-day window and, for a meal, its size.</summary>
+    /// <summary>
+    /// Whether an anchor falls on one of the cohort's local weekdays and in its local time-of-day
+    /// window and, for a meal, its size. The foods a meal carries are <see cref="MatchesFoods"/>'.
+    /// </summary>
     public static bool Matches(EventCohortDefinition cohort, EventAnchor anchor, TimeZoneInfo zone)
     {
         if (anchor.Grams is { } grams && (grams < cohort.MinGrams || grams > cohort.MaxGrams))
             return false;
-        if (cohort.FromMinute is null && cohort.ToMinute is null)
+        var days = cohort.DaysOfWeek is { Count: > 0 } d ? d : null;
+        if (days is null && cohort.FromMinute is null && cohort.ToMinute is null)
             return true;
 
         var local = LocalSlotBinning.LocalTime(anchor.Mills, zone);
+        if (days is not null && !days.Contains(local.DayOfWeek))
+            return false;
+        if (cohort.FromMinute is null && cohort.ToMinute is null)
+            return true;
+
         var minute = local.Hour * 60 + local.Minute;
         var start = cohort.FromMinute ?? 0;
         var end = cohort.ToMinute ?? 24 * 60;
         return start <= end ? minute >= start && minute < end : minute >= start || minute < end;
     }
 
-    private static EventResponseEvent Event(EventEpisode episode, List<int> cohorts, TimeZoneInfo zone)
+    /// <summary>
+    /// Whether a meal's food records satisfy the cohort's food filter: one names a food of
+    /// <see cref="EventCohortDefinition.FoodIds"/>, and one is of
+    /// <see cref="EventCohortDefinition.FoodCategory"/>, where each is set.
+    /// </summary>
+    public static bool MatchesFoods(EventCohortDefinition cohort, IReadOnlyList<MealFood> foods)
+    {
+        if (cohort.FoodIds is { Count: > 0 } ids && !foods.Any(f => f.FoodId is { } id && ids.Contains(id)))
+            return false;
+        if (cohort.FoodCategory?.Trim() is { Length: > 0 } category
+            && !foods.Any(f => string.Equals(f.Category?.Trim(), category, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        return true;
+    }
+
+    /// <summary>Whether a record names a food or a category; one of unspecified carbs is not a food record.</summary>
+    public static bool IsFoodRecord(MealFood food) => food.FoodId is not null || !string.IsNullOrWhiteSpace(food.Category);
+
+    /// <summary>The cohorts an <see cref="EventCohortDefinition.Others"/> cohort is the rest of: every other cohort of its anchor.</summary>
+    private static List<EventCohortDefinition> Siblings(EventResponseDefinition definition, EventCohortDefinition others) =>
+        [.. definition.Cohorts.Where(c => c != others && !c.Others && c.Anchor == others.Anchor)];
+
+    /// <summary>A meal's food records, or null where it carries none.</summary>
+    private static List<MealFood>? FoodRecords(IReadOnlyDictionary<long, IReadOnlyList<MealFood>> mealFoods, EventAnchor anchor) =>
+        mealFoods.TryGetValue(anchor.Mills, out var recorded) && recorded.Where(IsFoodRecord).ToList() is { Count: > 0 } foods
+            ? foods
+            : null;
+
+    /// <summary>
+    /// Whether <paramref name="cohort"/> takes the anchor into its <see cref="EventCohortResult.Anchors"/>:
+    /// every filter and condition it is counted by before its isolation and start glucose are read.
+    /// An anchor no sibling selects belongs to the <see cref="EventCohortDefinition.Others"/> cohort, so
+    /// the two together hold every anchor of the kind exactly once.
+    /// </summary>
+    private static bool Selects(
+        EventCohortDefinition cohort, EventAnchor anchor, TimeZoneInfo zone,
+        IReadOnlyDictionary<long, IReadOnlyList<MealFood>> mealFoods, AnchorState state) =>
+        Matches(cohort, anchor, zone)
+        && (anchor.Kind != EventAnchorKind.Meal || !cohort.HasFoodFilter
+            || FoodRecords(mealFoods, anchor) is { } foods && MatchesFoods(cohort, foods))
+        && (!cohort.HasIob || state.Iob(anchor) is not null)
+        && MatchesConditions(cohort, anchor, state);
+
+    /// <summary>
+    /// Whether the state at the anchor meets the cohort's conditions. A start glucose that cannot
+    /// be read passes here and is counted as <see cref="EventCohortResult.MissingAnchorGlucose"/>,
+    /// as any anchor without one is; an IOB that cannot be read fails.
+    /// </summary>
+    private static bool MatchesConditions(EventCohortDefinition cohort, EventAnchor anchor, AnchorState state)
+    {
+        if (cohort.HasMinutesSinceMeal)
+        {
+            var since = state.MinutesSinceMeal(anchor);
+            if (cohort.MinMinutesSinceMeal is { } min && since < min)
+                return false;
+            if (cohort.MaxMinutesSinceMeal is { } max && !(since <= max))
+                return false;
+        }
+        if (cohort.HasStartGlucose && state.StartGlucose(anchor) is { } glucose
+            && (glucose < cohort.MinStartGlucose || glucose > cohort.MaxStartGlucose))
+            return false;
+        if (cohort.HasIob && (state.Iob(anchor) is not { } iob || iob < cohort.MinIob || iob > cohort.MaxIob))
+            return false;
+        return true;
+    }
+
+    /// <summary>
+    /// What a cohort's conditions read at an anchor, off the series already loaded: the start
+    /// glucose, the IOB and the time since the last carbs.
+    /// </summary>
+    private sealed class AnchorState(EventSeries series, long[] carbMills)
+    {
+        public double? StartGlucose(EventAnchor anchor) => EventEpisode.StartGlucoseOf(anchor, series);
+
+        public double? Iob(EventAnchor anchor) => series.IobAt(anchor.Mills);
+
+        /// <summary>
+        /// Minutes from the last carb entry strictly before the anchor; null where none was loaded,
+        /// which reads as longer than any bound, since the load reaches back
+        /// <see cref="ConditionLookbackMs"/>.
+        /// </summary>
+        public double? MinutesSinceMeal(EventAnchor anchor)
+        {
+            var next = SortedSearch.FirstEndingAfter(carbMills, anchor.Mills - 1, static m => m);
+            return next > 0 ? (anchor.Mills - carbMills[next - 1]) / (double)LocalSlotBinning.MinuteMs : null;
+        }
+    }
+
+    private static EventResponseEvent Event(EventEpisode episode, List<int> cohorts, TimeZoneInfo zone, bool trace, AnchorState state)
     {
         var (date, time) = LocalSlotBinning.DayInReview(episode.Anchor.Mills, zone);
         return new EventResponseEvent
@@ -171,7 +342,9 @@ public static class EventResponseCalculator
             Grams = episode.Anchor.Grams is { } grams ? SlotSummary.Round(grams) : null,
             Cohorts = cohorts,
             GlucoseCoverage = GlucoseCoverage(episode),
+            GlucoseTrace = trace ? [.. episode.Slots.Select(s => s.Glucose is { } g ? SlotSummary.Round(g) : (double?)null)] : [],
             Metrics = Rounded(episode.Metrics),
+            MinutesSinceMeal = state.MinutesSinceMeal(episode.Anchor) is { } since ? SlotSummary.Round(since) : null,
         };
     }
 
@@ -284,8 +457,22 @@ public static class EventResponseCalculator
                 EventAnchorKind.OverrideStart => EventAnchors.Starts(sources.Overrides, kind),
                 EventAnchorKind.TemporaryTargetStart => EventAnchors.Starts(sources.TemporaryTargets, kind),
                 EventAnchorKind.UnannouncedRise => Rises().Anchors,
+                EventAnchorKind.LowStart => Excursions().Lows,
+                EventAnchorKind.HighStart => Excursions().Highs,
+                EventAnchorKind.SiteChange => EventAnchors.Merged(inputs.SiteChanges, EventAnchorKind.SiteChange),
+                EventAnchorKind.SleepStart => EventAnchors.Starts(inputs.SleepSessions, kind),
+                EventAnchorKind.Wake => [.. inputs.SleepSessions.Select(s => s.End).Distinct().Order().Select(m => new EventAnchor(m, kind))],
+                EventAnchorKind.LowTreatment => EventAnchors.LowTreatments(DayConditions.Lows(series.Readings), carbs),
+                EventAnchorKind.AnyBolus => [.. series.Insulin.Doses.Where(d => !d.Automatic && d.Units > 0).Select(d => d.Mills)
+                    .Distinct().Order().Select(m => new EventAnchor(m, kind))],
                 _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
             };
         }
+
+        private (List<EventAnchor> Lows, List<EventAnchor> Highs)? _excursions;
+
+        /// <summary>Over the readings outside the data exclusions: an excluded stretch longer than a gap ends an episode.</summary>
+        private (List<EventAnchor> Lows, List<EventAnchor> Highs) Excursions() =>
+            _excursions ??= EventAnchors.Excursions(series.Readings);
     }
 }

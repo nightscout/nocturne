@@ -27,7 +27,7 @@
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import { SleepSource } from "#lib/api/index.js";
   import { laneForStage, laneTexture } from "#lib/utils/sleep-stages.js";
-  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass } from "@nocturne/charts/core";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
   import { EmptyState } from "#lib/components/shared/index.js";

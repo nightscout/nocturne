@@ -1,5 +1,5 @@
 <script lang="ts">
-  import TrackerCategoryIcon from "#lib/components/icons/TrackerCategoryIcon.svelte";
+  import { TrackerCategoryIcon } from "@nocturne/charts/icons";
   import TrendArrow from "#lib/components/clock/TrendArrow.svelte";
   import type { ClockSettings, TrackerDefinitionDto } from "#lib/api/index.js";
   import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";

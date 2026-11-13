@@ -263,7 +263,16 @@ describe("DailyProfileBody", () => {
   it("says the ranges were clamped to the last 24 hours", async () => {
     render(DailyProfileBody, { props: { response: profileResponse({ historyClamped: true }) } });
 
-    await expect.element(page.getByText(/This page uses only the last 24 hours/)).toBeVisible();
+    await expect.element(page.getByText(/This page uses only the data from the last 24 hours/)).toBeVisible();
+  });
+
+  it("says a range that ends before the last 24 hours has no data", async () => {
+    render(DailyProfileBody, {
+      props: { response: { ...profileResponse({ historyClamped: true }), rangeOutsideHistory: true } },
+    });
+
+    await expect.element(page.getByText(/The range that you selected ends before the last 24 hours/)).toBeVisible();
+    await expect.element(page.getByText(/This page uses only the data/)).not.toBeInTheDocument();
   });
 
   it("names the filters the caller's access made the API ignore", async () => {

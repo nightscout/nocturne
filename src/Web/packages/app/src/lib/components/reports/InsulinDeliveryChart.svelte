@@ -7,7 +7,7 @@
     dashOf,
     patternClass,
     type TextureKey,
-  } from "#lib/components/charts/print/chart-print-patterns.js";
+  } from "@nocturne/charts/core";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
 
   interface Props {

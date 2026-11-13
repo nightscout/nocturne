@@ -2,7 +2,7 @@
   // Mounts the real chart card with a glucose window on hand, so whether the plot is drawn
   // turns on `deferDrawing` alone.
   import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import { transformChartData } from "#lib/utils/chart-data-transform.js";
+  import { transformChartData } from "@nocturne/charts/core";
   import type { MealPeriod } from "#lib/api/index.js";
   import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import GlucoseChartCard from "./GlucoseChartCard.svelte";

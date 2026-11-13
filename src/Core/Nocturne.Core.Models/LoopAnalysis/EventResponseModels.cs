@@ -24,6 +24,30 @@ public enum EventAnchorKind
     /// see <c>UnannouncedRises</c>.
     /// </summary>
     UnannouncedRise,
+
+    /// <summary>
+    /// The first reading of a low: an episode below range as the glucose statistics count them
+    /// (<c>TimeInRangeEpisodes</c>), at least 15 minutes below 70 mg/dL.
+    /// </summary>
+    LowStart,
+
+    /// <summary>The first reading of a high: an episode above range, at least 15 minutes above 180 mg/dL; see <see cref="LowStart"/>.</summary>
+    HighStart,
+
+    /// <summary>An infusion site change: a site, cannula or pod change, or a pod activated; records within two hours are one change.</summary>
+    SiteChange,
+
+    /// <summary>The start of a sleep session, a nap included.</summary>
+    SleepStart,
+
+    /// <summary>The end of a sleep session.</summary>
+    Wake,
+
+    /// <summary>The first carb entry during a low (<see cref="LowStart"/>'s episode).</summary>
+    LowTreatment,
+
+    /// <summary>Every manual bolus, for a meal or not; the algorithm's automatic boluses are not.</summary>
+    AnyBolus,
 }
 
 /// <summary>Which way glucose is expected to go after an anchor, and so which figures describe it.</summary>
@@ -59,6 +83,76 @@ public class EventCohortDefinition
 
     /// <summary>Largest meal, g, inclusive; meals only.</summary>
     public double? MaxGrams { get; set; }
+
+    /// <summary>
+    /// Foods a meal must carry a food record of, any one of them; meals only. Null or empty for any
+    /// meal. A meal with no food record at all is counted in
+    /// <see cref="EventCohortResult.MealsWithoutFoodRecord"/>, never matched.
+    /// </summary>
+    public List<Guid>? FoodIds { get; set; }
+
+    /// <summary>
+    /// The category a meal must carry a food record of, matched without regard to case; meals only.
+    /// With <see cref="FoodIds"/> as well, the meal must satisfy both.
+    /// </summary>
+    public string? FoodCategory { get; set; }
+
+    /// <summary>Local weekdays the anchor must fall on; null or empty for every day.</summary>
+    public List<DayOfWeek>? DaysOfWeek { get; set; }
+
+    /// <summary>
+    /// The cohort asked for a food filter the caller may not read, so it counts no events: the
+    /// filter is removed and the cohort is never widened to every meal.
+    /// </summary>
+    public bool FoodFilterWithheld { get; set; }
+
+    /// <summary>Whether the cohort is narrowed by the foods its meals carry.</summary>
+    [JsonIgnore]
+    public bool HasFoodFilter => FoodIds is { Count: > 0 } || !string.IsNullOrWhiteSpace(FoodCategory);
+
+    /// <summary>
+    /// The anchors of <see cref="Anchor"/> that no other cohort of the definition selects, with no
+    /// filter of its own. The members below are set by a custom report, never by the endpoint's
+    /// query, so they are not served.
+    /// </summary>
+    [JsonIgnore]
+    public bool Others { get; set; }
+
+    /// <summary>
+    /// Fewest minutes from the last carb entry strictly before the anchor, inclusive; an anchor with
+    /// no carb entry that far back qualifies.
+    /// </summary>
+    [JsonIgnore]
+    public int? MinMinutesSinceMeal { get; set; }
+
+    /// <summary>Most minutes from the last carb entry strictly before the anchor, inclusive.</summary>
+    [JsonIgnore]
+    public int? MaxMinutesSinceMeal { get; set; }
+
+    /// <summary>Lowest start glucose (<see cref="EventMetrics.StartGlucose"/>), mg/dL, inclusive.</summary>
+    [JsonIgnore]
+    public double? MinStartGlucose { get; set; }
+
+    /// <summary>Highest start glucose, mg/dL, inclusive.</summary>
+    [JsonIgnore]
+    public double? MaxStartGlucose { get; set; }
+
+    /// <summary>Least IOB at the anchor (<see cref="EventMetrics.IobAtAnchor"/>), U, inclusive.</summary>
+    [JsonIgnore]
+    public double? MinIob { get; set; }
+
+    /// <summary>Most IOB at the anchor, U, inclusive.</summary>
+    [JsonIgnore]
+    public double? MaxIob { get; set; }
+
+    [JsonIgnore]
+    public bool HasMinutesSinceMeal => MinMinutesSinceMeal is not null || MaxMinutesSinceMeal is not null;
+
+    [JsonIgnore]
+    public bool HasStartGlucose => MinStartGlucose is not null || MaxStartGlucose is not null;
+
+    [JsonIgnore]
+    public bool HasIob => MinIob is not null || MaxIob is not null;
 }
 
 /// <summary>The cohorts and window an event response was computed for.</summary>
@@ -72,8 +166,17 @@ public class EventResponseDefinition
     /// <summary>A bound no meal reaches, so a typing slip is ignored rather than read.</summary>
     public const double MaxGrams = 1000;
 
+    /// <summary>The most foods one cohort's food filter may name.</summary>
+    public const int MaxFoods = 20;
+
+    /// <summary>The longest food category a cohort may name.</summary>
+    public const int MaxFoodCategoryLength = 100;
+
+    /// <summary>The longest look back a minutes-since-meal condition may ask for: a day.</summary>
+    public const int MaxMinutesSinceMeal = 24 * 60;
+
     /// <summary>The windows before the anchor a request may ask for, in minutes.</summary>
-    public static readonly IReadOnlyList<int> MinutesBeforeChoices = [0, 30, 60, 90, 120];
+    public static readonly IReadOnlyList<int> MinutesBeforeChoices = [0, 30, 60, 90, 120, 180, 240];
 
     /// <summary>The windows after the anchor a request may ask for, in minutes.</summary>
     public static readonly IReadOnlyList<int> MinutesAfterChoices = [120, 180, 240, 300, 360, 420, 480];
@@ -97,6 +200,10 @@ public class EventResponseDefinition
     /// <c>UnannouncedRises.CorroborationBasalHours</c>.
     /// </summary>
     public bool RequireCorroboration { get; set; }
+
+    /// <summary>Keep each listed event's own glucose per slot (<see cref="EventResponseEvent.GlucoseTrace"/>) for a report that draws it. Not served.</summary>
+    [JsonIgnore]
+    public bool IncludeTraces { get; set; }
 }
 
 /// <summary>The bounds of an <see cref="EventResponseDefinition"/>, as the builder offers them.</summary>
@@ -184,6 +291,13 @@ public class EventCohortResult
     public int MissingAnchorGlucose { get; set; }
 
     /// <summary>
+    /// Anchors left out of a cohort with an IOB condition because no IOB stood at the anchor, so the
+    /// condition could not be read; not part of <see cref="Anchors"/>. Not served, as the condition is not.
+    /// </summary>
+    [JsonIgnore]
+    public int MissingAnchorIob { get; set; }
+
+    /// <summary>
     /// Anchors dropped because what decides them reaches back before the history the caller may
     /// read: a history-clamped caller sees no carbs or boluses there, so a rise could not be told
     /// from a meal nor an event shown isolated.
@@ -192,6 +306,19 @@ public class EventCohortResult
 
     /// <summary>Anchors counted: the events behind every slot and metric.</summary>
     public int Events { get; set; }
+
+    /// <summary>
+    /// With a food filter, the meals that passed the cohort's other filters and carried at least one
+    /// food record, matched or not; 0 without one.
+    /// </summary>
+    public int MealsWithFoodRecord { get; set; }
+
+    /// <summary>
+    /// With a food filter, the meals that passed the cohort's other filters but carried no food
+    /// record, only carbs, so the filter could not be applied to them and they are not counted; 0
+    /// without one.
+    /// </summary>
+    public int MealsWithoutFoodRecord { get; set; }
 
     /// <summary>
     /// Meals given no grams per unit because another meal, correction or rise fell inside the
@@ -284,6 +411,21 @@ public class EventResponseEvent
     /// <see cref="EventResponseReport.SlotMinutes"/>. Null when glucose is withheld.
     /// </summary>
     public string? GlucoseCoverage { get; set; }
+
+    /// <summary>
+    /// The event's own glucose in each slot of the window, mg/dL, null where the slot held no
+    /// reading, in the order of <see cref="EventResponseReport.SlotMinutes"/>: the trace the
+    /// slot aggregates are taken across. Not served by the endpoint; a report draws it.
+    /// </summary>
+    [JsonIgnore]
+    public List<double?> GlucoseTrace { get; set; } = [];
+
+    /// <summary>
+    /// Minutes from the last carb entry strictly before the event; null where none was read before
+    /// it. Not served by the endpoint; a report draws it.
+    /// </summary>
+    [JsonIgnore]
+    public double? MinutesSinceMeal { get; set; }
 
     public EventMetrics Metrics { get; set; } = new();
 }

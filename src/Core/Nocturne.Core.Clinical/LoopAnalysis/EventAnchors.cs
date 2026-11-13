@@ -1,4 +1,7 @@
+using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.LoopAnalysis;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Clinical.LoopAnalysis;
 
@@ -15,18 +18,69 @@ public static class EventAnchors
     public const long BolusAfterMealMs = 30 * LocalSlotBinning.MinuteMs;
 
     /// <summary>
+    /// Whether finding the anchors of <paramref name="kind"/> reads
+    /// <see cref="EventResponseDefinition.RequireCorroboration"/>: only unannounced rises, which the calculator finds
+    /// through <see cref="UnannouncedRises.Find"/>. Every other anchor is found the same whatever it says.
+    /// </summary>
+    public static bool ReadsCorroboration(EventAnchorKind kind) => kind == EventAnchorKind.UnannouncedRise;
+
+    /// <summary>
     /// Which way glucose is expected to go after an anchor of <paramref name="kind"/>. A sensor start
     /// has no expected direction and keeps the rise figures. Exercise is a fall, since a low after it
     /// is the risk. Every override is a fall: the anchor carries no insulin percentage, so one that
     /// asks for less insulin cannot be told apart here; carrying that percentage is where to split it.
+    /// A low start keeps the fall figures (how low it went, and when) and a high start the rise
+    /// figures (how high, and when it came back). A low treatment is a rise, the recovery; a site
+    /// change, a sleep start and a wake-up have no expected direction and keep the rise figures, as a
+    /// sensor start does; any bolus is a fall, as a correction is.
     /// </summary>
     public static EventResponseKind ResponseOf(EventAnchorKind kind) => kind switch
     {
-        EventAnchorKind.Meal or EventAnchorKind.UnannouncedRise or EventAnchorKind.SensorStart => EventResponseKind.Rise,
+        EventAnchorKind.Meal or EventAnchorKind.UnannouncedRise or EventAnchorKind.SensorStart
+            or EventAnchorKind.HighStart or EventAnchorKind.LowTreatment
+            or EventAnchorKind.SiteChange or EventAnchorKind.SleepStart or EventAnchorKind.Wake => EventResponseKind.Rise,
         EventAnchorKind.CorrectionBolus or EventAnchorKind.ExerciseStart
-            or EventAnchorKind.OverrideStart or EventAnchorKind.TemporaryTargetStart => EventResponseKind.Fall,
+            or EventAnchorKind.OverrideStart or EventAnchorKind.TemporaryTargetStart
+            or EventAnchorKind.LowStart or EventAnchorKind.AnyBolus => EventResponseKind.Fall,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
+
+    /// <summary>
+    /// How far before an excursion start the readings that decide it reach: a start is found only
+    /// after the episode before it has closed, 15 minutes back in range, and a reading may stand
+    /// for up to 15 minutes before it.
+    /// </summary>
+    public const long ExcursionLookbackMs = 2 * (long)GlucoseEpisodeDetector.EpisodeMinutes * LocalSlotBinning.MinuteMs;
+
+    /// <summary>
+    /// The first reading of every low (<see cref="EventAnchorKind.LowStart"/>) and high
+    /// (<see cref="EventAnchorKind.HighStart"/>) in <paramref name="readings"/>, by the episode rule
+    /// of the glucose statistics (<see cref="GlucoseEpisodeDetector"/>) over the consensus limits it
+    /// counts them by, 70 and 180 mg/dL, so a report's lows are the statistics' lows.
+    /// </summary>
+    /// <param name="readings">Readings in time order; implausible ones are left out, as the statistics leave them.</param>
+    public static (List<EventAnchor> Lows, List<EventAnchor> Highs) Excursions(IEnumerable<GlucoseSample> readings)
+    {
+        var plausible = readings
+            .Where(r => GlucoseStatistics.IsPlausibleReading(r.Mgdl))
+            .Select(r => new SensorGlucose
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.Mills).UtcDateTime,
+                Mgdl = r.Mgdl,
+            })
+            .ToList();
+        var lows = new List<EventAnchor>();
+        var highs = new List<EventAnchor>();
+        foreach (var episode in GlucoseEpisodeDetector.Detect(plausible, new GlycemicThresholds()))
+        {
+            var mills = new DateTimeOffset(episode.StartAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            if (episode.BelowRange)
+                lows.Add(new EventAnchor(mills, EventAnchorKind.LowStart));
+            else
+                highs.Add(new EventAnchor(mills, EventAnchorKind.HighStart));
+        }
+        return (lows, highs);
+    }
 
     /// <summary>
     /// One anchor per instant with carbs: entries at the same instant, such as a meal logged food by
@@ -64,6 +118,40 @@ public static class EventAnchors
     /// two hours has begun or ended.
     /// </summary>
     public const long SensorSessionMergeMs = 2 * LocalSlotBinning.HourMs;
+
+    /// <summary>
+    /// The first carb entry inside each low, one per low: the time the low was treated, where it was
+    /// logged. A low with no carbs logged during it has none.
+    /// </summary>
+    public static List<EventAnchor> LowTreatments(IReadOnlyList<MillsInterval> lows, IEnumerable<CarbEvent> carbs)
+    {
+        var mills = CarbMills(carbs);
+        var anchors = new List<EventAnchor>();
+        foreach (var low in lows)
+        {
+            var i = SortedSearch.FirstEndingAfter(mills, low.Start - 1, static m => m);
+            if (i < mills.Length && mills[i] < low.End)
+                anchors.Add(new EventAnchor(mills[i], EventAnchorKind.LowTreatment));
+        }
+        return anchors;
+    }
+
+    /// <summary>
+    /// One anchor per change, at its first record: records within <see cref="SensorSessionMergeMs"/>
+    /// of each other, a pod change and its activation say, are one change.
+    /// </summary>
+    public static List<EventAnchor> Merged(IEnumerable<long> instants, EventAnchorKind kind)
+    {
+        var anchors = new List<EventAnchor>();
+        long? last = null;
+        foreach (var mills in instants.Order())
+        {
+            if (last is null || mills - last > SensorSessionMergeMs)
+                anchors.Add(new EventAnchor(mills, kind));
+            last = mills;
+        }
+        return anchors;
+    }
 
     /// <summary>One anchor per new sensor, at the first record of it.</summary>
     public static List<EventAnchor> SensorStarts(IEnumerable<long> instants)

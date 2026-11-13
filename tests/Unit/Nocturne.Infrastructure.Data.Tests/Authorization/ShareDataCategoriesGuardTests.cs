@@ -30,6 +30,9 @@ public class ShareDataCategoriesGuardTests
         "tracker_definitions", "tracker_notification_thresholds", "tracker_presets", "translation_drafts",
         "user_food_favorites",
 
+        // Saved custom report specs: a definition that names datasets and ranges, no readings.
+        "report_specs",
+
         // Access control and audit, read under their own permissions.
         "alert_invites", "login_codes", "member_invites", "membership_requests", "mutation_audit_log",
         "oauth_authorization_codes", "oauth_clients", "oauth_device_codes", "oauth_grants", "oauth_refresh_tokens",

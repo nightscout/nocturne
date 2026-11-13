@@ -5,15 +5,15 @@
   import { getActogramData } from "#lib/api/actogram.remote.js";
   import { getBasalSeries } from "#lib/api/generated/chartDatas.generated.remote.js";
   import { bg, bgLabel, formatLocale, toDate } from "#lib/utils/formatting.js";
-  import { resolveChartColor } from "#lib/utils/chart-colors.js";
-  import { FALLBACK_GLUCOSE_Y_MAX } from "#lib/constants/glucose-thresholds.js";
+  import { resolveChartColor } from "@nocturne/charts/core";
+  import { FALLBACK_GLUCOSE_Y_MAX } from "@nocturne/charts/core";
   import {
     laneForStage,
     HYPNOGRAM_LANE_ORDER,
     HYPNOGRAM_LANE_LABELS,
     laneTexture,
   } from "#lib/utils/sleep-stages.js";
-  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass } from "@nocturne/charts/core";
   import { BasalDeliveryOrigin } from "#lib/api/index.js";
   import type { SleepStageInterval, SleepDawnPhenomenon } from "#lib/api/index.js";
 

@@ -318,6 +318,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>Manually-entered lab HbA1c results, compared against the computed eHbA1c estimate.</summary>
     public DbSet<LabHbA1cResultEntity> LabHbA1cResults { get; set; }
 
+    /// <summary>Saved custom reports: a name and a report spec each.</summary>
+    public DbSet<ReportSpecEntity> ReportSpecs { get; set; }
+
     public DbSet<DeviceEventEntity> DeviceEvents { get; set; }
 
     public DbSet<BolusCalculationEntity> BolusCalculations { get; set; }
@@ -2783,6 +2786,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasDatabaseName("ix_alert_excursion_mutes_tenant_subject_excursion");
             entity.HasIndex(e => e.AlertExcursionId);
+        });
+
+        modelBuilder.Entity<ReportSpecEntity>(entity =>
+        {
+            entity.HasIndex(e => new { e.TenantId, e.Name })
+                .IsUnique()
+                .HasFilter("deleted_at IS NULL")
+                .HasDatabaseName("ix_report_specs_tenant_name");
         });
 
         modelBuilder.Entity<AlertExcursionReceiptEntity>(entity =>

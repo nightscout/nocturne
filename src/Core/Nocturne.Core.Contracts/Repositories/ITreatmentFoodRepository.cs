@@ -25,6 +25,22 @@ public interface ITreatmentFoodRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The food records of the given carb intakes, each with its food's name and category, for
+    /// matching meals by what they carried. A record of unspecified carbs has no food.
+    /// </summary>
+    Task<IReadOnlyList<CarbIntakeFood>> GetCarbIntakeFoodsAsync(
+        IEnumerable<Guid> carbIntakeIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// For each food, how many carb intakes from <paramref name="since"/> on carry a record of it.
+    /// Foods no such intake references are absent.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountCarbIntakesByFoodAsync(
+        DateTime since,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Create a food breakdown entry.
     /// </summary>
     Task<TreatmentFood> CreateAsync(

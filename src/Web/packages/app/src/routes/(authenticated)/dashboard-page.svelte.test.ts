@@ -10,7 +10,7 @@ import {
   type WidgetConfig,
 } from "#lib/api/generated/nocturne-api-client.js";
 import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 
 // The dashboard's own sections are stood down to markers, one testid each: what
 // is under test is which of them the page renders, not what any of them shows.

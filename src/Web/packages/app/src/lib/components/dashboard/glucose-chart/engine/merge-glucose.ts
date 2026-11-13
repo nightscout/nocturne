@@ -1,7 +1,7 @@
 import type { Entry } from "#lib/websocket/types.js";
-import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
-import { getGlucoseColor, type GlucoseThresholds } from "#lib/utils/chart-colors.js";
-import type { GlucosePoint } from "./chart-data-view.svelte";
+import type { TransformedChartData } from "@nocturne/charts/core";
+import { getGlucoseColor, type GlucoseThresholds } from "@nocturne/charts/core";
+import type { GlucosePoint } from "@nocturne/charts";
 
 /**
  * The server's glucose series with the realtime readings in [fromMs, toMs] it

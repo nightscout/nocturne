@@ -16,6 +16,7 @@ import Footprints from "@lucide/svelte/icons/footprints";
 import Gauge from "@lucide/svelte/icons/gauge";
 import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 import Layers from "@lucide/svelte/icons/layers";
+import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
 import Moon from "@lucide/svelte/icons/moon";
 import PieChart from "@lucide/svelte/icons/chart-pie";
 import Repeat from "@lucide/svelte/icons/repeat";
@@ -25,7 +26,7 @@ import Syringe from "@lucide/svelte/icons/syringe";
 import Utensils from "@lucide/svelte/icons/utensils";
 import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import Target from "@lucide/svelte/icons/target";
-import SiteChangeIcon from "#lib/components/icons/SiteChangeIcon.svelte";
+import { SiteChangeIcon } from "@nocturne/charts/icons";
 import { satisfiesAllScopes } from "#lib/authorization/scopes.js";
 
 export interface ReportItem {
@@ -151,6 +152,16 @@ export function reportCategories(): ReportCategory[] {
           scopes: [READ.glucose, READ.reports],
           icon: Activity,
           status: "available",
+        },
+        {
+          title: "Custom reports",
+          description: "Reports that you make from the charts and figures of your data",
+          href: "/reports/custom",
+          keywords: ["custom", "saved", "builder", "report builder"],
+          scopes: [READ.reports],
+          icon: LayoutDashboard,
+          status: "available",
+          memberOnly: true,
         },
       ],
     },
@@ -434,11 +445,26 @@ function reportSubRoutes(): Record<string, { title: string; description: string 
       title: "Sleep night report",
       description: "Sleep stages and overnight glucose for one night",
     },
+    "/reports/custom/new": {
+      title: "New custom report",
+      description: "Make a report from the charts and figures of your data",
+    },
+    "/reports/custom/[id]/edit": {
+      title: "Edit custom report",
+      description: "Change the panels of a saved custom report",
+    },
+    "/reports/custom/[id]": {
+      title: "Custom report",
+      description: "A saved custom report, run on your current data",
+    },
   };
 }
 
 function subRouteKey(pathname: string): string {
-  return /^\/reports\/sleep\/[^/]+$/.test(pathname) ? "/reports/sleep/[date]" : pathname;
+  if (/^\/reports\/sleep\/[^/]+$/.test(pathname)) return "/reports/sleep/[date]";
+  if (/^\/reports\/custom\/[^/]+\/edit$/.test(pathname)) return "/reports/custom/[id]/edit";
+  if (/^\/reports\/custom\/[^/]+$/.test(pathname) && pathname !== "/reports/custom/new") return "/reports/custom/[id]";
+  return pathname;
 }
 
 /**

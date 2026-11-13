@@ -126,9 +126,6 @@
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
     <!-- Extension packages -->
     <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="11.0.0" />
-    <!-- MCP (Model Context Protocol) packages -->
-    <PackageVersion Include="ModelContextProtocol" Version="1.4.2" />
-    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.4.2" />
     <!-- Roslyn Code Analysis packages (for source generators) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />

@@ -43,7 +43,7 @@
     CHART_TEXTURES,
     patternClass,
     type TextureKey,
-  } from "#lib/components/charts/print/chart-print-patterns.js";
+  } from "@nocturne/charts/core";
   import { fresh } from "#lib/api/fresh-query.js";
 
   type ChartPoint = {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { AreaChart, Rule } from "layerchart";
-  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass } from "@nocturne/charts/core";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
   import { EmptyState } from "#lib/components/shared/index.js";
   import { bg, bgValue, bgLabel, bgRange } from "#lib/utils/formatting.js";

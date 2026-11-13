@@ -97,6 +97,7 @@ public partial class AnalyticsReadScopeGuardTests
             [
                 "EventCohortResult.Cohort", "EventCohortResult.Response", "EventCohortResult.Anchors", "EventCohortResult.NotIsolated",
                 "EventCohortResult.MissingAnchorGlucose", "EventCohortResult.BeforeVisibleHistory", "EventCohortResult.Events",
+                "EventCohortResult.MealsWithFoodRecord", "EventCohortResult.MealsWithoutFoodRecord",
                 "EventCohortResult.WentBelowRange", "EventCohortResult.WentBelowRangeObserved", "EventCohortResult.Slots", "EventCohortResult.Metrics",
                 "EventResponseSlot.GlucoseChange", "EventResponseSlot.Glucose",
                 "EventMetricsSummary.StartGlucose", "EventMetricsSummary.PeakRise", "EventMetricsSummary.MinutesToPeak",
@@ -129,6 +130,15 @@ public partial class AnalyticsReadScopeGuardTests
         { EventAnchorKind.UnannouncedRise, [Scope.GlucoseRead], false },
         { EventAnchorKind.UnannouncedRise, [Scope.TreatmentsRead], false },
         { EventAnchorKind.UnannouncedRise, [Scope.GlucoseRead, Scope.TreatmentsRead], true },
+        { EventAnchorKind.LowStart, [Scope.GlucoseRead], true },
+        { EventAnchorKind.LowStart, [Scope.TreatmentsRead], false },
+        { EventAnchorKind.HighStart, [Scope.GlucoseRead], true },
+        { EventAnchorKind.SiteChange, [Scope.GlucoseRead, Scope.TreatmentsRead], false },
+        { EventAnchorKind.SiteChange, [Scope.GlucoseRead, Scope.DevicesRead], true },
+        { EventAnchorKind.SleepStart, [Scope.GlucoseRead, Scope.TreatmentsRead], false },
+        { EventAnchorKind.Wake, [Scope.GlucoseRead, Scope.SleepRead], true },
+        { EventAnchorKind.LowTreatment, [Scope.GlucoseRead], false },
+        { EventAnchorKind.AnyBolus, [Scope.GlucoseRead, Scope.TreatmentsRead], true },
     };
 
     [Theory]
@@ -158,9 +168,77 @@ public partial class AnalyticsReadScopeGuardTests
         ignored.Should().Equal("isolatedOnly", "requireCorroboration");
         definition.IsolatedOnly.Should().BeFalse();
         definition.RequireCorroboration.Should().BeFalse();
-        LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted(Scope.GlucoseRead)).Select(f => f.Filter)
+        LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted(Scope.GlucoseRead, Scope.FoodRead)).Select(f => f.Filter)
             .Should().Equal("isolatedOnly", "requireCorroboration");
-        LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted(Scope.TreatmentsRead)).Should().BeEmpty();
+        LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted(Scope.TreatmentsRead, Scope.FoodRead)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void LoopAnalysis_Events_WithoutTreatments_DropACarbOrIobCondition_AndTheAllOthersGroupItWasTheRestOf()
+    {
+        var definition = new EventResponseDefinition
+        {
+            Cohorts =
+            [
+                new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.LowStart, MinMinutesSinceMeal = 240 },
+                new EventCohortDefinition { Cohort = 2, Anchor = EventAnchorKind.LowStart, Others = true },
+                new EventCohortDefinition { Cohort = 3, Anchor = EventAnchorKind.HighStart, MinStartGlucose = 250 },
+            ],
+        };
+
+        var ignored = LoopAnalysisReadScopeGuard.NarrowEvents(definition, Granted(Scope.GlucoseRead));
+
+        ignored.Should().Equal("anchor1", "anchor2");
+        definition.Cohorts.Should().ContainSingle().Which.Cohort.Should().Be(3, "a start glucose condition reads glucose only");
+    }
+
+    [Fact]
+    public void LoopAnalysis_Events_WithoutFood_WithholdTheFilteredCohortsInsteadOfWideningThem()
+    {
+        var food = Guid.NewGuid();
+        var definition = new EventResponseDefinition
+        {
+            Cohorts =
+            [
+                new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodIds = [food], DaysOfWeek = [DayOfWeek.Monday] },
+                new EventCohortDefinition { Cohort = 2, Anchor = EventAnchorKind.Meal, FoodCategory = "Pasta" },
+            ],
+        };
+
+        var ignored = LoopAnalysisReadScopeGuard.NarrowEvents(definition, Granted(Scope.GlucoseRead, Scope.TreatmentsRead));
+
+        ignored.Should().Equal("foodIds1", "foodCategory2");
+        definition.Cohorts.Should().HaveCount(2);
+        definition.Cohorts.Should().OnlyContain(c => !c.HasFoodFilter && c.FoodFilterWithheld);
+        definition.Cohorts[0].DaysOfWeek.Should().Equal(DayOfWeek.Monday);
+        LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted(Scope.GlucoseRead, Scope.TreatmentsRead)).Select(f => f.Filter)
+            .Should().Equal("foodIds", "foodCategory");
+    }
+
+    [Fact]
+    public void LoopAnalysis_Events_WithFood_KeepTheFoodFilters()
+    {
+        var definition = new EventResponseDefinition
+        {
+            Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodCategory = "Pasta" }],
+        };
+
+        LoopAnalysisReadScopeGuard.NarrowEvents(definition, Granted(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.FoodRead))
+            .Should().BeEmpty();
+        definition.Cohorts[0].FoodCategory.Should().Be("Pasta");
+        definition.Cohorts[0].FoodFilterWithheld.Should().BeFalse();
+    }
+
+    [Fact]
+    public void LoopAnalysis_Events_WithoutFood_LeaveACohortWithNoFoodFilterAsItIs()
+    {
+        var definition = new EventResponseDefinition
+        {
+            Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal }],
+        };
+
+        LoopAnalysisReadScopeGuard.NarrowEvents(definition, Granted(Scope.GlucoseRead, Scope.TreatmentsRead)).Should().BeEmpty();
+        definition.Cohorts[0].FoodFilterWithheld.Should().BeFalse();
     }
 
     [Fact]
@@ -171,8 +249,9 @@ public partial class AnalyticsReadScopeGuardTests
             .OfType<string>()
             .ToHashSet();
 
+        // A food filter is named without its cohort number.
         LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted()).Select(f => f.Filter)
-            .Should().OnlyContain(name => parameters.Contains(name));
+            .Should().OnlyContain(name => parameters.Contains(name) || parameters.Contains(name + "1"));
         parameters.Should().Contain(["anchor1", "anchor2", "anchor3"]);
     }
 

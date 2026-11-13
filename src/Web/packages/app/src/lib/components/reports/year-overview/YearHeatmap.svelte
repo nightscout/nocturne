@@ -22,7 +22,7 @@
   import { layoutYear, monthOutlinePath } from "./week-layout";
   import VisibleChart from "./VisibleChart.svelte";
   import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
-  import { patternClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass, type TextureKey } from "@nocturne/charts/core";
   import type { DailySummaryDay, YearCalendarDatum } from "./calendar-datum";
 
 

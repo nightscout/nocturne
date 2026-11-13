@@ -27,11 +27,7 @@
 	import { contextResource } from '#lib/hooks/resource-context.svelte.js';
 	import { createChartDataEngine } from '#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js';
 	import GlucoseChartShell from '#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte';
-	import GlucoseTrack from '#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte';
-	import BasalTrack from '#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte';
-	import IobCobTrack from '#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
-	import ThresholdRules from '#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
-	import ChartTooltip from '#lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
+	import { GlucoseTrack, BasalTrack, IobCobTrack, ThresholdRules, ChartTooltip } from '@nocturne/charts';
 	import { openDayInReview } from '#lib/components/dashboard/glucose-chart/day-in-review.js';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';

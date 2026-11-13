@@ -7,9 +7,11 @@
     CardTitle,
   } from "#lib/components/ui/card/index.js";
   import Activity from "@lucide/svelte/icons/activity";
+  import Clock from "@lucide/svelte/icons/clock";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import type { AidSystemMetrics } from "#lib/api/index.js";
   import { bg, bgLabel } from "#lib/utils/formatting.js";
+  import { plural } from "#lib/utils/plural.js";
 
   let { metrics }: { metrics: AidSystemMetrics | undefined } = $props();
 </script>
@@ -25,6 +27,17 @@
     </CardDescription>
   </CardHeader>
   <CardContent>
+    {#if metrics?.rangeOutsideHistory}
+      <p class="mb-4 flex items-start gap-2 text-sm text-muted-foreground" data-testid="aid-system-use-history-clamp">
+        <Clock class="mt-0.5 size-4 shrink-0" />
+        <span>
+          {plural(metrics.historyWindowHours ?? 0, [
+            "The range that you selected ends before the last hour. You can see only the last hour, so this card has no data for this range.",
+            "The range that you selected ends before the last # hours. You can see only the last # hours, so this card has no data for this range.",
+          ])}
+        </span>
+      </p>
+    {/if}
     {#if metrics?.timeZoneUnavailableReason}
       <p class="mb-4 text-sm text-muted-foreground">
         <TimeZoneNote reason={metrics.timeZoneUnavailableReason}>

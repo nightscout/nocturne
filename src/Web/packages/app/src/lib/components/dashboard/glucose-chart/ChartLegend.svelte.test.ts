@@ -1,14 +1,17 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
-import ChartLegend from "./ChartLegend.svelte";
+import { ChartLegend } from "@nocturne/charts";
 import { SystemEventType } from "#lib/api/index.js";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import { glucoseChartLabels } from "./chart-labels.svelte";
 
 function createDefaultProps(
 	overrides: Partial<Parameters<typeof ChartLegend>[1]> = {},
 ): Parameters<typeof ChartLegend>[1] {
 	return {
+		glucoseUnits: "mg/dl",
+		labels: glucoseChartLabels(),
 		glucoseData: [],
 		highThreshold: 180,
 		lowThreshold: 70,
