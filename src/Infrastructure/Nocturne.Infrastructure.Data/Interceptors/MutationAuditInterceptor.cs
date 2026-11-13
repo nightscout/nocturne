@@ -58,9 +58,9 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
                 var wasDeleted = deletedAt.OriginalValue is not null;
                 var isDeleted = deletedAt.CurrentValue is not null;
                 if (!wasDeleted && isDeleted)
-                    entry.Property("DeletedByUser").CurrentValue = !auditContext.IsSystemMutation();
+                    entry.Property(NocturneDbContext.DeletedByUserProperty).CurrentValue = !auditContext.IsSystemMutation();
                 else if (wasDeleted && !isDeleted)
-                    entry.Property("DeletedByUser").CurrentValue = false;
+                    entry.Property(NocturneDbContext.DeletedByUserProperty).CurrentValue = false;
             }
 
             if (entry.Entity is not IAuditable)

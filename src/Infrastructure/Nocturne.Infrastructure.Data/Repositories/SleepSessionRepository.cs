@@ -114,7 +114,7 @@ public class SleepSessionRepository : ISleepSessionRepository
             await LockIdAsync(ctx, entity.Id, token);
             var existing = await WithSoftDeleted(ctx).FirstOrDefaultAsync(s => s.Id == entity.Id, token);
 
-            if (existing is { DeletedAt: not null } && ctx.Entry(existing).Property<bool>("DeletedByUser").CurrentValue)
+            if (existing is { DeletedAt: not null } && ctx.Entry(existing).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue)
             {
                 throw new RecreationBlockedException(
                     "sleep session", $"original id '{existing.OriginalId}' from '{existing.Source}', which the user deleted");
@@ -182,7 +182,7 @@ public class SleepSessionRepository : ISleepSessionRepository
                         s => s.Id != id && s.Source == entity.Source && s.OriginalId == entity.OriginalId, token);
                 if (holder is not null)
                 {
-                    if (holder.DeletedAt is null || ctx.Entry(holder).Property<bool>("DeletedByUser").CurrentValue)
+                    if (holder.DeletedAt is null || ctx.Entry(holder).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue)
                     {
                         throw new RecreationBlockedException(
                             "sleep session",

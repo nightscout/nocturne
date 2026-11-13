@@ -240,8 +240,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             var existingByKey = new Dictionary<string, TEntity>(StringComparer.Ordinal);
             if (syncIdentifiers.Count > 0)
             {
-                var candidates = await EntitySet(db).IgnoreQueryFilters()
-                    .Where(e => e.TenantId == db.TenantId)
+                var candidates = await EntitySet(db).IncludingDeleted()
                     .WhereBlocksRecreation()
                     .Where(e => dataSources.Contains(
                             EF.Property<string>(e, nameof(ISyncDedupable.DataSource)))
@@ -292,8 +291,8 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             var unmatchedIds = unmatched.Select(e => e.Id).ToList();
             var existingById = unmatchedIds.Count == 0
                 ? new Dictionary<Guid, TEntity>()
-                : await EntitySet(db).IgnoreQueryFilters()
-                    .Where(e => e.TenantId == db.TenantId && unmatchedIds.Contains(e.Id))
+                : await EntitySet(db).IncludingDeleted()
+                    .Where(e => unmatchedIds.Contains(e.Id))
                     .ToDictionaryAsync(e => e.Id, cancellationToken);
 
             var toInsert = new List<TEntity>();
@@ -306,7 +305,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
                     continue;
                 }
 
-                if (existing.DeletedAt != null && db.Entry(existing).Property<bool>("DeletedByUser").CurrentValue)
+                if (existing.DeletedAt != null && db.Entry(existing).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue)
                 {
                     skippedDeleted++;
                     continue;

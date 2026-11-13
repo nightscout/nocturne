@@ -2100,8 +2100,8 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         try
         {
-            var entities = await db.DeviceEvents.IgnoreQueryFilters().AsNoTracking()
-                .Where(e => e.TenantId == db.TenantId && ids.Contains(e.Id))
+            var entities = await db.DeviceEvents.IncludingDeleted().AsNoTracking()
+                .Where(e => ids.Contains(e.Id))
                 .ToListAsync(ct);
             await _deviceEventReactor.OnDeletedAsync(entities.Select(DeviceEventMapper.ToDomainModel).ToList(), ct);
         }
@@ -2245,7 +2245,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                 copy.Id = Guid.CreateVersion7();
                 setKey(copy, key);
                 context.Add(copy);
-                context.Entry(copy).Property("DeletedByUser").CurrentValue = true;
+                context.Entry(copy).Property(NocturneDbContext.DeletedByUserProperty).CurrentValue = true;
             }
         }
     }
@@ -2254,8 +2254,8 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
     private static IQueryable<StateSpanEntity> StateSpansFromSource(
         NocturneDbContext db, string source, string[] originalIds) =>
-        db.StateSpans.IgnoreQueryFilters()
-            .Where(s => s.TenantId == db.TenantId && s.Source == source
+        db.StateSpans.IncludingDeleted()
+            .Where(s => s.Source == source
                      && s.LegacyId != null && originalIds.Contains(s.LegacyId))
             .WhereBlocksSpanRecreation();
 
@@ -2635,7 +2635,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         }
 
         private IQueryable<T> BlockingRows(NocturneDbContext db) =>
-            rowsOf(db).IgnoreQueryFilters().Where(e => e.TenantId == db.TenantId).WhereBlocksRecreation();
+            rowsOf(db).IncludingDeleted().WhereBlocksRecreation();
 
         private static IQueryable<T> FromSource(IQueryable<T> query, string source, string[] legacyIds)
             => query.Where(e => e.DataSource == source && e.LegacyId != null && legacyIds.Contains(e.LegacyId));

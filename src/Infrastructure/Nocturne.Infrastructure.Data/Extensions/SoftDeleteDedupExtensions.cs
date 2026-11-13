@@ -17,8 +17,6 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </summary>
 public static class SoftDeleteDedupExtensions
 {
-    private const string DeletedByUserProperty = "DeletedByUser";
-
     /// <summary>
     /// Narrows <paramref name="source"/> to the rows whose external identity must not be
     /// re-created: an active row, or a soft-deleted row whose latest delete was
@@ -32,12 +30,11 @@ public static class SoftDeleteDedupExtensions
     /// context (<c>deleted_by_user = false</c>).
     ///
     /// <paramref name="source"/> must have the soft-delete query filter lifted
-    /// (<c>IgnoreQueryFilters</c>) with its tenant predicate re-applied, or no soft-deleted
-    /// row can reach the predicate.
+    /// (<see cref="HistoryPage.IncludingDeleted{T}"/>), or no soft-deleted row can reach the predicate.
     /// </summary>
     public static IQueryable<TEntity> WhereBlocksRecreation<TEntity>(this IQueryable<TEntity> source)
         where TEntity : class, ISoftDeletable
-        => source.Where(e => e.DeletedAt == null || EF.Property<bool>(e, DeletedByUserProperty));
+        => source.Where(e => e.DeletedAt == null || EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty));
 
     /// <summary>
     /// <see cref="WhereBlocksRecreation{TEntity}"/> for state spans. A span whose category is not
@@ -75,7 +72,7 @@ public static class SoftDeleteDedupExtensions
         => source.IgnoreQueryFilters().AsNoTracking()
             .Where(e => e.TenantId == ctx.TenantId
                      && e.DeletedAt != null
-                     && EF.Property<bool>(e, DeletedByUserProperty));
+                     && EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty));
 
     /// <summary>
     /// Of the rows <see cref="WhereBlocksRecreation{TEntity}"/> kept for one external identity, the
