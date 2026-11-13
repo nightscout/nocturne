@@ -16,7 +16,7 @@ public static class SystemEventMapper
     {
         return new SystemEventEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(systemEvent.Id),
+            Id = RecordIdKey.ParseIdToGuid(systemEvent.Id),
             EventType = systemEvent.EventType.ToString(),
             Category = systemEvent.Category.ToString(),
             Code = systemEvent.Code,
