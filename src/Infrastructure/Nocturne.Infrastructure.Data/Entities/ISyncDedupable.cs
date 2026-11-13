@@ -12,7 +12,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// The types that upsert on the key back it with a partial unique index on
 /// <c>(tenant_id, data_source, sync_identifier)</c> filtered to
 /// <c>sync_identifier IS NOT NULL AND deleted_at IS NULL</c>;
-/// <see cref="NocturneDbContext.SyncDedupedEntities"/> is the authoritative list.
+/// <see cref="NocturneDbContext.SyncDedupedEntities"/> gives every implementer that index.
 /// <see cref="Repositories.Health.HealthSeriesRepository{TModel,TEntity}"/> and
 /// <see cref="Repositories.V4.SyncUpsertRepositoryBase{TModel,TEntity}"/> perform the upsert;
 /// <see cref="Repositories.V4.SyncKeyedRepositoryBase{TModel,TEntity}"/> the keyed lookup and delete.

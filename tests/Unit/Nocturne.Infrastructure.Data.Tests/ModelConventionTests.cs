@@ -38,6 +38,23 @@ public class ModelConventionTests
     }
 
     [Fact]
+    public void TheDerivedLists_HoldEveryMappedEntityThatCarriesTheirMarker()
+    {
+        var mapped = Model().GetEntityTypes().Select(e => e.ClrType).ToList();
+
+        NocturneDbContext.V4LegacyIdRecordEntities.Should().BeEquivalentTo(Marked<IV4Entity>(mapped));
+        NocturneDbContext.LegacyIdKeyedEntities.Should().BeEquivalentTo(Marked<ILegacyIdentified>(mapped));
+        NocturneDbContext.SyncDedupedEntities.Should().BeEquivalentTo(Marked<ISyncDedupable>(mapped));
+        NocturneDbContext.V4ProfileNamedEntities.Should().BeEquivalentTo(Marked<IProfileScopedEntity>(mapped));
+    }
+
+    [Fact]
+    public void TheTimestampIndexedRecords_AreEveryV4RecordButTheTwoSpanTables() =>
+        NocturneDbContext.V4TimeSeriesRecordEntities.Should().BeEquivalentTo(
+            NocturneDbContext.V4LegacyIdRecordEntities.Except([typeof(TempBasalEntity), typeof(ProfileActivationEntity)]),
+            "a new V4 record table gets its legacy id index by its marker, and has to be listed here to get its timestamp and watermark indexes");
+
+    [Fact]
     public void EveryV4RecordTable_HasANewestFirstTimestampIndex() =>
         AssertFamily(
             NocturneDbContext.V4TimeSeriesRecordEntities,
@@ -320,4 +337,7 @@ public class ModelConventionTests
 
         return ctx.GetService<IDesignTimeModel>().Model;
     }
+
+    private static IEnumerable<Type> Marked<TMarker>(IEnumerable<Type> mapped) =>
+        mapped.Where(t => typeof(TMarker).IsAssignableFrom(t));
 }
