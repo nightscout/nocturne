@@ -841,10 +841,9 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var rowIds = ids.Select(id => Guid.TryParse(id, out var rowId) ? rowId : (Guid?)null).ToList();
-        var deleted = await db.StateSpans.IgnoreQueryFilters().AsNoTracking()
+        var deleted = await db.StateSpans.IncludingDeleted().AsNoTracking()
             .WhereCategoryIsCurrent()
-            .Where(s => s.TenantId == db.TenantId
-                        && s.DeletedAt != null
+            .Where(s => s.DeletedAt != null
                         && ((s.LegacyId != null && ids.Contains(s.LegacyId)) || rowIds.Contains(s.Id)))
             .Select(s => new { s.Id, s.LegacyId, s.Category, s.DeletedAt })
             .ToListAsync(cancellationToken);

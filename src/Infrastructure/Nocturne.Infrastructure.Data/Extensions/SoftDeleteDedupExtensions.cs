@@ -60,18 +60,16 @@ public static class SoftDeleteDedupExtensions
     /// </summary>
     public static IQueryable<TEntity> UserTombstones<TEntity>(this NocturneDbContext ctx)
         where TEntity : class, ITenantScoped, ISoftDeletable
-        => ctx.Set<TEntity>().UserTombstones(ctx);
+        => ctx.Set<TEntity>().UserTombstones();
 
     /// <summary>
     /// The rows of <paramref name="source"/> that are
-    /// <see cref="UserTombstones{TEntity}(NocturneDbContext)"/>: the soft-delete query filter is
-    /// lifted and the tenant predicate re-applied.
+    /// <see cref="UserTombstones{TEntity}(NocturneDbContext)"/>.
     /// </summary>
-    public static IQueryable<TEntity> UserTombstones<TEntity>(this IQueryable<TEntity> source, NocturneDbContext ctx)
+    public static IQueryable<TEntity> UserTombstones<TEntity>(this IQueryable<TEntity> source)
         where TEntity : class, ITenantScoped, ISoftDeletable
-        => source.IgnoreQueryFilters().AsNoTracking()
-            .Where(e => e.TenantId == ctx.TenantId
-                     && e.DeletedAt != null
+        => source.IncludingDeleted().AsNoTracking()
+            .Where(e => e.DeletedAt != null
                      && EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty));
 
     /// <summary>
@@ -162,9 +160,8 @@ public static class SoftDeleteDedupExtensions
         if (legacyIds.Count == 0)
             return RecreationBlocks<string>.None;
 
-        var blocking = await ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
-            .Where(e => e.TenantId == ctx.TenantId
-                     && e.LegacyId != null
+        var blocking = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => e.LegacyId != null
                      && legacyIds.Contains(e.LegacyId))
             .Where(within)
             .WhereBlocksRecreation()
@@ -202,9 +199,8 @@ public static class SoftDeleteDedupExtensions
             return RecreationBlocks<string>.None.Held;
 
         var ids = originalIds.ToList();
-        var held = await ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
-            .Where(e => e.TenantId == ctx.TenantId
-                     && e.OriginalId != null
+        var held = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => e.OriginalId != null
                      && ids.Contains(e.OriginalId))
             .Where(within)
             .WhereBlocksRecreation()
@@ -237,9 +233,8 @@ public static class SoftDeleteDedupExtensions
             return await ctx.GetBlockingLegacyIdsAsync<TEntity>(clientIds.Keys.ToHashSet(StringComparer.Ordinal), ct);
 
         var legacyIds = clientIds.Keys.ToList();
-        var blocking = await ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
-            .Where(e => e.TenantId == ctx.TenantId
-                     && e.LegacyId != null
+        var blocking = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => e.LegacyId != null
                      && legacyIds.Contains(e.LegacyId))
             .WhereBlocksRecreation()
             .Select(e => new
@@ -268,9 +263,8 @@ public static class SoftDeleteDedupExtensions
         if (correlationIds.Count == 0)
             return RecreationBlocks<Guid>.None;
 
-        var blocking = await ctx.DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
-            .Where(e => e.TenantId == ctx.TenantId
-                     && correlationIds.Contains(e.CorrelationId))
+        var blocking = await ctx.DeviceStatusExtras.IncludingDeleted().AsNoTracking()
+            .Where(e => correlationIds.Contains(e.CorrelationId))
             .WhereBlocksRecreation()
             .Select(e => new { Key = e.CorrelationId, Live = e.DeletedAt == null })
             .ToListAsync(ct);
