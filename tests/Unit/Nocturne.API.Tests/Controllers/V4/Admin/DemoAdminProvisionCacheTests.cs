@@ -99,7 +99,7 @@ public class DemoAdminProvisionCacheTests : IDisposable
         await tenants.SetShareTokenAsync(
             demo.Id, new ShareTokenState(CredentialHash.ShareToken(token), "cipher", DateTime.UtcNow), CancellationToken.None);
 
-        var shareLinks = new ShareTokenCacheService(_cache, tenants, Mock.Of<ILogger<ShareTokenCacheService>>());
+        var shareLinks = new ShareTokenCacheService(_cache, tenants, Mock.Of<ILogger<ShareTokenCacheService>>(), TimeProvider.System);
         (await shareLinks.ResolveWithoutRecordingAccessAsync(token, CancellationToken.None))!
             .IsActive.Should().BeTrue();
 

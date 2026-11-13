@@ -92,6 +92,7 @@ public sealed class ShareLinkService : IShareLinkService
     private readonly ISecretEncryptionService _secrets;
     private readonly ILogger<ShareLinkService> _logger;
     private readonly string _baseDomain;
+    private readonly TimeProvider _timeProvider;
 
     public ShareLinkService(
         INocturneDbContextFactory contexts,
@@ -102,7 +103,8 @@ public sealed class ShareLinkService : IShareLinkService
         PublicAccessCacheService publicAccessCache,
         ISecretEncryptionService secrets,
         ILogger<ShareLinkService> logger,
-        IOptions<BaseDomainOptions> baseDomain)
+        IOptions<BaseDomainOptions> baseDomain,
+        TimeProvider timeProvider)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
@@ -113,6 +115,7 @@ public sealed class ShareLinkService : IShareLinkService
         _secrets = secrets;
         _logger = logger;
         _baseDomain = baseDomain.Value.BaseDomain;
+        _timeProvider = timeProvider;
     }
 
     public async Task<ShareLinkDto> GetAsync(Guid tenantId, CancellationToken ct = default)
@@ -149,7 +152,7 @@ public sealed class ShareLinkService : IShareLinkService
         var oldTokenHash = tenant.ShareTokenHash;
         var wasEnabled = oldTokenHash != null;
         var newToken = await GenerateUniqueTokenAsync(tenants, ct);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         // On first enable, seed the default public scopes (glucose reads alone) as direct
         // permissions on the Public subject, and default to a 24-hour window. Re-rotation only
@@ -183,7 +186,7 @@ public sealed class ShareLinkService : IShareLinkService
         var members = new TenantMembershipRepository(unit);
         var (tenant, member) = await ReadAsync(tenants, members, tenantId, ct);
         var oldTokenHash = tenant.ShareTokenHash;
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         await unit.CommitAsync(async t =>
         {
@@ -212,7 +215,7 @@ public sealed class ShareLinkService : IShareLinkService
         if (member is null)
             throw new InvalidOperationException("Public subject membership not found");
 
-        await _members.SetLimitTo24HoursAsync(tenantId, member.Id, !fullHistory, DateTime.UtcNow, ct);
+        await _members.SetLimitTo24HoursAsync(tenantId, member.Id, !fullHistory, _timeProvider.GetUtcNow().UtcDateTime, ct);
         _publicAccessCache.Evict(tenantId);
 
         return ToDto(tenant, member with { LimitTo24Hours = !fullHistory });
@@ -232,7 +235,7 @@ public sealed class ShareLinkService : IShareLinkService
             throw new InvalidOperationException("Public subject membership not found");
 
         var permissions = scopes.Distinct().ToList();
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         await unit.CommitAsync(async t =>
         {

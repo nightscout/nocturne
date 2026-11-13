@@ -20,10 +20,12 @@ namespace Nocturne.API.Services.Auth;
 public sealed class GrantRevocationService
 {
     private readonly GuestSessionCacheService _guestSessionCache;
+    private readonly TimeProvider _timeProvider;
 
-    public GrantRevocationService(GuestSessionCacheService guestSessionCache)
+    public GrantRevocationService(GuestSessionCacheService guestSessionCache, TimeProvider timeProvider)
     {
         _guestSessionCache = guestSessionCache;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -49,7 +51,7 @@ public sealed class GrantRevocationService
         IReadOnlyCollection<OAuthGrantRecord> grants,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var grantIds = grants.Select(g => g.Id).ToList();
 
         await new OAuthGrantRepository(unit).RevokeAsync(grantIds, now, ct);

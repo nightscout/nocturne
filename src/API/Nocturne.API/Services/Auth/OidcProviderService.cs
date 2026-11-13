@@ -21,6 +21,7 @@ public class OidcProviderService : IOidcProviderService
     private readonly ILogger<OidcProviderService> _logger;
     private readonly IDataProtector _clientSecretProtector;
     private readonly OidcOptions _oidcOptions;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="OidcProviderService"/>.
@@ -32,12 +33,14 @@ public class OidcProviderService : IOidcProviderService
     /// Used to create a scoped <see cref="IDataProtector"/> for encrypting client secrets at rest.
     /// </param>
     /// <param name="oidcOptions">Config-file OIDC provider definitions for config-managed mode.</param>
+    /// <param name="timeProvider">Clock for the discovery document cache age and stamp.</param>
     public OidcProviderService(
         IOidcProviderRepository providers,
         IHttpClientFactory httpClientFactory,
         ILogger<OidcProviderService> logger,
         IDataProtectionProvider dataProtectionProvider,
-        IOptions<OidcOptions> oidcOptions
+        IOptions<OidcOptions> oidcOptions,
+        TimeProvider timeProvider
     )
     {
         _providers = providers ?? throw new ArgumentNullException(nameof(providers));
@@ -47,6 +50,7 @@ public class OidcProviderService : IOidcProviderService
             "Nocturne.API.Services.Auth.OidcProviderService.ClientSecret.v1"
         );
         _oidcOptions = oidcOptions.Value;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -82,7 +86,8 @@ public class OidcProviderService : IOidcProviderService
             Icon: config.Icon,
             ButtonColor: config.ButtonColor)).ToList();
 
-        await providers.SyncConfiguredAsync(configured, DateTime.UtcNow, CancellationToken.None);
+        await providers.SyncConfiguredAsync(
+            configured, scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime, CancellationToken.None);
         logger.LogInformation("Synced {Count} config-managed OIDC providers to database", options.Providers.Count);
     }
 
@@ -221,7 +226,7 @@ public class OidcProviderService : IOidcProviderService
             !forceRefresh
             && record.DiscoveryDocumentJson != null
             && record.DiscoveryCachedAt.HasValue
-            && record.DiscoveryCachedAt.Value > DateTime.UtcNow.AddHours(-24)
+            && record.DiscoveryCachedAt.Value > _timeProvider.GetUtcNow().UtcDateTime.AddHours(-24)
         )
         {
             try
@@ -241,7 +246,7 @@ public class OidcProviderService : IOidcProviderService
         if (document != null)
         {
             await _providers.CacheDiscoveryDocumentAsync(
-                providerId, JsonSerializer.Serialize(document), DateTime.UtcNow, CancellationToken.None);
+                providerId, JsonSerializer.Serialize(document), _timeProvider.GetUtcNow().UtcDateTime, CancellationToken.None);
         }
 
         return document;
@@ -312,7 +317,7 @@ public class OidcProviderService : IOidcProviderService
             if (!IsConfigManaged)
             {
                 await _providers.CacheDiscoveryDocumentAsync(
-                    providerId, JsonSerializer.Serialize(document), DateTime.UtcNow, CancellationToken.None);
+                    providerId, JsonSerializer.Serialize(document), _timeProvider.GetUtcNow().UtcDateTime, CancellationToken.None);
             }
         }
         catch (Exception ex)

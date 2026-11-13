@@ -34,7 +34,7 @@ public class RecoveryCodeServiceTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        _service = new RecoveryCodeService(new RecoveryCodeRepository(_dbContext.AsFactory()), CheapDerive);
+        _service = new RecoveryCodeService(new RecoveryCodeRepository(_dbContext.AsFactory()), TimeProvider.System, CheapDerive);
     }
 
     /// <summary>
@@ -186,7 +186,7 @@ public class RecoveryCodeServiceTests : IDisposable
     private (RecoveryCodeService Service, Func<int> Derivations) CountingService()
     {
         var count = 0;
-        var service = new RecoveryCodeService(new RecoveryCodeRepository(_dbContext.AsFactory()), (code, salt) =>
+        var service = new RecoveryCodeService(new RecoveryCodeRepository(_dbContext.AsFactory()), TimeProvider.System, (code, salt) =>
         {
             count++;
             return CheapDerive(code, salt);
@@ -227,7 +227,7 @@ public class RecoveryCodeServiceTests : IDisposable
         RecoveryCodeService.Derive("AAAAABBBBB", salt).Should().Equal(
             Rfc2898DeriveBytes.Pbkdf2("AAAAABBBBB", salt, 100_000, HashAlgorithmName.SHA256, 32));
 
-        var service = new RecoveryCodeService(new RecoveryCodeRepository(_dbContext.AsFactory()));
+        var service = new RecoveryCodeService(new RecoveryCodeRepository(_dbContext.AsFactory()), TimeProvider.System);
         var codes = await service.GenerateCodesAsync(_subjectId);
 
         (await service.VerifyAndConsumeAsync(_subjectId, codes[0].ToLowerInvariant())).Should().BeTrue();

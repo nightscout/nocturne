@@ -24,7 +24,8 @@ public class OidcProviderServiceEnableTests
         new Mock<IHttpClientFactory>().Object,
         NullLogger<OidcProviderService>.Instance,
         new EphemeralDataProtectionProvider(),
-        Options.Create(new OidcOptions()));
+        Options.Create(new OidcOptions()),
+        TimeProvider.System);
 
     [Theory]
     [Trait("Category", "Unit")]
