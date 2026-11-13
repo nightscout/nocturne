@@ -28,19 +28,16 @@ public class RecoveryCodeService : IRecoveryCodeService
     private static readonly byte[] DummySalt = RandomNumberGenerator.GetBytes(SaltSize);
 
     private readonly IRecoveryCodeRepository _codes;
-    private readonly TimeProvider _timeProvider;
     private readonly Func<string, byte[], byte[]> _derive;
 
-    public RecoveryCodeService(IRecoveryCodeRepository codes, TimeProvider timeProvider)
-        : this(codes, timeProvider, Derive)
+    public RecoveryCodeService(IRecoveryCodeRepository codes)
+        : this(codes, Derive)
     {
     }
 
-    internal RecoveryCodeService(
-        IRecoveryCodeRepository codes, TimeProvider timeProvider, Func<string, byte[], byte[]> derive)
+    internal RecoveryCodeService(IRecoveryCodeRepository codes, Func<string, byte[], byte[]> derive)
     {
         _codes = codes ?? throw new ArgumentNullException(nameof(codes));
-        _timeProvider = timeProvider;
         _derive = derive;
     }
 
@@ -57,7 +54,7 @@ public class RecoveryCodeService : IRecoveryCodeService
             hashes.Add(Hash(NormalizeCode(code)));
         }
 
-        await _codes.ReplaceAsync(subjectId, hashes, _timeProvider.GetUtcNow().UtcDateTime, CancellationToken.None);
+        await _codes.ReplaceAsync(subjectId, hashes, DateTime.UtcNow, CancellationToken.None);
 
         return codes;
     }
@@ -87,12 +84,12 @@ public class RecoveryCodeService : IRecoveryCodeService
             return false;
         }
 
-        return await _codes.TryConsumeAsync(matchedId.Value, _timeProvider.GetUtcNow().UtcDateTime, CancellationToken.None);
+        return await _codes.TryConsumeAsync(matchedId.Value, DateTime.UtcNow, CancellationToken.None);
     }
 
     /// <inheritdoc />
     public Task InvalidateAllAsync(Guid subjectId) =>
-        _codes.InvalidateLiveAsync(subjectId, _timeProvider.GetUtcNow().UtcDateTime, CancellationToken.None);
+        _codes.InvalidateLiveAsync(subjectId, DateTime.UtcNow, CancellationToken.None);
 
     /// <inheritdoc />
     public Task<int> GetRemainingCountAsync(Guid subjectId) =>

@@ -27,7 +27,6 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     private readonly IOAuthClientService _clientService;
     private readonly IOAuthGrantService _grantService;
     private readonly ILogger<OAuthDeviceCodeService> _logger;
-    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="OAuthDeviceCodeService"/>.
@@ -37,14 +36,12 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <param name="clientService">Used to look up registered OAuth clients by ID.</param>
     /// <param name="grantService">Used to create or update grants when a device code is approved.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for device code expiry, approval and denial.</param>
     public OAuthDeviceCodeService(
         IOAuthTokenRepository tokens,
         IJwtService jwtService,
         IOAuthClientService clientService,
         IOAuthGrantService grantService,
-        ILogger<OAuthDeviceCodeService> logger,
-        TimeProvider timeProvider
+        ILogger<OAuthDeviceCodeService> logger
     )
     {
         _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
@@ -52,7 +49,6 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         _clientService = clientService;
         _grantService = grantService;
         _logger = logger;
-        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -106,7 +102,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
                 deviceCodeHash,
                 normalizedUserCode,
                 scopesList,
-                _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(DeviceCodeExpirationMinutes),
+                DateTime.UtcNow.AddMinutes(DeviceCodeExpirationMinutes),
                 DefaultPollingInterval),
             ct);
 
@@ -246,7 +242,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             ct: ct
         );
 
-        if (!await _tokens.ApproveDeviceCodeAsync(entity.Id, subjectId, grant.Id, _timeProvider.GetUtcNow().UtcDateTime, ct))
+        if (!await _tokens.ApproveDeviceCodeAsync(entity.Id, subjectId, grant.Id, DateTime.UtcNow, ct))
         {
             _logger.LogWarning(
                 "Cannot approve device code {UserCode}: it was deleted before the approval was stored",
@@ -303,7 +299,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        if (!await _tokens.DenyDeviceCodeAsync(entity.Id, _timeProvider.GetUtcNow().UtcDateTime, ct))
+        if (!await _tokens.DenyDeviceCodeAsync(entity.Id, DateTime.UtcNow, ct))
         {
             _logger.LogWarning(
                 "Cannot deny device code {UserCode}: it was deleted before the denial was stored",
@@ -320,7 +316,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         return true;
     }
 
-    private bool IsExpired(DeviceCodeRecord code) => _timeProvider.GetUtcNow().UtcDateTime >= code.ExpiresAt;
+    private static bool IsExpired(DeviceCodeRecord code) => DateTime.UtcNow >= code.ExpiresAt;
 
     /// <summary>
     /// Normalises a user code by stripping hyphens and spaces and converting to uppercase.

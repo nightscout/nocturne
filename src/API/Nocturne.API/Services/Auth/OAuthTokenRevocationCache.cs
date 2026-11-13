@@ -12,7 +12,6 @@ public class OAuthTokenRevocationCache : IOAuthTokenRevocationCache
 {
     private readonly ICacheService _cache;
     private readonly ILogger<OAuthTokenRevocationCache> _logger;
-    private readonly TimeProvider _timeProvider;
 
     private const string KeyPrefix = "oauth:revoked:";
 
@@ -21,12 +20,10 @@ public class OAuthTokenRevocationCache : IOAuthTokenRevocationCache
     /// </summary>
     /// <param name="cache">Distributed or in-process cache used for revocation markers.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for the revocation stamp.</param>
-    public OAuthTokenRevocationCache(ICacheService cache, ILogger<OAuthTokenRevocationCache> logger, TimeProvider timeProvider)
+    public OAuthTokenRevocationCache(ICacheService cache, ILogger<OAuthTokenRevocationCache> logger)
     {
         _cache = cache;
         _logger = logger;
-        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -40,7 +37,7 @@ public class OAuthTokenRevocationCache : IOAuthTokenRevocationCache
             return;
 
         var key = $"{KeyPrefix}{jti}";
-        await _cache.SetAsync(key, new RevokedTokenMarker { RevokedAt = _timeProvider.GetUtcNow().UtcDateTime }, remainingLifetime, ct);
+        await _cache.SetAsync(key, new RevokedTokenMarker { RevokedAt = DateTime.UtcNow }, remainingLifetime, ct);
 
         _logger.LogDebug("Marked token {Jti} as revoked, cache TTL {TTL}", jti, remainingLifetime);
     }

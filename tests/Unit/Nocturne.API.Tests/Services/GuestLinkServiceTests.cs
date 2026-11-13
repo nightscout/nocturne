@@ -48,9 +48,8 @@ public class GuestLinkServiceTests : IDisposable
         _service = new GuestLinkService(
             _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()),
             _sessionCache,
-            new GrantRevocationService(_sessionCache, TimeProvider.System),
-            NullLogger<GuestLinkService>.Instance,
-            TimeProvider.System);
+            new GrantRevocationService(_sessionCache),
+            NullLogger<GuestLinkService>.Instance);
     }
 
     [Fact]

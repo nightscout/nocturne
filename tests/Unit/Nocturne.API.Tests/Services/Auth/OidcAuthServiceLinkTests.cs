@@ -44,8 +44,7 @@ public class OidcAuthServiceLinkTests
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcAuthService>.Instance,
-            TimeProvider.System);
+            NullLogger<OidcAuthService>.Instance);
     }
 
     private static OidcAuthService.OidcStateData LinkState(Guid subjectId, string returnUrl = "/settings/account")

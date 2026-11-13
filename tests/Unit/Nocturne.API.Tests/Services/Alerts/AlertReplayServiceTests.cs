@@ -1,3 +1,5 @@
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
@@ -64,7 +66,8 @@ public class AlertReplayServiceTests
 
         var enricherDeps = new SensorContextEnricherDependencies(
             new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
-                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, Mock.Of<ITherapyTimelineResolver>(), Mock.Of<IStateSpanRepository>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+                TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
             _treatmentService.Object,

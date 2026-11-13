@@ -20,7 +20,6 @@ public class OAuthGrantService : IOAuthGrantService
     private readonly GuestSessionCacheService _guestSessionCache;
     private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<OAuthGrantService> _logger;
-    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="OAuthGrantService"/>.
@@ -33,15 +32,13 @@ public class OAuthGrantService : IOAuthGrantService
     /// <param name="guestSessionCache">Cache evicted when a grant's scopes are narrowed.</param>
     /// <param name="grantRevocation">Applies the consequences of a revoke.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for the grant's last-use stamp.</param>
     public OAuthGrantService(
         INocturneDbContextFactory contexts,
         IOAuthGrantRepository grants,
         IOAuthClientService clientService,
         GuestSessionCacheService guestSessionCache,
         GrantRevocationService grantRevocation,
-        ILogger<OAuthGrantService> logger,
-        TimeProvider timeProvider)
+        ILogger<OAuthGrantService> logger)
     {
         _contexts = contexts;
         _grants = grants;
@@ -49,7 +46,6 @@ public class OAuthGrantService : IOAuthGrantService
         _guestSessionCache = guestSessionCache;
         _grantRevocation = grantRevocation;
         _logger = logger;
-        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -178,7 +174,7 @@ public class OAuthGrantService : IOAuthGrantService
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default) =>
-        _grants.RecordUseAsync(grantId, _timeProvider.GetUtcNow().UtcDateTime, new GrantPresentation(ipAddress, userAgent), ct);
+        _grants.RecordUseAsync(grantId, DateTime.UtcNow, new GrantPresentation(ipAddress, userAgent), ct);
 
     /// <summary>The grant as the management UI and token minting see it.</summary>
     internal static OAuthGrantInfo ToInfo(OAuthGrantRecord grant)

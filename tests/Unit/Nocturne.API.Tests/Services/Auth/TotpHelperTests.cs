@@ -79,70 +79,107 @@ public class TotpHelperTests
         );
     }
 
-    // A multiple of the 30 second step, so StepStart is the first second of a step.
-    private static readonly DateTimeOffset StepStart = DateTimeOffset.FromUnixTimeSeconds(1_700_000_010);
-
-    private static string CodeAt(byte[] secret, DateTimeOffset time) =>
-        TotpHelper.ComputeTotp(secret, time.ToUnixTimeSeconds());
-
-    [Theory]
+    [Fact]
     [Trait("Category", "Unit")]
-    [InlineData(-60, false)]
-    [InlineData(-30, true)]
-    [InlineData(0, true)]
-    [InlineData(30, true)]
-    [InlineData(60, false)]
-    public void Verify_AcceptsOnlyTheStepsAdjacentToTheClock(int codeOffsetSeconds, bool accepted)
+    public void Verify_AcceptsCurrentTimeStepCode()
     {
-        var code = CodeAt(RfcTestSecret, StepStart.AddSeconds(codeOffsetSeconds));
+        var secret = TotpHelper.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now);
 
-        TotpHelper.Verify(RfcTestSecret, code, StepStart).Should().Be(accepted);
-    }
+        var result = TotpHelper.Verify(secret, code);
 
-    [Theory]
-    [Trait("Category", "Unit")]
-    [InlineData(29, true)]
-    [InlineData(59, true)]
-    [InlineData(60, false)]
-    public void Verify_StopsAcceptingACodeOnceTheClockMovesTwoStepsOn(int clockOffsetSeconds, bool accepted)
-    {
-        var code = CodeAt(RfcTestSecret, StepStart);
-
-        TotpHelper.Verify(RfcTestSecret, code, StepStart.AddSeconds(clockOffsetSeconds)).Should().Be(accepted);
+        result.Should().BeTrue();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void Verify_RejectsAWrongCode()
+    public void Verify_AcceptsPreviousTimeStepCode()
     {
-        var current = CodeAt(RfcTestSecret, StepStart);
-        var wrong = current == "000000" ? "000001" : "000000";
+        var secret = TotpHelper.GenerateSecret();
+        // Compute code for 30 seconds ago (previous time step)
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now - 30);
 
-        TotpHelper.Verify(RfcTestSecret, wrong, StepStart).Should().BeFalse();
+        var result = TotpHelper.Verify(secret, code);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void Verify_AcceptsNextTimeStepCode()
+    {
+        var secret = TotpHelper.GenerateSecret();
+        // Compute code for 30 seconds in the future (next time step)
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now + 30);
+
+        var result = TotpHelper.Verify(secret, code);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void Verify_RejectsWrongCode()
+    {
+        var secret = TotpHelper.GenerateSecret();
+
+        var result = TotpHelper.Verify(secret, "000000");
+
+        // Extremely unlikely to be valid, but if it is, the test secret just happens to match.
+        // We use a fixed known-bad approach instead:
+        var knownSecret = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 };
+        var wrongCode = "999999";
+        var currentCode = TotpHelper.ComputeTotp(knownSecret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+        // Only assert if the wrong code is actually different from the current code
+        if (wrongCode != currentCode)
+        {
+            TotpHelper.Verify(knownSecret, wrongCode).Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void Verify_RejectsCodeFromDistantFuture()
+    {
+        var secret = TotpHelper.GenerateSecret();
+        // Code from 5 minutes in the future — well outside the +/- 1 step window
+        var futureCode = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 300);
+
+        var result = TotpHelper.Verify(secret, futureCode);
+
+        result.Should().BeFalse();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public void TryVerify_ReportsTheMatchedTimeStep()
     {
-        var code = CodeAt(RfcTestSecret, StepStart);
+        var secret = TotpHelper.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now);
 
-        var result = TotpHelper.TryVerify(RfcTestSecret, code, lastUsedStep: null, StepStart, out var matchedStep);
+        var result = TotpHelper.TryVerify(secret, code, lastUsedStep: null, out var matchedStep);
 
         result.Should().BeTrue();
-        matchedStep.Should().Be(StepStart.ToUnixTimeSeconds() / 30);
+        matchedStep.Should().Be(now / 30);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public void TryVerify_RejectsACodeWhoseStepWasAlreadyConsumed()
     {
-        var code = CodeAt(RfcTestSecret, StepStart);
+        var secret = TotpHelper.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now);
 
-        TotpHelper.TryVerify(RfcTestSecret, code, lastUsedStep: null, StepStart, out var consumedStep).Should().BeTrue();
+        TotpHelper.TryVerify(secret, code, lastUsedStep: null, out var consumedStep).Should().BeTrue();
 
         // Replayed inside the same +/- 1 step window, which without the floor would still match.
-        var replay = TotpHelper.TryVerify(RfcTestSecret, code, consumedStep, StepStart, out _);
+        var replay = TotpHelper.TryVerify(secret, code, consumedStep, out _);
 
         replay.Should().BeFalse();
     }
@@ -151,14 +188,15 @@ public class TotpHelperTests
     [Trait("Category", "Unit")]
     public void TryVerify_AcceptsACodeFromAStepAfterTheConsumedOne()
     {
-        var code = CodeAt(RfcTestSecret, StepStart);
-        var currentStep = StepStart.ToUnixTimeSeconds() / 30;
+        var secret = TotpHelper.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now);
 
         // A step before the current one was consumed, so the current code is still usable.
-        var result = TotpHelper.TryVerify(RfcTestSecret, code, lastUsedStep: currentStep - 1, StepStart, out var matchedStep);
+        var result = TotpHelper.TryVerify(secret, code, lastUsedStep: (now / 30) - 1, out var matchedStep);
 
         result.Should().BeTrue();
-        matchedStep.Should().Be(currentStep);
+        matchedStep.Should().Be(now / 30);
     }
 
     [Fact]

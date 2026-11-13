@@ -350,9 +350,8 @@ public class OAuthTokenServiceTests : IDisposable
             _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
             Mock.Of<IOAuthClientService>(),
             guestSessionCache,
-            new GrantRevocationService(guestSessionCache, TimeProvider.System),
-            Mock.Of<ILogger<OAuthGrantService>>(),
-            TimeProvider.System);
+            new GrantRevocationService(guestSessionCache),
+            Mock.Of<ILogger<OAuthGrantService>>());
 
         var result = await CreateService(db, grantService).ExchangeAuthorizationCodeAsync(
             testCode, TestCodeVerifier, TestRedirectUri, TestClientId);

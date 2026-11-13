@@ -75,24 +75,21 @@ public class LoginCodeService : ILoginCodeService
     /// tenant. A recovery code is a bearer link that outlives the situation it was issued for, so
     /// it stops working once the member enrols a passkey or a newer code replaces it.
     /// </summary>
-    public static Task VoidRecoveryCodesAsync(
-        NocturneDbContext dbContext, Guid subjectId, DateTimeOffset now, CancellationToken ct = default)
+    public static Task VoidRecoveryCodesAsync(NocturneDbContext dbContext, Guid subjectId, CancellationToken ct = default)
     {
-        var consumedAt = now.UtcDateTime;
+        var now = DateTime.UtcNow;
         return dbContext.LoginCodes
             .Where(c => c.SubjectId == subjectId && c.ConsumedAt == null && RecoveryPurposes.Contains(c.Purpose))
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, consumedAt), ct);
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, now), ct);
     }
 
     private readonly IJwtService _jwtService;
     private readonly IAuthAuditService _auditService;
-    private readonly TimeProvider _timeProvider;
 
-    public LoginCodeService(IJwtService jwtService, IAuthAuditService auditService, TimeProvider timeProvider)
+    public LoginCodeService(IJwtService jwtService, IAuthAuditService auditService)
     {
         _jwtService = jwtService;
         _auditService = auditService;
-        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -105,15 +102,14 @@ public class LoginCodeService : ILoginCodeService
         AuthAuditActor actor,
         CancellationToken ct = default)
     {
-        var clock = _timeProvider.GetUtcNow();
-        var now = clock.UtcDateTime;
+        var now = DateTime.UtcNow;
 
         await dbContext.LoginCodes
             .Where(c => c.ConsumedAt != null || c.ExpiresAt <= now)
             .ExecuteDeleteAsync(ct);
 
         if (RecoveryPurposes.Contains(purpose))
-            await VoidRecoveryCodesAsync(dbContext, subjectId, clock, ct);
+            await VoidRecoveryCodesAsync(dbContext, subjectId, ct);
 
         var code = _jwtService.GenerateRefreshToken();
         var entity = new LoginCodeEntity
@@ -148,7 +144,7 @@ public class LoginCodeService : ILoginCodeService
         CancellationToken ct = default)
     {
         var codeHash = HashUtils.Sha256Hex(code);
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var now = DateTime.UtcNow;
 
         // Claiming and checking in one statement is what makes the code single-use: consumption
         // state is not a concurrency token, so a read-then-write would let two simultaneous

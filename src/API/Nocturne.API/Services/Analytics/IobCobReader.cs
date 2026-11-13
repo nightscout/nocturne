@@ -1,9 +1,13 @@
 using Nocturne.API.Services.Caching;
 using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Clinical.Treatments;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Analytics;
 
@@ -11,7 +15,8 @@ namespace Nocturne.API.Services.Analytics;
 /// <remarks>
 /// A live reading is held in the local tier of <see cref="ITenantCache"/> for a minute, so a
 /// history-clamped reader, which has no cache partition, always computes it. A reading at a past
-/// instant (replay, a requested time) is never cached: the key names only the present.
+/// instant (replay, a requested time) is never cached: the key names only the present. A series is
+/// never cached.
 /// </remarks>
 public sealed class IobCobReader(
     IIobCalculator iobCalculator,
@@ -19,11 +24,23 @@ public sealed class IobCobReader(
     IBolusRepository bolusRepository,
     ITempBasalRepository tempBasalRepository,
     ICarbIntakeRepository carbIntakeRepository,
+    ITherapyTimelineResolver therapyTimelineResolver,
+    IStateSpanRepository stateSpanRepository,
+    IApsSnapshotRepository apsSnapshotRepository,
+    IPumpSnapshotRepository pumpSnapshotRepository,
     ITenantCache cache,
     ILogger<IobCobReader> logger
-) : IIobCobReader
+) : IIobCobReader, IIobCobSeriesReader
 {
     private const int Limit = 1000;
+
+    /// <summary>
+    /// The most boluses, and the most carb intakes, a series reads; temp basals are read under
+    /// <see cref="ChartDataService.TempBasalQueryLimit"/>. The read is ascending, so a window that
+    /// holds more loses its newest records.
+    /// </summary>
+    private const int SeriesTreatmentLimit = 5000;
+
     private const string LiveCacheKey = "iobcob:current";
     private static readonly TimeSpan LiveCacheDuration = TimeSpan.FromMinutes(1);
 
@@ -78,5 +95,43 @@ public sealed class IobCobReader(
             logger.LogWarning(ex, "COB calculation failed at {At}; reporting IOB without it", at);
             return null;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<IobCobSeriesReading> ReadSeriesAsync(
+        IobCobSeriesWindow window, long nowMills, bool readCarbs, CancellationToken ct = default)
+    {
+        var to = DateTimeOffset.FromUnixTimeMilliseconds(window.ReadEnd).UtcDateTime;
+        var insulinFrom = DateTimeOffset.FromUnixTimeMilliseconds(window.InsulinReadStart).UtcDateTime;
+
+        List<Bolus> boluses = [.. await bolusRepository.GetAsync(
+            from: insulinFrom, to: to, device: null, source: null,
+            limit: SeriesTreatmentLimit, offset: 0, descending: false, ct: ct)];
+        List<TempBasal> tempBasals = [.. await tempBasalRepository.GetAsync(
+            from: DateTimeOffset.FromUnixTimeMilliseconds(window.TempBasalReadStart).UtcDateTime, to: to,
+            device: null, source: null,
+            limit: ChartDataService.TempBasalQueryLimit, offset: 0, descending: false, ct: ct)];
+        List<CarbIntake> carbIntakes = readCarbs
+            ? [.. await carbIntakeRepository.GetAsync(
+                from: insulinFrom, to: to, device: null, source: null,
+                limit: SeriesTreatmentLimit, offset: 0, descending: false, ct: ct)]
+            : [];
+
+        var timeline = await therapyTimelineResolver.BuildAsync(window.TherapyStart, window.TimelineEnd, ct: ct);
+        var scheduled = new ScheduledBasal(
+            timeline.BasalSegments(),
+            await ScheduledBasal.OverridesAsync(stateSpanRepository, window.TherapyStart, window.OverrideEnd, ct));
+
+        var deviceFrom = DateTimeOffset.FromUnixTimeMilliseconds(window.DeviceReadStart).UtcDateTime;
+        var deviceTo = DateTimeOffset.FromUnixTimeMilliseconds(window.DeviceReadEnd).UtcDateTime;
+        var devices = DeviceReadings.Of(
+            await apsSnapshotRepository.GetIobCobPointsAsync(deviceFrom, deviceTo, ct),
+            await pumpSnapshotRepository.GetIobPointsAsync(deviceFrom, deviceTo, ct));
+
+        var ticks = IobCobSeries.Build(
+            iobCalculator, cobCalculator, boluses, carbIntakes, tempBasals, timeline, scheduled, devices,
+            window.FirstTick, window.LastTick, nowMills, window.IntervalMs, ct);
+
+        return new IobCobSeriesReading(ticks, boluses, carbIntakes, tempBasals, timeline, scheduled);
     }
 }

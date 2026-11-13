@@ -36,7 +36,6 @@ public class PasskeyService : IPasskeyService
     private readonly Fido2Configuration _fido2Config;
     private readonly ILogger<PasskeyService> _logger;
     private readonly IHostEnvironment _environment;
-    private readonly TimeProvider _timeProvider;
 
     /// <param name="passkeys">Repository for the stored passkey credentials.</param>
     /// <param name="subjects">Repository for finding the tenant member a username names.</param>
@@ -46,7 +45,6 @@ public class PasskeyService : IPasskeyService
     /// <param name="fido2Options">FIDO2 configuration options (rpId, rpName, allowed origins, attestation preference).</param>
     /// <param name="logger">Logger for credential registration, assertion and removal, and challenge token failures.</param>
     /// <param name="environment">The hosting environment used to adjust origin validation in development.</param>
-    /// <param name="timeProvider">Clock for the challenge token expiry and the credential stamps.</param>
     public PasskeyService(
         IPasskeyCredentialRepository passkeys,
         ISubjectRepository subjects,
@@ -55,8 +53,7 @@ public class PasskeyService : IPasskeyService
         IDataProtectionProvider dataProtectionProvider,
         Microsoft.Extensions.Options.IOptions<Fido2Configuration> fido2Options,
         ILogger<PasskeyService> logger,
-        IHostEnvironment environment,
-        TimeProvider timeProvider)
+        IHostEnvironment environment)
     {
         _passkeys = passkeys ?? throw new ArgumentNullException(nameof(passkeys));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
@@ -66,7 +63,6 @@ public class PasskeyService : IPasskeyService
         _fido2Config = fido2Options.Value;
         _logger = logger;
         _environment = environment;
-        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -220,7 +216,7 @@ public class PasskeyService : IPasskeyService
                 string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
                 // AaGuid is not directly exposed by Fido2NetLib v4 RegisteredPublicKeyCredential
                 AaGuid: null,
-                _timeProvider.GetUtcNow().UtcDateTime),
+                DateTime.UtcNow),
             CancellationToken.None);
 
         _logger.LogInformation(
@@ -298,7 +294,7 @@ public class PasskeyService : IPasskeyService
                 await _passkeys.ExistsAsync(args.CredentialId, ct),
         });
 
-        await _passkeys.RecordUseAsync(stored.Credential.Id, result.SignCount, _timeProvider.GetUtcNow().UtcDateTime, CancellationToken.None);
+        await _passkeys.RecordUseAsync(stored.Credential.Id, result.SignCount, DateTime.UtcNow, CancellationToken.None);
 
         var subject = stored.Holder;
 
@@ -337,7 +333,7 @@ public class PasskeyService : IPasskeyService
             OptionsJson = optionsJson,
             SubjectId = subjectId,
             Purpose = purpose,
-            ExpiresAt = _timeProvider.GetUtcNow().UtcDateTime.Add(ChallengeExpiry),
+            ExpiresAt = DateTime.UtcNow.Add(ChallengeExpiry),
         };
 
         var json = JsonSerializer.Serialize(payload);
@@ -368,7 +364,7 @@ public class PasskeyService : IPasskeyService
             throw new InvalidOperationException("Challenge token was issued for a different ceremony.");
         }
 
-        if (payload.ExpiresAt < _timeProvider.GetUtcNow().UtcDateTime)
+        if (payload.ExpiresAt < DateTime.UtcNow)
         {
             throw new InvalidOperationException("Challenge token has expired. Please restart the authentication flow.");
         }

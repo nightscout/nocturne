@@ -45,21 +45,18 @@ public class TotpService : ITotpService
     private readonly IDataProtector _protector;
     private readonly IDataProtector _stepUpProtector;
     private readonly ILogger<TotpService> _logger;
-    private readonly TimeProvider _timeProvider;
 
     /// <param name="contexts">Context factory for reading and redeeming the single-use step-up tokens.</param>
     /// <param name="credentials">Repository of the stored TOTP credentials and their consumed steps.</param>
     /// <param name="subjects">Repository for looking up the subject a step-up token names.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting setup challenge tokens.</param>
     /// <param name="logger">Logger for credential changes, rejected codes and undecryptable tokens.</param>
-    /// <param name="timeProvider">Clock for the code window and the challenge and step-up token expiry.</param>
     public TotpService(
         INocturneDbContextFactory contexts,
         ITotpCredentialRepository credentials,
         ISubjectRepository subjects,
         IDataProtectionProvider dataProtectionProvider,
-        ILogger<TotpService> logger,
-        TimeProvider timeProvider)
+        ILogger<TotpService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
@@ -69,7 +66,6 @@ public class TotpService : ITotpService
         // already knows) from being redeemed as proof that a primary factor completed.
         _stepUpProtector = dataProtectionProvider.CreateProtector("Nocturne.Totp.StepUp");
         _logger = logger;
-        _timeProvider = timeProvider;
     }
 
     public Task<TotpSetupResult> GenerateSetupAsync(Guid subjectId, string username)
@@ -86,21 +82,21 @@ public class TotpService : ITotpService
     {
         var payload = ReadChallengeToken(challengeToken);
 
-        var now = _timeProvider.GetUtcNow();
-        if (!TotpHelper.TryVerify(payload.Secret, code, lastUsedStep: null, now, out var setupStep))
+        if (!TotpHelper.TryVerify(payload.Secret, code, lastUsedStep: null, out var setupStep))
         {
             throw new TotpSetupException(TotpSetupFailure.InvalidCode);
         }
 
+        var now = DateTime.UtcNow;
         var credentialId = await _credentials.CreateAsync(
             new NewTotpCredential(
                 payload.SubjectId,
                 payload.Secret,
                 string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
-                now.UtcDateTime,
+                now,
                 // The code proving setup is consumed, so it cannot also be used to sign in.
                 LastUsedStep: setupStep,
-                LastUsedAt: now.UtcDateTime),
+                LastUsedAt: now),
             CancellationToken.None);
 
         _logger.LogInformation(
@@ -113,7 +109,6 @@ public class TotpService : ITotpService
     public async Task<string> CreateStepUpTokenAsync(Guid subjectId, Guid? tenantId, bool admittedByInvite)
     {
         await using var db = await _contexts.CreateAsync();
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
         // The subject lives on the row, not in the token, so the token cannot assert an identity of
         // its own and redemption reads the subject from state this service wrote.
         var entity = new TotpStepUpTokenEntity
@@ -122,8 +117,8 @@ public class TotpService : ITotpService
             SubjectId = subjectId,
             BoundTenantId = tenantId,
             AdmittedByInvite = admittedByInvite,
-            CreatedAt = now,
-            ExpiresAt = now.Add(StepUpExpiry),
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.Add(StepUpExpiry),
         };
 
         db.TotpStepUpTokens.Add(entity);
@@ -141,7 +136,6 @@ public class TotpService : ITotpService
     public async Task<TotpLoginResult?> VerifyStepUpAsync(string stepUpToken, string code)
     {
         await using var db = await _contexts.CreateAsync();
-        var now = _timeProvider.GetUtcNow();
         Guid tokenId;
         try
         {
@@ -156,13 +150,13 @@ public class TotpService : ITotpService
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == tokenId
                 && t.ConsumedAt == null
-                && t.ExpiresAt > now.UtcDateTime);
+                && t.ExpiresAt > DateTime.UtcNow);
 
         if (stepUp is null)
         {
             // An unknown, already-redeemed or expired token: verify against a dummy secret so the
             // response time does not distinguish it from a wrong code.
-            TotpHelper.Verify(DummySecret, code, now);
+            TotpHelper.Verify(DummySecret, code);
             return null;
         }
 
@@ -172,7 +166,7 @@ public class TotpService : ITotpService
         {
             // Constant-time side-channel protection: verify against a dummy secret
             // so the response time is indistinguishable from a real verification
-            TotpHelper.Verify(DummySecret, code, now);
+            TotpHelper.Verify(DummySecret, code);
             return null;
         }
 
@@ -193,13 +187,13 @@ public class TotpService : ITotpService
                 "TOTP credentials for subject {SubjectId} could not be decrypted; treating the "
                 + "attempt as failed. They must be removed and re-enrolled.",
                 subject.Id);
-            TotpHelper.Verify(DummySecret, code, now);
+            TotpHelper.Verify(DummySecret, code);
             return null;
         }
 
         if (credentials.Count == 0)
         {
-            TotpHelper.Verify(DummySecret, code, now);
+            TotpHelper.Verify(DummySecret, code);
             return null;
         }
 
@@ -209,7 +203,7 @@ public class TotpService : ITotpService
         var matchedStep = 0L;
         foreach (var credential in credentials)
         {
-            if (TotpHelper.TryVerify(credential.SecretKey, code, credential.LastUsedStep, now, out var step))
+            if (TotpHelper.TryVerify(credential.SecretKey, code, credential.LastUsedStep, out var step))
             {
                 matchedCredential = credential;
                 matchedStep = step;
@@ -226,9 +220,9 @@ public class TotpService : ITotpService
         // a mistyped code does not force the user back through the primary factor. No rows updated
         // means a concurrent request already redeemed it.
         var stepUpConsumed = await db.TotpStepUpTokens
-            .Where(t => t.Id == stepUp.Id && t.ConsumedAt == null && t.ExpiresAt > now.UtcDateTime)
+            .Where(t => t.Id == stepUp.Id && t.ConsumedAt == null && t.ExpiresAt > DateTime.UtcNow)
             .ExecuteUpdateAsync(setters => setters
-                .SetProperty(t => t.ConsumedAt, now.UtcDateTime));
+                .SetProperty(t => t.ConsumedAt, DateTime.UtcNow));
 
         if (stepUpConsumed == 0)
         {
@@ -240,7 +234,7 @@ public class TotpService : ITotpService
 
         // Consume the time step conditionally so two concurrent requests carrying the same code
         // cannot both succeed. False means another request already took it.
-        if (!await _credentials.TryConsumeStepAsync(matchedCredential.Id, matchedStep, now.UtcDateTime, CancellationToken.None))
+        if (!await _credentials.TryConsumeStepAsync(matchedCredential.Id, matchedStep, DateTime.UtcNow, CancellationToken.None))
         {
             _logger.LogWarning(
                 "TOTP code for subject {SubjectId} was already consumed for time step {TimeStep}",
@@ -282,7 +276,7 @@ public class TotpService : ITotpService
         {
             Secret = secret,
             SubjectId = subjectId,
-            ExpiresAt = _timeProvider.GetUtcNow().UtcDateTime.Add(ChallengeExpiry),
+            ExpiresAt = DateTime.UtcNow.Add(ChallengeExpiry),
         };
 
         var json = JsonSerializer.Serialize(payload);
@@ -305,7 +299,7 @@ public class TotpService : ITotpService
         var payload = JsonSerializer.Deserialize<TotpChallengePayload>(json)
             ?? throw new TotpSetupException(TotpSetupFailure.ChallengeUnreadable);
 
-        if (payload.ExpiresAt < _timeProvider.GetUtcNow().UtcDateTime)
+        if (payload.ExpiresAt < DateTime.UtcNow)
         {
             throw new TotpSetupException(TotpSetupFailure.ChallengeExpired);
         }
@@ -334,7 +328,7 @@ public class TotpService : ITotpService
         var payload = JsonSerializer.Deserialize<TotpStepUpPayload>(json)
             ?? throw new InvalidOperationException("Failed to deserialize step-up token payload.");
 
-        if (payload.ExpiresAt < _timeProvider.GetUtcNow().UtcDateTime)
+        if (payload.ExpiresAt < DateTime.UtcNow)
         {
             throw new InvalidOperationException("Step-up token has expired.");
         }

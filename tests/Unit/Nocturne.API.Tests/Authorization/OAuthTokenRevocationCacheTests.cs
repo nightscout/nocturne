@@ -23,7 +23,7 @@ public class OAuthTokenRevocationCacheTests
     {
         _mockCache = new Mock<ICacheService>();
         _mockLogger = new Mock<ILogger<OAuthTokenRevocationCache>>();
-        _cache = new OAuthTokenRevocationCache(_mockCache.Object, _mockLogger.Object, TimeProvider.System);
+        _cache = new OAuthTokenRevocationCache(_mockCache.Object, _mockLogger.Object);
     }
 
     [Fact]

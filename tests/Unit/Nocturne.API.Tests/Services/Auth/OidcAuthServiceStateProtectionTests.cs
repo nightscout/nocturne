@@ -44,8 +44,7 @@ public class OidcAuthServiceStateProtectionTests
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcAuthService>.Instance,
-            TimeProvider.System);
+            NullLogger<OidcAuthService>.Instance);
 
         _providerService
             .Setup(p => p.GetProviderByIdAsync(ProviderId))
@@ -196,8 +195,7 @@ public class OidcAuthServiceStateProtectionTests
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcAuthService>.Instance,
-            TimeProvider.System);
+            NullLogger<OidcAuthService>.Instance);
 
     private static JsonDocument? DecodeAsPlainJson(string state)
     {

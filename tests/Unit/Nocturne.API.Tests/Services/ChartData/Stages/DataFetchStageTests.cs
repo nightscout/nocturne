@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -25,7 +25,7 @@ public class DataFetchStageTests
     // Common test timestamps: 24-hour window
     private const long StartTime = 1700000000000L;
     private const long EndTime = 1700086400000L;
-    private const long BufferStartTime = StartTime - DailyProfileCalculator.ActingMs;
+    private static readonly IobCobSeriesWindow SeriesWindow = new(StartTime, EndTime, 5 * 60 * 1000L);
 
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepo = new();
     private readonly Mock<IBolusRepository> _mockBolusRepo = new();
@@ -217,7 +217,6 @@ public class DataFetchStageTests
             StartTime = StartTime,
             EndTime = EndTime,
             IntervalMinutes = 5,
-            BufferStartTime = BufferStartTime,
         };
 
         // Act
@@ -248,7 +247,6 @@ public class DataFetchStageTests
         // Assert — request parameters are preserved unchanged
         result.StartTime.Should().Be(StartTime);
         result.EndTime.Should().Be(EndTime);
-        result.BufferStartTime.Should().Be(BufferStartTime);
     }
 
     [Fact]
@@ -259,7 +257,6 @@ public class DataFetchStageTests
             StartTime = StartTime,
             EndTime = EndTime,
             IntervalMinutes = 5,
-            BufferStartTime = BufferStartTime,
         };
 
         await _stage.ExecuteAsync(inputContext, CancellationToken.None);
@@ -357,7 +354,6 @@ public class DataFetchStageTests
             StartTime = StartTime,
             EndTime = EndTime,
             IntervalMinutes = 5,
-            BufferStartTime = BufferStartTime,
         };
 
         var result = await _stage.ExecuteAsync(context, CancellationToken.None)
@@ -420,8 +416,7 @@ public class DataFetchStageTests
                 StartTime = StartTime,
                 EndTime = EndTime,
                 IntervalMinutes = 5,
-                BufferStartTime = BufferStartTime,
-            },
+                },
             CancellationToken.None);
 
         var waited = Stopwatch.StartNew();
@@ -447,7 +442,7 @@ public class DataFetchStageTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_FetchesTempBasalsFromBufferAndSelectsThoseOverlappingDisplayWindow()
+    public async Task ExecuteAsync_FetchesTempBasalsFromTheSeriesReadStartAndSelectsThoseOverlappingDisplayWindow()
     {
         var beforeWindow = new TempBasal
         {
@@ -501,15 +496,63 @@ public class DataFetchStageTests
                 StartTime = StartTime,
                 EndTime = EndTime,
                 IntervalMinutes = 5,
-                BufferStartTime = BufferStartTime,
-            },
+                },
             CancellationToken.None);
 
-        requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(BufferStartTime).UtcDateTime);
+        requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(SeriesWindow.TempBasalReadStart).UtcDateTime);
         requestedLimit.Should().Be(Nocturne.API.Services.Analytics.ChartDataService.TempBasalQueryLimit);
         requestedDescending.Should().BeFalse();
         result.TempBasalList.Should().BeEquivalentTo([beforeWindow, runningAcrossStart, atStart, inWindow]);
         result.DisplayTempBasals.Should().BeEquivalentTo([atStart, inWindow], "the temp at the window start cancels the one running across it");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReadsAnOpenTempThatBeganTenHoursBeforeTheWindow()
+    {
+        var open = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(StartTime - 10 * 60 * 60 * 1000L).UtcDateTime,
+            Rate = 0,
+            Origin = TempBasalOrigin.Suspended,
+        };
+        _mockTempBasalRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, CancellationToken _) =>
+                new[] { open }.Where(t => t.StartTimestamp >= from && t.StartTimestamp <= to).ToList());
+
+        var result = await _stage.ExecuteAsync(Window(includeHealthSeries: false), CancellationToken.None);
+
+        result.TempBasalList.Should().ContainSingle().Which.Should().BeSameAs(open);
+    }
+
+    [Fact]
+    public async Task TheChartAndTheStandaloneBasalReads_AskForTempBasalsFromTheSameStart()
+    {
+        var starts = new List<DateTime?>();
+        _mockTempBasalRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken>(
+                (from, _, _, _, _, _, _, _) => starts.Add(from))
+            .ReturnsAsync([]);
+        var service = new Nocturne.API.Services.Analytics.ChartDataService(
+            [], Mock.Of<IChartDataAssembler>(), Mock.Of<IBasalSeriesBuilder>(), _mockTempBasalRepo.Object,
+            _mockStateSpanRepo.Object, Mock.Of<ITherapySettingsResolver>(), Mock.Of<IBasalRateResolver>(),
+            new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(EndTime)),
+            NullLogger<Nocturne.API.Services.Analytics.ChartDataService>.Instance);
+
+        await _stage.ExecuteAsync(Window(includeHealthSeries: false), CancellationToken.None);
+        await service.GetBasalDeliverySpansAsync(StartTime, EndTime);
+
+        starts.Should().HaveCount(2);
+        starts[1].Should().Be(starts[0]);
     }
 
     [Fact]
@@ -581,7 +624,6 @@ public class DataFetchStageTests
         StartTime = StartTime,
         EndTime = EndTime,
         IntervalMinutes = 5,
-        BufferStartTime = BufferStartTime,
         IncludeHealthSeries = includeHealthSeries,
     };
 }
