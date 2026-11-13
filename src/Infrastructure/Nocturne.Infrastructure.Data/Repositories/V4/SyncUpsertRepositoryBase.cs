@@ -170,43 +170,23 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     {
         // Records without both keys keep a unique grouping key so they're not collapsed.
         entities = entities
-            .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
-                ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
-                : $"id|{e.Id}")
+            .GroupBy(e => e.SyncKey() is { } key ? $"sync|{key}" : $"id|{e.Id}")
             .Select(g => g.Last())
             .ToList();
 
-        var syncKeyed = entities
-            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
-            .ToList();
-
-        if (syncKeyed.Count == 0)
+        if (!entities.Any(e => e.SyncKey() is not null))
             return UpsertSplit.Empty(entities);
 
-        var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
-        var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
-
-        // Over-fetches by a Cartesian amount. The live partial unique index and its user-tombstone
-        // companion on (tenant_id, data_source, sync_identifier) answer the WhereBlocksRecreation OR
-        // together: a user delete holds the key, a system sweep does not.
-        var existingRows = await ctx.Set<TEntity>().IgnoreQueryFilters()
+        var existingByKey = await ctx.Set<TEntity>().IgnoreQueryFilters()
             .Where(e => e.TenantId == ctx.TenantId)
-            .WhereBlocksRecreation()
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .ToListAsync(ct);
-
-        var existingByKey = existingRows
-            .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.GoverningRow()!);
+            .GoverningRowsBySyncKeyAsync(entities, ct);
 
         var toInsert = new List<TEntity>();
         var split = UpsertSplit.Empty(toInsert);
         var skippedDeleted = 0;
         foreach (var entity in entities)
         {
-            var hasKey = !string.IsNullOrEmpty(entity.DataSource)
-                && !string.IsNullOrEmpty(entity.SyncIdentifier);
-            if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
+            if (entity.SyncKey() is { } key && existingByKey.TryGetValue(key, out var existing))
             {
                 if (existing.DeletedAt != null)
                 {

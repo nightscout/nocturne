@@ -1,4 +1,5 @@
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Caching;
@@ -119,12 +120,10 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             stateSpanRepository, NullLogger<StateSpanService>.Instance);
 
         var heartRateService = new HeartRateService(
-            _context.AsFactory(), processing.Object, Mock.Of<ISignalRBroadcastService>(),
-            TimeProvider.System, NullLogger<HeartRateService>.Instance);
+            new HeartRateRepository(_context.AsFactory(), TimeProvider.System), processing.Object, Mock.Of<ISignalRBroadcastService>());
 
         var stepCountService = new StepCountService(
-            _context.AsFactory(), processing.Object, Mock.Of<ISignalRBroadcastService>(),
-            TimeProvider.System, NullLogger<StepCountService>.Instance);
+            new StepCountRepository(_context.AsFactory(), TimeProvider.System), processing.Object, Mock.Of<ISignalRBroadcastService>());
 
         var sleepService = Mock.Of<ISleepService>();
         var activityService = new ActivityService(

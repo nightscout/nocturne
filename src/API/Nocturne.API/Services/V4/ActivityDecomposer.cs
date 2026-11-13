@@ -245,7 +245,7 @@ public class ActivityDecomposer : IActivityDecomposer
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Soft-deletes, as <c>SimpleEntityService.DeleteOneAsync</c> does: the tombstone a user's delete
+    /// Soft-deletes, as <c>HealthSeriesRepository.DeleteAsync</c> does: the tombstone a user's delete
     /// leaves is what keeps a connector resync from bringing the record back
     /// (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
     /// </remarks>
