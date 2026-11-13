@@ -101,7 +101,8 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             _mockJwtService.Object,
             _mockClientService.Object,
             _mockGrantService.Object,
-            _mockLogger.Object
+            _mockLogger.Object,
+            TimeProvider.System
         );
     }
 

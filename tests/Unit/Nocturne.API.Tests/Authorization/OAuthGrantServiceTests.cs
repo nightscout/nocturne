@@ -68,8 +68,9 @@ public class OAuthGrantServiceTests : IDisposable
             _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
             _mockClientService.Object,
             _guestSessionCache,
-            new GrantRevocationService(_guestSessionCache),
-            _mockLogger.Object);
+            new GrantRevocationService(_guestSessionCache, TimeProvider.System),
+            _mockLogger.Object,
+            TimeProvider.System);
     }
 
     /// <summary>

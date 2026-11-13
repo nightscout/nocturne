@@ -101,7 +101,8 @@ public class PasskeyControllerTests : IDisposable
             new TenantMembershipRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
             (new SharedSqliteFactory(_db.Options)).AsNocturneFactory(),
             oidcOptions,
-            logger.Object);
+            logger.Object,
+            TimeProvider.System);
 
         // Set up HttpContext with response cookies
         var httpContext = new DefaultHttpContext();
@@ -581,7 +582,8 @@ public class PasskeyControllerTests : IDisposable
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts)),
             new SubjectRepository(tenantContexts), new TenantRepository(tenantContexts), new TenantMembershipRepository(tenantContexts),
-            tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+            tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object,
+            TimeProvider.System)
         {
             ControllerContext = _controller.ControllerContext,
         };
@@ -616,7 +618,8 @@ public class PasskeyControllerTests : IDisposable
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object)),
             new SubjectRepository(failingContexts.Object), new TenantRepository(failingContexts.Object), new TenantMembershipRepository(failingContexts.Object),
-            failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+            failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object,
+            TimeProvider.System)
         {
             ControllerContext = _controller.ControllerContext,
         };

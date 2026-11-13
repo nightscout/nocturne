@@ -47,12 +47,12 @@ public sealed class TenantServiceShareLinkEvictionTests : IDisposable
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
         new GrantRevocationService(
-            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())), TimeProvider.System),
         TimeProvider.System,
         Mock.Of<ILogger<TenantService>>());
 
     private ShareTokenCacheService ShareLinks() =>
-        new(_cache, Tenants(), Mock.Of<ILogger<ShareTokenCacheService>>());
+        new(_cache, Tenants(), Mock.Of<ILogger<ShareTokenCacheService>>(), TimeProvider.System);
 
     private async Task<TenantContext?> ResolveShareLinkAsync() =>
         await ShareLinks().ResolveWithoutRecordingAccessAsync(Token, CancellationToken.None);

@@ -61,7 +61,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
         new GrantRevocationService(
-            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())), TimeProvider.System),
         TimeProvider.System,
         Mock.Of<ILogger<TenantService>>());
 

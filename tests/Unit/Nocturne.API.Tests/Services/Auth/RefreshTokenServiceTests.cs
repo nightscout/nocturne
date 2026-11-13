@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
@@ -19,13 +20,14 @@ public class RefreshTokenServiceTests
     private readonly JwtOptions _options = new() { RefreshTokenLifetimeDays = 7 };
     private readonly Guid _subjectId = Guid.CreateVersion7();
 
-    private RefreshTokenService CreateService() =>
+    private RefreshTokenService CreateService(TimeProvider? clock = null) =>
         new(
             _repository.Object,
             _jwtService.Object,
             _successorCache.Object,
             Options.Create(_options),
-            NullLogger<RefreshTokenService>.Instance);
+            NullLogger<RefreshTokenService>.Instance,
+            clock ?? TimeProvider.System);
 
     #region CreateRefreshTokenAsync
 
@@ -498,6 +500,72 @@ public class RefreshTokenServiceTests
         _successorCache.Verify(
             c => c.GetAsync(It.IsAny<string>(), default),
             Times.Never);
+    }
+
+    #endregion
+
+    #region Fixed clock
+
+    private static readonly DateTimeOffset FixedNow = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateRefreshTokenAsync_StampsIssueAndExpiryFromTheClock()
+    {
+        _jwtService.Setup(j => j.GenerateRefreshToken()).Returns("plaintext-token");
+        _jwtService.Setup(j => j.HashRefreshToken("plaintext-token")).Returns("hashed");
+
+        await CreateService(new FakeTimeProvider(FixedNow)).CreateRefreshTokenAsync(_subjectId);
+
+        _repository.Verify(r => r.CreateAsync(
+            It.Is<RefreshTokenRecord>(rec =>
+                rec.IssuedAt == FixedNow.UtcDateTime &&
+                rec.ExpiresAt == FixedNow.UtcDateTime.AddDays(7)),
+            default));
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task ValidateRefreshTokenAsync_IsValidUpToItsExpiryInstantAndNotAfter(int msPastExpiry, bool valid)
+    {
+        var expiresAt = FixedNow.UtcDateTime.AddDays(7);
+        _jwtService.Setup(j => j.HashRefreshToken("token")).Returns("hash-token");
+        _repository.Setup(r => r.FindByHashAsync("hash-token", default))
+            .ReturnsAsync(MakeRecord(revokedAt: null, expiresAt: expiresAt));
+        var clock = new FakeTimeProvider(new DateTimeOffset(expiresAt, TimeSpan.Zero).AddMilliseconds(msPastExpiry));
+
+        var result = await CreateService(clock).ValidateRefreshTokenAsync("token");
+
+        (result is not null).Should().Be(valid);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(59, true)]
+    [InlineData(60, false)]
+    public async Task RotateRefreshTokenAsync_ReuseIsARaceUntilTheGracePeriodHasElapsed(int secondsSinceRevocation, bool isRace)
+    {
+        var revokedAt = FixedNow.UtcDateTime;
+        _jwtService.Setup(j => j.HashRefreshToken("rotated")).Returns("hash-rotated");
+        _repository.Setup(r => r.FindByHashAsync("hash-rotated", default))
+            .ReturnsAsync(MakeRecord(
+                revokedAt: revokedAt,
+                expiresAt: revokedAt.AddDays(7),
+                replacedByTokenId: Guid.CreateVersion7(),
+                oidcSessionId: "session-abc"));
+        var service = CreateService(new FakeTimeProvider(FixedNow.AddSeconds(secondsSinceRevocation)));
+
+        var rotate = () => service.RotateRefreshTokenAsync("rotated");
+
+        if (isRace)
+            await rotate.Should().ThrowAsync<TokenRotationRaceException>();
+        else
+            (await rotate()).Should().BeNull();
+        _repository.Verify(
+            r => r.RevokeByOidcSessionAsync("session-abc", "Token reuse detected", default),
+            isRace ? Times.Never : Times.Once);
     }
 
     #endregion

@@ -354,7 +354,7 @@ public class TotpServiceTests : IDisposable
 
         // The code still matches an accepted time step, and it is the recorded one — so single use
         // is the only thing left that can refuse it, not a crossed step boundary.
-        TotpHelper.TryVerify(secret, code, lastUsedStep: null, out var stillMatchedStep).Should().BeTrue();
+        TotpHelper.TryVerify(secret, code, lastUsedStep: null, DateTimeOffset.UtcNow, out var stillMatchedStep).Should().BeTrue();
         stillMatchedStep.Should().Be(consumedStep!.Value);
 
         // Same code, still inside the ±1 step acceptance window, fresh step-up token.
@@ -400,7 +400,7 @@ public class TotpServiceTests : IDisposable
         // A different, still-valid code — asserted valid against the consumed step, so the reuse is
         // caught by the token rather than by a crossed step boundary.
         var nextCode = TotpHelper.ComputeTotp(secret, now + 30);
-        TotpHelper.TryVerify(secret, nextCode, consumedStep, out _).Should()
+        TotpHelper.TryVerify(secret, nextCode, consumedStep, DateTimeOffset.FromUnixTimeSeconds(now), out _).Should()
             .BeTrue("the second attempt has to fail on the token, not on the code");
 
         var second = await service.VerifyStepUpAsync(stepUpToken, nextCode);
@@ -666,7 +666,7 @@ public class TotpServiceTests : IDisposable
     private TotpService CreateService()
     {
         var contexts = _dbContext.AsFactory();
-        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts), _dataProtectionProvider, NullLogger<TotpService>.Instance);
+        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts), _dataProtectionProvider, NullLogger<TotpService>.Instance, TimeProvider.System);
     }
 
     private SubjectEntity SeedSubject(string username, Guid? subjectId = null)

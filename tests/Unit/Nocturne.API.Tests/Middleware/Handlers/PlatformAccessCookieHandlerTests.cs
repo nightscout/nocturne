@@ -68,7 +68,8 @@ public class PlatformAccessCookieHandlerTests : IDisposable
                 new MemoryCache(new MemoryCacheOptions()),
                 Options.Create(new CacheConfiguration()),
                 NullLogger<MemoryCacheService>.Instance),
-            NullLogger<OAuthTokenRevocationCache>.Instance);
+            NullLogger<OAuthTokenRevocationCache>.Instance,
+            TimeProvider.System);
 
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);
