@@ -98,10 +98,11 @@ public interface IConnectorConfigurationService
 
     /// <summary>
     /// The top-level keys a connector's configuration type binds, secrets and sync toggles
-    /// included, or null when the connector or its type is unknown. The enabled flag is in the set
-    /// only as <c>enabled</c>; <see cref="ConnectorEnabledKey"/> matches its other casings.
+    /// included, each with its property type, or null when the connector or its type is unknown.
+    /// The enabled flag is in the map only as <c>enabled</c>; <see cref="ConnectorEnabledKey"/>
+    /// matches its other casings.
     /// </summary>
-    Task<IReadOnlySet<string>?> GetBoundKeysAsync(string connectorName, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, Type>?> GetBoundKeysAsync(string connectorName, CancellationToken ct = default);
 
     /// <summary>
     /// Saves encrypted secrets for a connector.

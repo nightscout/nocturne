@@ -39,7 +39,7 @@ public class ConfigurationControllerVerifyTests
     private void SetUpBoundKeys(params string[] keys) =>
         _configService
             .Setup(s => s.GetBoundKeysAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(keys.ToHashSet());
+            .ReturnsAsync(keys.ToDictionary(key => key, _ => typeof(string)));
 
     private static VerifyConnectorCredentialsRequest BuildRequest() => new()
     {
