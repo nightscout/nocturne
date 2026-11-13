@@ -566,7 +566,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var tombstones = ctx.Set<TEntity>().UserTombstones(ctx);
+        var tombstones = ctx.UserTombstones<TEntity>();
 
         if (Guid.TryParse(id, out var guid))
             return await tombstones.AnyAsync(e => e.Id == guid || e.LegacyId == id, ct);
@@ -580,7 +580,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 || (e.Id >= low && e.Id <= high)
                 || (e.LegacyId != null && e.LegacyId.Length == 36 && EF.Functions.ILike(e.LegacyId, dashed))
                 || (e.LegacyId != null && e.LegacyId.Length == 32 && EF.Functions.ILike(e.LegacyId, dashless)), ct)
-            || await WhereLegacyIdHashesTo(ctx, id).UserTombstones(ctx).AnyAsync(ct);
+            || await WhereLegacyIdHashesTo(ctx, id).UserTombstones().AnyAsync(ct);
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{T}.GetCorrelationIdsByLegacyIdAsync" />

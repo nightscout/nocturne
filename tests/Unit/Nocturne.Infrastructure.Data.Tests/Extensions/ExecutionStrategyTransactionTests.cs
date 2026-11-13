@@ -13,9 +13,11 @@ namespace Nocturne.Infrastructure.Data.Tests.Extensions;
 public sealed class ExecutionStrategyTransactionTests : IDisposable
 {
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0015-000000000001");
+    private static readonly Guid OtherTenantId = Guid.Parse("00000000-0000-0000-0015-000000000002");
     private static readonly Guid SeededRuleId = Guid.Parse("00000000-0000-0000-0015-0000000000aa");
 
-    private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
+    private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId)
+        .SeedTenant(OtherTenantId, "other");
 
     public ExecutionStrategyTransactionTests()
     {
@@ -100,6 +102,41 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
         await using var check = _db.CreateContext();
         (await check.TempBasals.AsNoTracking().ToListAsync())
             .Should().ContainSingle().Which.Id.Should().Be(inserted.Single().Id);
+    }
+
+    private async Task<TempBasalEntity> StoredTempBasalAsync(Guid tenantId, DateTime? deletedAt = null)
+    {
+        await using var seed = _db.CreateContext();
+        var row = new TempBasalEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenantId, Origin = "Algorithm", Rate = 1.5,
+            Timestamp = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc), DeletedAt = deletedAt,
+        };
+        seed.TempBasals.Add(row);
+        await seed.SaveChangesAsync();
+        return row;
+    }
+
+    [Fact]
+    public async Task An_insert_is_found_landed_by_its_own_tenants_row_even_once_deleted_and_never_by_another_tenants()
+    {
+        var deleted = await StoredTempBasalAsync(TenantId, deletedAt: new DateTime(2026, 1, 6, 0, 0, 0, DateTimeKind.Utc));
+        var theirs = await StoredTempBasalAsync(OtherTenantId);
+        await using var context = _db.CreateContext();
+
+        (await context.AnyLandedAsync([deleted], CancellationToken.None)).Should().BeTrue();
+        (await context.AnyLandedAsync([theirs], CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task An_update_is_never_found_landed_by_another_tenants_row()
+    {
+        var mine = await StoredTempBasalAsync(TenantId);
+        var theirs = await StoredTempBasalAsync(OtherTenantId);
+        await using var context = _db.CreateContext();
+
+        (await context.AnyUpdateLandedAsync([mine], CancellationToken.None)).Should().BeTrue();
+        (await context.AnyUpdateLandedAsync([theirs], CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]

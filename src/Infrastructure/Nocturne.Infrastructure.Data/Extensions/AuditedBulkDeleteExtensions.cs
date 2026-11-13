@@ -119,7 +119,7 @@ public static class AuditedBulkDeleteExtensions
                 return (Count: deleted, FirstId: ids[0]);
             },
             async (attempt, token) => attempt.Count > 0
-                && !await InTenant(context, context.Set<T>().IgnoreQueryFilters())
+                && !await context.Set<T>().IncludingDeleted()
                     .AnyAsync(e => EF.Property<Guid>(e, "Id") == attempt.FirstId, token),
             ct: ct);
 
@@ -248,18 +248,9 @@ public static class AuditedBulkDeleteExtensions
     {
         if (count == 0)
             return false;
-        return await InTenant(context, context.Set<T>().IgnoreQueryFilters())
+        return await context.Set<T>().IncludingDeleted()
             .AnyAsync(e => e.DeletedAt == deletedAt, ct);
     }
-
-    /// <summary>
-    /// Narrows an unfiltered query to the context's tenant, so a check made under
-    /// <c>IgnoreQueryFilters()</c> does not rest on row level security alone.
-    /// </summary>
-    private static IQueryable<T> InTenant<T>(NocturneDbContext context, IQueryable<T> query) where T : class =>
-        context.Model.FindEntityType(typeof(T))?.FindProperty(nameof(ITenantScoped.TenantId)) is not null
-            ? query.Where(e => EF.Property<Guid>(e, nameof(ITenantScoped.TenantId)) == context.TenantId)
-            : query;
 
     /// <summary>
     /// Stamps <c>DeletedAt</c> and the dedup attribution flag: a user-initiated delete blocks resync
@@ -377,7 +368,7 @@ public static class AuditedBulkDeleteExtensions
         CancellationToken ct = default) where T : class, ITenantScoped, ISoftDeletable
         => await context.ExecuteInTransactionAsync(async token =>
         {
-            var released = await query.UserTombstones(context).ExecuteUpdateAsync(
+            var released = await query.UserTombstones().ExecuteUpdateAsync(
                 s => s.SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), false), token);
             await WriteBulkSummaryAsync<T>(context, "allow_reimport", released, scope, auditContext, token);
             return released;

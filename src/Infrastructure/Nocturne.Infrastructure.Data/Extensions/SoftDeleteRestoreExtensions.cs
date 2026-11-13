@@ -23,10 +23,8 @@ public sealed record GroupRestore<TEntity>(
 /// soft-deletable row.
 /// </summary>
 /// <remarks>
-/// Parameterless <c>IgnoreQueryFilters()</c> drops <see cref="NocturneDbContext.TenantFilterKey"/>
-/// along with the soft-delete filter, so the tenant predicate is re-applied by hand — without it a
-/// restore would reach across tenants. The key is read through <see cref="EF.Property{TProperty}"/>
-/// because <c>PatientDeviceEntity</c> and <c>PatientInsulinEntity</c> declare it on no interface.
+/// The key is read through <see cref="EF.Property{TProperty}"/> because <c>PatientDeviceEntity</c>
+/// and <c>PatientInsulinEntity</c> declare it on no interface.
 /// </remarks>
 public static class SoftDeleteRestoreExtensions
 {
@@ -266,8 +264,8 @@ public static class SoftDeleteRestoreExtensions
         if (candidates.Count == 0 || (!byLegacyId && !bySyncKey))
             return clashes;
 
-        var live = ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt == null);
+        var live = ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => e.DeletedAt == null);
 
         var keys = candidates.Select(c =>
         {
@@ -356,6 +354,6 @@ public static class SoftDeleteRestoreExtensions
 
     private static IQueryable<TEntity> DeletedRows<TEntity>(this NocturneDbContext ctx)
         where TEntity : class, ITenantScoped, ISoftDeletable
-        => ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null);
+        => ctx.Set<TEntity>().IncludingDeleted()
+            .Where(e => e.DeletedAt != null);
 }

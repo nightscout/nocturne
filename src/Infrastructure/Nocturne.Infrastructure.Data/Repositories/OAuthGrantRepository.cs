@@ -347,12 +347,13 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <summary>
-    /// The grants of <paramref name="tenantId"/> on a context pinned to it. The query filter is
-    /// ignored because the pin, not the scope, names the tenant, and the tenant is matched explicitly
-    /// for the reason on <see cref="IOAuthGrantRepository.FindLiveDirectGrantAsync(Guid, DirectGrantLookup, DateTime, CancellationToken)"/>.
+    /// The grants of <paramref name="tenantId"/>, which <paramref name="db"/> is pinned to. The grant's
+    /// own tenant is matched as well as filtered, for the reason on
+    /// <see cref="IOAuthGrantRepository.FindLiveDirectGrantAsync(Guid, DirectGrantLookup, DateTime, CancellationToken)"/>:
+    /// a context pinned to another tenant then finds nothing.
     /// </summary>
     private static IQueryable<OAuthGrantEntity> PinnedGrants(NocturneDbContext db, Guid tenantId) =>
-        db.OAuthGrants.AsNoTracking().IgnoreQueryFilters().Where(g => g.TenantId == tenantId);
+        db.OAuthGrants.AsNoTracking().Where(g => g.TenantId == tenantId);
 
     /// <summary>
     /// What makes a direct grant usable at <paramref name="now"/>. Every read that authenticates or

@@ -334,9 +334,7 @@ public class SleepSessionRepository : ISleepSessionRepository
     /// rather than loading and tracking every child only to delete it.
     /// </summary>
     private static IQueryable<SleepSessionEntity> WithSoftDeleted(NocturneDbContext ctx) =>
-        ctx.SleepSessions
-            .IgnoreQueryFilters()
-            .Where(s => s.TenantId == ctx.TenantId);
+        ctx.SleepSessions.IncludingDeleted();
 
     private static IQueryable<Entities.SleepSessionEntity> BuildFilteredQuery(
         NocturneDbContext ctx, DateTime? from, DateTime? to,

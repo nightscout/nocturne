@@ -130,15 +130,9 @@ public static class LinkedRecordTypes
 
     /// <summary>
     /// Loads, for each requested record id, its <see cref="MatchCriteria"/> and whether the
-    /// underlying record is soft-deleted. Soft-deleted rows are included via
-    /// <c>IgnoreQueryFilters</c>; record types without a <c>DeletedAt</c> column report
-    /// <see cref="RecordInfo.IsDeleted"/> as <see langword="false"/>.
-    /// <para>
-    /// The global query filter combines tenant scoping (<c>TenantId == this.TenantId</c>) with
-    /// the soft-delete predicate (<c>DeletedAt == null</c>) and <c>IgnoreQueryFilters</c> drops
-    /// both. To bypass only the soft-delete filter, each query re-applies the tenant predicate
-    /// (<c>e.TenantId == db.TenantId</c>) explicitly so cross-tenant rows can never leak in.
-    /// </para>
+    /// underlying record is soft-deleted. Soft-deleted rows are included
+    /// (<see cref="HistoryPage.IncludingDeleted{T}"/>); record types without a <c>DeletedAt</c>
+    /// column report <see cref="RecordInfo.IsDeleted"/> as <see langword="false"/>.
     /// <para>
     /// Read with the history clamp lifted (<see cref="HistoryClampLiftExtensions"/>): a clamped
     /// caller's upload must still match a copy older than its window.
@@ -164,8 +158,8 @@ public static class LinkedRecordTypes
         Func<TEntity, RecordInfo> info, HashSet<Guid> ids, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable, IIdentified
     {
-        var records = await db.Set<TEntity>().AsNoTracking().IgnoreQueryFilters()
-            .Where(e => e.TenantId == db.TenantId && ids.Contains(e.Id)).ToListAsync(ct);
+        var records = await db.Set<TEntity>().AsNoTracking().IncludingDeleted()
+            .Where(e => ids.Contains(e.Id)).ToListAsync(ct);
         return records.ToDictionary(e => e.Id, info);
     }
 

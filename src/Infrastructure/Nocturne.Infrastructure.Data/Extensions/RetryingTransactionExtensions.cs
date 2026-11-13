@@ -150,7 +150,7 @@ public static class RetryingTransactionExtensions
         if (inserted.Count == 0)
             return false;
         var id = inserted[0].Id;
-        return await context.Set<TEntity>().IgnoreQueryFilters().AnyAsync(e => e.Id == id, ct);
+        return await context.Set<TEntity>().IncludingDeleted().AnyAsync(e => e.Id == id, ct);
     }
 
     /// <summary>
@@ -169,7 +169,7 @@ public static class RetryingTransactionExtensions
             return false;
         var id = updated[0].Id;
         var stamp = updated[0].SysUpdatedAt;
-        return await context.Set<TEntity>().IgnoreQueryFilters()
+        return await context.Set<TEntity>().IncludingDeleted()
             .AnyAsync(e => e.Id == id && e.SysUpdatedAt == stamp, ct);
     }
 
