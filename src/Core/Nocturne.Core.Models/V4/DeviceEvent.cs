@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using NJsonSchema.Annotations;
 using Nocturne.Core.Constants;
 
@@ -50,5 +51,10 @@ public class DeviceEvent : V4RecordBase, IDeviceAttributed
     /// Whether Nocturne inferred this event from the warm-up gap in a CGM's readings, rather than
     /// an uploader or the user recording it.
     /// </summary>
+    /// <remarks>
+    /// Omitted when false: the generated Java SDK rejects fields it does not know, so a client built
+    /// before this field existed would fail to parse the response to every event it uploads.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool IsInferred => DataSource == DataSources.SensorSessionInference;
 }
