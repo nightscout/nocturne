@@ -1,5 +1,6 @@
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -162,12 +163,13 @@ public static class DirectionService
 
         var mgdl = (int)Math.Floor(recentMean - mean5MinsAgo + 0.5);
 
+        var useMmol = GlucoseUnits.Parse(units) == GlucoseUnit.Mmol;
         var scaled =
-            units == "mmol"
+            useMmol
                 ? RoundBGToDisplayFormat(ScaleMgdl(recentMean) - ScaleMgdl(mean5MinsAgo))
                 : mgdl;
         var display =
-            units == "mmol"
+            useMmol
                 ? (scaled >= 0 ? $"+{scaled:F1}" : $"{scaled:F1}")
                 : (scaled >= 0 ? $"+{scaled}" : scaled.ToString());
         return new Core.Models.DeltaInfo

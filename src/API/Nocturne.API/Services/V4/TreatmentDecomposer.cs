@@ -706,7 +706,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             Glucose = treatment.Glucose ?? 0,
             GlucoseType = ParseGlucoseType(treatment.GlucoseType),
-            Units = ParseGlucoseUnit(treatment.Units),
+            Units = V4Models.GlucoseUnits.Parse(treatment.Units),
             Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
@@ -805,19 +805,6 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             "finger" => V4Models.GlucoseType.Finger,
             "sensor" => V4Models.GlucoseType.Sensor,
             _ => TryParseDefinedName<V4Models.GlucoseType>(glucoseType, out var parsed) ? parsed : null
-        };
-    }
-
-    internal static V4Models.GlucoseUnit? ParseGlucoseUnit(string? units)
-    {
-        if (string.IsNullOrEmpty(units))
-            return null;
-
-        return units.ToLowerInvariant() switch
-        {
-            "mg/dl" or "mgdl" or "mg" => V4Models.GlucoseUnit.MgDl,
-            "mmol" or "mmol/l" => V4Models.GlucoseUnit.Mmol,
-            _ => TryParseDefinedName<V4Models.GlucoseUnit>(units, out var parsed) ? parsed : null
         };
     }
 

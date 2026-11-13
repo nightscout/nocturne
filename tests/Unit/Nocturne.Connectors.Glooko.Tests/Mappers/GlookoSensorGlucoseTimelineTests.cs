@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Timezones;
 using Xunit;
 
@@ -36,6 +37,24 @@ public class GlookoSensorGlucoseTimelineTests
                 CgmNormal = [new GlookoV3GlucoseDataPoint { X = x, Y = y, Value = (long)(y * 100), Calculated = false }],
             },
         };
+
+    [Theory]
+    [InlineData("mmoll", 5.0 * GlucoseConstants.MgdlPerMmol)]
+    [InlineData("mmol", 5.0 * GlucoseConstants.MgdlPerMmol)]
+    [InlineData("mmol/L", 5.0 * GlucoseConstants.MgdlPerMmol)]
+    [InlineData("MMOL", 5.0 * GlucoseConstants.MgdlPerMmol)]
+    [InlineData("mgdl", 5.0)]
+    [InlineData("mg/dL", 5.0)]
+    [InlineData(null, 5.0)]
+    [InlineData("", 5.0)]
+    public void V3Cgm_ReadsTheMeterUnitsSpelling(string? meterUnits, double expectedMgdl)
+    {
+        var mapper = MapperWithTimeline(null);
+
+        var result = mapper.TransformV3ToSensorGlucose(CgmResponse(Unix(new DateTime(2026, 1, 15, 12, 0, 0)), 5.0), meterUnits).Single();
+
+        result.Mgdl.Should().Be(expectedMgdl);
+    }
 
     [Fact]
     public void V3Cgm_WithSydneyTimeline_ConvertsUsingDstOffsetForTheDate()
