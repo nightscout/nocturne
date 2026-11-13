@@ -60,14 +60,15 @@
   // ── New link ──────────────────────────────────────────────────────
   let label = $state("");
   let usage = $state<"single" | "multiple">("single");
-  let maxUses = $state("");
+  // A number input binds a number, or undefined (null in some browsers) while it is empty.
+  let maxUses = $state<number | null | undefined>(undefined);
   let expiresInDays = $state("7");
   let confirmed = $state(false);
   let creating = $state(false);
   let createError = $state<string | null>(null);
   let createdUrl = $state<string | null>(null);
 
-  const parsedMaxUses = $derived(maxUses.trim() === "" ? null : Number(maxUses));
+  const parsedMaxUses = $derived(maxUses ?? null);
   const maxUsesInvalid = $derived(
     usage === "multiple" &&
       parsedMaxUses !== null &&
@@ -91,7 +92,7 @@
       });
       createdUrl = result.url ?? null;
       label = "";
-      maxUses = "";
+      maxUses = undefined;
       confirmed = false;
     } catch (err) {
       createError = describeSubmitError(err, "Could not make the link. Try again.");
