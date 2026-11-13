@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Oref;
 using Xunit;
 using OrefModels = Nocturne.Core.Oref.Models;
 
@@ -42,6 +43,37 @@ public class PredictionServiceTests
         Assert.Equal("The glucose status could not be calculated", ex.Message);
         _entries.Verify(e => e.GetCurrentEntryAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public void OrefVersion_IsNullExactlyWhenTheLibraryIsNotLoaded()
+    {
+        var service = Unseamed();
+
+        Assert.Equal(OrefService.IsAvailable(), service.OrefVersion() is not null);
+    }
+
+    [Fact]
+    public void CalculateGlucoseStatus_ReachesTheLibraryOnlyWhenItIsLoaded()
+    {
+        var service = Unseamed();
+
+        var failure = Record.Exception(() => service.CalculateGlucoseStatus([]));
+
+        Assert.Equal(OrefService.IsAvailable(), failure is null);
+    }
+
+    private PredictionService Unseamed() =>
+        new(
+            _entries.Object,
+            Mock.Of<ITreatmentService>(),
+            Mock.Of<IBasalRateResolver>(),
+            Mock.Of<ISensitivityResolver>(),
+            Mock.Of<ICarbRatioResolver>(),
+            Mock.Of<ITargetRangeResolver>(),
+            Mock.Of<ITherapySettingsResolver>(),
+            Mock.Of<IPatientInsulinRepository>(),
+            new FakeTimeProvider(DateTimeOffset.Parse("2026-03-22T12:00:00Z")),
+            NullLogger<PredictionService>.Instance);
 
     /// <summary>A current reading is all a synthetic curve would need, so a service that still built one would return it instead of throwing.</summary>
     private void SeedCurrentEntry() =>
