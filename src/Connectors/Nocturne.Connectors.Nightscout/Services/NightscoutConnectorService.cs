@@ -194,7 +194,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     "Glucose", glucoseFrom, request.To,
                     (from, to) => FetchGlucosePagesAsync(from, to, recent),
                     timeOf: EntryTime,
-                    publishAsync: p => PublishGlucoseDataInBatchesAsync(p, config, cancellationToken),
+                    publishAsync: p => PublishInBatchesAsync(p, config, cancellationToken),
                     config.MaxCount);
 
                 if (recent is not null && outcome.Success)
@@ -236,7 +236,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     "Treatments", treatmentFrom, request.To,
                     (from, to) => FetchTreatmentPagesAsync(from, to, recent),
                     timeOf: t => ParseCreatedAt(t.CreatedAt)?.UtcDateTime,
-                    publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken),
+                    publishAsync: p => PublishInBatchesAsync(p, config, cancellationToken),
                     config.MaxCount);
 
                 if (recent is not null && outcome.Success)
@@ -261,8 +261,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var profiles = await FetchProfilesAsync();
-                await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
-                    profiles.ToList(), PublishProfileDataAsync, config, cancellationToken);
+                await PublishRecordTypeAsync(result, activeTypes,
+                    profiles.ToList(), config, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
@@ -288,7 +288,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     (from, to) => FetchCreatedAtPagesAsync<DeviceStatus>(
                         from, to, "devicestatus", d => d.CreatedAt, "FetchDeviceStatus", observe: page => recent?.Collect(page)),
                     timeOf: d => ParseCreatedAt(d.CreatedAt)?.UtcDateTime,
-                    publishAsync: p => PublishDeviceStatusAsync(p, config, cancellationToken),
+                    publishAsync: p => PublishByRouteAsync(p, config, cancellationToken),
                     config.MaxCount);
 
                 if (recent is not null && outcome.Success)
@@ -309,8 +309,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var foods = await FetchFoodAsync();
-                await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes,
-                    foods.ToList(), PublishFoodDataAsync, config, cancellationToken);
+                await PublishRecordTypeAsync(result, activeTypes,
+                    foods.ToList(), config, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
@@ -336,7 +336,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     (from, to) => FetchCreatedAtPagesAsync<Activity>(
                         from, to, "activity", a => a.CreatedAt, "FetchActivity", observe: page => recent?.Collect(page)),
                     timeOf: a => ParseCreatedAt(a.CreatedAt)?.UtcDateTime,
-                    publishAsync: p => PublishActivityDataAsync(p, config, cancellationToken),
+                    publishAsync: p => PublishByRouteAsync(p, config, cancellationToken),
                     config.MaxCount);
 
                 if (recent is not null && outcome.Success)

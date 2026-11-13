@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.ChartData;
-using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
@@ -20,10 +19,6 @@ namespace Nocturne.API.Services.Analytics;
 /// the shared <see cref="ChartDataContext"/>, then assembles the final <see cref="DashboardChartData"/>
 /// DTO via <see cref="IChartDataAssembler"/>.
 /// </summary>
-/// <remarks>
-/// A buffer of <see cref="DailyProfileCalculator.ActingMs"/> is prepended to <see cref="ChartDataContext.StartTime"/> so that IOB/COB
-/// calculations have enough treatment history to be accurate at the start of the requested window.
-/// </remarks>
 /// <seealso cref="IChartDataService"/>
 /// <seealso cref="IChartDataStage"/>
 /// <seealso cref="IChartDataAssembler"/>
@@ -91,7 +86,6 @@ public class ChartDataService : IChartDataService
             StartTime = startTime,
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
-            BufferStartTime = startTime - DailyProfileCalculator.ActingMs,
             IncludeHealthSeries = includeHealthSeries,
         };
 
@@ -141,7 +135,8 @@ public class ChartDataService : IChartDataService
     )
     {
         var tempBasals = (await _tempBasalRepository.GetAsync(
-            from: DateTimeOffset.FromUnixTimeMilliseconds(startTime - DailyProfileCalculator.ActingMs).UtcDateTime,
+            from: DateTimeOffset.FromUnixTimeMilliseconds(
+                new ChartDataContext { StartTime = startTime, EndTime = endTime }.SeriesWindow.TempBasalReadStart).UtcDateTime,
             to: DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime,
             device: null,
             source: null,

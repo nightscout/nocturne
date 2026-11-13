@@ -75,6 +75,7 @@ public class V3SortTests
     private static FoodController FoodControllerFor(Mock<IFoodRepository> foods, string queryString) =>
         new(
             foods.Object,
+            Mock.Of<IFoodService>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance)
         {

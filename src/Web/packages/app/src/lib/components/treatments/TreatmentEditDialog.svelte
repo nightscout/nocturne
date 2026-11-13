@@ -6,6 +6,7 @@
     GlucoseUnit,
     DeviceEventType,
     PatientInsulin,
+    TreatmentInsulinContext,
     InsulinFormulation,
     CreateBasalInjectionRequest,
   } from "#lib/api/index.js";
@@ -346,6 +347,22 @@
   // title/description/button copy and suppresses edit-only chrome.
   let isCreate = $derived(!activeRecord?.data.id);
 
+  function insulinContextFor(
+    patientInsulinId: string | undefined,
+    existing: TreatmentInsulinContext | undefined
+  ): TreatmentInsulinContext | undefined {
+    const selected = patientInsulins.find((i) => i.id === patientInsulinId);
+    if (!selected) return existing;
+    return {
+      patientInsulinId: selected.id,
+      insulinName: selected.name,
+      dia: selected.dia,
+      peak: selected.peak,
+      curve: selected.curve,
+      concentration: selected.concentration,
+    };
+  }
+
   function handleSubmit() {
     if (!activeRecord) return;
 
@@ -353,12 +370,22 @@
     let updated: EntryRecord;
 
     switch (activeRecord.kind) {
-      case "bolus":
+      case "bolus": {
+        const { patientInsulinId, ...bolusFields } = bolusForm;
         updated = {
           kind: "bolus",
-          data: { ...activeRecord.data, mills, ...bolusForm },
+          data: {
+            ...activeRecord.data,
+            mills,
+            ...bolusFields,
+            insulinContext: insulinContextFor(
+              patientInsulinId,
+              activeRecord.data.insulinContext
+            ),
+          },
         };
         break;
+      }
       case "carbs":
         updated = {
           kind: "carbs",
@@ -384,20 +411,6 @@
         };
         break;
       case "basalInjection": {
-        const existingContext = activeRecord.data.insulinContext;
-        const selectedInsulin = patientInsulins.find(
-          (i) => i.id === basalInjectionForm.patientInsulinId
-        );
-        const nextContext = selectedInsulin
-          ? {
-              patientInsulinId: selectedInsulin.id,
-              insulinName: selectedInsulin.name,
-              dia: selectedInsulin.dia,
-              peak: selectedInsulin.peak,
-              curve: selectedInsulin.curve,
-              concentration: selectedInsulin.concentration,
-            }
-          : existingContext;
         updated = {
           kind: "basalInjection",
           data: {
@@ -405,7 +418,10 @@
             mills,
             units: basalInjectionForm.units ?? activeRecord.data.units,
             notes: basalInjectionForm.notes ?? "",
-            insulinContext: nextContext,
+            insulinContext: insulinContextFor(
+              basalInjectionForm.patientInsulinId,
+              activeRecord.data.insulinContext
+            ),
           },
         };
         break;

@@ -72,7 +72,7 @@ public class MetadataPublisherBackfillMarkTests
             new ActivityDedupRepository(_db.AsFactory()),
             new ConnectorConfigurationRepository(_db.AsFactory()),
             Mock.Of<IProfileActivationRepository>(),
-            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);

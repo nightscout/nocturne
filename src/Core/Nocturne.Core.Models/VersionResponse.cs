@@ -4,7 +4,7 @@ namespace Nocturne.Core.Models;
 /// Version response model that maintains 1:1 compatibility with Nightscout version endpoints.
 /// Returned by <c>/api/v1/version</c>.
 /// </summary>
-/// <seealso cref="VersionsResponse"/>
+/// <seealso cref="ApiVersionEntry"/>
 /// <seealso cref="StatusResponse"/>
 public class VersionResponse
 {

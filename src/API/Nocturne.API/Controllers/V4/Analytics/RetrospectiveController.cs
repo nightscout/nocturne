@@ -3,18 +3,16 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
-using Nocturne.Core.Contracts.DeviceStatuses;
-using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using System.Linq;
@@ -31,7 +29,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 ///   <item><term>GET /basal-timeline</term><description>Basal rate timeline showing scheduled vs. temp rates throughout a day.</description></item>
 /// </list>
 /// Glucose values are linearly interpolated from surrounding <see cref="Entry"/> records.
-/// The point reads IOB and COB through <see cref="IIobCobReader"/>; the timeline reads both from <see cref="IobCobSeries"/> over the same device snapshots, as the chart does.
+/// The point reads IOB and COB through <see cref="IIobCobReader"/>, the timeline through <see cref="IIobCobSeriesReader"/>.
 /// Scheduled basal falls back to <see cref="IBasalRateResolver.GetBasalRateAsync"/> when no temp basal
 /// treatment is active.
 /// </remarks>
@@ -45,47 +43,32 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Produces("application/json")]
 public class RetrospectiveController : ControllerBase
 {
-    private readonly IIobCalculator _iobCalculator;
-    private readonly ICobCalculator _cobCalculator;
     private readonly IEntryService _entryService;
-    private readonly IBolusRepository _bolusRepository;
-    private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly ITempBasalRepository _tempBasalRepository;
-    private readonly IDeviceStatusService _deviceStatuses;
     private readonly ITherapyTimelineResolver _therapyTimelineResolver;
     private readonly IStateSpanRepository _stateSpanRepository;
-    private readonly IApsSnapshotRepository _apsSnapshotRepository;
-    private readonly IPumpSnapshotRepository _pumpSnapshotRepository;
     private readonly IIobCobReader _iobCobReader;
+    private readonly IIobCobSeriesReader _iobCobSeriesReader;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<RetrospectiveController> _logger;
     public RetrospectiveController(
-        IIobCalculator iobCalculator,
-        ICobCalculator cobCalculator,
         IEntryService entryService,
-        IBolusRepository bolusRepository,
-        ICarbIntakeRepository carbIntakeRepository,
         ITempBasalRepository tempBasalRepository,
-        IDeviceStatusService deviceStatuses,
         ITherapyTimelineResolver therapyTimelineResolver,
         IStateSpanRepository stateSpanRepository,
-        IApsSnapshotRepository apsSnapshotRepository,
-        IPumpSnapshotRepository pumpSnapshotRepository,
         IIobCobReader iobCobReader,
+        IIobCobSeriesReader iobCobSeriesReader,
+        TimeProvider timeProvider,
         ILogger<RetrospectiveController> logger
     )
     {
-        _iobCalculator = iobCalculator;
-        _cobCalculator = cobCalculator;
         _entryService = entryService;
-        _bolusRepository = bolusRepository;
-        _carbIntakeRepository = carbIntakeRepository;
         _tempBasalRepository = tempBasalRepository;
-        _deviceStatuses = deviceStatuses;
         _therapyTimelineResolver = therapyTimelineResolver;
         _stateSpanRepository = stateSpanRepository;
-        _apsSnapshotRepository = apsSnapshotRepository;
-        _pumpSnapshotRepository = pumpSnapshotRepository;
         _iobCobReader = iobCobReader;
+        _iobCobSeriesReader = iobCobSeriesReader;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
     /// <summary>
@@ -135,7 +118,7 @@ public class RetrospectiveController : ControllerBase
         // Get basal rate at the specified time
         var scheduledAtTime = await ScheduledBasalAsync(time, time + 1, cancellationToken);
         var basalData = GetBasalRateAtTime(
-            StatisticsService.ClipOverlappingTempBasals(tempBasals, Math.Min(time + 1, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())),
+            StatisticsService.ClipOverlappingTempBasals(tempBasals, Math.Min(time + 1, _timeProvider.GetUtcNow().ToUnixTimeMilliseconds())),
             time,
             scheduledAtTime.At);
         // Get recent treatments as summary data (boluses and carb intakes within 30 minutes)
@@ -225,67 +208,30 @@ public class RetrospectiveController : ControllerBase
         var dayEnd = dayStart.AddDays(1).AddMilliseconds(-1);
         var startMills = dayStart.ToUnixTimeMilliseconds();
         var endMills = dayEnd.ToUnixTimeMilliseconds();
-        var fetchFrom = dayStart.UtcDateTime.AddMilliseconds(-DailyProfileCalculator.ActingMs);
-        var fetchTo = dayEnd.UtcDateTime;
         // Get entries for the day
         var entries = await _entryService.QueryEntriesAsync(
             new EntryQuery { Count = 5000, Find = $"find[date][$gte]={startMills}&find[date][$lte]={endMills}" },
             cancellationToken
         );
         var entryList = entries?.ToList() ?? new List<Entry>();
-        // Query v4 types
-        var boluses = (await _bolusRepository.GetAsync(
-            from: fetchFrom, to: fetchTo, device: null, source: null,
-            limit: 5000, offset: 0, descending: false, ct: cancellationToken
-        )).ToList();
-        var tempBasals = (await _tempBasalRepository.GetAsync(
-            from: StatisticsService.TempBasalReadStart(dayStart.UtcDateTime), to: fetchTo, device: null, source: null,
-            limit: int.MaxValue, offset: 0, descending: false, ct: cancellationToken
-        )).ToList();
-        var carbIntakes = (await _carbIntakeRepository.GetAsync(
-            from: fetchFrom, to: fetchTo, device: null, source: null,
-            limit: 5000, offset: 0, descending: false, ct: cancellationToken
-        )).ToList();
-        // Get device status
-        var deviceStatus = await _deviceStatuses.GetDeviceStatusesAsync(
-            FindQuery.Empty,
-            count: 500,
-            skip: 0,
-            cancellationToken: cancellationToken
-        );
-        var deviceStatusList = deviceStatus?
-            .Where(d => d.Mills >= startMills && d.Mills <= endMills)
-            .ToList() ?? new List<DeviceStatus>();
-        // Calculate data points at each interval
-        var delivered = StatisticsService.ClipOverlappingTempBasals(
-            tempBasals, Math.Min(endMills, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+        var now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var dataPoints = new List<RetrospectiveDataPoint>();
         var totalIntervals = (24 * 60) / intervalMinutes;
         var intervalMs = intervalMinutes * 60 * 1000L;
         var lastPoint = startMills + (totalIntervals - 1) * intervalMs;
-        var timeline = await _therapyTimelineResolver.BuildAsync(
-            startMills - DailyProfileCalculator.ActingMs, lastPoint + 1, ct: cancellationToken);
-        var scheduled = new ScheduledBasal(
-            timeline.BasalSegments(),
-            await ScheduledBasal.OverridesAsync(
-                _stateSpanRepository, startMills - DailyProfileCalculator.ActingMs, lastPoint, cancellationToken));
-        var deviceFrom = DateTimeOffset.FromUnixTimeMilliseconds(startMills - DeviceReportedValues.RecencyThresholdMs).UtcDateTime;
-        var deviceTo = DateTimeOffset.FromUnixTimeMilliseconds(lastPoint + DeviceReportedValues.FutureSkewToleranceMs).UtcDateTime;
-        var devices = DeviceReadings.Of(
-            await _apsSnapshotRepository.GetIobCobPointsAsync(deviceFrom, deviceTo, cancellationToken),
-            await _pumpSnapshotRepository.GetIobPointsAsync(deviceFrom, deviceTo, cancellationToken));
-        var ticks = IobCobSeries.Build(
-            _iobCalculator, _cobCalculator, boluses, carbIntakes, tempBasals, timeline, scheduled, devices,
-            startMills, lastPoint, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), intervalMs,
-            cancellationToken);
-        foreach (var tick in ticks)
+        // Treatments are read to the day's end, past the last tick: a record after it can change which
+        // stream StatisticsService.ClipOverlappingTempBasals ranks first, and so a tick's basal.
+        var series = await _iobCobSeriesReader.ReadSeriesAsync(
+            new IobCobSeriesWindow(startMills, lastPoint, intervalMs) { ReadEnd = endMills }, now, readCarbs: true, cancellationToken);
+        var delivered = StatisticsService.ClipOverlappingTempBasals(series.TempBasals, Math.Min(endMills, now));
+        foreach (var tick in series.Ticks)
         {
             var pointTime = tick.Mills;
             var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
             // Get glucose at this time
             var glucose = GetGlucoseAtTime(entryList, pointTime);
             // Get basal rate
-            var basal = GetBasalRateAtTime(delivered, pointTime, scheduled.At);
+            var basal = GetBasalRateAtTime(delivered, pointTime, series.Scheduled.At);
             dataPoints.Add(new RetrospectiveDataPoint
             {
                 Time = pointTime,
@@ -349,7 +295,7 @@ public class RetrospectiveController : ControllerBase
             limit: int.MaxValue, offset: 0, descending: false, ct: cancellationToken
         )).ToList();
         var delivered = StatisticsService.ClipOverlappingTempBasals(
-            tempBasals, Math.Min(endMills, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            tempBasals, Math.Min(endMills, _timeProvider.GetUtcNow().ToUnixTimeMilliseconds()));
         // Generate basal timeline
         var scheduled = await ScheduledBasalAsync(startMills, endMills, cancellationToken);
         var dataPoints = new List<BasalDataPoint>();

@@ -15,6 +15,7 @@ using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Timezones;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -173,27 +174,56 @@ public class GlookoConnectorServiceStateIsolationTests
     /// Records the tenant each published reading was published under. The publish sink is the only
     /// place a run's resolved timezone timeline is observable from outside the service.
     /// </summary>
-    private sealed class CapturingGlookoConnectorService(
-        HttpClient httpClient,
-        IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
-        ILogger<GlookoConnectorService> logger,
-        IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
-        GlookoAuthTokenProvider tokenProvider,
-        ITimezoneTimelineService? timezoneTimelineService)
-        : GlookoConnectorService(httpClient, serverResolver, logger, retryDelayStrategy,
-            rateLimitingStrategy, tokenProvider, timezoneTimelineService: timezoneTimelineService)
+    private sealed class CapturingGlookoConnectorService : GlookoConnectorService
     {
-        public ConcurrentBag<(Guid TenantId, DateTime Timestamp)> PublishedGlucose { get; } = [];
-
-        protected override Task<bool> PublishSensorGlucoseDataAsync(
-            IEnumerable<SensorGlucose> records,
-            GlookoConnectorConfiguration config,
-            CancellationToken cancellationToken = default)
+        public CapturingGlookoConnectorService(
+            HttpClient httpClient,
+            IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
+            ILogger<GlookoConnectorService> logger,
+            IRetryDelayStrategy retryDelayStrategy,
+            IRateLimitingStrategy rateLimitingStrategy,
+            GlookoAuthTokenProvider tokenProvider,
+            ITimezoneTimelineService? timezoneTimelineService)
+            : this(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, tokenProvider,
+                timezoneTimelineService, new ConcurrentBag<(Guid TenantId, DateTime Timestamp)>())
         {
-            foreach (var record in records)
-                PublishedGlucose.Add((AmbientTenant.Id, record.Timestamp));
-            return Task.FromResult(true);
+        }
+
+        private CapturingGlookoConnectorService(
+            HttpClient httpClient,
+            IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
+            ILogger<GlookoConnectorService> logger,
+            IRetryDelayStrategy retryDelayStrategy,
+            IRateLimitingStrategy rateLimitingStrategy,
+            GlookoAuthTokenProvider tokenProvider,
+            ITimezoneTimelineService? timezoneTimelineService,
+            ConcurrentBag<(Guid TenantId, DateTime Timestamp)> published)
+            : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, tokenProvider,
+                CapturingPublisher(published), timezoneTimelineService: timezoneTimelineService)
+        {
+            PublishedGlucose = published;
+        }
+
+        public ConcurrentBag<(Guid TenantId, DateTime Timestamp)> PublishedGlucose { get; }
+
+        private static IConnectorPublisher CapturingPublisher(ConcurrentBag<(Guid TenantId, DateTime Timestamp)> published)
+        {
+            var glucose = new Mock<IGlucosePublisher>();
+            glucose
+                .Setup(g => g.PublishSensorGlucoseAsync(
+                    It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
+                    It.IsAny<CancellationToken>()))
+                .Callback((IEnumerable<SensorGlucose> records, string _, WriteOrigin _, CancellationToken _) =>
+                {
+                    foreach (var record in records)
+                        published.Add((AmbientTenant.Id, record.Timestamp));
+                })
+                .ReturnsAsync(true);
+
+            var publisher = new Mock<IConnectorPublisher>();
+            publisher.SetupGet(p => p.IsAvailable).Returns(true);
+            publisher.SetupGet(p => p.Glucose).Returns(glucose.Object);
+            return publisher.Object;
         }
     }
 

@@ -25,15 +25,14 @@ public interface ITempBasalRateReresolver
     /// <param name="spans">The activations written or removed, with the end they ran to, if any.</param>
     /// <param name="ct">Cancels the operation.</param>
     Task AfterActivationsChangedAsync(
-        IReadOnlyCollection<(string ProfileName, DateTime Start, DateTime? End)> spans, CancellationToken ct);
+        IReadOnlyCollection<(DateTime Start, DateTime? End)> spans, CancellationToken ct);
 
     /// <summary>
     /// For a change whose span is not worth working out (the default store, a store's timezone, the
     /// patient's timezone, a source's activations removed): every schedule-derived rate, at any time.
     /// </summary>
-    /// <param name="profileNames">The profiles whose cached versions the change made stale.</param>
     /// <param name="ct">Cancels the operation.</param>
-    Task AfterProfilesChangedAsync(IReadOnlyCollection<string> profileNames, CancellationToken ct);
+    Task AfterProfilesChangedAsync(CancellationToken ct);
 }
 
 /// <summary>
@@ -46,8 +45,9 @@ public interface ITempBasalRateReresolver
 /// Runs after the write has committed and never fails it: an error is logged and the rates are left
 /// as they were. It is a system-derived recompute in a job scope of its own that reads as no one, so
 /// a history-clamped writer still moves older rates, and no resolver memo of the writing scope
-/// answers for the change; the version cache is reloaded for the profiles named. A tenant with no
-/// schedule-derived percent temps costs one indexed probe.
+/// answers for the change. It reads profile versions uncached (<see cref="ProfileVersionCache.ReadUncached"/>),
+/// since it persists what it computes and a read racing the write could have filled the cache with
+/// the versions from before it. A tenant with no schedule-derived percent temps costs one indexed probe.
 /// <para>
 /// A version's window runs to the next version of its profile; the newest also covers the time
 /// before the first, which reads the newest (<see cref="ProfileVersionCache.ActiveAt{TRecord}"/>),
@@ -75,22 +75,18 @@ internal sealed class TempBasalRateReresolver(
         IReadOnlyCollection<(string ProfileName, DateTime Start)> versions, CancellationToken ct) =>
         versions.Count == 0
             ? Task.CompletedTask
-            : RunAsync(versions.Select(v => v.ProfileName), (sp, token) => VersionWindowsAsync(sp, versions, token), ct);
+            : RunAsync((sp, token) => VersionWindowsAsync(sp, versions, token), ct);
 
     public Task AfterActivationsChangedAsync(
-        IReadOnlyCollection<(string ProfileName, DateTime Start, DateTime? End)> spans, CancellationToken ct) =>
+        IReadOnlyCollection<(DateTime Start, DateTime? End)> spans, CancellationToken ct) =>
         spans.Count == 0
             ? Task.CompletedTask
-            : RunAsync(
-                spans.Select(s => s.ProfileName),
-                (_, _) => Task.FromResult(spans.Select(s => new Window(s.Start, s.End)).ToList()),
-                ct);
+            : RunAsync((_, _) => Task.FromResult(spans.Select(s => new Window(s.Start, s.End)).ToList()), ct);
 
-    public Task AfterProfilesChangedAsync(IReadOnlyCollection<string> profileNames, CancellationToken ct) =>
-        RunAsync(profileNames, (_, _) => Task.FromResult(new List<Window> { new(null, null) }), ct);
+    public Task AfterProfilesChangedAsync(CancellationToken ct) =>
+        RunAsync((_, _) => Task.FromResult(new List<Window> { new(null, null) }), ct);
 
     private async Task RunAsync(
-        IEnumerable<string> profileNames,
         Func<IServiceProvider, CancellationToken, Task<List<Window>>> windowsOf,
         CancellationToken ct)
     {
@@ -106,15 +102,7 @@ internal sealed class TempBasalRateReresolver(
             if (!await tempBasals.HasScheduleDerivedAsync(ct))
                 return;
 
-            var versions = services.GetRequiredService<ProfileVersionCache>();
-            var basalSchedules = services.GetRequiredService<IBasalScheduleRepository>();
-            var therapySettings = services.GetRequiredService<ITherapySettingsRepository>();
-            foreach (var name in profileNames.Distinct(StringComparer.Ordinal))
-            {
-                await versions.RefreshAsync(basalSchedules, name, ct);
-                await versions.RefreshAsync(therapySettings, name, ct);
-            }
-
+            services.GetRequiredService<ProfileVersionCache>().ReadUncached();
             var rates = services.GetRequiredService<RelativeTempBasalRates>();
             var changed = 0;
             foreach (var window in Merge(await windowsOf(services, ct)))

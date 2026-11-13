@@ -134,12 +134,58 @@ public class GoogleHealthTests : IDisposable
         Assert.Equal(3, await db.BodyWeights.CountAsync());
         Assert.Equal(3, await db.SleepSessions.CountAsync());
         Assert.False(await db.StepCounts.IgnoreQueryFilters().Where(record => record.TenantId == tenantId && record.SyncIdentifier == "stale")
-            .Select(record => EF.Property<bool>(record, "DeletedByUser")).SingleAsync());
+            .Select(record => EF.Property<bool>(record, NocturneDbContext.DeletedByUserProperty)).SingleAsync());
         db.TenantId = otherTenantId;
         Assert.Equal(4, await db.HeartRates.CountAsync());
         Assert.Equal(4, await db.StepCounts.CountAsync());
         Assert.Equal(4, await db.BodyWeights.CountAsync());
         Assert.Equal(4, await db.SleepSessions.CountAsync());
+    }
+
+    [Fact]
+    public async Task Purge_removes_the_tenants_user_deleted_rows_and_leaves_another_tenants()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+        db.Tenants.AddRange(
+            new TenantEntity { Id = tenantId, Slug = "purge-test", DisplayName = "Synthetic", IsActive = true },
+            new TenantEntity { Id = otherTenantId, Slug = "purge-other", DisplayName = "Other", IsActive = true });
+        await db.SaveChangesAsync();
+        var at = new DateTime(2026, 9, 1, 6, 0, 0, DateTimeKind.Utc);
+        var deletedAt = at.AddDays(1);
+        foreach (var tenant in new[] { tenantId, otherTenantId })
+        {
+            db.TenantId = tenant;
+            var rows = new object[]
+            {
+                new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = at, Bpm = 60, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "gone", DeletedAt = deletedAt },
+                new StepCountEntity { Id = Guid.NewGuid(), Timestamp = at, Metric = 42, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "gone", DeletedAt = deletedAt },
+                new BodyWeightEntity { Id = Guid.NewGuid(), Mills = new DateTimeOffset(at).ToUnixTimeMilliseconds(), WeightKg = 70, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "gone", DeletedAt = deletedAt },
+                new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = at.AddHours(-8), EndTime = at, Source = "Google", SourceApp = "Google Health", OriginalId = "gone", DeletedAt = deletedAt },
+            };
+            foreach (var row in rows) db.Entry(row).State = EntityState.Added;
+            foreach (var row in rows) db.Entry(row).Property(NocturneDbContext.DeletedByUserProperty).CurrentValue = true;
+            await db.SaveChangesAsync();
+        }
+        db.TenantId = tenantId;
+        var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db.AsFactory(), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
+
+        await writer.PurgeAsync(default);
+
+        Assert.Equal(0, await db.HeartRates.IncludingDeleted().CountAsync());
+        Assert.Equal(0, await db.StepCounts.IncludingDeleted().CountAsync());
+        Assert.Equal(0, await db.BodyWeights.IncludingDeleted().CountAsync());
+        Assert.Equal(0, await db.SleepSessions.IncludingDeleted().CountAsync());
+        db.TenantId = otherTenantId;
+        Assert.Equal(1, await db.HeartRates.IncludingDeleted().CountAsync());
+        Assert.Equal(1, await db.StepCounts.IncludingDeleted().CountAsync());
+        Assert.Equal(1, await db.BodyWeights.IncludingDeleted().CountAsync());
+        Assert.Equal(1, await db.SleepSessions.IncludingDeleted().CountAsync());
     }
 
     [Fact]
@@ -230,7 +276,7 @@ public class GoogleHealthTests : IDisposable
         Assert.Contains("other-app", remaining);
         var stored = await db.SleepSessions.IgnoreQueryFilters().AsNoTracking()
             .Where(session => session.TenantId == tenantId)
-            .Select(session => new { session.OriginalId, session.DeletedAt, DeletedByUser = EF.Property<bool>(session, "DeletedByUser") })
+            .Select(session => new { session.OriginalId, session.DeletedAt, DeletedByUser = EF.Property<bool>(session, NocturneDbContext.DeletedByUserProperty) })
             .ToListAsync();
         Assert.Equal(9, stored.Count);
         var stale = Assert.Single(stored, session => session.OriginalId == "stale-overnight");

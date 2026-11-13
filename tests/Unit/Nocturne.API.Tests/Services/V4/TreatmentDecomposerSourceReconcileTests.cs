@@ -180,7 +180,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     private void AddSpan(string originalId, string category, string source, string metadataJson, DateTime start) =>
         _context.StateSpans.Add(new StateSpanEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = originalId, Category = category,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = originalId, Category = category,
             State = "Active", StartTimestamp = start, Source = source, MetadataJson = metadataJson,
         });
 
@@ -218,7 +218,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _context.StateSpans.Add(new StateSpanEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, Category = nameof(StateSpanCategory.Override),
-            State = "Custom", StartTimestamp = At, OriginalId = "override",
+            State = "Custom", StartTimestamp = At, LegacyId = "override",
         });
         await _context.SaveChangesAsync();
 

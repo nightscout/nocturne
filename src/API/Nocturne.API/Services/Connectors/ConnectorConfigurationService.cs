@@ -343,6 +343,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyDictionary<string, Type>?> GetBoundKeysAsync(string connectorName, CancellationToken ct = default)
+    {
+        var configType = FindConfigurationType(connectorName, _logger);
+        return Task.FromResult<IReadOnlyDictionary<string, Type>?>(configType is null ? null : ConnectorConfigurationBinder.BoundKeyTypes(configType));
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ConnectorStatusInfo>> GetAllConnectorStatusAsync(CancellationToken ct = default)
     {
         var allConnectors = ConnectorMetadataService.GetAll();

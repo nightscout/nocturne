@@ -158,6 +158,34 @@ public class GlookoConnectorServiceReauthTests
         result.ItemsSynced[SyncDataType.StateSpans].Should().Be(2);
     }
 
+    /// <summary>
+    /// Glooko drops a session long before the 24-hour cache entry for it expires, and then answers
+    /// with its sign-in page or a 401. The run has to sign in again rather than fail every scheduled
+    /// sync until the cache entry lapses.
+    /// </summary>
+    [Theory]
+    [InlineData(true, ExpiredSessionAnswer.SignInPage)]
+    [InlineData(true, ExpiredSessionAnswer.Unauthorized)]
+    [InlineData(false, ExpiredSessionAnswer.SignInPage)]
+    [InlineData(false, ExpiredSessionAnswer.Unauthorized)]
+    public async Task SyncDataAsync_WhenTheCachedSessionHasExpired_ReauthenticatesAndRecovers(
+        bool useV3Api, ExpiredSessionAnswer answer)
+    {
+        var tokenProvider = new StaticGlookoTokenProvider();
+        var handler = new GlookoEndpointHandler(expiredFirstSession: answer);
+        var service = GlookoSyncHarness.Service(handler, tokenProvider: tokenProvider);
+
+        var result = await service.SyncDataAsync(
+            SingleChunkRequest(SyncDataType.StateSpans, SyncDataType.TempBasals),
+            GlookoSyncHarness.Config(useV3Api), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Errors.Should().BeEmpty();
+        tokenProvider.AcquireCount.Should().Be(2, "the expired session should trigger exactly one re-auth");
+        handler.ExpiredRequests.Should().Be(1,
+            "the same request with the same cookie cannot succeed, so it is not retried before signing in");
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────────
 
     private static SyncRequest SingleChunkRequest(params SyncDataType[] dataTypes) => new()

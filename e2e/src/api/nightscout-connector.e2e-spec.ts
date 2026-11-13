@@ -42,7 +42,7 @@ describe("Nightscout connector", () => {
     tenant = await seedTenant();
     await tenant.api.ok("PUT", "/api/v4/connectors/config/nightscout", {
       url: `${env.mocksUrlFromApi}/nightscout`,
-      isActive: true,
+      enabled: true,
     });
     await tenant.api.ok("PUT", "/api/v4/connectors/config/nightscout/secrets", { apiSecret: FAKE_SECRET });
   });
@@ -92,7 +92,7 @@ describe("Nightscout connector", () => {
 
   it("reports a wrong secret as a failed sync instead of storing anything", async () => {
     const other = await seedTenant();
-    await other.api.ok("PUT", "/api/v4/connectors/config/nightscout", { url: `${env.mocksUrlFromApi}/nightscout`, isActive: true });
+    await other.api.ok("PUT", "/api/v4/connectors/config/nightscout", { url: `${env.mocksUrlFromApi}/nightscout`, enabled: true });
     await other.api.ok("PUT", "/api/v4/connectors/config/nightscout/secrets", { apiSecret: "not-the-secret" });
 
     const res = await other.api.post<SyncResult>("/api/v4/services/connectors/nightscout/sync", {});

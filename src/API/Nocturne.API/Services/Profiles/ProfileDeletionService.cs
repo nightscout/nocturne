@@ -3,7 +3,9 @@ using Nocturne.API.Helpers;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
@@ -18,6 +20,7 @@ public class ProfileDeletionService : IProfileDeletionService
     private readonly IAuditContext _auditContext;
     private readonly ILoopClosedLoopStamper _closedLoop;
     private readonly ILogger<ProfileDeletionService> _logger;
+    private readonly ILegacyReadCacheInvalidation? _legacyReads;
 
     /// <summary>Rows read to evaluate the guard, matching the ceiling the summary endpoint reads at.</summary>
     private const int GuardReadLimit = 1000;
@@ -33,12 +36,14 @@ public class ProfileDeletionService : IProfileDeletionService
     /// </param>
     /// <param name="closedLoop">Restamps the Loop snapshots the deleted settings governed.</param>
     /// <param name="logger">Logger.</param>
+    /// <param name="legacyReads">Told which profile models the delete wrote, so the cached versions go.</param>
     public ProfileDeletionService(
         INocturneDbContextFactory contextFactory,
         ITherapySettingsRepository therapyRepo,
         IAuditContext auditContext,
         ILoopClosedLoopStamper closedLoop,
-        ILogger<ProfileDeletionService> logger
+        ILogger<ProfileDeletionService> logger,
+        ILegacyReadCacheInvalidation? legacyReads = null
     )
     {
         _contextFactory = contextFactory;
@@ -46,6 +51,7 @@ public class ProfileDeletionService : IProfileDeletionService
         _auditContext = auditContext;
         _closedLoop = closedLoop;
         _logger = logger;
+        _legacyReads = legacyReads;
     }
 
     /// <inheritdoc />
@@ -93,6 +99,11 @@ public class ProfileDeletionService : IProfileDeletionService
                     ctx.TherapySettings.Where(e => e.ProfileName == profileName),
                     _auditContext, scope, token),
             ct: ct);
+
+        if (_legacyReads is not null)
+            await _legacyReads.WrittenAsync(
+                [typeof(TherapySettings), typeof(BasalSchedule), typeof(CarbRatioSchedule),
+                 typeof(SensitivitySchedule), typeof(TargetRangeSchedule)]);
 
         await _closedLoop.AfterLoopSettingsWrittenAsync(
             settings.Where(s => s.ProfileName == profileName).Select(s => s.Timestamp).ToList(), ct);

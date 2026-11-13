@@ -97,6 +97,14 @@ public interface IConnectorConfigurationService
     Task<ConnectorConfigurationResponse> SaveConfigurationAsync(string connectorName, JsonDocument configuration, string? modifiedBy = null, CancellationToken ct = default);
 
     /// <summary>
+    /// The top-level keys a connector's configuration type binds, secrets and sync toggles
+    /// included, each with its property type, or null when the connector or its type is unknown.
+    /// The enabled flag is in the map only as <c>enabled</c>; <see cref="ConnectorEnabledKey"/>
+    /// matches its other casings.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, Type>?> GetBoundKeysAsync(string connectorName, CancellationToken ct = default);
+
+    /// <summary>
     /// Saves encrypted secrets for a connector.
     /// Secrets are encrypted using AES-256-GCM before storage.
     /// </summary>

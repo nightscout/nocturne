@@ -212,7 +212,7 @@ public class ActivityBatchEquivalenceTests : ApiIntegrationTestBase
             userSteps,
             new HeartRateEntity
             {
-                Id = MapperHelpers.ParseIdToGuid(SweptId(seed)),
+                Id = RecordIdKey.ParseIdToGuid(SweptId(seed)),
                 TenantId = Fixture.TenantId, OriginalId = SweptId(seed), Timestamp = at, Bpm = 61, DeletedAt = at,
             },
             new HeartRateEntity

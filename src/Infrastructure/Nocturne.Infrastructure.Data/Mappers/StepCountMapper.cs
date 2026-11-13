@@ -16,7 +16,7 @@ public static class StepCountMapper
     {
         return new StepCountEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(stepCount.Id),
+            Id = RecordIdKey.ParseIdToGuid(stepCount.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(stepCount.Id) ? stepCount.Id : null,
             Timestamp = stepCount.Timestamp,
             Metric = stepCount.Metric,

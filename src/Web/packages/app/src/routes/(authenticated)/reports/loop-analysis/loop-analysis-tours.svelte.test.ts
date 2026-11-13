@@ -259,11 +259,11 @@ describe("Loop Analysis tours", () => {
   it.each([
     ["a share viewer", { user: null }],
     ["a guest", { isGuestSession: true }],
-  ])("leaves the page alone for %s", async (_, data) => {
+  ])("shows none of its tours to %s", async (_, data) => {
     const { ctx } = await open("daily-profile", { data });
     await expect.element(page.getByTestId("loop-analysis-daily-totals")).toBeVisible();
 
-    for (const key of [...SHARED, ...steps("daily-profile")]) expect(ctx.getMountedSteps(key), key).toHaveLength(0);
+    for (const key of [...SHARED, ...steps("daily-profile")]) expect(ctx.isMarkEligible(key), key).toBe(false);
     expect(ctx.activeKey).toBeNull();
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
     await expect.element(page.getByRole("button", { name: tourReplayLabel() })).not.toBeInTheDocument();

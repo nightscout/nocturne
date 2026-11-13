@@ -17,12 +17,12 @@ public class MapperIdDerivationTests
     [Fact]
     public void FoodMapper_DerivesTheSharedKey_ForANonGuidId()
         => FoodMapper.ToEntity(new Food { Id = LegacyObjectId, Name = "Apple" }).Id
-            .Should().Be(MapperHelpers.ParseIdToGuid(LegacyObjectId));
+            .Should().Be(RecordIdKey.ParseIdToGuid(LegacyObjectId));
 
     [Fact]
     public void SettingsMapper_DerivesTheSharedKey_ForANonGuidId()
         => SettingsMapper.ToEntity(new Settings { Id = LegacyObjectId, Key = "units" }).Id
-            .Should().Be(MapperHelpers.ParseIdToGuid(LegacyObjectId));
+            .Should().Be(RecordIdKey.ParseIdToGuid(LegacyObjectId));
 
     [Fact]
     public void FoodAndSettingsMappers_AgreeOnTheSameNonGuidId()

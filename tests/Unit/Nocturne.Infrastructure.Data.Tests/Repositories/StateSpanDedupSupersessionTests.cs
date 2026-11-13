@@ -172,7 +172,7 @@ public class StateSpanDedupSupersessionTests : IDisposable
 
         var spans = (await _repository.GetStateSpansAsync(category: category)).ToList();
         spans.Should().HaveCount(2);
-        var rows = await _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.OriginalId!);
+        var rows = await _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.LegacyId!);
         rows["earlier"].EndTimestamp.Should().Be(later.StartTimestamp);
         rows["earlier"].SupersededById.Should().Be(rows["later"].Id);
         (await TheOneOpenSpanAsync(category, null)).OriginalId.Should().Be("later");

@@ -12,6 +12,7 @@
     labels,
     sequences = {},
     gates = {},
+    audience,
     settleDelay = 500,
     seenDwellMs = 2000,
     router,
@@ -21,6 +22,8 @@
     labels: CoachLabels;
     sequences?: SequenceConfig;
     gates?: CoachGates;
+    /** The reader on this page, matched against each sequence's `audience`. */
+    audience?: string;
     settleDelay?: number;
     seenDwellMs?: number;
     /** Without one, the back button leaves the page instead of dismissing an overlay. */
@@ -29,7 +32,7 @@
   } = $props();
 
   // svelte-ignore state_referenced_locally
-  const ctx = createCoachMarkContext(adapter, labels, sequences, settleDelay, seenDwellMs, () => gates);
+  const ctx = createCoachMarkContext(adapter, labels, sequences, settleDelay, seenDwellMs, () => gates, () => audience);
   setCoachMarkContextRef(ctx);
 
   $effect.pre(() => {

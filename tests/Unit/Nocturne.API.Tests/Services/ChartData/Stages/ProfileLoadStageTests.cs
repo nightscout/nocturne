@@ -34,7 +34,6 @@ public class ProfileLoadStageTests
             StartTime = 1700000000000L,
             EndTime = endTime,
             IntervalMinutes = 5,
-            BufferStartTime = 1700000000000L - 8L * 60 * 60 * 1000,
         };
 
     [Fact]

@@ -153,7 +153,8 @@ describe("a run of the tracker introduction", () => {
       2000,
       () => ({
         [ONBOARDING_CORE_GATE]: true,
-      })
+      }),
+      () => "member"
     );
     await context.initialize();
     return context;

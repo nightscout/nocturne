@@ -14,8 +14,12 @@ public interface IDuplicateReconciler
     /// merging duplicate canonical groups. Pages links in (SysCreatedAt, Id) order from the
     /// tenant's persisted cursor up to a short lag behind the present, advancing the cursor per
     /// batch. Stops when caught up or after maxBatches. Returns groups merged and whether caught up.
+    /// A batch that throws is counted against the cursor it started from; on its
+    /// skipBatchAfterFailures-th failure in a row it is logged and the cursor moved past it, so a batch
+    /// that always fails cannot hold the cursor. Null never skips.
     /// </summary>
-    Task<ReconcileResult> ReconcileNewLinksAsync(int batchSize, int maxBatches, CancellationToken cancellationToken = default);
+    Task<ReconcileResult> ReconcileNewLinksAsync(
+        int batchSize, int maxBatches, int? skipBatchAfterFailures, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes, for the current tenant, links that are the only link of their group once reconcile

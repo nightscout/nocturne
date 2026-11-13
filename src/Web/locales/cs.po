@@ -1876,13 +1876,11 @@ msgstr "<0/> Zpět"
 msgid "Clock name"
 msgstr "Název hodin"
 
-#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-msgid "Undo (Ctrl+Z)"
-msgstr "Zpět (Ctrl+Z)"
+#~ msgid "Undo (Ctrl+Z)"
+#~ msgstr "Zpět (Ctrl+Z)"
 
-#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
-msgid "Redo (Ctrl+Shift+Z)"
-msgstr "Znovu (Ctrl+Shift+Z)"
+#~ msgid "Redo (Ctrl+Shift+Z)"
+#~ msgstr "Znovu (Ctrl+Shift+Z)"
 
 #: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
@@ -4074,6 +4072,7 @@ msgstr "Přehled"
 #~ msgstr "Časové úseky"
 
 #: ../portal/src/routes/features/+page.svelte
+#: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/+layout.svelte
@@ -7923,9 +7922,8 @@ msgstr "<0/> {0}: tuky, bílkoviny, kategorie..."
 #~ msgid "Subcategory"
 #~ msgstr "Podkategorie"
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Save & add another <0>⌘+Enter</0>"
-msgstr "Uložit a přidat další <0>⌘+Enter</0>"
+#~ msgid "Save & add another <0>⌘+Enter</0>"
+#~ msgstr "Uložit a přidat další <0>⌘+Enter</0>"
 
 #~ msgid "Showing {0} of {1} — scroll or refine search to see more"
 #~ msgstr "Zobrazeno {0} z {1} — posuňte se nebo upřesněte hledání"
@@ -19375,9 +19373,8 @@ msgstr "Použít podle mého jazyka"
 msgid "Tracker data is unavailable, so site and sensor changes are not shown."
 msgstr "Data sledování nejsou dostupná, proto se nezobrazují výměny infuzního setu ani senzoru."
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
-msgstr "Tab pro pohyb mezi poli · Enter pro uložení · ⌘+Enter pro uložení a přidání dalšího · Esc pro zavření"
+#~ msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
+#~ msgstr "Tab pro pohyb mezi poli · Enter pro uložení · ⌘+Enter pro uložení a přidání dalšího · Esc pro zavření"
 
 #~ msgid "Name <0/><1>(required)</1>"
 #~ msgstr ""
@@ -38546,4 +38543,57 @@ msgstr ""
 
 #: ../portal/src/routes/scalar/+page.svelte
 msgid "Open the reference on the demo"
+msgstr ""
+
+#. 0: modifier.label
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Undo ({0}+Z)"
+msgstr ""
+
+#. 0: modifier.label
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Redo ({0}+Shift+Z)"
+msgstr ""
+
+#. 0: modifier.label
+#: src/routes/(authenticated)/food/Composer.svelte
+msgid "Tab through fields · Enter to save · {0}+Enter to save and add another · Esc to close"
+msgstr ""
+
+#. 0.0: modifier.label
+#: src/routes/(authenticated)/food/Composer.svelte
+msgid "Save & add another <0>{0}+Enter</0>"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Read-only access"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "You can read this data, but you cannot change it. This banner shows the time that remains. When the time ends, ask the person who gave you the code for a new code."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Glucose chart"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Drag the chart to see earlier readings. Pinch or scroll to zoom. Select a point to see the reading and its time."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Reports show summaries of a longer period, for example the glucose profile (AGP). Select Reports to see the list."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Newest reading"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This is the newest glucose reading of the person who shared this page. You can read this page, but you cannot change the data."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This chart shows the recent readings. Drag the chart to see earlier readings. Select a point to see the reading and its time."
 msgstr ""

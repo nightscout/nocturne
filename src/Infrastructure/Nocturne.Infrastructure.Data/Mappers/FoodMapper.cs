@@ -17,7 +17,7 @@ public static class FoodMapper
     {
         return new FoodEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(food.Id),
+            Id = RecordIdKey.ParseIdToGuid(food.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(food.Id) ? food.Id : null,
             Type = food.Type,
             Category = food.Category,

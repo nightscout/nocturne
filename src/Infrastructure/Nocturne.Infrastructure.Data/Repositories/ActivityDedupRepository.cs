@@ -31,7 +31,7 @@ public class ActivityDedupRepository : IActivityDedupRepository
         await using var db = await _contexts.CreateAsync(ct);
         var lookups = new Func<Task<IReadOnlySet<string>>>[]
         {
-            () => db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, ct),
+            async () => (await db.GetBlockingLegacyIdsAsync<StateSpanEntity>(ids, ct)).Held,
             () => db.GetHeldOriginalIdsAsync<HeartRateEntity>(ids, ct),
             () => db.GetHeldOriginalIdsAsync<StepCountEntity>(ids, ct),
             () => db.GetHeldOriginalIdsAsync<SleepSessionEntity>(

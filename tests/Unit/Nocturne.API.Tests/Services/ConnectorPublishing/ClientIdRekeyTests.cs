@@ -141,7 +141,7 @@ public class ClientIdRekeyTests : IDisposable
         var span = new StateSpanEntity
         {
             Id = Guid.CreateVersion7(), TenantId = _context.TenantId, Category = "Override", State = "Active",
-            StartTimestamp = MealAt, Source = Source, OriginalId = TrioId, DeletedAt = DateTime.UtcNow,
+            StartTimestamp = MealAt, Source = Source, LegacyId = TrioId, DeletedAt = DateTime.UtcNow,
         };
         _context.StateSpans.Add(span);
         _context.Entry(span).Property("DeletedByUser").CurrentValue = true;
@@ -158,7 +158,7 @@ public class ClientIdRekeyTests : IDisposable
 
         var spans = await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().ToListAsync();
         spans.Should().OnlyContain(s => s.DeletedAt != null);
-        spans.Select(s => s.OriginalId).Should().BeEquivalentTo([TrioId, ObjectIdA, ObjectIdB, ObjectIdC]);
+        spans.Select(s => s.LegacyId).Should().BeEquivalentTo([TrioId, ObjectIdA, ObjectIdB, ObjectIdC]);
     }
 
     [Fact]

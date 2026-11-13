@@ -990,7 +990,7 @@ public class DeduplicationReconcileTests : IDisposable
         FailingReadsInterceptor.FailWhen = sql => sql.Contains("carb_intakes");
         try
         {
-            var act = () => service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+            var act = () => service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
             await act.Should().ThrowAsync<InvalidOperationException>();
         }
@@ -1013,6 +1013,240 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     [Fact]
+    public async Task ReconcileNewLinksAsync_ABatchThatKeepsFailing_IsSkippedOnlyOnItsThresholdFailure()
+    {
+        var now = DateTime.UtcNow;
+        var cursor = new ReconcileCursor(now.AddHours(-1), Guid.CreateVersion7());
+        await SetCursorAsync(cursor);
+        await AddOnePairCreatedAt(now.AddMinutes(-5));
+        var lastLink = (await _context.LinkedRecords.AsNoTracking().ToListAsync())
+            .OrderBy(l => l.SysCreatedAt).ThenBy(l => l.Id).Last();
+
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+        FailingReadsInterceptor.FailWhen = sql => sql.Contains("carb_intakes");
+        ReconcileResult skipped;
+        try
+        {
+            for (var pass = 1; pass < 3; pass++)
+            {
+                var failing = () => service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 3, CancellationToken.None);
+                await failing.Should().ThrowAsync<InvalidOperationException>("pass {0} is below the threshold", pass);
+                (await CursorAsync()).Should().Be(cursor);
+                (await FailedBatchAsync()).Should().Be((cursor.CreatedAt, cursor.Id, pass));
+            }
+
+            skipped = await service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 3, CancellationToken.None);
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailWhen = null;
+        }
+
+        skipped.Should().Be(new ReconcileResult(0, true));
+        (await CursorAsync()).Should().Be(new ReconcileCursor(lastLink.SysCreatedAt, lastLink.Id));
+        (await FailedBatchAsync()).Should().Be(((DateTime?)null, (Guid?)null, 0), "moving the cursor clears the failure record");
+        VerifySkipLogged(logger, Times.Once(), lastLink.Id);
+
+        var later = await service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 3, CancellationToken.None);
+
+        later.GroupsMerged.Should().Be(0, "the skipped batch is left to a full deduplication run");
+        (await AllCanonicals(RecordType.CarbIntake)).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_SkippingAtTheFirstFailure_StillMergesAHealthyBatch()
+    {
+        var now = DateTime.UtcNow;
+        await SetCursorAsync(new ReconcileCursor(now.AddHours(-1), Guid.CreateVersion7()));
+        await AddOnePairCreatedAt(now.AddMinutes(-5));
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+
+        var result = await service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 1, CancellationToken.None);
+
+        result.Should().Be(new ReconcileResult(1, true));
+        (await AllCanonicals(RecordType.CarbIntake)).Should().HaveCount(1);
+        VerifySkipLogged(logger, Times.Never());
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_ALaterBatchFailingOnce_IsRetriedByTheNextPassNotSkipped()
+    {
+        var now = DateTime.UtcNow;
+        await AddThreePairsCreatedAt(now.AddHours(-6), now.AddMinutes(-5));
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+        var middle = await MiddlePairIdsAsync();
+        var failures = 0;
+        FailingReadsInterceptor.FailCommandWhen = command =>
+            ReadsAny(command, "carb_intakes", middle) && failures++ == 0;
+        ReconcileResult retried;
+        try
+        {
+            var first = () => service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 10, skipBatchAfterFailures: 2, CancellationToken.None);
+            await first.Should().ThrowAsync<InvalidOperationException>();
+            (await AllCanonicals(RecordType.CarbIntake)).Should().HaveCount(5, "the batch before the failing one merged");
+
+            retried = await service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 10, skipBatchAfterFailures: 2, CancellationToken.None);
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailCommandWhen = null;
+        }
+
+        retried.Should().Be(new ReconcileResult(2, true));
+        (await AllCanonicals(RecordType.CarbIntake)).Should().HaveCount(3);
+        VerifySkipLogged(logger, Times.Never());
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_ALaterBatchThatKeepsFailing_IsSkippedAndTheBatchAfterItMerges()
+    {
+        var now = DateTime.UtcNow;
+        await AddThreePairsCreatedAt(now.AddHours(-6), now.AddMinutes(-5));
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+        var middle = await MiddlePairIdsAsync();
+        FailingReadsInterceptor.FailCommandWhen = command => ReadsAny(command, "carb_intakes", middle);
+        ReconcileResult skipping;
+        try
+        {
+            var first = () => service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 10, skipBatchAfterFailures: 2, CancellationToken.None);
+            await first.Should().ThrowAsync<InvalidOperationException>();
+
+            skipping = await service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 10, skipBatchAfterFailures: 2, CancellationToken.None);
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailCommandWhen = null;
+        }
+
+        skipping.Should().Be(new ReconcileResult(1, true));
+        var carbs = await _context.CarbIntakes.AsNoTracking().ToListAsync();
+        var canonicalOf = (await _context.LinkedRecords.AsNoTracking().Where(l => l.RecordType == "carbintake").ToListAsync())
+            .ToDictionary(l => l.RecordId, l => l.CanonicalId);
+        foreach (var pair in carbs.GroupBy(c => c.Carbs))
+        {
+            pair.Select(c => canonicalOf[c.Id]).Distinct().Should().HaveCount(
+                pair.Key == 60 ? 2 : 1, "only the skipped pair stays apart");
+        }
+        VerifySkipLogged(logger, Times.Once());
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_CancelledDuringAFailingBatch_ThrowsAndNeitherSkipsNorCounts()
+    {
+        var now = DateTime.UtcNow;
+        var cursor = new ReconcileCursor(now.AddHours(-1), Guid.CreateVersion7());
+        await SetCursorAsync(cursor);
+        await AddOnePairCreatedAt(now.AddMinutes(-5));
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+        using var cts = new CancellationTokenSource();
+        FailingReadsInterceptor.FailCommandWhen = command =>
+        {
+            if (!command.CommandText.Contains("carb_intakes"))
+                return false;
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        };
+        try
+        {
+            var act = () => service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 1, cts.Token);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailCommandWhen = null;
+        }
+
+        (await CursorAsync()).Should().Be(cursor);
+        (await FailedBatchAsync()).Should().Be(((DateTime?)null, (Guid?)null, 0));
+        VerifySkipLogged(logger, Times.Never());
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_FailedPrunes_DoNotCountTowardsTheSkip()
+    {
+        var now = DateTime.UtcNow;
+        var cursor = new ReconcileCursor(now.AddHours(-1), Guid.CreateVersion7());
+        await SetCursorAsync(cursor);
+        await AddOnePairCreatedAt(now.AddMinutes(-5));
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+
+        FailingReadsInterceptor.FailWhen = sql => sql.Contains("dedup_reconcile_state");
+        try
+        {
+            for (var pass = 0; pass < 3; pass++)
+            {
+                var prune = () => service.PruneSingletonLinksAsync(100, 10, CancellationToken.None);
+                await prune.Should().ThrowAsync<InvalidOperationException>();
+            }
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailWhen = null;
+        }
+
+        FailingReadsInterceptor.FailWhen = sql => sql.Contains("carb_intakes");
+        try
+        {
+            var act = () => service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 2, CancellationToken.None);
+
+            await act.Should().ThrowAsync<InvalidOperationException>("the batch has failed once, below the threshold");
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailWhen = null;
+        }
+
+        (await CursorAsync()).Should().Be(cursor);
+        (await FailedBatchAsync()).Should().Be(((DateTime?)cursor.CreatedAt, (Guid?)cursor.Id, 1));
+        VerifySkipLogged(logger, Times.Never());
+    }
+
+    private async Task AddOnePairCreatedAt(DateTime at)
+    {
+        var mylife = await AddCarb(at, "mylife-connector", 50);
+        var glooko = await AddCarb(at.AddSeconds(20), "glooko-connector", 50);
+        AddPrimaryLink(RecordType.CarbIntake, mylife, at.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, at.AddSeconds(20).ToMills(), "glooko-connector");
+        await _context.SaveChangesAsync();
+        await SetAllLinkSysCreatedAt(at);
+    }
+
+    private async Task<string[]> MiddlePairIdsAsync() =>
+        (await _context.CarbIntakes.AsNoTracking().Where(c => c.Carbs == 60).Select(c => c.Id).ToListAsync())
+        .Select(id => id.ToString())
+        .ToArray();
+
+    private static bool ReadsAny(DbCommand command, string table, string[] ids) =>
+        command.CommandText.Contains(table)
+        && command.Parameters.Cast<DbParameter>().Any(p => ids.Any(id =>
+            (p.Value?.ToString() ?? "").Contains(id, StringComparison.OrdinalIgnoreCase)));
+
+    private async Task<(DateTime? CreatedAt, Guid? Id, int Attempts)> FailedBatchAsync()
+    {
+        var state = await _context.DedupReconcileState.AsNoTracking().SingleAsync();
+        return (state.FailedBatchCursorCreatedAt, state.FailedBatchCursorId, state.FailedBatchAttempts);
+    }
+
+    private static void VerifySkipLogged(Mock<ILogger<DuplicateReconciler>> logger, Times times, Guid? lastLinkId = null) =>
+        logger.Verify(l => l.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) =>
+                    v!.ToString()!.Contains("skipped")
+                    && v.ToString()!.Contains("carbintake")
+                    && (lastLinkId == null || v.ToString()!.Contains(lastLinkId.Value.ToString()))),
+                It.IsAny<InvalidOperationException>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            times);
+
+    [Fact]
     public async Task ReconcileNewLinksAsync_MergesGroupsWithRecentLinks()
     {
         var now = DateTime.UtcNow;
@@ -1027,7 +1261,7 @@ public class DeduplicationReconcileTests : IDisposable
         var created = now.AddMinutes(-5);
         await SetAllLinkSysCreatedAt(created);
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(1);
         result.CaughtUp.Should().BeTrue();
@@ -1056,7 +1290,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         await RestampOnePastTheCursor(tp2, now);
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().Where(l => l.RecordType == "bolus").ToListAsync();
@@ -1078,7 +1312,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         await RestampOnePastTheCursor(tp2, now);
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(0);
         (await _context.LinkedRecords.CountAsync(l => l.RecordType == "bolus" && l.IsPrimary)).Should().Be(2,
@@ -1100,7 +1334,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now.AddHours(-1));
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(0);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -1137,7 +1371,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now.AddMinutes(-5));
 
-        var act = async () => await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var act = async () => await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         var result = await act.Should().NotThrowAsync();
         // The valid pair still merges, and the call returns normally.
@@ -1161,7 +1395,7 @@ public class DeduplicationReconcileTests : IDisposable
         var created = now.AddMinutes(-5);
         await SetAllLinkSysCreatedAt(created);
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -1183,7 +1417,7 @@ public class DeduplicationReconcileTests : IDisposable
         var created = now.AddMinutes(-5);
         await AddThreePairsCreatedAt(now.AddHours(-6), created);
 
-        var result = await _service.ReconcileNewLinksAsync(batchSize: 3, maxBatches: 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(batchSize: 3, maxBatches: 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(3);
         result.CaughtUp.Should().BeTrue();
@@ -1210,7 +1444,7 @@ public class DeduplicationReconcileTests : IDisposable
         ReconcileResult result;
         do
         {
-            result = await _service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 1, CancellationToken.None);
+            result = await _service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 1, skipBatchAfterFailures: null, CancellationToken.None);
             merged += result.GroupsMerged;
             passes++;
         } while (!result.CaughtUp && passes < 10);
@@ -1236,7 +1470,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now);
 
-        var young = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var young = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         young.GroupsMerged.Should().Be(0);
         young.CaughtUp.Should().BeTrue();
@@ -1244,7 +1478,7 @@ public class DeduplicationReconcileTests : IDisposable
 
         await SetAllLinkSysCreatedAt(now.AddMinutes(-3));
 
-        var aged = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var aged = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         aged.GroupsMerged.Should().Be(1);
     }
@@ -1814,6 +2048,8 @@ public class DeduplicationReconcileTests : IDisposable
     {
         public Func<string, bool>? FailWhen { get; set; }
 
+        public Func<DbCommand, bool>? FailCommandWhen { get; set; }
+
         public override InterceptionResult<DbDataReader> ReaderExecuting(
             DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
         {
@@ -1831,7 +2067,7 @@ public class DeduplicationReconcileTests : IDisposable
 
         private void ThrowIfArmed(DbCommand command)
         {
-            if (FailWhen?.Invoke(command.CommandText) == true)
+            if (FailWhen?.Invoke(command.CommandText) == true || FailCommandWhen?.Invoke(command) == true)
                 throw new InvalidOperationException("Simulated read failure");
         }
     }

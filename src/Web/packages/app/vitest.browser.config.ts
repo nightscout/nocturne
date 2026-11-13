@@ -30,9 +30,11 @@ export default defineConfig({
     // source file (untested ones at zero) and instrumenting the rest here doubles time and memory.
     coverage: {
       provider: "v8",
+      // @nocturne/ui sits outside this package; its sources count toward the app components that mount them.
+      allowExternal: true,
       reporter: ["text-summary", "json-summary", "cobertura"],
       reportsDirectory: "coverage/browser",
-      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "src/**/*.generated.*", "**/node_modules/**", "**/.svelte-kit/**"],
+      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "src/**/*.generated.*", "**/node_modules/**", "**/.svelte-kit/**", "**/vendor/**"],
     },
     browser: {
       enabled: true,

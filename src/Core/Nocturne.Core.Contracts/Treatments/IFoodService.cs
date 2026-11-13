@@ -27,9 +27,11 @@ public interface IFoodService
     /// <summary>
     /// Create new food records with WebSocket broadcasting
     /// </summary>
+    /// <param name="mode">The write rules. V1 and V3 pass <see cref="FoodWriteMode.Legacy"/>.</param>
     /// <returns>Created food records with assigned IDs</returns>
     Task<IEnumerable<Food>> CreateFoodAsync(
         IEnumerable<Food> foods,
+        FoodWriteMode mode,
         CancellationToken cancellationToken = default
     );
 
@@ -49,4 +51,12 @@ public interface IFoodService
     /// </summary>
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteFoodAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete the food records a legacy <c>find</c> selects, with WebSocket broadcasting
+    /// </summary>
+    /// <param name="find">The find, in either wire form. It must carry a condition.</param>
+    /// <exception cref="ArgumentException">The find has no condition, or names a field or operator the food collection cannot filter on.</exception>
+    /// <returns>Number of food records deleted</returns>
+    Task<long> BulkDeleteFoodAsync(string? find, CancellationToken cancellationToken = default);
 }

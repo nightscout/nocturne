@@ -621,178 +621,11 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         return await latestTimestamp() is null ? WriteOrigin.Backfill : WriteOrigin.Live;
     }
 
-    protected virtual async Task<bool> PublishGlucoseDataAsync(
-        IEnumerable<Entry> entries,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for glucose data submission");
-            return false;
-        }
-
-        return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, await GlucosePublishOriginAsync(), cancellationToken);
-    }
-
-    protected virtual async Task<bool> PublishTreatmentDataAsync(
-        IEnumerable<Treatment> treatments,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for treatment data submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishTreatmentsAsync(
-            treatments,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishDeviceStatusAsync(
-        IEnumerable<DeviceStatus> deviceStatuses,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for device status submission");
-            return false;
-        }
-
-        return await _publisher.Device.PublishDeviceStatusAsync(
-            deviceStatuses,
-            ConnectorSource, await DevicePublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishProfileDataAsync(
-        IEnumerable<Profile> profiles,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for profile data submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
-    protected virtual async Task<bool> PublishFoodDataAsync(
-        IEnumerable<Food> foods,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for food data submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
-    protected virtual async Task<bool> PublishActivityDataAsync(
-        IEnumerable<Activity> activities,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for activity data submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishActivityAsync(
-            activities,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
-    protected virtual async Task<bool> PublishStateSpanDataAsync(
-        IEnumerable<StateSpan> stateSpans,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for state span submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishStateSpansAsync(
-            stateSpans,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
     /// <summary>
-    ///     Profile activations derive from what a connector reads as the pump's active program and gate
-    ///     and count under <see cref="SyncDataType.StateSpans"/>, as the Profile spans they replace did.
+    ///     Publishes one record type's batch through its <see cref="PublishRoutes"/> entry when the
+    ///     type is active, reporting progress and recording the outcome through <see cref="RecordPublishOutcome"/>.
     /// </summary>
-    protected virtual async Task<bool> PublishProfileActivationDataAsync(
-        IEnumerable<ProfileActivation> activations,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for profile activation submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishProfileActivationsAsync(
-            activations,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        );
-    }
-
-    /// <summary>
-    ///     System events have no <see cref="SyncDataType"/> of their own, so a connector routing them through
-    ///     <see cref="PublishRecordTypeAsync{T}"/> gates and counts them under
-    ///     <see cref="SyncDataType.DeviceEvents"/>.
-    /// </summary>
-    protected virtual async Task<bool> PublishSystemEventDataAsync(
-        IEnumerable<SystemEvent> systemEvents,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for system event submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishSystemEventsAsync(
-            systemEvents,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
-    /// <summary>
-    ///     Publishes one record type's batch when the type is active, reporting progress and
-    ///     recording the outcome through <see cref="RecordPublishOutcome"/>.
-    /// </summary>
+    /// <param name="dataType">The type to gate and count under when more than one governs the record type.</param>
     /// <param name="context">
     ///     Detail about this batch — where it came from, or what it held — appended to the success log
     ///     in parentheses.
@@ -803,29 +636,65 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// </returns>
     protected async Task<bool> PublishRecordTypeAsync<T>(
         SyncResult result,
-        SyncDataType dataType,
         HashSet<SyncDataType> activeTypes,
         List<T> records,
-        Func<List<T>, TConfig, CancellationToken, Task<bool>> publishFunc,
         TConfig config,
         CancellationToken cancellationToken,
-        string? context = null) where T : class
+        string? context = null,
+        SyncDataType? dataType = null) where T : class
     {
-        if (!activeTypes.Contains(dataType)) return false;
+        var route = PublishRoutes.For<T>();
+        var type = dataType ?? route.DefaultDataType;
+        if (!route.DataTypes.Contains(type))
+            throw new ArgumentException(
+                $"{typeof(T).Name} is not published under {type}.", nameof(dataType));
+
+        if (!activeTypes.Contains(type)) return false;
 
         if (records.Count == 0)
         {
-            RecordPublishOutcome(result, dataType, 0, success: true);
+            RecordPublishOutcome(result, type, 0, success: true);
             return false;
         }
 
         await ReportSyncMessageAsync(SyncMessageType.PublishingDataType,
-            new() { ["count"] = records.Count.ToString(), ["dataType"] = dataType.ToString() },
+            new() { ["count"] = records.Count.ToString(), ["dataType"] = type.ToString() },
             cancellationToken);
 
-        var success = await publishFunc(records, config, cancellationToken);
-        RecordPublishOutcome(result, dataType, records.Count, success, context);
+        var success = await PublishByRouteAsync(records, config, cancellationToken);
+        RecordPublishOutcome(result, type, records.Count, success, context);
         return success;
+    }
+
+    /// <summary>
+    ///     Publishes a batch through its record type's route without the per-type bookkeeping of
+    ///     <see cref="PublishRecordTypeAsync{T}"/>: no count, no progress message. The one place the
+    ///     publisher is checked for availability.
+    /// </summary>
+    protected async Task<bool> PublishByRouteAsync<T>(
+        IEnumerable<T> records,
+        TConfig config,
+        CancellationToken cancellationToken) where T : class
+    {
+        var route = PublishRoutes.For<T>();
+        if (_publisher is not { IsAvailable: true } publisher)
+        {
+            _logger?.LogWarning("Publisher not available for {RecordType} submission", typeof(T).Name);
+            return false;
+        }
+
+        if (route.Prepare is { } prepare)
+            foreach (var record in records)
+                prepare(record, config);
+
+        var origin = route.Origin switch
+        {
+            PublishOriginFamily.Glucose => await GlucosePublishOriginAsync(),
+            PublishOriginFamily.Treatment => await TreatmentPublishOriginAsync(),
+            PublishOriginFamily.Device => await DevicePublishOriginAsync(),
+            _ => WriteOrigin.Live,
+        };
+        return await route.Publish(publisher, records, ConnectorSource, origin, cancellationToken);
     }
 
     /// <summary>
@@ -996,309 +865,38 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         _ => SyncPhase.Syncing,
     };
 
-    protected virtual async Task<bool> PublishSensorGlucoseDataAsync(
-        IEnumerable<SensorGlucose> records,
+    protected async Task<bool> PublishInBatchesAsync<T>(
+        IEnumerable<T> records,
         TConfig config,
         CancellationToken cancellationToken = default
-    )
+    ) where T : class
     {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for SensorGlucose submission");
-            return false;
-        }
-
-        var processing = config.GlucoseProcessing;
-        foreach (var record in records)
-        {
-            record.GlucoseProcessing = processing;
-            record.SmoothedMgdl ??= processing == GlucoseProcessing.Smoothed ? record.Mgdl : null;
-        }
-
-        return await _publisher.Glucose.PublishSensorGlucoseAsync(
-            records,
-            ConnectorSource, await GlucosePublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishBolusDataAsync(
-        IEnumerable<Bolus> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for Bolus submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
-    }
-
-    protected virtual async Task<bool> PublishCarbIntakeDataAsync(
-        IEnumerable<CarbIntake> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for CarbIntake submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishCarbIntakesAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishBGCheckDataAsync(
-        IEnumerable<BGCheck> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for BGCheck submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
-    }
-
-    protected virtual async Task<bool> PublishBolusCalculationDataAsync(
-        IEnumerable<BolusCalculation> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for BolusCalculation submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishBolusCalculationsAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishNoteDataAsync(
-        IEnumerable<Note> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for Note submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishNotesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
-    }
-
-    /// <summary>
-    ///     Submits body-weight measurements to the API (upserted by deterministic Id).
-    /// </summary>
-    protected virtual async Task<bool> PublishBodyWeightDataAsync(
-        IEnumerable<BodyWeight> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for BodyWeight submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishBodyWeightsAsync(records, ConnectorSource, cancellationToken);
-    }
-
-    /// <summary>
-    ///     Submits step-count records to the API (upserted by deterministic Id).
-    /// </summary>
-    protected virtual async Task<bool> PublishStepCountDataAsync(
-        IEnumerable<StepCount> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for StepCount submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishStepCountsAsync(records, ConnectorSource, cancellationToken);
-    }
-
-    /// <summary>
-    ///     Submits heart-rate records to the API (upserted by deterministic Id).
-    /// </summary>
-    protected virtual async Task<bool> PublishHeartRateDataAsync(
-        IEnumerable<HeartRate> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for HeartRate submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishHeartRatesAsync(records, ConnectorSource, cancellationToken);
-    }
-
-    protected virtual async Task<bool> PublishDeviceEventDataAsync(
-        IEnumerable<DeviceEvent> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for DeviceEvent submission");
-            return false;
-        }
-
-        return await _publisher.Device.PublishDeviceEventsAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishTempBasalDataAsync(
-        IEnumerable<TempBasal> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for TempBasal submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishTempBasalsAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishBasalInjectionDataAsync(
-        IEnumerable<BasalInjection> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for BasalInjection submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishBasalInjectionsAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishGlucoseDataInBatchesAsync(
-        IEnumerable<Entry> entries,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var entriesArray = entries.ToArray();
-        if (entriesArray.Length == 0)
+        var array = records.ToArray();
+        if (array.Length == 0)
             return true;
-
-        var batchSize = Math.Max(1, config.BatchSize);
-        var batches = entriesArray
-            .Select((entry, index) => new { entry, index })
-            .GroupBy(x => x.index / batchSize)
-            .Select(g => g.Select(x => x.entry).ToArray());
 
         var allSuccessful = true;
         var batchNumber = 1;
 
-        foreach (var batch in batches)
+        foreach (var batch in array.Chunk(Math.Max(1, config.BatchSize)))
         {
             _logger?.LogDebug(
-                "Publishing batch {BatchNumber} with {Count} entries",
+                "Publishing {RecordType} batch {BatchNumber} with {Count} entries",
+                typeof(T).Name,
                 batchNumber,
                 batch.Length
             );
 
-            var success = await PublishGlucoseDataAsync(batch, config, cancellationToken);
-            if (!success)
+            if (!await PublishByRouteAsync(batch, config, cancellationToken))
             {
                 allSuccessful = false;
-                _logger?.LogWarning("Failed to publish batch {BatchNumber}", batchNumber);
+                _logger?.LogWarning("Failed to publish {RecordType} batch {BatchNumber}", typeof(T).Name, batchNumber);
             }
 
             batchNumber++;
 
             // Small delay between batches to avoid overwhelming the message bus
-            if (batchNumber > 1)
-                await Task.Delay(10, cancellationToken);
-        }
-
-        return allSuccessful;
-    }
-
-    protected virtual async Task<bool> PublishTreatmentDataInBatchesAsync(
-        IEnumerable<Treatment> treatments,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var treatmentsArray = treatments.ToArray();
-        if (treatmentsArray.Length == 0)
-            return true;
-
-        var batchSize = Math.Max(1, config.BatchSize);
-        var batches = treatmentsArray
-            .Select((treatment, index) => new { treatment, index })
-            .GroupBy(x => x.index / batchSize)
-            .Select(g => g.Select(x => x.treatment).ToArray());
-
-        var allSuccessful = true;
-        var batchNumber = 1;
-
-        foreach (var batch in batches)
-        {
-            _logger?.LogDebug(
-                "Publishing treatment batch {BatchNumber} with {Count} entries",
-                batchNumber,
-                batch.Length
-            );
-
-            var success = await PublishTreatmentDataAsync(batch, config, cancellationToken);
-            if (!success)
-            {
-                allSuccessful = false;
-                _logger?.LogWarning("Failed to publish treatment batch {BatchNumber}", batchNumber);
-            }
-
-            batchNumber++;
-
-            // Small delay between batches to avoid overwhelming the message bus
-            if (batchNumber > 1)
-                await Task.Delay(10, cancellationToken);
+            await Task.Delay(10, cancellationToken);
         }
 
         return allSuccessful;

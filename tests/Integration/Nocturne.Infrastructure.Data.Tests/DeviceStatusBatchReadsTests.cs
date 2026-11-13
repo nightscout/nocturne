@@ -102,7 +102,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         await using var store = await OpenAsync();
         var spans = Spans(store.Factory);
         await spans.BulkUpsertAsync([Span("tt", At(0), At(1), "by-uuid")]);
-        var uuid = (await store.Context.StateSpans.AsNoTracking().SingleAsync(s => s.OriginalId == "by-uuid")).Id.ToString();
+        var uuid = (await store.Context.StateSpans.AsNoTracking().SingleAsync(s => s.LegacyId == "by-uuid")).Id.ToString();
         await spans.BulkUpsertAsync([Span("tt", At(2), At(3), uuid)]);
 
         var written = await spans.UpdateStateSpansAsync([new StateSpan
@@ -112,7 +112,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         }]);
 
         written.Should().ContainSingle().Which!.EndTimestamp.Should().Be(At(9));
-        var rows = await store.Context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.OriginalId!);
+        var rows = await store.Context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.LegacyId!);
         rows[uuid].EndTimestamp.Should().Be(At(9), "the span whose original id is the uuid is the one updated");
         rows["by-uuid"].EndTimestamp.Should().Be(At(1));
     }

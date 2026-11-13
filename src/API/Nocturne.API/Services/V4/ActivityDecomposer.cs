@@ -20,7 +20,7 @@ namespace Nocturne.API.Services.V4;
 /// <summary>
 /// Decomposes legacy <see cref="Activity"/> records into typed v4 models (<see cref="HeartRate"/>,
 /// <see cref="StepCount"/> or <see cref="SleepSession"/>) as <see cref="Classify"/> routes them. Supports idempotent
-/// create-or-update via <c>OriginalId</c> matching.
+/// create-or-update by the id a record arrives under.
 /// </summary>
 /// <seealso cref="IActivityDecomposer"/>
 public class ActivityDecomposer : IActivityDecomposer
@@ -231,10 +231,10 @@ public class ActivityDecomposer : IActivityDecomposer
     public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        Guid? recordId = Guid.TryParse(id, out var parsed) ? parsed : null;
+        var recordId = RecordIdKey.ParseIdToGuid(id);
 
         return await db.UserTombstones<StateSpanEntity>().AnyAsync(
-                s => ActivityCategoryNames.Contains(s.Category) && (s.OriginalId == id || s.Id == recordId), ct)
+                s => ActivityCategoryNames.Contains(s.Category) && (s.LegacyId == id || s.Id == recordId), ct)
             || await db.UserTombstones<SleepSessionEntity>().AnyAsync(
                 s => s.OriginalId == id || s.Id == recordId, ct)
             || await db.UserTombstones<HeartRateEntity>().AnyAsync(
@@ -254,9 +254,10 @@ public class ActivityDecomposer : IActivityDecomposer
         await using var db = await _contexts.CreateAsync(ct);
         var deleted = 0;
         var now = _time.GetUtcNow().UtcDateTime;
+        var recordId = RecordIdKey.ParseIdToGuid(legacyId);
 
         var heartRateEntity = await db.HeartRates.FirstOrDefaultAsync(
-            h => h.OriginalId == legacyId,
+            h => h.OriginalId == legacyId || h.Id == recordId,
             ct
         );
         if (heartRateEntity != null)
@@ -266,7 +267,7 @@ public class ActivityDecomposer : IActivityDecomposer
         }
 
         var stepCountEntity = await db.StepCounts.FirstOrDefaultAsync(
-            s => s.OriginalId == legacyId,
+            s => s.OriginalId == legacyId || s.Id == recordId,
             ct
         );
         if (stepCountEntity != null)
@@ -360,8 +361,8 @@ public class ActivityDecomposer : IActivityDecomposer
         where TEntity : class;
 
     /// <summary>
-    /// Maps a table's records and reads, in one query each, the rows their <c>OriginalId</c>s name
-    /// (<see cref="ResolveByOriginalIdAsync{TEntity}"/>) and the rows the sync keys of those with no id
+    /// Maps a table's records and reads, in one query each, the rows their ids name
+    /// (<see cref="ResolveByIdAsync{TEntity}"/>) and the rows the sync keys of those with no id
     /// name (<see cref="ResolveBySyncKeyAsync{TEntity}"/>). Only a record with no id is given a sync
     /// key (<see cref="MapToHeartRate"/>, <see cref="MapToStepCount"/>).
     /// </summary>
@@ -372,8 +373,10 @@ public class ActivityDecomposer : IActivityDecomposer
         where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified, ISyncDedupable
     {
         var records = models.Select(m => (m.Index, m.Model, Entity: toEntity(m.Model))).ToList();
-        var (byId, userDeletedIds) = await ResolveByOriginalIdAsync(
-            db, set, [.. records.Select(r => r.Model.Id).OfType<string>().Distinct(StringComparer.Ordinal)], ct);
+        var (byId, userDeletedIds) = await ResolveByIdAsync(
+            db, set,
+            [.. records.Where(r => r.Model.Id != null).Select(r => (Id: r.Model.Id!, Key: r.Entity.Id)).DistinctBy(r => r.Id, StringComparer.Ordinal)],
+            ct);
         var (byKey, userDeletedKeys) = await ResolveBySyncKeyAsync(
             db, set,
             [.. records.Where(r => r.Model.Id == null).Select(r => r.Entity.SyncIdentifier).OfType<string>().Distinct(StringComparer.Ordinal)],
@@ -383,9 +386,9 @@ public class ActivityDecomposer : IActivityDecomposer
 
     /// <summary>
     /// The rows a table's records write. A record whose id or sync key only a user tombstone holds is
-    /// not written; of several with one id or one sync key the last wins; a record whose row is stored
-    /// updates it, reviving a system-swept tombstone in place, and is unchanged when that changes
-    /// nothing; the rest are inserted.
+    /// not written; of several with one primary key (ids that differ only in case derive one) or one
+    /// sync key the last wins; a record whose row is stored updates it, reviving a system-swept
+    /// tombstone in place, and is unchanged when that changes nothing; the rest are inserted.
     /// </summary>
     private static TablePlan<TEntity> Plan<TModel, TEntity>(
         NocturneDbContext db, DbSet<TEntity> set, Resolved<TModel, TEntity> resolved,
@@ -444,8 +447,8 @@ public class ActivityDecomposer : IActivityDecomposer
 
     private static string? KeyOf<TModel, TEntity>(TModel model, TEntity entity)
         where TModel : ProcessableDocumentBase
-        where TEntity : ISyncDedupable
-        => model.Id is { } id ? $"id|{id}"
+        where TEntity : ISyncDedupable, IIdentified
+        => model.Id is not null ? $"id|{entity.Id}"
             : entity.SyncIdentifier is { } syncIdentifier ? $"sync|{entity.DataSource}|{syncIdentifier}"
             : null;
 
@@ -478,32 +481,43 @@ public class ActivityDecomposer : IActivityDecomposer
     }
 
     /// <summary>
-    /// The row each of <paramref name="originalIds"/> is written to, soft-deleted rows included: the
-    /// live row, or else a system-swept tombstone, which the write revives in place because the primary
-    /// key is derived from the id (<see cref="MapperHelpers.ParseIdToGuid"/>) and a fresh insert would
-    /// collide with it within the tenant. An id only a user tombstone holds is returned in <c>UserDeleted</c> and must
-    /// not be written (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
+    /// The row each of <paramref name="recordIds"/> is written to, soft-deleted rows included, found
+    /// by <c>OriginalId</c> or by the primary key the record derives from its id
+    /// (<see cref="RecordIdKey.ParseIdToGuid"/>), which a non-ObjectId id has no <c>OriginalId</c>
+    /// to match: the live row, or else a system-swept tombstone, which the write revives in place
+    /// because a fresh insert would collide with it within the tenant. An id only a user tombstone
+    /// holds is returned in <c>UserDeleted</c> and must not be written
+    /// (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
     /// </summary>
-    private static async Task<(Dictionary<string, TEntity> Rows, HashSet<string> UserDeleted)> ResolveByOriginalIdAsync<TEntity>(
+    private static async Task<(Dictionary<string, TEntity> Rows, HashSet<string> UserDeleted)> ResolveByIdAsync<TEntity>(
         NocturneDbContext db,
-        DbSet<TEntity> set, IReadOnlyCollection<string> originalIds, CancellationToken ct)
+        DbSet<TEntity> set, IReadOnlyCollection<(string Id, Guid Key)> recordIds, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified
     {
         var rows = new Dictionary<string, TEntity>(StringComparer.Ordinal);
         var userDeleted = new HashSet<string>(StringComparer.Ordinal);
-        if (originalIds.Count == 0)
+        if (recordIds.Count == 0)
             return (rows, userDeleted);
 
-        var ids = originalIds.ToList();
-        var candidates = await set.IgnoreQueryFilters()
-            .Where(e => e.TenantId == db.TenantId && e.OriginalId != null && ids.Contains(e.OriginalId))
+        var ids = recordIds.Select(r => r.Id).ToList();
+        var wanted = ids.ToHashSet(StringComparer.Ordinal);
+        var idsByKey = recordIds.ToLookup(r => r.Key, r => r.Id);
+        var keys = recordIds.Select(r => r.Key).Distinct().ToList();
+        var candidates = await set.IncludingDeleted()
+            .Where(e => ((e.OriginalId != null && ids.Contains(e.OriginalId)) || keys.Contains(e.Id)))
             .ToListAsync(ct);
 
-        foreach (var group in candidates.GroupBy(e => e.OriginalId!, StringComparer.Ordinal))
+        var named = candidates
+            .SelectMany(e => idsByKey[e.Id].Prepend(e.OriginalId)
+                .OfType<string>()
+                .Where(wanted.Contains)
+                .Distinct(StringComparer.Ordinal)
+                .Select(id => (Id: id, Row: e)));
+        foreach (var group in named.GroupBy(n => n.Id, n => n.Row, StringComparer.Ordinal))
         {
             if (group.FirstOrDefault(e => e.DeletedAt == null) is { } live)
                 rows[group.Key] = live;
-            else if (group.Any(e => db.Entry(e).Property<bool>("DeletedByUser").CurrentValue))
+            else if (group.Any(e => db.Entry(e).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue))
                 userDeleted.Add(group.Key);
             else
                 rows[group.Key] = group.First();
@@ -530,8 +544,8 @@ public class ActivityDecomposer : IActivityDecomposer
             return (rows, userDeleted);
 
         var ids = syncIdentifiers.ToList();
-        var candidates = await set.IgnoreQueryFilters()
-            .Where(e => e.TenantId == db.TenantId && e.SyncIdentifier != null && ids.Contains(e.SyncIdentifier))
+        var candidates = await set.IncludingDeleted()
+            .Where(e => e.SyncIdentifier != null && ids.Contains(e.SyncIdentifier))
             .WhereBlocksRecreation()
             .ToListAsync(ct);
 

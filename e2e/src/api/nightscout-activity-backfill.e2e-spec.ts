@@ -44,7 +44,7 @@ describe("Nightscout connector: activity uploaded behind the cursor", () => {
     tenant = await seedTenant();
     await tenant.api.ok("PUT", "/api/v4/connectors/config/nightscout", {
       url: `${env.mocksUrlFromApi}${scopePath(tenant)}`,
-      isActive: true,
+      enabled: true,
     });
     await tenant.api.ok("PUT", "/api/v4/connectors/config/nightscout/secrets", { apiSecret: FAKE_SECRET });
   });

@@ -25,6 +25,7 @@ public class TempBasalRateReresolverTests
     private readonly Mock<IBasalScheduleRepository> _basalSchedules = new();
     private readonly Mock<ITherapySettingsRepository> _therapySettings = new();
     private readonly Mock<ITenantCache> _cache = new();
+    private readonly ITenantCache _tenantCache = TestTenantCache.Create();
 
     public TempBasalRateReresolverTests()
     {
@@ -41,18 +42,21 @@ public class TempBasalRateReresolverTests
         _tempBasals.Setup(r => r.HasScheduleDerivedAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
     }
 
-    private TempBasalRateReresolver Reresolver(IProfileActivationRepository? activations = null)
+    private TempBasalRateReresolver Reresolver(
+        IProfileActivationRepository? activations = null,
+        Func<ProfileVersionCache, IBasalRateResolver>? basalRates = null)
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => Mock.Of<ITenantAccessor>());
         services.AddScoped(_ => Mock.Of<ICategoryReadContext>());
-        services.AddScoped(_ => new ProfileVersionCache(TestTenantCache.Create()));
+        services.AddScoped(_ => new ProfileVersionCache(_tenantCache));
         services.AddScoped(_ => _basalSchedules.Object);
         services.AddScoped(_ => _therapySettings.Object);
         services.AddScoped(_ => _tempBasals.Object);
         services.AddScoped(_ => activations ?? Mock.Of<IProfileActivationRepository>());
         services.AddScoped(_ => _cache.Object);
-        services.AddScoped(_ => TempBasalTestDeps.Rates(_basalRates.Object));
+        services.AddScoped(sp => TempBasalTestDeps.Rates(
+            basalRates?.Invoke(sp.GetRequiredService<ProfileVersionCache>()) ?? _basalRates.Object));
 
         var request = services.BuildServiceProvider().CreateScope().ServiceProvider;
         var tenant = Mock.Get(request.GetRequiredService<ITenantAccessor>());
@@ -71,6 +75,49 @@ public class TempBasalRateReresolverTests
         ScheduledRate = rate is null ? null : rate * 2,
         RateFromSchedule = rate is not null,
     };
+
+    private static BasalSchedule ScheduleOf(double rate) => new()
+    {
+        ProfileName = "Day",
+        Timestamp = VersionStart,
+        Entries = [new ScheduleEntry { TimeAsSeconds = 0, Value = rate }],
+    };
+
+    [Fact]
+    public async Task TheReresolverLoadsEachProfileOnceFromTheRepositoryAndNotFromTheCache()
+    {
+        _basalSchedules
+            .Setup(r => r.GetByProfileNameAsync("Day", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([ScheduleOf(2.0)]);
+        await new ProfileVersionCache(_tenantCache).GetVersionsAsync(_basalSchedules.Object, "Day", default);
+        _basalSchedules
+            .Setup(r => r.GetByProfileNameAsync("Day", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([ScheduleOf(1.0)]);
+        _basalSchedules.Invocations.Clear();
+
+        var temps = Enumerable.Range(1, 4).Select(i => Derived(VersionStart.AddDays(i), 1.0)).ToList();
+        _tempBasals
+            .Setup(r => r.GetScheduleDerivedAsync(null, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(temps);
+        var active = new Mock<IActiveProfileResolver>();
+        active
+            .Setup(r => r.GetActiveAtAsync(It.IsAny<IReadOnlyList<long>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<long> times, CancellationToken _) =>
+                (IReadOnlyList<ActiveProfileAt>)times.Select(_ => new ActiveProfileAt("Day", null)).ToList());
+        IBasalRateResolver RealRates(ProfileVersionCache versions) => new BasalRateResolver(
+            _basalSchedules.Object, _therapySettings.Object, Mock.Of<IPatientRecordRepository>(),
+            active.Object, versions, NullLogger<BasalRateResolver>.Instance);
+        _tempBasals
+            .Setup(r => r.SetScheduleDerivedRateAsync(It.IsAny<Guid>(), -50, It.IsAny<double?>(), It.IsAny<double?>(), It.IsAny<double?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await Reresolver(basalRates: RealRates).AfterProfilesChangedAsync(CancellationToken.None);
+
+        _basalSchedules.Verify(r => r.GetByProfileNameAsync("Day", It.IsAny<CancellationToken>()), Times.Once);
+        _therapySettings.Verify(r => r.GetByProfileNameAsync("Day", It.IsAny<CancellationToken>()), Times.Once);
+        foreach (var temp in temps)
+            _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(temp.Id, -50, 1.0, 0.5, 1.0, It.IsAny<CancellationToken>()), Times.Once);
+    }
 
     [Fact]
     public async Task AfterSchedulesWritten_ReresolvesTheDerivedRatesTheVersionGoverns()
@@ -122,7 +169,7 @@ public class TempBasalRateReresolverTests
     {
         var start = VersionStart.AddDays(1);
 
-        await Reresolver().AfterActivationsChangedAsync([("Day", start, null)], CancellationToken.None);
+        await Reresolver().AfterActivationsChangedAsync([(start, null)], CancellationToken.None);
 
         _tempBasals.Verify(r => r.GetScheduleDerivedAsync(start, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -147,7 +194,7 @@ public class TempBasalRateReresolverTests
             .ReturnsAsync(true);
 
         await Reresolver().AfterActivationsChangedAsync(
-            [("Day", permanentStart, null), ("Day", temporaryStart, temporaryStart.AddHours(1))], CancellationToken.None);
+            [(permanentStart, null), (temporaryStart, temporaryStart.AddHours(1))], CancellationToken.None);
 
         _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(tempAfter.Id, -50, 0.4, 0.75, 1.5, It.IsAny<CancellationToken>()), Times.Once);
     }

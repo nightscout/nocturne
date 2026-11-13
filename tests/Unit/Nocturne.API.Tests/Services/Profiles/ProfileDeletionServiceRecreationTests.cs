@@ -1,7 +1,10 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Profiles;
+using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
@@ -190,6 +193,31 @@ public class ProfileDeletionServiceRecreationTests : IDisposable
         var result = await Deletion(new UserAuditContext()).DeleteByProfileNameAsync("Nonexistent");
 
         result.Refusal.Should().Be(ProfileDeletionRefusal.NotFound);
+    }
+
+    [Fact]
+    public async Task Delete_ClearsTheCachedVersionsOfTheDeletedProfile()
+    {
+        var audit = new UserAuditContext();
+        await Decomposer(audit).DecomposeBatchAsync([UpstreamProfile()], WriteOrigin.Live);
+        using var memory = new MemoryCache(new MemoryCacheOptions());
+        var tenantCache = TestTenantCache.Create(memory);
+        var versions = new ProfileVersionCache(tenantCache);
+        var basal = new BasalScheduleRepository(_factory, audit, NullLogger<BasalScheduleRepository>.Instance);
+
+        (await versions.GetVersionsAsync(basal, "Default", default)).Should().HaveCount(1);
+
+        var deletion = new ProfileDeletionService(
+            _factory,
+            new TherapySettingsRepository(_factory, audit, NullLogger<TherapySettingsRepository>.Instance),
+            audit,
+            _closedLoop.Object,
+            NullLogger<ProfileDeletionService>.Instance,
+            new LegacyReadCacheInvalidation(tenantCache, NullLogger<LegacyReadCacheInvalidation>.Instance));
+        await deletion.DeleteByProfileNameAsync("Default");
+
+        (await versions.GetVersionsAsync(basal, "Default", default)).Should().BeEmpty(
+            "the delete reports the profile models, so the versions read before it are not served after");
     }
 
     private ProfileDecomposer Decomposer(IAuditContext audit) => new(
