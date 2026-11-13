@@ -1,18 +1,15 @@
 using System.Linq.Expressions;
-using Nocturne.Connectors.Core.Models;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 
-namespace Nocturne.API.Services.Analytics;
+namespace Nocturne.Infrastructure.Data.Services;
 
 /// <summary>
 /// One table behind the data overview, in the terms its year-range, data-source and
 /// per-day-count surfaces need.
 /// </summary>
 /// <seealso cref="DataOverviewTables"/>
-internal interface IDataOverviewTable
+public interface IDataOverviewTable
 {
     string CountsKey { get; }
 
@@ -40,7 +37,7 @@ internal interface IDataOverviewTable
 
 /// <inheritdoc cref="IDataOverviewTable"/>
 internal sealed class DataOverviewTable<TEntity>(
-    SyncDataType countsKey,
+    string countsKey,
     Func<NocturneDbContext, IQueryable<TEntity>> table,
     Expression<Func<TEntity, DateTime>> timestamp,
     Expression<Func<TEntity, string?>>? source
@@ -48,7 +45,7 @@ internal sealed class DataOverviewTable<TEntity>(
     where TEntity : class, IIdentified
 {
     /// <inheritdoc />
-    public string CountsKey { get; } = countsKey.ToString();
+    public string CountsKey { get; } = countsKey;
 
     /// <inheritdoc />
     public IQueryable<DateTime?> Timestamps(NocturneDbContext context) =>
@@ -120,49 +117,14 @@ internal sealed class DataOverviewTable<TEntity>(
 }
 
 /// <summary>
-/// Every table the data overview aggregates, driving its year range, its data-source list and its
-/// per-day counts. Order is significant: it fixes the insertion order of
-/// <see cref="Core.Models.Services.DailySummaryDay.Counts"/>, which survives into the serialized
-/// response.
+/// Every table the data overview aggregates (<see cref="V4RecordTables.Overview"/>), driving its year
+/// range, its data-source list and its per-day counts.
 /// </summary>
-internal static class DataOverviewTables
+public static class DataOverviewTables
 {
-    internal static readonly IReadOnlyList<IDataOverviewTable> All =
+    public static readonly IReadOnlyList<IDataOverviewTable> All =
     [
-        new DataOverviewTable<SensorGlucoseEntity>(
-            SyncDataType.Glucose,
-            c => c.SensorGlucose, e => e.Timestamp, e => e.DataSource),
-        new DataOverviewTable<MeterGlucoseEntity>(
-            SyncDataType.ManualBG,
-            c => c.MeterGlucose, e => e.Timestamp, e => e.DataSource),
-        new DataOverviewTable<BolusEntity>(
-            SyncDataType.Boluses,
-            c => c.Boluses, e => e.Timestamp, e => e.DataSource),
-        new DataOverviewTable<CarbIntakeEntity>(
-            SyncDataType.CarbIntake,
-            c => c.CarbIntakes, e => e.Timestamp, e => e.DataSource),
-        new DataOverviewTable<BolusCalculationEntity>(
-            SyncDataType.BolusCalculations,
-            c => c.BolusCalculations, e => e.Timestamp, e => e.DataSource),
-        new DataOverviewTable<NoteEntity>(
-            SyncDataType.Notes,
-            c => c.Notes, e => e.Timestamp, e => e.DataSource),
-        new DataOverviewTable<DeviceEventEntity>(
-            SyncDataType.DeviceEvents,
-            c => c.DeviceEvents, e => e.Timestamp, e => e.DataSource),
-        new DataOverviewTable<StateSpanEntity>(
-            SyncDataType.StateSpans,
-            c => c.StateSpans, e => e.StartTimestamp, e => e.Source),
-        // ApsSnapshots carries a DataSource column the overview does not surface, so a source
-        // filter drops the table rather than narrowing it.
-        new DataOverviewTable<ApsSnapshotEntity>(
-            SyncDataType.DeviceStatus,
-            c => c.ApsSnapshots, e => e.Timestamp, source: null),
-        new DataOverviewTable<BGCheckEntity>(
-            SyncDataType.BGChecks,
-            c => c.BGChecks, e => e.Timestamp, e => e.DataSource),
-        new DataOverviewTable<TempBasalEntity>(
-            SyncDataType.TempBasals,
-            c => c.TempBasals, e => e.Timestamp, e => e.DataSource),
+        .. V4RecordTables.Overview.Select(t =>
+            t.ToOverview(attributed: !V4RecordTables.UnattributedInOverview.ContainsKey(t.Table.Entity))),
     ];
 }

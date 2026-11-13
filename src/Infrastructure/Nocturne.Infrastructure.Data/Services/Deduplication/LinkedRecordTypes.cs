@@ -5,9 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Mappers;
 using static Nocturne.Infrastructure.Data.Services.Deduplication.DuplicateMatching;
 
 namespace Nocturne.Infrastructure.Data.Services.Deduplication;
@@ -153,37 +151,22 @@ public static class LinkedRecordTypes
         if (ids.Count == 0)
             return new Dictionary<Guid, RecordInfo>();
 
-        return await db.WriteWithHistoryClampLiftedAsync(token => recordType switch
-        {
-            RecordType.SensorGlucose => LoadAsync<SensorGlucoseEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.Bolus => LoadAsync<BolusEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.CarbIntake => LoadAsync<CarbIntakeEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.BGCheck => LoadAsync<BGCheckEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.DeviceEvent => LoadAsync<DeviceEventEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.Note => LoadAsync<NoteEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.BolusCalculation => LoadAsync<BolusCalculationEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.TempBasal => LoadAsync<TempBasalEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.StateSpan => LoadAsync<StateSpanEntity>(
-                db, MatchCriteriaMapper.From, ids, token, s => new SpanEnd(s.SupersededById, s.EndTimestamp)),
-            _ => Task.FromResult(new Dictionary<Guid, RecordInfo>()),
-        }, ct);
+        return V4RecordTables.Of(recordType) is { } table
+            ? await db.WriteWithHistoryClampLiftedAsync(token => table.RecordInfoAsync(db, ids, token), ct)
+            : new Dictionary<Guid, RecordInfo>();
     }
 
     /// <summary>
-    /// Loads the criteria and soft-deleted status of every requested row of one entity type, and,
-    /// for a span-shaped type, how each row ended.
+    /// Every requested row of one entity type, soft-deleted included, as <paramref name="info"/> reads it.
     /// </summary>
-    private static async Task<Dictionary<Guid, RecordInfo>> LoadAsync<TEntity>(
+    internal static async Task<Dictionary<Guid, RecordInfo>> LoadAsync<TEntity>(
         NocturneDbContext db,
-        Func<TEntity, MatchCriteria> toCriteria, HashSet<Guid> ids, CancellationToken ct,
-        Func<TEntity, SpanEnd>? spanEnd = null)
+        Func<TEntity, RecordInfo> info, HashSet<Guid> ids, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable, IIdentified
     {
         var records = await db.Set<TEntity>().AsNoTracking().IgnoreQueryFilters()
             .Where(e => e.TenantId == db.TenantId && ids.Contains(e.Id)).ToListAsync(ct);
-        return records.ToDictionary(
-            e => e.Id,
-            e => new RecordInfo(toCriteria(e), e.DeletedAt != null, spanEnd?.Invoke(e) ?? default));
+        return records.ToDictionary(e => e.Id, info);
     }
 
     /// <summary>Rows <see cref="TypePhase.Pages"/> reads per page.</summary>
@@ -230,7 +213,7 @@ public static class LinkedRecordTypes
     /// <paramref name="id"/> serves the same two purposes, and <paramref name="createdAt"/> is the
     /// insert stamp <see cref="SingletonLinkRetention"/> is measured on.
     /// </summary>
-    private static TypePhase Phase<TEntity>(
+    internal static TypePhase Phase<TEntity>(
         RecordType recordType,
         string name,
         Func<NocturneDbContext, IQueryable<TEntity>> set,
@@ -243,9 +226,9 @@ public static class LinkedRecordTypes
         var eventTime = timestamp.Compile();
         var recordId = id.Compile();
         var key = RecordTypeKeys.Key(recordType);
-        var timestampName = MemberName(timestamp);
-        var idName = MemberName(id);
-        var createdAtName = MemberName(createdAt);
+        var timestampName = V4RecordTables.MemberName(timestamp);
+        var idName = V4RecordTables.MemberName(id);
+        var createdAtName = V4RecordTables.MemberName(createdAt);
 
         DeduplicationInput ToInput(TEntity e) => new(
             recordId(e),
@@ -315,7 +298,7 @@ public static class LinkedRecordTypes
         DateTime? after,
         [EnumeratorCancellation] CancellationToken ct) where TEntity : class
     {
-        var timestampProperty = MemberName(timestamp);
+        var timestampProperty = V4RecordTables.MemberName(timestamp);
         var eventTime = timestamp.Compile();
         var ordered = set
             .AsNoTracking()
@@ -351,39 +334,10 @@ public static class LinkedRecordTypes
     }
 
     /// <summary>
-    /// Every record type deduplication links, in the order a full run passes over them. MeterGlucose
-    /// has no <see cref="RecordType"/> value and is not deduplicated.
+    /// Every record type deduplication links, in the order a full run passes over them
+    /// (<see cref="V4RecordTables.Deduplicated"/>).
     /// </summary>
-    internal static readonly TypePhase[] TypePhases =
-    [
-        Phase(RecordType.SensorGlucose, "SensorGlucose",
-            static c => c.SensorGlucose, static e => e.Timestamp,
-            static e => e.Id, static e => e.SysCreatedAt, static e => e.DataSource, MatchCriteriaMapper.From),
-        Phase(RecordType.Bolus, "Boluses",
-            static c => c.Boluses, static b => b.Timestamp,
-            static b => b.Id, static b => b.SysCreatedAt, static b => b.DataSource, MatchCriteriaMapper.From),
-        Phase(RecordType.CarbIntake, "CarbIntakes",
-            static c => c.CarbIntakes, static c => c.Timestamp,
-            static c => c.Id, static c => c.SysCreatedAt, static c => c.DataSource, MatchCriteriaMapper.From),
-        Phase(RecordType.BGCheck, "BGChecks",
-            static c => c.BGChecks, static bg => bg.Timestamp,
-            static bg => bg.Id, static bg => bg.SysCreatedAt, static bg => bg.DataSource, MatchCriteriaMapper.From),
-        Phase(RecordType.DeviceEvent, "DeviceEvents",
-            static c => c.DeviceEvents, static d => d.Timestamp,
-            static d => d.Id, static d => d.SysCreatedAt, static d => d.DataSource, MatchCriteriaMapper.From),
-        Phase(RecordType.Note, "Notes",
-            static c => c.Notes, static n => n.Timestamp,
-            static n => n.Id, static n => n.SysCreatedAt, static n => n.DataSource, MatchCriteriaMapper.From),
-        Phase(RecordType.BolusCalculation, "BolusCalculations",
-            static c => c.BolusCalculations, static bc => bc.Timestamp,
-            static bc => bc.Id, static bc => bc.SysCreatedAt, static bc => bc.DataSource, MatchCriteriaMapper.From),
-        Phase(RecordType.TempBasal, "TempBasals",
-            static c => c.TempBasals, static t => t.Timestamp,
-            static t => t.Id, static t => t.SysCreatedAt, static t => t.DataSource, MatchCriteriaMapper.From),
-        Phase(RecordType.StateSpan, "StateSpans",
-            static c => c.StateSpans, static s => s.StartTimestamp,
-            static s => s.Id, static s => s.CreatedAt, static s => s.Source, MatchCriteriaMapper.From)
-    ];
+    internal static readonly TypePhase[] TypePhases = [.. V4RecordTables.Deduplicated.Select(static t => t.CreatePhase())];
 
     /// <summary>
     /// The record types deduplication links, in <see cref="TypePhases"/> order. Internal so a test can
@@ -439,16 +393,4 @@ public static class LinkedRecordTypes
     internal static IQueryable<LinkedRecordEntity> OrphanedLinksOf(
         NocturneDbContext context, RecordType recordType) =>
         TypePhases.Single(p => p.RecordType == recordType).OrphanedLinks(context);
-
-    /// <summary>
-    /// The property <paramref name="member"/> reads. One query shape serves every entity type, so a
-    /// column arrives as a property name rather than an expression to compose into it.
-    /// </summary>
-    private static string MemberName<TEntity, TValue>(Expression<Func<TEntity, TValue>> member) =>
-        member.Body is MemberExpression access
-            ? access.Member.Name
-            : throw new ArgumentException(
-                "The expression must be a simple member access (e => e.Timestamp): the query reads "
-                + "that property by name.",
-                nameof(member));
 }
