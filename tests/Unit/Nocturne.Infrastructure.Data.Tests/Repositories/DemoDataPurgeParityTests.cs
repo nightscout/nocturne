@@ -307,6 +307,71 @@ public class DemoDataPurgeParityTests : IDisposable
     }
 
     [Fact]
+    public async Task PurgeTreatments_ReportsExactlyTheTreatmentAndDeviceStatusModels()
+    {
+        SeedOneDemoRowOfEveryType();
+
+        await PlatformAdminPurge().PurgeTreatmentsAsync(Tenant, default);
+
+        _tenantReports.Should().ContainSingle().Which.Models.Should().BeEquivalentTo([
+            typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(Note), typeof(DeviceEvent),
+            typeof(BolusCalculation), typeof(TempBasal), typeof(ProfileActivation), typeof(StateSpan),
+            typeof(CompressionLowSuggestion), typeof(LabHbA1cResult), typeof(ApsSnapshot),
+        ]);
+    }
+
+    [Fact]
+    public async Task ScopePurge_TakesDemoProfileActivationsAndLeavesTheProfileAndActivityTables()
+    {
+        var timestamp = DateTime.UtcNow;
+        await using (var db = NewContext())
+        {
+            db.ProfileActivations.Add(new ProfileActivationEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Day",
+            });
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, Bpm = 60,
+            });
+            db.StepCounts.Add(new StepCountEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, Metric = 10,
+            });
+            db.BodyWeights.Add(new BodyWeightEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(), WeightKg = 70,
+            });
+            db.TherapySettings.Add(new TherapySettingsEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, ProfileName = "Day",
+            });
+            db.BasalSchedules.Add(new BasalScheduleEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, ProfileName = "Day",
+            });
+            db.SaveChanges();
+        }
+
+        var counts = await ScopePurge().PurgeAsync(default);
+
+        counts.Treatments.Should().Be(1);
+        await using var verify = NewContext();
+        (await verify.ProfileActivations.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await verify.HeartRates.CountAsync()).Should().Be(1);
+        (await verify.StepCounts.CountAsync()).Should().Be(1);
+        (await verify.BodyWeights.CountAsync()).Should().Be(1);
+        (await verify.TherapySettings.CountAsync()).Should().Be(1);
+        (await verify.BasalSchedules.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
     public async Task PurgeTreatments_ThatFailsPartWay_StillReportsTheGroupAndNoGroupThatNeverStarted()
     {
         SeedOneDemoRowOfEveryType();

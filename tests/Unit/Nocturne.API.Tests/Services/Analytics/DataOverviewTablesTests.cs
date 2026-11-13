@@ -1,6 +1,7 @@
-using Nocturne.API.Services.Analytics;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -25,5 +26,24 @@ public class DataOverviewTablesTests
     public void All_KeysEveryTableUniquely()
     {
         DataOverviewTables.All.Select(t => t.CountsKey).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void All_ListsItsTablesInTheOrderTheCountsAreSerialised()
+    {
+        DataOverviewTables.All.Select(t => t.CountsKey).Should().Equal(
+            "Glucose", "ManualBG", "Boluses", "CarbIntake", "BolusCalculations", "Notes", "DeviceEvents",
+            "StateSpans", "DeviceStatus", "BGChecks", "TempBasals");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void All_AttributesEveryTableButTheApsSnapshotsToADataSource()
+    {
+        using var context = TestDbContextFactory.CreateInMemoryContext($"overview_{Guid.NewGuid()}");
+
+        DataOverviewTables.All.Where(t => t.Sources(context) is null).Select(t => t.CountsKey)
+            .Should().Equal("DeviceStatus");
     }
 }

@@ -18,6 +18,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Platform;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Security;
@@ -182,6 +183,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISourceOwnedDataReader>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
         services.AddScoped<ISourceOwnedDataPurge>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
         services.AddScoped<IDemoDataPurge, DemoDataPurgeRepository>();
+        services.AddScoped<ICollectionLastModifiedReader, CollectionLastModifiedReader>();
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
