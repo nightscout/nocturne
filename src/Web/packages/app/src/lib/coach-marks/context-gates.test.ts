@@ -16,7 +16,7 @@ function stored(markKey: string, status: MarkState["status"]): MarkState {
 
 async function started(gates: CoachGates, states: MarkState[] = []) {
   const adapter: CoachMarkAdapter = { fetchAll: async () => states, update: async () => {} };
-  const context = new CoachMarkContext(adapter, coachLabels(), sequences, SETTLE, 2000, () => gates);
+  const context = new CoachMarkContext(adapter, coachLabels(), sequences, SETTLE, 2000, () => gates, () => "member");
   await context.initialize();
   return context;
 }
