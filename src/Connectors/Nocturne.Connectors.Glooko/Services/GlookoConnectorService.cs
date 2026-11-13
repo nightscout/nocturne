@@ -14,7 +14,6 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
-using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -25,7 +24,6 @@ namespace Nocturne.Connectors.Glooko.Services;
 public class GlookoConnectorService
     : TokenConnectorService<GlookoConnectorConfiguration, GlookoAuthTokenProvider>
 {
-    private readonly IConnectorPublisher? _connectorPublisher;
     private readonly IMealMatchingService? _mealMatchingService;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
@@ -53,7 +51,6 @@ public class GlookoConnectorService
     )
         : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _connectorPublisher = publisher;
         _mealMatchingService = mealMatchingService;
         _timezoneTimelineService = timezoneTimelineService;
         _deviceClockService = deviceClockService;
@@ -683,7 +680,7 @@ public class GlookoConnectorService
             ? context.V4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
         Func<string, string?> foodResolver = externalEntryId => $"glooko_food_{externalEntryId}";
         landed &= await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, carbs, foodResolver, result, activeTypes, cancellationToken);
+            foodEntryImports, carbs, foodResolver, config, result, activeTypes, cancellationToken);
 
         var stateSpans = context.StateSpanMapper.TransformV2ToStateSpans(batchData);
         landed &= Landed(activeTypes, SyncDataType.StateSpans, stateSpans,
@@ -800,7 +797,7 @@ public class GlookoConnectorService
             }
 
             await PublishFoodEntriesAndAttributeAsync(
-                foodEntryImports, allCarbs, foodResolver, result, activeTypes, cancellationToken);
+                foodEntryImports, allCarbs, foodResolver, config, result, activeTypes, cancellationToken);
         }
 
         var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
@@ -838,6 +835,7 @@ public class GlookoConnectorService
         List<ConnectorFoodEntryImport> foodEntryImports,
         List<CarbIntake> carbIntakes,
         Func<string, string?>? foodEntryToCarbLegacyId,
+        GlookoConnectorConfiguration config,
         SyncResult result,
         HashSet<SyncDataType> activeTypes,
         CancellationToken cancellationToken)
@@ -851,18 +849,11 @@ public class GlookoConnectorService
             return true;
         }
 
-        if (_connectorPublisher is not { IsAvailable: true })
-        {
-            _logger.LogWarning("Publisher not available for food entry submission");
-            RecordPublishOutcome(result, SyncDataType.Food, foodEntryImports.Count, success: false);
-            return false;
-        }
+        // The publisher returns null only from its own catch (or the route found it unavailable); an
+        // import that reached the catalog returns a list, empty when nothing was accepted.
+        var importedEntries = await PublishByRouteForResultAsync<ConnectorFoodEntryImport, IReadOnlyList<ConnectorFoodEntry>>(
+            foodEntryImports, config, cancellationToken);
 
-        var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
-            foodEntryImports, ConnectorSource, WriteOrigin.Live, cancellationToken); // Food is a dormant broadcast category — origin irrelevant until wired.
-
-        // The publisher returns null only from its own catch; an import that reached the catalog
-        // returns a list, empty when nothing was accepted.
         RecordPublishOutcome(result, SyncDataType.Food, foodEntryImports.Count, importedEntries is not null);
 
         if (importedEntries is null)
@@ -1575,10 +1566,8 @@ public class GlookoConnectorService
 
             var patientDevices = context.DeviceMapper.TransformPumpsToPatientDevices(pumpDevices);
             patientDevices.AddRange(context.DeviceMapper.TransformCgmDevicesToPatientDevices(cgmDevices));
-            var devicesLanded = patientDevices.Count == 0;
-            if (patientDevices.Count > 0 && _connectorPublisher is { IsAvailable: true })
-                devicesLanded = await _connectorPublisher.Device.PublishPatientDevicesAsync(
-                    patientDevices, ConnectorSource, await DevicePublishOriginAsync(), cancellationToken);
+            var devicesLanded = patientDevices.Count == 0
+                || await PublishByRouteAsync(patientDevices, config, cancellationToken);
             await CommitSsv2CursorsAsync(context, devicesLanded,
                 GlookoConstants.Ssv2PumpsPath, GlookoConstants.Ssv2CgmDevicesPath);
         }
