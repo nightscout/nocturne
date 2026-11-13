@@ -88,9 +88,8 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 }
                 else
                 {
-                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                        _sensorGlucoseMapper.MapBgValues(bgValues, Clock.GetUtcNow().UtcDateTime).ToList(), PublishSensorGlucoseDataAsync,
-                        config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        _sensorGlucoseMapper.MapBgValues(bgValues, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -124,12 +123,12 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 // Boluses come from the bolus fetch and carb intakes from the food fetch, so each
                 // type is reported only when its own fetch came back.
                 if (boluses is not null)
-                    await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                        mappedBoluses, PublishBolusDataAsync, config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        mappedBoluses, config, cancellationToken);
 
                 if (foods is not null)
-                    await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                        mappedCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        mappedCarbs, config, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {

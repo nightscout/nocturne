@@ -122,8 +122,8 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
         var foodEntryImports = _mapper.Map(read.Entries, config, from, to, mealNames);
 
-        await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes, foodEntryImports,
-            PublishFoodEntriesAsync, config, cancellationToken,
+        await PublishRecordTypeAsync(result, activeTypes, foodEntryImports,
+            config, cancellationToken,
             context: $"since {from:yyyy-MM-dd}");
 
         // Outside the publish branch: a window the user has emptied maps to no imports at all, and
@@ -142,31 +142,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Adapts the food-catalog publish to the shared publish path: the publisher reports a rejected
-    /// import with a null result rather than a flag, and returns an empty list when it reached the
-    /// catalog but nothing was accepted.
-    /// </summary>
-    private async Task<bool> PublishFoodEntriesAsync(
-        List<ConnectorFoodEntryImport> entries,
-        MyFitnessPalConnectorConfiguration config,
-        CancellationToken cancellationToken)
-    {
-        if (Publisher is not { IsAvailable: true } publisher)
-        {
-            _logger.LogWarning("Publisher not available for connector food entry submission");
-            return false;
-        }
-
-        var imported = await publisher.Metadata.PublishConnectorFoodEntriesAsync(
-            entries,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        ); // Food is a dormant broadcast category — origin irrelevant until wired.
-
-        return imported != null;
     }
 
     private static DateTimeOffset AsUtc(DateTime value) =>

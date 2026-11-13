@@ -138,8 +138,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var unchanged = await PublishedProfileFingerprintAsync(resource, cancellationToken) == fingerprint;
 
         var published = await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
-            result, SyncDataType.Profiles, activeTypes, unchanged ? [] : [profile],
-            PublishProfileDataAsync, config, cancellationToken);
+            result, activeTypes, unchanged ? [] : [profile], config, cancellationToken);
 
         if (published)
             await RememberPublishedProfileAsync(resource, fingerprint, cancellationToken);
@@ -310,21 +309,21 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             window is { } bounds ? records.Where(record => bounds.Holds(at(record))).ToList() : records;
 
         if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                cgm.Map(cgmEvents, now), PublishSensorGlucoseDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                cgm.Map(cgmEvents, now), config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.Bolus, out var bolusEvents))
         {
             var decomposed = bolus.Map(bolusEvents, now);
-            await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+            await PublishRecordTypeAsync(result, activeTypes,
                 Inside(decomposed.Boluses, record => record.Timestamp),
-                PublishBolusDataAsync, config, cancellationToken);
-            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
                 Inside(decomposed.CarbIntakes, record => record.Timestamp),
-                PublishCarbIntakeDataAsync, config, cancellationToken);
-            await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
+                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
                 Inside(decomposed.BolusCalculations, record => record.Timestamp),
-                PublishBolusCalculationDataAsync, config, cancellationToken);
+                config, cancellationToken);
         }
 
         string? unclosed = null;
@@ -339,28 +338,27 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
                     $"The basal span starting {unclosedFrom.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} "
                     + "UTC is not published: the delivery event that ends it is more than a day above the window.";
 
-            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
-                Inside(spans.Spans, record => record.StartTimestamp), PublishTempBasalDataAsync,
-                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                Inside(spans.Spans, record => record.StartTimestamp), config, cancellationToken);
         }
 
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
             TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
-        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-            deviceEvents.Map(devEvents, now), PublishDeviceEventDataAsync, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            deviceEvents.Map(devEvents, now), config, cancellationToken);
 
         var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
-        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-            systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            systemEvents.Map(sysEvents), config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
-            await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+            await PublishRecordTypeAsync(result, activeTypes,
                 Inside(userMode.Map(userModeEvents), record => record.StartTimestamp),
-                PublishStateSpanDataAsync, config, cancellationToken);
+                config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.DeviceStatus, out var dailyBasal))
-            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
-                deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                deviceStatus.Map(dailyBasal), config, cancellationToken);
 
         return unclosed;
     }

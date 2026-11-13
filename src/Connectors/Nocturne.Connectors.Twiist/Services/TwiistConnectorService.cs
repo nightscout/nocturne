@@ -145,26 +145,24 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             latest.Direction = TwiistGlucoseMapper.ParseTrend(status.Summary.LastGlucoseTrend);
         }
 
-        await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-            sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            sensorGlucose, config, cancellationToken);
     }
 
     private async Task SyncBolusesAsync(
         TwiistStatus status, SyncResult result, HashSet<SyncDataType> activeTypes,
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-            _insulinMapper.MapBoluses(status.InsulinHistory, Clock.GetUtcNow().UtcDateTime).ToList(), PublishBolusDataAsync,
-            config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            _insulinMapper.MapBoluses(status.InsulinHistory, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
     }
 
     private async Task SyncCarbIntakeAsync(
         TwiistStatus status, SyncResult result, HashSet<SyncDataType> activeTypes,
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-            _mealMapper.MapMeals(status.MealHistory, Clock.GetUtcNow().UtcDateTime).ToList(), PublishCarbIntakeDataAsync,
-            config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            _mealMapper.MapMeals(status.MealHistory, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
     }
 
     private async Task SyncTempBasalsAsync(
@@ -177,8 +175,8 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             .Concat(_tempBasalMapper.MapSuspensions(status.InsulinHistory, now))
             .ToList();
 
-        await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
-            tempBasals, PublishTempBasalDataAsync, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            tempBasals, config, cancellationToken);
     }
 
     /// <summary>

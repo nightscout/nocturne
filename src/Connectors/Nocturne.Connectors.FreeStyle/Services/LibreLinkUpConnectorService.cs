@@ -188,12 +188,12 @@ public class LibreConnectorService(
                 return result;
             }
 
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                sensorGlucose, config, cancellationToken);
 
             List<DeviceEvent> sensorStarts = LibreSensorSessionMapper.ToSensorStart(_currentSensor, Clock.GetUtcNow().UtcDateTime) is { } start ? [start] : [];
-            await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-                sensorStarts, PublishDeviceEventDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                sensorStarts, config, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {

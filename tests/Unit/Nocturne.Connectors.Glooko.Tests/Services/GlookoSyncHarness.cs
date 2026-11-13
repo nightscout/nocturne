@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -101,16 +102,23 @@ public enum PublishKind
 }
 
 /// <summary>
-/// Accepts every publish except the one under test, and records which publishes were reached.
+/// Accepts the publishes a Glooko sync reaches in <see cref="PublishKind"/> except the one under
+/// test, and records which were reached. Every other publisher member goes to the publisher the
+/// test supplied, or answers with the default of its return type when none was.
 /// </summary>
 internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
 {
-    private readonly PublishKind? _rejected;
-
     public RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, PublishKind? rejected,
         IConnectorPublisher? publisher = null, IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? clock = null)
+        : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected), cursorStore, clock)
+    {
+    }
+
+    private RecordingGlookoConnectorService(
+        HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, InterceptingPublisher publisher,
+        IConnectorSyncCursorStore? cursorStore, TimeProvider? clock)
         : base(
             httpClient,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
@@ -122,39 +130,81 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
             cursorStore: cursorStore,
             timeProvider: clock)
     {
-        _rejected = rejected;
+        Published = publisher.Published;
     }
+
+    public List<PublishKind> Published { get; }
+}
+
+/// <summary>Stands in for the tenant's publisher, recording the publishes <see cref="PublishKind"/> names.</summary>
+internal sealed class InterceptingPublisher(IConnectorPublisher? inner, PublishKind? rejected) : IConnectorPublisher
+{
+    private static readonly Dictionary<string, PublishKind> Kinds = new()
+    {
+        [nameof(IMetadataPublisher.PublishStateSpansAsync)] = PublishKind.StateSpans,
+        [nameof(IMetadataPublisher.PublishProfileActivationsAsync)] = PublishKind.ProfileActivations,
+        [nameof(ITreatmentPublisher.PublishTempBasalsAsync)] = PublishKind.TempBasals,
+        [nameof(IDevicePublisher.PublishDeviceEventsAsync)] = PublishKind.DeviceEvents,
+        [nameof(IMetadataPublisher.PublishSystemEventsAsync)] = PublishKind.SystemEvents,
+        [nameof(IMetadataPublisher.PublishProfilesAsync)] = PublishKind.Profiles,
+    };
 
     public List<PublishKind> Published { get; } = [];
 
-    protected override Task<bool> PublishStateSpanDataAsync(
-        IEnumerable<StateSpan> stateSpans, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.StateSpans);
+    public bool IsAvailable => inner?.IsAvailable ?? true;
 
-    protected override Task<bool> PublishProfileActivationDataAsync(
-        IEnumerable<ProfileActivation> activations, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.ProfileActivations);
+    public IGlucosePublisher Glucose => Wrap(inner?.Glucose);
 
-    protected override Task<bool> PublishTempBasalDataAsync(
-        IEnumerable<TempBasal> records, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.TempBasals);
+    public ITreatmentPublisher Treatments => Wrap(inner?.Treatments);
 
-    protected override Task<bool> PublishDeviceEventDataAsync(
-        IEnumerable<DeviceEvent> records, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.DeviceEvents);
+    public IDevicePublisher Device => Wrap(inner?.Device);
 
-    protected override Task<bool> PublishSystemEventDataAsync(
-        IEnumerable<SystemEvent> systemEvents, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.SystemEvents);
+    public IMetadataPublisher Metadata => Wrap(inner?.Metadata);
 
-    protected override Task<bool> PublishProfileDataAsync(
-        IEnumerable<Profile> profiles, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.Profiles);
+    public int SkippedDeleted => inner?.SkippedDeleted ?? 0;
+
+    public int Refused => inner?.Refused ?? 0;
+
+    private T Wrap<T>(T? target) where T : class
+    {
+        var proxy = DispatchProxy.Create<T, Interceptor<T>>();
+        var interceptor = (Interceptor<T>)(object)proxy;
+        interceptor.Target = target;
+        interceptor.Owner = this;
+        return proxy;
+    }
 
     private Task<bool> Record(PublishKind kind)
     {
-        Published.Add(kind);
-        return Task.FromResult(kind != _rejected);
+        lock (Published) Published.Add(kind);
+        return Task.FromResult(kind != rejected);
+    }
+
+    public class Interceptor<T> : DispatchProxy where T : class
+    {
+        public T? Target { get; set; }
+
+        public InterceptingPublisher Owner { get; set; } = null!;
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod!.Name is { } name && Kinds.TryGetValue(name, out var kind))
+                return Owner.Record(kind);
+            if (Target is not null)
+                return targetMethod.Invoke(Target, args);
+
+            var returned = targetMethod.ReturnType;
+            if (returned.IsGenericType && returned.GetGenericTypeDefinition() == typeof(Task<>))
+            {
+                var inner = returned.GetGenericArguments()[0];
+                var value = inner.IsValueType ? Activator.CreateInstance(inner) : null;
+                return typeof(Task).GetMethod(nameof(Task.FromResult))!.MakeGenericMethod(inner).Invoke(null, [value]);
+            }
+
+            return returned == typeof(Task) ? Task.CompletedTask
+                : returned.IsValueType && returned != typeof(void) ? Activator.CreateInstance(returned)
+                : null;
+        }
     }
 }
 
