@@ -5,10 +5,9 @@ import { fileURLToPath } from 'node:url'
 /** Read by wuchaleConfig in wuchale.shared.js. */
 export const DEV_LOCALES_DIR_ENV = 'NOCTURNE_WUCHALE_LOCALES_DIR'
 
-const webRoot = dirname(fileURLToPath(import.meta.url))
-const sharedLocalesDir = resolve(webRoot, 'locales')
-// The directory wuchale resolves localesDir against: the config is always loaded from there.
-const wuchaleRoot = resolve(webRoot, 'packages/app')
+// The directory wuchale resolves localesDir against: the config is always loaded from here.
+const wuchaleRoot = dirname(fileURLToPath(import.meta.url))
+const sharedLocalesDir = resolve(wuchaleRoot, '../../locales')
 
 const slashes = (/** @type {string} */ p) => p.replaceAll('\\', '/')
 

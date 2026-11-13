@@ -16,7 +16,7 @@ COPY src/Web/package.json src/Web/pnpm-lock.yaml src/Web/pnpm-workspace.yaml ./
 COPY src/Web/patches ./patches
 RUN pnpm fetch
 
-COPY src/Web/supportedLocales.json src/Web/wuchale.shared.js src/Web/wuchale.dev.js ./
+COPY src/Web/supportedLocales.json src/Web/wuchale.shared.js ./
 COPY src/Web/locales ./locales
 COPY src/Web/packages ./packages
 # The water-ui submodule, with its wasm built in CI before the image build.

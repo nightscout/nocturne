@@ -7,7 +7,7 @@ import { remarkVars } from '@nocturne/cms/remark/vars';
 import { rehypeInstallSteps } from './src/lib/markdown/rehype-install-steps.js';
 import tailwindcss from '@tailwindcss/vite';
 import { wuchale } from 'wuchale/vite';
-import { privateDevCatalogue } from '../../wuchale.dev.js';
+import { privateDevCatalogue } from '../app/wuchale.dev.js';
 import lingo from 'vite-plugin-lingo';
 import { blogManifest } from '@nocturne/cms/blog/vite-plugin';
 import { resolve, sep } from 'node:path';

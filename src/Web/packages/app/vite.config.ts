@@ -37,7 +37,7 @@ const reactAliases = {
   "react-dom": dirname(require.resolve("react-dom/package.json")),
 };
 import { wuchale } from 'wuchale/vite'
-import { privateDevCatalogue } from '../../wuchale.dev.js'
+import { privateDevCatalogue } from './wuchale.dev.js'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.

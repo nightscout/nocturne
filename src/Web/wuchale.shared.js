@@ -3,7 +3,7 @@ import { adapter as svelte, svelteKitDefaultHeuristic } from "@wuchale/svelte"
 import { adapter as js } from 'wuchale/adapter-vanilla'
 import { defineConfig, gemini, pofile } from "wuchale"
 import supportedLocales from "./supportedLocales.json" with { type: 'json' };
-import { DEV_LOCALES_DIR_ENV } from "./wuchale.dev.js"
+import { DEV_LOCALES_DIR_ENV } from "./packages/app/wuchale.dev.js"
 
 // The monorepo's one wuchale config. It is loaded only as packages/app/wuchale.config.js:
 // `pnpm run translations:sync` runs there, and the portal's vite plugin loads that file by
@@ -33,7 +33,7 @@ export function wuchaleConfig() {
 
     return defineConfig({
         locales: supportedLocales,
-        // A dev server's own compiled catalogue; see privateDevCatalogue in wuchale.dev.js.
+        // A dev server's own compiled catalogue; see privateDevCatalogue in packages/app/wuchale.dev.js.
         localesDir: process.env[DEV_LOCALES_DIR_ENV] || '../../locales',
         adapters: {
             main: svelte({
