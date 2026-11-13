@@ -85,13 +85,6 @@ public class DataSourceService : IDataSourceService
     /// </remarks>
     private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest, SourceHandle? Handle);
 
-    /// <summary>The types a source's treatment totals and first and last treatment times span.</summary>
-    private static readonly string[] TreatmentTypes =
-    [
-        SourceDataTypes.Boluses, SourceDataTypes.CarbIntake, SourceDataTypes.BolusCalculations, SourceDataTypes.Notes,
-        SourceDataTypes.DeviceEvents, SourceDataTypes.BGChecks, SourceDataTypes.TempBasals,
-    ];
-
     private static void ApplyStatus(DataSourceInfo info, DateTimeOffset now, int activeMinutes, int staleMinutes)
     {
         var minutesSinceLast = info.LastSeen.HasValue
@@ -1095,10 +1088,7 @@ public class DataSourceService : IDataSourceService
 
         var sgStats = Of(SourceDataTypes.Glucose);
         var stateSpanStats = Of(SourceDataTypes.StateSpans);
-        var treatments = TreatmentTypes.Select(Of).ToList();
-
-        // Treatment totals cover exactly the types the first/last treatment timestamps span, so a
-        // source with only one of them cannot report zero treatments alongside a treatment time.
+        var treatments = _sourceData.TreatmentDataTypes.Select(Of).ToList();
         var totalTreatments = treatments.Sum(t => t.Count);
         var treatments24h = treatments.Sum(t => t.CountLast24Hours);
         var lastTreatmentTime = await GetLatestTreatmentTimestampBySourceAsync(dataSource, cancellationToken);

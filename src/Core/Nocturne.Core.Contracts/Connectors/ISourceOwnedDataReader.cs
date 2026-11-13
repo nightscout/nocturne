@@ -35,6 +35,12 @@ public interface ISourceOwnedDataReader
     Task<IReadOnlyList<SourceTypeStats>> StatsBySourceAsync(
         string source, DateTime last24Hours, CancellationToken ct);
 
+    /// <summary>
+    /// The <see cref="SourceDataTypes"/> names of the treatment types, whose rows a source's treatment
+    /// totals and its first and last treatment times span.
+    /// </summary>
+    IReadOnlyList<string> TreatmentDataTypes { get; }
+
     /// <summary>The latest time among the source's treatment rows, or null when it has none.</summary>
     Task<DateTime?> LatestTreatmentTimestampAsync(string source, CancellationToken ct);
 
