@@ -9,6 +9,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -17,6 +18,7 @@ namespace Nocturne.API.Controllers.V1;
 /// Implements the /api/v1/food/* endpoints from the legacy JavaScript implementation.
 /// </summary>
 /// <seealso cref="IFoodRepository"/>
+/// <seealso cref="IFoodService"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
@@ -24,16 +26,23 @@ namespace Nocturne.API.Controllers.V1;
 public class FoodController : ControllerBase
 {
     private readonly IFoodRepository _foodRepository;
+    private readonly IFoodService _foodService;
     private readonly ILogger<FoodController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="FoodController"/>.
     /// </summary>
-    /// <param name="foodRepository">Repository for food records.</param>
+    /// <param name="foodRepository">Repository for reading food records.</param>
+    /// <param name="foodService">Service every food write goes through.</param>
     /// <param name="logger">Logger instance.</param>
-    public FoodController(IFoodRepository foodRepository, ILogger<FoodController> logger)
+    public FoodController(
+        IFoodRepository foodRepository,
+        IFoodService foodService,
+        ILogger<FoodController> logger
+    )
     {
         _foodRepository = foodRepository;
+        _foodService = foodService;
         _logger = logger;
     }
 
@@ -285,27 +294,12 @@ public class FoodController : ControllerBase
                 // Nightscout V1 API does NOT reject missing name - it creates the record anyway
                 // This matches legacy Nightscout behavior
 
-                // Set default unit if not provided
-                if (string.IsNullOrWhiteSpace(food.Unit))
-                {
-                    food.Unit = "g";
-                }
-
-                // Set default GI if not provided or invalid
-                if (food.Gi < 1 || food.Gi > 3)
-                {
-                    food.Gi = 2;
-                }
-
-                // Set created_at timestamp for parity with Nightscout
-                if (string.IsNullOrWhiteSpace(food.CreatedAt))
-                {
-                    food.CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                }
+                food.ApplyUnitAndGiDefaults();
             }
 
-            var createdFoods = await _foodRepository.CreateFoodAsync(
+            var createdFoods = await _foodService.CreateFoodAsync(
                 foodsToCreate,
+                FoodWriteMode.Legacy,
                 cancellationToken
             );
             var resultArray = createdFoods.ToArray();
@@ -388,19 +382,9 @@ public class FoodController : ControllerBase
                 return BadRequest("Food name is required");
             }
 
-            // Set default unit if not provided
-            if (string.IsNullOrWhiteSpace(food.Unit))
-            {
-                food.Unit = "g";
-            }
+            food.ApplyUnitAndGiDefaults();
 
-            // Set default GI if not provided or invalid
-            if (food.Gi < 1 || food.Gi > 3)
-            {
-                food.Gi = 2;
-            }
-
-            var updatedFood = await _foodRepository.UpdateFoodAsync(id, food, cancellationToken);
+            var updatedFood = await _foodService.UpdateFoodAsync(id, food, cancellationToken);
             if (updatedFood == null)
             {
                 _logger.LogDebug("Food record not found for update with ID: {Id}", id);
@@ -484,7 +468,7 @@ public class FoodController : ControllerBase
                 return BadRequest("Food ID cannot be null or empty");
             }
 
-            var deleted = await _foodRepository.DeleteFoodAsync(id, cancellationToken);
+            var deleted = await _foodService.DeleteFoodAsync(id, cancellationToken);
             if (!deleted)
             {
                 _logger.LogDebug("Food record not found for deletion with ID: {Id}", id);
@@ -543,7 +527,7 @@ public class FoodController : ControllerBase
                 return BadRequest(refusal);
             }
 
-            var deletedCount = await _foodRepository.BulkDeleteFoodAsync(find, cancellationToken);
+            var deletedCount = await _foodService.BulkDeleteFoodAsync(find, cancellationToken);
 
             _logger.LogDebug("Deleted {Count} food records matching filter: {Query}", deletedCount, find);
 

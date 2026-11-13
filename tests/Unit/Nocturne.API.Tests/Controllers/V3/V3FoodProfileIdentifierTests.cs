@@ -9,6 +9,7 @@ using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Xunit;
@@ -31,7 +32,7 @@ public class V3FoodProfileIdentifierTests
     private readonly Mock<IProfileProjectionService> _profiles = new();
 
     private FoodController FoodController() =>
-        new(_foods.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<FoodController>.Instance)
+        new(_foods.Object, Mock.Of<IFoodService>(), Mock.Of<IDocumentProcessingService>(), NullLogger<FoodController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

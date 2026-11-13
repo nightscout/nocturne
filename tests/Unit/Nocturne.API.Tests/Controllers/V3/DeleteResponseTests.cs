@@ -8,6 +8,7 @@ using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V3;
@@ -35,7 +36,7 @@ public class DeleteResponseTests
         var foods = new Mock<IFoodRepository>();
         foods.Setup(f => f.DeleteFoodAsync("abc", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var controller = WithContext(
-            new FoodController(foods.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<FoodController>.Instance));
+            new FoodController(foods.Object, FoodServices.Over(foods.Object), Mock.Of<IDocumentProcessingService>(), NullLogger<FoodController>.Instance));
 
         AssertStatusEnvelope(await controller.DeleteFood("abc"));
     }
