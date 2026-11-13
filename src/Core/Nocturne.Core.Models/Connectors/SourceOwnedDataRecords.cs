@@ -19,6 +19,7 @@ public static class SourceDataTypes
     public const string DeviceEvents = "DeviceEvents";
     public const string StateSpans = "StateSpans";
     public const string TempBasals = "TempBasals";
+    public const string BasalInjections = "BasalInjections";
     public const string Profiles = "Profiles";
     public const string DeviceStatus = "DeviceStatus";
     public const string Steps = "Steps";

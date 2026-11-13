@@ -185,7 +185,7 @@ public class DataSourceServiceStatsTests : IDisposable
     }
 
     [Fact]
-    public async Task Stats_TotalTheSevenTreatmentTypesAndBreakDownEveryTypeInOrder()
+    public async Task Stats_TotalTheEightTreatmentTypesAndBreakDownEveryCountedTypeInOrder()
     {
         var now = DateTime.UtcNow;
         using (var db = NewContext())
@@ -201,7 +201,10 @@ public class DataSourceServiceStatsTests : IDisposable
                 new DeviceEventEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, EventType = "SiteChange" },
                 new BGCheckEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Glucose = 100 },
                 new TempBasalEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Rate = 0.5, Origin = "pump" },
+                new BasalInjectionEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Units = 10 },
                 new ApsSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, AidAlgorithm = "Loop" },
+                new PumpSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now },
+                new UploaderSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now },
                 new StateSpanEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Source = DataSource, StartTimestamp = now, Category = "PumpMode", State = "Automatic" },
                 new ProfileActivationEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Day" });
             db.SaveChanges();
@@ -209,12 +212,12 @@ public class DataSourceServiceStatsTests : IDisposable
 
         var stats = await StatsFor(DataSource);
 
-        stats.TotalTreatments.Should().Be(7);
-        stats.TreatmentsLast24Hours.Should().Be(7);
+        stats.TotalTreatments.Should().Be(8);
+        stats.TreatmentsLast24Hours.Should().Be(8);
         stats.TypeBreakdown.Select(t => (t.Key, t.Value)).Should().Equal(
             ("Glucose", 1L), ("ManualBG", 1L), ("Boluses", 1L), ("CarbIntake", 1L), ("BolusCalculations", 1L),
             ("Notes", 1L), ("DeviceEvents", 1L), ("BGChecks", 1L), ("TempBasals", 1L), ("StateSpans", 1L),
-            ("DeviceStatus", 1L));
+            ("DeviceStatus", 1L), ("BasalInjections", 1L));
     }
 
     private void SeedBolus(string? dataSource, string? device, DateTime timestamp)

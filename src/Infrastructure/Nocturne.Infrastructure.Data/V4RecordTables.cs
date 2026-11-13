@@ -57,8 +57,11 @@ internal static class V4RecordTables
         TimeSeries<NoteEntity>(SourceDataTypes.Notes, typeof(Note), V4RecordKind.Treatment, db => db.Notes)
             .LinkedAs(RecordType.Note, MatchCriteriaMapper.From),
         TimeSeries<ApsSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(ApsSnapshot), V4RecordKind.DeviceStatus, db => db.ApsSnapshots),
+        TimeSeries<PumpSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(PumpSnapshot), V4RecordKind.DeviceStatus, db => db.PumpSnapshots, discovered: false),
+        TimeSeries<UploaderSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(UploaderSnapshot), V4RecordKind.DeviceStatus, db => db.UploaderSnapshots, discovered: false),
         TimeSeries<TempBasalEntity>(SourceDataTypes.TempBasals, typeof(TempBasal), V4RecordKind.Treatment, db => db.TempBasals)
             .LinkedAs(RecordType.TempBasal, MatchCriteriaMapper.From),
+        TimeSeries<BasalInjectionEntity>(SourceDataTypes.BasalInjections, typeof(BasalInjection), V4RecordKind.Treatment, db => db.BasalInjections),
         new V4RecordTable<StateSpanEntity>(
                 SourceDataTypes.StateSpans, typeof(StateSpan), V4RecordKind.StateSpan, db => db.StateSpans,
                 source => s => s.Source == source, s => s.Source, s => s.StartTimestamp, newestStamp: null,
@@ -81,17 +84,6 @@ internal static class V4RecordTables
     ];
 
     /// <summary>
-    /// Sourced, soft-deletable entities that are not in <see cref="All"/>, each with the reason.
-    /// No list over the record tables reaches them.
-    /// </summary>
-    internal static readonly IReadOnlyDictionary<Type, string> Unregistered = new Dictionary<Type, string>
-    {
-        [typeof(BasalInjectionEntity)] = "not yet owned by a source: no source purge, count, stats or demo purge reaches it",
-        [typeof(PumpSnapshotEntity)] = "not yet owned by a source: a source purge leaves its rows",
-        [typeof(UploaderSnapshotEntity)] = "not yet owned by a source: a source purge leaves its rows",
-    };
-
-    /// <summary>
     /// Tables of a counted kind that a source's stats and the data overview do not count yet, each
     /// with the reason.
     /// </summary>
@@ -99,6 +91,8 @@ internal static class V4RecordTables
     {
         [typeof(CalibrationEntity)] = "calibrations are not yet counted in a source's stats or in the overview",
         [typeof(ProfileActivationEntity)] = "profile activations are not yet counted with the state spans that share their type, in a source's stats or in the overview",
+        [typeof(PumpSnapshotEntity)] = "a device status is one APS snapshot in a source's stats and in the overview, and its pump snapshot is a part of it",
+        [typeof(UploaderSnapshotEntity)] = "a device status is one APS snapshot in a source's stats and in the overview, and its uploader snapshot is a part of it",
     };
 
     /// <summary>
@@ -109,7 +103,7 @@ internal static class V4RecordTables
         All.Where(IsCounted),
         typeof(SensorGlucoseEntity), typeof(MeterGlucoseEntity), typeof(BolusEntity), typeof(CarbIntakeEntity),
         typeof(BolusCalculationEntity), typeof(NoteEntity), typeof(DeviceEventEntity), typeof(BGCheckEntity),
-        typeof(TempBasalEntity), typeof(StateSpanEntity), typeof(ApsSnapshotEntity));
+        typeof(TempBasalEntity), typeof(StateSpanEntity), typeof(ApsSnapshotEntity), typeof(BasalInjectionEntity));
 
     /// <summary>
     /// The tables the data overview aggregates, in the order that fixes the insertion order of
@@ -119,7 +113,7 @@ internal static class V4RecordTables
         All.Where(IsCounted),
         typeof(SensorGlucoseEntity), typeof(MeterGlucoseEntity), typeof(BolusEntity), typeof(CarbIntakeEntity),
         typeof(BolusCalculationEntity), typeof(NoteEntity), typeof(DeviceEventEntity), typeof(StateSpanEntity),
-        typeof(ApsSnapshotEntity), typeof(BGCheckEntity), typeof(TempBasalEntity));
+        typeof(ApsSnapshotEntity), typeof(BGCheckEntity), typeof(TempBasalEntity), typeof(BasalInjectionEntity));
 
     /// <summary>
     /// The tables the overview does not attribute to a data source, each with the reason. A source

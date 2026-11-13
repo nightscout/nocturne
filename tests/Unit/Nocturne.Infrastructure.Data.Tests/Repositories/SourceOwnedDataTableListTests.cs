@@ -61,7 +61,10 @@ public class SourceOwnedDataTableListTests : IDisposable
         [typeof(BGCheckEntity)] = at => new BGCheckEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at, Glucose = 100 },
         [typeof(NoteEntity)] = at => new NoteEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at, Text = "note" },
         [typeof(ApsSnapshotEntity)] = at => new ApsSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at, AidAlgorithm = "Loop" },
+        [typeof(PumpSnapshotEntity)] = at => new PumpSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at },
+        [typeof(UploaderSnapshotEntity)] = at => new UploaderSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at },
         [typeof(TempBasalEntity)] = at => new TempBasalEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at, Rate = 0.5, Origin = "pump" },
+        [typeof(BasalInjectionEntity)] = at => new BasalInjectionEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at, Units = 10 },
         [typeof(StateSpanEntity)] = at => new StateSpanEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, Source = Source, StartTimestamp = at, Category = "PumpMode", State = "Automatic" },
         [typeof(ProfileActivationEntity)] = at => new ProfileActivationEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Day" },
         [typeof(HeartRateEntity)] = at => new HeartRateEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, DataSource = Source, Timestamp = at, Bpm = 60 },
@@ -77,7 +80,7 @@ public class SourceOwnedDataTableListTests : IDisposable
     private static readonly Type[] TreatmentTables =
     [
         typeof(BolusEntity), typeof(CarbIntakeEntity), typeof(BGCheckEntity), typeof(NoteEntity),
-        typeof(DeviceEventEntity), typeof(TempBasalEntity), typeof(BolusCalculationEntity),
+        typeof(DeviceEventEntity), typeof(TempBasalEntity), typeof(BolusCalculationEntity), typeof(BasalInjectionEntity),
     ];
 
     public static TheoryData<Type> Treatments => [.. TreatmentTables];
@@ -85,7 +88,8 @@ public class SourceOwnedDataTableListTests : IDisposable
     public static TheoryData<Type> NonTreatments =>
     [
         typeof(SensorGlucoseEntity), typeof(MeterGlucoseEntity), typeof(CalibrationEntity),
-        typeof(ApsSnapshotEntity), typeof(StateSpanEntity), typeof(ProfileActivationEntity),
+        typeof(ApsSnapshotEntity), typeof(PumpSnapshotEntity), typeof(UploaderSnapshotEntity),
+        typeof(StateSpanEntity), typeof(ProfileActivationEntity),
         typeof(HeartRateEntity), typeof(StepCountEntity), typeof(TherapySettingsEntity),
         typeof(BasalScheduleEntity),
     ];
@@ -124,8 +128,9 @@ public class SourceOwnedDataTableListTests : IDisposable
             (SourceDataTypes.DeviceEvents, 1L),
             (SourceDataTypes.BGChecks, 1L),
             (SourceDataTypes.Notes, 1L),
-            (SourceDataTypes.DeviceStatus, 1L),
+            (SourceDataTypes.DeviceStatus, 3L),
             (SourceDataTypes.TempBasals, 1L),
+            (SourceDataTypes.BasalInjections, 1L),
             (SourceDataTypes.StateSpans, 2L),
             (SourceDataTypes.HeartRate, 1L),
             (SourceDataTypes.Steps, 1L),
@@ -150,6 +155,7 @@ public class SourceOwnedDataTableListTests : IDisposable
             SourceDataTypes.Notes,
             SourceDataTypes.DeviceStatus,
             SourceDataTypes.TempBasals,
+            SourceDataTypes.BasalInjections,
             SourceDataTypes.StateSpans,
             SourceDataTypes.HeartRate,
             SourceDataTypes.Steps,
@@ -178,7 +184,8 @@ public class SourceOwnedDataTableListTests : IDisposable
             (SourceDataTypes.BGChecks, 1L, 1),
             (SourceDataTypes.TempBasals, 1L, 1),
             (SourceDataTypes.StateSpans, 1L, 1),
-            (SourceDataTypes.DeviceStatus, 1L, 1));
+            (SourceDataTypes.DeviceStatus, 1L, 1),
+            (SourceDataTypes.BasalInjections, 1L, 1));
         stats.Where(s => s.Latest != null || s.Oldest != null).Select(s => s.DataType)
             .Should().Equal(SourceDataTypes.Glucose, SourceDataTypes.StateSpans);
     }
@@ -220,8 +227,9 @@ public class SourceOwnedDataTableListTests : IDisposable
             (SourceDataTypes.DeviceEvents, 1L),
             (SourceDataTypes.BGChecks, 1L),
             (SourceDataTypes.Notes, 1L),
-            (SourceDataTypes.DeviceStatus, 1L),
+            (SourceDataTypes.DeviceStatus, 3L),
             (SourceDataTypes.TempBasals, 1L),
+            (SourceDataTypes.BasalInjections, 1L),
             (SourceDataTypes.StateSpans, 2L),
             (SourceDataTypes.HeartRate, 1L),
             (SourceDataTypes.Steps, 1L),
@@ -229,8 +237,8 @@ public class SourceOwnedDataTableListTests : IDisposable
             (SourceDataTypes.Profiles, 5L));
         _reports.Should().ContainSingle().Which.Should().BeEquivalentTo([
             typeof(Bolus), typeof(CarbIntake), typeof(BolusCalculation), typeof(DeviceEvent), typeof(BGCheck),
-            typeof(Note), typeof(ApsSnapshot), typeof(TempBasal), typeof(StateSpan), typeof(ProfileActivation),
-            typeof(HeartRate), typeof(StepCount), typeof(BodyWeight), typeof(TherapySettings),
+            typeof(Note), typeof(ApsSnapshot), typeof(PumpSnapshot), typeof(UploaderSnapshot), typeof(TempBasal),
+            typeof(BasalInjection), typeof(StateSpan), typeof(ProfileActivation), typeof(HeartRate), typeof(StepCount), typeof(BodyWeight), typeof(TherapySettings),
             typeof(BasalSchedule), typeof(CarbRatioSchedule), typeof(SensitivitySchedule),
             typeof(TargetRangeSchedule),
         ]);
@@ -251,8 +259,8 @@ public class SourceOwnedDataTableListTests : IDisposable
         _reports.Should().ContainSingle().Which.Should().BeEquivalentTo([
             typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration),
             typeof(Bolus), typeof(CarbIntake), typeof(BolusCalculation), typeof(DeviceEvent), typeof(BGCheck),
-            typeof(Note), typeof(ApsSnapshot), typeof(TempBasal), typeof(StateSpan), typeof(ProfileActivation),
-            typeof(HeartRate), typeof(StepCount), typeof(BodyWeight), typeof(TherapySettings),
+            typeof(Note), typeof(ApsSnapshot), typeof(PumpSnapshot), typeof(UploaderSnapshot), typeof(TempBasal),
+            typeof(BasalInjection), typeof(StateSpan), typeof(ProfileActivation), typeof(HeartRate), typeof(StepCount), typeof(BodyWeight), typeof(TherapySettings),
             typeof(BasalSchedule), typeof(CarbRatioSchedule), typeof(SensitivitySchedule),
             typeof(TargetRangeSchedule),
         ]);
