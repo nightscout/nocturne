@@ -1222,7 +1222,11 @@ public class StateSpanRepository : IStateSpanRepository
         if (entity == null)
             return null;
 
+        // An edit payload carries no record id (V4) or the id it was addressed by (V1). The stored
+        // LegacyId is the key a resync matches, and the stored Source is the connector that owns the row.
+        var (source, legacyId) = (entity.Source, entity.LegacyId);
         StateSpanMapper.UpdateEntity(entity, stateSpan);
+        (entity.Source, entity.LegacyId) = (source, legacyId);
         await db.SaveChangesAsync(cancellationToken);
         await ReportWrittenAsync();
         return StateSpanMapper.ToDomainModel(entity);

@@ -874,6 +874,47 @@ public class StateSpanRepositoryTests : IDisposable
         rows[0].DeletedAt.Should().NotBeNull();
     }
 
+    [Theory]
+    [InlineData(null, "nocturne")]
+    [InlineData("glooko-exercise-1", "nightscout")]
+    public async Task UpdateActivityStateSpanAsync_KeepsTheStoredKeyAndSource_SoAResyncUpdatesIt(
+        string? editedOriginalId, string editedSource)
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        var edited = ConnectorSpan();
+        edited.State = "Cycling";
+        edited.OriginalId = editedOriginalId;
+        edited.Source = editedSource;
+        var updated = await _repository.UpdateActivityStateSpanAsync("glooko-exercise-1", edited);
+
+        updated.Should().NotBeNull();
+        updated!.OriginalId.Should().Be("glooko-exercise-1");
+        updated.Source.Should().Be("glooko-connector");
+        updated.State.Should().Be("Cycling");
+
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        (await _context.StateSpans.AsNoTracking().Where(s => s.DeletedAt == null).ToListAsync())
+            .Should().ContainSingle("the resync updates the edited row rather than inserting a second span")
+            .Which.State.Should().Be("Running");
+    }
+
+    [Fact]
+    public async Task UpdateActivityStateSpanAsync_ByRowId_KeepsTheStoredKeyAndSource()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var rowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
+
+        var edited = ConnectorSpan();
+        edited.OriginalId = rowId.ToString();
+        edited.Source = "nightscout";
+        var updated = await _repository.UpdateActivityStateSpanAsync(rowId.ToString(), edited);
+
+        updated!.OriginalId.Should().Be("glooko-exercise-1");
+        updated.Source.Should().Be("glooko-connector");
+    }
+
     [Fact]
     public async Task SystemSweptSpan_IsRecreatedByTheNextConnectorSync()
     {
