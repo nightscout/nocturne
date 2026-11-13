@@ -69,6 +69,17 @@ public static class ConnectorConfigurationBinder
     }
 
     /// <summary>
+    ///     The keys <see cref="ApplyJsonToConfig{TConfig}"/> binds on <paramref name="configType"/>,
+    ///     whether or not the schema lists them. The enabled flag is in the set only as <c>enabled</c>;
+    ///     <see cref="ConnectorEnabledKey"/> matches its other casings.
+    /// </summary>
+    public static IReadOnlySet<string> BoundKeyNames(Type configType) =>
+        configType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite)
+            .Select(GetBoundKeyName)
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
     ///     The keys under which <paramref name="configType"/>'s secret properties are stored.
     /// </summary>
     public static IReadOnlySet<string> SecretKeyNames(Type configType) =>

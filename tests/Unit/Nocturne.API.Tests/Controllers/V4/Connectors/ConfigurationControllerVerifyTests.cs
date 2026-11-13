@@ -25,8 +25,9 @@ public class ConfigurationControllerVerifyTests
 
     private ConfigurationController BuildController()
     {
-        // Verification runs the same schema gate the configuration PUT runs, so the schema read is
-        // the one configuration-service call it is allowed to make.
+        // Verification runs the same gate the configuration PUT runs, so the key and schema reads
+        // are the only configuration-service calls it is allowed to make.
+        SetUpBoundKeys("email");
         _configService
             .Setup(s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonDocument.Parse("""{"properties":{"email":{"type":"string"}}}"""));
@@ -34,6 +35,11 @@ public class ConfigurationControllerVerifyTests
         return new ConfigurationController(
             _configService.Object, NullLogger<ConfigurationController>.Instance);
     }
+
+    private void SetUpBoundKeys(params string[] keys) =>
+        _configService
+            .Setup(s => s.GetBoundKeysAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(keys.ToHashSet());
 
     private static VerifyConnectorCredentialsRequest BuildRequest() => new()
     {
@@ -99,6 +105,8 @@ public class ConfigurationControllerVerifyTests
         // the configuration or the secrets could not pass unseen.
         _configService.Verify(
             s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _configService.Verify(
+            s => s.GetBoundKeysAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _configService.VerifyNoOtherCalls();
     }
 
@@ -114,6 +122,7 @@ public class ConfigurationControllerVerifyTests
         verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
 
         _configService.Reset();
+        SetUpBoundKeys("maxRetryAttempts");
         _configService
             .Setup(s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonDocument.Parse(
@@ -133,6 +142,32 @@ public class ConfigurationControllerVerifyTests
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         // Strict verifier mock: no live sign-in was attempted with the refused value.
+        verifier.Verify(v => v.VerifyAsync(
+                It.IsAny<JsonDocument?>(),
+                It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<IReadOnlyCollection<string>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task VerifyCredentials_UnknownKey_IsRefusedBeforeReachingTheVerifier()
+    {
+        var verifier = new Mock<IConnectorCredentialVerifier>(MockBehavior.Strict);
+        verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
+        var controller = BuildController();
+
+        var request = new VerifyConnectorCredentialsRequest
+        {
+            Configuration = JsonDocument.Parse("""{"email":"user@example.com","isActive":true}"""),
+            Secrets = new Dictionary<string, string> { ["password"] = "secret" },
+        };
+
+        var result = await controller.VerifyCredentials(
+            "glooko", request, [verifier.Object], CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("isActive", JsonSerializer.Serialize(badRequest.Value));
         verifier.Verify(v => v.VerifyAsync(
                 It.IsAny<JsonDocument?>(),
                 It.IsAny<Dictionary<string, string>>(),

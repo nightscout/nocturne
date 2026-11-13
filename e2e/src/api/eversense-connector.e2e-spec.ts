@@ -38,7 +38,7 @@ async function connect(tenant: Tenant, server: "US" | "OUS", password = EVERSENS
   await tenant.api.ok("PUT", "/api/v4/connectors/config/eversense", {
     username: `${tenant.slug}@example.com`,
     server,
-    isActive: true,
+    enabled: true,
   });
   await tenant.api.ok("PUT", "/api/v4/connectors/config/eversense/secrets", { password });
 }
