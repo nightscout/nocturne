@@ -19,6 +19,7 @@ vi.mock("#lib/api/generated/insulinCatalogs.generated.remote.js", () => ({
 
 import TreatmentEditDialog from "./TreatmentEditDialog.svelte";
 import type { EntryRecord } from "#lib/constants/entry-categories.js";
+import { toUpdateEntryInput } from "#routes/(authenticated)/reports/treatments/entry-request.js";
 
 function renderDialog(record: EntryRecord | null, onSave = vi.fn()) {
   render(TreatmentEditDialog, {
@@ -65,6 +66,38 @@ describe("TreatmentEditDialog", () => {
     const saved = onSave.mock.calls[0][0] as EntryRecord;
     expect(saved.kind).toBe("carbs");
     expect(saved.data).toMatchObject({ id: "c1", carbs: 45, absorptionTime: 120 });
+  });
+
+  const fiasp = { id: "ins-fiasp", name: "Fiasp (Faster Aspart)", isCurrent: true, role: "Bolus", dia: 4, peak: 55, curve: "RapidActing", concentration: 100 };
+  const humalog = { id: "ins-humalog", name: "Humalog", isCurrent: true, role: "Bolus", dia: 5, peak: 75, curve: "RapidActing", concentration: 100 };
+
+  it("links an unlinked bolus to the insulin chosen in the picker", async () => {
+    insulinsCurrent = [fiasp, humalog];
+    const onSave = renderDialog({ kind: "bolus", data: { id: "b1", mills, insulin: 2, insulinType: "FIASP" } });
+
+    await page.getByText("Select insulin...").click();
+    await page.getByRole("option", { name: "Fiasp (Faster Aspart)" }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    const saved = onSave.mock.calls[0][0] as EntryRecord;
+    if (saved.kind !== "bolus") throw new Error("expected a bolus");
+    expect(saved.data.insulinContext).toMatchObject({ patientInsulinId: "ins-fiasp", insulinName: "Fiasp (Faster Aspart)", dia: 4 });
+    expect(toUpdateEntryInput(saved).data).toMatchObject({ patientInsulinId: "ins-fiasp", insulinType: "Fiasp (Faster Aspart)" });
+  });
+
+  it("relinks a linked bolus to another insulin", async () => {
+    insulinsCurrent = [fiasp, humalog];
+    const onSave = renderDialog({
+      kind: "bolus",
+      data: { id: "b1", mills, insulin: 2, insulinType: "Fiasp (Faster Aspart)", insulinContext: { patientInsulinId: "ins-fiasp", insulinName: "Fiasp (Faster Aspart)" } },
+    });
+
+    await page.getByText("Fiasp (Faster Aspart)").click();
+    await page.getByRole("option", { name: "Humalog" }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    const saved = onSave.mock.calls[0][0] as EntryRecord;
+    expect(toUpdateEntryInput(saved).data).toMatchObject({ patientInsulinId: "ins-humalog" });
   });
 
   it("says no record is selected when given none", async () => {
