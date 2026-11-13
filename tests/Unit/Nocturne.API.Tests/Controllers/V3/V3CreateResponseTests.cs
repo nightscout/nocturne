@@ -60,6 +60,7 @@ public class V3CreateResponseTests
                 f.Select(x => { x.Id = StoredId; return x; }).ToList());
         var controller = WithContext(new FoodController(
             repository.Object,
+            FoodServices.Over(repository.Object),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance));
 
