@@ -123,6 +123,30 @@ public partial class TenantService : ITenantService
         return created;
     }
 
+    public async Task<TenantCreatedDto> CreateWithOwnerAsync(
+        string slug, string displayName, Guid ownerSubjectId, string? ownerUsername = null, CancellationToken ct = default)
+    {
+        await using var unit = await DbUnitOfWork.OpenPlatformAsync(_factory, ct);
+        var tenants = new TenantRepository(unit);
+        var members = new TenantMembershipRepository(unit);
+        var tenantId = await unit.CommitAsync(async token =>
+        {
+            var id = await CreateSeededTenantAsync(unit, tenants, members, slug, displayName, token);
+
+            var ownerRoleId = await members.FindRoleIdBySlugAsync(id, RoleSeeds.Owner, token)
+                ?? throw new InvalidOperationException($"Tenant {id} has no owner role after seeding.");
+            await members.AddMemberAsync(
+                new NewTenantMember(id, ownerSubjectId, [ownerRoleId], Username: ownerUsername), token);
+            await unit.Context.SaveChangesAsync(token);
+
+            return id;
+        }, ct: ct);
+
+        var tenant = (await _tenants.GetAsync(tenantId, ct))!;
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
+        return new TenantCreatedDto(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.SysCreatedAt);
+    }
+
     public async Task<TenantCreatedDto> CreateWithoutOwnerAsync(
         string slug, string displayName, CancellationToken ct = default)
     {
@@ -407,19 +431,7 @@ public partial class TenantService : ITenantService
         var passkeys = new PasskeyCredentialRepository(unit);
         var provisioned = await unit.CommitAsync(async token =>
         {
-            var tenantId = await tenants.CreateAsync(new NewTenant(slug.ToLowerInvariant(), displayName), token);
-            await context.SaveChangesAsync(token);
-
-            // The tenant's id exists only once the row is saved, and the connection is already
-            // open, so the TenantConnectionInterceptor will not fire again: the GUC is set here
-            // for the tenant-scoped writes that follow.
-            await context.PinTenantAsync(tenantId, token);
-
-            await members.SeedRolesAsync(tenantId, token);
-            await context.SaveChangesAsync(token);
-
-            await CreatePublicSubjectMembershipAsync(members, tenantId, token);
-            await context.SaveChangesAsync(token);
+            var tenantId = await CreateSeededTenantAsync(unit, tenants, members, slug, displayName, token);
 
             // Resolve the owner subject. An OIDC account maps to one subject reused across
             // tenants, so an already-linked identity names the owner even when the checkout email
@@ -518,6 +530,32 @@ public partial class TenantService : ITenantService
 
         TenantCacheEviction.Evict(_cache, provisioned.Slug);
         return provisioned;
+    }
+
+    /// <summary>
+    /// Creates the tenant row, its seeded roles and its Public membership on
+    /// <paramref name="unit"/>, inside the caller's transaction, and returns the tenant's id.
+    /// </summary>
+    private async Task<Guid> CreateSeededTenantAsync(
+        DbUnitOfWork unit, TenantRepository tenants, TenantMembershipRepository members,
+        string slug, string displayName, CancellationToken token)
+    {
+        var context = unit.Context;
+        var tenantId = await tenants.CreateAsync(new NewTenant(slug.ToLowerInvariant(), displayName), token);
+        await context.SaveChangesAsync(token);
+
+        // The tenant's id exists only once the row is saved, and the connection is already
+        // open, so the TenantConnectionInterceptor will not fire again: the GUC is set here
+        // for the tenant-scoped writes that follow.
+        await context.PinTenantAsync(tenantId, token);
+
+        await members.SeedRolesAsync(tenantId, token);
+        await context.SaveChangesAsync(token);
+
+        await CreatePublicSubjectMembershipAsync(members, tenantId, token);
+        await context.SaveChangesAsync(token);
+
+        return tenantId;
     }
 
     /// <summary>

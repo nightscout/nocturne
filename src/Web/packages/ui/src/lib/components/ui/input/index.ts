@@ -25,7 +25,7 @@ export const inputVariants = tv({
       // A run of text inside a larger field that owns the border and the focus ring, e.g. the
       // subdomain typed into a site address. It takes the size of the text around it.
       inline:
-        "h-auto w-auto rounded-none border-0 border-b-2 border-primary bg-transparent p-0 text-center text-[length:inherit] font-medium shadow-none focus-visible:ring-0 dark:bg-transparent md:text-[length:inherit]",
+        "h-auto w-auto rounded-none border-0 border-b-2 border-input bg-transparent p-0 text-center text-[length:inherit] font-medium shadow-none focus-visible:border-primary focus-visible:ring-0 dark:bg-transparent md:text-[length:inherit]",
     },
   },
   defaultVariants: {

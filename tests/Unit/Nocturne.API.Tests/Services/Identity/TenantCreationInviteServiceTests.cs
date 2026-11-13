@@ -41,8 +41,8 @@ public class TenantCreationInviteServiceTests : IDisposable
             .Setup(t => t.ValidateSlugAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugValidationResult(true));
         _tenantService
-            .Setup(t => t.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string slug, string name, Guid _, CancellationToken _) => AddTenant(slug, name));
+            .Setup(t => t.CreateWithOwnerAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string slug, string name, Guid _, string? _, CancellationToken _) => AddTenant(slug, name));
     }
 
     public void Dispose() => _db.Dispose();
@@ -52,7 +52,6 @@ public class TenantCreationInviteServiceTests : IDisposable
             new TenantCreationInviteRepository(_context.AsFactory()),
             new TenantRepository(_context.AsFactory()),
             _tenantService.Object,
-            new TenantMembershipRepository(_context.AsFactory()),
             _jwt.Object,
             Options.Create(new BaseDomainOptions { BaseDomain = baseDomain }),
             _time,
@@ -216,5 +215,35 @@ public class TenantCreationInviteServiceTests : IDisposable
         var token = await CreateLinkAsync();
         var stored = await _context.TenantCreationInvites.AsNoTracking().SingleAsync();
         stored.TokenHash.Should().Be(HashUtils.Sha256Hex(token)).And.NotBe(token);
+    }
+
+    [Fact]
+    public async Task A_create_that_throws_gives_the_use_back()
+    {
+        var token = await CreateLinkAsync(maxUses: 1);
+        _tenantService
+            .Setup(t => t.CreateWithOwnerAsync("boom", It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("seeding failed"));
+
+        var claim = await Service().ClaimAsync(token, default);
+        var act = () => Service().CreateTenantAsync(claim.Value, "boom", "Sam", Guid.CreateVersion7(), null, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        (await Service().ClaimAsync(token, default)).Refusal.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_cancelled_caller_cannot_spend_the_use_without_a_tenant()
+    {
+        var token = await CreateLinkAsync(maxUses: 1);
+        var claim = await Service().ClaimAsync(token, default);
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        var created = await Service().CreateTenantAsync(claim.Value, "sam", "Sam", Guid.CreateVersion7(), "sam", cancelled.Token);
+
+        created.Refusal.Should().BeNull();
+        _tenantService.Verify(t => t.ValidateSlugAsync("sam", CancellationToken.None), Times.Once);
+        _tenantService.Verify(t => t.CreateWithOwnerAsync("sam", "Sam", It.IsAny<Guid>(), "sam", CancellationToken.None), Times.Once);
     }
 }

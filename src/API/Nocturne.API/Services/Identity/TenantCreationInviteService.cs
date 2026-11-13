@@ -14,7 +14,6 @@ public class TenantCreationInviteService(
     ITenantCreationInviteRepository invites,
     ITenantRepository tenants,
     ITenantService tenantService,
-    ITenantMembershipRepository members,
     IJwtService jwtService,
     IOptions<BaseDomainOptions> baseDomain,
     TimeProvider time,
@@ -143,46 +142,47 @@ public class TenantCreationInviteService(
         Guid claimedInviteId, string slug, string displayName, Guid ownerSubjectId, string? ownerUsername,
         CancellationToken ct)
     {
-        var name = displayName.Trim();
-        if (name.Length is 0 or > MaxDisplayNameLength)
-        {
-            await ReleaseAsync(claimedInviteId);
-            return TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
-                TenantInviteRefusalCode.InvalidRequest,
-                $"The site name must be 1 to {MaxDisplayNameLength} characters.");
-        }
-
-        var validation = await tenantService.ValidateSlugAsync(slug, ct);
-        if (!validation.IsValid)
-        {
-            await ReleaseAsync(claimedInviteId);
-            return TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
-                TenantInviteRefusalCode.InvalidSlug, validation.Message ?? "This subdomain cannot be used.");
-        }
-
+        // The use is already taken, so nothing past this point may be cancelled by the caller: a
+        // disconnect would leave the link spent with no tenant. Every exit that creates no tenant
+        // gives the use back.
         TenantCreatedDto? created = null;
         try
         {
-            created = await tenantService.CreateAsync(slug, name, ownerSubjectId, CancellationToken.None);
-        }
-        catch (DbUpdateException)
-        {
-            if (!await tenants.SlugExistsAsync(slug.ToLowerInvariant().Trim(), CancellationToken.None))
-                throw;
+            var name = displayName.Trim();
+            if (name.Length is 0 or > MaxDisplayNameLength)
+            {
+                return TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
+                    TenantInviteRefusalCode.InvalidRequest,
+                    $"The site name must be 1 to {MaxDisplayNameLength} characters.");
+            }
 
-            return TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
-                TenantInviteRefusalCode.InvalidSlug, "This name is already taken");
+            var validation = await tenantService.ValidateSlugAsync(slug, CancellationToken.None);
+            if (!validation.IsValid)
+            {
+                return TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
+                    TenantInviteRefusalCode.InvalidSlug, validation.Message ?? "This subdomain cannot be used.");
+            }
+
+            try
+            {
+                created = await tenantService.CreateWithOwnerAsync(
+                    slug, name, ownerSubjectId, ownerUsername, CancellationToken.None);
+            }
+            catch (DbUpdateException)
+            {
+                // The tenant and its owner are one transaction, so a failed create leaves no row of
+                // its own: a slug that exists now was taken by a concurrent create.
+                if (!await tenants.SlugExistsAsync(slug.ToLowerInvariant().Trim(), CancellationToken.None))
+                    throw;
+
+                return TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
+                    TenantInviteRefusalCode.InvalidSlug, "This name is already taken");
+            }
         }
         finally
         {
             if (created is null)
                 await ReleaseAsync(claimedInviteId);
-        }
-
-        if (ownerUsername is not null
-            && await members.FindMemberAsync(created.Id, ownerSubjectId, CancellationToken.None) is { } membership)
-        {
-            await members.SetUsernameAsync(created.Id, membership.Id, ownerUsername, CancellationToken.None);
         }
 
         await invites.RecordUseAsync(

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Fido2NetLib;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -1168,8 +1169,10 @@ public class PasskeyController : ControllerBase
     /// <remarks>
     /// The use is taken before the ceremony and given back if it fails, so two people on a
     /// single-use link cannot both finish. A tenant that cannot be created after the passkey is
-    /// stored leaves an account with no tenant; signed in with that passkey, its holder redeems the
-    /// link again through <c>TenantCreationInviteController.Redeem</c>.
+    /// stored leaves an account with no tenant, so the response still signs it in and names the
+    /// refusal: the page then redeems the link again for the signed-in account through
+    /// <c>TenantCreationInviteController.Redeem</c>. Passkey sign-in needs a tenant, so this
+    /// session is that account's way in.
     /// </remarks>
     [HttpPost("tenant-invite/complete")]
     [AllowAnonymous]
@@ -1206,9 +1209,17 @@ public class PasskeyController : ControllerBase
                 request.AttestationResponseJson, request.ChallengeToken, Guid.Empty,
                 expectedSubjectId: enrollingSubjectId.Value);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Tenant invite passkey registration failed");
+        }
+        catch (Fido2VerificationException ex)
+        {
+            _logger.LogWarning(ex, "Tenant invite passkey attestation was refused");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Tenant invite passkey attestation could not be read");
         }
         finally
         {
@@ -1219,8 +1230,26 @@ public class PasskeyController : ControllerBase
         if (credResult is null)
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Registration Failed");
 
-        var created = await tenantInvites.CreateTenantAsync(
-            claim.Value, request.Slug, request.SiteName, credResult.SubjectId, username, CancellationToken.None);
+        // The passkey is stored, so from here the account exists whatever happens to the tenant:
+        // a failure is reported beside the session rather than in place of it.
+        TenantInviteOutcome<TenantCreationInviteRedeemed> created;
+        try
+        {
+            created = await tenantInvites.CreateTenantAsync(
+                claim.Value, request.Slug, request.SiteName, credResult.SubjectId, username, CancellationToken.None);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Tenant invite: the passkey was stored but the tenant could not be created");
+            created = TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
+                TenantInviteRefusalCode.InvalidRequest, "We could not make your site.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Tenant invite: the passkey was stored but the tenant could not be created");
+            created = TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
+                TenantInviteRefusalCode.InvalidRequest, "We could not make your site.");
+        }
 
         var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
 

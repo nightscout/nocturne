@@ -383,9 +383,7 @@
                     />
                   {/if}
                   <p class="text-center text-sm text-muted-foreground">
-                    Do you have an account on this server?
-                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved path; the return URL only adds a query -->
-                    <a class="underline underline-offset-4" href={`${resolve("/(unauthenticated)/auth/login")}?returnUrl=${encodeURIComponent(returnHere())}`}>Sign in</a>
+                    Do you have an account on this server? Sign in at your own site, then open this link again.
                   </p>
                 {/if}
               </div>

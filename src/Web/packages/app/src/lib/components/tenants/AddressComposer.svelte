@@ -29,7 +29,7 @@
     class="flex cursor-text flex-wrap items-baseline justify-center rounded-2xl border bg-background px-3 pt-5 pb-4 font-brand text-xl font-light tracking-tight shadow-xs transition-shadow focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 @lg:text-3xl @lg:px-5"
   >
     <span class="hidden text-muted-foreground @lg:inline">https://</span>
-    <span class="address-grow inline-grid" data-value={value || "name"}>
+    <span class="address-grow inline-grid max-w-full min-w-0" data-value={value || "name"}>
       <Input
         {id}
         bind:value
@@ -68,6 +68,11 @@
 </div>
 
 <style>
+  /* The track follows the twin up to the frame's width, then shrinks, and the input scrolls. */
+  .address-grow {
+    grid-template-columns: minmax(0, max-content);
+  }
+
   .address-grow::after {
     content: attr(data-value) " ";
     grid-area: 1 / 1;

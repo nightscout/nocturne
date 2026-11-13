@@ -117,7 +117,7 @@
       <Button variant="outline" onclick={openDialog}>Change address</Button>
     {:else if subdomain}
       <p class="text-sm text-muted-foreground">
-        Only the server administrator can change the address of this site.
+        You cannot change the address of this site.
       </p>
     {/if}
   </Card.Content>

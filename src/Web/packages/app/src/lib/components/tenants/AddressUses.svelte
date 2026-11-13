@@ -15,7 +15,8 @@
 
 <!-- The address dropped into the three places it is used, so the reader sees it there. -->
 {#snippet address()}
-  <span class="block truncate font-mono text-xs">https://<span class="font-semibold text-foreground">{slug}</span>.{baseDomain}</span>
+  <!-- Only the subdomain truncates: the domain is the part the previews exist to show. -->
+  <span class="flex min-w-0 font-mono text-xs"><span class="shrink-0">https://</span><span class="truncate font-semibold text-foreground">{slug}</span><span class="shrink-0">.{baseDomain}</span></span>
 {/snippet}
 
 <div class="space-y-1">
