@@ -130,9 +130,24 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         if (response.IsSuccessStatusCode)
         {
             var json = await GlookoHttpHelper.ReadResponseAsync(response);
+
+            if (IsHtml(response, json))
+            {
+                _logger.LogWarning(
+                    "Glooko answered {Url} with an HTML page instead of JSON; the session has expired", absoluteUrl);
+                throw new GlookoSessionExpiredException(
+                    $"Glooko returned an HTML page instead of JSON for {absoluteUrl}");
+            }
+
             _logger.LogDebug("[{ConnectorSource}] Response {StatusCode} from {Url}: {Json}",
                 ConnectorSource, (int)response.StatusCode, absoluteUrl, json);
             return JsonSerializer.Deserialize<JsonElement>(json);
+        }
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            _logger.LogWarning("Unauthorized (401) fetching from {Url}; the session has expired", absoluteUrl);
+            throw new GlookoSessionExpiredException($"Glooko returned 401 Unauthorized for {absoluteUrl}");
         }
 
         if (response.StatusCode == HttpStatusCode.UnprocessableEntity)
@@ -157,6 +172,19 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     }
 
     /// <summary>
+    ///     Whether a successful response is a web page rather than API data. Glooko serves an expired
+    ///     session a redirect to its sign-in page, which the outbound handler follows to a 200.
+    /// </summary>
+    private static bool IsHtml(HttpResponseMessage response, string body)
+    {
+        var mediaType = response.Content.Headers.ContentType?.MediaType;
+        if (string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return body.AsSpan().TrimStart().StartsWith("<");
+    }
+
+    /// <summary>
     ///     Fetches from a Glooko endpoint with retry logic and exponential backoff.
     ///     Throws rather than returning null once the attempts are spent, so a caller cannot mistake
     ///     an exhausted endpoint for one that legitimately had no data.
@@ -178,10 +206,10 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
                     _logger.LogWarning("Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
                 }
-                catch (GlookoDataForbiddenException)
+                catch (GlookoSessionRejectedException)
                 {
-                    // The patient code is part of the URL; retrying it unchanged will 403 again.
-                    // Bubble up immediately so the caller can re-authenticate and rebuild URLs.
+                    // The session or the patient code in the URL is what failed; retrying the same
+                    // request fails the same way. The caller re-authenticates and rebuilds URLs.
                     throw;
                 }
                 catch (HttpRequestException ex) when (ex.Message.Contains("422"))
@@ -339,9 +367,9 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 "[{ConnectorSource}] Syncing {From:yyyy-MM-dd} to {To:yyyy-MM-dd} in {ChunkCount} chunk(s)",
                 ConnectorSource, from, to, chunks.Count);
 
-            // Run the sync; if Glooko rejects the patient code (403 data_cant_view) the cached
-            // glookoCode has gone stale (e.g. the account was re-linked), so re-authenticate once
-            // to resolve the current code and retry from scratch. A second 403 propagates to the
+            // Run the sync; if Glooko rejects the cached session (expired: 401 or its HTML sign-in
+            // page) or the patient code (403 data_cant_view, e.g. the account was re-linked),
+            // re-authenticate once and retry from scratch. A second rejection propagates to the
             // outer handler and fails the sync rather than looping.
             for (var attempt = 0; ; attempt++)
             {
@@ -353,11 +381,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                         context, from, !request.To.HasValue, chunks, activeTypes, result, cancellationToken);
                     break;
                 }
-                catch (GlookoDataForbiddenException ex) when (attempt == 0)
+                catch (GlookoSessionRejectedException ex) when (attempt == 0)
                 {
                     _logger.LogWarning(ex,
-                        "[{ConnectorSource}] Glooko returned 403 (data_cant_view) for patient code {Code}; the account's "
-                        + "glookoCode likely changed. Invalidating cached session and re-authenticating.",
+                        "[{ConnectorSource}] Glooko rejected the cached session for patient code {Code}. "
+                        + "Invalidating it and re-authenticating.",
                         ConnectorSource, context.PatientCode);
 
                     _tokenProvider.InvalidateToken();
@@ -367,7 +395,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     {
                         result.Success = false;
                         result.Message = "Re-authentication failed after Glooko denied data access";
-                        result.Errors.Add("Re-authentication failed after Glooko returned 403 (data_cant_view)");
+                        result.Errors.Add("Re-authentication failed after Glooko rejected the session");
                         break;
                     }
 
@@ -381,7 +409,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     result.Message = SyncSucceededMessage;
 
                     _logger.LogInformation(
-                        "[{ConnectorSource}] Re-authenticated after 403; retrying sync with patient code {Code}",
+                        "[{ConnectorSource}] Re-authenticated; retrying sync with patient code {Code}",
                         ConnectorSource, context.PatientCode);
                 }
             }
@@ -510,8 +538,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// <summary>
     ///     Runs one full sync pass: every date chunk followed by the profile/device-settings fetch,
     ///     or the single cursor-driven SSV2 pass when the tenant is on it.
-    ///     Throws <see cref="GlookoDataForbiddenException"/> when Glooko rejects the patient code, so
-    ///     the caller can re-authenticate and retry with a refreshed code.
+    ///     Throws <see cref="GlookoSessionRejectedException"/> when Glooko rejects the session or the
+    ///     patient code, so the caller can re-authenticate and retry with a fresh session and code.
     /// </summary>
     private async Task RunSyncPassAsync(
         GlookoSyncContext context,
@@ -589,7 +617,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                         "device settings");
                 }
             }
-            catch (Exception profileEx) when (profileEx is not GlookoDataForbiddenException
+            catch (Exception profileEx) when (profileEx is not GlookoSessionRejectedException
                                               && (profileEx is not OperationCanceledException
                                                   || !cancellationToken.IsCancellationRequested))
             {
