@@ -450,13 +450,13 @@ public class StateSpanRepositoryTests : IDisposable
         var primaryEntity = SpanEntity(
             _context.TenantId, StateSpanCategory.PumpMode, PumpModeState.Automatic.ToString(),
             new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc), null);
-        primaryEntity.OriginalId = "pm-primary";
+        primaryEntity.LegacyId = "pm-primary";
         primaryEntity.Source = "primary";
 
         var duplicateEntity = SpanEntity(
             _context.TenantId, StateSpanCategory.PumpMode, PumpModeState.Manual.ToString(),
             new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc), null);
-        duplicateEntity.OriginalId = "pm-duplicate";
+        duplicateEntity.LegacyId = "pm-duplicate";
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
@@ -851,7 +851,7 @@ public class StateSpanRepositoryTests : IDisposable
     /// <summary>Primary keys of every row carrying <paramref name="originalId"/>, deleted included.</summary>
     private Task<List<StateSpanEntity>> RowsForAsync(string originalId) =>
         _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
-            .Where(s => s.OriginalId == originalId)
+            .Where(s => s.LegacyId == originalId)
             .ToListAsync();
 
     [Fact]
@@ -1123,7 +1123,7 @@ public class StateSpanRepositoryTests : IDisposable
     };
 
     private Task<Dictionary<string, StateSpanEntity>> LiveRowsAsync() =>
-        _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.OriginalId!);
+        _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.LegacyId!);
 
     /// <summary>
     /// Ending each inserted open span at its stored successor reads the store once for the batch, so a
@@ -1162,7 +1162,7 @@ public class StateSpanRepositoryTests : IDisposable
             _context, [Span(StateSpanCategory.TemporaryTarget, "Custom", 1, "tt-backfill")], [], CancellationToken.None);
 
         successors.Later.Values.Should().ContainSingle()
-            .Which.Select(s => s.OriginalId).Should().Equal(
+            .Which.Select(s => s.LegacyId).Should().Equal(
                 Enumerable.Range(0, StateSpanRepository.SuccessorCandidates).Select(i => $"tt-history-{i}"));
     }
 
@@ -1365,7 +1365,7 @@ public class StateSpanRepositoryTests : IDisposable
         var successorId = (await LiveRowsAsync())["pr-b"].Id;
         var stalePointer = SpanEntity(
             _context.TenantId, StateSpanCategory.Profile, "Active", BatchDay.AddHours(1), BatchDay.AddHours(2));
-        stalePointer.OriginalId = "pr-x";
+        stalePointer.LegacyId = "pr-x";
         stalePointer.SupersededById = successorId;
         _context.StateSpans.Add(stalePointer);
         await _context.SaveChangesAsync();
@@ -1385,7 +1385,7 @@ public class StateSpanRepositoryTests : IDisposable
         var successorId = (await LiveRowsAsync())["pr-b"].Id;
         var stalePointer = SpanEntity(
             _context.TenantId, StateSpanCategory.Profile, "Active", BatchDay.AddHours(1), BatchDay.AddHours(2));
-        stalePointer.OriginalId = "pr-x";
+        stalePointer.LegacyId = "pr-x";
         stalePointer.SupersededById = successorId;
         _context.StateSpans.Add(stalePointer);
         await _context.SaveChangesAsync();
@@ -1562,7 +1562,7 @@ public class StateSpanRepositoryTests : IDisposable
         {
             var tombstone = SpanEntity(
                 _context.TenantId, StateSpanCategory.Exercise, "Running", BatchDay.AddHours(hour), null);
-            tombstone.OriginalId = "ex-twice-deleted";
+            tombstone.LegacyId = "ex-twice-deleted";
             tombstone.DeletedAt = BatchDay.AddHours(hour + 1);
             _context.StateSpans.Add(tombstone);
             _context.Entry(tombstone).Property("DeletedByUser").CurrentValue = true;

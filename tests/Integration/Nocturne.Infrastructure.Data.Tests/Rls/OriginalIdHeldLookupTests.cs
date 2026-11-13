@@ -3,8 +3,9 @@ using Nocturne.Infrastructure.Data.Extensions;
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
 /// <summary>
-/// <see cref="SoftDeleteDedupExtensions.GetHeldOriginalIdsAsync{TEntity}"/> lifts the soft-delete
-/// filter to see user tombstones, so the tenant predicate it re-applies and row level security are all
+/// <see cref="SoftDeleteDedupExtensions.GetHeldOriginalIdsAsync{TEntity}"/>, and
+/// <see cref="SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync{TEntity}(NocturneDbContext, HashSet{string}, CancellationToken)"/>
+/// for state spans, lift the soft-delete filter to see user tombstones, so the tenant predicate it re-applies and row level security are all
 /// that keep another tenant's rows out. Run as <c>nocturne_app</c> against the migrated schema.
 /// Activity is stored across these four tables under its id.
 /// </summary>
@@ -16,11 +17,13 @@ public class OriginalIdHeldLookupTests(RlsCompletenessFixture fx)
 
     [Fact]
     public Task StateSpans_HoldLiveRowsAndUserTombstones() =>
-        AssertHeldAsync(id => new StateSpanEntity
-        {
-            Id = Guid.CreateVersion7(), Category = "Exercise", State = "exercise",
-            StartTimestamp = DateTime.UtcNow.AddHours(-3), Source = "nightscout-connector", OriginalId = id,
-        });
+        AssertHeldAsync(
+            id => new StateSpanEntity
+            {
+                Id = Guid.CreateVersion7(), Category = "Exercise", State = "exercise",
+                StartTimestamp = DateTime.UtcNow.AddHours(-3), Source = "nightscout-connector", LegacyId = id,
+            },
+            async ctx => (await ctx.GetBlockingLegacyIdsAsync<StateSpanEntity>(LookedUp.ToHashSet())).Held);
 
     [Fact]
     public Task HeartRates_HoldLiveRowsAndUserTombstones() =>
@@ -70,8 +73,13 @@ public class OriginalIdHeldLookupTests(RlsCompletenessFixture fx)
             "a session is keyed by source and original id, so another source's session is a different record");
     }
 
-    private async Task AssertHeldAsync<TEntity>(Func<string, TEntity> row)
+    private Task AssertHeldAsync<TEntity>(Func<string, TEntity> row)
         where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified
+        => AssertHeldAsync(row, ctx => ctx.GetHeldOriginalIdsAsync<TEntity>(LookedUp));
+
+    private async Task AssertHeldAsync<TEntity>(
+        Func<string, TEntity> row, Func<NocturneDbContext, Task<IReadOnlySet<string>>> heldOf)
+        where TEntity : class, ITenantScoped, ISoftDeletable
     {
         var tenant = await CreateTenantAsync();
         var other = await CreateTenantAsync();
@@ -93,7 +101,7 @@ public class OriginalIdHeldLookupTests(RlsCompletenessFixture fx)
         }
 
         await using var lookup = await OpenAsAppAsync(tenant);
-        var held = await lookup.GetHeldOriginalIdsAsync<TEntity>(LookedUp);
+        var held = await heldOf(lookup);
 
         held.Should().BeEquivalentTo(["live", "user-deleted"],
             "a live row and a user tombstone hold the id; a system sweep, another tenant's row and an unknown id do not");

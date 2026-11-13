@@ -1040,7 +1040,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     {
         var categories = TreatmentSpanCategories;
         return db.StateSpans.Where(s =>
-            s.OriginalId != null && legacyIds.Contains(s.OriginalId) && categories.Contains(s.Category));
+            s.LegacyId != null && legacyIds.Contains(s.LegacyId) && categories.Contains(s.Category));
     }
 
     /// <summary>The tables of <see cref="DecomposedTables"/> a classification writes to.</summary>
@@ -1518,9 +1518,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         await using (var db = await _contexts.CreateAsync(ct))
         {
             spanKeys = (await StoredTreatmentSpans(db, ids).AsNoTracking()
-                    .Select(s => new { s.OriginalId, s.Category })
+                    .Select(s => new { s.LegacyId, s.Category })
                     .ToListAsync(ct))
-                .GroupBy(s => s.OriginalId!)
+                .GroupBy(s => s.LegacyId!)
                 .ToDictionary(g => g.Key, g => g.Select(s => s.Category).ToHashSet(), StringComparer.Ordinal);
         }
 
@@ -2067,13 +2067,13 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         var scope = $"data_source={source}";
 
         var spans = LegacyTreatmentTables.ServedStateSpansFromSource(db, source)
-            .Where(s => ids.Contains(s.OriginalId!));
+            .Where(s => ids.Contains(s.LegacyId!));
 
         var (deleted, deviceEventIds, activationIds) = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
-            var spanKeys = spans.Select(s => s.OriginalId!);
+            var spanKeys = spans.Select(s => s.LegacyId!);
             var count = -await db.Notes
                 .Where(n => n.DataSource == source && n.LegacyId != null && spanKeys.Contains(n.LegacyId))
                 .CountAsync(ct);
@@ -2139,7 +2139,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         foreach (var span in await LegacyTreatmentTables.ServedStateSpansFromSource(db, source)
                      .AsNoTracking()
                      .Where(s => s.StartTimestamp >= from && s.StartTimestamp <= to)
-                     .Select(s => new { Id = s.OriginalId!, At = s.StartTimestamp })
+                     .Select(s => new { Id = s.LegacyId!, At = s.StartTimestamp })
                      .ToListAsync(ct))
             stored.TryAdd(span.Id, span.At);
 
@@ -2181,7 +2181,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         foreach (var table in DecomposedTables)
             stored.AddRange(await table.ClientIdRowsAsync(db, source, clientIds, ct));
         stored.AddRange((await StateSpansFromSource(db, source, clientIds).AsNoTracking()
-                .Select(s => new { Key = s.OriginalId!, s.StartTimestamp, Live = s.DeletedAt == null })
+                .Select(s => new { Key = s.LegacyId!, s.StartTimestamp, Live = s.DeletedAt == null })
                 .ToListAsync(ct))
             .Select(s => new ClientIdRow(s.Key, s.StartTimestamp, s.Live)));
         if (stored.Count == 0)
@@ -2223,7 +2223,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                     moved += await table.RekeyAsync(db, source, from, to, ct);
 
                 moved += await StateSpansFromSource(db, source, [from])
-                    .ExecuteUpdateAsync(u => u.SetProperty(s => s.OriginalId, to), ct);
+                    .ExecuteUpdateAsync(u => u.SetProperty(s => s.LegacyId, to), ct);
             }
 
             foreach (var (from, to) in copies)
@@ -2233,7 +2233,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
                 var spanTombstones = await StateSpansFromSource(db, source, [from]).AsNoTracking()
                     .Where(s => s.DeletedAt != null).ToListAsync(ct);
-                AddTombstoneCopies(db, spanTombstones, to, (s, id) => s.OriginalId = id);
+                AddTombstoneCopies(db, spanTombstones, to, (s, id) => s.LegacyId = id);
             }
 
             await db.SaveChangesAsync(ct);
@@ -2270,7 +2270,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         NocturneDbContext db, string source, string[] originalIds) =>
         db.StateSpans.IgnoreQueryFilters()
             .Where(s => s.TenantId == db.TenantId && s.Source == source
-                     && s.OriginalId != null && originalIds.Contains(s.OriginalId))
+                     && s.LegacyId != null && originalIds.Contains(s.LegacyId))
             .WhereBlocksSpanRecreation();
 
     /// <inheritdoc />
@@ -2378,14 +2378,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         foreach (var table in DecomposedTables)
             rows.AddRange(await table.BlockingAsync(db, legacyIds, ct));
 
-        // Overrides and temporary targets land as state spans keyed by OriginalId.
-        var ids = legacyIds.ToArray();
-        rows.AddRange((await db.StateSpans.IgnoreQueryFilters().AsNoTracking()
-                .Where(s => s.TenantId == db.TenantId && s.OriginalId != null && ids.Contains(s.OriginalId))
-                .WhereBlocksSpanRecreation()
-                .Select(s => new { Key = s.OriginalId!, Live = s.DeletedAt == null })
-                .ToListAsync(ct))
-            .Select(s => (s.Key, s.Live)));
+        // Overrides and temporary targets land as state spans.
+        var spans = await db.GetBlockingSpanLegacyIdsAsync(legacyIds, ct);
+        rows.AddRange(spans.Held.Select(id => (id, !spans.DeletedByUser.Contains(id))));
 
         var blocks = RecreationBlocks<string>.From(rows);
         return (blocks.Held, blocks.DeletedByUser);
@@ -2477,7 +2472,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
     /// <summary>
     /// The tables a legacy treatment decomposes into, each row keyed by the treatment's id as its
-    /// <see cref="IV4Entity.LegacyId"/>. Deletes go through the audited soft-delete path: a
+    /// <see cref="ILegacyIdentified.LegacyId"/>. Deletes go through the audited soft-delete path: a
     /// user-issued one is attributed, and blocks a later connector resync from re-creating the row
     /// (<see cref="SoftDeleteDedupExtensions"/>).
     /// </summary>

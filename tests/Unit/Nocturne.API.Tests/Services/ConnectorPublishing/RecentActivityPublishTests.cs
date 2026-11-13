@@ -79,7 +79,7 @@ public class RecentActivityPublishTests : IDisposable
             StartTime = now.AddHours(-8), EndTime = now, Type = "sleep", DetectionMethod = "manual", DeletedAt = now,
         });
         await _context.SaveChangesAsync();
-        MarkDeletedByUser(_context.StateSpans.IgnoreQueryFilters().Single(s => s.OriginalId == "act-user-deleted"));
+        MarkDeletedByUser(_context.StateSpans.IgnoreQueryFilters().Single(s => s.LegacyId == "act-user-deleted"));
         MarkDeletedByUser(_context.SleepSessions.IgnoreQueryFilters().Single(s => s.OriginalId == "act-sleep-deleted"));
 
         var written = await Publisher().PublishRecentActivityAsync(
@@ -191,7 +191,7 @@ public class RecentActivityPublishTests : IDisposable
         State = "exercise",
         StartTimestamp = DateTime.UtcNow.AddHours(-3),
         Source = Source,
-        OriginalId = originalId,
+        LegacyId = originalId,
         DeletedAt = deletedAt,
     };
 

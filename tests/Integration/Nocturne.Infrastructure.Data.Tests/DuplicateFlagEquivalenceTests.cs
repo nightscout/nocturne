@@ -574,10 +574,10 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         flagged.Should().ContainSingle();
 
         var copy = await LegacySpanAsync(tenant, flagged[0]);
-        await repository.BulkUpsertAsync([SpanModel(copy.Source!, copy.OriginalId!, copy.StartTimestamp, end: start.AddHours(1))]);
+        await repository.BulkUpsertAsync([SpanModel(copy.Source!, copy.LegacyId!, copy.StartTimestamp, end: start.AddHours(1))]);
         (await FlaggedAsync(tenant, "state_spans")).Should().Equal(flagged, "a re-send by original id");
 
-        await repository.UpdateStateSpanAsync(copy.OriginalId!, SpanModel(copy.Source!, copy.OriginalId!, copy.StartTimestamp, end: start.AddHours(2)));
+        await repository.UpdateStateSpanAsync(copy.LegacyId!, SpanModel(copy.Source!, copy.LegacyId!, copy.StartTimestamp, end: start.AddHours(2)));
         (await FlaggedAsync(tenant, "state_spans")).Should().Equal(flagged, "an update by id");
         (await MismatchesAsync(tenant)).Should().BeEmpty();
     }
