@@ -26,9 +26,11 @@ public sealed class GoogleHealthConnectorService(
     ITenantAccessor tenantAccessor,
     IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> configurationLoader,
     ILogger<GoogleHealthConnectorService> logger,
+    IRetryDelayStrategy retryDelayStrategy,
     IConnectorPublisher? publisher = null,
     TimeProvider? timeProvider = null)
-    : BaseConnectorService<GoogleHealthConnectorConfiguration>(httpClient, serverResolver, logger, publisher, timeProvider)
+    : BaseConnectorService<GoogleHealthConnectorConfiguration>(
+        httpClient, serverResolver, logger, retryDelayStrategy, publisher, timeProvider)
 {
     public const string ConnectorName = "GoogleHealth";
 

@@ -17,14 +17,13 @@ namespace Nocturne.Connectors.Twiist.Services;
 /// Connector service for Twiist Insight follower API.
 /// Fetches glucose (from binary blobs), insulin doses, and meals.
 /// </summary>
-public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfiguration>
+public class TwiistConnectorService
+    : TokenConnectorService<TwiistConnectorConfiguration, TwiistAuthTokenProvider>
 {
     private readonly TwiistGlucoseMapper _glucoseMapper;
     private readonly TwiistInsulinMapper _insulinMapper;
     private readonly TwiistMealMapper _mealMapper;
     private readonly TwiistTempBasalMapper _tempBasalMapper;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly TwiistAuthTokenProvider _tokenProvider;
 
     public TwiistConnectorService(
         HttpClient httpClient,
@@ -34,10 +33,8 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         TwiistAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null)
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _glucoseMapper = new TwiistGlucoseMapper(logger);
         _insulinMapper = new TwiistInsulinMapper(logger);
         _mealMapper = new TwiistMealMapper(logger);
@@ -56,11 +53,8 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         var result = new SyncResult { Success = true };
         var activeTypes = ResolveActiveTypes(request, config);
 
-        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        if (await ValidTokenAsync(config, cancellationToken) is null)
             return AuthenticationFailedResult();
-        }
 
         try
         {
@@ -218,20 +212,19 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     private async Task<List<TwiistOverview>?> FetchOverviewsAsync(
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var accessToken = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(accessToken))
+        var accessToken = await ValidTokenAsync(config, cancellationToken);
+        if (accessToken is null)
         {
             _logger.LogWarning("[{Source}] Failed to get valid token for overviews fetch", ConnectorSource);
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 
         return await ExecuteWithRetryAsync(
             async () => await FetchOverviewsCoreAsync(accessToken, cancellationToken),
-            _retryDelayStrategy,
-            ReauthenticateWith(_tokenProvider, config, t => accessToken = t, cancellationToken),
+            ReauthenticateWith(config, t => accessToken = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
-            operationName: "FetchTwiistOverviews");
+            operationName: "FetchTwiistOverviews",
+            cancellationToken: cancellationToken);
     }
 
     private async Task<List<TwiistOverview>?> FetchOverviewsCoreAsync(
@@ -254,20 +247,19 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     private async Task<TwiistPackage?> FetchPackageAsync(
         string pwdId, TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var accessToken = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(accessToken))
+        var accessToken = await ValidTokenAsync(config, cancellationToken);
+        if (accessToken is null)
         {
             _logger.LogWarning("[{Source}] Failed to get valid token for package fetch", ConnectorSource);
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 
         var result = await ExecuteWithRetryAsync(
             async () => await FetchPackageCoreAsync(accessToken, pwdId, cancellationToken),
-            _retryDelayStrategy,
-            ReauthenticateWith(_tokenProvider, config, t => accessToken = t, cancellationToken),
+            ReauthenticateWith(config, t => accessToken = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
-            operationName: "FetchTwiistPackage");
+            operationName: "FetchTwiistPackage",
+            cancellationToken: cancellationToken);
 
         return result;
     }

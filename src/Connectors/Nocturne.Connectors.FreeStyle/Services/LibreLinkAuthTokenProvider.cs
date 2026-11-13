@@ -20,7 +20,8 @@ public class LibreLinkAuthTokenProvider(
     ILogger<LibreLinkAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null
-) : AuthTokenProviderBase<LibreLinkUpConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+) : AuthTokenProviderBase<LibreLinkUpConnectorConfiguration>(
+    httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -28,10 +29,6 @@ public class LibreLinkAuthTokenProvider(
     };
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy
-        ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     /// <summary>
     ///     LibreLinkUp tokens typically last 24 hours.
@@ -109,7 +106,6 @@ public class LibreLinkAuthTokenProvider(
                 _logger.LogError("LibreLinkUp authentication failed: Invalid response structure");
                 return (null, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "LibreLinkUp authentication",
             cancellationToken

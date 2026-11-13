@@ -17,13 +17,15 @@ public sealed class GoogleHealthAuthTokenProvider(
     ITenantAccessor tenantAccessor,
     IGoogleHealthPlatformSettings platformOptions,
     ILogger<GoogleHealthAuthTokenProvider> logger,
+    IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null)
     : AuthTokenProviderBase<GoogleHealthConnectorConfiguration>(
         httpClient,
         tokenCache,
         serverResolver,
         tenantAccessor,
-        logger)
+        logger,
+        retryDelayStrategy)
 {
     private const string RefreshTokenKey = "RefreshToken";
     private const string ScopesKey = "Scopes";

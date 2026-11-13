@@ -105,7 +105,7 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
     )
         : base(new HttpClient(),
             new Nocturne.Connectors.Core.Services.ConnectorServerResolver<TestConnectorConfiguration>(null, null, null),
-            logger, publisher) { }
+            logger, Mock.Of<IRetryDelayStrategy>(), publisher) { }
 
     protected override string ConnectorSource => "test-connector";
     public override string ServiceName => "Test Connector";

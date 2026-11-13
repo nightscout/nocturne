@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
@@ -169,7 +170,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         disposables.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(http, new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-            accessor.Object, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+            accessor.Object, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
         return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform.Object,
             NullLogger<GoogleHealthSessionStore>.Instance);
     }

@@ -23,6 +23,12 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// <summary>The only clock derived connectors read, so a test can drive it.</summary>
     protected TimeProvider Clock { get; }
 
+    /// <summary>
+    ///     The delay between attempts of <see cref="ExecuteWithRetryAsync{T}"/>, for a connector that
+    ///     runs <see cref="ConnectorRetryLoop"/> itself.
+    /// </summary>
+    protected IRetryDelayStrategy RetryDelayStrategy { get; }
+
     /// <summary>The API publisher, or <c>null</c> when running detached (e.g. dry-run tooling).</summary>
     protected IConnectorPublisher? Publisher => _publisher;
 
@@ -45,6 +51,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         HttpClient httpClient,
         IConnectorServerResolver<TConfig> serverResolver,
         ILogger logger,
+        IRetryDelayStrategy retryDelayStrategy,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
@@ -52,6 +59,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _serverResolver = serverResolver ?? throw new ArgumentNullException(nameof(serverResolver));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        RetryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _publisher = publisher;
         Clock = timeProvider ?? TimeProvider.System;
     }
@@ -568,11 +576,6 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         return request.DataTypes.Count == 0 ? enabled : [.. request.DataTypes.Where(enabled.Contains)];
     }
 
-    protected virtual Task<IEnumerable<Profile>> FetchProfilesAsync()
-    {
-        return Task.FromResult(Enumerable.Empty<Profile>());
-    }
-
     /// <summary>
     ///     The broadcast origin for this run's glucose-family publishes: <see cref="WriteOrigin.Backfill"/>
     ///     on the source's first-ever glucose sync (no prior data — suppress so a first sync of history
@@ -1038,7 +1041,6 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// <returns><c>default</c> when the operation failed.</returns>
     protected async Task<T?> ExecuteWithRetryAsync<T>(
         Func<Task<T?>> operation,
-        IRetryDelayStrategy retryStrategy,
         Func<Task<bool>>? reAuthenticateOnUnauthorized = null,
         int maxRetries = 3,
         string? operationName = null,
@@ -1148,7 +1150,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                     return RetryStep<T>.Complete(default);
                 }
             },
-            retryStrategy,
+            RetryDelayStrategy,
             maxRetries,
             attempts =>
             {
@@ -1168,24 +1170,6 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             cancellationToken
         );
     }
-
-    /// <summary>
-    ///     The <c>reAuthenticateOnUnauthorized</c> answer to <see cref="ExecuteWithRetryAsync{T}"/> for a
-    ///     connector holding a cached token: drop the token the source refused, sign in again, and
-    ///     hand the retry the new one through <paramref name="useToken"/>.
-    /// </summary>
-    protected static Func<Task<bool>> ReauthenticateWith(
-        AuthTokenProviderBase<TConfig> tokenProvider,
-        TConfig config,
-        Action<string> useToken,
-        CancellationToken cancellationToken = default) => async () =>
-    {
-        tokenProvider.InvalidateToken();
-        var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token)) return false;
-        useToken(token);
-        return true;
-    };
 
     protected async Task<HttpResponseMessage> SendWithHeadersAsync(
         HttpMethod method,

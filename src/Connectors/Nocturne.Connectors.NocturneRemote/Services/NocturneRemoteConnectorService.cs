@@ -17,7 +17,6 @@ namespace Nocturne.Connectors.NocturneRemote.Services;
 /// </summary>
 public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemoteConnectorConfiguration>
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
     private string? _resolvedBaseUrl;
     private Dictionary<string, string>? _authHeaders;
 
@@ -29,9 +28,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, publisher, timeProvider)
     {
-        _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
     }
 
     protected override string ConnectorSource => DataSources.NocturneRemoteConnector;
@@ -107,7 +105,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                         throw;
                     }
                 },
-                _retryDelayStrategy,
                 maxRetries: 1,
                 operationName: "auth check",
                 cancellationToken: cancellationToken);
@@ -425,7 +422,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     throw;
                 }
             },
-            _retryDelayStrategy,
             maxRetries: config.MaxRetryAttempts,
             operationName: operationName,
             cancellationToken: ct);

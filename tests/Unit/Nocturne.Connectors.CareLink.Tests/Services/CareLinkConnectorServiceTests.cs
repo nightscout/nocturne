@@ -562,6 +562,7 @@ public class CareLinkConnectorServiceTests
                 TokenProvider,
                 configService.Object,
                 NullLogger<CareLinkConnectorService>.Instance,
+                Mock.Of<IRetryDelayStrategy>(),
                 publisher);
         }
     }

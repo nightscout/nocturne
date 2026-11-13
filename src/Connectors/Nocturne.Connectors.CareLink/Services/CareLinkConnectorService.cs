@@ -20,9 +20,9 @@ namespace Nocturne.Connectors.CareLink.Services;
 ///     Supports both patient and care-partner roles, tries BLE/SIMPLERA monitor path
 ///     before falling back to the legacy connect endpoint.
 /// </summary>
-public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorConfiguration>
+public class CareLinkConnectorService
+    : TokenConnectorService<CareLinkConnectorConfiguration, CareLinkAuthTokenProvider>
 {
-    private readonly CareLinkAuthTokenProvider _tokenProvider;
     private readonly IConnectorConfigurationService _configService;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly CareLinkSensorGlucoseMapper _sgMapper;
@@ -38,13 +38,13 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         CareLinkAuthTokenProvider tokenProvider,
         IConnectorConfigurationService configService,
         ILogger<CareLinkConnectorService> logger,
+        IRetryDelayStrategy retryDelayStrategy,
         IConnectorPublisher? publisher = null,
         ITimezoneTimelineService? timezoneTimelineService = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _configService = configService ?? throw new ArgumentNullException(nameof(configService));
         _timezoneTimelineService = timezoneTimelineService;
         _sgMapper = new CareLinkSensorGlucoseMapper(logger);
@@ -53,7 +53,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     protected override string ConnectorSource => DataSources.CareLinkConnector;
     public override string ServiceName => ServiceNames.CareLinkConnector;
 
-    private async Task<bool> AuthenticateWithConfigAsync(CareLinkConnectorConfiguration config)
+    private async Task<bool> AuthenticateWithConfigAsync(
+        CareLinkConnectorConfiguration config, CancellationToken cancellationToken)
     {
         // Seed the token provider with persisted secrets so refresh is available immediately
         var secrets = await _configService.GetSecretsAsync("CareLink");
@@ -62,19 +63,16 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         secrets.TryGetValue("token_url", out var savedTokenUrl);
         secrets.TryGetValue("audience", out var savedAudience);
 
-        _tokenProvider.InitializeFromSecrets(
+        TokenProvider.InitializeFromSecrets(
             savedRefreshToken,
             savedClientId,
             savedTokenUrl,
             savedAudience);
-        _initialRefreshToken = _tokenProvider.CurrentRefreshToken;
+        _initialRefreshToken = TokenProvider.CurrentRefreshToken;
 
-        var token = await _tokenProvider.GetValidTokenAsync(config);
-        if (string.IsNullOrEmpty(token))
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        var token = await ValidTokenAsync(config, cancellationToken);
+        if (token is null)
             return false;
-        }
 
         // Store the token for per-request use; never mutate DefaultRequestHeaders
         _accessToken = token;
@@ -91,7 +89,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         var result = new SyncResult { Success = true };
 
         // Authenticate with per-tenant config
-        if (!await AuthenticateWithConfigAsync(config))
+        if (!await AuthenticateWithConfigAsync(config, cancellationToken))
             return AuthenticationFailedResult();
 
         if (string.IsNullOrEmpty(_accessToken))
@@ -726,7 +724,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     /// </summary>
     private async Task PersistRefreshTokenIfChangedAsync(CancellationToken ct)
     {
-        var cached = await _tokenProvider.GetCachedSessionAsync();
+        var cached = await TokenProvider.GetCachedSessionAsync();
         var currentRefreshToken = cached?.Metadata?.GetValueOrDefault("RefreshToken");
         if (string.IsNullOrEmpty(currentRefreshToken) || currentRefreshToken == _initialRefreshToken)
             return;
@@ -790,7 +788,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private void DropTokenIfRejected(HttpResponseMessage response)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)
-            _tokenProvider.InvalidateToken();
+            TokenProvider.InvalidateToken();
     }
 
     /// <summary>
