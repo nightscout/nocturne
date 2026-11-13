@@ -12,7 +12,6 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Mappers;
 using Nocturne.Connectors.MyFitnessPal.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -49,7 +48,6 @@ public class MyFitnessPalConnectorService
         _mapper = new MyFitnessPalFoodEntryMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.MyFitnessPalConnector;
     public override string ServiceName => "MyFitnessPal";
 
     /// <summary>

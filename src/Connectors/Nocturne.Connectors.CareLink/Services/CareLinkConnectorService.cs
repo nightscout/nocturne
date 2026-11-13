@@ -50,7 +50,6 @@ public class CareLinkConnectorService
         _sgMapper = new CareLinkSensorGlucoseMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.CareLinkConnector;
     public override string ServiceName => ServiceNames.CareLinkConnector;
 
     private async Task<bool> AuthenticateWithConfigAsync(

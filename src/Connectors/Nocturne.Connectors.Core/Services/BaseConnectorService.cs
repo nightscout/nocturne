@@ -64,7 +64,20 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         Clock = timeProvider ?? TimeProvider.System;
     }
 
-    protected abstract string ConnectorSource { get; }
+    /// <summary>
+    ///     The data source id every record this connector imports is stored under, and that its
+    ///     resume watermarks are read by: the <see cref="ConnectorRegistrationAttribute.DataSourceId"/>
+    ///     on <typeparamref name="TConfig"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     <typeparamref name="TConfig"/> declares no data source id, so nothing the connector
+    ///     stores could be found again.
+    /// </exception>
+    protected virtual string ConnectorSource =>
+        Registration?.DataSourceId is { Length: > 0 } dataSourceId
+            ? dataSourceId
+            : throw new InvalidOperationException(
+                $"{typeof(TConfig).Name} declares no {nameof(ConnectorRegistrationAttribute.DataSourceId)}.");
 
     public abstract string ServiceName { get; }
 
@@ -74,16 +87,15 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// this property drives the sync loop, so stating them separately lets a connector advertise a
     /// toggle it never acts on, or act on data the tenant has no way to turn off.
     /// </summary>
-    public virtual List<SyncDataType> SupportedDataTypes => [.. RegisteredDataTypes];
+    public virtual List<SyncDataType> SupportedDataTypes => [.. Registration?.SupportedDataTypes ?? [SyncDataType.Glucose]];
 
     /// <remarks>
     ///     Not <see cref="ConnectorRegistrationAttribute.DeclaredOn"/>: a connector service may be
-    ///     closed over a configuration carrying no registration at all, which defaults to glucose
-    ///     rather than failing. The inherit rule is the same one.
+    ///     closed over a configuration carrying no registration at all, whose data types default
+    ///     to glucose rather than failing. The inherit rule is the same one.
     /// </remarks>
-    private static readonly SyncDataType[] RegisteredDataTypes =
-        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.SupportedDataTypes
-        ?? [SyncDataType.Glucose];
+    private static readonly ConnectorRegistrationAttribute? Registration =
+        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false);
 
     /// <summary>
     ///     The pre-flight <see cref="RunBackgroundSyncAsync"/> runs before it fetches anything.

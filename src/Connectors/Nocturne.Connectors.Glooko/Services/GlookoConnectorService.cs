@@ -9,7 +9,6 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Utilities;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -64,7 +63,6 @@ public class GlookoConnectorService
     }
 
     public override string ServiceName => "Glooko";
-    protected override string ConnectorSource => DataSources.GlookoConnector;
 
     private const string SyncSucceededMessage = "Sync completed successfully";
 

@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.Nightscout.Configurations;
     ServiceNames.NightscoutConnector,
     "NIGHTSCOUT",
     "ConnectSource.Nightscout",
-    "nightscout-connector",
+    DataSources.NightscoutConnector,
     "nightscout",
     ConnectorCategory.Sync,
     "Sync glucose, treatment, device status, and profile data from a Nightscout instance",

@@ -34,7 +34,6 @@ public sealed class GoogleHealthConnectorService(
 {
     public const string ConnectorName = "GoogleHealth";
 
-    protected override string ConnectorSource => DataSources.GoogleHealthConnector;
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
     protected override DateTime? InitialSyncFloor => null;
 

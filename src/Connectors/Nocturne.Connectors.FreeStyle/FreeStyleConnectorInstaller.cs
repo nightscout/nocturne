@@ -9,7 +9,6 @@ public class FreeStyleConnectorInstaller()
     : ConnectorInstaller<LibreLinkUpConnectorConfiguration, LibreConnectorService, LibreLinkAuthTokenProvider>(
         new ConnectorOptions
         {
-            ConnectorName = "LibreLinkUp",
             DefaultServer = LibreLinkUpConstants.Endpoints.Eu,
             ServerMapping = new Dictionary<string, string>
             {

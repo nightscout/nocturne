@@ -6,7 +6,6 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Mappers;
 using Nocturne.Connectors.Tidepool.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Tidepool.Services;
@@ -36,7 +35,6 @@ public class TidepoolConnectorService
         _v4TreatmentMapper = new TidepoolV4TreatmentMapper(logger, ConnectorSource);
     }
 
-    protected override string ConnectorSource => DataSources.TidepoolConnector;
     public override string ServiceName => "Tidepool";
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(

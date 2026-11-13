@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.Nightscout;
 
 public class NightscoutConnectorInstaller()
     : TenantUrlConnectorInstaller<NightscoutConnectorConfiguration, NightscoutConnectorService>(
-        new ConnectorOptions { ConnectorName = "Nightscout" },
+        new ConnectorOptions(),
         config => config.Url)
 {
     /// <summary>

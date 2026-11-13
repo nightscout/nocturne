@@ -395,7 +395,7 @@ public class DataSourceService : IDataSourceService
                 Available = true,
                 RequiresServerConfig = true,
                 DataSourceId = connector.DataSourceId,
-                DocumentationUrl = GetConnectorDocumentationUrl(connector.ConnectorName),
+                DocumentationUrl = connector.DocumentationUrl,
                 ConfigFields = null,
             })
             .OrderBy(connector => connector.Name)
@@ -412,17 +412,6 @@ public class DataSourceService : IDataSourceService
         }
 
         return connectors;
-    }
-
-    private static string? GetConnectorDocumentationUrl(string connectorName)
-    {
-        return connectorName.ToLowerInvariant() switch
-        {
-            "dexcom" => UrlConstants.External.DocsDexcom,
-            "librelinkup" => UrlConstants.External.DocsLibre,
-            "glooko" => UrlConstants.External.DocsGlooko,
-            _ => null,
-        };
     }
 
     /// <inheritdoc />

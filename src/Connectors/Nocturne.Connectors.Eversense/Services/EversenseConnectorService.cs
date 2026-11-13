@@ -8,7 +8,6 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Eversense.Configurations;
 using Nocturne.Connectors.Eversense.Mappers;
 using Nocturne.Connectors.Eversense.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Eversense.Services;
@@ -38,7 +37,6 @@ public class EversenseConnectorService
         _mapper = new EversenseSensorGlucoseMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.EversenseConnector;
     public override string ServiceName => "Eversense Now";
 
     /// <summary>

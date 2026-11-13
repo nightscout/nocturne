@@ -9,7 +9,7 @@ namespace Nocturne.Connectors.HomeAssistant.Configurations;
     ServiceNames.HomeAssistantConnector,
     "HOME_ASSISTANT",
     "ConnectSource.HomeAssistant",
-    "home-assistant-connector",
+    DataSources.HomeAssistantConnector,
     "home-assistant",
     ConnectorCategory.Sync,
     "Connect via the Home Assistant integration (HACS)",

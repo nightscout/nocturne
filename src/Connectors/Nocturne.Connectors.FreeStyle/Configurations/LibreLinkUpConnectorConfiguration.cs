@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.FreeStyle.Configurations;
     ServiceNames.LibreConnector,
     "LIBRE",
     "ConnectSource.LibreLinkUp",
-    "libre-connector",
+    DataSources.LibreConnector,
     "libre",
     ConnectorCategory.Cgm,
     "Connect to LibreView for CGM data",
@@ -21,7 +21,8 @@ namespace Nocturne.Connectors.FreeStyle.Configurations;
     MaxHistoricalDays = 7,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.DeviceEvents],
-    SensorReadingIntervalSeconds = 300
+    SensorReadingIntervalSeconds = 300,
+    DocumentationUrl = UrlConstants.External.DocsLibre
 )]
 public class LibreLinkUpConnectorConfiguration : BaseConnectorConfiguration
 {

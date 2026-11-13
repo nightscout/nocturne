@@ -124,7 +124,8 @@ public static class ConnectorMetadataService
                         Description = attr.Description,
                         ServiceName = attr.ServiceName,
                         DefaultActiveThresholdMinutes = attr.DefaultActiveThresholdMinutes,
-                        DefaultStaleThresholdMinutes = attr.DefaultStaleThresholdMinutes
+                        DefaultStaleThresholdMinutes = attr.DefaultStaleThresholdMinutes,
+                        DocumentationUrl = attr.DocumentationUrl
                     };
 
                     ConnectorsByDataSourceId[attr.DataSourceId] = info;
@@ -153,6 +154,9 @@ public static class ConnectorMetadataService
         public string ServiceName { get; set; } = string.Empty;
         public int DefaultActiveThresholdMinutes { get; init; } = 15;
         public int DefaultStaleThresholdMinutes { get; init; } = 60;
+
+        /// <inheritdoc cref="ConnectorRegistrationAttribute.DocumentationUrl"/>
+        public string? DocumentationUrl { get; init; }
 
         /// <summary>
         ///     Converts this connector info to an AvailableService for UI consumption.

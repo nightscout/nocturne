@@ -7,5 +7,5 @@ namespace Nocturne.Connectors.NocturneRemote;
 
 public class NocturneRemoteConnectorInstaller()
     : TenantUrlConnectorInstaller<NocturneRemoteConnectorConfiguration, NocturneRemoteConnectorService>(
-        new ConnectorOptions { ConnectorName = "NocturneRemote" },
+        new ConnectorOptions(),
         config => config.Url);

@@ -9,7 +9,7 @@ namespace Nocturne.Connectors.MyLife.Configurations;
     "MYLIFE",
     "MYLIFE",
     "ConnectSource.MyLife",
-    "mylife-connector",
+    DataSources.MyLifeConnector,
     "mylife",
     ConnectorCategory.Pump,
     "Connect to MyLife for pump data",

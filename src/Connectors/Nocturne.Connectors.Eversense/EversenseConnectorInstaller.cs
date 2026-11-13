@@ -9,7 +9,6 @@ public class EversenseConnectorInstaller()
     : ConnectorInstaller<EversenseConnectorConfiguration, EversenseConnectorService, EversenseAuthTokenProvider>(
         new ConnectorOptions
         {
-            ConnectorName = "Eversense",
             ServerMapping = new Dictionary<string, string>
             {
                 ["US"] = EversenseConstants.Servers.UsData,

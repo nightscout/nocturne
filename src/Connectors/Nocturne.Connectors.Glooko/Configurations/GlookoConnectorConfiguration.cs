@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.Glooko.Configurations;
     ServiceNames.GlookoConnector,
     "GLOOKO",
     "ConnectSource.Glooko",
-    "glooko-connector",
+    DataSources.GlookoConnector,
     "glooko",
     ConnectorCategory.Sync,
     "Import data from Glooko platform",
@@ -34,7 +34,8 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Profiles,
         SyncDataType.Notes,
         SyncDataType.Activity
-    ]
+    ],
+    DocumentationUrl = UrlConstants.External.DocsGlooko
 )]
 public class GlookoConnectorConfiguration : BaseConnectorConfiguration
 {
