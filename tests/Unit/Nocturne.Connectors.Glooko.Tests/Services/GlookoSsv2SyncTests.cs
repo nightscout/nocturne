@@ -309,6 +309,77 @@ public class GlookoSsv2SyncTests
         handler.RequestedPaths.Should().Contain(p => p.Contains("/api/v2/validic/routines"));
     }
 
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    public async Task Ssv2_PatientDeviceCursors_AreCommittedOnlyWhenThePublishLands(
+        bool publishLands, bool publisherAvailable, bool cursorsCommitted)
+    {
+        var cursorStore = new FakeCursorStore();
+        var published = new List<PatientDevice>();
+        var publisher = DevicePublisher(publishLands, publisherAvailable, published);
+
+        await BuildService(DeviceHandler(softDeleted: false), cursorStore, publisher)
+            .SyncDataAsync(DeviceEventsRequest(), Config(), CancellationToken.None);
+
+        published.Should().HaveCount(publisherAvailable ? 2 : 0, "one pump and one CGM device");
+        foreach (var feed in new[] { "/api/v2/pumps", "/api/v2/cgm_devices" })
+        {
+            if (cursorsCommitted)
+                cursorStore.Saved.Should().ContainKey(feed);
+            else
+                cursorStore.Saved.Should().NotContainKey(feed);
+        }
+    }
+
+    [Fact]
+    public async Task Ssv2_WhenThereAreNoPatientDevices_NothingIsPublishedAndTheFeedCursorsAreStillCommitted()
+    {
+        var cursorStore = new FakeCursorStore();
+        var published = new List<PatientDevice>();
+        var publisher = DevicePublisher(publishLands: false, available: true, published);
+
+        await BuildService(DeviceHandler(softDeleted: true), cursorStore, publisher)
+            .SyncDataAsync(DeviceEventsRequest(), Config(), CancellationToken.None);
+
+        published.Should().BeEmpty();
+        publisher.Verify(p => p.Device.PublishPatientDevicesAsync(
+            It.IsAny<IEnumerable<PatientDevice>>(), It.IsAny<string>(),
+            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+        cursorStore.Saved.Should().ContainKey("/api/v2/pumps");
+        cursorStore.Saved.Should().ContainKey("/api/v2/cgm_devices");
+    }
+
+    private static SyncRequest DeviceEventsRequest() => new() { DataTypes = [SyncDataType.DeviceEvents] };
+
+    private static RoutingHandler DeviceHandler(bool softDeleted)
+    {
+        var deleted = softDeleted ? "true" : "false";
+        string Page(string array, string guid) =>
+            $"{{\"{array}\":[{{\"guid\":\"{guid}\",\"serialNumber\":\"sn-{guid}\",\"brand\":\"Brand\","
+            + $"\"model\":\"Model\",\"softDeleted\":{deleted}}}],\"lastPage\":true,"
+            + $"\"lastUpdatedAt\":\"2026-06-04T00:00:00.000Z\",\"lastGuid\":\"{guid}\"}}";
+        return new RoutingHandler(path =>
+            path.Contains("/api/v2/cgm_devices") ? Json(Page("cgmDevices", "c1"))
+            : path.Contains("/api/v2/pumps?") || path.EndsWith("/api/v2/pumps") ? Json(Page("pumps", "p1"))
+            : Json("{\"lastPage\":true}"));
+    }
+
+    private static Mock<IConnectorPublisher> DevicePublisher(
+        bool publishLands, bool available, List<PatientDevice> sink)
+    {
+        var publisher = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
+        publisher.Setup(p => p.IsAvailable).Returns(available);
+        publisher.Setup(p => p.Device.PublishPatientDevicesAsync(
+                It.IsAny<IEnumerable<PatientDevice>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<PatientDevice>, string, WriteOrigin, CancellationToken>(
+                (d, _, _, _) => sink.AddRange(d))
+            .ReturnsAsync(publishLands);
+        return publisher;
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static SyncRequest GlucoseRequest() => new() { DataTypes = [SyncDataType.Glucose] };

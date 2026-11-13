@@ -42,6 +42,13 @@ public class ConnectorPublishRoutesTests
         public Task<bool> ByRoute<T>(IEnumerable<T> records, TestConfig? config = null) where T : class
             => PublishByRouteAsync(records, config ?? new TestConfig(), CancellationToken.None);
 
+        public Task<int?> Recent<T>(IEnumerable<T> records) where T : class
+            => PublishRecentByRouteAsync(records, new TestConfig(), CancellationToken.None);
+
+        public Task<TResult?> ForResult<T, TResult>(IEnumerable<T> records)
+            where T : class where TResult : class
+            => PublishByRouteForResultAsync<T, TResult>(records, new TestConfig(), CancellationToken.None);
+
         public Task<bool> Counted<T>(
             SyncResult result, HashSet<SyncDataType> active, List<T> records, SyncDataType? dataType = null)
             where T : class
@@ -54,6 +61,16 @@ public class ConnectorPublishRoutesTests
         SyncDataType[] DataTypes,
         PublishOriginFamily Origin,
         string Member);
+
+    private sealed record ExpectedRecent(Type RecordType, PublishOriginFamily Origin, string Member);
+
+    private static readonly ExpectedRecent[] RecentExpectations =
+    [
+        new(typeof(Entry), PublishOriginFamily.Glucose, "PublishRecentEntriesAsync"),
+        new(typeof(Treatment), PublishOriginFamily.Treatment, "PublishRecentTreatmentsAsync"),
+        new(typeof(DeviceStatus), PublishOriginFamily.Device, "PublishRecentDeviceStatusAsync"),
+        new(typeof(Activity), PublishOriginFamily.Live, "PublishRecentActivityAsync"),
+    ];
 
     private static readonly Expected[] Expectations =
     [
@@ -68,6 +85,7 @@ public class ConnectorPublishRoutesTests
         new(typeof(BasalInjection), [SyncDataType.BasalInjections], PublishOriginFamily.Treatment, "PublishBasalInjectionsAsync"),
         new(typeof(Note), [SyncDataType.Notes], PublishOriginFamily.Treatment, "PublishNotesAsync"),
         new(typeof(DeviceStatus), [SyncDataType.DeviceStatus], PublishOriginFamily.Device, "PublishDeviceStatusAsync"),
+        new(typeof(PatientDevice), [], PublishOriginFamily.Device, "PublishPatientDevicesAsync"),
         new(typeof(DeviceEvent), [SyncDataType.DeviceEvents], PublishOriginFamily.Treatment, "PublishDeviceEventsAsync"),
         new(typeof(SystemEvent), [SyncDataType.DeviceEvents], PublishOriginFamily.Live, "PublishSystemEventsAsync"),
         new(typeof(Profile), [SyncDataType.Profiles], PublishOriginFamily.Live, "PublishProfilesAsync"),
@@ -105,6 +123,11 @@ public class ConnectorPublishRoutesTests
                     It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Array.Empty<ConnectorFoodEntry>());
 
+            Glucose.SetReturnsDefault(Task.FromResult<int?>(RecentWritten));
+            Treatments.SetReturnsDefault(Task.FromResult<int?>(RecentWritten));
+            Device.SetReturnsDefault(Task.FromResult<int?>(RecentWritten));
+            Metadata.SetReturnsDefault(Task.FromResult<int?>(RecentWritten));
+
             Root.SetupGet(p => p.IsAvailable).Returns(true);
             Root.SetupGet(p => p.Glucose).Returns(Glucose.Object);
             Root.SetupGet(p => p.Treatments).Returns(Treatments.Object);
@@ -125,12 +148,57 @@ public class ConnectorPublishRoutesTests
                     .Select(i => (pair.Item1, i.Method.Name, i.Arguments.ToArray())));
     }
 
+    private const int RecentWritten = 7;
+
     private static readonly Dictionary<string, string> WatermarkReaders = new()
     {
         [nameof(PublishOriginFamily.Glucose)] = "Glucose.GetLatestEntryTimestampAsync",
         [nameof(PublishOriginFamily.Treatment)] = "Treatments.GetLatestTreatmentTimestampAsync",
         [nameof(PublishOriginFamily.Device)] = "Device.GetLatestDeviceStatusTimestampAsync",
     };
+
+    private static object? RecentDelegateOf(PublishRoute route) =>
+        route.GetType().GetProperty(nameof(PublishRoute<Entry>.PublishRecent))!.GetValue(route);
+
+    private sealed class PreparedRecord
+    {
+        public string? Stamp { get; set; }
+    }
+
+    [Fact]
+    public async Task ARoutesPreparationStep_RunsOnTheRecentPathAsOnTheNormalOne()
+    {
+        var table = (Dictionary<Type, PublishRoute>)typeof(PublishRoutes)
+            .GetField("Table", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .GetValue(null)!;
+        var stampsSeen = new List<string?>();
+        table[typeof(PreparedRecord)] = new PublishRoute<PreparedRecord>(
+            [], PublishOriginFamily.Live,
+            (_, r, _, _, _) =>
+            {
+                stampsSeen.AddRange(r.Select(x => x.Stamp));
+                return Task.FromResult(true);
+            },
+            prepare: (record, _) => record.Stamp = "prepared",
+            publishRecent: (_, r, _, _, _) =>
+            {
+                stampsSeen.AddRange(r.Select(x => x.Stamp));
+                return Task.FromResult<int?>(1);
+            });
+        try
+        {
+            var service = new TestConnectorService(new RecordingPublisher().Object);
+
+            await service.ByRoute([new PreparedRecord()]);
+            await service.Recent([new PreparedRecord()]);
+
+            stampsSeen.Should().Equal("prepared", "prepared");
+        }
+        finally
+        {
+            table.Remove(typeof(PreparedRecord));
+        }
+    }
 
     private static object Batch(Type recordType)
     {
@@ -149,6 +217,131 @@ public class ConnectorPublishRoutesTests
     {
         PublishRoutes.All.Select(route => route.RecordType)
             .Should().BeEquivalentTo(Expectations.Select(e => e.RecordType));
+    }
+
+    [Fact]
+    public void TheRoutesWithARecentMember_AreExactlyTheOnesTheExpectationsName()
+    {
+        PublishRoutes.All.Where(route => RecentDelegateOf(route) is not null).Select(route => route.RecordType)
+            .Should().BeEquivalentTo(RecentExpectations.Select(e => e.RecordType));
+    }
+
+    [Fact]
+    public async Task EveryRecentMember_IsReachedUnderItsOriginFamilyAndReturnsTheWrittenCount()
+    {
+        foreach (var expected in RecentExpectations)
+        {
+            var publisher = new RecordingPublisher();
+            var service = new TestConnectorService(publisher.Object);
+
+            var written = await (Task<int?>)typeof(TestConnectorService).GetMethod(nameof(TestConnectorService.Recent))!
+                .MakeGenericMethod(expected.RecordType)
+                .Invoke(service, [Batch(expected.RecordType)])!;
+
+            var because = $"{expected.RecordType.Name} recent routes to {expected.Member}";
+            written.Should().Be(RecentWritten, because);
+
+            var calls = publisher.Calls().ToList();
+            var publishes = calls.Where(c => c.Member.StartsWith("Publish")).ToList();
+            publishes.Should().ContainSingle(because).Which.Member.Should().Be(expected.Member, because);
+            publishes[0].Arguments.OfType<WriteOrigin>().Should().Equal(
+                [expected.Origin == PublishOriginFamily.Live ? WriteOrigin.Live : WriteOrigin.Backfill], because);
+
+            var watermarkReads = calls.Where(c => c.Member.StartsWith("GetLatest"))
+                .Select(c => $"{c.Surface}.{c.Member}").ToList();
+            if (expected.Origin == PublishOriginFamily.Live)
+                watermarkReads.Should().BeEmpty(because);
+            else
+                watermarkReads.Should().Equal([WatermarkReaders[expected.Origin.ToString()]], because);
+        }
+    }
+
+    [Fact]
+    public async Task ARecentPublishThatFails_ReturnsNull()
+    {
+        var publisher = new RecordingPublisher();
+        publisher.Glucose
+            .Setup(g => g.PublishRecentEntriesAsync(
+                It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int?)null);
+        var service = new TestConnectorService(publisher.Object);
+
+        var written = await service.Recent([new Entry()]);
+
+        written.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ARecordTypeWithoutARecentMember_FailsLoudlyWhenAskedForOne()
+    {
+        var publisher = new RecordingPublisher();
+        var service = new TestConnectorService(publisher.Object);
+
+        var recent = () => service.Recent([new Bolus()]);
+
+        await recent.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Bolus*");
+        publisher.Calls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ARecentPublish_WithAnUnavailablePublisher_PublishesNothingAndReportsNull()
+    {
+        var recording = new RecordingPublisher();
+        recording.Root.SetupGet(p => p.IsAvailable).Returns(false);
+        var service = new TestConnectorService(recording.Object);
+
+        var written = await service.Recent([new Entry()]);
+
+        written.Should().BeNull();
+        recording.Calls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TheFoodImportRoute_HandsBackTheImportedEntries()
+    {
+        IReadOnlyList<ConnectorFoodEntry> imported = [new ConnectorFoodEntry()];
+        var publisher = new RecordingPublisher();
+        publisher.Metadata
+            .Setup(m => m.PublishConnectorFoodEntriesAsync(
+                It.IsAny<IEnumerable<ConnectorFoodEntryImport>>(), "test", WriteOrigin.Live,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(imported);
+        var service = new TestConnectorService(publisher.Object);
+
+        var result = await service.ForResult<ConnectorFoodEntryImport, IReadOnlyList<ConnectorFoodEntry>>(
+            [new ConnectorFoodEntryImport()]);
+
+        result.Should().BeSameAs(imported);
+    }
+
+    [Fact]
+    public async Task TheFoodImportRoute_ReportsANullResultAsAFailedPublish()
+    {
+        var publisher = new RecordingPublisher();
+        publisher.Metadata
+            .Setup(m => m.PublishConnectorFoodEntriesAsync(
+                It.IsAny<IEnumerable<ConnectorFoodEntryImport>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<ConnectorFoodEntry>?)null);
+        var service = new TestConnectorService(publisher.Object);
+
+        var forResult = await service.ForResult<ConnectorFoodEntryImport, IReadOnlyList<ConnectorFoodEntry>>(
+            [new ConnectorFoodEntryImport()]);
+        var byBool = await service.ByRoute([new ConnectorFoodEntryImport()]);
+
+        forResult.Should().BeNull();
+        byBool.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AResultRequestedFromARouteThatReturnsNone_Throws()
+    {
+        var service = new TestConnectorService(new RecordingPublisher().Object);
+
+        var wrong = () => service.ForResult<Bolus, List<Bolus>>([new Bolus()]);
+
+        await wrong.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Bolus*");
     }
 
     [Fact]

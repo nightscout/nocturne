@@ -3,6 +3,7 @@ using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -135,6 +136,92 @@ public class GlookoConnectorServicePublishFailureTests
         result.Success.Should().BeFalse();
         result.Errors.Should().ContainSingle()
             .Which.Should().Contain("Food");
+    }
+
+    /// <summary>
+    /// Only a pending imported entry whose external id resolves to a published carb intake is
+    /// attributed to it, with the entry's own carbs and no time offset.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AttributesOnlyPendingEntriesThatMatchACarbIntake()
+    {
+        var imports = new List<ConnectorFoodEntryImport>();
+        var carbs = new List<CarbIntake>();
+        var matched = new ConnectorFoodEntry { Id = Guid.NewGuid(), Carbs = 12m };
+        var alreadyMatched = new ConnectorFoodEntry
+        {
+            Id = Guid.NewGuid(), Status = ConnectorFoodEntryStatus.Matched, Carbs = 5m,
+        };
+        var unmatched = new ConnectorFoodEntry
+        {
+            Id = Guid.NewGuid(), ExternalEntryId = "no-such-food", Carbs = 7m,
+        };
+
+        var metadata = new Mock<IMetadataPublisher>();
+        metadata
+            .Setup(m => m.PublishConnectorFoodEntriesAsync(
+                It.IsAny<IEnumerable<ConnectorFoodEntryImport>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<ConnectorFoodEntryImport>, string, WriteOrigin, CancellationToken>(
+                (entries, _, _, _) =>
+                {
+                    imports.AddRange(entries);
+                    matched.ExternalEntryId = alreadyMatched.ExternalEntryId = imports.Single().ExternalEntryId;
+                })
+            .ReturnsAsync(() => [matched, alreadyMatched, unmatched]);
+        var treatments = new Mock<ITreatmentPublisher>();
+        treatments
+            .Setup(t => t.PublishCarbIntakesAsync(
+                It.IsAny<IEnumerable<CarbIntake>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<CarbIntake>, string, WriteOrigin, CancellationToken>(
+                (c, _, _, _) => carbs.AddRange(c))
+            .ReturnsAsync(true);
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(true);
+        publisher.SetupGet(p => p.Metadata).Returns(metadata.Object);
+        publisher.SetupGet(p => p.Treatments).Returns(treatments.Object);
+        var mealMatching = new Mock<IMealMatchingService>();
+        var request = BuildFoodRequest();
+        request.DataTypes = [.. request.DataTypes, SyncDataType.CarbIntake];
+
+        var service = GlookoSyncHarness.Service(
+            new GlookoEndpointHandler(), publisher: publisher.Object, mealMatchingService: mealMatching.Object);
+        var result = await service.SyncDataAsync(request, BuildConfig(useV3Api: false), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var carb = carbs.Should().ContainSingle(c => c.LegacyId == $"glooko_food_{imports.Single().ExternalEntryId}")
+            .Subject;
+        mealMatching.Verify(m => m.AcceptMatchAsync(
+            matched.Id, carb.Id, 12m, 0, It.IsAny<CancellationToken>()), Times.Once);
+        mealMatching.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// With no publisher to reach, the import is neither attempted nor matched, and the batch is
+    /// counted once as a failed publish.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenThePublisherIsUnavailable_FailsTheFoodImportAndMatchesNothing()
+    {
+        var metadata = new Mock<IMetadataPublisher>();
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(false);
+        publisher.SetupGet(p => p.Metadata).Returns(metadata.Object);
+        var mealMatching = new Mock<IMealMatchingService>();
+
+        var service = GlookoSyncHarness.Service(
+            new GlookoEndpointHandler(), publisher: publisher.Object, mealMatchingService: mealMatching.Object);
+        var result = await service.SyncDataAsync(
+            BuildFoodRequest(), BuildConfig(useV3Api: false), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().Contain("Food publish failed");
+        result.ItemsSynced[SyncDataType.Food].Should().Be(1);
+        metadata.Verify(m => m.PublishConnectorFoodEntriesAsync(
+            It.IsAny<IEnumerable<ConnectorFoodEntryImport>>(), It.IsAny<string>(),
+            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+        mealMatching.VerifyNoOtherCalls();
     }
 
     /// <summary>

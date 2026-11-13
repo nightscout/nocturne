@@ -192,9 +192,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     config.MaxCount);
 
                 if (recent is not null && outcome.Success)
-                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, glucoseFrom!.Value,
-                        async (p, uncrawled) => await p.Glucose.PublishRecentEntriesAsync(
-                            uncrawled, ConnectorSource, await GlucosePublishOriginAsync(), cancellationToken)));
+                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, glucoseFrom!.Value, config, cancellationToken));
 
                 RecordPublishOutcome(result, SyncDataType.Glucose, outcome.Count, outcome.Success);
             }
@@ -235,7 +233,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 if (recent is not null && outcome.Success)
                 {
-                    var reconciled = await ReconcileRecentTreatmentsAsync(recent, treatmentFrom!.Value, cancellationToken);
+                    var reconciled = await ReconcileRecentTreatmentsAsync(recent, treatmentFrom!.Value, config, cancellationToken);
                     outcome = outcome.Plus(reconciled);
                     if (reconciled.Success && recent.Full)
                         await RecordFullReconcileAsync(now);
@@ -287,9 +285,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     config.MaxCount);
 
                 if (recent is not null && outcome.Success)
-                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, deviceStatusFrom!.Value,
-                        async (p, uncrawled) => await p.Device.PublishRecentDeviceStatusAsync(
-                            uncrawled, ConnectorSource, await DevicePublishOriginAsync(), cancellationToken)));
+                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, deviceStatusFrom!.Value, config, cancellationToken));
 
                 RecordPublishOutcome(result, SyncDataType.DeviceStatus, outcome.Count, outcome.Success);
             }
@@ -336,9 +332,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     config.MaxCount);
 
                 if (recent is not null && outcome.Success)
-                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, activityFrom!.Value,
-                        async (p, uncrawled) => await p.Metadata.PublishRecentActivityAsync(
-                            uncrawled, ConnectorSource, WriteOrigin.Live, cancellationToken)));
+                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, activityFrom!.Value, config, cancellationToken));
 
                 RecordPublishOutcome(result, SyncDataType.Activity, outcome.Count, outcome.Success);
             }
@@ -592,22 +586,23 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     phone, activity a health app syncs hours late.
     /// </summary>
     /// <param name="crawledFrom">The crawl's own lower bound; it already published what lies above.</param>
-    /// <param name="publishRecentAsync">Writes what the store does not already hold, returning how many, or null on failure.</param>
     /// <returns>How many records were written, not how many were compared.</returns>
     private async Task<PagedCrawlOutcome> PublishUncrawledAsync<T>(
         RecentRecords<T> recent,
         DateTime crawledFrom,
-        Func<IConnectorPublisher, List<T>, Task<int?>> publishRecentAsync)
+        TConfig config,
+        CancellationToken cancellationToken)
         where T : ProcessableDocumentBase
     {
-        if (Publisher is not { IsAvailable: true } publisher)
+        // An unavailable publisher is not a failed sync here, but the recent publish reports it as one.
+        if (Publisher is not { IsAvailable: true })
             return new PagedCrawlOutcome(0, true);
 
         var uncrawled = recent.Uncrawled(crawledFrom);
         if (uncrawled.Count == 0)
             return new PagedCrawlOutcome(0, true);
 
-        return await publishRecentAsync(publisher, uncrawled) is { } written
+        return await PublishRecentByRouteAsync(uncrawled, config, cancellationToken) is { } written
             ? new PagedCrawlOutcome(written, true)
             : new PagedCrawlOutcome(0, false);
     }
@@ -640,14 +635,13 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     /// <param name="crawledFrom">The crawl's own lower bound; it already published what lies above.</param>
     /// <returns>How many treatments were written, not how many were compared.</returns>
     private async Task<PagedCrawlOutcome> ReconcileRecentTreatmentsAsync(
-        RecentRecords<Treatment> recent, DateTime crawledFrom, CancellationToken cancellationToken)
+        RecentRecords<Treatment> recent, DateTime crawledFrom, TConfig config,
+        CancellationToken cancellationToken)
     {
         if (Publisher is not { IsAvailable: true } publisher || recent.Records.Count == 0)
             return new PagedCrawlOutcome(0, true);
 
-        var republished = await PublishUncrawledAsync(recent, crawledFrom,
-            async (p, uncrawled) => await p.Treatments.PublishRecentTreatmentsAsync(
-                uncrawled, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken));
+        var republished = await PublishUncrawledAsync(recent, crawledFrom, config, cancellationToken);
         if (!republished.Success)
             return republished;
 
@@ -662,6 +656,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 read.TryAdd(clientId, at);
         }
 
+        // Not a publish: the delete pass reads and removes stored rows, which no route covers.
         await DeleteTreatmentsGoneUpstreamAsync(publisher.Treatments, recent.WindowStart, read, cancellationToken);
 
         return republished;

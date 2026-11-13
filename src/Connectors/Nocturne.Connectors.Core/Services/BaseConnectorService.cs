@@ -683,8 +683,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
     /// <summary>
     ///     Publishes a batch through its record type's route without the per-type bookkeeping of
-    ///     <see cref="PublishRecordTypeAsync{T}"/>: no count, no progress message. The one place the
-    ///     publisher is checked for availability.
+    ///     <see cref="PublishRecordTypeAsync{T}"/>: no count, no progress message. Every route dispatch
+    ///     goes through <see cref="DispatchAsync{T, TOut}"/>.
     /// </summary>
     protected async Task<bool> PublishByRouteAsync<T>(
         IEnumerable<T> records,
@@ -692,10 +692,58 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         CancellationToken cancellationToken) where T : class
     {
         var route = PublishRoutes.For<T>();
+        return await DispatchAsync(route, records, config, false,
+            (publisher, origin) => route.Publish(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     Publishes through a route that hands back its publisher's result, for a caller that needs
+    ///     more than whether it landed.
+    /// </summary>
+    /// <returns>The result, or null when the publisher is unavailable or reported a failure.</returns>
+    protected async Task<TResult?> PublishByRouteForResultAsync<T, TResult>(
+        IEnumerable<T> records,
+        TConfig config,
+        CancellationToken cancellationToken) where T : class where TResult : class
+    {
+        var route = PublishRoutes.ForResult<T, TResult>();
+        return await DispatchAsync<T, TResult?>(route, records, config, null,
+            (publisher, origin) => route.PublishForResult(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     Writes through the record type's "recent" member only what the store does not already hold.
+    /// </summary>
+    /// <returns>How many records were written, or null when the publisher is unavailable or reported a failure.</returns>
+    /// <exception cref="InvalidOperationException">The record type's route has no recent member.</exception>
+    protected async Task<int?> PublishRecentByRouteAsync<T>(
+        IEnumerable<T> records,
+        TConfig config,
+        CancellationToken cancellationToken) where T : class
+    {
+        var route = PublishRoutes.For<T>();
+        var publishRecent = route.PublishRecent
+            ?? throw new InvalidOperationException($"{typeof(T).Name} has no recent publish member.");
+        return await DispatchAsync<T, int?>(route, records, config, null,
+            (publisher, origin) => publishRecent(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     The one place the publisher is checked for availability, the route's preparation step is run
+    ///     and its origin family is resolved.
+    /// </summary>
+    /// <param name="unavailable">What a caller gets when the publisher is unavailable.</param>
+    private async Task<TOut> DispatchAsync<T, TOut>(
+        PublishRoute<T> route,
+        IEnumerable<T> records,
+        TConfig config,
+        TOut unavailable,
+        Func<IConnectorPublisher, WriteOrigin, Task<TOut>> publish) where T : class
+    {
         if (_publisher is not { IsAvailable: true } publisher)
         {
             _logger?.LogWarning("Publisher not available for {RecordType} submission", typeof(T).Name);
-            return false;
+            return unavailable;
         }
 
         if (route.Prepare is { } prepare)
@@ -709,7 +757,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             PublishOriginFamily.Device => await DevicePublishOriginAsync(),
             _ => WriteOrigin.Live,
         };
-        return await route.Publish(publisher, records, ConnectorSource, origin, cancellationToken);
+        return await publish(publisher, origin);
     }
 
     /// <summary>
