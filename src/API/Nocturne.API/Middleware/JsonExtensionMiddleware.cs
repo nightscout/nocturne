@@ -5,9 +5,10 @@ using Microsoft.Extensions.Logging;
 namespace Nocturne.API.Middleware;
 
 /// <summary>
-/// Handles <c>.json</c>, <c>.txt</c>, <c>.csv</c> and <c>.tsv</c> extensions in API routes for legacy
-/// Nightscout compatibility. Strips the extension from the path so a standard controller route
-/// handles it, and replaces the caller's <c>Accept</c> header with the extension's media type.
+/// Handles <c>.json</c>, <c>.txt</c>, <c>.csv</c>, <c>.tsv</c>, <c>.html</c>, <c>.js</c>, <c>.svg</c> and
+/// <c>.png</c> extensions in API routes for legacy Nightscout compatibility. Strips the extension
+/// from the path so a standard controller route handles it, and replaces the caller's
+/// <c>Accept</c> header with the extension's media type.
 /// </summary>
 /// <remarks>
 /// Must run before <c>UseRouting</c>, so the router matches the stripped path.
@@ -24,12 +25,19 @@ public class JsonExtensionMiddleware
     /// </summary>
     private static readonly string[] LiteralJsonPrefixes = ["/openapi", "/.well-known"];
 
+    private const string EntriesFormats = ".txt .csv .tsv";
+
     /// <summary>
-    /// Prefixes whose text extensions Nightscout honours: the entries router, which also serves
-    /// <c>times</c> and <c>slice</c>.
+    /// The non-JSON extensions Nightscout honours, by route prefix: the entries router (which also
+    /// serves <c>times</c> and <c>slice</c>) and the status router.
     /// </summary>
-    private static readonly string[] TextExtensionPrefixes =
-        ["/api/v1/entries", "/api/v1/times/", "/api/v1/slice/"];
+    private static readonly (string Prefix, string Extensions)[] ExtensionsByPrefix =
+    [
+        ("/api/v1/entries", EntriesFormats),
+        ("/api/v1/times/", EntriesFormats),
+        ("/api/v1/slice/", EntriesFormats),
+        ("/api/v1/status", ".txt .html .js .svg .png"),
+    ];
 
     private static readonly Dictionary<string, string> MediaTypeByExtension = new(
         StringComparer.OrdinalIgnoreCase
@@ -39,6 +47,10 @@ public class JsonExtensionMiddleware
         [".txt"] = "text/plain",
         [".csv"] = "text/csv",
         [".tsv"] = "text/tab-separated-values",
+        [".html"] = "text/html",
+        [".js"] = "application/javascript",
+        [".svg"] = "image/svg+xml",
+        [".png"] = "image/png",
     };
 
     private readonly RequestDelegate _next;
@@ -70,7 +82,7 @@ public class JsonExtensionMiddleware
             && path.LastIndexOf('.') is var dot
             && dot > path.LastIndexOf('/')
             && MediaTypeByExtension.TryGetValue(path[dot..], out var mediaType)
-            && Honours(path, mediaType)
+            && Honours(path, path[dot..], mediaType)
         )
         {
             var newPath = path[..dot];
@@ -88,10 +100,13 @@ public class JsonExtensionMiddleware
         await _next(context);
     }
 
-    private static bool Honours(string path, string mediaType) =>
+    private static bool Honours(string path, string extension, string mediaType) =>
         mediaType == JsonMediaType
             ? !StartsWithAny(path, LiteralJsonPrefixes)
-            : StartsWithAny(path, TextExtensionPrefixes);
+            : ExtensionsByPrefix.Any(entry =>
+                path.StartsWith(entry.Prefix, StringComparison.OrdinalIgnoreCase)
+                && entry.Extensions.Split(' ').Contains(extension, StringComparer.OrdinalIgnoreCase)
+            );
 
     private static bool StartsWithAny(string path, string[] prefixes) =>
         prefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
