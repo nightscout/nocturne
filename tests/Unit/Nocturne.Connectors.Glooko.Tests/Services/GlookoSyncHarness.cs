@@ -40,9 +40,10 @@ internal static class GlookoSyncHarness
         IConnectorPublisher? publisher = null,
         StaticGlookoTokenProvider? tokenProvider = null,
         IConnectorSyncCursorStore? cursorStore = null,
-        TimeProvider? clock = null) =>
+        TimeProvider? clock = null,
+        TimeSpan? endpointPause = null) =>
         new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(clock), rejected, publisher,
-            cursorStore, clock);
+            cursorStore, clock, endpointPause ?? TimeSpan.Zero);
 }
 
 /// <summary>
@@ -111,24 +112,25 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
     public RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, PublishKind? rejected,
         IConnectorPublisher? publisher = null, IConnectorSyncCursorStore? cursorStore = null,
-        TimeProvider? clock = null)
-        : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected), cursorStore, clock)
+        TimeProvider? clock = null, TimeSpan endpointPause = default)
+        : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected), cursorStore, clock,
+            endpointPause)
     {
     }
 
     private RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, InterceptingPublisher publisher,
-        IConnectorSyncCursorStore? cursorStore, TimeProvider? clock)
+        IConnectorSyncCursorStore? cursorStore, TimeProvider? clock, TimeSpan endpointPause)
         : base(
             httpClient,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             tokenProvider,
             publisher,
             cursorStore: cursorStore,
-            timeProvider: clock)
+            timeProvider: clock,
+            endpointPause: endpointPause)
     {
         Published = publisher.Published;
     }

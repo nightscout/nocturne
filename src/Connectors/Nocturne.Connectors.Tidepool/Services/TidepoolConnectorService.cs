@@ -17,7 +17,6 @@ namespace Nocturne.Connectors.Tidepool.Services;
 /// </summary>
 public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorConfiguration>
 {
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TidepoolSensorGlucoseMapper _sensorGlucoseMapper;
     private readonly TidepoolAuthTokenProvider _tokenProvider;
@@ -28,7 +27,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         IConnectorServerResolver<TidepoolConnectorConfiguration> serverResolver,
         ILogger<TidepoolConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         TidepoolAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
@@ -37,8 +35,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     {
         _retryDelayStrategy =
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy =
-            rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider =
             tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _sensorGlucoseMapper = new TidepoolSensorGlucoseMapper(logger, ConnectorSource);
@@ -162,8 +158,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 ConnectorSource);
             return null;
         }
-
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         return await ExecuteWithRetryAsync(
             async () => await FetchDataCoreAsync<T>(config, token, userId, dataType, startDate, endDate),

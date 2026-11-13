@@ -210,8 +210,8 @@ public class GlookoConnectorServiceReauthTests
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
-            tokenProvider);
+            tokenProvider,
+            endpointPause: TimeSpan.Zero);
 
     /// <summary>
     /// Token provider that returns a session cookie plus a <c>UserData</c> metadata blob whose

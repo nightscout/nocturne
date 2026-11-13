@@ -69,9 +69,7 @@ public static class ConnectorServiceCollectionExtensions
     {
         public IServiceCollection AddBaseConnectorServices()
         {
-            // Default strategies
             services.TryAddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
-            services.TryAddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
 
             return services;
         }

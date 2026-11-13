@@ -73,7 +73,6 @@ public class DexcomSignInFailureTests
             resolver,
             NullLogger<DexcomConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             provider);
 
         return await service.SyncDataAsync(
