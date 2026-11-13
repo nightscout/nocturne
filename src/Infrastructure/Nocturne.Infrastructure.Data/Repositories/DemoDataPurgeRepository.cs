@@ -8,7 +8,6 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -31,16 +30,19 @@ public class DemoDataPurgeRepository(
 {
     private const string AuditEndpoint = "service:demo-purge";
 
-    private static readonly Type[] GlucoseModels = [typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration)];
+    private static readonly IReadOnlyList<V4RecordTable> GlucoseTables = V4RecordTables.OfKind(V4RecordKind.Glucose);
+
+    private static readonly IReadOnlyList<V4RecordTable> TreatmentTables =
+        V4RecordTables.OfKind(V4RecordKind.Treatment, V4RecordKind.StateSpan);
+
+    private static readonly IReadOnlyList<V4RecordTable> DeviceStatusTables = V4RecordTables.OfKind(V4RecordKind.DeviceStatus);
+
+    private static readonly Type[] GlucoseModels = [.. GlucoseTables.Select(t => t.Model)];
 
     private static readonly Type[] TreatmentModels =
-    [
-        typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(Note), typeof(DeviceEvent),
-        typeof(BolusCalculation), typeof(TempBasal), typeof(ProfileActivation), typeof(StateSpan),
-        typeof(CompressionLowSuggestion), typeof(LabHbA1cResult),
-    ];
+        [.. TreatmentTables.Select(t => t.Model), typeof(CompressionLowSuggestion), typeof(LabHbA1cResult)];
 
-    private static readonly Type[] DeviceStatusModels = [typeof(ApsSnapshot)];
+    private static readonly Type[] DeviceStatusModels = [.. DeviceStatusTables.Select(t => t.Model)];
 
     /// <inheritdoc/>
     public async Task<DemoPurgeCounts> PurgeAsync(CancellationToken ct)
@@ -92,24 +94,21 @@ public class DemoDataPurgeRepository(
         }
     }
 
-    private static async Task<long> DeleteGlucoseAsync(NocturneDbContext db, CancellationToken ct)
+    private static async Task<long> DeleteAsync(
+        NocturneDbContext db, IReadOnlyList<V4RecordTable> tables, CancellationToken ct)
     {
-        long deleted = await db.SensorGlucose.PurgeAsync(SourceFilter.For<SensorGlucoseEntity>(DataSources.DemoService), ct);
-        deleted += await db.MeterGlucose.PurgeAsync(SourceFilter.For<MeterGlucoseEntity>(DataSources.DemoService), ct);
-        deleted += await db.Calibrations.PurgeAsync(SourceFilter.For<CalibrationEntity>(DataSources.DemoService), ct);
+        long deleted = 0;
+        foreach (var table in tables)
+            deleted += await table.PurgeAsync(db, DataSources.DemoService, ct);
         return deleted;
     }
 
+    private static Task<long> DeleteGlucoseAsync(NocturneDbContext db, CancellationToken ct) =>
+        DeleteAsync(db, GlucoseTables, ct);
+
     private async Task<long> DeleteTreatmentsAsync(NocturneDbContext db, CancellationToken ct)
     {
-        long deleted = await db.Boluses.PurgeAsync(SourceFilter.For<BolusEntity>(DataSources.DemoService), ct);
-        deleted += await db.CarbIntakes.PurgeAsync(SourceFilter.For<CarbIntakeEntity>(DataSources.DemoService), ct);
-        deleted += await db.BGChecks.PurgeAsync(SourceFilter.For<BGCheckEntity>(DataSources.DemoService), ct);
-        deleted += await db.Notes.PurgeAsync(SourceFilter.For<NoteEntity>(DataSources.DemoService), ct);
-        deleted += await db.DeviceEvents.PurgeAsync(SourceFilter.For<DeviceEventEntity>(DataSources.DemoService), ct);
-        deleted += await db.BolusCalculations.PurgeAsync(SourceFilter.For<BolusCalculationEntity>(DataSources.DemoService), ct);
-        deleted += await db.TempBasals.PurgeAsync(SourceFilter.For<TempBasalEntity>(DataSources.DemoService), ct);
-        deleted += await db.ProfileActivations.PurgeAsync(SourceFilter.For<ProfileActivationEntity>(DataSources.DemoService), ct);
+        var deleted = await DeleteAsync(db, TreatmentTables, ct);
         var demoAcceptedSpanIds = (await db.StateSpans
                 .Where(s => s.Source == "compression-low-detection" && s.MetadataJson != null)
                 .Select(s => new { s.Id, s.MetadataJson })
@@ -117,8 +116,8 @@ public class DemoDataPurgeRepository(
             .Where(span => HasDemoSeedMarker(span.MetadataJson))
             .Select(span => span.Id)
             .ToArray();
-        deleted += await db.StateSpans.PurgeAsync(
-            s => s.Source == DataSources.DemoService || demoAcceptedSpanIds.Contains(s.Id), ct);
+        if (demoAcceptedSpanIds.Length > 0)
+            deleted += await db.StateSpans.PurgeAsync(s => demoAcceptedSpanIds.Contains(s.Id), ct);
         deleted += await db.CompressionLowSuggestions.PurgeAsync(
             s => s.DataSource == DataSources.DemoService, ct);
         deleted += await db.LabHbA1cResults
@@ -128,8 +127,8 @@ public class DemoDataPurgeRepository(
         return deleted;
     }
 
-    private static async Task<long> DeleteDeviceStatusAsync(NocturneDbContext db, CancellationToken ct) =>
-        await db.ApsSnapshots.PurgeAsync(SourceFilter.For<ApsSnapshotEntity>(DataSources.DemoService), ct);
+    private static Task<long> DeleteDeviceStatusAsync(NocturneDbContext db, CancellationToken ct) =>
+        DeleteAsync(db, DeviceStatusTables, ct);
 
     private static bool HasDemoSeedMarker(string? metadata)
     {

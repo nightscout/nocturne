@@ -372,7 +372,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IStoreSizeReader, StoreSizeReader>();
         services.AddScoped<IDDataService, DDataService>();
         services.AddScoped<IPropertiesService, PropertiesService>();
-        services.AddScoped<IIobCobReader, IobCobReader>();
+        services.AddScoped<IobCobReader>();
+        services.AddScoped<IIobCobReader>(sp => sp.GetRequiredService<IobCobReader>());
+        services.AddScoped<IIobCobSeriesReader>(sp => sp.GetRequiredService<IobCobReader>());
         services.AddScoped<ISummaryService, SummaryService>();
         // Prediction service — configurable via Predictions:Source (None, DeviceStatus, OrefWasm)
         var predictionSource = PredictionOptions.ResolveSource(configuration);
@@ -838,6 +840,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
         services.AddScoped<IConnectorFoodEntryRepository, ConnectorFoodEntryRepository>();
         services.AddScoped<IMealMatchingService, MealMatchingService>();
+        services.AddScoped<IMealReadService, MealReadService>();
 
         // Activity and health metric services
         services.AddScoped<IActivityService, ActivityService>();

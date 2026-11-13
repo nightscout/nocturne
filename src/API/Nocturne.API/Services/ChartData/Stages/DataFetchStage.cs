@@ -25,15 +25,10 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// readings per hour (5-minute intervals) with a 50% safety margin.
 /// </para>
 /// <para>
-/// Bolus and carb data are fetched from an extended window beginning at
-/// <see cref="ChartDataContext.BufferStartTime"/> (8 hours before <see cref="ChartDataContext.StartTime"/>)
-/// so that IOB and COB calculations account for insulin and carbs administered before the
-/// visible chart window. <see cref="ChartDataContext.DisplayBoluses"/> and
-/// <see cref="ChartDataContext.DisplayCarbIntakes"/> are derived subsets trimmed to the display window.
-/// </para>
-/// <para>
-/// TempBasal records are fetched from <see cref="ChartDataContext.BufferStartTime"/> like boluses so
-/// basal IOB sees temp basals that began before the window, under the same cap as
+/// The reads the IOB/COB series feeds on take their bounds from <see cref="ChartDataContext.SeriesWindow"/>
+/// (<see cref="IobCobSeriesWindow"/>). <see cref="ChartDataContext.DisplayBoluses"/> and
+/// <see cref="ChartDataContext.DisplayCarbIntakes"/> are subsets trimmed to the display window.
+/// Temp basals are read under the same cap as
 /// <see cref="Nocturne.API.Services.Analytics.ChartDataService"/> because the ascending read truncates the newest
 /// rows. Consumers sort for themselves. <see cref="ChartDataContext.DisplayTempBasals"/> is the
 /// delivered pieces of the whole fetch that overlap the display window, chosen by
@@ -72,7 +67,7 @@ internal sealed class DataFetchStage(
     {
         var startTime = context.StartTime;
         var endTime = context.EndTime;
-        var bufferStartTime = context.BufferStartTime;
+        var window = context.SeriesWindow;
 
         // Helper to convert mills to DateTime for V4 repository calls
         static DateTime? MillsToDateTime(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
@@ -82,9 +77,8 @@ internal sealed class DataFetchStage(
         // The canonical read returns one stream per bucket: twice a 1-minute stream's 60 readings an
         // hour leaves room for a denser uploader without removing the limit entirely.
         var entryLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 2 * 60));
-        // Treatments are less frequent but include the buffer window
-        var bufferMs = startTime - bufferStartTime;
-        var treatmentRangeHours = (endTime - (startTime - bufferMs)) / (60.0 * 60 * 1000);
+        // Treatments are less frequent but are read from the series' insulin look-back.
+        var treatmentRangeHours = (window.ReadEnd - window.InsulinReadStart) / (60.0 * 60 * 1000);
         var treatmentLimit = (int)Math.Max(500, Math.Ceiling(treatmentRangeHours * 10));
         var displayRangeLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 10));
 
@@ -104,10 +98,9 @@ internal sealed class DataFetchStage(
                 streams: GlucoseStreams.Canonical
             )).ToList();
 
-        // Fetch bolus data from v4 Bolus table — extended range for IOB calculation
         var bolusTask = bolusRepository.GetAsync(
-            from: MillsToDateTime(bufferStartTime),
-            to: MillsToDateTime(endTime),
+            from: MillsToDateTime(window.InsulinReadStart),
+            to: MillsToDateTime(window.ReadEnd),
             device: null,
             source: null,
             limit: treatmentLimit,
@@ -116,10 +109,9 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         );
 
-        // Fetch carb data from v4 CarbIntake table — extended range for COB calculation
         var carbIntakeTask = carbIntakeRepository.GetAsync(
-            from: MillsToDateTime(bufferStartTime),
-            to: MillsToDateTime(endTime),
+            from: MillsToDateTime(window.InsulinReadStart),
+            to: MillsToDateTime(window.ReadEnd),
             device: null,
             source: null,
             limit: treatmentLimit,
@@ -165,8 +157,8 @@ internal sealed class DataFetchStage(
         );
 
         var tempBasalTask = tempBasalRepository.GetAsync(
-            from: MillsToDateTime(bufferStartTime),
-            to: MillsToDateTime(endTime),
+            from: MillsToDateTime(window.TempBasalReadStart),
+            to: MillsToDateTime(window.ReadEnd),
             device: null,
             source: null,
             limit: Nocturne.API.Services.Analytics.ChartDataService.TempBasalQueryLimit,
@@ -175,20 +167,16 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         );
 
-        // APS and pump snapshot points (ascending) so the IOB/COB series can prefer the values the
-        // devices reported. The buffer start lets a tick at the very left edge resolve a snapshot
-        // uploaded just before it, and the skew allowance past the end lets the live tick take one
-        // stamped by a device clock running ahead. The slim projections are deliberate: full
-        // snapshots carry multi-KB JSON blob columns, and a limit heuristic would truncate the
-        // newest rows for high-cadence uploaders.
-        var deviceReadUntil = MillsToDateTime(endTime + DeviceReportedValues.FutureSkewToleranceMs)!.Value;
+        // The slim projections are deliberate: full snapshots carry multi-KB JSON blob columns, and
+        // a limit heuristic would truncate the newest rows for high-cadence uploaders.
+        var deviceReadUntil = MillsToDateTime(window.DeviceReadEnd)!.Value;
         var apsSnapshotTask = apsSnapshotRepository.GetIobCobPointsAsync(
-            from: MillsToDateTime(bufferStartTime)!.Value,
+            from: MillsToDateTime(window.DeviceReadStart)!.Value,
             to: deviceReadUntil,
             ct: cancellationToken
         );
         var pumpIobTask = pumpSnapshotRepository.GetIobPointsAsync(
-            from: MillsToDateTime(bufferStartTime)!.Value,
+            from: MillsToDateTime(window.DeviceReadStart)!.Value,
             to: deviceReadUntil,
             ct: cancellationToken
         );
@@ -222,7 +210,7 @@ internal sealed class DataFetchStage(
             );
 
             var overrides = await ScheduledBasal.OverridesAsync(
-                stateSpanRepository, bufferStartTime, endTime, cancellationToken);
+                stateSpanRepository, window.TherapyStart, window.OverrideEnd, cancellationToken);
 
             var profileSegments = await profileActivationResolver.GetRangeAsync(startTime, endTime, cancellationToken);
 

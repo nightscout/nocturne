@@ -27,6 +27,9 @@ public class LoopAnalysisServiceReadTests
     private static readonly DateTime To = From.AddDays(1);
 
     private readonly Mock<ITempBasalRepository> _tempBasals = new();
+    private readonly Mock<IBolusRepository> _boluses = new();
+    private readonly Mock<ICarbIntakeRepository> _carbs = new();
+    private readonly Mock<IStateSpanRepository> _spans = new();
     private readonly Mock<IApsSnapshotRepository> _snapshots = new();
     private readonly Mock<IPatientDeviceRepository> _devices = new();
     private readonly Mock<IBasalSeriesBuilder> _series = new();
@@ -67,8 +70,7 @@ public class LoopAnalysisServiceReadTests
         profiles
             .Setup(r => r.GetProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var spans = new Mock<IStateSpanRepository>();
-        spans
+        _spans
             .Setup(r => r.GetByCategories(
                 It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new Dictionary<StateSpanCategory, List<StateSpan>>
@@ -93,12 +95,12 @@ public class LoopAnalysisServiceReadTests
 
         return new LoopAnalysisService(
             glucoseRepository: glucose.Object,
-            bolusRepository: Mock.Of<IBolusRepository>(),
-            carbIntakeRepository: Mock.Of<ICarbIntakeRepository>(),
+            bolusRepository: _boluses.Object,
+            carbIntakeRepository: _carbs.Object,
             tempBasalRepository: _tempBasals.Object,
             apsSnapshotRepository: _snapshots.Object,
             pumpSnapshotRepository: Mock.Of<IPumpSnapshotRepository>(),
-            stateSpanRepository: spans.Object,
+            stateSpanRepository: _spans.Object,
             patientDeviceRepository: _devices.Object,
             targetRangeScheduleRepository: Mock.Of<ITargetRangeScheduleRepository>(),
             therapyTimelineResolver: timeline.Object,
@@ -165,6 +167,29 @@ public class LoopAnalysisServiceReadTests
 
         _timelineStarts.Should().NotBeEmpty().And.OnlyContain(start =>
             start == new DateTimeOffset(From).ToUnixTimeMilliseconds() - DailyProfileCalculator.ActingMs);
+    }
+
+    [Fact]
+    public async Task DailyProfile_ReadsTheSeriesWindowsLookBacks_FromTheFirstTick()
+    {
+        var from = From.AddMinutes(2);
+
+        await Service().GetDailyProfileAsync(new LoopAnalysisFilter { From = from, To = To, Now = To }, Utc);
+
+        var insulinFrom = From.AddHours(-8);
+        var tempBasalFrom = From.AddHours(-32);
+        _boluses.Verify(r => r.GetAsync(
+            insulinFrom, It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _carbs.Verify(r => r.GetAsync(
+            insulinFrom, It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _tempBasals.Verify(r => r.GetAsync(
+            tempBasalFrom, It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+        _spans.Verify(r => r.GetByCategories(
+            It.Is<IEnumerable<StateSpanCategory>>(c => c.SequenceEqual(new[] { StateSpanCategory.Override })),
+            tempBasalFrom, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

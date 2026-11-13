@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Tidepool.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 using Nocturne.Connectors.Core.Utilities;
 
@@ -52,14 +51,6 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
         }
     }
 
-    internal static double ConvertToMgdl(double value, string units)
-    {
-        if (string.IsNullOrEmpty(units)) return value;
-        return units.ToLowerInvariant() switch
-        {
-            "mmol/l" or "mmol" => value * GlucoseConstants.MgdlPerMmol,
-            "mg/dl" => value,
-            _ => value
-        };
-    }
+    internal static double ConvertToMgdl(double value, string? units) =>
+        GlucoseUnits.ToMgdl(value, GlucoseUnits.Parse(units) ?? GlucoseUnit.MgDl);
 }

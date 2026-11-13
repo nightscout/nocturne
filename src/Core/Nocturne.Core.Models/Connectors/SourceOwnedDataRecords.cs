@@ -19,6 +19,7 @@ public static class SourceDataTypes
     public const string DeviceEvents = "DeviceEvents";
     public const string StateSpans = "StateSpans";
     public const string TempBasals = "TempBasals";
+    public const string BasalInjections = "BasalInjections";
     public const string Profiles = "Profiles";
     public const string DeviceStatus = "DeviceStatus";
     public const string Steps = "Steps";
@@ -68,7 +69,4 @@ public sealed record SourceTypeStats(
 
 /// <summary>What a soft delete of a source's rows removed.</summary>
 /// <param name="DeletedCounts">Rows deleted by <see cref="SourceDataTypes"/> name, non-zero only.</param>
-/// <param name="ProfileNames">The distinct profile names of the deleted schedules and therapy settings.</param>
-public sealed record SourcePurgeResult(
-    IReadOnlyDictionary<string, long> DeletedCounts,
-    IReadOnlyCollection<string> ProfileNames);
+public sealed record SourcePurgeResult(IReadOnlyDictionary<string, long> DeletedCounts);

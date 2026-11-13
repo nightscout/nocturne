@@ -821,22 +821,6 @@ public class Treatment : ProcessableDocumentBase
     public Dictionary<string, object>? AdditionalProperties { get; set; }
 
     /// <summary>
-    /// Canonical group ID for deduplication.
-    /// Records with the same CanonicalId represent the same underlying event from different sources.
-    /// </summary>
-    [JsonPropertyName("canonicalId")]
-    [NocturneOnly]
-    public Guid? CanonicalId { get; set; }
-
-    /// <summary>
-    /// List of data sources that contributed to this unified record.
-    /// Only populated when returning merged/unified DTOs.
-    /// </summary>
-    [JsonPropertyName("sources")]
-    [NocturneOnly]
-    public string[]? Sources { get; set; }
-
-    /// <summary>
     /// Snapshot of insulin pharmacokinetic properties at treatment delivery time.
     /// Captures DIA, peak, curve, and concentration so IOB calculations use the correct values
     /// regardless of future changes to the patient's insulin configuration.

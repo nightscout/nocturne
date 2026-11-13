@@ -554,6 +554,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
 
     /// <summary>
     /// Whether a profile's units string denotes mmol/L (matching the forms Nightscout profiles use).
+    /// Not <see cref="V4Models.GlucoseUnits.Parse"/>: the write and the read must agree on stored rows,
+    /// and rows already stored were converted under this rule.
     /// </summary>
     internal static bool IsMmol(string? units) =>
         units is not null

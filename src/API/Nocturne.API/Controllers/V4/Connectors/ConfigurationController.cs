@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -78,8 +79,48 @@ public class ConfigurationController : ControllerBase
             return NotFound(new { message = $"No configuration found for connector '{connectorName}'" });
         }
 
-        return Ok(config);
+        return Ok(await WithoutUnusableKeysAsync(connectorName, config, ct));
     }
+
+    /// <summary>
+    /// Drops the stored keys the connector's configuration type does not bind, and the bound keys
+    /// whose stored value does not convert, so a client that sends the document back is not refused
+    /// for what an earlier save stored. Readers on the server still see the whole stored document.
+    /// </summary>
+    private async Task<ConnectorConfigurationResponse> WithoutUnusableKeysAsync(
+        string connectorName,
+        ConnectorConfigurationResponse config,
+        CancellationToken ct)
+    {
+        var known = await _configService.GetBoundKeysAsync(connectorName, ct);
+        if (known is null || JsonNode.Parse(config.Configuration.RootElement.GetRawText()) is not JsonObject stored)
+            return config;
+
+        var unbindable = ConnectorConfigurationBinder.UnbindableKeys(known, config.Configuration.RootElement).ToHashSet();
+        foreach (var key in stored.Select(property => property.Key)
+            .Where(key => IsUnknownKey(key, known) || unbindable.Contains(ConnectorEnabledKey.Matches(key) ? "enabled" : key))
+            .ToList())
+            stored.Remove(key);
+
+        config.Configuration = JsonDocument.Parse(stored.ToJsonString());
+        return config;
+    }
+
+    private static string UnbindableMessage(string key, Type type, JsonElement root)
+    {
+        var enumType = Nullable.GetUnderlyingType(type) ?? type;
+        if (!enumType.IsEnum)
+            return $"Field '{key}' has invalid type";
+
+        var names = string.Join(", ", Enum.GetNames(enumType));
+        var sent = root.EnumerateObject().First(p => (ConnectorEnabledKey.Matches(p.Name) ? "enabled" : p.Name) == key).Value;
+        return sent.ValueKind == JsonValueKind.String
+            ? $"Field '{key}' value '{sent.GetString()}' is not one of: {names}"
+            : $"Field '{key}' must be one of: {names}";
+    }
+
+    private static bool IsUnknownKey(string key, IReadOnlyDictionary<string, Type> known) =>
+        !known.ContainsKey(key) && !ConnectorEnabledKey.Matches(key);
 
     /// <summary>
     /// Gets the JSON Schema for a connector's configuration.
@@ -213,6 +254,16 @@ public class ConfigurationController : ControllerBase
     {
         var errors = new List<string>();
 
+        var known = await _configService.GetBoundKeysAsync(connectorName, ct);
+        if (known is not null && configuration.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            errors.AddRange(configuration.RootElement.EnumerateObject()
+                .Where(property => IsUnknownKey(property.Name, known))
+                .Select(property => $"Unknown field '{property.Name}'"));
+            errors.AddRange(ConnectorConfigurationBinder.UnbindableKeys(known, configuration.RootElement)
+                .Select(key => UnbindableMessage(key, known[key], configuration.RootElement)));
+        }
+
         // Get the schema for this connector
         var schema = await _configService.GetSchemaAsync(connectorName, ct);
         var schemaRoot = schema.RootElement;
@@ -221,7 +272,7 @@ public class ConfigurationController : ControllerBase
         if (!schemaRoot.TryGetProperty("properties", out var schemaProperties))
         {
             // No schema available, allow any configuration
-            return errors;
+            return errors.Distinct().ToList();
         }
 
         var configRoot = configuration.RootElement;
@@ -260,27 +311,6 @@ public class ConfigurationController : ControllerBase
                 // Unknown property - could be a secret field or removed property
                 // Don't error, just skip validation for unknown fields
                 continue;
-            }
-
-            // Validate type
-            if (propSchema.TryGetProperty("type", out var typeProp))
-            {
-                var expectedType = typeProp.GetString();
-                var actualValue = configProp.Value;
-
-                var typeValid = expectedType switch
-                {
-                    "boolean" => actualValue.ValueKind == JsonValueKind.True || actualValue.ValueKind == JsonValueKind.False,
-                    "integer" => actualValue.ValueKind == JsonValueKind.Number && actualValue.TryGetInt64(out _),
-                    "number" => actualValue.ValueKind == JsonValueKind.Number,
-                    "string" => actualValue.ValueKind == JsonValueKind.String,
-                    _ => true
-                };
-
-                if (!typeValid)
-                {
-                    errors.Add($"Field '{configProp.Name}' has invalid type. Expected {expectedType}");
-                }
             }
 
             // Validate minimum/maximum for numbers
@@ -335,7 +365,7 @@ public class ConfigurationController : ControllerBase
             }
         }
 
-        return errors;
+        return errors.Distinct().ToList();
     }
 
     /// <summary>

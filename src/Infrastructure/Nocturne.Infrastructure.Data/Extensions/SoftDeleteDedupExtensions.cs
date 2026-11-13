@@ -17,8 +17,6 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </summary>
 public static class SoftDeleteDedupExtensions
 {
-    private const string DeletedByUserProperty = "DeletedByUser";
-
     /// <summary>
     /// Narrows <paramref name="source"/> to the rows whose external identity must not be
     /// re-created: an active row, or a soft-deleted row whose latest delete was
@@ -32,20 +30,29 @@ public static class SoftDeleteDedupExtensions
     /// context (<c>deleted_by_user = false</c>).
     ///
     /// <paramref name="source"/> must have the soft-delete query filter lifted
-    /// (<c>IgnoreQueryFilters</c>) with its tenant predicate re-applied, or no soft-deleted
-    /// row can reach the predicate.
+    /// (<see cref="HistoryPage.IncludingDeleted{T}"/>), or no soft-deleted row can reach the predicate.
     /// </summary>
     public static IQueryable<TEntity> WhereBlocksRecreation<TEntity>(this IQueryable<TEntity> source)
         where TEntity : class, ISoftDeletable
-        => source.Where(e => e.DeletedAt == null || EF.Property<bool>(e, DeletedByUserProperty));
+        => source.Where(e => e.DeletedAt == null || EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty));
 
     /// <summary>
     /// <see cref="WhereBlocksRecreation{TEntity}"/> for state spans. A span whose category is not
     /// current (<see cref="StateSpanMapper.WhereCategoryIsCurrent"/>) is retired and blocks nothing,
-    /// even when the user deleted it, so a re-upload of its <c>OriginalId</c> writes a new span.
+    /// even when the user deleted it, so a re-upload of its legacy id writes a new span.
     /// </summary>
     public static IQueryable<StateSpanEntity> WhereBlocksSpanRecreation(this IQueryable<StateSpanEntity> source)
         => source.WhereCategoryIsCurrent().WhereBlocksRecreation();
+
+    /// <summary>
+    /// <see cref="GetBlockingLegacyIdsAsync{TEntity}(NocturneDbContext, HashSet{string}, CancellationToken)"/>
+    /// for state spans, per <see cref="WhereBlocksSpanRecreation"/>.
+    /// </summary>
+    public static Task<RecreationBlocks<string>> GetBlockingSpanLegacyIdsAsync(
+        this NocturneDbContext ctx,
+        HashSet<string> legacyIds,
+        CancellationToken ct = default)
+        => ctx.GetBlockingLegacyIdsAsync(legacyIds, StateSpanMapper.IsCurrentCategory, ct);
 
     /// <summary>
     /// The rows of <typeparamref name="TEntity"/> in the context's tenant whose latest delete was the
@@ -65,7 +72,7 @@ public static class SoftDeleteDedupExtensions
         => source.IgnoreQueryFilters().AsNoTracking()
             .Where(e => e.TenantId == ctx.TenantId
                      && e.DeletedAt != null
-                     && EF.Property<bool>(e, DeletedByUserProperty));
+                     && EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty));
 
     /// <summary>
     /// Of the rows <see cref="WhereBlocksRecreation{TEntity}"/> kept for one external identity, the
@@ -88,14 +95,69 @@ public static class SoftDeleteDedupExtensions
     }
 
     /// <summary>
+    /// The (DataSource, SyncIdentifier) pair as one key, or <see langword="null"/> when either half
+    /// is missing and the row has no sync identity.
+    /// </summary>
+    public static string? SyncKey(this ISyncDedupable entity)
+        => !string.IsNullOrEmpty(entity.DataSource) && !string.IsNullOrEmpty(entity.SyncIdentifier)
+            ? $"{entity.DataSource}|{entity.SyncIdentifier}"
+            : null;
+
+    /// <summary>
+    /// The <see cref="GoverningRow{TEntity}"/> of each <see cref="SyncKey"/> in
+    /// <paramref name="incoming"/>, tracked so a live one can be updated in place. A key with no
+    /// row blocking it per <see cref="WhereBlocksRecreation{TEntity}"/> is absent.
+    /// </summary>
+    /// <remarks>
+    /// Matches sources and identifiers separately, so it over-fetches by a Cartesian amount; the data
+    /// source is what lets the lookup seek the (tenant_id, data_source, sync_identifier) index and
+    /// its user-tombstone companion. <paramref name="source"/> must have the soft-delete query
+    /// filter lifted and the tenant kept.
+    /// </remarks>
+    public static async Task<Dictionary<string, TEntity>> GoverningRowsBySyncKeyAsync<TEntity>(
+        this IQueryable<TEntity> source,
+        IEnumerable<TEntity> incoming,
+        CancellationToken ct = default)
+        where TEntity : class, ISoftDeletable, ISyncDedupable
+    {
+        var keyed = incoming.Where(e => e.SyncKey() is not null).ToList();
+        if (keyed.Count == 0)
+            return new Dictionary<string, TEntity>(StringComparer.Ordinal);
+
+        var sources = keyed.Select(e => e.DataSource!).Distinct().ToList();
+        var syncIds = keyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
+
+        var rows = await source
+            .WhereBlocksRecreation()
+            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(e => e.SyncKey()!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.GoverningRow()!, StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// Returns the subset of <paramref name="legacyIds"/> that must be skipped on bulk
     /// insert, per <see cref="WhereBlocksRecreation{TEntity}"/>.
+    /// </summary>
+    public static Task<RecreationBlocks<string>> GetBlockingLegacyIdsAsync<TEntity>(
+        this NocturneDbContext ctx,
+        HashSet<string> legacyIds,
+        CancellationToken ct = default)
+        where TEntity : class, ILegacyIdentified
+        => ctx.GetBlockingLegacyIdsAsync<TEntity>(legacyIds, _ => true, ct);
+
+    /// <summary>
+    /// As <see cref="GetBlockingLegacyIdsAsync{TEntity}(NocturneDbContext, HashSet{string}, CancellationToken)"/>,
+    /// counting only the rows <paramref name="within"/> keeps.
     /// </summary>
     public static async Task<RecreationBlocks<string>> GetBlockingLegacyIdsAsync<TEntity>(
         this NocturneDbContext ctx,
         HashSet<string> legacyIds,
+        Expression<Func<TEntity, bool>> within,
         CancellationToken ct = default)
-        where TEntity : class, IV4Entity
+        where TEntity : class, ILegacyIdentified
     {
         if (legacyIds.Count == 0)
             return RecreationBlocks<string>.None;
@@ -104,6 +166,7 @@ public static class SoftDeleteDedupExtensions
             .Where(e => e.TenantId == ctx.TenantId
                      && e.LegacyId != null
                      && legacyIds.Contains(e.LegacyId))
+            .Where(within)
             .WhereBlocksRecreation()
             .Select(e => new { Key = e.LegacyId!, Live = e.DeletedAt == null })
             .ToListAsync(ct);

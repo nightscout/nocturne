@@ -5,6 +5,8 @@ using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 using Xunit;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
@@ -37,18 +39,39 @@ public class PublishRecordTypePathTests
             => Messages.Add(formatter(state, exception));
     }
 
+    private sealed class PublisherBehaviour
+    {
+        public bool Succeeds { get; set; } = true;
+
+        public bool Throws { get; set; }
+
+        public Task<bool> Answer() =>
+            Throws ? throw new InvalidOperationException("publisher exploded") : Task.FromResult(Succeeds);
+    }
+
     private sealed class TestConnectorService : BaseConnectorService<TestConfig>
     {
         private readonly Func<SyncResult, CancellationToken, Task> _syncBody;
+        private readonly PublisherBehaviour _behaviour;
 
         public TestConnectorService(
             Func<SyncResult, CancellationToken, Task> syncBody,
             ILogger<TestConnectorService>? logger = null)
+            : this(syncBody, logger, new PublisherBehaviour())
+        {
+        }
+
+        private TestConnectorService(
+            Func<SyncResult, CancellationToken, Task> syncBody,
+            ILogger<TestConnectorService>? logger,
+            PublisherBehaviour behaviour)
             : base(new HttpClient(),
                 new ConnectorServerResolver<TestConfig>(null, null, null),
-                logger ?? NullLogger<TestConnectorService>.Instance)
+                logger ?? NullLogger<TestConnectorService>.Instance,
+                PublisherAnswering(behaviour))
         {
             _syncBody = syncBody;
+            _behaviour = behaviour;
         }
 
         protected override string ConnectorSource => "test";
@@ -66,6 +89,10 @@ public class PublishRecordTypePathTests
             return result;
         }
 
+        /// <summary>
+        ///     Publishes <paramref name="records"/> as the record type that <paramref name="dataType"/>
+        ///     defaults to: sensor glucose for Glucose, boluses for Boluses.
+        /// </summary>
         public Task<bool> PublishAsync(
             SyncResult result,
             SyncDataType dataType,
@@ -73,18 +100,49 @@ public class PublishRecordTypePathTests
             List<PublishedRecord> records,
             bool publishSucceeds = true,
             CancellationToken cancellationToken = default)
-            => PublishRecordTypeAsync(result, dataType, activeTypes, records,
-                (_, _, _) => Task.FromResult(publishSucceeds),
-                new TestConfig(), cancellationToken);
+        {
+            _behaviour.Succeeds = publishSucceeds;
+            return dataType switch
+            {
+                SyncDataType.Glucose => PublishRecordTypeAsync(result, activeTypes,
+                    records.Select(_ => new SensorGlucose()).ToList(), new TestConfig(), cancellationToken),
+                SyncDataType.Boluses => PublishRecordTypeAsync(result, activeTypes,
+                    records.Select(_ => new Bolus()).ToList(), new TestConfig(), cancellationToken),
+                _ => throw new ArgumentOutOfRangeException(nameof(dataType)),
+            };
+        }
 
         public Task<bool> PublishThrowingAsync(
             SyncResult result,
             SyncDataType dataType,
             HashSet<SyncDataType> activeTypes,
             List<PublishedRecord> records)
-            => PublishRecordTypeAsync(result, dataType, activeTypes, records,
-                (_, _, _) => throw new InvalidOperationException("publisher exploded"),
-                new TestConfig(), CancellationToken.None);
+        {
+            _behaviour.Throws = true;
+            return PublishAsync(result, dataType, activeTypes, records);
+        }
+
+        private static IConnectorPublisher PublisherAnswering(PublisherBehaviour behaviour)
+        {
+            var glucose = new Mock<IGlucosePublisher>();
+            glucose
+                .Setup(g => g.PublishSensorGlucoseAsync(
+                    It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns(behaviour.Answer);
+            var treatments = new Mock<ITreatmentPublisher>();
+            treatments
+                .Setup(t => t.PublishBolusesAsync(
+                    It.IsAny<IEnumerable<Bolus>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns(behaviour.Answer);
+
+            var publisher = new Mock<IConnectorPublisher>();
+            publisher.SetupGet(p => p.IsAvailable).Returns(true);
+            publisher.SetupGet(p => p.Glucose).Returns(glucose.Object);
+            publisher.SetupGet(p => p.Treatments).Returns(treatments.Object);
+            return publisher.Object;
+        }
     }
 
     private static Task<SyncResult> RunAsync(

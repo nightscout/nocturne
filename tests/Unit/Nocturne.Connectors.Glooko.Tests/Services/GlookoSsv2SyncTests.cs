@@ -355,12 +355,12 @@ public class GlookoSsv2SyncTests
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new FixedGlookoTokenProvider(),
             publisher.Object,
             mealMatchingService: null,
             timezoneTimelineService: null,
-            cursorStore: cursorStore);
+            cursorStore: cursorStore,
+            endpointPause: TimeSpan.Zero);
 
     private static Mock<IConnectorPublisher> CapturePublisher(List<SensorGlucose> sink)
     {

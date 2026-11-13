@@ -165,14 +165,14 @@ public class GlookoDeviceClockProbeTests
                 new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
                 NullLogger<GlookoConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 new StaticGlookoTokenProvider(),
                 Publisher.Object,
                 mealMatchingService: null,
                 timezoneTimelineService: Timeline.Object,
                 deviceClockService: DeviceClock.Object,
                 cursorStore: new FakeCursorStore(),
-                timeProvider: new FakeTimeProvider(Instant));
+                timeProvider: new FakeTimeProvider(Instant),
+                endpointPause: TimeSpan.Zero);
 
             return service.SyncDataAsync(
                 new SyncRequest { DataTypes = [SyncDataType.Glucose] }, config, CancellationToken.None);

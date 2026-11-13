@@ -1,7 +1,7 @@
-using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -40,5 +40,5 @@ public class TenantGlucoseUnits(
     }
 
     public async Task<bool> UsesMmolAsync(CancellationToken ct = default) =>
-        GlucoseUnits.IsMmol(await ResolveAsync(ct));
+        GlucoseUnits.Parse(await ResolveAsync(ct)) == GlucoseUnit.Mmol;
 }

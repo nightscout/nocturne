@@ -112,3 +112,5 @@ public class TreatmentFoodBreakdown
     public decimal UnspecifiedCarbs { get; set; }
 }
 
+/// <summary>The catalog food a food attribution line points at: its id and the carbs in one portion.</summary>
+public sealed record CatalogFoodPortion(Guid Id, double CarbsPerPortion);

@@ -453,7 +453,6 @@ public class NightscoutTreatmentReconcileTests
                 Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
                 NullLogger<NightscoutConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 registration.Object,
                 publisher.Object,
                 new FakeTimeProvider(At));

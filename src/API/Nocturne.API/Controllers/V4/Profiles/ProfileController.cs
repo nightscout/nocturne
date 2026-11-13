@@ -230,7 +230,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
 
         await _therapyRepo.SetDefaultAsync(target.Id, ct);
-        await _tempBasalRates.AfterProfilesChangedAsync([profileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
 
         return NoContent();
     }
@@ -471,7 +471,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(created.Id, ct);
             created.IsDefault = true;
         }
-        await _tempBasalRates.AfterProfilesChangedAsync([created.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync([created.Timestamp], ct);
         return CreatedAtAction(nameof(GetTherapySettingsById), new { id = created.Id }, created);
     }
@@ -517,7 +517,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(id, ct);
             updated.IsDefault = true;
         }
-        await _tempBasalRates.AfterProfilesChangedAsync([updated.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync(
             stored is null ? [updated.Timestamp] : [stored.Timestamp, updated.Timestamp], ct);
         return Ok(updated);
@@ -543,7 +543,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
         }
 
-        await _tempBasalRates.AfterProfilesChangedAsync(stored is null ? [] : [stored.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync(stored is null ? [] : [stored.Timestamp], ct);
         return NoContent();
     }

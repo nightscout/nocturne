@@ -11,7 +11,10 @@
   const ctx = getCoachMarkContext();
   const label = $derived(tourReplayLabel());
   const shown = $derived(
-    ctx != null && !ctx.disabled && tour.flatMap((name) => sequences[name]?.steps ?? []).some((key) => ctx.getMountedSteps(key).length > 0)
+    ctx != null &&
+      !ctx.disabled &&
+      tour.every((name) => ctx.isSequenceForReader(name)) &&
+      tour.flatMap((name) => sequences[name]?.steps ?? []).some((key) => ctx.getMountedSteps(key).length > 0)
   );
 </script>
 

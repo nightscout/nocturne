@@ -11,8 +11,8 @@ namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
 /// Domain service implementation for <see cref="Food"/> operations with WebSocket broadcasting.
-/// Sanitizes food records via <see cref="IDocumentProcessingService"/> on creation and deduplicates
-/// by a composite key built from all food properties.
+/// On a <see cref="FoodWriteMode.Native"/> create, sanitizes food records via
+/// <see cref="IDocumentProcessingService"/> and deduplicates by a composite key built from all food properties.
 /// </summary>
 /// <seealso cref="IFoodService"/>
 /// <seealso cref="IFoodRepository"/>
@@ -104,6 +104,7 @@ public class FoodService : IFoodService
     /// <inheritdoc />
     public async Task<IEnumerable<Food>> CreateFoodAsync(
         IEnumerable<Food> foods,
+        FoodWriteMode mode,
         CancellationToken cancellationToken = default
     )
     {
@@ -141,6 +142,12 @@ public class FoodService : IFoodService
 
             foreach (var food in documents)
             {
+                if (mode == FoodWriteMode.Legacy)
+                {
+                    processed.Add(food);
+                    continue;
+                }
+
                 SanitizeFood(food);
 
                 var dedupKey = BuildDedupKey(food);
@@ -162,12 +169,8 @@ public class FoodService : IFoodService
             food.Category = Sanitize(food.Category);
             food.Subcategory = Sanitize(food.Subcategory);
             food.Name = Sanitize(food.Name);
-            food.Unit = Sanitize(food.Unit, "g");
-
-            if (food.Gi < 1 || food.Gi > 3)
-            {
-                food.Gi = 2;
-            }
+            food.Unit = Sanitize(food.Unit);
+            food.ApplyUnitAndGiDefaults();
 
             if (food.Foods == null || food.Foods.Count == 0)
             {
@@ -300,12 +303,13 @@ public class FoodService : IFoodService
         {
             _logger.LogDebug("Deleting food record with ID: {Id}", id);
 
+            var existing = await _food.GetFoodByIdAsync(id, cancellationToken);
             var deleted = await _food.DeleteFoodAsync(id, cancellationToken);
 
             if (deleted)
             {
-                await _sideEffects.OnDeletedAsync<Food>(CollectionName, null, cancellationToken: cancellationToken);
-                await _events.OnDeletedAsync(null, cancellationToken);
+                await _sideEffects.OnDeletedAsync(CollectionName, existing, cancellationToken: cancellationToken);
+                await _events.OnDeletedAsync(existing, cancellationToken);
                 _logger.LogDebug("Successfully deleted food record with ID: {Id}", id);
             }
 
@@ -314,6 +318,30 @@ public class FoodService : IFoodService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting food record with ID: {Id}", id);
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<long> BulkDeleteFoodAsync(
+        string? find,
+        CancellationToken cancellationToken = default
+    )
+    {
+        try
+        {
+            _logger.LogDebug("Bulk deleting food records matching: {Find}", find);
+
+            var deletedCount = await _food.BulkDeleteFoodAsync(find, cancellationToken);
+
+            await _sideEffects.OnBulkDeletedAsync(CollectionName, deletedCount, cancellationToken: cancellationToken);
+            await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
+
+            return deletedCount;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error bulk deleting food records");
             throw;
         }
     }

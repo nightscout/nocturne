@@ -137,7 +137,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         var foodList = foods.ToList();
         try
         {
-            await _foodService.CreateFoodAsync(foodList, cancellationToken);
+            await _foodService.CreateFoodAsync(foodList, FoodWriteMode.Native, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }

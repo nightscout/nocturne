@@ -91,7 +91,7 @@ public sealed class GoogleHealthReadingWriter(
                             identifiers, type, batch => db.HeartRates.Where(record =>
                                     record.TenantId == run.TenantId && record.DataSource == Source && batch.Contains(record.Id))
                                 .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
-                                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct), ct);
+                                    .SetProperty(record => EF.Property<bool>(record, NocturneDbContext.DeletedByUserProperty), false), ct), ct);
                         break;
                     case "steps":
                         await ReconcileRecordsAsync(db.StepCounts.Where(record => record.TenantId == run.TenantId &&
@@ -102,7 +102,7 @@ public sealed class GoogleHealthReadingWriter(
                             identifiers, type, batch => db.StepCounts.Where(record =>
                                     record.TenantId == run.TenantId && record.DataSource == Source && batch.Contains(record.Id))
                                 .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
-                                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct), ct);
+                                    .SetProperty(record => EF.Property<bool>(record, NocturneDbContext.DeletedByUserProperty), false), ct), ct);
                         break;
                     case "weight":
                         var firstMills = run.FromTime.ToMills();
@@ -115,7 +115,7 @@ public sealed class GoogleHealthReadingWriter(
                             identifiers, type, batch => db.BodyWeights.Where(record =>
                                     record.TenantId == run.TenantId && record.DataSource == Source && batch.Contains(record.Id))
                                 .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
-                                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct), ct);
+                                    .SetProperty(record => EF.Property<bool>(record, NocturneDbContext.DeletedByUserProperty), false), ct), ct);
                         break;
                     case "sleep":
                         await ReconcileRecordsAsync(db.SleepSessions.Where(session => session.TenantId == run.TenantId &&
@@ -127,7 +127,7 @@ public sealed class GoogleHealthReadingWriter(
                                     session.TenantId == run.TenantId && session.Source == SleepSource.Google.ToString() &&
                                     session.SourceApp == SourceApp && session.DeletedAt == null && batch.Contains(session.Id))
                                 .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.DeletedAt, deletedAt)
-                                    .SetProperty(session => EF.Property<bool>(session, "DeletedByUser"), false), ct), ct);
+                                    .SetProperty(session => EF.Property<bool>(session, NocturneDbContext.DeletedByUserProperty), false), ct), ct);
                         break;
                 }
             }
@@ -264,13 +264,13 @@ public sealed class GoogleHealthReadingWriter(
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             // Purge releases account-independent sync keys, including prior user-deletion tombstones.
-            await db.HeartRates.IgnoreQueryFilters().Where(record => record.TenantId == db.TenantId && record.DataSource == Source)
+            await db.HeartRates.IncludingDeleted().Where(record => record.DataSource == Source)
                 .ExecuteDeleteAsync(ct);
-            await db.StepCounts.IgnoreQueryFilters().Where(record => record.TenantId == db.TenantId && record.DataSource == Source)
+            await db.StepCounts.IncludingDeleted().Where(record => record.DataSource == Source)
                 .ExecuteDeleteAsync(ct);
-            await db.BodyWeights.IgnoreQueryFilters().Where(record => record.TenantId == db.TenantId && record.DataSource == Source)
+            await db.BodyWeights.IncludingDeleted().Where(record => record.DataSource == Source)
                 .ExecuteDeleteAsync(ct);
-            await db.SleepSessions.IgnoreQueryFilters().Where(session => session.TenantId == db.TenantId &&
+            await db.SleepSessions.IncludingDeleted().Where(session =>
                     session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp)
                 .ExecuteDeleteAsync(ct);
             await transaction.CommitAsync(ct);

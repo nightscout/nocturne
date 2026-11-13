@@ -1,132 +1,69 @@
-using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Mappers;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health;
 
 /// <summary>
-/// Domain service for heart rate record operations. Inherits standard CRUD, SignalR broadcasting,
-/// and document-processing behaviour from <see cref="TimeSeriesEntityService{TModel,TEntity}"/>.
+/// <see cref="IHeartRateService"/> over <see cref="IHeartRateRepository"/>, broadcasting each
+/// committed write.
 /// </summary>
-/// <seealso cref="IHeartRateService"/>
-/// <seealso cref="TimeSeriesEntityService{TModel,TEntity}"/>
-/// <param name="contexts">Factory that opens the database context each operation runs on.</param>
-/// <param name="documentProcessingService">Service that applies field processing before save.</param>
-/// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
-/// <param name="timeProvider">Clock that stamps soft deletes.</param>
-/// <param name="logger">Logger instance for this service.</param>
 public class HeartRateService(
-    INocturneDbContextFactory contexts,
+    IHeartRateRepository repository,
     IDocumentProcessingService documentProcessingService,
-    ISignalRBroadcastService signalRBroadcastService,
-    TimeProvider timeProvider,
-    ILogger<HeartRateService> logger
-)
-    : TimeSeriesEntityService<HeartRate, HeartRateEntity>(
-        contexts, documentProcessingService, signalRBroadcastService, timeProvider, logger),
-        IHeartRateService
+    ISignalRBroadcastService signalRBroadcastService
+) : IHeartRateService
 {
-    protected override DbSet<HeartRateEntity> EntitySet(NocturneDbContext db) => db.HeartRates;
-    protected override string CollectionName => "heartrate";
-    protected override string EntityTypeName => "heart rate";
+    private readonly HealthSeriesWriter<HeartRate> _series =
+        new(repository, documentProcessingService, signalRBroadcastService, "heartrate");
 
-    protected override HeartRate ToDomainModel(HeartRateEntity entity) =>
-        HeartRateMapper.ToDomainModel(entity);
-
-    protected override HeartRateEntity ToEntity(HeartRate model) =>
-        HeartRateMapper.ToEntity(model);
-
-    protected override void UpdateEntity(HeartRateEntity entity, HeartRate model) =>
-        HeartRateMapper.UpdateEntity(entity, model);
-
-    public Task<IEnumerable<HeartRate>> GetHeartRatesAsync(
+    public async Task<IEnumerable<HeartRate>> GetHeartRatesAsync(
         int count = 10,
         int skip = 0,
         DateTime? from = null,
         DateTime? to = null,
         CancellationToken cancellationToken = default
-    ) => GetNewestFirstAsync(count, skip, from, to, cancellationToken);
+    ) => await repository.GetNewestFirstAsync(count, skip, from, to, cancellationToken);
 
-    public Task<IEnumerable<HeartRate>> GetHeartRatesByDateRangeAsync(
+    public async Task<IEnumerable<HeartRate>> GetHeartRatesByDateRangeAsync(
         DateTime from,
         DateTime to,
         int? count = null,
         int skip = 0,
         CancellationToken cancellationToken = default
-    ) => GetByDateRangeAsync(from, to, count, skip, cancellationToken);
+    ) => await repository.GetByDateRangeAsync(from, to, count, skip, cancellationToken);
 
     public async Task<IEnumerable<HeartRate>> GetHeartRateMinuteAveragesByDateRangeAsync(
         DateTime from,
         DateTime to,
         CancellationToken cancellationToken = default
-    )
-    {
-        // Group in PostgreSQL so a dense wearable stream does not cross the API boundary as
-        // hundreds of thousands of points. The source table remains untouched and the normal
-        // tenant/soft-delete filters on EntitySet still apply.
-        await using var db = await Contexts.CreateAsync(cancellationToken);
-        var rangeStart = from;
-        var rangeEnd = to;
-        var buckets = await (
-            from row in EntitySet(db).AsNoTracking()
-            where row.Timestamp >= rangeStart && row.Timestamp < rangeEnd
-            let utcTimestamp = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(row.Timestamp, "UTC")
-            group row by new
-            {
-                utcTimestamp.Year,
-                utcTimestamp.Month,
-                utcTimestamp.Day,
-                utcTimestamp.Hour,
-                utcTimestamp.Minute,
-            }
-            into minute
-            orderby minute.Key.Year, minute.Key.Month, minute.Key.Day,
-                minute.Key.Hour, minute.Key.Minute
-            select new
-            {
-                minute.Key.Year,
-                minute.Key.Month,
-                minute.Key.Day,
-                minute.Key.Hour,
-                minute.Key.Minute,
-                AverageBpm = minute.Average(row => (double)row.Bpm),
-            }).ToListAsync(cancellationToken);
+    ) => await repository.GetMinuteAveragesAsync(from, to, cancellationToken);
 
-        return buckets.Select(bucket => new HeartRate
-        {
-            Timestamp = new DateTime(bucket.Year, bucket.Month, bucket.Day,
-                bucket.Hour, bucket.Minute,
-                0,
-                DateTimeKind.Utc),
-            Bpm = (int)Math.Round(bucket.AverageBpm, MidpointRounding.AwayFromZero),
-        });
-    }
+    public Task<DateTime?> GetLatestTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    ) => repository.GetLatestTimestampAsync(source, cancellationToken);
 
     public Task<HeartRate?> GetHeartRateByIdAsync(
         string id,
         CancellationToken cancellationToken = default
-    ) => GetByIdAsync(id, cancellationToken);
+    ) => repository.GetByIdAsync(id, cancellationToken);
 
     public Task<IEnumerable<HeartRate>> CreateHeartRatesAsync(
         IEnumerable<HeartRate> heartRates,
         CancellationToken cancellationToken = default
-    ) => CreateManyAsync(heartRates, cancellationToken);
+    ) => _series.CreateAsync(heartRates, cancellationToken);
 
     public Task<HeartRate?> UpdateHeartRateAsync(
         string id,
         HeartRate heartRate,
         CancellationToken cancellationToken = default
-    ) => UpdateOneAsync(id, heartRate, cancellationToken);
+    ) => _series.UpdateAsync(id, heartRate, cancellationToken);
 
     public Task<bool> DeleteHeartRateAsync(
         string id,
         CancellationToken cancellationToken = default
-    ) => DeleteOneAsync(id, cancellationToken);
+    ) => _series.DeleteAsync(id, cancellationToken);
 }

@@ -110,7 +110,7 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
         });
         _context.StateSpans.Add(new StateSpanEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "t-4", Source = Connector,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "t-4", Source = Connector,
             Category = "Override", State = "Active", StartTimestamp = At,
             MetadataJson = """{"collection":"treatments","utcOffset":0}""",
         });

@@ -150,8 +150,8 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 records.Count,
                 history.Count);
 
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                records, PublishSensorGlucoseDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                records, config, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {

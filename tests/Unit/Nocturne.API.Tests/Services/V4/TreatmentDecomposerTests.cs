@@ -1283,14 +1283,6 @@ public class TreatmentDecomposerTests : IDisposable
         TreatmentDecomposer.ParseGlucoseType(input).Should().BeNull();
     }
 
-    [Theory]
-    [InlineData("0")]
-    [InlineData("MgDl, Mmol")]
-    public void ParseGlucoseUnit_NumericOrCommaList_ReturnsNull(string input)
-    {
-        TreatmentDecomposer.ParseGlucoseUnit(input).Should().BeNull();
-    }
-
     [Fact]
     public void ParseGlucoseType_Null_ReturnsNull()
     {
@@ -1303,15 +1295,19 @@ public class TreatmentDecomposerTests : IDisposable
     [InlineData("mg", V4Models.GlucoseUnit.MgDl)]
     [InlineData("mmol", V4Models.GlucoseUnit.Mmol)]
     [InlineData("mmol/l", V4Models.GlucoseUnit.Mmol)]
-    public void ParseGlucoseUnit_KnownValues_MapsCorrectly(string input, V4Models.GlucoseUnit expected)
+    [InlineData("mmol/L ", V4Models.GlucoseUnit.Mmol)]
+    [InlineData("MMOLL", V4Models.GlucoseUnit.Mmol)]
+    [InlineData("MgDl", V4Models.GlucoseUnit.MgDl)]
+    [InlineData("0", null)]
+    [InlineData("MgDl, Mmol", null)]
+    [InlineData("g/L", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void MapToBGCheck_ReadsTheTreatmentUnits(string? units, V4Models.GlucoseUnit? expected)
     {
-        TreatmentDecomposer.ParseGlucoseUnit(input).Should().Be(expected);
-    }
+        var treatment = new Treatment { Id = "units", Mills = 1700000000000, Glucose = 5, Units = units };
 
-    [Fact]
-    public void ParseGlucoseUnit_Null_ReturnsNull()
-    {
-        TreatmentDecomposer.ParseGlucoseUnit(null).Should().BeNull();
+        TreatmentDecomposer.MapToBGCheck(treatment, Guid.CreateVersion7()).Units.Should().Be(expected);
     }
 
     [Theory]
@@ -2862,18 +2858,6 @@ public class TreatmentDecomposerTests : IDisposable
     public void ParseGlucoseType_UnknownNonEmpty_ReturnsNull()
     {
         TreatmentDecomposer.ParseGlucoseType("Interstitial").Should().BeNull();
-    }
-
-    [Fact]
-    public void ParseGlucoseUnit_UnknownNonEmpty_ReturnsNull()
-    {
-        TreatmentDecomposer.ParseGlucoseUnit("g/L").Should().BeNull();
-    }
-
-    [Fact]
-    public void ParseGlucoseUnit_EmptyString_ReturnsNull()
-    {
-        TreatmentDecomposer.ParseGlucoseUnit("").Should().BeNull();
     }
 
     [Fact]

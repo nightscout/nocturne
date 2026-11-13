@@ -455,7 +455,7 @@ internal sealed class LegacyStateSpanTable(
     private IQueryable<StateSpanEntity> Visible(NocturneDbContext context) => Rows(context).ExcludeDuplicates();
 
     /// <inheritdoc />
-    public IQueryable<string> TreatmentKeys(NocturneDbContext context) => Rows(context).Select(s => s.OriginalId!);
+    public IQueryable<string> TreatmentKeys(NocturneDbContext context) => Rows(context).Select(s => s.LegacyId!);
 
     private IQueryable<StateSpanEntity> Served(IQueryable<StateSpanEntity> spans) =>
         spans.Where(s => s.Category == _category).Where(fromTreatment);
@@ -555,7 +555,7 @@ internal sealed class LegacyStateSpanTable(
     )
     {
         var keys = treatmentKeys.ToList();
-        var spans = await Visible(context).Where(s => keys.Contains(s.OriginalId!)).ToListAsync(ct);
+        var spans = await Visible(context).Where(s => keys.Contains(s.LegacyId!)).ToListAsync(ct);
         return spans.Select(Fetched).ToList();
     }
 
@@ -780,7 +780,7 @@ internal static class LegacyTreatmentTables
     internal static readonly IReadOnlyList<LegacyStateSpanTable> StateSpanTables =
     [
         new(StateSpanCategory.Override,
-            s => s.OriginalId != null && EF.Functions.JsonContains(s.MetadataJson!, TreatmentsCollectionJson),
+            s => s.LegacyId != null && EF.Functions.JsonContains(s.MetadataJson!, TreatmentsCollectionJson),
             (s, metadata) => new Treatment
             {
                 EventType = "Temporary Override",
@@ -797,7 +797,7 @@ internal static class LegacyTreatmentTables
                 AdditionalProperties = UploadedFields(metadata, UploadedOverrideFields),
             }),
         new(StateSpanCategory.TemporaryTarget,
-            s => s.OriginalId != null
+            s => s.LegacyId != null
                 && EF.Functions.JsonExists(s.MetadataJson!, StateSpanMetadataExtensions.UtcOffsetKey),
             (s, metadata) => new Treatment
             {
@@ -1181,7 +1181,7 @@ internal static class LegacyTreatmentTables
     /// </summary>
     internal static string? ServedKey(object record) => record switch
     {
-        StateSpanEntity span => span.OriginalId,
+        StateSpanEntity span => span.LegacyId,
         Note => null,
         IV4Record v4 => v4.LegacyId,
         _ => null,

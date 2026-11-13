@@ -18,6 +18,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -34,6 +35,8 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private const long At = 1_780_000_000_000;
     private const string Id = "tt-1";
+    private const string ClientId = "B5E5A1C2-0000-4000-8000-000000000001";
+    private const string Source = "AAPS";
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
@@ -75,7 +78,7 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
         }, WriteOrigin.Live);
 
         result.SkippedDeleted.Should().Be(blocks ? 1 : 0);
-        (await _context.StateSpans.AsNoTracking().CountAsync(s => s.OriginalId == Id)).Should().Be(blocks ? 0 : 1);
+        (await _context.StateSpans.AsNoTracking().CountAsync(s => s.LegacyId == Id)).Should().Be(blocks ? 0 : 1);
     }
 
     [Theory]
@@ -89,16 +92,69 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
         deleted.Contains(Id).Should().Be(blocks);
     }
 
-    private async Task SeedUserDeletedSpanAsync(string category)
+    [Fact]
+    public async Task A_user_deleted_span_of_another_tenant_holds_nothing()
+    {
+        var otherTenantId = await AddOtherTenantAsync();
+        await SeedUserDeletedSpanAsync(nameof(StateSpanCategory.TemporaryTarget));
+        await SeedUserDeletedSpanAsync(nameof(StateSpanCategory.TemporaryTarget), otherTenantId, "tt-other");
+
+        var deleted = await Decomposer().GetDeletedByUserAsync([Id, "tt-other"]);
+
+        deleted.Should().BeEquivalentTo([Id]);
+    }
+
+    [Fact]
+    public async Task A_rekey_leaves_another_tenants_rows_under_the_client_id_alone()
+    {
+        var otherTenantId = await AddOtherTenantAsync();
+        var carb = new CarbIntakeEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = otherTenantId, LegacyId = ClientId, DataSource = Source,
+            Carbs = 10, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
+        };
+        var span = new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = otherTenantId, Category = nameof(StateSpanCategory.TemporaryTarget),
+            State = "Active", Source = Source, LegacyId = ClientId,
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
+        };
+        _context.AddRange(carb, span);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var rekeyed = await Decomposer().RekeyClientIdRecordsAsync(Source,
+        [
+            new Treatment
+            {
+                Id = "6ab400000000000000000001", EventType = "Carb Correction", Carbs = 10, Mills = At,
+                DataSource = Source, AdditionalProperties = new() { [TreatmentClientId.Field] = ClientId },
+            },
+        ]);
+
+        rekeyed.Should().Be(0);
+        (await _context.CarbIntakes.IgnoreQueryFilters().AsNoTracking().SingleAsync()).LegacyId.Should().Be(ClientId);
+        (await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().SingleAsync()).LegacyId.Should().Be(ClientId);
+    }
+
+    private async Task<Guid> AddOtherTenantAsync()
+    {
+        var otherTenantId = Guid.NewGuid();
+        _context.Tenants.Add(new TenantEntity { Id = otherTenantId, Slug = "other" });
+        await _context.SaveChangesAsync();
+        return otherTenantId;
+    }
+
+    private async Task SeedUserDeletedSpanAsync(string category, Guid? tenantId = null, string? originalId = null)
     {
         var span = new StateSpanEntity
         {
             Id = Guid.CreateVersion7(),
-            TenantId = TenantId,
+            TenantId = tenantId ?? TenantId,
             Category = category,
             State = "Active",
             Source = "AAPS",
-            OriginalId = Id,
+            LegacyId = originalId ?? Id,
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
         };
         _context.StateSpans.Add(span);
@@ -106,7 +162,7 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
         _context.Entry(span).State = EntityState.Detached;
         await _context.StateSpans.IgnoreQueryFilters().Where(s => s.Id == span.Id).ExecuteUpdateAsync(u => u
             .SetProperty(s => s.DeletedAt, DateTime.UtcNow)
-            .SetProperty(s => EF.Property<bool>(s, "DeletedByUser"), true));
+            .SetProperty(s => EF.Property<bool>(s, NocturneDbContext.DeletedByUserProperty), true));
     }
 
     private TreatmentDecomposer Decomposer()

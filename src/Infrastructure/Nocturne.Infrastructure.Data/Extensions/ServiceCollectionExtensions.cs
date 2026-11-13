@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Storage;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Configuration;
@@ -18,8 +19,10 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Platform;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Services.Deduplication;
@@ -182,6 +185,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISourceOwnedDataReader>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
         services.AddScoped<ISourceOwnedDataPurge>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
         services.AddScoped<IDemoDataPurge, DemoDataPurgeRepository>();
+        services.AddScoped<ICollectionLastModifiedReader, CollectionLastModifiedReader>();
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
@@ -215,6 +219,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStateSpanRepository, StateSpanRepository>();
         services.AddScoped<ISleepSessionRepository, SleepSessionRepository>();
         services.AddScoped<IActivityDedupRepository, ActivityDedupRepository>();
+        services.AddScoped<IHeartRateRepository, HeartRateRepository>();
+        services.AddScoped<IObservedHealthSeriesRepository<StepCount>, StepCountRepository>();
+        services.AddScoped<IHealthSeriesRepository<BodyWeight>, BodyWeightRepository>();
         services.AddScoped<ISystemEventRepository, SystemEventRepository>();
         services.AddScoped<IUserFoodFavoriteRepository, UserFoodFavoriteRepository>();
         services.AddScoped<ITreatmentFoodRepository, TreatmentFoodRepository>();

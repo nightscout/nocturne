@@ -5,7 +5,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
 /// Every <see cref="Interval"/>, merges an active tenant's duplicate canonical groups created since its
-/// reconcile cursor (<see cref="IDuplicateReconciler.ReconcileNewLinksAsync(int, int, CancellationToken)"/>),
+/// reconcile cursor (<see cref="IDuplicateReconciler.ReconcileNewLinksAsync(int, int, int?, CancellationToken)"/>),
 /// then runs <see cref="IDuplicateReconciler.RepairStateSpanPrimariesAsync(CancellationToken)"/> and
 /// <see cref="IDuplicateReconciler.PruneSingletonLinksAsync(int, int, CancellationToken)"/>.
 /// </summary>
@@ -13,7 +13,10 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Both cursors are kept in <c>dedup_reconcile_state</c>, not in the ledger, so the run's
 /// <see cref="JobCursor"/> stays empty. A tenant whose merge lock is held has its merges left to the
 /// next run, which is not a failure. An inactive tenant's row is parked for
-/// <see cref="IScheduledJob.InactiveTenantRecheck"/>.
+/// <see cref="IScheduledJob.InactiveTenantRecheck"/>. A failing run is retried after the scheduler's
+/// backoff. A reconcile batch that fails <see cref="SkipBatchAfterFailures"/> passes in a row is
+/// skipped, so one batch that always fails cannot stop the tenant's reconcile. The reconciler counts
+/// those failures per batch, not the run's attempts, so a failed repair or prune never counts.
 /// </remarks>
 internal sealed class DeduplicationReconciliationJob(ILogger<DeduplicationReconciliationJob> logger) : IScheduledJob
 {
@@ -25,6 +28,8 @@ internal sealed class DeduplicationReconciliationJob(ILogger<DeduplicationReconc
     private const int MaxBatchesPerRun = 4;
     private const int PruneBatchSize = 10_000;
     private const int MaxPruneBatchesPerRun = 10;
+
+    internal const int SkipBatchAfterFailures = 3;
 
     public string Name => JobName;
 
@@ -38,7 +43,7 @@ internal sealed class DeduplicationReconciliationJob(ILogger<DeduplicationReconc
             return JobOutcome.Resume(null, run.StartedAt + IScheduledJob.InactiveTenantRecheck);
 
         var dedup = run.Services.GetRequiredService<IDuplicateReconciler>();
-        var result = await dedup.ReconcileNewLinksAsync(BatchSize, MaxBatchesPerRun, ct);
+        var result = await dedup.ReconcileNewLinksAsync(BatchSize, MaxBatchesPerRun, SkipBatchAfterFailures, ct);
         var repaired = await dedup.RepairStateSpanPrimariesAsync(ct);
         var pruned = await dedup.PruneSingletonLinksAsync(PruneBatchSize, MaxPruneBatchesPerRun, ct);
 

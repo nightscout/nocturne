@@ -37,10 +37,14 @@ internal sealed partial class LoopAnalysisService
     {
         var from = window.From;
         var to = window.To;
-        var lookbackUtc = ToUtc(from - DailyProfileCalculator.ActingMs);
+        var series = window.Series;
+        var lookbackUtc = ToUtc(series.InsulinReadStart);
 
+        // Carbs are read to the window's end, past the series' last tick, because the calculable time
+        // counts them. Snapshots are read from the insulin look-back, before the series' device read
+        // start, because the open-loop mask reads them too.
         var carbTask = carbIntakeRepository.GetAsync(lookbackUtc, ToUtc(to), null, null, int.MaxValue, descending: false, ct: ct);
-        var deviceReadUntil = ToUtc(to + DeviceReportedValues.FutureSkewToleranceMs);
+        var deviceReadUntil = ToUtc(series.DeviceReadEnd);
         var apsTask = apsSnapshotRepository.GetIobCobPointsAsync(lookbackUtc, deviceReadUntil, ct);
         var pumpTask = pumpSnapshotRepository.GetIobPointsAsync(lookbackUtc, deviceReadUntil, ct);
         var commonTask = LoadCommonAsync(window, ct);
@@ -55,7 +59,7 @@ internal sealed partial class LoopAnalysisService
         var iobCob = IobCobSeries.Build(
             iobCalculator, cobCalculator, common.Boluses, carbs, common.TempBasals, delivery.Timeline, delivery.Scheduled,
             DeviceReadings.Of(apsPoints, await pumpTask),
-            delivery.TickStart, to - 1, now, TickMs, ct);
+            series.FirstTick, series.LastTick, now, series.IntervalMs, ct);
 
         var inputs = new DailyProfileInputs
         {

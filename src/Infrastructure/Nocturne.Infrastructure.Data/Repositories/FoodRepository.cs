@@ -433,4 +433,35 @@ public class FoodRepository : IFoodRepository
 
         return entities.Select(FoodMapper.ToDomainModel);
     }
+
+    /// <inheritdoc />
+    public async Task<CatalogFoodPortion?> GetCatalogFoodAsync(
+        string reference,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (Guid.TryParse(reference, out var id))
+            return await GetCatalogFoodAsync(id, cancellationToken);
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.Foods
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.OriginalId == reference, cancellationToken);
+
+        return entity is null ? null : new CatalogFoodPortion(entity.Id, entity.Carbs);
+    }
+
+    /// <inheritdoc />
+    public async Task<CatalogFoodPortion?> GetCatalogFoodAsync(
+        Guid id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.Foods
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
+
+        return entity is null ? null : new CatalogFoodPortion(entity.Id, entity.Carbs);
+    }
 }

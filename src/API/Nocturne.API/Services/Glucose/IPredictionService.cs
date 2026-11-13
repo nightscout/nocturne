@@ -21,7 +21,7 @@ public interface IPredictionService
     /// state the user actually had at that tick. <c>null</c> preserves the live behavior
     /// (anchored at the implementation's <see cref="TimeProvider"/> clock).
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when no glucose readings or device status data are available.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no prediction can be produced: no glucose readings or device status data, the oref library is unavailable, or the glucose status cannot be calculated. No substitute curve is returned.</exception>
     Task<GlucosePredictionResponse> GetPredictionsAsync(
         string? profileId = null,
         DateTimeOffset? asOf = null,

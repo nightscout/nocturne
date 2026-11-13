@@ -10,6 +10,7 @@ using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
@@ -39,7 +40,6 @@ public class NutritionControllerMealsTests : IDisposable
     private readonly BolusRepository _bolusRepo;
     private readonly CarbIntakeRepository _carbIntakeRepo;
     private readonly Mock<ITreatmentFoodService> _foodServiceMock = new();
-    private readonly Mock<IDemoModeService> _demoModeMock = new();
     private readonly RecordingV4RecordBroadcaster<Bolus> _bolusBroadcaster = new();
     private readonly RecordingV4RecordBroadcaster<CarbIntake> _carbBroadcaster = new();
 
@@ -81,8 +81,8 @@ public class NutritionControllerMealsTests : IDisposable
             carbIntakeRepo ?? _carbIntakeRepo,
             bolusRepo ?? _bolusRepo,
             _foodServiceMock.Object,
-            _demoModeMock.Object,
-            _dbContext.AsFactory());
+            Mock.Of<IFoodRepository>(),
+            Mock.Of<IMealReadService>());
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()

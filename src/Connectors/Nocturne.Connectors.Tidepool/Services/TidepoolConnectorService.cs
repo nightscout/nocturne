@@ -17,7 +17,6 @@ namespace Nocturne.Connectors.Tidepool.Services;
 /// </summary>
 public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorConfiguration>
 {
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TidepoolSensorGlucoseMapper _sensorGlucoseMapper;
     private readonly TidepoolAuthTokenProvider _tokenProvider;
@@ -28,7 +27,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         IConnectorServerResolver<TidepoolConnectorConfiguration> serverResolver,
         ILogger<TidepoolConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         TidepoolAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
@@ -37,8 +35,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     {
         _retryDelayStrategy =
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy =
-            rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider =
             tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _sensorGlucoseMapper = new TidepoolSensorGlucoseMapper(logger, ConnectorSource);
@@ -88,9 +84,8 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 }
                 else
                 {
-                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                        _sensorGlucoseMapper.MapBgValues(bgValues, Clock.GetUtcNow().UtcDateTime).ToList(), PublishSensorGlucoseDataAsync,
-                        config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        _sensorGlucoseMapper.MapBgValues(bgValues, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -124,12 +119,12 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 // Boluses come from the bolus fetch and carb intakes from the food fetch, so each
                 // type is reported only when its own fetch came back.
                 if (boluses is not null)
-                    await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                        mappedBoluses, PublishBolusDataAsync, config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        mappedBoluses, config, cancellationToken);
 
                 if (foods is not null)
-                    await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                        mappedCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        mappedCarbs, config, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
@@ -163,8 +158,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 ConnectorSource);
             return null;
         }
-
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         return await ExecuteWithRetryAsync(
             async () => await FetchDataCoreAsync<T>(config, token, userId, dataType, startDate, endDate),

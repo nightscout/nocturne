@@ -23,7 +23,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     private readonly TwiistInsulinMapper _insulinMapper;
     private readonly TwiistMealMapper _mealMapper;
     private readonly TwiistTempBasalMapper _tempBasalMapper;
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TwiistAuthTokenProvider _tokenProvider;
 
@@ -32,14 +31,12 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         IConnectorServerResolver<TwiistConnectorConfiguration> serverResolver,
         ILogger<TwiistConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         TwiistAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null)
         : base(httpClient, serverResolver, logger, publisher, timeProvider)
     {
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _glucoseMapper = new TwiistGlucoseMapper(logger);
         _insulinMapper = new TwiistInsulinMapper(logger);
@@ -145,26 +142,24 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             latest.Direction = TwiistGlucoseMapper.ParseTrend(status.Summary.LastGlucoseTrend);
         }
 
-        await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-            sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            sensorGlucose, config, cancellationToken);
     }
 
     private async Task SyncBolusesAsync(
         TwiistStatus status, SyncResult result, HashSet<SyncDataType> activeTypes,
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-            _insulinMapper.MapBoluses(status.InsulinHistory, Clock.GetUtcNow().UtcDateTime).ToList(), PublishBolusDataAsync,
-            config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            _insulinMapper.MapBoluses(status.InsulinHistory, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
     }
 
     private async Task SyncCarbIntakeAsync(
         TwiistStatus status, SyncResult result, HashSet<SyncDataType> activeTypes,
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-            _mealMapper.MapMeals(status.MealHistory, Clock.GetUtcNow().UtcDateTime).ToList(), PublishCarbIntakeDataAsync,
-            config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            _mealMapper.MapMeals(status.MealHistory, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
     }
 
     private async Task SyncTempBasalsAsync(
@@ -177,8 +172,8 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             .Concat(_tempBasalMapper.MapSuspensions(status.InsulinHistory, now))
             .ToList();
 
-        await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
-            tempBasals, PublishTempBasalDataAsync, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            tempBasals, config, cancellationToken);
     }
 
     /// <summary>
@@ -231,8 +226,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             return null;
         }
 
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
-
         return await ExecuteWithRetryAsync(
             async () => await FetchOverviewsCoreAsync(accessToken, cancellationToken),
             _retryDelayStrategy,
@@ -268,8 +261,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
-
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
             async () => await FetchPackageCoreAsync(accessToken, pwdId, cancellationToken),

@@ -328,7 +328,6 @@ public class TidepoolConnectorServiceTests
                 serverResolver,
                 NullLogger<TidepoolConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 tokenProvider,
                 publisher,
                 clock);

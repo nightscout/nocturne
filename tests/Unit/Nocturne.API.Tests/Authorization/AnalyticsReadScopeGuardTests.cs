@@ -417,10 +417,13 @@ public partial class AnalyticsReadScopeGuardTests
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
                 new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(3.0, 30.0, null, null, 0, null, null, null))]));
 
+        var stateSpans = MockStateSpans.Empty().Object;
+        var reader = new IobCobReader(
+            iob.Object, cob.Object, boluses.Object, tempBasals.Object, carbs.Object, timelines.Object, stateSpans,
+            Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+            TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance);
         var controller = new RetrospectiveController(
-            iob.Object, cob.Object, entries.Object, boluses.Object, carbs.Object,
-            tempBasals.Object, deviceStatuses: null!, timelines.Object, MockStateSpans.Empty().Object, Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(), new IobCobReader(iob.Object, cob.Object, boluses.Object, tempBasals.Object, carbs.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
+            entries.Object, tempBasals.Object, timelines.Object, stateSpans, reader, reader, TimeProvider.System,
             NullLogger<RetrospectiveController>.Instance)
         {
             ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),

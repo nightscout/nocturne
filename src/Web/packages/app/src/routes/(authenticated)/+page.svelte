@@ -71,9 +71,10 @@
     <div
       {@attach readingInWidget
         ? undefined
-        : coachmark({
-            ...coachFor("quick-tour.current-bg"),
-          })}
+        : coachmark([
+            coachFor("quick-tour.current-bg"),
+            coachFor("share-tour.reading"),
+          ])}
     >
       <CurrentBGDisplay />
     </div>
@@ -96,9 +97,11 @@
         {#snippet glucoseChart(chartVisible: boolean)}
           <div
             {@attach chartVisible
-              ? coachmark({
-                  ...coachFor("quick-tour.chart"),
-                })
+              ? coachmark([
+                  coachFor("quick-tour.chart"),
+                  coachFor("guest-tour.chart"),
+                  coachFor("share-tour.chart"),
+                ])
               : undefined}
           >
             <GlucoseChartCard

@@ -320,7 +320,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
-            OriginalId = originalId,
+            LegacyId = originalId,
             Category = category,
             State = "Active",
             StartTimestamp = start,
@@ -432,9 +432,9 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         await using var assertCtx = NewContext();
         var deleted = await assertCtx.StateSpans.IgnoreQueryFilters()
             .Where(s => s.DeletedAt != null)
-            .Select(s => new { s.OriginalId, ByUser = EF.Property<bool>(s, "DeletedByUser") })
+            .Select(s => new { s.LegacyId, ByUser = EF.Property<bool>(s, "DeletedByUser") })
             .ToListAsync();
-        deleted.Select(s => s.OriginalId).Should().BeEquivalentTo(new[] { "override-1", "tt-1" });
+        deleted.Select(s => s.LegacyId).Should().BeEquivalentTo(new[] { "override-1", "tt-1" });
         deleted.Should().OnlyContain(s => s.ByUser);
         var deletedActivations = await assertCtx.ProfileActivations.IgnoreQueryFilters()
             .Where(a => a.DeletedAt != null)
@@ -471,7 +471,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         deleted.Should().Be(3);
         await using var db = NewContext();
         var spans = await db.StateSpans.IgnoreQueryFilters().ToListAsync();
-        spans.Where(s => s.DeletedAt != null).Select(s => s.OriginalId)
+        spans.Where(s => s.DeletedAt != null).Select(s => s.LegacyId)
             .Should().BeEquivalentTo("override-1", "tt-1");
         (await db.ProfileActivations.IgnoreQueryFilters().Where(a => a.DeletedAt != null).Select(a => a.LegacyId).ToListAsync())
             .Should().Equal("ps-1");

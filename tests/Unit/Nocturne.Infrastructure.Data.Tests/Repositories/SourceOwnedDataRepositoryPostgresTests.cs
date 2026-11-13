@@ -23,6 +23,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     : IClassFixture<SourceOwnedDataRepositoryPostgresTests.Database>
 {
     private const string Source = "loop-connector";
+    private const string OtherSource = "other-connector";
 
     public sealed class Database : IAsyncLifetime
     {
@@ -86,6 +87,22 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
             Id = Guid.CreateVersion7(), TenantId = tenant, LegacyId = $"bolus-{tenant:N}",
             DataSource = Source, Timestamp = DateTime.UtcNow, Insulin = 1,
         });
+        db.BasalInjections.Add(new BasalInjectionEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = Source, Timestamp = DateTime.UtcNow, Units = 10,
+        });
+        db.BasalInjections.Add(new BasalInjectionEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = OtherSource, Timestamp = DateTime.UtcNow, Units = 10,
+        });
+        db.PumpSnapshots.Add(new PumpSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = Source, Timestamp = DateTime.UtcNow,
+        });
+        db.UploaderSnapshots.Add(new UploaderSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = Source, Timestamp = DateTime.UtcNow,
+        });
         db.StateSpans.Add(new StateSpanEntity
         {
             Id = Guid.CreateVersion7(), TenantId = tenant, Source = Source,
@@ -112,6 +129,8 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         result.DeletedCounts.Should().BeEquivalentTo(new Dictionary<string, long>
         {
             [SourceDataTypes.Boluses] = 1,
+            [SourceDataTypes.BasalInjections] = 1,
+            [SourceDataTypes.DeviceStatus] = 2,
             [SourceDataTypes.StateSpans] = 1,
             [SourceDataTypes.Profiles] = 1,
         });
@@ -120,16 +139,31 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
             new Dictionary<string, long>
             {
                 [SourceDataTypes.Boluses] = 1,
+                [SourceDataTypes.BasalInjections] = 1,
+                [SourceDataTypes.DeviceStatus] = 2,
                 [SourceDataTypes.StateSpans] = 1,
                 [SourceDataTypes.Profiles] = 1,
             });
         await using (var db = Context(b))
+        {
             (await db.Boluses.IgnoreQueryFilters().SingleAsync()).DeletedAt.Should().BeNull();
+            (await db.BasalInjections.IgnoreQueryFilters().ToListAsync()).Should().OnlyContain(e => e.DeletedAt == null);
+            (await db.PumpSnapshots.IgnoreQueryFilters().SingleAsync()).DeletedAt.Should().BeNull();
+            (await db.UploaderSnapshots.IgnoreQueryFilters().SingleAsync()).DeletedAt.Should().BeNull();
+        }
         await using (var db = Context(a))
         {
             var bolus = await db.Boluses.IgnoreQueryFilters().SingleAsync();
             bolus.DeletedAt.Should().NotBeNull();
             db.Entry(bolus).Property<bool>("DeletedByUser").CurrentValue.Should().BeFalse("the release lifts the user tombstone so the source may send the record again");
+
+            var injections = await db.BasalInjections.IgnoreQueryFilters().ToListAsync();
+            injections.Single(e => e.DataSource == Source).DeletedAt.Should().NotBeNull();
+            injections.Single(e => e.DataSource == OtherSource).DeletedAt.Should().BeNull("another source's rows stay");
+            (await db.PumpSnapshots.IgnoreQueryFilters().SingleAsync()).DeletedAt.Should().NotBeNull();
+            (await db.UploaderSnapshots.IgnoreQueryFilters().SingleAsync()).DeletedAt.Should().NotBeNull();
+            foreach (var entity in new object[] { injections.Single(e => e.DataSource == Source), await db.PumpSnapshots.IgnoreQueryFilters().SingleAsync(), await db.UploaderSnapshots.IgnoreQueryFilters().SingleAsync() })
+                db.Entry(entity).Property("DeletedByUser").CurrentValue.Should().Be(false);
         }
     }
 
