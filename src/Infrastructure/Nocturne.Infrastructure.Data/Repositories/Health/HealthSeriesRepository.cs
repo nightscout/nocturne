@@ -124,8 +124,7 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
                 continue;
             }
 
-            if (existing.DeletedAt != null
-                && db.Entry(existing).Property<bool>(NocturneDbContext.DeletedByUserProperty).CurrentValue)
+            if (existing.DeletedAt != null && db.BlocksRecreation(existing))
                 continue;
 
             Apply(existing, ToDomain(entity));
