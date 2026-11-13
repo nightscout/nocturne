@@ -38600,3 +38600,7 @@ msgstr ""
 #: src/lib/coach-marks/copy.svelte.ts
 msgid "This chart shows the recent readings. Drag the chart to see earlier readings. Select a point to see the reading and its time."
 msgstr ""
+
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "BasalInjections"
+msgstr ""
