@@ -240,6 +240,19 @@ function isRootSelector(selector: string): boolean {
   return selector.split(",").every((s) => /^(:root|html)$/.test(s.trim()));
 }
 
+/** `css` without its comments; an unclosed comment runs to the end, as in a browser. Linear, unlike a lazy regex. */
+function stripComments(css: string): string {
+  let out = "";
+  let at = 0;
+  for (let open = css.indexOf("/*"); open !== -1; open = css.indexOf("/*", at)) {
+    out += css.slice(at, open);
+    const close = css.indexOf("*/", open + 2);
+    if (close === -1) return out;
+    at = close + 2;
+  }
+  return out + css.slice(at);
+}
+
 /**
  * The custom properties a stylesheet declares for the light scheme (`:root`) and the dark one
  * (`.dark`, `:root.dark`, or `:root` inside `@media (prefers-color-scheme: dark)`), inside any other
@@ -252,7 +265,7 @@ export function readCustomProperties(css: string): {
   dark: Map<string, string>;
   unread: UnreadDeclaration[];
 } {
-  const source = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const source = stripComments(css);
   const root = new Map<string, string>();
   const dark = new Map<string, string>();
   const unread: UnreadDeclaration[] = [];

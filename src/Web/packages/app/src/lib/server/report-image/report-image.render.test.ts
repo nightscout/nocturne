@@ -32,6 +32,28 @@ function count(data: Uint8ClampedArray, hex: string, tolerance = 6): number {
   return n;
 }
 
+/**
+ * For each column that holds any, how much of `hex` over `background` its pixels add up to, counting
+ * only pixels on the mix of the two (within `tolerance` on every channel).
+ */
+function columnTints(image: { width: number; height: number; data: Uint8ClampedArray }, hex: string, background: string, tolerance = 12): number[] {
+  const ink = rgb(hex);
+  const bg = rgb(background);
+  const channel = [0, 1, 2].reduce((best, c) => (Math.abs(bg[c] - ink[c]) > Math.abs(bg[best] - ink[best]) ? c : best), 0);
+  const tints: number[] = [];
+  for (let x = 0; x < image.width; x++) {
+    let sum = 0;
+    for (let y = 0; y < image.height; y++) {
+      const i = (y * image.width + x) * 4;
+      const t = (bg[channel] - image.data[i + channel]) / (bg[channel] - ink[channel]);
+      if (t < 0.05 || t > 1.05) continue;
+      if ([0, 1, 2].every((c) => Math.abs(bg[c] + (ink[c] - bg[c]) * t - image.data[i + c]) <= tolerance)) sum += t;
+    }
+    if (sum > 0) tints.push(sum);
+  }
+  return tints;
+}
+
 beforeAll(async () => {
   await loadLocales(main.key, main.loadCount, main.loadCatalog, locales);
   await loadLocales(js.key, js.loadCount, js.loadCatalog, locales);
@@ -154,12 +176,13 @@ describe("a report image request", () => {
       renderReportImage(requestOf(flat, { width: 800, height: 420, theme: "light" })));
     const image = await pixels(png);
     const palette = resolveChartTheme("light");
-    // Antialiasing spreads the one-pixel line a little: at the live view's 60% it shows as about a
-    // 50% tint; drawn solid, as before strokeOpacity was baked into the colour, at about 90%.
-    const solid = paint(palette, "color-mix(in srgb, var(--glucose-high) 90%, var(--background))");
-    const faded = paint(palette, "color-mix(in srgb, var(--glucose-high) 50%, var(--background))");
-    expect(count(image.data, solid, 12)).toBeLessThanOrEqual(2);
-    expect(count(image.data, faded, 12)).toBeGreaterThan(20);
+    // Antialiasing splits a one-pixel line over two rows by where it falls, but keeps its coverage: a
+    // dash column holds 0.6 of the colour at the live view's 60%, and 1 drawn solid.
+    const tints = columnTints(image, paint(palette, "var(--glucose-high)"), paint(palette, "var(--background)"));
+    expect(tints.length).toBeGreaterThan(100);
+    const median = tints.sort((a, b) => a - b)[tints.length >> 1];
+    expect(median).toBeGreaterThan(0.5);
+    expect(median).toBeLessThan(0.7);
   }, 30_000);
 });
 

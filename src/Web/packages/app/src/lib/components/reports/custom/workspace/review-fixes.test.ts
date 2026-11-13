@@ -40,7 +40,7 @@ function claims(ws: Workspace): { claim: string; holds: boolean }[] {
     out.push({ claim: "corroborated rises", holds: json.includes('"requireCorroboration":true') });
   for (const l of vocab.leaveOuts) {
     const word = words.leaveOutLabel(l.id).toLowerCase();
-    const said = new RegExp(`without [^,]*\b${word}\b`).test(text);
+    const said = new RegExp(`without [^,]*\\b${word}\\b`).test(text);
     if (!said) continue;
     const sent = json.includes(`"${l.parameter}":true`) || (defaults[l.id] && !json.includes(`"${l.parameter}":false`));
     out.push({ claim: `without ${word}`, holds: sent });
