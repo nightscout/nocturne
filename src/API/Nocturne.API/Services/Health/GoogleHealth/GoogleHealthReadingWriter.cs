@@ -1,17 +1,14 @@
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
@@ -20,7 +17,8 @@ public sealed class GoogleHealthReadingWriter(
     IStepCountService stepCounts,
     IBodyWeightService bodyWeights,
     ISleepService sleep,
-    INocturneDbContextFactory contexts,
+    IHealthRecordTransactions records,
+    ISleepSessionRepository sleepSessions,
     ITenantAccessor tenant,
     TimeProvider time,
     ILogger<GoogleHealthReadingWriter> logger) : IGoogleHealthReadingWriter
@@ -69,12 +67,9 @@ public sealed class GoogleHealthReadingWriter(
 
     public async Task CompleteReconciliationAsync(Guid runId, CancellationToken ct)
     {
-        await using var db = await contexts.CreateAsync(ct);
-        var run = GetRun(runId, db.TenantId);
-        var strategy = db.Database.CreateExecutionStrategy();
-        await strategy.ExecuteAsync(async () =>
+        var run = GetRun(runId, tenant.TenantId);
+        await records.CommitAsync(async (repositories, token) =>
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
             var deletedAt = time.GetUtcNow().UtcDateTime;
             foreach (var (type, identifiers) in run.Identifiers)
             {
@@ -83,67 +78,45 @@ public sealed class GoogleHealthReadingWriter(
                 switch (type)
                 {
                     case "heart-rate":
-                        await ReconcileRecordsAsync(db.HeartRates.Where(record => record.TenantId == run.TenantId &&
-                                record.DataSource == Source && record.DeletedAt == null &&
-                                record.Timestamp >= run.FromTime && record.Timestamp < run.ToTime &&
-                                record.SyncIdentifier != null)
-                            .Select(record => new ReconciliationRecord(record.Id, record.SyncIdentifier!)),
-                            identifiers, type, batch => db.HeartRates.Where(record =>
-                                    record.TenantId == run.TenantId && record.DataSource == Source && batch.Contains(record.Id))
-                                .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
-                                    .SetProperty(record => EF.Property<bool>(record, NocturneDbContext.DeletedByUserProperty), false), ct), ct);
+                        await ReconcileRecordsAsync(
+                            limit => repositories.HeartRateRecords.GetSyncKeysAsync(Source, run.FromTime, run.ToTime, limit, token),
+                            identifiers, type,
+                            batch => repositories.HeartRateRecords.RetireAsync(Source, batch, deletedAt, token));
                         break;
                     case "steps":
-                        await ReconcileRecordsAsync(db.StepCounts.Where(record => record.TenantId == run.TenantId &&
-                                record.DataSource == Source && record.DeletedAt == null &&
-                                record.Timestamp >= run.FromTime && record.Timestamp < run.ToTime &&
-                                record.SyncIdentifier != null)
-                            .Select(record => new ReconciliationRecord(record.Id, record.SyncIdentifier!)),
-                            identifiers, type, batch => db.StepCounts.Where(record =>
-                                    record.TenantId == run.TenantId && record.DataSource == Source && batch.Contains(record.Id))
-                                .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
-                                    .SetProperty(record => EF.Property<bool>(record, NocturneDbContext.DeletedByUserProperty), false), ct), ct);
+                        await ReconcileRecordsAsync(
+                            limit => repositories.StepCountRecords.GetSyncKeysAsync(Source, run.FromTime, run.ToTime, limit, token),
+                            identifiers, type,
+                            batch => repositories.StepCountRecords.RetireAsync(Source, batch, deletedAt, token));
                         break;
                     case "weight":
-                        var firstMills = run.FromTime.ToMills();
-                        var lastMills = run.ToTime.ToMills();
-                        await ReconcileRecordsAsync(db.BodyWeights.Where(record => record.TenantId == run.TenantId &&
-                                record.DataSource == Source && record.DeletedAt == null &&
-                                record.Mills >= firstMills && record.Mills < lastMills &&
-                                record.SyncIdentifier != null)
-                            .Select(record => new ReconciliationRecord(record.Id, record.SyncIdentifier!)),
-                            identifiers, type, batch => db.BodyWeights.Where(record =>
-                                    record.TenantId == run.TenantId && record.DataSource == Source && batch.Contains(record.Id))
-                                .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
-                                    .SetProperty(record => EF.Property<bool>(record, NocturneDbContext.DeletedByUserProperty), false), ct), ct);
+                        await ReconcileRecordsAsync(
+                            limit => repositories.BodyWeightRecords.GetSyncKeysAsync(Source, run.FromTime, run.ToTime, limit, token),
+                            identifiers, type,
+                            batch => repositories.BodyWeightRecords.RetireAsync(Source, batch, deletedAt, token));
                         break;
                     case "sleep":
-                        await ReconcileRecordsAsync(db.SleepSessions.Where(session => session.TenantId == run.TenantId &&
-                                session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp &&
-                                session.EndTime >= run.FromTime && session.EndTime < run.ToTime &&
-                                session.OriginalId != null)
-                            .Select(session => new ReconciliationRecord(session.Id, session.OriginalId!)),
-                            identifiers, type, batch => db.SleepSessions.Where(session =>
-                                    session.TenantId == run.TenantId && session.Source == SleepSource.Google.ToString() &&
-                                    session.SourceApp == SourceApp && session.DeletedAt == null && batch.Contains(session.Id))
-                                .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.DeletedAt, deletedAt)
-                                    .SetProperty(session => EF.Property<bool>(session, NocturneDbContext.DeletedByUserProperty), false), ct), ct);
+                        await ReconcileRecordsAsync(
+                            limit => repositories.SleepSessionRecords.GetSourceAppKeysAsync(
+                                SleepSource.Google, SourceApp, run.FromTime, run.ToTime, limit, token),
+                            identifiers, type,
+                            batch => repositories.SleepSessionRecords.RetireAsync(
+                                SleepSource.Google, SourceApp, batch, deletedAt, token));
                         break;
                 }
             }
-            await transaction.CommitAsync(ct);
-        });
+        }, ct);
         reconciliationRuns.Remove(runId);
     }
 
     private static async Task ReconcileRecordsAsync(
-        IQueryable<ReconciliationRecord> query, HashSet<string> identifiers, string dataType,
-        Func<Guid[], Task<int>> remove, CancellationToken ct)
+        Func<int, Task<IReadOnlyList<SourceRecordKey>>> read, HashSet<string> identifiers, string dataType,
+        Func<Guid[], Task<int>> remove)
     {
-        var records = await query.Take(MaxReconciliationIdentifiers + 1).ToListAsync(ct);
-        if (records.Count > MaxReconciliationIdentifiers)
+        var stored = await read(MaxReconciliationIdentifiers + 1);
+        if (stored.Count > MaxReconciliationIdentifiers)
             throw new GoogleHealthException("history_too_large", stage: "native_reconciliation_complete", dataType: dataType);
-        foreach (var batch in records.Where(record => !identifiers.Contains(record.Identifier))
+        foreach (var batch in stored.Where(record => !identifiers.Contains(record.Key))
                      .Select(record => record.Id).Chunk(500))
             await remove(batch);
     }
@@ -165,8 +138,6 @@ public sealed class GoogleHealthReadingWriter(
     // after successful completion, so native idempotency keys make retrying the window safe.
     private sealed record ReconciliationRun(
         Guid TenantId, DateTime FromTime, DateTime ToTime, Dictionary<string, HashSet<string>> Identifiers);
-
-    private sealed record ReconciliationRecord(Guid Id, string Identifier);
 
     public async Task WriteAsync(
         IReadOnlyCollection<GoogleHealthReading> readings,
@@ -256,53 +227,25 @@ public sealed class GoogleHealthReadingWriter(
         }
     }
 
-    public async Task PurgeAsync(CancellationToken ct)
-    {
-        await using var db = await contexts.CreateAsync(ct);
-        var strategy = db.Database.CreateExecutionStrategy();
-        await strategy.ExecuteAsync(async () =>
+    public Task PurgeAsync(CancellationToken ct) =>
+        records.CommitAsync(async (repositories, token) =>
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
             // Purge releases account-independent sync keys, including prior user-deletion tombstones.
-            await db.HeartRates.IncludingDeleted().Where(record => record.DataSource == Source)
-                .ExecuteDeleteAsync(ct);
-            await db.StepCounts.IncludingDeleted().Where(record => record.DataSource == Source)
-                .ExecuteDeleteAsync(ct);
-            await db.BodyWeights.IncludingDeleted().Where(record => record.DataSource == Source)
-                .ExecuteDeleteAsync(ct);
-            await db.SleepSessions.IncludingDeleted().Where(session =>
-                    session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp)
-                .ExecuteDeleteAsync(ct);
-            await transaction.CommitAsync(ct);
-        });
-    }
+            await repositories.HeartRateRecords.PurgeSourceAsync(Source, token);
+            await repositories.StepCountRecords.PurgeSourceAsync(Source, token);
+            await repositories.BodyWeightRecords.PurgeSourceAsync(Source, token);
+            await repositories.SleepSessionRecords.PurgeSourceAppAsync(SleepSource.Google, SourceApp, token);
+        }, ct);
 
-    public async Task<GoogleHealthSleepStats?> DescribeSleepAsync(DateTime? since, DateTime last24Hours, CancellationToken ct)
-    {
-        await using var db = await contexts.CreateAsync(ct);
-        var sessions = db.SleepSessions.AsNoTracking().Where(session =>
-            session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp);
-        if (since is { } from)
-            sessions = sessions.Where(session => session.StartTime >= from);
-        return await sessions
-            .GroupBy(_ => 1)
-            .Select(g => new GoogleHealthSleepStats(
-                g.LongCount(),
-                g.Count(session => session.StartTime >= last24Hours),
-                g.Max(session => session.StartTime),
-                g.Min(session => session.StartTime)))
-            .FirstOrDefaultAsync(ct);
-    }
+    public Task<SleepSessionStats?> DescribeSleepAsync(DateTime? since, DateTime last24Hours, CancellationToken ct) =>
+        sleepSessions.DescribeSourceAppAsync(SleepSource.Google, SourceApp, since, last24Hours, ct);
 
     public async Task<int> DeleteSleepAsync(bool allowReimport, IAuditContext auditContext, CancellationToken ct)
     {
-        await using var db = await contexts.CreateAsync(ct);
-        var sessions = db.SleepSessions.Where(session =>
-            session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp);
         var scope = $"data_source={Source}";
-        var deleted = await db.AuditedSoftDeleteAsync(sessions, auditContext, scope, ct);
+        var deleted = await sleepSessions.DeleteSourceAppAsync(SleepSource.Google, SourceApp, auditContext, scope, ct);
         if (allowReimport)
-            await db.AuditedAllowReimportAsync(sessions, auditContext, scope, ct);
+            await sleepSessions.AllowSourceAppReimportAsync(SleepSource.Google, SourceApp, auditContext, scope, ct);
         return deleted;
     }
 }

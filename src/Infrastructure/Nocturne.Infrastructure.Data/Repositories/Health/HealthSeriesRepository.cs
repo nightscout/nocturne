@@ -10,7 +10,8 @@ namespace Nocturne.Infrastructure.Data.Repositories.Health;
 /// <see cref="IHealthSeriesRepository{T}"/> over one health series table. These rows are not V4
 /// records: they carry no legacy id, audit columns or duplicate links, so they upsert on the sync key
 /// here rather than through <see cref="V4.SyncUpsertRepositoryBase{TModel,TEntity}"/>, sharing its
-/// lookup, <see cref="SoftDeleteDedupExtensions.GoverningRowsBySyncKeyAsync{TEntity}"/>.
+/// lookup, <see cref="SoftDeleteDedupExtensions.GoverningRowsBySyncKeyAsync{TEntity}"/>. Each call
+/// runs on its own context, or on the caller's <see cref="DbUnitOfWork"/> when constructed over one.
 /// </summary>
 /// <typeparam name="TModel">The domain record type.</typeparam>
 /// <typeparam name="TEntity">The entity backing <typeparamref name="TModel"/>.</typeparam>
@@ -18,15 +19,23 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
     where TModel : class
     where TEntity : class, IOriginalIdentified, ITenantScoped, ISoftDeletable, ISyncDedupable
 {
+    private readonly INocturneDbContextFactory? _contexts;
+    private readonly DbUnitOfWork? _unit;
     private readonly TimeProvider _time;
 
     protected HealthSeriesRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
-        Contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _time = time ?? throw new ArgumentNullException(nameof(time));
     }
 
-    protected INocturneDbContextFactory Contexts { get; }
+    protected HealthSeriesRepository(DbUnitOfWork unit, TimeProvider time)
+    {
+        _unit = unit ?? throw new ArgumentNullException(nameof(unit));
+        _time = time ?? throw new ArgumentNullException(nameof(time));
+    }
+
+    protected ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);
 
     protected abstract DbSet<TEntity> Set(NocturneDbContext db);
 
@@ -38,10 +47,13 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
 
     protected abstract IOrderedQueryable<TEntity> NewestFirst(IQueryable<TEntity> query);
 
+    protected abstract IQueryable<TEntity> ObservedIn(IQueryable<TEntity> query, DateTime from, DateTime to);
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<TModel>> GetNewestFirstAsync(int count, int skip, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
         var entities = await NewestFirst(Set(db).AsNoTracking())
             .Skip(skip)
             .Take(count)
@@ -52,7 +64,8 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
     /// <inheritdoc />
     public async Task<TModel?> GetByIdAsync(string id, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
         var entity = await FindByIdAsync(db, id, ct);
         return entity is null ? null : ToDomain(entity);
     }
@@ -60,7 +73,8 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
     /// <inheritdoc />
     public async Task<IReadOnlyList<TModel>> UpsertAsync(IReadOnlyCollection<TModel> records, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
 
         // Two rows of one batch on the same sync key would collide on the partial unique index.
         var entities = records
@@ -129,7 +143,8 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
     /// <inheritdoc />
     public async Task<TModel?> UpdateAsync(string id, TModel record, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
         var entity = await FindByIdAsync(db, id, ct);
         if (entity is null)
             return null;
@@ -142,7 +157,8 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(string id, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
         var entity = await FindByIdAsync(db, id, ct);
         if (entity is null)
             return false;
@@ -150,6 +166,37 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
         entity.DeletedAt = _time.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> PurgeSourceAsync(string source, CancellationToken ct = default)
+    {
+        await using var lease = await OpenAsync(ct);
+        return await Set(lease.Context).PurgeAsync(e => e.DataSource == source, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SourceRecordKey>> GetSyncKeysAsync(
+        string source, DateTime from, DateTime to, int limit, CancellationToken ct = default)
+    {
+        await using var lease = await OpenAsync(ct);
+        return await ObservedIn(Set(lease.Context).AsNoTracking(), from, to)
+            .Where(e => e.DataSource == source && e.DeletedAt == null && e.SyncIdentifier != null)
+            .Select(e => new SourceRecordKey(e.Id, e.SyncIdentifier!))
+            .Take(limit)
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RetireAsync(
+        string source, IReadOnlyCollection<Guid> ids, DateTime deletedAt, CancellationToken ct = default)
+    {
+        await using var lease = await OpenAsync(ct);
+        return await Set(lease.Context)
+            .Where(e => e.DataSource == source && ids.Contains(e.Id))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(e => e.DeletedAt, deletedAt)
+                .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), false), ct);
     }
 
     private Task<TEntity?> FindByIdAsync(NocturneDbContext db, string id, CancellationToken ct) =>

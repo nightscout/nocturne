@@ -6,9 +6,19 @@ using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories.Health;
 
-public sealed class StepCountRepository(INocturneDbContextFactory contexts, TimeProvider time)
-    : ObservedHealthSeriesRepository<StepCount, StepCountEntity>(contexts, time)
+public sealed class StepCountRepository
+    : ObservedHealthSeriesRepository<StepCount, StepCountEntity>
 {
+    public StepCountRepository(INocturneDbContextFactory contexts, TimeProvider time)
+        : base(contexts, time)
+    {
+    }
+
+    internal StepCountRepository(DbUnitOfWork unit, TimeProvider time)
+        : base(unit, time)
+    {
+    }
+
     protected override DbSet<StepCountEntity> Set(NocturneDbContext db) => db.StepCounts;
 
     protected override StepCount ToDomain(StepCountEntity entity) => StepCountMapper.ToDomainModel(entity);

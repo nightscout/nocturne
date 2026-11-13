@@ -30,6 +30,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Repositories;
 using Npgsql;
 using Xunit;
 
@@ -113,7 +114,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
                 .Where(row => row.TenantId == first).Select(row => row.SecretsJson).SingleAsync());
 
         var holders = new PostgresGoogleHealthGrantHolders(real.GetRequiredService<IServiceScopeFactory>(),
-            real.GetRequiredService<INocturneDbContextFactory>(), real.GetRequiredService<ITenantRepository>(),
+            new GoogleHealthGrantHolderRepository(real.GetRequiredService<INocturneDbContextFactory>()),
+            real.GetRequiredService<ITenantRepository>(),
             NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
         Assert.Equal(GoogleHealthGrantSharing.Shared, await holders.SharingAsync(second, "encrypted-account", default));
@@ -133,7 +135,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
     }
 
     private PostgresGoogleHealthGrantHolders Holders() =>
-        new(provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<INocturneDbContextFactory>(),
+        new(provider.GetRequiredService<IServiceScopeFactory>(),
+            new GoogleHealthGrantHolderRepository(provider.GetRequiredService<INocturneDbContextFactory>()),
             provider.GetRequiredService<ITenantRepository>(), NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
     private async Task StoreAsync(Guid tenant, GoogleHealthSessionStore sessions, string refreshToken, string account)

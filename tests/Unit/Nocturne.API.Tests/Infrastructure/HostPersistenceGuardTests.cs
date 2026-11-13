@@ -114,8 +114,6 @@ public class HostPersistenceGuardTests
             ["BodyWeightEntity", "HeartRateEntity", "StepCountEntity"],
             ["BodyWeights", "HeartRates", "StepCounts"],
             [
-                new("src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthReadingWriter.cs",
-                    "reconciles a Google Health pull against the stored rows of each series in one context"),
                 new("src/API/Nocturne.API/Services/V4/ActivityDecomposer.cs",
                     "decomposes an activity batch into heart rates and step counts beside its state spans in one transaction"),
                 new("src/API/Nocturne.API/Services/Seeding/SampleDataSeeder.cs",
@@ -134,6 +132,21 @@ public class HostPersistenceGuardTests
                     "host-side writer that queues read access log rows and saves them in batches after the request ends",
                     CoversMembers: true),
             ]),
+        new("sleep sessions (#3348)",
+            ["SleepSessionEntity", "SleepStageEntity", "SleepBiometricSampleEntity"],
+            ["SleepSessions", "SleepStages", "SleepBiometricSamples"],
+            [
+                new("src/API/Nocturne.API/Services/V4/ActivityDecomposer.cs",
+                    "checks the user's sleep session tombstones beside its state spans in one transaction"),
+                new("src/API/Nocturne.API/Services/ChartData/Stages/DtoMappingStage.cs",
+                    "reads the chart context's SleepSessions, which shares the DbSet's name"),
+                new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
+                    "reports the seeder's SleepSessions count, which shares the DbSet's name"),
+            ]),
+        new("Google Health grant holders (#3348)",
+            ["GoogleHealthGrantHolderEntity"],
+            ["GoogleHealthGrantHolders"],
+            []),
     ];
 
     private const string Host = "src/API/Nocturne.API";
