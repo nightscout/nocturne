@@ -37,6 +37,14 @@ public interface ITenantService
     /// <summary>Renames the tenant, leaving its slug and active state as they are.</summary>
     Task<TenantSettingsDto> SetDisplayNameAsync(Guid id, string displayName, CancellationToken ct = default);
 
+    /// <summary>
+    /// Moves the tenant to the subdomain <paramref name="newSlug"/>, after the checks
+    /// <see cref="ValidateSlugAsync(string, CancellationToken)"/> makes. The old subdomain stops
+    /// resolving at once: nothing redirects from it.
+    /// </summary>
+    /// <returns>The refusal, or a valid result once the tenant has moved.</returns>
+    Task<SlugValidationResult> ChangeSlugAsync(Guid id, string newSlug, CancellationToken ct = default);
+
     Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>

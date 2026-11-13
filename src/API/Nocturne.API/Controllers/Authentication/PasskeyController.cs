@@ -13,6 +13,8 @@ using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
+using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
@@ -1098,6 +1100,153 @@ public class PasskeyController : ControllerBase
         }
     }
 
+
+    /// <summary>
+    /// Generate passkey registration options for someone without an account who holds a tenant
+    /// creation invite. Checks the link, the subdomain and the username before creating the
+    /// subject the ceremony enrols; nothing is claimed until the complete step.
+    /// </summary>
+    [HttpPost("tenant-invite/options")]
+    [AllowAnonymous]
+    [DenyDemoSubject]
+    [EnableRateLimiting("passkey-register")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> TenantInviteOptions(
+        [FromBody] TenantInviteOptionsRequest request,
+        [FromServices] ITenantCreationInviteService tenantInvites)
+    {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName) || string.IsNullOrWhiteSpace(request.SiteName))
+            return Problem(detail: "Your name and the site name are required", statusCode: 400, title: "Bad Request");
+
+        var username = UsernameRules.Normalize(request.Username ?? "");
+        if (UsernameRules.Refusal(username) is { } usernameRefusal)
+            return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
+
+        var info = await tenantInvites.GetInfoAsync(request.Token, HttpContext.RequestAborted);
+        if (info.Refusal is { } inviteRefusal)
+            return this.ToResult(inviteRefusal);
+
+        var slugCheck = await _tenantService.ValidateSlugAsync(request.Slug, HttpContext.RequestAborted);
+        if (!slugCheck.IsValid)
+            return Problem(detail: slugCheck.Message, statusCode: 400, title: "Bad Request");
+
+        var displayName = request.DisplayName.Trim();
+
+        // As for member invites: a cancelled OS prompt leaves this subject behind, and the retry
+        // reuses it rather than adding a second under the same username.
+        var subjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
+        if (subjectId == null)
+        {
+            subjectId = await _subjects.CreateAsync(
+                new NewSubject(displayName, Username: username), HttpContext.RequestAborted);
+        }
+        else
+        {
+            await _subjects.UpdateAsync(subjectId.Value, new SubjectEdit(Name: displayName), HttpContext.RequestAborted);
+        }
+
+        var result = await _passkeyService.GenerateRegistrationOptionsAsync(subjectId.Value, username);
+
+        return Ok(new PasskeyOptionsResponse
+        {
+            Options = result.OptionsJson,
+            ChallengeToken = result.ChallengeToken,
+        });
+    }
+
+    /// <summary>
+    /// Complete passkey registration for a tenant creation invite: takes one use of the link,
+    /// verifies the attestation, creates the tenant with the new subject as its owner, and signs
+    /// them in.
+    /// </summary>
+    /// <remarks>
+    /// The use is taken before the ceremony and given back if it fails, so two people on a
+    /// single-use link cannot both finish. A tenant that cannot be created after the passkey is
+    /// stored leaves an account with no tenant; signed in with that passkey, its holder redeems the
+    /// link again through <c>TenantCreationInviteController.Redeem</c>.
+    /// </remarks>
+    [HttpPost("tenant-invite/complete")]
+    [AllowAnonymous]
+    [DenyDemoSubject]
+    [EnableRateLimiting("passkey-register")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(TenantInviteRegistrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> TenantInviteComplete(
+        [FromBody] TenantInviteCompleteRequest request,
+        [FromServices] ITenantCreationInviteService tenantInvites)
+    {
+        if (string.IsNullOrEmpty(request.ChallengeToken) || string.IsNullOrWhiteSpace(request.Username))
+            return Problem(detail: "Username and challenge token are required", statusCode: 400, title: "Bad Request");
+
+        var username = UsernameRules.Normalize(request.Username);
+        var enrollingSubjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
+        if (enrollingSubjectId == null)
+            return Problem(detail: "Start again from your invite link", statusCode: 400, title: "Bad Request");
+
+        var slugCheck = await _tenantService.ValidateSlugAsync(request.Slug, HttpContext.RequestAborted);
+        if (!slugCheck.IsValid)
+            return Problem(detail: slugCheck.Message, statusCode: 400, title: "Bad Request");
+
+        var claim = await tenantInvites.ClaimAsync(request.Token, HttpContext.RequestAborted);
+        if (claim.Refusal is { } claimRefusal)
+            return this.ToResult(claimRefusal);
+
+        PasskeyCredentialResult? credResult = null;
+        try
+        {
+            credResult = await _passkeyService.CompleteRegistrationAsync(
+                request.AttestationResponseJson, request.ChallengeToken, Guid.Empty,
+                expectedSubjectId: enrollingSubjectId.Value);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Tenant invite passkey registration failed");
+        }
+        finally
+        {
+            if (credResult is null)
+                await tenantInvites.ReleaseAsync(claim.Value);
+        }
+
+        if (credResult is null)
+            return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Registration Failed");
+
+        var created = await tenantInvites.CreateTenantAsync(
+            claim.Value, request.Slug, request.SiteName, credResult.SubjectId, username, CancellationToken.None);
+
+        var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
+
+        var session = await _sessionService.IssueSessionAsync(
+            credResult.SubjectId,
+            new SessionContext(
+                DeviceDescription: "Invite Passkey",
+                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent: Request.Headers.UserAgent.ToString()));
+
+        Response.SetSessionCookies(session, _oidcOptions);
+
+        // The account exists and is signed in either way, so a refused tenant is reported beside
+        // the session rather than in place of it: the page shows the recovery codes, then lets the
+        // new owner pick another subdomain on the signed-in path.
+        return Ok(new TenantInviteRegistrationResponse
+        {
+            Success = true,
+            RecoveryCodes = recoveryCodes,
+            AccessToken = session.AccessToken,
+            RefreshToken = session.RefreshToken,
+            ExpiresIn = session.ExpiresInSeconds,
+            Tenant = created.Value,
+            TenantRefusal = created.Refusal?.Message,
+        });
+    }
 }
 
 #region Request/Response DTOs
@@ -1318,4 +1467,39 @@ public class InviteCompleteRequest
     public string ChallengeToken { get; set; } = string.Empty;
 }
 
+public class TenantInviteOptionsRequest
+{
+    public string Token { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string SiteName { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Request to complete a tenant creation invite. The username is re-resolved against the subject
+/// the options step created rather than trusted.
+/// </summary>
+public class TenantInviteCompleteRequest
+{
+    public string Token { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string SiteName { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string AttestationResponseJson { get; set; } = string.Empty;
+    public string ChallengeToken { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// A completed tenant creation invite registration: the new account's session, and the tenant it
+/// owns or why that tenant could not be created.
+/// </summary>
+public class TenantInviteRegistrationResponse : PasskeyRegistrationResponse
+{
+    public TenantCreationInviteRedeemed? Tenant { get; set; }
+
+    public string? TenantRefusal { get; set; }
+}
+
 #endregion
+

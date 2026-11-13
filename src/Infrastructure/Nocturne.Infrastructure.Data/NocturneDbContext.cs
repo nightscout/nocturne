@@ -270,6 +270,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<MemberInviteEntity> MemberInvites { get; set; } = null!;
 
+    public DbSet<TenantCreationInviteEntity> TenantCreationInvites { get; set; } = null!;
+
+    public DbSet<TenantCreationInviteUseEntity> TenantCreationInviteUses { get; set; } = null!;
+
+    public DbSet<PlatformPolicyEntity> PlatformPolicy { get; set; } = null!;
+
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }
@@ -2635,6 +2641,35 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => e.TokenHash).IsUnique();
             entity.HasIndex(e => e.TenantId);
         });
+
+        modelBuilder.Entity<TenantCreationInviteEntity>(entity =>
+        {
+            entity.HasOne(e => e.CreatedBy)
+                .WithMany()
+                .HasForeignKey(e => e.CreatedBySubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Uses)
+                .WithOne()
+                .HasForeignKey(u => u.InviteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<TenantCreationInviteUseEntity>(entity =>
+        {
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.InviteId);
+        });
+
+        modelBuilder.Entity<PlatformPolicyEntity>()
+            .Property(p => p.Id)
+            .ValueGeneratedNever();
 
         modelBuilder.Entity<MembershipRequestEntity>(entity =>
         {

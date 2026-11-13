@@ -213,6 +213,40 @@ public partial class TenantService : ITenantService
         return ToSettingsDto(tenant with { DisplayName = displayName });
     }
 
+    public async Task<SlugValidationResult> ChangeSlugAsync(
+        Guid id, string newSlug, CancellationToken ct = default)
+    {
+        var tenant = await RequireAsync(id, ct);
+        var normalized = newSlug.ToLowerInvariant().Trim();
+
+        if (normalized == tenant.Slug)
+            return new SlugValidationResult(false, "This is already the tenant's subdomain");
+
+        var validation = await ValidateSlugAsync(normalized, ct);
+        if (!validation.IsValid)
+            return validation;
+
+        try
+        {
+            await _tenants.UpdateAsync(id, new TenantEdit(Slug: normalized), ct);
+        }
+        catch (DbUpdateException)
+        {
+            if (!await _tenants.SlugExistsAsync(normalized, CancellationToken.None))
+                throw;
+
+            return new SlugValidationResult(false, "This name is already taken");
+        }
+
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
+        TenantCacheEviction.Evict(_cache, normalized);
+
+        _logger.LogInformation(
+            "Tenant {TenantId} moved from subdomain {OldSlug} to {NewSlug}", id, tenant.Slug, normalized);
+
+        return new SlugValidationResult(true);
+    }
+
     public async Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default) =>
         (await RequireAsync(id, ct)).PatientRelationship;
 

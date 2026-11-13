@@ -191,11 +191,18 @@ public class TenantResolutionMiddleware
         // tenant subdomain yet); the target tenant is resolved from the query string.
         new TenantlessPath("/api/auth/platform-access", Prefix: true),
         new TenantlessPath("/api/v4/admin/demo/", Prefix: true),
+        new TenantlessPath("/api/v4/admin/platform-policy", Prefix: true),
         new TenantlessPath("/api/v4/admin/platform-settings", Prefix: true),
+        new TenantlessPath("/api/v4/admin/tenant-invites", Prefix: true),
         new TenantlessPath("/api/v4/admin/tenants", Prefix: true),
         new TenantlessPath("/api/v4/dev-only/", Prefix: true),
         new TenantlessPath("/api/v4/platform/", Prefix: true),
         new TenantlessPath("/api/v4/setup/", Prefix: true),
+        // Tenant creation invites: the link opens on the bare domain, and creates a tenant that
+        // does not exist yet, so neither the lookups nor the owner's passkey ceremony can resolve
+        // one. With several tenants the bare domain resolves none, so these must be tenantless.
+        new TenantlessPath("/api/v4/tenant-invites/", Prefix: true),
+        new TenantlessPath("/api/auth/passkey/tenant-invite/", HttpMethods.Post, Prefix: true),
         // Cross-tenant overview hub: authorizes a subject in-band and joins per-tenant groups
         // itself, so the connection is negotiated from the apex with no tenant. Prefix, not
         // exact path: SignalR appends /negotiate to the hub path.
