@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -154,6 +155,26 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
             .CarbIntakes.AsNoTracking()
             .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
             .ToListAsync(ct);
+        return entities.Select(CarbIntakeMapper.ToDomainModel).ToList();
+    }
+
+    public async Task<IReadOnlyList<CarbIntake>> GetMealCandidatesAsync(
+        DateTime from,
+        DateTime to,
+        bool demo,
+        CancellationToken ct = default
+    )
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx
+            .CarbIntakes.AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to && e.Carbs > 0);
+
+        query = demo
+            ? query.Where(e => e.DataSource == DataSources.DemoService)
+            : query.Where(e => e.DataSource != DataSources.DemoService);
+
+        var entities = await query.OrderByDescending(e => e.Timestamp).ToListAsync(ct);
         return entities.Select(CarbIntakeMapper.ToDomainModel).ToList();
     }
 }

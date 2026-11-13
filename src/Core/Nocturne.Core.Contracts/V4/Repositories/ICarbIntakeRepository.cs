@@ -70,4 +70,16 @@ public interface ICarbIntakeRepository
         IEnumerable<Guid> correlationIds,
         CancellationToken ct = default
     );
+
+    /// <summary>
+    /// The intakes of more than zero carbs timestamped in [<paramref name="from"/>, <paramref name="to"/>],
+    /// newest first, from the demo source only when <paramref name="demo"/> is set and from every other
+    /// source otherwise. Rows flagged as duplicates are included.
+    /// </summary>
+    Task<IReadOnlyList<CarbIntake>> GetMealCandidatesAsync(
+        DateTime from,
+        DateTime to,
+        bool demo,
+        CancellationToken ct = default
+    );
 }

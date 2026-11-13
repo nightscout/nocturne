@@ -174,4 +174,18 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.SetPatientDeviceIdsAsync<BolusEntity>(patientDeviceIdByRecordId, ct);
     }
+
+    public async Task<Guid?> GetCorrelationIdBySyncKeyAsync(
+        string dataSource,
+        string syncIdentifier,
+        CancellationToken ct = default
+    )
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx
+            .Boluses.AsNoTracking()
+            .Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)
+            .Select(e => e.CorrelationId)
+            .FirstOrDefaultAsync(ct);
+    }
 }
