@@ -72,4 +72,14 @@ public interface IBolusRepository
         Guid correlationId,
         CancellationToken ct = default
     );
+
+    /// <summary>
+    /// The correlation identifier of the live bolus holding <paramref name="dataSource"/> and
+    /// <paramref name="syncIdentifier"/>, or null when none does or it carries none.
+    /// </summary>
+    Task<Guid?> GetCorrelationIdBySyncKeyAsync(
+        string dataSource,
+        string syncIdentifier,
+        CancellationToken ct = default
+    );
 }

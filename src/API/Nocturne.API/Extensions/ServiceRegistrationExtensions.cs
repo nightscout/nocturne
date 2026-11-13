@@ -840,6 +840,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
         services.AddScoped<IConnectorFoodEntryRepository, ConnectorFoodEntryRepository>();
         services.AddScoped<IMealMatchingService, MealMatchingService>();
+        services.AddScoped<IMealReadService, MealReadService>();
 
         // Activity and health metric services
         services.AddScoped<IActivityService, ActivityService>();
