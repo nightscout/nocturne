@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
@@ -100,7 +101,8 @@ public class GoogleHealthSessionStoreTests : IDisposable
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenant.Object,
             TestPlatform.Options(),
-            NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+            NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
         return new GoogleHealthSessionStore(
             configurations.Object, oauth, holders.Object, tenant.Object, TestPlatform.Options(),
             NullLogger<GoogleHealthSessionStore>.Instance, revokeTimeout);

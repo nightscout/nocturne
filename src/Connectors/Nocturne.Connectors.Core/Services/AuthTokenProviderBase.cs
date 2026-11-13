@@ -20,7 +20,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
     IConnectorTokenCache tokenCache,
     IConnectorServerResolver<TConfig> serverResolver,
     ITenantAccessor tenantAccessor,
-    ILogger logger)
+    ILogger logger,
+    IRetryDelayStrategy retryDelayStrategy)
     : IAuthTokenProvider, IDisposable
     where TConfig : BaseConnectorConfiguration
 {
@@ -29,6 +30,13 @@ public abstract class AuthTokenProviderBase<TConfig>(
     protected readonly IConnectorServerResolver<TConfig> _serverResolver = serverResolver ?? throw new ArgumentNullException(nameof(serverResolver));
     protected readonly ITenantAccessor _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
     protected readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+    /// <summary>
+    ///     The delay between login attempts of <see cref="ExecuteWithRetryAsync{T}"/>, for a provider
+    ///     that runs <see cref="ConnectorRetryLoop"/> itself.
+    /// </summary>
+    protected IRetryDelayStrategy RetryDelayStrategy { get; } =
+        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
     private bool _disposed;
 
     /// <summary>
@@ -301,7 +309,6 @@ public abstract class AuthTokenProviderBase<TConfig>(
     /// <param name="maxRetries">Total attempts, not retries on top of a first try; clamped to a floor of one.</param>
     protected async Task<T?> ExecuteWithRetryAsync<T>(
         Func<int, Task<(T? Result, bool ShouldRetry)>> operation,
-        IRetryDelayStrategy retryDelayStrategy,
         int maxRetries,
         string operationName,
         CancellationToken cancellationToken)
@@ -364,7 +371,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
                     return RetryStep<T>.Complete(default);
                 }
             },
-            retryDelayStrategy,
+            RetryDelayStrategy,
             maxRetries,
             attempts =>
             {

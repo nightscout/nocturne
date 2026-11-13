@@ -68,6 +68,7 @@ public class PublishRecordTypePathTests
             : base(new HttpClient(),
                 new ConnectorServerResolver<TestConfig>(null, null, null),
                 logger ?? NullLogger<TestConnectorService>.Instance,
+                new RecordingRetryDelayStrategy(),
                 PublisherAnswering(behaviour))
         {
             _syncBody = syncBody;

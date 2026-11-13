@@ -1850,7 +1850,8 @@ public class GoogleHealthTests : IDisposable
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenant.Object,
             platformOptions,
-            NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+            NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
         var patientRecords = new Mock<IPatientRecordRepository>();
         patientRecords.Setup(value => value.GetAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(sex is null ? null : new Nocturne.Core.Models.V4.PatientRecord { Sex = sex });

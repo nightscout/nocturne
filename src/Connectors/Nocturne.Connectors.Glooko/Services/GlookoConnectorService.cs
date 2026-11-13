@@ -23,12 +23,11 @@ namespace Nocturne.Connectors.Glooko.Services;
 ///     Connector service for Glooko data source.
 ///     Based on the original nightscout-connect Glooko implementation.
 /// </summary>
-public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfiguration>
+public class GlookoConnectorService
+    : TokenConnectorService<GlookoConnectorConfiguration, GlookoAuthTokenProvider>
 {
     private readonly IConnectorPublisher? _connectorPublisher;
     private readonly IMealMatchingService? _mealMatchingService;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly GlookoAuthTokenProvider _tokenProvider;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
     private readonly IConnectorSyncCursorStore? _cursorStore;
@@ -53,12 +52,10 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         TimeProvider? timeProvider = null,
         TimeSpan? endpointPause = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
         _connectorPublisher = publisher;
         _mealMatchingService = mealMatchingService;
-        _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _timezoneTimelineService = timezoneTimelineService;
         _deviceClockService = deviceClockService;
         _cursorStore = cursorStore;
@@ -73,18 +70,15 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     private async Task<bool> AuthenticateWithConfigAsync(GlookoSyncContext context)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(context.Config, context.CancellationToken);
-        if (token == null)
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        var token = await ValidTokenAsync(context.Config, context.CancellationToken);
+        if (token is null)
             return false;
-        }
 
         // The token IS the session cookie for Glooko
         context.SessionCookie = token;
 
         // Retrieve user data from cache metadata via the token provider's public accessor
-        var cached = await _tokenProvider.GetCachedSessionAsync();
+        var cached = await TokenProvider.GetCachedSessionAsync();
         if (cached?.Metadata != null && cached.Metadata.TryGetValue("UserData", out var userDataJson))
         {
             context.UserData = JsonSerializer.Deserialize<GlookoUserData>(userDataJson);
@@ -234,7 +228,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
                 return RetryStep<JsonElement?>.RetryAfterDelay;
             },
-            _retryDelayStrategy,
+            RetryDelayStrategy,
             maxRetries,
             attempts =>
             {
@@ -392,7 +386,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                         + "Invalidating it and re-authenticating.",
                         ConnectorSource, context.PatientCode);
 
-                    _tokenProvider.InvalidateToken();
+                    TokenProvider.InvalidateToken();
                     context.ClearSessionAndProfile();
 
                     if (!await AuthenticateWithConfigAsync(context))

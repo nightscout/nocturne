@@ -22,13 +22,11 @@ public class CareLinkAuthTokenProvider(
     ILogger<CareLinkAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy,
     TimeProvider timeProvider)
-    : AuthTokenProviderBase<CareLinkConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    : AuthTokenProviderBase<CareLinkConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     private readonly TimeProvider _timeProvider =
         timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     /// <summary>
     ///     Per-tenant state seeded by <see cref="InitializeFromSecrets"/>.
@@ -136,7 +134,7 @@ public class CareLinkAuthTokenProvider(
                 var login = await authFlow.LoginAsync(config.Username, config.Password!, config.Server, cancellationToken);
                 return (login.Result, login.ShouldRetry);
             },
-            _retryDelayStrategy, maxRetries, "CareLink credential login", cancellationToken);
+            maxRetries, "CareLink credential login", cancellationToken);
 
         if (result == null) return (null, DateTime.MinValue, null);
 
@@ -207,7 +205,7 @@ public class CareLinkAuthTokenProvider(
                     ? RetryStep<RefreshResult>.RetryAfterDelay
                     : RetryStep<RefreshResult>.Complete(attempt);
             },
-            _retryDelayStrategy,
+            RetryDelayStrategy,
             maxAttempts,
             _ => new RefreshResult(RefreshOutcome.Unavailable, null, DateTime.MinValue, null),
             ct);

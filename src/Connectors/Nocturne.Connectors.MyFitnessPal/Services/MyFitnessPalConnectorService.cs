@@ -24,10 +24,9 @@ namespace Nocturne.Connectors.MyFitnessPal.Services;
 /// Reads the authenticated user's own diary through the mobile Apollo "query-envoy" GraphQL API,
 /// which works for private diaries and is reachable where the <c>www</c> host is Cloudflare-blocked.
 /// </summary>
-public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalConnectorConfiguration>
+public class MyFitnessPalConnectorService
+    : TokenConnectorService<MyFitnessPalConnectorConfiguration, MyFitnessPalAuthTokenProvider>
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly MyFitnessPalAuthTokenProvider _tokenProvider;
     private readonly IConnectorConfigurationService _configService;
     private readonly MyFitnessPalFoodEntryMapper _mapper;
 
@@ -44,11 +43,8 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _retryDelayStrategy =
-            retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _configService = configService ?? throw new ArgumentNullException(nameof(configService));
         _mapper = new MyFitnessPalFoodEntryMapper(logger);
     }
@@ -170,14 +166,11 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         MyFitnessPalConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token))
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        var token = await ValidTokenAsync(config, cancellationToken);
+        if (token is null)
             return false;
-        }
 
-        var session = await _tokenProvider.GetCachedSessionAsync();
+        var session = await TokenProvider.GetCachedSessionAsync();
         var metadata = session?.Metadata;
 
         _accessToken = token;
@@ -232,7 +225,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             var cursor = before;
             var connection = await ExecuteWithRetryAsync(
                 async () => await FetchDiaryPageAsync(cursor, cancellationToken),
-                _retryDelayStrategy,
                 maxRetries: config.MaxRetryAttempts,
                 operationName: "FetchMyFitnessPalDiaryPage",
                 cancellationToken: cancellationToken
@@ -441,7 +433,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 // Same reasoning as the GraphQL path: only a 401 drops the token, since a 403 here
                 // is more likely a WAF block.
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
-                    _tokenProvider.InvalidateToken();
+                    TokenProvider.InvalidateToken();
 
                 _logger.LogWarning(
                     "MyFitnessPal diary for {Date} returned HTTP {StatusCode}",
@@ -506,7 +498,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             // a 403 here is more likely a WAF block, and re-minting a good token every cycle
             // risks MyFitnessPal rate-limiting the login itself.
             if (response.StatusCode == HttpStatusCode.Unauthorized)
-                _tokenProvider.InvalidateToken();
+                TokenProvider.InvalidateToken();
 
             _logger.LogError(
                 "MyFitnessPal GraphQL returned HTTP {StatusCode}: {ResponseBody}",

@@ -20,11 +20,9 @@ namespace Nocturne.Connectors.Tandem.Services;
 /// and CGM-session device events, pump suspend/resume, alarms, CGM alerts, sleep/exercise spans,
 /// device status, and profiles.
 /// </summary>
-public class TandemConnectorService : BaseConnectorService<TandemConnectorConfiguration>
+public class TandemConnectorService
+    : TokenConnectorService<TandemConnectorConfiguration, TandemAuthTokenProvider>
 {
-
-    private readonly TandemAuthTokenProvider _tokenProvider;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TandemSourceApiClient _apiClient;
     private readonly IConnectorSyncCursorStore? _cursorStore;
 
@@ -37,11 +35,9 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         IConnectorPublisher? publisher = null,
         IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? timeProvider = null)
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
         _cursorStore = cursorStore;
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
-        _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _apiClient = new TandemSourceApiClient(httpClient, logger);
     }
 
@@ -60,10 +56,16 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
         try
         {
-            var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-            var session = await _tokenProvider.GetCachedSessionAsync();
+            var token = await ValidTokenAsync(config, cancellationToken);
+            if (token is null)
+            {
+                _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
+                return AuthenticationFailedResult();
+            }
+
+            var session = await TokenProvider.GetCachedSessionAsync();
             var pumperId = session?.Metadata?.GetValueOrDefault(TandemAuthTokenProvider.PumperIdKey);
-            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(pumperId))
+            if (string.IsNullOrEmpty(pumperId))
             {
                 _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
                 result.Success = false;
@@ -368,15 +370,14 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         DateTime windowStart, DateTime windowEnd, int[]? eventIdsFilter,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
+        var token = await TokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (string.IsNullOrEmpty(token))
             return null;
 
         return await ExecuteWithRetryAsync(
             () => _apiClient.GetPumpLogsAsync(
                 region, token!, pumperId, deviceAssignmentId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
-            _retryDelayStrategy,
-            ReauthenticateWith(_tokenProvider, config, t => token = t, cancellationToken),
+            ReauthenticateWith(config, t => token = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchPumpEvents",
             cancellationToken: cancellationToken);

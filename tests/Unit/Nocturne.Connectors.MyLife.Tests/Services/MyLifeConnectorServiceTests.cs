@@ -44,11 +44,11 @@ public class MyLifeConnectorServiceTests
     }
 
     [Fact]
-    public async Task SyncDataAsync_ReportsAuthFailure_WhenLoginFails()
+    public async Task SyncDataAsync_LoginRefused_ReportsTheProvidersSignInReason()
     {
         var tenantId = Guid.NewGuid();
         using var http = new HttpClient(new SoapStubHandler(loginSucceeds: false));
-        var (service, sessionCache, _) = MyLifeSyncHarness.BuildService(http, tenantId);
+        var (service, sessionCache, tokenProvider) = MyLifeSyncHarness.BuildService(http, tenantId);
 
         var config = new MyLifeConnectorConfiguration
         {
@@ -61,8 +61,35 @@ public class MyLifeConnectorServiceTests
         var result = await service.SyncDataAsync(request, config, CancellationToken.None);
 
         result.Success.Should().BeFalse("a failed login must surface as an unhealthy sync");
-        result.Errors.Should().Contain(e => e.Contains("auth", StringComparison.OrdinalIgnoreCase));
+        tokenProvider.SignInFailureReason.Should().Contain("did not accept this sign-in");
+        result.Message.Should().Be(tokenProvider.SignInFailureReason,
+            "the tenant is told what to fix, not to read the connector logs");
+        result.Errors.Should().ContainSingle().Which.Should().Be(tokenProvider.SignInFailureReason);
         sessionCache.Get(tenantId).Should().BeNull("no session must be cached when login fails");
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_TokenCachedButSessionLost_ReportsTheMissingSession()
+    {
+        var tenantId = Guid.NewGuid();
+        using var http = new HttpClient(new SoapStubHandler(loginSucceeds: true));
+        var (service, sessionCache, tokenProvider) = MyLifeSyncHarness.BuildService(http, tenantId);
+        var config = new MyLifeConnectorConfiguration
+        {
+            Username = "user@example.com",
+            Password = "secret",
+            PatientId = "patient-1"
+        };
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose] };
+        await service.SyncDataAsync(request, config, CancellationToken.None);
+        sessionCache.Invalidate("MyLife", tenantId);
+
+        var result = await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        tokenProvider.IsTokenExpired.Should().BeFalse("the token itself is still cached");
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be("MyLife authentication failed; see connector logs for the failing step");
     }
 
     /// <summary>

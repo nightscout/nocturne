@@ -17,11 +17,10 @@ namespace Nocturne.Connectors.Dexcom.Services;
 /// <summary>
 ///     Connector service for Dexcom Share data source.
 /// </summary>
-public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfiguration>
+public class DexcomConnectorService
+    : TokenConnectorService<DexcomConnectorConfiguration, DexcomAuthTokenProvider>
 {
     private readonly DexcomSensorGlucoseMapper _sensorGlucoseMapper;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly DexcomAuthTokenProvider _tokenProvider;
 
     public DexcomConnectorService(
         HttpClient httpClient,
@@ -32,12 +31,8 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _retryDelayStrategy =
-            retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _tokenProvider =
-            tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _sensorGlucoseMapper = new DexcomSensorGlucoseMapper(logger);
     }
 
@@ -78,11 +73,8 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
             return result;
         }
 
-        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        if (await ValidTokenAsync(config, cancellationToken) is null)
             return AuthenticationFailedResult();
-        }
 
         try
         {
@@ -102,21 +94,19 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
     private async Task<DexcomEntry[]?> FetchBatchDataAsync(
         DexcomConnectorConfiguration config, DateTime? since, CancellationToken cancellationToken)
     {
-        var sessionId = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(sessionId))
+        var sessionId = await ValidTokenAsync(config, cancellationToken);
+        if (sessionId is null)
         {
             _logger.LogWarning(
                 "[{ConnectorSource}] Failed to get valid session, authentication failed",
                 ConnectorSource
             );
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 
         var fetched = await ExecuteWithRetryAsync(
             async () => await FetchRawDataCoreAsync(config, sessionId, since, cancellationToken),
-            _retryDelayStrategy,
-            ReauthenticateWith(_tokenProvider, config, t => sessionId = t, cancellationToken),
+            ReauthenticateWith(config, t => sessionId = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchDexcomData",
             cancellationToken: cancellationToken

@@ -27,6 +27,7 @@ public class ConnectorPublishRoutesTests
             new HttpClient(),
             new ConnectorServerResolver<TestConfig>(null, null, null),
             NullLogger<TestConnectorService>.Instance,
+            new RecordingRetryDelayStrategy(),
             publisher)
     {
         protected override string ConnectorSource => "test";

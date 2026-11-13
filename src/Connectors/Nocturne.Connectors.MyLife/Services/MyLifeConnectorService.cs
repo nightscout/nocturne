@@ -22,6 +22,7 @@ public class MyLifeConnectorService(
     HttpClient httpClient,
     IConnectorServerResolver<MyLifeConnectorConfiguration> serverResolver,
     ILogger<MyLifeConnectorService> logger,
+    IRetryDelayStrategy retryDelayStrategy,
     MyLifeAuthTokenProvider tokenProvider,
     MyLifeEventProcessor eventProcessor,
     IMyLifeSessionCache sessionCache,
@@ -29,7 +30,8 @@ public class MyLifeConnectorService(
     MyLifeSyncService syncService,
     IConnectorPublisher? publisher = null,
     TimeProvider? timeProvider = null
-) : BaseConnectorService<MyLifeConnectorConfiguration>(httpClient, serverResolver, logger, publisher, timeProvider)
+) : TokenConnectorService<MyLifeConnectorConfiguration, MyLifeAuthTokenProvider>(
+    httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
 {
 
     public override string ServiceName => "MyLife";
@@ -89,11 +91,16 @@ public class MyLifeConnectorService(
             // provider) performs the SOAP login and populates the session cache as a side effect;
             // the token is cached so subsequent cycles reuse it. Without this call the session cache
             // is never populated and every sync fails with "session not established".
-            var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
+            if (await ValidTokenAsync(config, cancellationToken) is null)
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Sync failed: MyLife authentication unsuccessful",
+                    ConnectorSource);
+                return AuthenticationFailedResult();
+            }
 
             var session = sessionCache.Get(tenantAccessor.TenantId);
-            if (string.IsNullOrEmpty(token)
-                || session == null
+            if (session == null
                 || string.IsNullOrWhiteSpace(session.ServiceUrl)
                 || string.IsNullOrWhiteSpace(session.AuthToken)
                 || string.IsNullOrWhiteSpace(session.PatientId))
@@ -235,7 +242,7 @@ public class MyLifeConnectorService(
             // A token MyLife has already rejected would otherwise stay cached until its nominal
             // 24-hour expiry, failing every sync in between.
             if (ex is HttpRequestException { StatusCode: HttpStatusCode.Unauthorized })
-                tokenProvider.InvalidateToken();
+                TokenProvider.InvalidateToken();
 
             RecordSyncError(result, ex);
         }

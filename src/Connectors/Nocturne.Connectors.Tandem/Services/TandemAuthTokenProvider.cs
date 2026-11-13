@@ -24,12 +24,10 @@ public class TandemAuthTokenProvider(
     ILogger<TandemAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null)
-    : AuthTokenProviderBase<TandemConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    : AuthTokenProviderBase<TandemConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     /// <summary>Metadata key under which the resolved pumper id is cached alongside the token.</summary>
     public const string PumperIdKey = "PumperId";
@@ -63,7 +61,6 @@ public class TandemAuthTokenProvider(
                 metadata = signIn.Metadata;
                 return (signIn.Token, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Tandem Source authentication",
             cancellationToken);

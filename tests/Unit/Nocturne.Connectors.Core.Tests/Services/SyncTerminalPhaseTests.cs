@@ -28,6 +28,7 @@ public class SyncTerminalPhaseTests
             : base(new HttpClient(),
                 new ConnectorServerResolver<TestConfig>(null, null, null),
                 NullLogger<TestConnectorService>.Instance,
+                new RecordingRetryDelayStrategy(),
                 timeProvider: timeProvider)
         {
             _syncBody = syncBody;

@@ -1005,7 +1005,8 @@ public class GoogleHealthConnectorServiceTests
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 tenant.Object,
                 TestPlatform.Options(),
-                NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+                NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+                Mock.Of<IRetryDelayStrategy>());
             Service = new GoogleHealthConnectorService(
                 new HttpClient(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
@@ -1019,7 +1020,9 @@ public class GoogleHealthConnectorServiceTests
                 cursorStore.Object,
                 tenant.Object,
                 loader.Object,
-                NullLogger<GoogleHealthConnectorService>.Instance, timeProvider: timeProvider);
+                NullLogger<GoogleHealthConnectorService>.Instance,
+                Mock.Of<IRetryDelayStrategy>(),
+                timeProvider: timeProvider);
         }
 
         public GoogleHealthConnectorService Service { get; }
