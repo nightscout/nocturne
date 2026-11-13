@@ -581,6 +581,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity), typeof(ProfileActivationEntity)];
 
     /// <summary>
+    /// Tables whose <see cref="ILegacyIdentified.LegacyId"/> is the re-import key, each with the
+    /// unique legacy-id index and its user-tombstone companion: <see cref="V4LegacyIdRecordEntities"/>
+    /// and <see cref="StateSpanEntity"/>, which carries no decomposition correlation.
+    /// </summary>
+    internal static readonly Type[] LegacyIdKeyedEntities =
+        [.. V4LegacyIdRecordEntities, typeof(StateSpanEntity)];
+
+    /// <summary>
     /// Tables looked up by the decomposition correlation, adding
     /// <see cref="DeviceStatusExtrasEntity"/> — which carries the correlation but no legacy id
     /// (see its <see cref="DeviceStatusExtrasEntity.CorrelationId"/>), so it cannot ride the
@@ -683,13 +691,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(DeviceEventEntity),
         .. V4SnapshotEntities,
     ];
-
-    /// <summary>
-    /// Tables whose <see cref="IOriginalIdentified.OriginalId"/> is the re-import key. No unique index
-    /// backs it, so a restore checks for a live holder itself
-    /// (<see cref="Extensions.SoftDeleteRestoreExtensions"/>).
-    /// </summary>
-    internal static readonly Type[] OriginalIdKeyedEntities = [typeof(StateSpanEntity)];
 
     /// <summary>
     /// The marker-declared timestamp columns, by the marker that declares them. Every column here
@@ -850,12 +851,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         // The legacy-id uniqueness must drop soft-deleted rows, or the next resync of a
         // system-swept legacy id is a 23505 — see SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync.
-        foreach (var entity in V4LegacyIdRecordEntities.Select(t => modelBuilder.Entity(t)))
+        foreach (var entity in LegacyIdKeyedEntities.Select(t => modelBuilder.Entity(t)))
         {
-            entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId))
+            entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId))
                 .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_legacy_id")
                 .IsUnique()
-                .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+                .HasFilter($"{LegacyIdColumn(entity)} IS NOT NULL AND deleted_at IS NULL");
         }
 
         // GetBlockingLegacyIdsAsync also wants the user tombstones, which the unique index above
@@ -865,19 +866,25 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         // only, not every soft-deleted row, because that is the arm the OR asks for; on production
         // that is 1.5% of sensor_glucose and at most 15% of any table. Named, because an unnamed HasIndex on the same
         // columns would reconfigure the unique index instead of adding this one.
-        foreach (var entity in V4LegacyIdRecordEntities.Select(t => modelBuilder.Entity(t)))
+        foreach (var entity in LegacyIdKeyedEntities.Select(t => modelBuilder.Entity(t)))
         {
             var name = $"ix_{entity.Metadata.GetTableName()}_tenant_legacy_id_user_deleted";
-            entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)], name)
+            entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)], name)
                 .HasDatabaseName(name)
-                .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
+                .HasFilter($"{LegacyIdColumn(entity)} IS NOT NULL AND deleted_by_user");
         }
 
         // The legacy treatment read stamps a record with the Note beside it, deleted or not, on every
         // page it serves, and both legacy-id indexes above skip a system-deleted Note.
         modelBuilder.Entity<NoteEntity>()
-            .HasIndex([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)], "ix_notes_tenant_legacy_id_any")
+            .HasIndex([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)], "ix_notes_tenant_legacy_id_any")
             .HasDatabaseName("ix_notes_tenant_legacy_id_any");
+
+        // StateSpanRepository.ResolveDeletedAsync looks a deleted span up by id whichever way it was
+        // deleted, and both legacy-id indexes above skip a system-deleted span.
+        modelBuilder.Entity<StateSpanEntity>()
+            .HasIndex([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)], "ix_state_spans_tenant_legacy_id_any")
+            .HasDatabaseName("ix_state_spans_tenant_legacy_id_any");
 
         // Matches HistoryPage's (sys_updated_at, id) order under the tenant filter, so a poll reads
         // its page off the index instead of sorting the tenant's whole table. Not partial on
@@ -1450,11 +1457,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(s => new { s.TenantId, s.Category, s.UpdatedAt, s.Id })
             .HasDatabaseName("ix_state_spans_tenant_category_updated_at")
             .HasFilter("deleted_at IS NULL");
-
-        modelBuilder
-            .Entity<StateSpanEntity>()
-            .HasIndex(s => s.OriginalId)
-            .HasDatabaseName("ix_state_spans_original_id");
 
         modelBuilder
             .Entity<StateSpanEntity>()
@@ -2156,6 +2158,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         entity.Property<Guid>(nameof(ITenantScoped.TenantId)).HasValueGenerator<ResolvedTenantValueGenerator>();
         entity.Property<Guid>("Id").ValueGeneratedOnAdd();
     }
+
+    /// <summary>
+    /// The column <see cref="ILegacyIdentified.LegacyId"/> maps to: <c>legacy_id</c>, except on
+    /// <c>state_spans</c>, which keeps <c>original_id</c>.
+    /// </summary>
+    private static string LegacyIdColumn(EntityTypeBuilder entity)
+        => entity.Property(nameof(ILegacyIdentified.LegacyId)).Metadata.GetColumnName();
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
     {

@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.14")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -4637,14 +4637,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_duplicate");
 
-                    b.Property<string>("MetadataJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("metadata");
-
-                    b.Property<string>("OriginalId")
+                    b.Property<string>("LegacyId")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("original_id");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata");
 
                     b.Property<string>("Source")
                         .HasMaxLength(50)
@@ -4680,9 +4680,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_state_spans_end_timestamp")
                         .HasFilter("end_timestamp IS NULL");
 
-                    b.HasIndex("OriginalId")
-                        .HasDatabaseName("ix_state_spans_original_id");
-
                     b.HasIndex("Source")
                         .HasDatabaseName("ix_state_spans_source");
 
@@ -4693,6 +4690,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Category", "StartTimestamp")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_state_spans_category_start");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_state_spans_tenant_legacy_id")
+                        .HasFilter("original_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "SupersededById")
                         .HasDatabaseName("ix_state_spans_tenant_id_superseded_by_id");
@@ -4709,6 +4711,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "Source", "Category", "StartTimestamp")
                         .IsDescending(false, false, false, true)
                         .HasDatabaseName("ix_state_spans_tenant_source_category_start");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_state_spans_tenant_legacy_id_any")
+                        .HasDatabaseName("ix_state_spans_tenant_legacy_id_any");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_state_spans_tenant_legacy_id_user_deleted")
+                        .HasDatabaseName("ix_state_spans_tenant_legacy_id_user_deleted")
+                        .HasFilter("original_id IS NOT NULL AND deleted_by_user");
 
                     b.ToTable("state_spans");
                 });

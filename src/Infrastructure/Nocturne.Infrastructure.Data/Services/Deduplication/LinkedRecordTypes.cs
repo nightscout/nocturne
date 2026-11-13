@@ -163,38 +163,27 @@ public static class LinkedRecordTypes
             RecordType.Note => LoadAsync<NoteEntity>(db, MatchCriteriaMapper.From, ids, token),
             RecordType.BolusCalculation => LoadAsync<BolusCalculationEntity>(db, MatchCriteriaMapper.From, ids, token),
             RecordType.TempBasal => LoadAsync<TempBasalEntity>(db, MatchCriteriaMapper.From, ids, token),
-            RecordType.StateSpan => LoadStateSpanInfoAsync(db, ids, token),
+            RecordType.StateSpan => LoadAsync<StateSpanEntity>(
+                db, MatchCriteriaMapper.From, ids, token, s => new SpanEnd(s.SupersededById, s.EndTimestamp)),
             _ => Task.FromResult(new Dictionary<Guid, RecordInfo>()),
         }, ct);
     }
 
     /// <summary>
-    /// Loads the criteria and soft-deleted status of every requested row of one entity type.
+    /// Loads the criteria and soft-deleted status of every requested row of one entity type, and,
+    /// for a span-shaped type, how each row ended.
     /// </summary>
     private static async Task<Dictionary<Guid, RecordInfo>> LoadAsync<TEntity>(
         NocturneDbContext db,
-        Func<TEntity, MatchCriteria> toCriteria, HashSet<Guid> ids, CancellationToken ct)
-        where TEntity : class, IV4Entity
+        Func<TEntity, MatchCriteria> toCriteria, HashSet<Guid> ids, CancellationToken ct,
+        Func<TEntity, SpanEnd>? spanEnd = null)
+        where TEntity : class, ITenantScoped, ISoftDeletable, IIdentified
     {
         var records = await db.Set<TEntity>().AsNoTracking().IgnoreQueryFilters()
             .Where(e => e.TenantId == db.TenantId && ids.Contains(e.Id)).ToListAsync(ct);
-        return records.ToDictionary(e => e.Id, e => new RecordInfo(toCriteria(e), e.DeletedAt != null));
-    }
-
-    /// <summary>
-    /// State spans are loaded apart from <see cref="LoadAsync{TEntity}"/> because
-    /// <see cref="StateSpanEntity"/> is keyed by <c>OriginalId</c> rather than the
-    /// <c>LegacyId</c> that <see cref="IV4Entity"/> requires.
-    /// </summary>
-    private static async Task<Dictionary<Guid, RecordInfo>> LoadStateSpanInfoAsync(
-        NocturneDbContext db,
-        HashSet<Guid> ids, CancellationToken ct)
-    {
-        var records = await db.StateSpans.AsNoTracking().IgnoreQueryFilters()
-            .Where(s => s.TenantId == db.TenantId && ids.Contains(s.Id)).ToListAsync(ct);
-        return records.ToDictionary(s => s.Id,
-            s => new RecordInfo(
-                MatchCriteriaMapper.From(s), s.DeletedAt != null, new SpanEnd(s.SupersededById, s.EndTimestamp)));
+        return records.ToDictionary(
+            e => e.Id,
+            e => new RecordInfo(toCriteria(e), e.DeletedAt != null, spanEnd?.Invoke(e) ?? default));
     }
 
     /// <summary>Rows <see cref="TypePhase.Pages"/> reads per page.</summary>

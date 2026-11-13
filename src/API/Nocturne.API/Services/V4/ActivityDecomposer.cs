@@ -234,7 +234,7 @@ public class ActivityDecomposer : IActivityDecomposer
         var recordId = RecordIdKey.ParseIdToGuid(id);
 
         return await db.UserTombstones<StateSpanEntity>().AnyAsync(
-                s => ActivityCategoryNames.Contains(s.Category) && (s.OriginalId == id || s.Id == recordId), ct)
+                s => ActivityCategoryNames.Contains(s.Category) && (s.LegacyId == id || s.Id == recordId), ct)
             || await db.UserTombstones<SleepSessionEntity>().AnyAsync(
                 s => s.OriginalId == id || s.Id == recordId, ct)
             || await db.UserTombstones<HeartRateEntity>().AnyAsync(

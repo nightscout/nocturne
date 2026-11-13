@@ -1,16 +1,11 @@
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// Marker for V4 clinical entities that participate in tenant-scoped soft-delete
-/// dedup. Implementations expose <see cref="IIdentified.Id"/>, <see cref="LegacyId"/>,
-/// <see cref="CorrelationId"/>, <see cref="ITenantScoped.TenantId"/>, and
-/// <see cref="ISoftDeletable.DeletedAt"/>.
+/// Marker for V4 clinical entities: <see cref="ILegacyIdentified"/> rows that also carry the
+/// <see cref="CorrelationId"/> linking the records one legacy upload was decomposed into.
 /// </summary>
-public interface IV4Entity : ITenantScoped, ISoftDeletable, IIdentified
+public interface IV4Entity : ILegacyIdentified
 {
-    /// <summary>The record's legacy (Nightscout/MongoDB) identifier, kept for v1-v3 round-tripping.</summary>
-    string? LegacyId { get; set; }
-
     /// <summary>Links records decomposed from the same legacy Treatment or DeviceStatus.</summary>
     Guid? CorrelationId { get; set; }
 }

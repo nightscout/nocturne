@@ -48,22 +48,22 @@ public class ModelConventionTests
                 && i.GetFilter() is null);
 
     [Fact]
-    public void EveryV4RecordTable_HasTheLiveLegacyIdUniqueIndex() =>
+    public void EveryLegacyIdKeyedTable_HasTheLiveLegacyIdUniqueIndex() =>
         AssertFamily(
-            NocturneDbContext.V4LegacyIdRecordEntities,
+            NocturneDbContext.LegacyIdKeyedEntities,
             "_tenant_legacy_id",
-            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)])
+            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)])
                 && i.IsUnique
-                && i.GetFilter() == "legacy_id IS NOT NULL AND deleted_at IS NULL");
+                && i.GetFilter() == $"{i.Properties[1].GetColumnName()} IS NOT NULL AND deleted_at IS NULL");
 
     [Fact]
-    public void EveryV4LegacyIdRecordTable_HasTheUserTombstoneLegacyIdIndex() =>
+    public void EveryLegacyIdKeyedTable_HasTheUserTombstoneLegacyIdIndex() =>
         AssertFamily(
-            NocturneDbContext.V4LegacyIdRecordEntities,
+            NocturneDbContext.LegacyIdKeyedEntities,
             "_tenant_legacy_id_user_deleted",
-            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)])
+            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)])
                 && !i.IsUnique
-                && i.GetFilter() == "legacy_id IS NOT NULL AND deleted_by_user");
+                && i.GetFilter() == $"{i.Properties[1].GetColumnName()} IS NOT NULL AND deleted_by_user");
 
     [Fact]
     public void EverySyncDedupedTable_HasTheUserTombstoneSyncKeyIndex() =>

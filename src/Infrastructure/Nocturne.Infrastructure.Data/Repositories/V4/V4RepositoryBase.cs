@@ -496,9 +496,9 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         var schema = entityType.GetSchema();
         var table = schema is null ? tableName : SqlIdentifier.Require(schema, nameof(TEntity)) + "." + tableName;
         var column = SqlIdentifier.Require(
-            entityType.FindProperty(nameof(IV4Entity.LegacyId))!
+            entityType.FindProperty(nameof(ILegacyIdentified.LegacyId))!
                 .GetColumnName(StoreObjectIdentifier.Table(tableName, schema))!,
-            nameof(IV4Entity.LegacyId));
+            nameof(ILegacyIdentified.LegacyId));
 
         var sql = "SELECT * FROM " + table + " WHERE "
             + "encode(substring(sha256(convert_to(" + column + ", 'UTF8')) FROM 1 FOR 12), 'hex') = {0}";

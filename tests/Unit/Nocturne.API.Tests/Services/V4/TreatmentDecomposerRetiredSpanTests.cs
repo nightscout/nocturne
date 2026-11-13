@@ -75,7 +75,7 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
         }, WriteOrigin.Live);
 
         result.SkippedDeleted.Should().Be(blocks ? 1 : 0);
-        (await _context.StateSpans.AsNoTracking().CountAsync(s => s.OriginalId == Id)).Should().Be(blocks ? 0 : 1);
+        (await _context.StateSpans.AsNoTracking().CountAsync(s => s.LegacyId == Id)).Should().Be(blocks ? 0 : 1);
     }
 
     [Theory]
@@ -98,7 +98,7 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
             Category = category,
             State = "Active",
             Source = "AAPS",
-            OriginalId = Id,
+            LegacyId = Id,
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
         };
         _context.StateSpans.Add(span);

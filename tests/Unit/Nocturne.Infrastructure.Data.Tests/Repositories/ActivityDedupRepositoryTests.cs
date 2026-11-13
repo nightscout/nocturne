@@ -32,7 +32,7 @@ public class ActivityDedupRepositoryTests : IDisposable
     private static StateSpanEntity Span(string id) => new()
     {
         Id = Guid.CreateVersion7(), Category = "Exercise", State = "exercise", StartTimestamp = Stamp,
-        Source = "connector", OriginalId = id,
+        Source = "connector", LegacyId = id,
     };
 
     private static HeartRateEntity Heart(string id) => new()
