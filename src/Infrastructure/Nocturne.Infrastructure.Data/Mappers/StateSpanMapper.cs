@@ -16,7 +16,7 @@ public static class StateSpanMapper
     {
         return new StateSpanEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(stateSpan.Id),
+            Id = RecordIdKey.ParseIdToGuid(stateSpan.Id),
             Category = stateSpan.Category.ToString(),
             State = stateSpan.State ?? string.Empty,
             StartTimestamp = stateSpan.StartTimestamp,
@@ -27,7 +27,7 @@ public static class StateSpanMapper
                 : null,
             OriginalId = stateSpan.OriginalId,
             SupersededById = !string.IsNullOrEmpty(stateSpan.SupersededById)
-                ? MapperHelpers.ParseIdToGuid(stateSpan.SupersededById)
+                ? RecordIdKey.ParseIdToGuid(stateSpan.SupersededById)
                 : null,
         };
     }

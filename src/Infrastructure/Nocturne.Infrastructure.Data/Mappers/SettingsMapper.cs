@@ -17,7 +17,7 @@ public static class SettingsMapper
     {
         return new SettingsEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(settings.Id),
+            Id = RecordIdKey.ParseIdToGuid(settings.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(settings.Id) ? settings.Id : null,
             Key = settings.Key,
             Value = settings.Value != null ? JsonSerializer.Serialize(settings.Value) : null,

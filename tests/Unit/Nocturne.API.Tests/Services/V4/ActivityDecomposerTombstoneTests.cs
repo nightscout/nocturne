@@ -163,6 +163,140 @@ public class ActivityDecomposerTombstoneTests : IDisposable
         _context.HeartRates.IgnoreQueryFilters().Should().HaveCount(2);
     }
 
+    public static TheoryData<string> NonMongoIds => new()
+    {
+        "6f1b1f0e-3c5a-4e0a-9d52-1b7a0c1f2e33",
+        "uploader-hr-0001",
+    };
+
+    [Theory]
+    [MemberData(nameof(NonMongoIds))]
+    public async Task DecomposeBatchAsync_UpdatesAHeartRateReSentUnderANonMongoId(string id)
+    {
+        await _decomposer.DecomposeBatchAsync([HeartRate(id)], WriteOrigin.Live);
+        _context.ChangeTracker.Clear();
+
+        var resend = HeartRate(id);
+        resend.AdditionalProperties!["bpm"] = 90;
+        var result = await _decomposer.DecomposeBatchAsync([resend], WriteOrigin.Live);
+
+        result.UpdatedRecords.Should().ContainSingle();
+        result.CreatedRecords.Should().BeEmpty();
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().ContainSingle().Which.Bpm.Should().Be(90);
+    }
+
+    [Theory]
+    [MemberData(nameof(NonMongoIds))]
+    public async Task DecomposeBatchAsync_UpdatesAStepCountReSentUnderANonMongoIdInABatch(string id)
+    {
+        await _decomposer.DecomposeBatchAsync([StepCount(id), HeartRate(id + "-b")], WriteOrigin.Live);
+        _context.ChangeTracker.Clear();
+
+        var resend = StepCount(id);
+        resend.AdditionalProperties!["metric"] = 900;
+        var result = await _decomposer.DecomposeBatchAsync([resend, HeartRate(id + "-b")], WriteOrigin.Live);
+
+        result.UpdatedRecords.Should().ContainSingle();
+        result.UnchangedRecords.Should().ContainSingle();
+        _context.ChangeTracker.Clear();
+        _context.StepCounts.Should().ContainSingle().Which.Metric.Should().Be(900);
+        _context.HeartRates.Should().ContainSingle();
+    }
+
+    [Theory]
+    [MemberData(nameof(NonMongoIds))]
+    public async Task DecomposeBatchAsync_DoesNotRecreateAHeartRateTheUserDeletedUnderANonMongoId(string id)
+    {
+        await _decomposer.DecomposeBatchAsync([HeartRate(id)], WriteOrigin.Live);
+        await TombstoneHeartRateAsync(byUser: true);
+
+        var result = await _decomposer.DecomposeBatchAsync([HeartRate(id)], WriteOrigin.Live);
+
+        result.SkippedDeleted.Should().Be(1);
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().BeEmpty();
+    }
+
+    [Theory]
+    [MemberData(nameof(NonMongoIds))]
+    public async Task DecomposeBatchAsync_RevivesAHeartRateTheSystemSweptUnderANonMongoId(string id)
+    {
+        await _decomposer.DecomposeBatchAsync([HeartRate(id)], WriteOrigin.Live);
+        await TombstoneHeartRateAsync(byUser: false);
+
+        var result = await _decomposer.DecomposeBatchAsync([HeartRate(id)], WriteOrigin.Live);
+
+        result.SkippedDeleted.Should().Be(0);
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().ContainSingle();
+        _context.HeartRates.IgnoreQueryFilters().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_CollapsesIdsThatDifferOnlyInCaseInOneBatch()
+    {
+        const string lower = "6f1b1f0e-3c5a-4e0a-9d52-1b7a0c1f2e33";
+        var first = HeartRate(lower);
+        var second = HeartRate(lower.ToUpperInvariant());
+        second.AdditionalProperties!["bpm"] = 90;
+
+        var result = await _decomposer.DecomposeBatchAsync([first, second], WriteOrigin.Live);
+
+        result.CreatedRecords.Should().ContainSingle();
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().ContainSingle().Which.Bpm.Should().Be(90);
+
+        var again = await _decomposer.DecomposeBatchAsync([HeartRate(lower), HeartRate(lower.ToUpperInvariant())], WriteOrigin.Live);
+
+        again.UpdatedRecords.Should().ContainSingle();
+        again.CreatedRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_StoresAHeartRateWithAnEmptyId()
+    {
+        var result = await _decomposer.DecomposeBatchAsync([HeartRate("")], WriteOrigin.Live);
+
+        result.CreatedRecords.Should().ContainSingle();
+    }
+
+    [Theory]
+    [MemberData(nameof(NonMongoIds))]
+    public async Task DeleteByLegacyIdAsync_SoftDeletesRecordsStoredUnderANonMongoId(string id)
+    {
+        await _decomposer.DecomposeBatchAsync([HeartRate(id), StepCount(id)], WriteOrigin.Live);
+        _context.ChangeTracker.Clear();
+
+        var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live);
+
+        deleted.Should().Be(2);
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().BeEmpty();
+        _context.StepCounts.Should().BeEmpty();
+    }
+
+    [Theory]
+    [MemberData(nameof(NonMongoIds))]
+    public async Task IsDeletedByUserAsync_ReportsAHeartRateTheUserDeletedUnderANonMongoId(string id)
+    {
+        await _decomposer.DecomposeBatchAsync([HeartRate(id)], WriteOrigin.Live);
+        await TombstoneHeartRateAsync(byUser: true);
+
+        (await _decomposer.IsDeletedByUserAsync(id)).Should().BeTrue();
+    }
+
+    private async Task TombstoneHeartRateAsync(bool byUser)
+    {
+        var row = _context.HeartRates.Single();
+        row.DeletedAt = DateTime.UtcNow;
+        _context.Entry(row).Property("DeletedByUser").CurrentValue = byUser;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+    }
+
     private const long XDripMills = 1_700_000_000_000;
     private const string XDripSyncKey = "steps-total:1700000000000";
     private const string XDripHeartRateSyncKey = "hr-bpm:1700000000000";
