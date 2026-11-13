@@ -1658,6 +1658,18 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<int>("FailedBatchAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_batch_attempts");
+
+                    b.Property<DateTime?>("FailedBatchCursorCreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("failed_batch_cursor_created_at");
+
+                    b.Property<Guid?>("FailedBatchCursorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("failed_batch_cursor_id");
+
                     b.Property<DateTime>("LastReconciledLinkCreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_reconciled_link_created_at");

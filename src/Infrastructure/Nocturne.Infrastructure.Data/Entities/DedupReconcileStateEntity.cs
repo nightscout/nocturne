@@ -33,6 +33,24 @@ public class DedupReconcileStateEntity : ITenantScoped
     public Guid? LastReconciledLinkId { get; set; }
 
     /// <summary>
+    /// The reconcile cursor's ingestion time when the batch after it last failed. Null when no
+    /// batch has failed since the cursor last moved.
+    /// </summary>
+    [Column("failed_batch_cursor_created_at")]
+    public DateTime? FailedBatchCursorCreatedAt { get; set; }
+
+    /// <summary>The reconcile cursor's link id when the batch after it last failed.</summary>
+    [Column("failed_batch_cursor_id")]
+    public Guid? FailedBatchCursorId { get; set; }
+
+    /// <summary>
+    /// How many passes in a row the batch after <see cref="FailedBatchCursorCreatedAt"/> and
+    /// <see cref="FailedBatchCursorId"/> has failed.
+    /// </summary>
+    [Column("failed_batch_attempts")]
+    public int FailedBatchAttempts { get; set; }
+
+    /// <summary>
     /// Ingestion time of the last primary link the singleton prune examined. Null before the
     /// prune's first page, and after a restart that found no links.
     /// </summary>

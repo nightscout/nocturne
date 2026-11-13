@@ -57,6 +57,17 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
     }
 
     /// <summary>
+    /// What the wide pass keeps of one root's partners. A pair merges only when each root has exactly
+    /// one, so a second distinct partner is recorded as <see cref="Many"/> and nothing more: keeping
+    /// every partner grows with the square of a run of same-value groups inside one wide window, which
+    /// a source that re-inserts its records on every sync builds by the hundred thousand.
+    /// </summary>
+    /// <param name="Partner">The one partner root seen, while <see cref="Many"/> is false.</param>
+    /// <param name="OffsetMillis">The smallest offset seen between the two roots' primaries.</param>
+    /// <param name="Many">Whether a second distinct partner was seen.</param>
+    private readonly record struct WidePartner(Guid Partner, long OffsetMillis, bool Many);
+
+    /// <summary>
     /// True when any canonical beneath one root exactly matches any canonical beneath the other.
     /// A root that the tight pass built from several canonicals carries each of their values, and
     /// the insert path compares an incoming record against every link it can see — so comparing
@@ -486,7 +497,13 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             var sourcesB = tightRootSources.GetValueOrDefault(Find(b));
             if (sourcesA is null || sourcesB is null)
                 return false;
-            return sourcesA.Any(source => RefusesTightJoin(recordType, source, sourcesB));
+            foreach (var source in sourcesA)
+            {
+                if (RefusesTightJoin(recordType, source, sourcesB))
+                    return true;
+            }
+
+            return false;
         }
 
         void TightUnion(Guid a, Guid b)
@@ -525,19 +542,21 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         // share no data source. Anything ambiguous is left as separate groups.
         if (wideEligible)
         {
-            // Root -> (partner root -> smallest observed offset between their primaries).
-            var widePartners = new Dictionary<Guid, Dictionary<Guid, long>>();
+            var widePartners = new Dictionary<Guid, WidePartner>();
             void AddWidePartner(Guid from, Guid to, long offsetMillis)
             {
-                if (!widePartners.TryGetValue(from, out var partners))
-                {
-                    partners = new Dictionary<Guid, long>();
-                    widePartners[from] = partners;
-                }
-
-                if (!partners.TryGetValue(to, out var existing) || Math.Abs(offsetMillis) < Math.Abs(existing))
-                    partners[to] = offsetMillis;
+                if (!widePartners.TryGetValue(from, out var known))
+                    widePartners[from] = new WidePartner(to, offsetMillis, Many: false);
+                else if (known.Many)
+                    return;
+                else if (!known.Partner.Equals(to))
+                    widePartners[from] = known with { Many = true };
+                else if (Math.Abs(offsetMillis) < Math.Abs(known.OffsetMillis))
+                    widePartners[from] = known with { OffsetMillis = offsetMillis };
             }
+
+            bool HasManyWidePartners(Guid root) =>
+                widePartners.TryGetValue(root, out var known) && known.Many;
 
             // Pairing and ambiguity are judged on a group's whole extent, not on its primary. A
             // group that has already absorbed a wide join spans up to a window, so a primary-only
@@ -585,6 +604,8 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
                 for (int j = i + 1; j < wideGroups.Count
                      && wideGroups[j].Min - wideGroups[i].Max <= WideMatchingWindowMillis; j++)
                 {
+                    if (HasManyWidePartners(wideGroups[i].Root) && HasManyWidePartners(wideGroups[j].Root))
+                        continue;
                     if (!AnyCriteriaMatch(recordType, wideGroups[i], wideGroups[j]))
                         continue;
 
@@ -644,20 +665,20 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
                 }
 
                 var mergedOffsets = new List<long>();
-                foreach (var (root, partners) in widePartners)
+                foreach (var (root, known) in widePartners)
                 {
-                    if (partners.Count != 1)
+                    if (known.Many)
                         continue;
-                    var (partner, offset) = partners.First();
+                    var (partner, offset, _) = known;
 
                     // AddWidePartner inserts both directions, so a mutual pair appears twice in
                     // this loop. Act on one ordering only, or the merge would be logged twice.
                     if (root.CompareTo(partner) >= 0)
                         continue;
 
-                    // AddWidePartner's symmetric insertion means partner's entries always include
-                    // root, so a single reverse entry is necessarily root itself.
-                    if (!widePartners.TryGetValue(partner, out var reverse) || reverse.Count != 1)
+                    // AddWidePartner's symmetric insertion means partner has seen root, so a
+                    // reverse with a single partner has root as that partner.
+                    if (!widePartners.TryGetValue(partner, out var reverse) || reverse.Many)
                         continue;
 
                     // A candidate-bounded pass loaded neighbours around the candidates only, so a
@@ -820,11 +841,18 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
     /// <remarks>
     /// The pass runs on one context. Each batch is one transaction that holds the tenant's merge
     /// lock (<see cref="LockTenantMergesAsync"/>) while it reads the cursor, merges and advances it.
-    /// A batch that finds the lock held ends the pass.
+    /// A batch that finds the lock held ends the pass. A batch that throws is counted against the
+    /// cursor it started from in <c>dedup_reconcile_state</c> (<see cref="RecordFailedBatchAsync"/>),
+    /// so only failures of that same batch count towards <paramref name="skipBatchAfterFailures"/>,
+    /// and the count survives restarts. A pass that kills the process records nothing, so a batch
+    /// that crashes the host rather than throwing is retried without end. A skipped batch keeps its
+    /// duplicates apart until a full deduplication run (<see cref="DeduplicationAdmin"/>), which
+    /// merges every group whatever the cursor says.
     /// </remarks>
     public async Task<ReconcileResult> ReconcileNewLinksAsync(
         int batchSize,
         int maxBatches,
+        int? skipBatchAfterFailures,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateAsync(cancellationToken);
@@ -833,8 +861,21 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
 
         for (var batchNo = 0; batchNo < maxBatches; batchNo++)
         {
-            var batch = await db.ExecuteInTransactionAsync(
-                ct => ReconcileNextBatchAsync(db, batchSize, horizon, ct), ct: cancellationToken);
+            (int Merged, bool Drained)? batch;
+            try
+            {
+                batch = await db.ExecuteInTransactionAsync(
+                    ct => ReconcileNextBatchAsync(db, batchSize, horizon, ct), ct: cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                var skipped = await db.ExecuteInTransactionAsync(
+                    ct => RecordFailedBatchAsync(db, batchSize, horizon, skipBatchAfterFailures, ex, ct),
+                    ct: cancellationToken);
+                if (skipped is null)
+                    throw;
+                batch = skipped;
+            }
 
             if (batch is not { } step)
                 break;
@@ -845,6 +886,53 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         }
 
         return new ReconcileResult(merged, false);
+    }
+
+    /// <summary>
+    /// Counts a failure of the batch after the tenant's cursor, and once that batch has failed
+    /// <paramref name="skipBatchAfterFailures"/> passes in a row, logs it and moves the cursor past it
+    /// without merging.
+    /// </summary>
+    /// <returns>
+    /// The skipped batch as <see cref="ReconcileNextBatchAsync"/> reports one, or null when the
+    /// failure stands.
+    /// </returns>
+    private async Task<(int Merged, bool Drained)?> RecordFailedBatchAsync(
+        NocturneDbContext db,
+        int batchSize,
+        DateTime horizon,
+        int? skipBatchAfterFailures,
+        Exception failure,
+        CancellationToken ct)
+    {
+        if (!await TryLockTenantMergesAsync(db, ct))
+            return null;
+
+        var state = await TrackedStateAsync(db, ct);
+        var cursor = new ReconcileCursor(state.LastReconciledLinkCreatedAt, state.LastReconciledLinkId ?? Guid.Empty);
+        var attempts = state.FailedBatchCursorCreatedAt == cursor.CreatedAt && state.FailedBatchCursorId == cursor.Id
+            ? state.FailedBatchAttempts + 1
+            : 1;
+
+        var batch = skipBatchAfterFailures is { } threshold && attempts >= threshold
+            ? await LinksAfter(db, cursor, horizon).Take(batchSize).ToListAsync(ct)
+            : [];
+        if (batch.Count == 0)
+        {
+            state.FailedBatchCursorCreatedAt = cursor.CreatedAt;
+            state.FailedBatchCursorId = cursor.Id;
+            state.FailedBatchAttempts = attempts;
+            await db.SaveChangesAsync(ct);
+            return null;
+        }
+
+        var last = batch[^1];
+        logger.LogError(failure,
+            "Dedup reconcile for tenant {TenantId} skipped the {RecordTypes} links after {CursorCreatedAt} {CursorLinkId} through {LastCreatedAt} {LastLinkId} after {Attempts} failed passes; a full deduplication run merges them",
+            db.TenantId, string.Join(",", batch.Select(l => l.RecordType).Distinct()),
+            cursor.CreatedAt, cursor.Id, last.SysCreatedAt, last.Id, attempts);
+        await SetCursorAsync(db, new ReconcileCursor(last.SysCreatedAt, last.Id), ct);
+        return (0, batch.Count < batchSize);
     }
 
     /// <summary>
@@ -885,7 +973,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 logger.LogError(ex,
-                    "Dedup reconcile for tenant {TenantId} failed merging {RecordType}; the cursor stays at {CursorCreatedAt} {CursorLinkId} and every pass retries this batch until it succeeds",
+                    "Dedup reconcile for tenant {TenantId} failed merging {RecordType}; the cursor stays at {CursorCreatedAt} {CursorLinkId} until the batch succeeds or is skipped",
                     db.TenantId, type, cursor?.CreatedAt, cursor?.Id);
                 throw;
             }
@@ -1096,6 +1184,9 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         var state = await TrackedStateAsync(db, ct);
         state.LastReconciledLinkCreatedAt = createdAt;
         state.LastReconciledLinkId = cursor.Id;
+        state.FailedBatchCursorCreatedAt = null;
+        state.FailedBatchCursorId = null;
+        state.FailedBatchAttempts = 0;
 
         await db.SaveChangesAsync(ct);
     }
