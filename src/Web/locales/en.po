@@ -286,6 +286,7 @@ msgstr "Failed to load session"
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/stores/auth-store.svelte.ts
 #: src/routes/(authenticated)/notifications/+page.svelte
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
 msgid "Expired"
 msgstr "Expired"
@@ -496,6 +497,7 @@ msgstr "Or enter this secret manually:"
 #: src/lib/components/alerts/ChannelsSection.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 msgid "Label (optional)"
 msgstr "Label (optional)"
 
@@ -542,6 +544,7 @@ msgstr "Verification code"
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
+#: src/lib/components/tenants/SiteAddressCard.svelte
 #: src/lib/components/trackers/CreateTrackersFromLegacyDialog.svelte
 #: src/lib/components/trackers/ReservoirReportDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
@@ -1112,6 +1115,8 @@ msgstr "Previous"
 #: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Next"
 msgstr "Next"
 
@@ -2513,6 +2518,7 @@ msgstr "No server-side connectors are registered in this installation."
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/community/+page.svelte
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -2918,6 +2924,7 @@ msgstr "Initializing"
 
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Progress"
 msgstr "Progress"
 
@@ -4133,6 +4140,7 @@ msgstr "Setup"
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Account"
 msgstr "Account"
 
@@ -7202,6 +7210,7 @@ msgid "Schedule"
 msgstr "Schedule"
 
 #: src/lib/components/trackers/TrackerStartDialog.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Start"
 msgstr "Start"
 
@@ -7589,6 +7598,7 @@ msgstr "Last update: {0}"
 msgid "Configuration"
 msgstr "Configuration"
 
+#: src/lib/components/tenants/AddressUses.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/compatibility/test/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
@@ -8145,7 +8155,6 @@ msgstr "Create new tenant"
 #~ msgstr "Set up a new Nocturne instance"
 
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
-#: src/routes/(authenticated)/settings/site/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
 msgid "Slug"
@@ -9041,7 +9050,9 @@ msgstr "Step {0} of {1}"
 #~ msgstr "Save & exit"
 
 #. 0: String(activeIndex + 1).padStart(2, "0"); 1: String(activeSteps.length).padStart(2, "0")
+#. 0: String(stepIndex + 1).padStart(2, "0"); 1: String(STEPS.length).padStart(2, "0")
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Step {0} / {1}"
 msgstr "Step {0} / {1}"
 
@@ -13618,8 +13629,8 @@ msgstr "Select a compression low to view details"
 #~ msgid "Manage the current tenant's details and members"
 #~ msgstr "Manage the current tenant's details and members"
 
+#: src/lib/components/tenants/SiteAddressCard.svelte
 #: src/lib/components/trackers/CreateTrackersFromLegacyDialog.svelte
-#: src/routes/(authenticated)/settings/site/+page.svelte
 msgid "Created"
 msgstr "Created"
 
@@ -28835,6 +28846,7 @@ msgstr "Showing {0} of {1}. Scroll or refine the search to see more."
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/(authenticated)/notifications/+page.svelte
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
 msgid "Canceled"
@@ -32158,6 +32170,7 @@ msgstr "Average per tenant"
 msgid "Largest tenant"
 msgstr "Largest tenant"
 
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Used"
 msgstr "Used"
@@ -32886,6 +32899,7 @@ msgstr "<0/> Access data"
 
 #: src/lib/components/auth/RecoveryCodes.svelte
 #: src/routes/(unauthenticated)/auth/help/+page.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Recovery codes"
 msgstr "Recovery codes"
 
@@ -37335,6 +37349,7 @@ msgid "You are now viewing the data shared with you."
 msgstr "You are now viewing the data shared with you."
 
 #: src/lib/components/members/JoinWelcome.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Welcome"
 msgstr "Welcome"
 
@@ -37924,6 +37939,7 @@ msgid "Scheduled windows are interpreted in your timezone, set on your <0>patien
 msgstr "Scheduled windows are interpreted in your timezone, set on your <0>patient record</0> ."
 
 #: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "<0/>Back"
 msgstr "<0/>Back"
 
@@ -38083,6 +38099,7 @@ msgstr "<0/> Status"
 msgid "Could not load the Nightscout status"
 msgstr "Could not load the Nightscout status"
 
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
 #: src/routes/(authenticated)/settings/site/+page.svelte
 msgid "Reload the page to try again."
@@ -38138,6 +38155,7 @@ msgstr "Could not load the site details"
 
 #: src/routes/(authenticated)/settings/site/+page.svelte
 #: src/routes/(authenticated)/settings/site/+page.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Site name"
 msgstr "Site name"
 
@@ -38157,13 +38175,13 @@ msgstr "Enter a site name."
 msgid "Site name saved."
 msgstr "Site name saved."
 
-#: src/routes/(authenticated)/settings/site/+page.svelte
+#: src/lib/components/tenants/SiteAddressCard.svelte
+#: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Address"
 msgstr "Address"
 
-#: src/routes/(authenticated)/settings/site/+page.svelte
-msgid "You cannot change the address of a site."
-msgstr "You cannot change the address of a site."
+#~ msgid "You cannot change the address of a site."
+#~ msgstr "You cannot change the address of a site."
 
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Could not save the tenant. Try again."
@@ -38601,3 +38619,533 @@ msgstr "This chart shows the recent readings. Drag the chart to see earlier read
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "BasalInjections"
 msgstr "BasalInjections"
+
+#: src/lib/navigation/settings-navigation.svelte.ts
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Invite people"
+msgstr "Invite people"
+
+#: src/lib/navigation/settings-navigation.svelte.ts
+msgid "Links that let people make their own site on this server."
+msgstr "Links that let people make their own site on this server."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "The link has no invite code. Check the link that you got."
+msgstr "The link has no invite code. Check the link that you got."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "This invite link is not valid. Ask the person who sent it for a new link."
+msgstr "This invite link is not valid. Ask the person who sent it for a new link."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Your address"
+msgstr "Your address"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Could not make your site. Try again."
+msgstr "Could not make your site. Try again."
+
+#. 0: result.tenantRefusal ?? ""
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "We made your account, but not your site. {0} Select another address, then try again."
+msgstr "We made your account, but not your site. {0} Select another address, then try again."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Could not make your account. Try again."
+msgstr "Could not make your account. Try again."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Go to my site"
+msgstr "Go to my site"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Make your Nocturne site"
+msgstr "Make your Nocturne site"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "You cannot use this link"
+msgstr "You cannot use this link"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Your new site"
+msgstr "Your new site"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "About three minutes."
+msgstr "About three minutes."
+
+#. 0: info.invite.invitedByName
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "{0} invited you"
+msgstr "{0} invited you"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Make your own <0>Nocturne</0> site."
+msgstr "Make your own <0>Nocturne</0> site."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "A site keeps the diabetes data of one person in one place: glucose, insulin, carbs, and the devices that send them."
+msgstr "A site keeps the diabetes data of one person in one place: glucose, insulin, carbs, and the devices that send them."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Your site gets its own address"
+msgstr "Your site gets its own address"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "You select it in the next step."
+msgstr "You select it in the next step."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "You sign in with a passkey"
+msgstr "You sign in with a passkey"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Your fingerprint, face, or device PIN. You do not need a password."
+msgstr "Your fingerprint, face, or device PIN. You do not need a password."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "You own the site"
+msgstr "You own the site"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "You decide who sees your data. The administrators of this server can open your site for support. Nocturne records each time."
+msgstr "You decide who sees your data. The administrators of this server can open your site for support. Nocturne records each time."
+
+#. 0: formatNumericDate(new Date(info.invite.expiresAt))
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "This link stops working on {0}."
+msgstr "This link stops working on {0}."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Select your <0>address</0>."
+msgstr "Select your <0>address</0>."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Only your site uses this address. Select one that is easy to type on a phone."
+msgstr "Only your site uses this address. Select one that is easy to type on a phone."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "For example, Sam's glucose"
+msgstr "For example, Sam's glucose"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Nocturne shows this name at the top of your site. You can change it later."
+msgstr "Nocturne shows this name at the top of your site. You can change it later."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Make your <0>site</0>."
+msgstr "Make your <0>site</0>."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Make your <0>passkey</0>."
+msgstr "Make your <0>passkey</0>."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "You will own the new site."
+msgstr "You will own the new site."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Your device keeps the passkey. You use it each time you sign in to your site."
+msgstr "Your device keeps the passkey. You use it each time you sign in to your site."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "You are signed in as <0/>."
+msgstr "You are signed in as <0/>."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "<0/> Make my site"
+msgstr "<0/> Make my site"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Do you have an account on this server? Sign in at your own site, then open this link again."
+msgstr "Do you have an account on this server? Sign in at your own site, then open this link again."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Save your <0>recovery codes</0>."
+msgstr "Save your <0>recovery codes</0>."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "If you lose your passkey, one code lets you sign in again. Each code works one time."
+msgstr "If you lose your passkey, one code lets you sign in again. Each code works one time."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Your site is <0>ready</0>."
+msgstr "Your site is <0>ready</0>."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Keep this address. You use it to sign in, in your apps, and with your followers."
+msgstr "Keep this address. You use it to sign in, in your apps, and with your followers."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Copy your site address"
+msgstr "Copy your site address"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "<0/>Add a bookmark for it on each device."
+msgstr "<0/>Add a bookmark for it on each device."
+
+#. 0: baseDomain
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "<0/>Use this address, not {0}, in your apps."
+msgstr "<0/>Use this address, not {0}, in your apps."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Your site address"
+msgstr "Your site address"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "QR code of your site address"
+msgstr "QR code of your site address"
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Scan with your phone to open your site there."
+msgstr "Scan with your phone to open your site there."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "Next, Nocturne helps you connect your devices and apps."
+msgstr "Next, Nocturne helps you connect your devices and apps."
+
+#: src/routes/(unauthenticated)/start/+page@.svelte
+msgid "<0/>Change the address"
+msgstr "<0/>Change the address"
+
+#: src/lib/components/tenants/AddressComposer.svelte
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "https://"
+msgstr "https://"
+
+#: src/lib/components/tenants/AddressComposer.svelte
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "Checking the address..."
+msgstr "Checking the address..."
+
+#: src/lib/components/tenants/AddressComposer.svelte
+msgid "This address is available."
+msgstr "This address is available."
+
+#: src/lib/components/tenants/AddressComposer.svelte
+msgid "Use 3 to 63 lowercase letters, numbers, and hyphens."
+msgstr "Use 3 to 63 lowercase letters, numbers, and hyphens."
+
+#: src/lib/components/tenants/AddressComposer.svelte
+msgid "Not <0/>. That is the address of the server, and many sites share it."
+msgstr "Not <0/>. That is the address of the server, and many sites share it."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "Could not change the address. Try again."
+msgstr "Could not change the address. Try again."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "Use this address to sign in, to connect your apps, and to share with followers."
+msgstr "Use this address to sign in, to connect your apps, and to share with followers."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Copy the site address"
+msgstr "Copy the site address"
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "Subdomain"
+msgstr "Subdomain"
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "Change address"
+msgstr "Change address"
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "You cannot change the address of this site."
+msgstr "You cannot change the address of this site."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "Change the site address"
+msgstr "Change the site address"
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "The site moves to the new address at once. Nothing sends people from the old address to the new one."
+msgstr "The site moves to the new address at once. Nothing sends people from the old address to the new one."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Apps that upload data, for example xDrip+, AAPS, Loop, and Trio."
+msgstr "Apps that upload data, for example xDrip+, AAPS, Loop, and Trio."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "Apps and watch faces that show your glucose to you or to followers."
+msgstr "Apps and watch faces that show your glucose to you or to followers."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Bookmarks, and links that you gave to other people."
+msgstr "Bookmarks, and links that you gave to other people."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "After the change, put the new address into each of these:"
+msgstr "After the change, put the new address into each of these:"
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "Until you do this, these apps do not get or send data, and alarms in them do not sound."
+msgstr "Until you do this, these apps do not get or send data, and alarms in them do not sound."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "WARNING: Apps that use the old address stop sending and showing data"
+msgstr "WARNING: Apps that use the old address stop sending and showing data"
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "<0/> This address is available."
+msgstr "<0/> This address is available."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "New subdomain"
+msgstr "New subdomain"
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "I understand that the old address stops working, and that I must change it in each app."
+msgstr "I understand that the old address stops working, and that I must change it in each app."
+
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "<0/> Change address"
+msgstr "<0/> Change address"
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "Where you use this address"
+msgstr "Where you use this address"
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "Your apps and followers need the full address, with your name in it."
+msgstr "Your apps and followers need the full address, with your name in it."
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "<0/> To sign in"
+msgstr "<0/> To sign in"
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "Open it in a browser. Add a bookmark."
+msgstr "Open it in a browser. Add a bookmark."
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "Uploader settings"
+msgstr "Uploader settings"
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "<0/> In your apps"
+msgstr "<0/> In your apps"
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "xDrip+, AAPS, Loop, and Trio send data to it."
+msgstr "xDrip+, AAPS, Loop, and Trio send data to it."
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "My glucose is here <0/>"
+msgstr "My glucose is here <0/>"
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "Saved, thanks"
+msgstr "Saved, thanks"
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "<0/> For followers"
+msgstr "<0/> For followers"
+
+#: src/lib/components/tenants/AddressUses.svelte
+msgid "Followers and watch faces read from it."
+msgstr "Followers and watch faces read from it."
+
+#: src/lib/components/tenants/slug-availability.svelte.ts
+msgid "Could not check the address. Try again."
+msgstr "Could not check the address. Try again."
+
+#: src/lib/components/tenants/slug-availability.svelte.ts
+msgid "You cannot use this address."
+msgstr "You cannot use this address."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Could not save the setting. Try again."
+msgstr "Could not save the setting. Try again."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Could not make the link. Try again."
+msgstr "Could not make the link. Try again."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Could not cancel the link. Try again."
+msgstr "Could not cancel the link. Try again."
+
+#. 0: used
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "{0} used, no limit"
+msgstr "{0} used, no limit"
+
+#. 0: used; 1: invite.maxUses
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "{0} of {1} used"
+msgstr "{0} of {1} used"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Invite people - Settings - Nocturne"
+msgstr "Invite people - Settings - Nocturne"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Give people a link to make their own Nocturne site on this server"
+msgstr "Give people a link to make their own Nocturne site on this server"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Could not load the invite links"
+msgstr "Could not load the invite links"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "How an invite works"
+msgstr "How an invite works"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "1. You make a link"
+msgstr "1. You make a link"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Send it to the person by email or chat. A link can work for one person or for many people."
+msgstr "Send it to the person by email or chat. A link can work for one person or for many people."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "2. They make an account"
+msgstr "2. They make an account"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "They select an address for their site, then sign in with a passkey. They do not need a password."
+msgstr "They select an address for their site, then sign in with a passkey. They do not need a password."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "3. They get their own site"
+msgstr "3. They get their own site"
+
+#. 0.0: baseDomain ?? "example.com"
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "The site has its own address, for example <0>name.{0}</0>. Their data is in their site only."
+msgstr "The site has its own address, for example <0>name.{0}</0>. Their data is in their site only."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "They own their site. They decide who can see their data. As a server administrator, you can open their site for support, and you can turn it off or delete it. Nocturne records each time that an administrator opens a site."
+msgstr "They own their site. They decide who can see their data. As a server administrator, you can open their site for support, and you can turn it off or delete it. Nocturne records each time that an administrator opens a site."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Set a base domain first"
+msgstr "Set a base domain first"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Each site needs its own subdomain. Set BASE_DOMAIN on the server, then restart it."
+msgstr "Each site needs its own subdomain. Set BASE_DOMAIN on the server, then restart it."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Apps and watch faces that show glucose to you or to followers."
+msgstr "Apps and watch faces that show glucose to you or to followers."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Now, <0/> opens <1/>, because it is the only site on this server."
+msgstr "Now, <0/> opens <1/>, because it is the only site on this server."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "When a second site exists, <0/> does not open a site. Apps that use it stop sending and showing data, and alarms in them do not sound."
+msgstr "When a second site exists, <0/> does not open a site. Apps that use it stop sending and showing data, and alarms in them do not sound."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Before you make the first link, put this address into each of these:"
+msgstr "Before you make the first link, put this address into each of these:"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "WARNING: Move your apps to the site address before you invite people"
+msgstr "WARNING: Move your apps to the site address before you invite people"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Make a link"
+msgstr "Make a link"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "We show the link one time only. Copy it before you leave this page."
+msgstr "We show the link one time only. Copy it before you leave this page."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "For example, the name of the person"
+msgstr "For example, the name of the person"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "One person"
+msgstr "One person"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "More than one person"
+msgstr "More than one person"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Enter a whole number of 2 or more."
+msgstr "Enter a whole number of 2 or more."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "If you leave this empty, the link has no limit."
+msgstr "If you leave this empty, the link has no limit."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Maximum number of sites (optional)"
+msgstr "Maximum number of sites (optional)"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Who can use the link"
+msgstr "Who can use the link"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "The link stops working after"
+msgstr "The link stops working after"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "I put <0/> into each app, watch face, and bookmark."
+msgstr "I put <0/> into each app, watch face, and bookmark."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "<0/> Make link"
+msgstr "<0/> Make link"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Copy the invite link"
+msgstr "Copy the invite link"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Your link is ready"
+msgstr "Your link is ready"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Send this link to the person. The link shows them how their site address works."
+msgstr "Send this link to the person. The link shows them how their site address works."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Links"
+msgstr "Links"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "No links yet. Make a link to invite a person."
+msgstr "No links yet. Make a link to invite a person."
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "No label"
+msgstr "No label"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Deleted site"
+msgstr "Deleted site"
+
+#. 0: usesLabel(invite); 1: invite.expiresAt ? formatNumericDate(new Date(invite.expiresAt)) \\: "---"
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "{0} · Stops working {1}"
+msgstr "{0} · Stops working {1}"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "<0/> Cancel link"
+msgstr "<0/> Cancel link"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Site addresses"
+msgstr "Site addresses"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Owners can change the address of their site"
+msgstr "Owners can change the address of their site"
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "When the address changes, apps that use the old address stop working. Server administrators can always change the address of a site that they own."
+msgstr "When the address changes, apps that use the old address stop working. Server administrators can always change the address of a site that they own."
