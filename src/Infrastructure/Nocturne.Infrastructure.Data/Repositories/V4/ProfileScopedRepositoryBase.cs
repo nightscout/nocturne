@@ -62,18 +62,6 @@ public abstract class ProfileScopedRepositoryBase<TModel, TEntity> : V4Repositor
         return entity is null ? null : ToDomain(entity);
     }
 
-    /// <inheritdoc cref="IProfileScopedRepository{TRecord}.GetByCorrelationIdAsync" />
-    public async Task<IEnumerable<TModel>> GetByCorrelationIdAsync(
-        Guid correlationId, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.Set<TEntity>()
-            .AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(ToDomain).ToList();
-    }
-
     /// <inheritdoc cref="IProfileScopedRepository{TRecord}.DeleteByLegacyIdPrefixAsync" />
     public async Task<int> DeleteByLegacyIdPrefixAsync(
         string prefix, WriteOrigin origin, CancellationToken ct = default)
@@ -84,21 +72,6 @@ public abstract class ProfileScopedRepositoryBase<TModel, TEntity> : V4Repositor
             AuditContext, $"legacy_id_prefix={prefix}", ct);
         await ReportWrittenAsync();
         return deleted;
-    }
-
-    /// <inheritdoc cref="IProfileScopedRepository{TRecord}.GetByCorrelationIdsAsync" />
-    public async Task<IEnumerable<TModel>> GetByCorrelationIdsAsync(
-        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
-    {
-        var ids = correlationIds.Distinct().ToArray();
-        if (ids.Length == 0) return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.Set<TEntity>()
-            .AsNoTracking()
-            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
-            .ToListAsync(ct);
-        return entities.Select(ToDomain).ToList();
     }
 
     /// <inheritdoc cref="IProfileScopedRepository{TRecord}.GetNewestByProfileNamesAsync" />

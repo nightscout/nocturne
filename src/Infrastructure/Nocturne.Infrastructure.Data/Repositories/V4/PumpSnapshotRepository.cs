@@ -80,24 +80,4 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
         return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
     }
 
-    /// <summary>
-    /// Gets pump snapshots by correlation IDs.
-    /// </summary>
-    /// <param name="correlationIds">The correlation IDs to match.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Matching pump snapshots.</returns>
-    public async Task<IEnumerable<PumpSnapshot>> GetByCorrelationIdsAsync(
-        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
-    {
-        var ids = correlationIds.ToList();
-        if (ids.Count == 0) return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.PumpSnapshots
-            .AsNoTracking()
-            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
-            .ToListAsync(ct);
-
-        return entities.Select(PumpSnapshotMapper.ToDomainModel);
-    }
 }

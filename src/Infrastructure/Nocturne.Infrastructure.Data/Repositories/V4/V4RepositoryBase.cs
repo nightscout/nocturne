@@ -292,22 +292,78 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     protected abstract void ApplyUpdate(TEntity target, TModel source);
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetAsync" />
-    /// <remarks>
-    /// Virtual so dedup participants (which expose an extended overload with the duplicate
-    /// filter + keyset cursor) can override this 7-arg form to route through their
-    /// filtered overload, preserving the pre-base default-interface bridge behaviour.
-    /// </remarks>
-    public virtual async Task<IEnumerable<TModel>> GetAsync(
+    /// <remarks>Reads through <see cref="PagedRead"/>, so it hides the non-primary copies of duplicate groups.</remarks>
+    public async Task<IEnumerable<TModel>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = InWindow(ctx.Set<TEntity>().AsNoTracking(), from, to, device);
-        if (source != null) query = query.Where(e => e.DataSource == source);
-        query = query.InObservationOrder(descending);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
+        var entities = await PagedRead(
+            ctx.Set<TEntity>().AsNoTracking(), from, to, device, source, limit, offset, descending).ToListAsync(ct);
         return entities.Select(ToDomain);
+    }
+
+    /// <summary>
+    /// The read every <c>GetAsync</c> of a record type serves: the time window, device and source,
+    /// <paramref name="extra"/>, the duplicate filter (<see cref="ReadVisibilityFilter.ExcludeDuplicatesWhereFlagged{TEntity}"/>),
+    /// the keyset cursor, <paramref name="order"/> (observation order by default) and the page.
+    /// </summary>
+    /// <remarks>
+    /// A cursor given as both <paramref name="afterTimestamp"/> and <paramref name="afterId"/> replaces
+    /// <paramref name="offset"/>: it seeks to the cursor row instead of skipping to it.
+    /// </remarks>
+    protected static IQueryable<TEntity> PagedRead(
+        IQueryable<TEntity> rows,
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit, int offset, bool descending,
+        Func<IQueryable<TEntity>, IQueryable<TEntity>>? extra = null,
+        DateTime? afterTimestamp = null, Guid? afterId = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? order = null)
+    {
+        var query = InWindow(rows, from, to, device);
+        if (source != null) query = query.Where(e => e.DataSource == source);
+        if (extra != null) query = extra(query);
+        query = query.ExcludeDuplicatesWhereFlagged();
+
+        var seeking = afterTimestamp.HasValue && afterId.HasValue;
+        if (seeking)
+        {
+            query = descending
+                ? query.Where(e => e.Timestamp < afterTimestamp!.Value
+                    || (e.Timestamp == afterTimestamp.Value && e.Id < afterId!.Value))
+                : query.Where(e => e.Timestamp > afterTimestamp!.Value
+                    || (e.Timestamp == afterTimestamp.Value && e.Id > afterId!.Value));
+        }
+
+        query = order != null ? order(query) : query.InObservationOrder(descending);
+        return (seeking ? query : query.Skip(offset)).Take(limit);
+    }
+
+    /// <summary>Returns the records sharing <paramref name="correlationId"/>.</summary>
+    public async Task<IEnumerable<TModel>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.Set<TEntity>()
+            .AsNoTracking()
+            .Where(e => e.CorrelationId == correlationId)
+            .ToListAsync(ct);
+        return entities.Select(ToDomain).ToList();
+    }
+
+    /// <summary>Returns the records sharing any of <paramref name="correlationIds"/>; none for an empty set.</summary>
+    public async Task<IEnumerable<TModel>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
+    {
+        var ids = correlationIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.Set<TEntity>()
+            .AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+        return entities.Select(ToDomain).ToList();
     }
 
     /// <summary>
