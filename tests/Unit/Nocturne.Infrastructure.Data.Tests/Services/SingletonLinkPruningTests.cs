@@ -218,7 +218,7 @@ public class SingletonLinkPruningTests
                 // A copy whose own insert-time pass missed the reading, as a concurrent ingest can.
                 await w.AddGlucose(copy, Event.AddSeconds(10), "glooko-connector", 120);
                 await w.AddSingletonLink(RecordType.SensorGlucose, copy, Event.AddSeconds(10), "glooko-connector");
-                await w.Service.ReconcileNewLinksAsync(100, 10);
+                await w.Service.ReconcileNewLinksAsync(100, 10, skipBatchAfterFailures: null);
             });
 
         groups.Should().ContainSingle().Which.Should().Be(Group(reading, copy));
@@ -243,7 +243,7 @@ public class SingletonLinkPruningTests
             {
                 await w.AddBolus(copy, Event.AddMinutes(4), "glooko-connector", 2.0);
                 await w.AddSingletonLink(RecordType.Bolus, copy, Event.AddMinutes(4), "glooko-connector");
-                await w.Service.ReconcileNewLinksAsync(100, 10);
+                await w.Service.ReconcileNewLinksAsync(100, 10, skipBatchAfterFailures: null);
             });
 
         groups.Should().ContainSingle().Which.Should().Be(Group(mylife, tandem),
@@ -287,7 +287,7 @@ public class SingletonLinkPruningTests
             {
                 await w.AddGlucose(live, Event.AddSeconds(10), "glooko-connector", 120);
                 await w.AddSingletonLink(RecordType.SensorGlucose, live, Event.AddSeconds(10), "glooko-connector");
-                await w.Service.ReconcileNewLinksAsync(100, 10);
+                await w.Service.ReconcileNewLinksAsync(100, 10, skipBatchAfterFailures: null);
             });
 
         groups.Should().ContainSingle().Which.Should().Be(Group(live, deleted),
