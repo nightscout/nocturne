@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -115,7 +116,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // The retry loop re-throws every cancellation, and a client timeout reaches it as one. Only
         // the caller's own token means the run was withdrawn and must travel; the rest is the remote
         // falling silent.
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             return UnansweredResult(transportFailure);
         }
@@ -216,7 +217,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     _ => Task.CompletedTask
                 });
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, type.ToString(), ex);
             }

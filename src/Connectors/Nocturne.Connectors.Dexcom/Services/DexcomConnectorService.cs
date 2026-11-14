@@ -81,7 +81,7 @@ public class DexcomConnectorService
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorGlucose.ToList(), config, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             RecordSyncError(result, ex);
         }

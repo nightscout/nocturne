@@ -989,6 +989,45 @@ public class NocturneRemoteConnectorServiceCrawlTests
         result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
+    [Fact]
+    public async Task SyncDataAsync_WhenACrawlRequestTimesOut_ReportsTheTimeoutAsTheCause()
+    {
+        var handler = new RemoteFakeHandler()
+            .BreakCrawl(NocturneRemoteConstants.SensorGlucose,
+                new TaskCanceledException("The crawl request timed out."));
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Contain("The crawl request timed out.",
+                "the tenant reads the sync card, so a timeout has to leave its text there");
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_WhenTheCallerCancelsDuringACrawlRequest_Propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new RemoteFakeHandler()
+            .BreakCrawl(NocturneRemoteConstants.SensorGlucose,
+                new TaskCanceledException("The crawl request was cancelled."));
+        handler.OnRequest = url =>
+        {
+            if (url.Contains("offset=", StringComparison.Ordinal))
+                cancellation.Cancel();
+        };
+        var fixture = new ServiceFixture(handler);
+
+        var run = () => fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, cancellation.Token);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     /// <summary>
     /// An explicit range is honoured as given for every family — that is how a cursor reset re-pulls
     /// history the per-family catch-up bounds would otherwise skip.
@@ -1245,6 +1284,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
         private readonly Dictionary<string, Queue<HttpResponseMessage>> _pages = new(StringComparer.Ordinal);
         private readonly Dictionary<string, HttpStatusCode> _broken = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Exception> _transportFailures = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Exception> _crawlFailures = new(StringComparer.Ordinal);
 
         /// <summary>Every request made, so a test can assert on the range each crawl asked for.</summary>
         internal List<string> Requests { get; } = [];
@@ -1285,6 +1325,13 @@ public class NocturneRemoteConnectorServiceCrawlTests
             return this;
         }
 
+        /// <summary>Fails the crawl of <paramref name="path"/> but not the auth check that precedes it.</summary>
+        internal RemoteFakeHandler BreakCrawl(string path, Exception failure)
+        {
+            _crawlFailures[path] = failure;
+            return this;
+        }
+
         internal static HttpResponseMessage Status(HttpStatusCode status) => new(status);
 
         internal static HttpResponseMessage Json(string body) =>
@@ -1322,6 +1369,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
             if (_transportFailures.TryGetValue(path, out var failure))
                 throw failure;
+
+            if (_crawlFailures.TryGetValue(path, out var crawlFailure) && !IsAuthCheck(request))
+                throw crawlFailure;
 
             if (IsAuthCheck(request))
                 return Task.FromResult(GlucosePage(total: 0));

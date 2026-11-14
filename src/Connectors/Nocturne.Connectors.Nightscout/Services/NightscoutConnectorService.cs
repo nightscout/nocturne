@@ -120,8 +120,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         // reported as one. DNS, a refused connection, dropped packets and a client timeout all land
         // here. OutboundRefusedException carries its own wording and names more than "unreachable"
         // can. A cancellation the caller asked for is the run being withdrawn, not a failure.
-        catch (Exception ex) when (ex is not OperationCanceledException
-                                   || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             TrackFailedAuthentication(ex switch
             {
@@ -196,7 +195,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 RecordPublishOutcome(result, SyncDataType.Glucose, outcome.Count, outcome.Success);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Glucose", ex);
             }
@@ -242,7 +241,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 foreach (var treatmentType in treatmentTypes.Where(activeTypes.Contains))
                     RecordPublishOutcome(result, treatmentType, outcome.Count, outcome.Success);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Treatments", ex);
             }
@@ -256,7 +255,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 await PublishRecordTypeAsync(result, activeTypes,
                     profiles.ToList(), config, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Profiles", ex);
             }
@@ -289,7 +288,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 RecordPublishOutcome(result, SyncDataType.DeviceStatus, outcome.Count, outcome.Success);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "DeviceStatus", ex);
             }
@@ -303,7 +302,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 await PublishRecordTypeAsync(result, activeTypes,
                     foods.ToList(), config, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Food", ex);
             }
@@ -336,7 +335,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 RecordPublishOutcome(result, SyncDataType.Activity, outcome.Count, outcome.Success);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Activity", ex);
             }
@@ -720,7 +719,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 }
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex,
                 "[{ConnectorSource}] Looking treatments up by id failed; deleting none", ConnectorSource);

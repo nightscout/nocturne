@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Connectors.Core.Services;
@@ -163,7 +164,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
             return null;
         }
         // A withdrawn run is not a failed sign-in, so its cancellation travels instead of becoming a null token.
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogError(ex, "Error acquiring token for {ProviderName}", GetType().Name);
             if (RethrowTokenAcquisitionExceptions)
@@ -202,7 +203,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
             var result = await AcquireTokenAsync(config, cancellationToken);
             return !string.IsNullOrEmpty(result.Token);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Credential verification failed for {ProviderName}", GetType().Name);
             return false;
@@ -359,8 +360,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
 
                     return RetryStep<T>.Complete(default);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException
-                                           || !cancellationToken.IsCancellationRequested)
+                catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
                 {
                     _logger.LogError(
                         ex,

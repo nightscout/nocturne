@@ -448,8 +448,7 @@ public class MyFitnessPalConnectorService
                 .ToList();
         }
         // Losing one day costs that day its meal names; it must never fail the whole sync.
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             // An HttpClient timeout surfaces as TaskCanceledException without the token being set.
             _logger.LogWarning(ex, "MyFitnessPal diary request for {Date} timed out", date);
@@ -600,8 +599,7 @@ public class MyFitnessPalConnectorService
             if (await _configService.MergeSecretsAsync("MyFitnessPal", updates, _logger, cancellationToken))
                 _logger.LogInformation("[{ConnectorSource}] Persisted updated connector state", ConnectorSource);
         }
-        catch (OperationCanceledException) { throw; }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to persist connector state", ConnectorSource);
         }

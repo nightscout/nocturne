@@ -57,13 +57,49 @@ public class MyFitnessPalConnectorServiceTests
         });
     }
 
+    [Fact]
+    public async Task SyncDataAsync_WhenPersistingTheConnectorStateTimesOut_StillSucceeds()
+    {
+        var fixture = new ServiceFixture(
+            new MyFitnessPalFakeHandler(),
+            publishSucceeds: true,
+            onSaveSecrets: _ => throw new TaskCanceledException("The secrets store timed out."));
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Food] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue("state that could not be saved is retried next run and costs no data");
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_WhenTheCallerCancelsWhilePersistingTheConnectorState_Propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fixture = new ServiceFixture(
+            new MyFitnessPalFakeHandler(),
+            publishSucceeds: true,
+            onSaveSecrets: token =>
+            {
+                cancellation.Cancel();
+                token.ThrowIfCancellationRequested();
+            });
+
+        var run = () => fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Food] }, fixture.Config, cancellation.Token);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     /// <summary>Wires the connector service and a real token provider onto one fake handler.</summary>
     private sealed class ServiceFixture
     {
         internal MyFitnessPalConnectorService Service { get; }
         internal MyFitnessPalConnectorConfiguration Config { get; }
 
-        internal ServiceFixture(MyFitnessPalFakeHandler handler, bool publishSucceeds)
+        internal ServiceFixture(
+            MyFitnessPalFakeHandler handler,
+            bool publishSucceeds,
+            Action<CancellationToken>? onSaveSecrets = null)
         {
             Config = new MyFitnessPalConnectorConfiguration
             {
@@ -90,6 +126,14 @@ public class MyFitnessPalConnectorServiceTests
             configService
                 .Setup(s => s.GetSecretsAsync("MyFitnessPal", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Dictionary<string, string>());
+            configService
+                .Setup(s => s.SaveRuntimeSecretsAsync(
+                    "MyFitnessPal", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Returns<string, Dictionary<string, string>, CancellationToken>((_, _, token) =>
+                {
+                    onSaveSecrets?.Invoke(token);
+                    return Task.CompletedTask;
+                });
 
             var metadata = new Mock<IMetadataPublisher>();
             metadata
