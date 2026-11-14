@@ -12,6 +12,7 @@
   import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
   import { FormError, useSubmission } from "#lib/forms/index.js";
   import { tick } from "svelte";
+  import { getNightscoutEventTypeLabel } from "#lib/constants/device-event-types.svelte.js";
   import {
     TrackerCategory,
     DashboardVisibility,
@@ -400,7 +401,7 @@
               onCheckedChange={(checked) => toggleTrigger(eventType, checked === true)}
             />
             <Label for="trigger-{eventType}" variant="option" class="cursor-pointer">
-              {eventType}
+              {getNightscoutEventTypeLabel(eventType)}
             </Label>
           </div>
         {/each}
@@ -423,7 +424,7 @@
               onCheckedChange={(checked) => toggleEnd(eventType, checked === true)}
             />
             <Label for="end-{eventType}" variant="option" class="cursor-pointer">
-              {eventType}
+              {getNightscoutEventTypeLabel(eventType)}
             </Label>
           </div>
         {/each}
@@ -570,12 +571,12 @@
     onValueChange={(selected) => onSelect(selected === noDeviceEvent ? undefined : selected)}
   >
     <Select.Trigger {id} data-testid={id}>
-      {value || "None"}
+      {value ? getNightscoutEventTypeLabel(value) : "None"}
     </Select.Trigger>
     <Select.Content>
       <Select.Item value={noDeviceEvent} label="None" />
       {#each deviceEventTypes as eventType (eventType)}
-        <Select.Item value={eventType} label={eventType} />
+        <Select.Item value={eventType} label={getNightscoutEventTypeLabel(eventType)} />
       {/each}
     </Select.Content>
   </Select.Root>

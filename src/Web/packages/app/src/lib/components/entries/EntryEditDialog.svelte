@@ -4,6 +4,7 @@
   import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from "#lib/api/index.js";
   import { BolusType, GlucoseType, GlucoseUnit, DeviceEventType } from "#lib/api/index.js";
   import type { EntryRecord, EntryCategoryId } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
   import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
@@ -767,11 +768,10 @@
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="start">
             {#each inactiveSectionKeys as key (key)}
-              {@const category = ENTRY_CATEGORIES[key]}
               {@const Icon = sectionIcons[key]}
               <DropdownMenu.Item onclick={() => addSection(key)}>
                 <Icon class="mr-2 h-4 w-4" />
-                {category.name}
+                {entryCategoryName(key)}
               </DropdownMenu.Item>
             {/each}
           </DropdownMenu.Content>
