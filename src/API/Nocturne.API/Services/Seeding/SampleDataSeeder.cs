@@ -287,35 +287,21 @@ public class SampleDataSeeder
             {
                 ct.ThrowIfCancellationRequested();
 
-                var readings = DemoCoverageSeeds.CgmReadings(step);
-                foreach (var reading in readings)
-                {
-                    reading.DataSource = dataSource;
-                    entryBatch.Add(reading);
-                }
-                if (readings.Count > 0)
+                var records = RecordsOf(step, clock, config, dataSource);
+                entryBatch.AddRange(records.Entries);
+                if (records.HasCgmReading)
                     episodeTracker.Observe(
                         step.Entry.Mills.ToUtcDateTime(), step.Entry.Sgv);
-                foreach (var extra in step.ExtraEntries)
-                {
-                    extra.DataSource = dataSource;
-                    entryBatch.Add(extra);
-                }
 
-                foreach (var treatment in step.Treatments)
+                foreach (var treatment in records.Treatments)
                 {
-                    treatment.DataSource = dataSource;
                     treatmentBatch.Add(treatment);
                     if (treatment.EventType == "Carbs" && treatment.FoodType is { Length: > 0 })
                         mealCarbLinks.Add((treatment.Mills.ToUtcDateTime(), treatment.FoodType));
                 }
 
-                if (DemoDeviceStatusGenerator.ForStep(step, clock.Demo, config.TargetGlucose, config.BasalRate) is { } status)
-                {
-                    // Deterministic legacy id, so a re-seed skips the statuses it already wrote.
-                    status.Id = status.Mills.ToString("x24");
+                if (records.Status is { } status)
                     statusBatch.Add(status);
-                }
 
                 if (entryBatch.Count >= BatchSize) await FlushEntriesAsync();
                 if (treatmentBatch.Count >= BatchSize) await FlushTreatmentsAsync();
@@ -385,6 +371,18 @@ public class SampleDataSeeder
             ownerSubjectId, tenant.TenantId, episodeTracker.Episodes, ct);
         await SeedLabHbA1cAsync(db, clock, dataSource, ct);
 
+        // Last, so the live feed never continues a seed still being written. The demo tenant's own
+        // service streams its realtime data.
+        if (includeGlucose && dataSource != Nocturne.Core.Constants.DataSources.DemoService)
+        {
+            var firstDay = clock.Demo.ToLocal(seedEnd).AddDays(-config.BackfillDays).Date;
+            await SampleDataTimeline.WriteAsync(
+                db,
+                new SampleDataTimeline(firstDay, seedEnd, seedEnd, clock.ZoneId, dataSource),
+                _time.GetUtcNow(),
+                ct);
+        }
+
         _logger.LogInformation(
             "Seeded tenant {Slug} ({Days} days): {Entries} entries, {Treatments} treatments, "
             + "{DeviceStatuses} device statuses, {Profiles} profiles, {DeviceChanges} device changes, "
@@ -403,6 +401,30 @@ public class SampleDataSeeder
             alertRules, alertExcursions, deviceStatusCount, profilesCreated,
             foodCount, stateSpanCount, notificationCount);
     }
+
+    /// <summary>What one timeline step stores, stamped with <paramref name="dataSource"/>.</summary>
+    internal static StepRecords RecordsOf(
+        DemoTimeStep step, SeedingClock clock, DemoModeConfiguration config, string dataSource)
+    {
+        var readings = DemoCoverageSeeds.CgmReadings(step);
+        List<Entry> entries = [.. readings, .. step.ExtraEntries];
+        foreach (var entry in entries)
+            entry.DataSource = dataSource;
+        foreach (var treatment in step.Treatments)
+            treatment.DataSource = dataSource;
+
+        var status = DemoDeviceStatusGenerator.ForStep(step, clock.Demo, config.TargetGlucose, config.BasalRate);
+        // Deterministic legacy id, so a re-seed skips the statuses it already wrote.
+        status?.Id = status.Mills.ToString("x24");
+
+        return new StepRecords(entries, step.Treatments, status, readings.Count > 0);
+    }
+
+    internal sealed record StepRecords(
+        IReadOnlyList<Entry> Entries,
+        IReadOnlyList<Treatment> Treatments,
+        DeviceStatus? Status,
+        bool HasCgmReading);
 
     /// <summary>The simulation every seed of <paramref name="days"/> days runs.</summary>
     internal static DemoModeConfiguration ConfigurationFor(int days) =>

@@ -164,6 +164,9 @@ builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configurat
 // Consumed by the dev-only admin controllers (Development) and the demo admin
 // controller's seed-extras endpoint (demo container, all environments).
 builder.Services.AddScoped<SampleDataSeeder>();
+builder.Services.AddScoped<SampleDataLiveFeed>();
+if (SampleDataLiveFeed.IsEnabled(builder.Configuration))
+    builder.Services.AddHostedService<SampleDataLiveFeedService>();
 
 builder.Services.AddSingleton<ReadAccessLogWriter>();
 builder.Services.AddHostedService<ReadAccessLogDrain>();
