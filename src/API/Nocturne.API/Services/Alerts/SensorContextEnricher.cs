@@ -269,7 +269,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             foreach (var t in treatments)
             {
                 if (t.Mills <= 0) continue;
-                var at = DateTimeOffset.FromUnixTimeMilliseconds(t.Mills).UtcDateTime;
+                var at = t.Mills.ToUtcDateTime();
                 if (t.Carbs is > 0 && (lastCarbAt is null || at > lastCarbAt))
                     lastCarbAt = at;
                 if (t.Insulin is > 0 && (lastBolusAt is null || at > lastBolusAt))

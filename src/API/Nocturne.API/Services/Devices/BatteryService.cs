@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Battery;
 using Nocturne.Core.Models.V4;
 
@@ -129,10 +130,10 @@ public class BatteryService : IBatteryService
         try
         {
             var from = fromMills.HasValue
-                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+                ? fromMills.Value.ToUtcDateTime()
                 : (DateTime?)null;
             var to = toMills.HasValue
-                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+                ? toMills.Value.ToUtcDateTime()
                 : (DateTime?)null;
 
             var uploaderSnapshots = await _uploaderSnapshots.GetAsync(

@@ -656,8 +656,8 @@ public class DDataService : IDDataService
         {
             ["created_at"] = new Dictionary<string, string>
             {
-                ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime.ToString("o"),
-                ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime.ToString("o"),
+                ["$gte"] = fromMills.ToUtcDateTime().ToString("o"),
+                ["$lte"] = toMills.ToUtcDateTime().ToString("o"),
             },
         });
 
@@ -812,8 +812,8 @@ public class DDataService : IDDataService
             {
                 ["created_at"] = new Dictionary<string, string>
                 {
-                    ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp - DeviceStatusWindowMills).UtcDateTime.ToString("o"),
-                    ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.ToString("o"),
+                    ["$gte"] = (timestamp - DeviceStatusWindowMills).ToUtcDateTime().ToString("o"),
+                    ["$lte"] = timestamp.ToUtcDateTime().ToString("o"),
                 },
             };
             var deviceStatuses = await _deviceStatuses.GetDeviceStatusesAsync(

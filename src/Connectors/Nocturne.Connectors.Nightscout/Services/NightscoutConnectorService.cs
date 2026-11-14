@@ -410,13 +410,13 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     }
 
     private static DateTime? EntryTime(Entry entry) =>
-        entry.Mills > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime : null;
+        entry.Mills > 0 ? entry.Mills.ToUtcDateTime() : null;
 
     private static DateTime? OldestEntryTime(Entry[] page)
     {
         var oldestMs = page.Min(e => e.Mills);
         return oldestMs > 0
-            ? DateTimeOffset.FromUnixTimeMilliseconds(oldestMs).UtcDateTime
+            ? oldestMs.ToUtcDateTime()
             : null;
     }
 

@@ -124,10 +124,10 @@ public class ActivityService : IActivityService
 
             var query = FindQuery.Parse(find);
             var from = query.FromMills is { } fromMills
-                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime
+                ? fromMills.ToUtcDateTime()
                 : (DateTime?)null;
             var to = query.ToMills is { } toMills
-                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime
+                ? toMills.ToUtcDateTime()
                 : (DateTime?)null;
 
             // Over-fetch from each source so we can merge and re-paginate. Clamped into range: a
@@ -583,10 +583,10 @@ public class ActivityService : IActivityService
             var query = FindQuery.Parse(find);
             var structured = !query.IsEmpty;
             var from = query.FromMills is { } fromMills
-                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime
+                ? fromMills.ToUtcDateTime()
                 : (DateTime?)null;
             var to = query.ToMills is { } toMills
-                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime
+                ? toMills.ToUtcDateTime()
                 : (DateTime?)null;
 
             var fetchCount = query.HasFieldFilters ? MaxFilteredFetch : int.MaxValue;

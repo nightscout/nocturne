@@ -429,7 +429,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     {
         var isEffective = EffectiveProfileSwitch.Is(treatment);
         var metadata = (isEffective ? BuildEffectiveProfileMetadata(treatment) : BuildProfileMetadata(treatment)) ?? [];
-        var start = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
+        var start = treatment.Mills.ToUtcDateTime();
 
         var model = ProfileActivationLegacyFields.FromSpanMetadata(metadata, start);
         model.Id = Guid.CreateVersion7();
@@ -447,9 +447,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     {
         Category = StateSpanCategory.Override,
         State = OverrideState.Custom.ToString(),
-        StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+        StartTimestamp = treatment.Mills.ToUtcDateTime(),
         EndTimestamp = treatment.Duration is > 0
-            ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).UtcDateTime
+            ? (treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).ToUtcDateTime()
             : null,
         Source = SpanSource(treatment),
         OriginalId = treatment.Id,
@@ -467,9 +467,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             State = isCancelled
                 ? TemporaryTargetState.Cancelled.ToString()
                 : TemporaryTargetState.Active.ToString(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            StartTimestamp = treatment.Mills.ToUtcDateTime(),
             EndTimestamp = !isCancelled && treatment.Duration is > 0
-                ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).UtcDateTime
+                ? (treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).ToUtcDateTime()
                 : null,
             Source = SpanSource(treatment),
             OriginalId = treatment.Id,
@@ -514,7 +514,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// </summary>
     internal static V4Models.TempBasal MapToTempBasal(Treatment treatment, Guid? correlationId)
     {
-        var startTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
+        var startTimestamp = treatment.Mills.ToUtcDateTime();
         var durationMs = (treatment.DurationInMilliseconds ?? (long?)((treatment.Duration ?? 0) * 60 * 1000)) ?? 0;
         var percent = treatment.Absolute is null ? treatment.Percent : null;
         var (origin, evidence) = MapTempBasalOrigin(treatment);
@@ -530,7 +530,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                     ?? (evidence is V4Models.TempBasalOriginEvidence.Reported ? TempBasalAutomaticFlag.Of(origin) : null)),
                 treatment),
             StartTimestamp = startTimestamp,
-            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + Math.Max(durationMs, 0)).UtcDateTime,
+            EndTimestamp = (treatment.Mills + Math.Max(durationMs, 0)).ToUtcDateTime(),
             UtcOffset = treatment.UtcOffset,
             Device = UploadedDevice(treatment),
             App = treatment.EnteredBy,
@@ -648,7 +648,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                     TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                     treatment, keepEventType, TreatmentTypes.CorrectionBolus),
                 treatment, keepEventType),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             Insulin = treatment.Insulin ?? 0,
             Programmed = treatment.Programmed,
             Delivered = treatment.InsulinDelivered,
@@ -676,7 +676,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             AdditionalProperties = UploadedEventType(
                 TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                 treatment, keepEventType, TreatmentTypes.CarbCorrection),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             Carbs = treatment.Carbs ?? 0,
             Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
@@ -703,7 +703,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             LegacyId = treatment.Id,
             AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             Glucose = treatment.Glucose ?? 0,
             GlucoseType = ParseGlucoseType(treatment.GlucoseType),
             Units = V4Models.GlucoseUnits.Parse(treatment.Units),
@@ -721,7 +721,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             LegacyId = treatment.Id,
             AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             Text = treatment.Notes ?? string.Empty,
             EventType = treatment.EventType,
             IsAnnouncement = isAnnouncement || (treatment.IsAnnouncement ?? false),
@@ -739,7 +739,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             LegacyId = treatment.Id,
             AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             EventType = deviceEventType,
             Notes = treatment.Notes,
             Device = UploadedDevice(treatment),
@@ -756,7 +756,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             LegacyId = treatment.Id,
             AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             BloodGlucoseInput = treatment.BloodGlucoseInput,
             BloodGlucoseInputSource = treatment.BloodGlucoseInputSource,
             CarbInput = treatment.Carbs,
@@ -1343,7 +1343,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// <summary>A treatment of a batch, with the classification and the correlation id its records are written under.</summary>
     private sealed record BatchTreatment(int Index, Treatment Treatment, TreatmentClassification Classification, Guid CorrelationId)
     {
-        public DateTime Start => DateTimeOffset.FromUnixTimeMilliseconds(Treatment.Mills).UtcDateTime;
+        public DateTime Start => Treatment.Mills.ToUtcDateTime();
     }
 
     /// <summary>The models a batch builds, before any is written.</summary>
@@ -2281,10 +2281,10 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         }
 
         DateTime? from = fromMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+            ? fromMills.Value.ToUtcDateTime()
             : null;
         DateTime? to = toMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+            ? toMills.Value.ToUtcDateTime()
             : null;
 
         var scope = $"timestamp={from:O}..{to:O}";

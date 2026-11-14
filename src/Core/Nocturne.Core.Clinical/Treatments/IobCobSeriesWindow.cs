@@ -23,7 +23,7 @@ public sealed record IobCobSeriesWindow(long FirstTick, long LastTick, long Inte
     /// it is read.
     /// </summary>
     public long TempBasalReadStart =>
-        StatisticsService.TempBasalReadStart(DateTimeOffset.FromUnixTimeMilliseconds(InsulinReadStart).UtcDateTime).ToMills();
+        StatisticsService.TempBasalReadStart(InsulinReadStart.ToUtcDateTime()).ToMills();
 
     private readonly long? _readEnd;
 

@@ -253,12 +253,12 @@ public static class LinkedRecordTypes
                             lr.RecordType == key && lr.RecordId == EF.Property<Guid>(e, idName)));
                 if (fromMills is { } from)
                 {
-                    var fromTime = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime;
+                    var fromTime = from.ToUtcDateTime();
                     query = query.Where(e => EF.Property<DateTime>(e, timestampName) >= fromTime);
                 }
                 if (toMills is { } to)
                 {
-                    var toTime = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime;
+                    var toTime = to.ToUtcDateTime();
                     query = query.Where(e => EF.Property<DateTime>(e, timestampName) <= toTime);
                 }
 

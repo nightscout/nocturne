@@ -199,9 +199,9 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             return false;
 
         if (find.FromMills > earliest)
-            from = DateTimeOffset.FromUnixTimeMilliseconds(find.FromMills.Value).UtcDateTime;
+            from = find.FromMills.Value.ToUtcDateTime();
         if (find.ToMills < latest)
-            to = DateTimeOffset.FromUnixTimeMilliseconds(find.ToMills.Value).UtcDateTime
+            to = find.ToMills.Value.ToUtcDateTime()
                 .AddTicks(TimeSpan.TicksPerMillisecond - TimeSpan.TicksPerMicrosecond);
         return true;
     }

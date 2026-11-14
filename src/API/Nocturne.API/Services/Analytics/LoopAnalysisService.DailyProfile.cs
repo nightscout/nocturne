@@ -38,13 +38,13 @@ internal sealed partial class LoopAnalysisService
         var from = window.From;
         var to = window.To;
         var series = window.Series;
-        var lookbackUtc = ToUtc(series.InsulinReadStart);
+        var lookbackUtc = series.InsulinReadStart.ToUtcDateTime();
 
         // Carbs are read to the window's end, past the series' last tick, because the calculable time
         // counts them. Snapshots are read from the insulin look-back, before the series' device read
         // start, because the open-loop mask reads them too.
-        var carbTask = carbIntakeRepository.GetAsync(lookbackUtc, ToUtc(to), null, null, int.MaxValue, descending: false, ct: ct);
-        var deviceReadUntil = ToUtc(series.DeviceReadEnd);
+        var carbTask = carbIntakeRepository.GetAsync(lookbackUtc, to.ToUtcDateTime(), null, null, int.MaxValue, descending: false, ct: ct);
+        var deviceReadUntil = series.DeviceReadEnd.ToUtcDateTime();
         var apsTask = apsSnapshotRepository.GetIobCobPointsAsync(lookbackUtc, deviceReadUntil, ct);
         var pumpTask = pumpSnapshotRepository.GetIobPointsAsync(lookbackUtc, deviceReadUntil, ct);
         var commonTask = LoadCommonAsync(window, ct);
@@ -78,7 +78,7 @@ internal sealed partial class LoopAnalysisService
                 delivery.HasTherapy ? common.Profiles : [], ActiveTemporaryTargets(common.Spans, to), zone, to, ct),
         };
 
-        return new DailyProfileLoaded(inputs, Sources(common, LoopStates(apsPoints.Where(p => p.Timestamp <= ToUtc(to))), to), delivery.Timeline);
+        return new DailyProfileLoaded(inputs, Sources(common, LoopStates(apsPoints.Where(p => p.Timestamp <= to.ToUtcDateTime())), to), delivery.Timeline);
     }
 
     /// <summary>
@@ -111,7 +111,7 @@ internal sealed partial class LoopAnalysisService
                 return null;
             var entries = span.Schedules?.Targets
                 ?? ProfileVersionCache.ActiveAt(
-                    versions[span.ProfileName], DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime)?.Entries;
+                    versions[span.ProfileName], mills.ToUtcDateTime())?.Entries;
             if (entries is null)
                 return null;
             var shifted = mills + (span.Adjustment?.TimeshiftMs ?? 0);

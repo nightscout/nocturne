@@ -419,8 +419,8 @@ public class IobCalculator(
     internal async Task<IobResult?> GetDeviceIobAsync(long time, bool live, CancellationToken ct = default)
     {
         var (from, to) = DeviceReportedValues.Window(time, live);
-        var fromTime = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime;
-        var toTime = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime;
+        var fromTime = from.ToUtcDateTime();
+        var toTime = to.ToUtcDateTime();
 
         var aps = (await apsSnapshotRepo.GetAsync(
             from: fromTime, to: toTime, device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))

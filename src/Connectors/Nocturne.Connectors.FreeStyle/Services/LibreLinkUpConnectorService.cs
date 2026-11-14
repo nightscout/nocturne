@@ -271,7 +271,7 @@ public class LibreConnectorService(
             .Select(m => _sensorGlucoseMapper.ConvertMeasurement(m, now))
             .Where(sg => sg != null)
             .Cast<SensorGlucose>()
-            .Where(sg => !since.HasValue || DateTimeOffset.FromUnixTimeMilliseconds(sg.Mills).UtcDateTime > since.Value)
+            .Where(sg => !since.HasValue || sg.Mills.ToUtcDateTime() > since.Value)
             .OrderBy(sg => sg.Mills)
             .ToList();
 

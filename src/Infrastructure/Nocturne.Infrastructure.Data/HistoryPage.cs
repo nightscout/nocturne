@@ -43,7 +43,7 @@ public static class HistoryPage
         string table,
         CancellationToken ct)
     {
-        var from = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
+        var from = (cursorMills + 1).ToUtcDateTime();
         var horizon = await HistoryHorizon.GetAsync(context, logger, ct);
         var page = await source
             .Where(InRange(stamp, from, horizon))
@@ -89,7 +89,7 @@ public static class HistoryPage
         long millisecond,
         CancellationToken ct)
     {
-        var from = DateTimeOffset.FromUnixTimeMilliseconds(millisecond).UtcDateTime;
+        var from = millisecond.ToUtcDateTime();
         return source
             .Where(InRange(stamp, from, from.AddMilliseconds(1)))
             .OrderBy(stamp)

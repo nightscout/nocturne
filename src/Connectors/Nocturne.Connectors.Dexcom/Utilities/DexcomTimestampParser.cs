@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Dexcom.Utilities;
 
@@ -19,7 +20,7 @@ public static partial class DexcomTimestampParser
         if (!match.Success) throw new FormatException($"Invalid Dexcom timestamp format: {value}");
 
         var milliseconds = long.Parse(match.Groups[1].Value);
-        return DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).UtcDateTime;
+        return milliseconds.ToUtcDateTime();
     }
 
     /// <summary>
@@ -33,7 +34,7 @@ public static partial class DexcomTimestampParser
 
         if (!long.TryParse(match.Groups[1].Value, out var milliseconds)) return false;
 
-        result = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).UtcDateTime;
+        result = milliseconds.ToUtcDateTime();
         return true;
     }
 

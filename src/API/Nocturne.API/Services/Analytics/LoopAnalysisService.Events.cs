@@ -61,7 +61,7 @@ internal sealed partial class LoopAnalysisService
         var padded = new Window(range.From - EventLookbackMs(window), range.To + window.AfterMs + EventMarginMs);
         var sensorTask = sensorStarts
             ? deviceEventRepository.GetAsync(
-                ToUtc(range.From - EventAnchors.SensorSessionMergeMs), ToUtc(range.To), null, null, int.MaxValue, descending: false, ct: ct)
+                (range.From - EventAnchors.SensorSessionMergeMs).ToUtcDateTime(), range.To.ToUtcDateTime(), null, null, int.MaxValue, descending: false, ct: ct)
             : Task.FromResult(Enumerable.Empty<Core.Models.V4.DeviceEvent>());
         var loaded = await LoadDailyProfileAsync(padded, zone, filter, ct);
 
