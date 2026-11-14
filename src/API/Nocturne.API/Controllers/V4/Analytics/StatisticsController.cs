@@ -376,6 +376,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         return Ok(await _rangeAnalytics.ReadAsync(startDate, endDate, population, patientDeviceId, cancellationToken));
     }
 
@@ -449,6 +452,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         if (clock.Zone is not { } tz)
             return Ok(new WeekdayAveragesResponse { TimeZoneUnavailableReason = clock.Reason });
@@ -483,6 +489,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
@@ -812,6 +821,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         if (clock.Zone is not { } tz)
             return Ok(new DailyBasalBolusRatioResponse { TimeZoneUnavailableReason = clock.Reason });
@@ -861,6 +873,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate.ToDateTime(TimeOnly.MinValue), endDate.ToDateTime(TimeOnly.MinValue)) is { } overlong)
+            return overlong;
+
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         if (clock.Zone is not { } tz)
             return Ok(new PunchCardResponse { TimeZoneUnavailableReason = clock.Reason });
@@ -912,6 +927,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var (result, boluses) = await _insulinDelivery.ReadAsync(startDate, endDate, cancellationToken);
         if (includeBoluses && AnalyticsReadScopes.Allows(HttpContext.GetGrantedScopes(), Scope.TreatmentsRead))
             result.ManualBoluses = StatisticsService.CountedBoluses(boluses).ToList();
@@ -934,6 +952,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         // Force UTC kind to avoid DateTimeOffset throwing when the server's local
         // timezone offset would push DateTime.MinValue/MaxValue out of the valid range.
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
@@ -980,6 +1001,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endUtc = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
