@@ -34,6 +34,15 @@ internal enum V4RecordKind
 /// </summary>
 internal static class V4RecordTables
 {
+    private static readonly V4RecordTable<ApsSnapshotEntity> ApsSnapshots =
+        TimeSeries<ApsSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(ApsSnapshot), V4RecordKind.DeviceStatus, db => db.ApsSnapshots);
+
+    private static readonly V4RecordTable<PumpSnapshotEntity> PumpSnapshots =
+        TimeSeries<PumpSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(PumpSnapshot), V4RecordKind.DeviceStatus, db => db.PumpSnapshots, discovered: false);
+
+    private static readonly V4RecordTable<UploaderSnapshotEntity> UploaderSnapshots =
+        TimeSeries<UploaderSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(UploaderSnapshot), V4RecordKind.DeviceStatus, db => db.UploaderSnapshots, discovered: false);
+
     /// <summary>
     /// The tables in their declaration order, which is the order of a source's counts, discovery
     /// buckets and purge counts: each reaches a response as an ordered map.
@@ -56,9 +65,9 @@ internal static class V4RecordTables
             .LinkedAs(RecordType.BGCheck, MatchCriteriaMapper.From),
         TimeSeries<NoteEntity>(SourceDataTypes.Notes, typeof(Note), V4RecordKind.Treatment, db => db.Notes)
             .LinkedAs(RecordType.Note, MatchCriteriaMapper.From),
-        TimeSeries<ApsSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(ApsSnapshot), V4RecordKind.DeviceStatus, db => db.ApsSnapshots),
-        TimeSeries<PumpSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(PumpSnapshot), V4RecordKind.DeviceStatus, db => db.PumpSnapshots, discovered: false),
-        TimeSeries<UploaderSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(UploaderSnapshot), V4RecordKind.DeviceStatus, db => db.UploaderSnapshots, discovered: false),
+        ApsSnapshots,
+        PumpSnapshots,
+        UploaderSnapshots,
         TimeSeries<TempBasalEntity>(SourceDataTypes.TempBasals, typeof(TempBasal), V4RecordKind.Treatment, db => db.TempBasals)
             .LinkedAs(RecordType.TempBasal, MatchCriteriaMapper.From),
         TimeSeries<BasalInjectionEntity>(SourceDataTypes.BasalInjections, typeof(BasalInjection), V4RecordKind.Treatment, db => db.BasalInjections),
@@ -82,6 +91,33 @@ internal static class V4RecordTables
         Profile<SensitivityScheduleEntity>(typeof(SensitivitySchedule), db => db.SensitivitySchedules),
         Profile<TargetRangeScheduleEntity>(typeof(TargetRangeSchedule), db => db.TargetRangeSchedules),
     ];
+
+    /// <summary>
+    /// The extras rows of the device statuses <paramref name="source"/> holds a snapshot of, deleted or
+    /// not, that have no live snapshot left. An extras row has no source of its own: it is a part of its
+    /// status, deleted and released with the status's last snapshot, as the delete of one status deletes
+    /// it by its <see cref="DeviceStatusExtrasEntity.CorrelationId"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reading the deleted snapshots lifts the soft-delete filter for the whole query, so each live
+    /// test is written out. The source tests are correlated on the extras row, not a set of the
+    /// source's statuses: <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteAsync{T}"/> runs
+    /// this query again for each chunk of ids, and a set would be rebuilt from the source's whole
+    /// history for every chunk.
+    /// </remarks>
+    internal static IQueryable<DeviceStatusExtrasEntity> StatusExtrasLeftBy(NocturneDbContext db, string source)
+    {
+        var aps = ApsSnapshots.Owned(db, source).IncludingDeleted();
+        var pump = PumpSnapshots.Owned(db, source).IncludingDeleted();
+        var uploader = UploaderSnapshots.Owned(db, source).IncludingDeleted();
+        return db.DeviceStatusExtras.Where(e => e.TenantId == db.TenantId
+            && (aps.Any(s => s.CorrelationId == e.CorrelationId)
+                || pump.Any(s => s.CorrelationId == e.CorrelationId)
+                || uploader.Any(s => s.CorrelationId == e.CorrelationId))
+            && !db.ApsSnapshots.Any(s => s.CorrelationId == e.CorrelationId && s.DeletedAt == null)
+            && !db.PumpSnapshots.Any(s => s.CorrelationId == e.CorrelationId && s.DeletedAt == null)
+            && !db.UploaderSnapshots.Any(s => s.CorrelationId == e.CorrelationId && s.DeletedAt == null));
+    }
 
     /// <summary>
     /// Tables of a counted kind that a source's stats and the data overview do not count yet, each

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -57,6 +58,41 @@ public class V4RecordTablesGuardTests
         V4RecordTables.Uncounted.Values.Concat(V4RecordTables.UnattributedInOverview.Values)
             .Should().OnlyContain(reason => !string.IsNullOrWhiteSpace(reason));
     }
+
+    [Fact]
+    public void APurgeReadsEveryDeviceStatusTableBeforeItDeletesAStatusExtrasRow()
+    {
+        using var context = OfflineDbContext.Create();
+        var sql = V4RecordTables.StatusExtrasLeftBy(context, "src").ToQueryString();
+
+        foreach (var table in V4RecordTables.OfKind(V4RecordKind.DeviceStatus))
+        {
+            var name = context.Model.FindEntityType(table.Entity)!.GetTableName()!;
+            Regex.IsMatch(sql, HeldBySource(name), RegexOptions.Singleline).Should().BeTrue(
+                $"a status with a row of the source in {name}, deleted or not, is a status of the source");
+            Regex.IsMatch(sql, LiveIn(name), RegexOptions.Singleline).Should().BeTrue(
+                $"a live row of any source in {name} keeps its status live");
+        }
+    }
+
+    [Fact]
+    public void APurgeFindsTheSourceStatusesOfAnExtrasRowByItsOwnCorrelationId()
+    {
+        using var context = OfflineDbContext.Create();
+        var sql = V4RecordTables.StatusExtrasLeftBy(context, "src").ToQueryString();
+
+        sql.Should().NotContain("UNION").And.NotContain(" IN (",
+            "each chunk of a purge reruns this query, and a set of the source's statuses is rebuilt from its whole history every time");
+        var tables = V4RecordTables.OfKind(V4RecordKind.DeviceStatus).Count();
+        Regex.Matches(sql, HeldBySource(@"\w+"), RegexOptions.Singleline).Should().HaveCount(tables);
+        Regex.Matches(sql, @"\) OR EXISTS \(").Should().HaveCount(tables - 1);
+    }
+
+    private static string HeldBySource(string table) =>
+        $@"(?<!NOT )EXISTS \(\s*SELECT 1\s*FROM {table} AS (\w+)\s*WHERE (?:(?!EXISTS).)*?@source(?:(?!EXISTS).)*?\1\.correlation_id = d\.correlation_id\)";
+
+    private static string LiveIn(string table) =>
+        $@"NOT EXISTS \(\s*SELECT 1\s*FROM {table} AS (\w+)\s*WHERE (?:(?!EXISTS).)*?\1\.correlation_id = d\.correlation_id AND \1\.deleted_at IS NULL\)";
 
     private sealed class UnregisteredReading : ISourcedEntity, ISoftDeletable
     {
