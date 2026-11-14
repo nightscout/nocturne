@@ -1,59 +1,71 @@
 import { describe, it, expect, vi } from "vitest";
-import { BasalDeliveryOrigin, StateSpanCategory } from "#lib/api/index.js";
+import { DeviceEventType, StateSpanCategory } from "#lib/api/index.js";
 
-const day = new Date(2026, 0, 10, 8).getTime();
+const from = new Date(2026, 0, 10).getTime();
 const hour = 3_600_000;
+const to = from + 24 * hour;
 
-const stateSpans = {
-  getPumpModes: vi.fn(async () => ({ data: [] })),
-  getOverrides: vi.fn(async () => ({ data: [] })),
-  getActivities: vi.fn(async () => ({ data: [] })),
-  getStateSpans: vi.fn(async () => ({
-    data: [
-      { id: "ex", category: StateSpanCategory.Exercise, state: "Run", startMills: day, endMills: day + hour },
-      { id: "mo", category: StateSpanCategory.Motion, state: "Walking", startMills: day, endMills: day + hour },
-    ],
-  })),
+const refused = async () => {
+  throw Object.assign(new Error("forbidden"), { status: 403 });
 };
-const chartData = {
-  getBasalDeliverySpans: vi.fn(async () => [
-    { id: "tb0", startMills: day - hour, endMills: day + hour, rate: 0.8, origin: BasalDeliveryOrigin.Inferred, fillColor: "insulin-basal" },
-    { id: "tb1", startMills: day, endMills: day + hour, rate: 1.4, origin: BasalDeliveryOrigin.Algorithm, source: "loop", fillColor: "insulin-basal" },
-    { id: "tb2", startMills: day + hour, endMills: day + 2 * hour, rate: 0, origin: BasalDeliveryOrigin.Suspended, fillColor: "insulin-basal" },
-  ]),
+
+const apiClient = {
+  profileHistory: {
+    getProfileHistory: vi.fn(refused),
+    getProfileLanes: vi.fn(refused),
+    getGlucoseTrace: vi.fn(async () => [{ mills: from + hour, average: 120, min: 100, max: 140 }]),
+    getGlucoseAroundChange: vi.fn(refused),
+  },
+  chartData: { getBasalDeliverySpans: vi.fn(async () => []) },
+  stateSpans: {
+    getPumpModes: vi.fn(async () => ({
+      data: [{ id: "pm", category: StateSpanCategory.PumpMode, state: "Automatic", startMills: from - hour }],
+    })),
+    getOverrides: vi.fn(async () => ({ data: [] })),
+    getActivities: vi.fn(async () => ({ data: [] })),
+  },
+  sleep: { getSessions: vi.fn(async () => ({ data: [{ id: "s", startMills: from + hour, endMills: to + hour }] })) },
+  deviceEvent: {
+    getAll: vi.fn(async () => ({
+      data: [
+        { id: "site", mills: from + hour, eventType: DeviceEventType.SiteChange },
+        { id: "prime", mills: from + 2 * hour, eventType: DeviceEventType.Priming },
+      ],
+    })),
+  },
 };
 
 vi.mock("$app/server", () => ({
-  getRequestEvent: () => ({
-    locals: {
-      apiClient: {
-        stateSpans,
-        chartData,
-        profileActivations: { getActivations: async () => [] },
-      },
-    },
-  }),
+  getRequestEvent: () => ({ locals: { apiClient } }),
   query: (schemaOrFn: unknown, fn?: unknown) => fn ?? schemaOrFn,
 }));
 
-const { getTimeSpansData } = await import("./data.remote");
+const remote = await import("./data.remote");
+type Window = { from: number; to: number };
+const overview = remote.getTimelineOverview as unknown as (i: Window) => ReturnType<typeof remote.getTimelineOverview>;
+const stage = remote.getTimelineStage as unknown as (i: Window) => ReturnType<typeof remote.getTimelineStage>;
 
-describe("getTimeSpansData temp-basal lane", () => {
-  it("draws only the backend basal delivery spans, never a state span of any category", async () => {
-    const data = await (getTimeSpansData as unknown as (i: { from: string; to: string }) => Promise<Awaited<ReturnType<typeof getTimeSpansData>>>)({
-      from: "2026-01-10",
-      to: "2026-01-10",
-    });
+describe("therapy timeline reads", () => {
+  it("leaves out a refused category and keeps the others", async () => {
+    const data = await overview({ from, to });
 
-    expect(stateSpans.getStateSpans).not.toHaveBeenCalled();
-    expect(chartData.getBasalDeliverySpans).toHaveBeenCalledWith(
-      new Date(2026, 0, 10, 0, 0, 0).getTime(),
-      new Date(2026, 0, 10, 23, 59, 59).getTime()
-    );
-    expect(data.tempBasalSpans.map((s) => [s.id, s.rate, s.origin])).toEqual([
-      ["tb0", 0.8, BasalDeliveryOrigin.Inferred],
-      ["tb1", 1.4, BasalDeliveryOrigin.Algorithm],
-      ["tb2", 0, BasalDeliveryOrigin.Suspended],
+    expect(data.history).toBeNull();
+    expect(data.glucose).toHaveLength(1);
+  });
+
+  it("clips spans to the window and runs an open one to its end", async () => {
+    const data = await stage({ from, to });
+
+    expect(data.lanes).toBeNull();
+    expect(data.pumpModes).toEqual([
+      expect.objectContaining({ id: "pm", label: "Automatic", startMills: from, endMills: to }),
     ]);
+    expect(data.sleep).toEqual([expect.objectContaining({ startMills: from + hour, endMills: to })]);
+  });
+
+  it("draws only the device changes that start a new sensor, site, reservoir, pod or battery", async () => {
+    const data = await stage({ from, to });
+
+    expect(data.deviceEvents?.map((e) => e.id)).toEqual(["site"]);
   });
 });

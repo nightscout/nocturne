@@ -183,9 +183,9 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "page-time-spans",
-		label: "Time spans",
+		label: "Therapy timeline",
 		group: "pages",
-		keywords: ["time spans", "ranges", "periods"],
+		keywords: ["therapy timeline", "time spans", "profile history", "profile changes"],
 		icon: Clock,
 		href: "/time-spans",
 	},
