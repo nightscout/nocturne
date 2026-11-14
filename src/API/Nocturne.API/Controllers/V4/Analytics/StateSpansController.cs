@@ -90,11 +90,8 @@ public class StateSpansController : ControllerBase
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
 
         var granted = HttpContext.GetGrantedScopes();
         if (category is { } requested && !StateSpanReadScopeGuard.CanRead(granted, requested))
@@ -104,7 +101,6 @@ public class StateSpansController : ControllerBase
             ? [only]
             : StateSpanReadScopeGuard.ReadableCategories(granted);
 
-        var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansInCategoriesAsync(
             categories, state, from, to, source, active, limit, offset, descending, cancellationToken);
         var total = await _stateSpanService.CountStateSpansInCategoriesAsync(
@@ -250,13 +246,9 @@ public class StateSpansController : ControllerBase
         string sort,
         CancellationToken cancellationToken)
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
 
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(category, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
         var total = await _stateSpanService.CountStateSpansAsync(category, from: from, to: to, cancellationToken: cancellationToken);
         return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
@@ -285,13 +277,12 @@ public class StateSpansController : ControllerBase
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+        if (this.RejectInvalidSort(sort, out var descending) is { } invalid)
+            return invalid;
 
         offset = V4ReadLimits.ClampOffset(offset);
         limit = V4ReadLimits.ClampMergedPage(limit, offset);
 
-        var descending = sort == "timestamp_desc";
         var allSpans = new List<StateSpan>();
         var total = 0;
 
