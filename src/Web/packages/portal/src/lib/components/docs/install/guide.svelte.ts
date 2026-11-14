@@ -1,6 +1,7 @@
 import { getContext, onMount, setContext } from "svelte";
 
-const CONTEXT = Symbol("install-guide");
+// @wc-ignore
+const CONTEXT = "nocturne:portal:install-guide";
 
 // Storage keys, variable names and byte counts, not user-facing text.
 // @wc-ignore
