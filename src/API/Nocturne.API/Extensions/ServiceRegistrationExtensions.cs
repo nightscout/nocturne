@@ -810,6 +810,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBasalRateResolver, BasalRateResolver>();
         services.AddScoped<IBasalSegmentService, BasalSegmentService>();
         services.AddScoped<IActiveProfileSchedulesService, ActiveProfileSchedulesService>();
+        services.AddScoped<IProfileHistoryService, ProfileHistoryService>();
+        services.AddScoped<Services.Profiles.ProfileHistoryGlucoseReader>();
         services.AddScoped<ISensitivityResolver, SensitivityResolver>();
         services.AddScoped<ICarbRatioResolver, CarbRatioResolver>();
         services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();
