@@ -522,8 +522,7 @@ msgstr "Código de verificación"
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
-#: src/lib/components/dashboard/glucose-chart/dialogs/PointInspectionPicker.svelte
-#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
+#: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -849,7 +848,6 @@ msgstr "Añadir"
 #: src/lib/components/admin/SubjectEditDialog.svelte
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/audit/AuditMutationsTable.svelte
-#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
@@ -861,6 +859,7 @@ msgstr "Crear"
 #: src/lib/components/admin/SubjectEditDialog.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
@@ -3871,9 +3870,8 @@ msgstr "No se pudo guardar el evento del dispositivo"
 msgid "Edit the details of this entry and its correlated records."
 msgstr "Edita los detalles de esta entrada y de sus registros relacionados."
 
-#: src/lib/components/entries/EntryEditDialog.svelte
-msgid "Create a new entry. Add multiple record types to correlate them."
-msgstr "Crea una nueva entrada. Añade varios tipos de registro para relacionarlos."
+#~ msgid "Create a new entry. Add multiple record types to correlate them."
+#~ msgstr "Crea una nueva entrada. Añade varios tipos de registro para relacionarlos."
 
 #~ msgid "Date & Time"
 #~ msgstr "Fecha y hora"
@@ -13650,9 +13648,8 @@ msgstr "<0/> Administración"
 #~ msgid "Inspect Point"
 #~ msgstr "Inspeccionar punto"
 
-#: src/lib/components/dashboard/glucose-chart/dialogs/PointInspectionPicker.svelte
-msgid "Multiple data types available at this time. Choose what to inspect."
-msgstr "Hay varios tipos de datos disponibles en este momento. Elige cuál quieres inspeccionar."
+#~ msgid "Multiple data types available at this time. Choose what to inspect."
+#~ msgstr "Hay varios tipos de datos disponibles en este momento. Elige cuál quieres inspeccionar."
 
 #. 0: formatInsulinDisplay(bolusInsulin); 1: bolusType ? ` ${bolusType}` \\: ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
@@ -13710,9 +13707,8 @@ msgstr "Prebolo"
 #~ msgid "Multiple Entries"
 #~ msgstr "Varias entradas"
 
-#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
-msgid "Several entries occurred around this time. Select one to edit."
-msgstr "Se produjeron varias entradas alrededor de este momento. Selecciona una para editarla."
+#~ msgid "Several entries occurred around this time. Select one to edit."
+#~ msgstr "Se produjeron varias entradas alrededor de este momento. Selecciona una para editarla."
 
 #. 0: span.rate.toFixed(2)
 #: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
@@ -34213,9 +34209,8 @@ msgstr "Tipo de evento"
 msgid "Edit entry"
 msgstr "Editar entrada"
 
-#: src/lib/components/entries/EntryEditDialog.svelte
-msgid "New entry"
-msgstr "Nueva entrada"
+#~ msgid "New entry"
+#~ msgstr "Nueva entrada"
 
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
@@ -37191,13 +37186,11 @@ msgstr "Es posible que los datos de insulina basal estén desactualizados. La ú
 msgid "Glucose response"
 msgstr "Respuesta glucémica"
 
-#: src/lib/components/dashboard/glucose-chart/dialogs/PointInspectionPicker.svelte
-msgid "Inspect point"
-msgstr "Examinar punto"
+#~ msgid "Inspect point"
+#~ msgstr "Examinar punto"
 
-#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
-msgid "Multiple entries"
-msgstr "Varias entradas"
+#~ msgid "Multiple entries"
+#~ msgstr "Varias entradas"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 msgid "Bolus source"
@@ -40243,4 +40236,43 @@ msgstr ""
 
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "There are no changes in this range."
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+#: src/lib/components/entries/LogEventButton.svelte
+#: src/lib/components/entries/LogEventButton.svelte
+msgid "Log event"
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Record insulin, carbs, or a different event. Add a section for each record."
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
+#: src/lib/components/entries/LogEventButton.svelte
+msgid "<0/> Log event"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
+msgid "Select data to inspect or an entry to edit."
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
+msgid "Select data to inspect."
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
+msgid "Select an entry to edit."
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
+msgid "No data to inspect or entries to edit at this time."
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
+msgid "Inspect"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
+msgid "Edit an entry"
 msgstr ""
