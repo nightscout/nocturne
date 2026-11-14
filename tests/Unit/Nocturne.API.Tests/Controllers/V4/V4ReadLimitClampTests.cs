@@ -64,7 +64,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpans_LimitAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = FullAccess(new StateSpansController(service.Object));
+        var controller = FullAccess(new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>()));
 
         await controller.GetStateSpans(limit: Ceiling, offset: 0);
 
@@ -77,7 +77,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpans_LimitAboveCeiling_IsClamped()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = FullAccess(new StateSpansController(service.Object));
+        var controller = FullAccess(new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>()));
 
         await controller.GetStateSpans(limit: AboveCeiling, offset: -1);
 
@@ -90,7 +90,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpansCategorySubRoutes_LimitAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await InvokeCategorySubRoutes(controller, Ceiling, 0);
 
@@ -101,7 +101,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpansCategorySubRoutes_LimitAboveCeiling_IsClamped()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await InvokeCategorySubRoutes(controller, AboveCeiling, -1);
 
@@ -112,7 +112,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_LimitAboveWindow_IsClampedInTheReportedPage()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         var result = await controller.GetActivities(limit: MergedWindow + 1, offset: -1);
 
@@ -126,7 +126,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_LimitAboveWindow_FetchesEachCategoryOnlyToTheWindow()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await controller.GetActivities(limit: MergedWindow + 1, offset: 0);
 
@@ -137,7 +137,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_OffsetInsideWindow_FetchesOnlyAsDeepAsThePageReaches()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await controller.GetActivities(limit: 100, offset: 50);
 
@@ -148,7 +148,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_OffsetPastWindow_FetchesNothingRatherThanReopeningIt()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         var result = await controller.GetActivities(limit: 100, offset: MergedWindow * 10);
 
@@ -162,7 +162,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_ReadsExactlyTheDrawnActivityCategories()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await controller.GetActivities(limit: 100, offset: 0);
 
