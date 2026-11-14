@@ -62,7 +62,7 @@ public class StatusResponse
     public bool? BoluscalcEnabled { get; set; }
 
     /// <summary>
-    /// Authorized status (null when unauthenticated).
+    /// The token exchange for the request's <c>?token=</c>, else null.
     /// Always serialized for Nightscout compatibility.
     /// </summary>
     [JsonPropertyName("authorized")]
@@ -114,4 +114,15 @@ public class StatusResponse
     /// </summary>
     [JsonPropertyName("tenantSlug")]
     public string? TenantSlug { get; set; }
+
+    /// <summary>
+    /// A shallow copy carrying <paramref name="authorized"/>. The status is cached per tenant and
+    /// shared by every caller, so a caller's token never goes on the cached instance.
+    /// </summary>
+    public StatusResponse WithAuthorized(AuthorizationResponse authorized)
+    {
+        var copy = (StatusResponse)MemberwiseClone();
+        copy.Authorized = authorized;
+        return copy;
+    }
 }

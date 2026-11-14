@@ -311,4 +311,56 @@ public class ScopeTranslatorTests
 
         Assert.Contains(Scope.FoodReadWrite, scopes);
     }
+
+    private static readonly string[] ActivityReads = [Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead];
+
+    /// <summary>
+    /// What a scope reads back as after <see cref="ScopeTranslator.ToPermissions"/> then
+    /// <see cref="ScopeTranslator.FromPermissions"/>, for each scope whose Shiro form the forward map
+    /// does not take back to the same authority.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> RoundTripGaps = new()
+    {
+        // The three categories share one legacy activity collection, whose read the forward map
+        // takes to all three, and it has no entry for the create and update verbs.
+        [Scope.HeartRateRead] = ActivityReads,
+        [Scope.StepCountRead] = ActivityReads,
+        [Scope.SleepRead] = ActivityReads,
+        [Scope.HeartRateReadWrite] = ActivityReads,
+        [Scope.StepCountReadWrite] = ActivityReads,
+        [Scope.SleepReadWrite] = ActivityReads,
+
+        // Their Shiro forms have no entry in the forward map.
+        [Scope.AlertsRead] = [],
+        [Scope.AlertsReadWrite] = [],
+        [Scope.ReportsRead] = [],
+        [Scope.IdentityRead] = [],
+        [Scope.SharingReadWrite] = [],
+
+        // No Shiro form at all.
+        [Scope.DeviceNotify] = [],
+        [Scope.DeviceActuate] = [],
+    };
+
+    public static TheoryData<string> EveryScope() => [.. Scope.AllScopes];
+
+    /// <summary>
+    /// Clients read a grant's authority from the Shiro form, so it must come back as the scope it
+    /// was, or as the gap listed for it. A scope added without either fails here.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryScope))]
+    public void ToPermissions_RoundTripsToTheSameAuthorityOrItsListedGap(string scope)
+    {
+        var roundTripped = ScopeTranslator.FromPermissions(ScopeTranslator.ToPermissions([scope]));
+
+        var expected = RoundTripGaps.TryGetValue(scope, out var gap) ? gap : [scope];
+        Assert.Equal(Authority(expected), Authority(roundTripped));
+    }
+
+    private static string[] Authority(IEnumerable<string> scopes)
+    {
+        var granted = scopes.ToList();
+        return [.. Scope.AllScopes.Where(atom => Scope.Satisfies(granted, atom)).Order(StringComparer.Ordinal)];
+    }
 }
