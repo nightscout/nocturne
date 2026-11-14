@@ -547,6 +547,7 @@ msgstr "Código de verificación"
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
@@ -40540,4 +40541,8 @@ msgstr ""
 #. 0: formatMediumDateTime(job.completedAt)
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Ended: {0}"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/NightscoutConnect.svelte
+msgid "Start import"
 msgstr ""

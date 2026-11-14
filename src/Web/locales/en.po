@@ -538,6 +538,7 @@ msgstr "Verification code"
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
@@ -39635,3 +39636,7 @@ msgstr "Last migration"
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Ended: {0}"
 msgstr "Ended: {0}"
+
+#: src/routes/(unauthenticated)/setup/steps/NightscoutConnect.svelte
+msgid "Start import"
+msgstr "Start import"
