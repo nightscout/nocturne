@@ -65,13 +65,9 @@ public class TempBasalController(
         [FromQuery] bool includeTotal = false,
         CancellationToken ct = default)
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
 
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
         var data = (await repo.GetAsync(from, to, device, source, limit, offset, descending, ct)).ToList();
         var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => repo.CountAsync(from, to, ct));
         return Ok(new PaginatedResponse<TempBasal> { Data = data, Pagination = pagination });

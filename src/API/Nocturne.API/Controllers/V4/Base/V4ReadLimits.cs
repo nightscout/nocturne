@@ -148,6 +148,33 @@ public static class V4ReadLimits
             : null;
 
     /// <summary>
+    /// Reads the <c>sort</c> of a V4 list: <c>timestamp_desc</c> or <c>timestamp_asc</c>.
+    /// </summary>
+    /// <returns>The error response to return, or <c>null</c> when the sort is usable.</returns>
+    public static ObjectResult? RejectInvalidSort(this ControllerBase controller, string sort, out bool descending)
+    {
+        descending = sort == "timestamp_desc";
+        return sort is "timestamp_desc" or "timestamp_asc"
+            ? null
+            : controller.Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+    }
+
+    /// <summary>
+    /// Reads the <c>sort</c> of a V4 list and clamps its paging window to this class's ceilings.
+    /// </summary>
+    /// <returns>The error response to return, or <c>null</c> when the query is usable.</returns>
+    public static ObjectResult? PrepareListPage(
+        this ControllerBase controller, string sort, ref int limit, ref int offset, out bool descending)
+    {
+        if (controller.RejectInvalidSort(sort, out descending) is { } invalid)
+            return invalid;
+
+        limit = ClampLimit(limit);
+        offset = ClampOffset(offset);
+        return null;
+    }
+
+    /// <summary>
     /// Rejects a CGM comparison or sleep trends range that covers more than
     /// <see cref="MaxAnalyticsSpanDays"/> days in the tenant's zone.
     /// </summary>
