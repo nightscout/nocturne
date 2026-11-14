@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -19,6 +20,7 @@ public class PublishRecordTypePathTests
 {
     private sealed class PublishedRecord;
 
+    [ConnectorRegistration("Probe", "probe", "PROBE", "Probe")]
     private sealed class TestConfig : BaseConnectorConfiguration;
 
     /// <summary>Captures the messages the shared publish path logs, which no fixture otherwise sees.</summary>
@@ -338,7 +340,7 @@ public class PublishRecordTypePathTests
         // Assert: the run's own terminal message is not a publish message
         var publishes = reported.Where(e => e.MessageType == SyncMessageType.PublishingDataType).ToList();
         publishes.Should().HaveCount(2);
-        publishes.Should().OnlyContain(e => e.Phase == SyncPhase.Syncing && e.ConnectorId == "test");
+        publishes.Should().OnlyContain(e => e.Phase == SyncPhase.Syncing && e.ConnectorId == "probe");
         publishes[0].MessageParams.Should().Contain("dataType", nameof(SyncDataType.Glucose))
             .And.Contain("count", "2");
         publishes[1].MessageParams.Should().Contain("dataType", nameof(SyncDataType.Boluses))

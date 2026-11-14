@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -18,7 +19,33 @@ namespace Nocturne.Connectors.Core.Tests.Services;
 /// </summary>
 public class SyncTerminalPhaseTests
 {
+    [ConnectorRegistration("Probe", "probe", "PROBE", "Probe")]
     private sealed class TestConfig : BaseConnectorConfiguration;
+
+    private sealed class UnregisteredConfig : BaseConnectorConfiguration;
+
+    private sealed class UnregisteredConnectorService : BaseConnectorService<UnregisteredConfig>
+    {
+        public UnregisteredConnectorService()
+            : base(new HttpClient(),
+                new ConnectorServerResolver<UnregisteredConfig>(null, null, null),
+                NullLogger<UnregisteredConnectorService>.Instance,
+                new RecordingRetryDelayStrategy())
+        {
+        }
+
+        protected override string ConnectorSource => "unregistered-source";
+        public override string ServiceName => "Unregistered";
+
+        protected override Task<bool> EnsureAuthenticatedAsync(
+            UnregisteredConfig config,
+            CancellationToken cancellationToken) => Task.FromResult(true);
+
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request,
+            UnregisteredConfig config,
+            CancellationToken cancellationToken) => Task.FromResult(new SyncResult { Success = true });
+    }
 
     private sealed class TestConnectorService : BaseConnectorService<TestConfig>
     {
@@ -117,7 +144,23 @@ public class SyncTerminalPhaseTests
         reported[0].MessageType.Should().Be(SyncMessageType.SyncComplete);
         reported[0].Phase.Should().Be(SyncPhase.Completed);
         reported[0].ErrorMessage.Should().BeNull();
-        reported[0].ConnectorId.Should().Be("test");
+        reported[0].ConnectorId.Should().Be("probe");
+    }
+
+    [Fact]
+    public async Task ConfigWithNoRegistration_ReportsProgressUnderItsConnectorSource()
+    {
+        var (reporter, reported) = BuildReporter();
+
+        var result = await new UnregisteredConnectorService().SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            new UnregisteredConfig(),
+            CancellationToken.None,
+            reporter.Object);
+
+        result.Success.Should().BeTrue();
+        reported.Should().NotBeEmpty();
+        reported.Should().OnlyContain(e => e.ConnectorId == "unregistered-source");
     }
 
     [Fact]

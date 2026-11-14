@@ -79,6 +79,13 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             : throw new InvalidOperationException(
                 $"{typeof(TConfig).Name} declares no {nameof(ConnectorRegistrationAttribute.DataSourceId)}.");
 
+    /// <summary>
+    ///     The id the connector list carries for this connector, which its progress events carry
+    ///     too. A <typeparamref name="TConfig"/> with no registration is in no list and reports under
+    ///     <see cref="ConnectorSource"/>.
+    /// </summary>
+    private string ConnectorId => Registration?.ConnectorId ?? ConnectorSource;
+
     public abstract string ServiceName { get; }
 
     /// <summary>
@@ -911,7 +918,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
         return _progressReporter.ReportProgressAsync(new SyncProgressEvent
         {
-            ConnectorId = ConnectorSource,
+            ConnectorId = ConnectorId,
             ConnectorName = ServiceName,
             Phase = PhaseOf(messageType),
             ErrorMessage = errorMessage,
