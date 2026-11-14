@@ -165,6 +165,6 @@ internal sealed class BasalSegmentService : IBasalSegmentService
             ScheduleTimeHelper.TimezoneOf(
                 PatientTimezone,
                 switchTimezone,
-                ProfileVersionCache.ActiveAt(Settings, DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime)?.Timezone);
+                ProfileVersionCache.ActiveAt(Settings, mills.ToUtcDateTime())?.Timezone);
     }
 }

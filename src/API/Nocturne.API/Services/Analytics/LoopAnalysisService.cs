@@ -146,14 +146,14 @@ internal sealed partial class LoopAnalysisService(
     {
         var from = window.From;
         var to = window.To;
-        var fromUtc = ToUtc(from);
-        var toUtc = ToUtc(to);
+        var fromUtc = from.ToUtcDateTime();
+        var toUtc = to.ToUtcDateTime();
         var series = window.Series;
 
         var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct, streams: GlucoseStreams.Canonical);
-        var bolusTask = bolusRepository.GetAsync(ToUtc(series.InsulinReadStart), toUtc, null, null, int.MaxValue, descending: false, ct: ct);
+        var bolusTask = bolusRepository.GetAsync(series.InsulinReadStart.ToUtcDateTime(), toUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var tempBasalTask = tempBasalRepository.GetAsync(
-            ToUtc(series.TempBasalReadStart), ToUtc(to + NetInsulinAboveSchedule.MaxInferredGapMs), null, null, int.MaxValue, descending: false, ct: ct);
+            series.TempBasalReadStart.ToUtcDateTime(), (to + NetInsulinAboveSchedule.MaxInferredGapMs).ToUtcDateTime(), null, null, int.MaxValue, descending: false, ct: ct);
         var spanTask = stateSpanRepository.GetByCategories(
             MaskCategories.Where(c => c != StateSpanCategory.Override), fromUtc, toUtc, ct);
         var deviceTask = patientDeviceRepository.GetByDateRangeAsync(fromUtc, toUtc, ct);
@@ -323,8 +323,6 @@ internal sealed partial class LoopAnalysisService(
         spans.TryGetValue(category, out var list)
             ? [.. list.Select(s => (s, new MillsInterval(s.StartMills, s.EndMills ?? to)))]
             : [];
-
-    private static DateTime ToUtc(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
 
     private readonly record struct Window(long From, long To)
     {

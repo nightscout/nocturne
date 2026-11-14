@@ -86,7 +86,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         NocturneDbContext context,
         IAuditContext auditContext,
         Microsoft.Extensions.Logging.ILogger<TreatmentDecomposer>? logger = null) => new(
-        context.AsFactory(),
+        context.AsFactory(), new DecomposedTreatmentKeys(context.AsFactory()),
         Mock.Of<IBolusRepository>(),
         Mock.Of<ITempBasalRepository>(),
         Mock.Of<ICarbIntakeRepository>(),

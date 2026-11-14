@@ -16,6 +16,14 @@ public interface ITenantService
     /// <summary>Creates a new tenant with the specified subject as its owner.</summary>
     Task<TenantCreatedDto> CreateAsync(string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Creates a tenant with <paramref name="ownerSubjectId"/> as its owner, under
+    /// <paramref name="ownerUsername"/> when one is given, in one transaction: the tenant is created
+    /// with its owner or not at all.
+    /// </summary>
+    Task<TenantCreatedDto> CreateWithOwnerAsync(
+        string slug, string displayName, Guid ownerSubjectId, string? ownerUsername = null, CancellationToken ct = default);
+
     /// <summary>Creates a new tenant without assigning an owner.</summary>
     Task<TenantCreatedDto> CreateWithoutOwnerAsync(string slug, string displayName, CancellationToken ct = default);
 
@@ -36,6 +44,14 @@ public interface ITenantService
 
     /// <summary>Renames the tenant, leaving its slug and active state as they are.</summary>
     Task<TenantSettingsDto> SetDisplayNameAsync(Guid id, string displayName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Moves the tenant to the subdomain <paramref name="newSlug"/>, after the checks
+    /// <see cref="ValidateSlugAsync(string, CancellationToken)"/> makes. The old subdomain stops
+    /// resolving at once: nothing redirects from it.
+    /// </summary>
+    /// <returns>The refusal, or a valid result once the tenant has moved.</returns>
+    Task<SlugValidationResult> ChangeSlugAsync(Guid id, string newSlug, CancellationToken ct = default);
 
     Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default);
 

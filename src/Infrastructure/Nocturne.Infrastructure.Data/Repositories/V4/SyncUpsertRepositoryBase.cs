@@ -144,14 +144,12 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// <summary>
     /// The row that decides a write on the sync key, tracked so a matched live row can be updated
     /// in place. Reads past the soft-delete query filter, which would hide the tombstone holding
-    /// the key; <c>IgnoreQueryFilters</c> lifts the tenant filter with it, hence the explicit
-    /// predicate.
+    /// the key.
     /// </summary>
     /// <seealso cref="SoftDeleteDedupExtensions.GoverningRow{TEntity}"/>
     private static async Task<TEntity?> FindGoverningRowAsync(
         NocturneDbContext ctx, string dataSource, string syncIdentifier, CancellationToken ct)
-        => (await ctx.Set<TEntity>().IgnoreQueryFilters()
-                .Where(e => e.TenantId == ctx.TenantId)
+        => (await ctx.Set<TEntity>().IncludingDeleted()
                 .WhereBlocksRecreation()
                 .Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)
                 .ToListAsync(ct))
@@ -177,8 +175,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         if (!entities.Any(e => e.SyncKey() is not null))
             return UpsertSplit.Empty(entities);
 
-        var existingByKey = await ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId)
+        var existingByKey = await ctx.Set<TEntity>().IncludingDeleted()
             .GoverningRowsBySyncKeyAsync(entities, ct);
 
         var toInsert = new List<TEntity>();

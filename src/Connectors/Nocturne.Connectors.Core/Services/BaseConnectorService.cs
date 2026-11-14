@@ -23,6 +23,12 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// <summary>The only clock derived connectors read, so a test can drive it.</summary>
     protected TimeProvider Clock { get; }
 
+    /// <summary>
+    ///     The delay between attempts of <see cref="ExecuteWithRetryAsync{T}"/>, for a connector that
+    ///     runs <see cref="ConnectorRetryLoop"/> itself.
+    /// </summary>
+    protected IRetryDelayStrategy RetryDelayStrategy { get; }
+
     /// <summary>The API publisher, or <c>null</c> when running detached (e.g. dry-run tooling).</summary>
     protected IConnectorPublisher? Publisher => _publisher;
 
@@ -45,6 +51,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         HttpClient httpClient,
         IConnectorServerResolver<TConfig> serverResolver,
         ILogger logger,
+        IRetryDelayStrategy retryDelayStrategy,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
@@ -52,11 +59,32 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _serverResolver = serverResolver ?? throw new ArgumentNullException(nameof(serverResolver));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        RetryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _publisher = publisher;
         Clock = timeProvider ?? TimeProvider.System;
     }
 
-    protected abstract string ConnectorSource { get; }
+    /// <summary>
+    ///     The data source id every record this connector imports is stored under, and that its
+    ///     resume watermarks are read by: the <see cref="ConnectorRegistrationAttribute.DataSourceId"/>
+    ///     on <typeparamref name="TConfig"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     <typeparamref name="TConfig"/> declares no data source id, so nothing the connector
+    ///     stores could be found again.
+    /// </exception>
+    protected virtual string ConnectorSource =>
+        Registration?.DataSourceId is { Length: > 0 } dataSourceId
+            ? dataSourceId
+            : throw new InvalidOperationException(
+                $"{typeof(TConfig).Name} declares no {nameof(ConnectorRegistrationAttribute.DataSourceId)}.");
+
+    /// <summary>
+    ///     The id the connector list carries for this connector, which its progress events carry
+    ///     too. A <typeparamref name="TConfig"/> with no registration is in no list and reports under
+    ///     <see cref="ConnectorSource"/>.
+    /// </summary>
+    private string ConnectorId => Registration?.ConnectorId ?? ConnectorSource;
 
     public abstract string ServiceName { get; }
 
@@ -66,16 +94,15 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// this property drives the sync loop, so stating them separately lets a connector advertise a
     /// toggle it never acts on, or act on data the tenant has no way to turn off.
     /// </summary>
-    public virtual List<SyncDataType> SupportedDataTypes => [.. RegisteredDataTypes];
+    public virtual List<SyncDataType> SupportedDataTypes => [.. Registration?.SupportedDataTypes ?? [SyncDataType.Glucose]];
 
     /// <remarks>
     ///     Not <see cref="ConnectorRegistrationAttribute.DeclaredOn"/>: a connector service may be
-    ///     closed over a configuration carrying no registration at all, which defaults to glucose
-    ///     rather than failing. The inherit rule is the same one.
+    ///     closed over a configuration carrying no registration at all, whose data types default
+    ///     to glucose rather than failing. The inherit rule is the same one.
     /// </remarks>
-    private static readonly SyncDataType[] RegisteredDataTypes =
-        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.SupportedDataTypes
-        ?? [SyncDataType.Glucose];
+    private static readonly ConnectorRegistrationAttribute? Registration =
+        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false);
 
     /// <summary>
     ///     The pre-flight <see cref="RunBackgroundSyncAsync"/> runs before it fetches anything.
@@ -166,7 +193,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         }
         // A run the caller withdrew still resolves the tenant's in-progress indicator: report one
         // reasonless terminal failure under CancellationToken.None, then let the cancellation travel.
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             await ReportSyncOutcomeAsync(false, null, CancellationToken.None);
             throw;
@@ -568,11 +595,6 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         return request.DataTypes.Count == 0 ? enabled : [.. request.DataTypes.Where(enabled.Contains)];
     }
 
-    protected virtual Task<IEnumerable<Profile>> FetchProfilesAsync()
-    {
-        return Task.FromResult(Enumerable.Empty<Profile>());
-    }
-
     /// <summary>
     ///     The broadcast origin for this run's glucose-family publishes: <see cref="WriteOrigin.Backfill"/>
     ///     on the source's first-ever glucose sync (no prior data — suppress so a first sync of history
@@ -668,8 +690,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
     /// <summary>
     ///     Publishes a batch through its record type's route without the per-type bookkeeping of
-    ///     <see cref="PublishRecordTypeAsync{T}"/>: no count, no progress message. The one place the
-    ///     publisher is checked for availability.
+    ///     <see cref="PublishRecordTypeAsync{T}"/>: no count, no progress message. Every route dispatch
+    ///     goes through <see cref="DispatchAsync{T, TOut}"/>.
     /// </summary>
     protected async Task<bool> PublishByRouteAsync<T>(
         IEnumerable<T> records,
@@ -677,10 +699,58 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         CancellationToken cancellationToken) where T : class
     {
         var route = PublishRoutes.For<T>();
+        return await DispatchAsync(route, records, config, false,
+            (publisher, origin) => route.Publish(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     Publishes through a route that hands back its publisher's result, for a caller that needs
+    ///     more than whether it landed.
+    /// </summary>
+    /// <returns>The result, or null when the publisher is unavailable or reported a failure.</returns>
+    protected async Task<TResult?> PublishByRouteForResultAsync<T, TResult>(
+        IEnumerable<T> records,
+        TConfig config,
+        CancellationToken cancellationToken) where T : class where TResult : class
+    {
+        var route = PublishRoutes.ForResult<T, TResult>();
+        return await DispatchAsync<T, TResult?>(route, records, config, null,
+            (publisher, origin) => route.PublishForResult(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     Writes through the record type's "recent" member only what the store does not already hold.
+    /// </summary>
+    /// <returns>How many records were written, or null when the publisher is unavailable or reported a failure.</returns>
+    /// <exception cref="InvalidOperationException">The record type's route has no recent member.</exception>
+    protected async Task<int?> PublishRecentByRouteAsync<T>(
+        IEnumerable<T> records,
+        TConfig config,
+        CancellationToken cancellationToken) where T : class
+    {
+        var route = PublishRoutes.For<T>();
+        var publishRecent = route.PublishRecent
+            ?? throw new InvalidOperationException($"{typeof(T).Name} has no recent publish member.");
+        return await DispatchAsync<T, int?>(route, records, config, null,
+            (publisher, origin) => publishRecent(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     The one place the publisher is checked for availability, the route's preparation step is run
+    ///     and its origin family is resolved.
+    /// </summary>
+    /// <param name="unavailable">What a caller gets when the publisher is unavailable.</param>
+    private async Task<TOut> DispatchAsync<T, TOut>(
+        PublishRoute<T> route,
+        IEnumerable<T> records,
+        TConfig config,
+        TOut unavailable,
+        Func<IConnectorPublisher, WriteOrigin, Task<TOut>> publish) where T : class
+    {
         if (_publisher is not { IsAvailable: true } publisher)
         {
             _logger?.LogWarning("Publisher not available for {RecordType} submission", typeof(T).Name);
-            return false;
+            return unavailable;
         }
 
         if (route.Prepare is { } prepare)
@@ -694,7 +764,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             PublishOriginFamily.Device => await DevicePublishOriginAsync(),
             _ => WriteOrigin.Live,
         };
-        return await route.Publish(publisher, records, ConnectorSource, origin, cancellationToken);
+        return await publish(publisher, origin);
     }
 
     /// <summary>
@@ -848,7 +918,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
         return _progressReporter.ReportProgressAsync(new SyncProgressEvent
         {
-            ConnectorId = ConnectorSource,
+            ConnectorId = ConnectorId,
             ConnectorName = ServiceName,
             Phase = PhaseOf(messageType),
             ErrorMessage = errorMessage,
@@ -963,7 +1033,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
             return result;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogError(
                 ex,
@@ -1038,7 +1108,6 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// <returns><c>default</c> when the operation failed.</returns>
     protected async Task<T?> ExecuteWithRetryAsync<T>(
         Func<Task<T?>> operation,
-        IRetryDelayStrategy retryStrategy,
         Func<Task<bool>>? reAuthenticateOnUnauthorized = null,
         int maxRetries = 3,
         string? operationName = null,
@@ -1046,7 +1115,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     )
     {
         var opName = operationName ?? "operation";
-        HttpRequestException? lastException = null;
+        Exception? lastException = null;
 
         return await ConnectorRetryLoop.RunAsync<T>(
             async (attempt, attempts) =>
@@ -1127,7 +1196,19 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                     TrackFailedRequest("JSON parsing error");
                     return RetryStep<T>.Complete(default);
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, cancellationToken))
+                {
+                    lastException = ex;
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] {Operation} timed out (attempt {Attempt})",
+                        ConnectorSource,
+                        opName,
+                        attempt + 1
+                    );
+
+                    return RetryStep<T>.RetryAfterDelay;
+                }
+                catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
                 {
                     _logger.LogInformation(
                         "[{ConnectorSource}] {Operation} was cancelled",
@@ -1148,7 +1229,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                     return RetryStep<T>.Complete(default);
                 }
             },
-            retryStrategy,
+            RetryDelayStrategy,
             maxRetries,
             attempts =>
             {
@@ -1168,24 +1249,6 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             cancellationToken
         );
     }
-
-    /// <summary>
-    ///     The <c>reAuthenticateOnUnauthorized</c> answer to <see cref="ExecuteWithRetryAsync{T}"/> for a
-    ///     connector holding a cached token: drop the token the source refused, sign in again, and
-    ///     hand the retry the new one through <paramref name="useToken"/>.
-    /// </summary>
-    protected static Func<Task<bool>> ReauthenticateWith(
-        AuthTokenProviderBase<TConfig> tokenProvider,
-        TConfig config,
-        Action<string> useToken,
-        CancellationToken cancellationToken = default) => async () =>
-    {
-        tokenProvider.InvalidateToken();
-        var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token)) return false;
-        useToken(token);
-        return true;
-    };
 
     protected async Task<HttpResponseMessage> SendWithHeadersAsync(
         HttpMethod method,

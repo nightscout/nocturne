@@ -6,6 +6,8 @@
 
   import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
   import { formatLocale, formatMediumDateRange } from "#lib/utils/formatting.js";
+  import { exceedsDaySpan, outsideDaySpan } from "#lib/utils/date-range.js";
+  import { getV4ApiLimits } from "#lib/api/generated/metadatas.generated.remote.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
@@ -47,6 +49,9 @@
       defaultValue: undefined,
     },
   });
+
+  const limits = getV4ApiLimits();
+  const maxDays = $derived(limits.current?.maxDateSpanDays);
 
   let value = $state<DateRange | undefined>();
   let open = $state(false);
@@ -142,8 +147,12 @@
     });
   }
 
+  const pendingStart = $derived(value?.start && !value.end ? value.start : undefined);
+  const isDateDisabled = $derived(outsideDaySpan(pendingStart, maxDays));
+
   function handleCalendarChange(newValue: DateRange | undefined) {
     if (newValue?.start && newValue?.end) {
+      if (exceedsDaySpan(newValue.start.toString(), newValue.end.toString(), maxDays)) return;
       // Clear days parameter when manually selecting dates
       params.days = undefined;
       params.from = newValue.start.toString();
@@ -185,6 +194,8 @@
         captionLayout="dropdown"
         locale={formatLocale()}
         onValueChange={handleCalendarChange}
+        {isDateDisabled}
+        {maxDays}
       />
     </Popover.Content>
   </Popover.Root>

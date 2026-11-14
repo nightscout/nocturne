@@ -124,7 +124,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         {
             RecordFailure(ex, method);
         }
-        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        catch (TaskCanceledException ex) when (ConnectorFaults.IsTimeout(ex, ct))
         {
             RecordFailure(ex, method);
         }

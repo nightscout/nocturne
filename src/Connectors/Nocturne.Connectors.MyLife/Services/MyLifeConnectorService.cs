@@ -3,11 +3,11 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -22,6 +22,7 @@ public class MyLifeConnectorService(
     HttpClient httpClient,
     IConnectorServerResolver<MyLifeConnectorConfiguration> serverResolver,
     ILogger<MyLifeConnectorService> logger,
+    IRetryDelayStrategy retryDelayStrategy,
     MyLifeAuthTokenProvider tokenProvider,
     MyLifeEventProcessor eventProcessor,
     IMyLifeSessionCache sessionCache,
@@ -29,11 +30,11 @@ public class MyLifeConnectorService(
     MyLifeSyncService syncService,
     IConnectorPublisher? publisher = null,
     TimeProvider? timeProvider = null
-) : BaseConnectorService<MyLifeConnectorConfiguration>(httpClient, serverResolver, logger, publisher, timeProvider)
+) : TokenConnectorService<MyLifeConnectorConfiguration, MyLifeAuthTokenProvider>(
+    httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
 {
 
     public override string ServiceName => "MyLife";
-    protected override string ConnectorSource => DataSources.MyLifeConnector;
 
     /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
@@ -89,11 +90,16 @@ public class MyLifeConnectorService(
             // provider) performs the SOAP login and populates the session cache as a side effect;
             // the token is cached so subsequent cycles reuse it. Without this call the session cache
             // is never populated and every sync fails with "session not established".
-            var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
+            if (await ValidTokenAsync(config, cancellationToken) is null)
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Sync failed: MyLife authentication unsuccessful",
+                    ConnectorSource);
+                return AuthenticationFailedResult();
+            }
 
             var session = sessionCache.Get(tenantAccessor.TenantId);
-            if (string.IsNullOrEmpty(token)
-                || session == null
+            if (session == null
                 || string.IsNullOrWhiteSpace(session.ServiceUrl)
                 || string.IsNullOrWhiteSpace(session.AuthToken)
                 || string.IsNullOrWhiteSpace(session.PatientId))
@@ -230,12 +236,12 @@ public class MyLifeConnectorService(
                     activations, config, cancellationToken, "from pump settings");
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             // A token MyLife has already rejected would otherwise stay cached until its nominal
             // 24-hour expiry, failing every sync in between.
             if (ex is HttpRequestException { StatusCode: HttpStatusCode.Unauthorized })
-                tokenProvider.InvalidateToken();
+                TokenProvider.InvalidateToken();
 
             RecordSyncError(result, ex);
         }

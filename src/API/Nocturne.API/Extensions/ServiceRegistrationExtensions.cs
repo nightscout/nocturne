@@ -591,6 +591,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IOAuthTokenService, OAuthTokenService>();
         services.AddScoped<IOAuthDeviceCodeService, OAuthDeviceCodeService>();
         services.AddScoped<IMemberInviteService, MemberInviteService>();
+        services.AddScoped<ITenantCreationInviteService, TenantCreationInviteService>();
         services.AddScoped<IMembershipRequestService, MembershipRequestService>();
         services.AddScoped<IAccessRequestService, AccessRequestService>();
         services.AddScoped<IGuestLinkService, GuestLinkService>();
@@ -747,6 +748,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITreatmentService, TreatmentService>();
         services.AddScoped<ITreatmentStore, TreatmentReadService>();
         services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadStore, Nocturne.Infrastructure.Data.Repositories.RejectedUploadRepository>();
+        services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditLogReader, Nocturne.Infrastructure.Data.Repositories.AuditLogReader>();
+        services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditConfigStore, Nocturne.Infrastructure.Data.Repositories.AuditConfigRepository>();
         services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadRecorder, Nocturne.API.Services.Uploads.RejectedUploadRecorder>();
         services.AddScoped<ITreatmentCache, TreatmentCacheAdapter>();
         services.AddScoped<SignalRTreatmentEventSink>();
@@ -807,6 +810,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBasalRateResolver, BasalRateResolver>();
         services.AddScoped<IBasalSegmentService, BasalSegmentService>();
         services.AddScoped<IActiveProfileSchedulesService, ActiveProfileSchedulesService>();
+        services.AddScoped<IProfileHistoryService, ProfileHistoryService>();
+        services.AddScoped<Services.Profiles.ProfileHistoryGlucoseReader>();
         services.AddScoped<ISensitivityResolver, SensitivityResolver>();
         services.AddScoped<ICarbRatioResolver, CarbRatioResolver>();
         services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();
@@ -958,6 +963,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
         services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
+        services.AddScoped<IDecomposedTreatmentKeys, DecomposedTreatmentKeys>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
 
         // Manually-entered lab results (outside the V4 sync/dedup family)

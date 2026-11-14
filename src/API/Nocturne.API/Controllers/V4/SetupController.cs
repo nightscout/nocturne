@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -85,11 +84,6 @@ public partial class SetupController : ControllerBase
         _logger = logger;
     }
 
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9._\-]{1,30}[a-z0-9]$")]
-    private static partial Regex UsernamePattern();
-
-    private static readonly HashSet<string> ReservedUsernames = ["admin", "system"];
-
     /// <summary>
     /// Whether the username webhook's last attempt has already been reported. See
     /// <see cref="AskUsernameWebhookAsync"/>.
@@ -140,14 +134,10 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrWhiteSpace(username))
             return Ok(new SlugValidationResult(false, "Username is required"));
 
-        var normalized = username.Trim().ToLowerInvariant();
+        var normalized = UsernameRules.Normalize(username);
 
-        if (!UsernamePattern().IsMatch(normalized))
-            return Ok(new SlugValidationResult(false,
-                "Username must be 3-32 characters: letters, numbers, dots, underscores, and hyphens"));
-
-        if (ReservedUsernames.Contains(normalized))
-            return Ok(new SlugValidationResult(false, "This username is reserved"));
+        if (UsernameRules.Refusal(normalized) is { } formatRefusal)
+            return Ok(new SlugValidationResult(false, formatRefusal));
 
         var tenant = (await _tenants.ListNonDemoAsync(1, ct)).FirstOrDefault();
         if (tenant == null)
@@ -185,13 +175,9 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.DisplayName))
             return Problem(detail: "Username and display name are required", statusCode: 400, title: "Bad Request");
 
-        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
-        if (!UsernamePattern().IsMatch(normalizedUsername))
-            return Problem(detail: "Username must be 3-32 characters: letters, numbers, dots, underscores, and hyphens",
-                statusCode: 400, title: "Bad Request");
-
-        if (ReservedUsernames.Contains(normalizedUsername))
-            return Problem(detail: "This username is reserved", statusCode: 400, title: "Bad Request");
+        var normalizedUsername = UsernameRules.Normalize(request.Username);
+        if (UsernameRules.Refusal(normalizedUsername) is { } usernameRefusal)
+            return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
 
         var subjectId = await EnsureOwnerSubjectAsync(
             tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
@@ -294,13 +280,9 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.DisplayName))
             return Problem(detail: "Username and display name are required", statusCode: 400, title: "Bad Request");
 
-        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
-        if (!UsernamePattern().IsMatch(normalizedUsername))
-            return Problem(detail: "Username must be 3-32 characters: letters, numbers, dots, underscores, and hyphens",
-                statusCode: 400, title: "Bad Request");
-
-        if (ReservedUsernames.Contains(normalizedUsername))
-            return Problem(detail: "This username is reserved", statusCode: 400, title: "Bad Request");
+        var normalizedUsername = UsernameRules.Normalize(request.Username);
+        if (UsernameRules.Refusal(normalizedUsername) is { } usernameRefusal)
+            return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
 
         if (request.ProviderId == Guid.Empty)
             return Problem(detail: "Provider ID is required", statusCode: 400, title: "Bad Request");

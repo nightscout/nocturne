@@ -9,13 +9,11 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Utilities;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
-using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -23,12 +21,10 @@ namespace Nocturne.Connectors.Glooko.Services;
 ///     Connector service for Glooko data source.
 ///     Based on the original nightscout-connect Glooko implementation.
 /// </summary>
-public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfiguration>
+public class GlookoConnectorService
+    : TokenConnectorService<GlookoConnectorConfiguration, GlookoAuthTokenProvider>
 {
-    private readonly IConnectorPublisher? _connectorPublisher;
     private readonly IMealMatchingService? _mealMatchingService;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly GlookoAuthTokenProvider _tokenProvider;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
     private readonly IConnectorSyncCursorStore? _cursorStore;
@@ -53,12 +49,9 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         TimeProvider? timeProvider = null,
         TimeSpan? endpointPause = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _connectorPublisher = publisher;
         _mealMatchingService = mealMatchingService;
-        _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _timezoneTimelineService = timezoneTimelineService;
         _deviceClockService = deviceClockService;
         _cursorStore = cursorStore;
@@ -67,24 +60,20 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     }
 
     public override string ServiceName => "Glooko";
-    protected override string ConnectorSource => DataSources.GlookoConnector;
 
     private const string SyncSucceededMessage = "Sync completed successfully";
 
     private async Task<bool> AuthenticateWithConfigAsync(GlookoSyncContext context)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(context.Config, context.CancellationToken);
-        if (token == null)
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        var token = await ValidTokenAsync(context.Config, context.CancellationToken);
+        if (token is null)
             return false;
-        }
 
         // The token IS the session cookie for Glooko
         context.SessionCookie = token;
 
         // Retrieve user data from cache metadata via the token provider's public accessor
-        var cached = await _tokenProvider.GetCachedSessionAsync();
+        var cached = await TokenProvider.GetCachedSessionAsync();
         if (cached?.Metadata != null && cached.Metadata.TryGetValue("UserData", out var userDataJson))
         {
             context.UserData = JsonSerializer.Deserialize<GlookoUserData>(userDataJson);
@@ -234,7 +223,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
                 return RetryStep<JsonElement?>.RetryAfterDelay;
             },
-            _retryDelayStrategy,
+            RetryDelayStrategy,
             maxRetries,
             attempts =>
             {
@@ -392,7 +381,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                         + "Invalidating it and re-authenticating.",
                         ConnectorSource, context.PatientCode);
 
-                    _tokenProvider.InvalidateToken();
+                    TokenProvider.InvalidateToken();
                     context.ClearSessionAndProfile();
 
                     if (!await AuthenticateWithConfigAsync(context))
@@ -420,7 +409,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return result;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogError(ex, "Error during Glooko batch sync");
             result.Success = false;
@@ -510,7 +499,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             return FullWalkSchedule.IsDue(
                 attempted?.LastUpdatedAt, GlookoConstants.FullWalkRetryInterval, now);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex,
                 "[{ConnectorSource}] Could not read the full-walk schedule; walking", ConnectorSource);
@@ -532,7 +521,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 new ConnectorSyncCursor(FullWalkSchedule.Stamp(new DateTimeOffset(at, TimeSpan.Zero)), null),
                 cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex,
                 "[{ConnectorSource}] Could not record the full walk ({Resource})", ConnectorSource, resource);
@@ -623,7 +612,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             }
             catch (Exception profileEx) when (profileEx is not GlookoSessionRejectedException
                                               && (profileEx is not OperationCanceledException
-                                                  || !cancellationToken.IsCancellationRequested))
+                                                  || ConnectorFaults.IsTimeout(profileEx, cancellationToken)))
             {
                 _logger.LogWarning(profileEx, "[{ConnectorSource}] Failed to fetch/publish profile data", ConnectorSource);
                 RecordFetchFailure(result, SyncDataType.Profiles, activeTypes);
@@ -691,7 +680,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             ? context.V4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
         Func<string, string?> foodResolver = externalEntryId => $"glooko_food_{externalEntryId}";
         landed &= await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, carbs, foodResolver, result, activeTypes, cancellationToken);
+            foodEntryImports, carbs, foodResolver, config, result, activeTypes, cancellationToken);
 
         var stateSpans = context.StateSpanMapper.TransformV2ToStateSpans(batchData);
         landed &= Landed(activeTypes, SyncDataType.StateSpans, stateSpans,
@@ -808,7 +797,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             }
 
             await PublishFoodEntriesAndAttributeAsync(
-                foodEntryImports, allCarbs, foodResolver, result, activeTypes, cancellationToken);
+                foodEntryImports, allCarbs, foodResolver, config, result, activeTypes, cancellationToken);
         }
 
         var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
@@ -846,6 +835,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         List<ConnectorFoodEntryImport> foodEntryImports,
         List<CarbIntake> carbIntakes,
         Func<string, string?>? foodEntryToCarbLegacyId,
+        GlookoConnectorConfiguration config,
         SyncResult result,
         HashSet<SyncDataType> activeTypes,
         CancellationToken cancellationToken)
@@ -859,18 +849,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             return true;
         }
 
-        if (_connectorPublisher is not { IsAvailable: true })
-        {
-            _logger.LogWarning("Publisher not available for food entry submission");
-            RecordPublishOutcome(result, SyncDataType.Food, foodEntryImports.Count, success: false);
-            return false;
-        }
+        // The publisher returns null only from its own catch (or the route found it unavailable); an
+        // import that reached the catalog returns a list, empty when nothing was accepted.
+        var importedEntries = await PublishByRouteForResultAsync<ConnectorFoodEntryImport, IReadOnlyList<ConnectorFoodEntry>>(
+            foodEntryImports, config, cancellationToken);
 
-        var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
-            foodEntryImports, ConnectorSource, WriteOrigin.Live, cancellationToken); // Food is a dormant broadcast category — origin irrelevant until wired.
-
-        // The publisher returns null only from its own catch; an import that reached the catalog
-        // returns a list, empty when nothing was accepted.
         RecordPublishOutcome(result, SyncDataType.Food, foodEntryImports.Count, importedEntries is not null);
 
         if (importedEntries is null)
@@ -904,7 +887,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     entry.Id, carbIntake.Id, entry.Carbs, timeOffsetMinutes: 0, cancellationToken);
                 attributedCount++;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 _logger.LogWarning(ex,
                     "[{ConnectorSource}] Failed to attribute food entry {FoodEntryId} to CarbIntake {CarbIntakeId}",
@@ -1583,10 +1566,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             var patientDevices = context.DeviceMapper.TransformPumpsToPatientDevices(pumpDevices);
             patientDevices.AddRange(context.DeviceMapper.TransformCgmDevicesToPatientDevices(cgmDevices));
-            var devicesLanded = patientDevices.Count == 0;
-            if (patientDevices.Count > 0 && _connectorPublisher is { IsAvailable: true })
-                devicesLanded = await _connectorPublisher.Device.PublishPatientDevicesAsync(
-                    patientDevices, ConnectorSource, await DevicePublishOriginAsync(), cancellationToken);
+            var devicesLanded = patientDevices.Count == 0
+                || await PublishByRouteAsync(patientDevices, config, cancellationToken);
             await CommitSsv2CursorsAsync(context, devicesLanded,
                 GlookoConstants.Ssv2PumpsPath, GlookoConstants.Ssv2CgmDevicesPath);
         }
@@ -1755,7 +1736,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 + "derived clock segments: {SegmentCount})",
                 ConnectorSource, resolver.HasEntries, context.Timezone ?? "(none)", segments.Count);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             // Never fail a sync over timeline setup — fall back to the static offset.
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to configure timezone timeline; using static offset", ConnectorSource);
@@ -1833,7 +1814,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return context.Config.AutoClockCorrection ? segments : [];
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex,
                 "[{ConnectorSource}] Device clock observation failed; syncing without it", ConnectorSource);

@@ -374,10 +374,10 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         }
 
         DateTime? from = fromMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+            ? fromMills.Value.ToUtcDateTime()
             : null;
         DateTime? to = toMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+            ? toMills.Value.ToUtcDateTime()
             : null;
 
         var sgDeleted = typeFilter is null or "sgv"
@@ -415,7 +415,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         return new SensorGlucose
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Mgdl = WrittenMgdl(entry),
             Direction = MapDirection(entry.Direction),
             TrendRate = entry.TrendRate,
@@ -441,7 +441,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         return new MeterGlucose
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Mgdl = WrittenMgdl(entry),
             Device = entry.Device,
             App = entry.App,
@@ -460,7 +460,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         return new Calibration
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Slope = entry.Slope,
             Intercept = entry.Intercept,
             Scale = entry.Scale,

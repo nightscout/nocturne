@@ -240,5 +240,5 @@ public sealed class NativeProfileSwitches
     /// timestamp keeps microseconds, not ticks.
     /// </summary>
     private DateTime Now() =>
-        DateTimeOffset.FromUnixTimeMilliseconds(_time.GetUtcNow().ToUnixTimeMilliseconds()).UtcDateTime;
+        _time.GetUtcNow().ToUnixTimeMilliseconds().ToUtcDateTime();
 }

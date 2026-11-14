@@ -20,12 +20,10 @@ public class EversenseAuthTokenProvider(
     ILogger<EversenseAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null)
-    : AuthTokenProviderBase<EversenseConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    : AuthTokenProviderBase<EversenseConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     protected override int TokenLifetimeBufferMinutes => 5;
 
@@ -45,7 +43,6 @@ public class EversenseAuthTokenProvider(
 
                 return await RequestTokenAsync(config, cancellationToken);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Eversense authentication",
             cancellationToken

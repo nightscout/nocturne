@@ -155,7 +155,7 @@ public static class HistoryHorizon
             .SingleAsync(ct);
 
         Report(read, logger);
-        return DateTimeOffset.FromUnixTimeMilliseconds(read.Value.ToMills()).UtcDateTime;
+        return read.Value.ToMills().ToUtcDateTime();
     }
 
     private static void Report(HorizonRead read, ILogger logger)

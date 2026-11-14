@@ -572,7 +572,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     private static string FormatHttpDate(long mills) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime.ToString("R");
+        mills.ToUtcDateTime().ToString("R");
 
     /// <summary>
     /// Set <c>Last-Modified</c> and <c>ETag</c> on a V3 <c>history/{lastModified}</c> response.

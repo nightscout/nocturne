@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   getTenantSettings: vi.fn(),
   setDisplayName: vi.fn(),
   setPublicDocs: vi.fn(),
+  getSubdomain: vi.fn(),
+  changeSubdomain: vi.fn(),
 }));
 
 const settings: TenantSettingsDto = {
@@ -23,6 +25,12 @@ vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getTenantSettings: mocks.getTenantSettings,
   setDisplayName: mocks.setDisplayName,
   setPublicDocs: mocks.setPublicDocs,
+  getSubdomain: mocks.getSubdomain,
+  changeSubdomain: mocks.changeSubdomain,
+}));
+
+vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
+  validateSlug: () => remoteQuery(() => ({ isValid: true })),
 }));
 
 import SitePage from "./+page.svelte";
@@ -33,6 +41,9 @@ describe("site details page", () => {
     page.data.effectivePermissions = ["tenant.settings"];
     page.data.refusedAsDemoSubject = undefined;
     mocks.getTenantSettings.mockImplementation(() => remoteQuery(() => settings));
+    mocks.getSubdomain.mockImplementation(() =>
+      remoteQuery(() => ({ slug: "sam", address: "https://sam.example.org", baseDomain: "example.org", canChange: false })),
+    );
     mocks.setDisplayName.mockResolvedValue({ ...settings, displayName: "Sam's site" });
   });
 

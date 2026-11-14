@@ -514,7 +514,7 @@ internal static class DeviceStatusProperties
     }
 
     private static string Iso(long mills) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime
+        mills.ToUtcDateTime()
             .ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
 
     private static bool Truthy(JsonNode? value) =>

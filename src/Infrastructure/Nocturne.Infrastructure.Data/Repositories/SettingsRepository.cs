@@ -146,7 +146,9 @@ public class SettingsRepository : ISettingsRepository
             var key = entity.Key;
             if (await db.Settings.AnyAsync(
                     s => (s.Id == entityId || (originalId != null && s.OriginalId == originalId))
-                         && (s.Key.StartsWith(SettingsKeys.UiSettingsPrefix) || s.Key.StartsWith(SettingsKeys.ConnectorsPrefix)),
+                         && (s.Key.StartsWith(SettingsKeys.UiSettingsPrefix)
+                             || s.Key.StartsWith(SettingsKeys.ConnectorsPrefix)
+                             || s.Key.StartsWith(SettingsKeys.SampleDataPrefix)),
                     cancellationToken))
                 throw new ArgumentException("The settings id names a reserved row.", nameof(settings));
 

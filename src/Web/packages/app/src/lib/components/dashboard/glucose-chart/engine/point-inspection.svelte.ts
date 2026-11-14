@@ -87,6 +87,11 @@ export function createPointInspection(
   glucoseData: () => GlucosePoint[],
   seriesData: InspectionSeriesData,
   glucoseUnits: () => GlucoseUnits | undefined = () => undefined,
+  /**
+   * Opens the picker even at a point with only glucose to inspect, because the picker offers
+   * more than inspection there (logging an entry at that time).
+   */
+  alwaysPick: () => boolean = () => false,
 ): PointInspection {
   let timestamp = $state<Date | null>(null);
   let glucosePoint = $state<{ sgv: number; color: string } | null>(null);
@@ -189,7 +194,7 @@ export function createPointInspection(
     const hasDelivery = basal != null || basalDelivery != null;
     const hasTreatment = nearbyBol != null || nearbyCarb != null;
 
-    if (!hasDelivery && !hasTreatment) {
+    if (!hasDelivery && !hasTreatment && !alwaysPick()) {
       activeDialog = "glucose";
     } else {
       activeDialog = "picker";

@@ -87,7 +87,8 @@ public class CareLinkSignInFailureTests
             resolver,
             provider,
             configService.Object,
-            NullLogger<CareLinkConnectorService>.Instance);
+            NullLogger<CareLinkConnectorService>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
 
         try
         {

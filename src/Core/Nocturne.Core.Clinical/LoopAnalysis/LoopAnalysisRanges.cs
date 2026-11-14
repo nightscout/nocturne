@@ -44,7 +44,7 @@ public static class LoopAnalysisRanges
         {
             var partialTo = LocalSlotBinning.DayStartMills(previous.EndDate, tz) + (primaryTo - primaryLastDay);
             if (partialTo < previous.To.ToMills())
-                previous.To = DateTimeOffset.FromUnixTimeMilliseconds(partialTo).UtcDateTime;
+                previous.To = partialTo.ToUtcDateTime();
         }
         return previous;
     }
@@ -67,8 +67,8 @@ public static class LoopAnalysisRanges
     {
         StartDate = startDate,
         EndDate = endDate,
-        From = DateTimeOffset.FromUnixTimeMilliseconds(LocalSlotBinning.DayStartMills(startDate, tz)).UtcDateTime,
-        To = DateTimeOffset.FromUnixTimeMilliseconds(LocalSlotBinning.DayStartMills(endDate.AddDays(1), tz)).UtcDateTime,
+        From = LocalSlotBinning.DayStartMills(startDate, tz).ToUtcDateTime(),
+        To = LocalSlotBinning.DayStartMills(endDate.AddDays(1), tz).ToUtcDateTime(),
         Shortened = shortened,
     };
 }

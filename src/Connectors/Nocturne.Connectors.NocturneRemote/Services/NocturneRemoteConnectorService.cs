@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -17,7 +18,6 @@ namespace Nocturne.Connectors.NocturneRemote.Services;
 /// </summary>
 public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemoteConnectorConfiguration>
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
     private string? _resolvedBaseUrl;
     private Dictionary<string, string>? _authHeaders;
 
@@ -29,12 +29,10 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, publisher, timeProvider)
     {
-        _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
     }
 
-    protected override string ConnectorSource => DataSources.NocturneRemoteConnector;
     public override string ServiceName => "Nocturne Remote";
 
     /// <summary>
@@ -107,7 +105,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                         throw;
                     }
                 },
-                _retryDelayStrategy,
                 maxRetries: 1,
                 operationName: "auth check",
                 cancellationToken: cancellationToken);
@@ -119,7 +116,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // The retry loop re-throws every cancellation, and a client timeout reaches it as one. Only
         // the caller's own token means the run was withdrawn and must travel; the rest is the remote
         // falling silent.
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             return UnansweredResult(transportFailure);
         }
@@ -220,7 +217,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     _ => Task.CompletedTask
                 });
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, type.ToString(), ex);
             }
@@ -304,8 +301,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     /// </summary>
     private static ProfileActivation ToProfileActivation(ProfileActivationDto remote) => new()
     {
-        StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(remote.StartMills).UtcDateTime,
-        EndTimestamp = remote.EndMills is { } end ? DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime : null,
+        StartTimestamp = remote.StartMills.ToUtcDateTime(),
+        EndTimestamp = remote.EndMills is { } end ? end.ToUtcDateTime() : null,
         RequestedDurationMs = remote.IsTemporary && remote.EndMills is { } temporaryEnd
             ? temporaryEnd - remote.StartMills
             : null,
@@ -425,7 +422,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     throw;
                 }
             },
-            _retryDelayStrategy,
             maxRetries: config.MaxRetryAttempts,
             operationName: operationName,
             cancellationToken: ct);
@@ -585,14 +581,14 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     private static DateTime? DeviceStatusTime(DeviceStatus status) =>
         status.Mills > 0
-            ? DateTimeOffset.FromUnixTimeMilliseconds(status.Mills).UtcDateTime
+            ? status.Mills.ToUtcDateTime()
             : UploaderTimestamp.ParseUtcDateTime(status.CreatedAt);
 
     private static DateTime? OldestDeviceStatusTime(DeviceStatus[] statuses)
     {
         var mills = statuses.Where(d => d.Mills > 0).Select(d => (long?)d.Mills).Min();
         if (mills.HasValue)
-            return DateTimeOffset.FromUnixTimeMilliseconds(mills.Value).UtcDateTime;
+            return mills.Value.ToUtcDateTime();
 
         return statuses
             .Select(d => UploaderTimestamp.ParseUtcDateTime(d.CreatedAt))

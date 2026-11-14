@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -35,7 +36,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
     }
 
     private static ActivityDecomposer DecomposerFor(NocturneDbContext context) => new(
-        context.AsFactory(), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+        new ActivityRecordRepository(context.AsFactory(), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), NullLogger<ActivityDecomposer>.Instance);
 
     public void Dispose()
     {

@@ -28,6 +28,8 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 ///   a row holding the record's sync key or primary key, so it blocks re-import the same way; once
 ///   released, a record keyed by its primary key revives its row in place.</item>
 /// </list>
+/// A device status's extras row has no source, so it follows its status
+/// (<see cref="V4RecordTables.StatusExtrasLeftBy"/>) after the snapshot tables, uncounted.
 /// Each purge and each release tells <see cref="ILegacyReadCacheInvalidation"/> once, after its tables have
 /// committed, which model types it changed, so the legacy read caches stop serving them.
 /// </remarks>
@@ -184,6 +186,8 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
                 deleted[table.DataType] = deleted.GetValueOrDefault(table.DataType) + count;
                 written.Add(table.Model);
             }
+
+            await db.AuditedSoftDeleteAsync(V4RecordTables.StatusExtrasLeftBy(db, source), _audit, scope, ct);
         }
         finally
         {
@@ -205,6 +209,8 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
                 if (await table.AllowReimportAsync(db, source, _audit, scope, ct) > 0)
                     written.Add(table.Model);
             }
+
+            await db.AuditedAllowReimportAsync(V4RecordTables.StatusExtrasLeftBy(db, source), _audit, scope, ct);
         }
         finally
         {

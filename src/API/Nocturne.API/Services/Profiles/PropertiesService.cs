@@ -547,7 +547,7 @@ public class PropertiesService : IPropertiesService
         try
         {
             var offline = _openAps.FindOfflineMarker(
-                ddata.Treatments ?? [], DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime) is not null;
+                ddata.Treatments ?? [], now.ToUtcDateTime()) is not null;
             var built = DeviceStatusProperties.Build(ddata.DeviceStatus ?? [], now, new PumpPreferences(), offline);
             var byName = new Dictionary<string, object>
             {

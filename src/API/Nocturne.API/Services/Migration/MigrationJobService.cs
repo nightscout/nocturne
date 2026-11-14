@@ -1343,13 +1343,13 @@ internal class MigrationJob
             var dated = page.Where(d => d.Mills > 0).ToList();
             return dated.Count == 0
                 ? null
-                : DateTimeOffset.FromUnixTimeMilliseconds(dated.Min(d => d.Mills)).UtcDateTime;
+                : dated.Min(d => d.Mills).ToUtcDateTime();
         },
         to => to,
         TimeSpan.Zero,
         (_, _) => true,
         page => page.Any(d => d.Mills > 0)
-            ? DateTimeOffset.FromUnixTimeMilliseconds(page.Max(d => d.Mills)).UtcDateTime
+            ? page.Max(d => d.Mills).ToUtcDateTime()
             : null);
 
     /// <summary>

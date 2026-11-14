@@ -17,6 +17,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Platform;
@@ -169,6 +170,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IOAuthGrantRepository, OAuthGrantRepository>();
         services.AddTransient<IOAuthClientRepository, OAuthClientRepository>();
         services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
+        services.AddTransient<ITenantCreationInviteRepository, TenantCreationInviteRepository>();
+        services.AddTransient<IPlatformPolicyRepository, PlatformPolicyRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
         services.AddTransient<ITenantRepository, TenantRepository>();
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
@@ -178,6 +181,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
         services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
+        services.AddTransient<IGoogleHealthGrantHolderRepository, GoogleHealthGrantHolderRepository>();
         services.AddTransient<IConnectorResetJobRepository, ConnectorResetJobRepository>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
@@ -219,9 +223,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStateSpanRepository, StateSpanRepository>();
         services.AddScoped<ISleepSessionRepository, SleepSessionRepository>();
         services.AddScoped<IActivityDedupRepository, ActivityDedupRepository>();
+        services.AddScoped<IActivityRecordRepository, ActivityRecordRepository>();
         services.AddScoped<IHeartRateRepository, HeartRateRepository>();
         services.AddScoped<IObservedHealthSeriesRepository<StepCount>, StepCountRepository>();
         services.AddScoped<IHealthSeriesRepository<BodyWeight>, BodyWeightRepository>();
+        services.AddScoped<IHealthRecordTransactions, HealthRecordTransactions>();
         services.AddScoped<ISystemEventRepository, SystemEventRepository>();
         services.AddScoped<IUserFoodFavoriteRepository, UserFoodFavoriteRepository>();
         services.AddScoped<ITreatmentFoodRepository, TreatmentFoodRepository>();

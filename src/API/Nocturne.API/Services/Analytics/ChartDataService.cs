@@ -135,9 +135,8 @@ public class ChartDataService : IChartDataService
     )
     {
         var tempBasals = (await _tempBasalRepository.GetAsync(
-            from: DateTimeOffset.FromUnixTimeMilliseconds(
-                new ChartDataContext { StartTime = startTime, EndTime = endTime }.SeriesWindow.TempBasalReadStart).UtcDateTime,
-            to: DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime,
+            from: new ChartDataContext { StartTime = startTime, EndTime = endTime }.SeriesWindow.TempBasalReadStart.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             device: null,
             source: null,
             limit: TempBasalQueryLimit,

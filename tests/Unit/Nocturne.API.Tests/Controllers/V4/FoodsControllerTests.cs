@@ -78,6 +78,36 @@ public class FoodsControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateFood_WhenTheNameSanitizesToEmpty_Returns400WithNameRequired()
+    {
+        _foodServiceMock
+            .Setup(s => s.CreateNativeFoodAsync(It.IsAny<Food>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new FoodNameRequiredException());
+        var controller = CreateController(null);
+
+        var result = await controller.CreateFood(new Food { Name = "<script>alert(3)</script>" });
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        problem.Value.Should().BeOfType<Microsoft.AspNetCore.Mvc.ProblemDetails>().Which.Detail.Should().Be("Name is required");
+    }
+
+    [Fact]
+    public async Task UpdateFood_WhenTheNameSanitizesToEmpty_Returns400WithNameRequired()
+    {
+        _foodServiceMock
+            .Setup(s => s.UpdateFoodAsync("stored", It.IsAny<Food>(), FoodWriteMode.Native, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new FoodNameRequiredException());
+        var controller = CreateController(null);
+
+        var result = await controller.UpdateFood("stored", new Food { Name = "<script>alert(3)</script>" });
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        problem.Value.Should().BeOfType<Microsoft.AspNetCore.Mvc.ProblemDetails>().Which.Detail.Should().Be("Name is required");
+    }
+
+    [Fact]
     public async Task GetFavorites_WithSubjectId_ReturnsOk()
     {
         var subjectId = Guid.NewGuid();

@@ -145,15 +145,15 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Food>> CreateFood([FromBody] Food food, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(food.Name))
-            return Problem(detail: "Name is required", statusCode: 400, title: "Bad Request");
-
-        var created = (await _foodService.CreateFoodAsync([food], FoodWriteMode.Native, ct)).ToArray();
-        var first = created.FirstOrDefault();
-        if (first is null)
-            return Problem(detail: "Failed to create food", statusCode: 500, title: "Internal Server Error");
-
-        return StatusCode(StatusCodes.Status201Created, first);
+        try
+        {
+            var created = await _foodService.CreateNativeFoodAsync(food, ct);
+            return StatusCode(StatusCodes.Status201Created, created);
+        }
+        catch (FoodNameRequiredException ex)
+        {
+            return NameRequired(ex);
+        }
     }
 
     /// <summary>
@@ -168,12 +168,19 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Food>> UpdateFood(string foodId, [FromBody] Food food, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(food.Name))
-            return Problem(detail: "Name is required", statusCode: 400, title: "Bad Request");
-
-        var updated = await _foodService.UpdateFoodAsync(foodId, food, ct);
-        return updated is null ? NotFound() : Ok(updated);
+        try
+        {
+            var updated = await _foodService.UpdateFoodAsync(foodId, food, FoodWriteMode.Native, ct);
+            return updated is null ? NotFound() : Ok(updated);
+        }
+        catch (FoodNameRequiredException ex)
+        {
+            return NameRequired(ex);
+        }
     }
+
+    private ActionResult NameRequired(FoodNameRequiredException ex) =>
+        Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
 
     #endregion
 

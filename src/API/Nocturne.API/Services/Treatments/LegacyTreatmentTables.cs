@@ -462,7 +462,7 @@ internal sealed class LegacyStateSpanTable(
 
     /// <summary>The served spans of this category whose latest delete was the user's.</summary>
     internal IQueryable<StateSpanEntity> UserTombstones(NocturneDbContext context) =>
-        context.StateSpans.UserTombstones(context).Where(s => s.Category == _category).Where(fromTreatment);
+        context.StateSpans.UserTombstones().Where(s => s.Category == _category).Where(fromTreatment);
 
     /// <summary>Served spans starting inside the window, bounds inclusive, duplicate copies included.</summary>
     internal IQueryable<StateSpanEntity> InWindow(NocturneDbContext context, DateTime? from, DateTime? to) =>

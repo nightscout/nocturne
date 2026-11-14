@@ -129,6 +129,20 @@ for (const operations of Object.values(filteredPaths)) {
   }
 }
 
+// NSwag closes every object schema with `additionalProperties: false`, which makes generated
+// models reject any response field they do not know. SDKs outlive the server version they were
+// built against, so the filtered spec leaves objects open.
+function openObjectSchemas(node) {
+  if (node === null || typeof node !== 'object') return;
+  if (node.additionalProperties === false) delete node.additionalProperties;
+  for (const value of Object.values(node)) {
+    openObjectSchemas(value);
+  }
+}
+
+openObjectSchemas(filteredSchemas);
+openObjectSchemas(filteredPaths);
+
 const output = {
   openapi: spec.openapi,
   info: {

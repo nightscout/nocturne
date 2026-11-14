@@ -8,7 +8,6 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Eversense.Configurations;
 using Nocturne.Connectors.Eversense.Mappers;
 using Nocturne.Connectors.Eversense.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Eversense.Services;
@@ -19,11 +18,10 @@ namespace Nocturne.Connectors.Eversense.Services;
 ///     the followed patient's latest reading from the following-patient list, plus the glucose history
 ///     since the last stored reading from the user-event feed.
 /// </summary>
-public class EversenseConnectorService : BaseConnectorService<EversenseConnectorConfiguration>
+public class EversenseConnectorService
+    : TokenConnectorService<EversenseConnectorConfiguration, EversenseAuthTokenProvider>
 {
     private readonly EversenseSensorGlucoseMapper _mapper;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly EversenseAuthTokenProvider _tokenProvider;
 
     public EversenseConnectorService(
         HttpClient httpClient,
@@ -34,16 +32,11 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _retryDelayStrategy =
-            retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _tokenProvider =
-            tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _mapper = new EversenseSensorGlucoseMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.EversenseConnector;
     public override string ServiceName => "Eversense Now";
 
     /// <summary>
@@ -84,11 +77,8 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             return result;
         }
 
-        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        if (await ValidTokenAsync(config, cancellationToken) is null)
             return AuthenticationFailedResult();
-        }
 
         try
         {
@@ -153,7 +143,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             await PublishRecordTypeAsync(result, activeTypes,
                 records, config, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             RecordSyncError(result, ex);
         }
@@ -235,7 +225,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             return [];
         }
 
-        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
+        var token = await TokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (string.IsNullOrEmpty(token))
             return [];
 
@@ -262,17 +252,10 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
                     return await DeserializeResponseAsync<List<EversenseUserEvent>>(response, cancellationToken) ?? [];
                 },
-                _retryDelayStrategy,
-                reAuthenticateOnUnauthorized: async () =>
-                {
-                    _tokenProvider.InvalidateToken();
-                    var newToken = await _tokenProvider.GetValidTokenAsync(config);
-                    if (string.IsNullOrEmpty(newToken)) return false;
-                    token = newToken;
-                    return true;
-                },
+                reAuthenticateOnUnauthorized: ReauthenticateWith(config, t => token = t, cancellationToken),
                 maxRetries: config.MaxRetryAttempts,
-                operationName: "FetchEversenseGlucoseHistory"
+                operationName: "FetchEversenseGlucoseHistory",
+                cancellationToken: cancellationToken
             );
 
             if (events == null)
@@ -297,11 +280,10 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         EversenseConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token))
+        var token = await ValidTokenAsync(config, cancellationToken);
+        if (token is null)
         {
             _logger.LogWarning("[{ConnectorSource}] No valid token available for data fetch", ConnectorSource);
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 
@@ -326,8 +308,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 var patients = await DeserializeResponseAsync<List<EversensePatientDatum>>(response, cancellationToken);
                 return ConnectorFaults.NonNullRecords(patients, _logger, ConnectorSource, "Eversense patient").ToList();
             },
-            _retryDelayStrategy,
-            reAuthenticateOnUnauthorized: ReauthenticateWith(_tokenProvider, config, t => token = t, cancellationToken),
+            reAuthenticateOnUnauthorized: ReauthenticateWith(config, t => token = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchEversensePatientList",
             cancellationToken: cancellationToken

@@ -146,6 +146,7 @@ public class ReadEndpointScopeEnforcementTests
             ["ShareLinkController.GetShareLink"] = V4Reason.ActionChecksAccess,
             ["GuestLinkController.GetGuestLinkScopeOptions"] = V4Reason.ActionChecksAccess,
             ["TenantSettingsController.GetTenantSettings"] = V4Reason.ActionChecksAccess,
+            ["TenantSettingsController.GetSubdomain"] = V4Reason.ActionChecksAccess,
             ["ReleasesController.GetReleaseStatus"] = V4Reason.ActionChecksAccess,
             ["AuditController.GetMutationAuditLog"] = V4Reason.ActionChecksAccess,
             ["AuditController.GetReadAccessAuditLog"] = V4Reason.ActionChecksAccess,
@@ -178,6 +179,8 @@ public class ReadEndpointScopeEnforcementTests
 
             ["DatabaseCapacityController.Get"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["JobLedgerController.List"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["TenantCreationInviteAdminController.GetOverview"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["PlatformPolicyController.GetPolicy"] = V4ScopeGuardExemptions.PlatformAdminRole,
 
             ["WebhookSettingsController.GetWebhookSettings"] = V4Reason.NotStored,
 

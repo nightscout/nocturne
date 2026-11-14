@@ -306,6 +306,12 @@ public static class ApplicationConstants
         /// matching upstream Nightscout.
         /// </summary>
         public const string V3Version = "3.0.5";
+
+        /// <summary>
+        /// The Nightscout release Nocturne matches, reported as <c>version</c> by the v1 and v3 status
+        /// and <c>/api/v3/version</c>. Clients compare it against the Nightscout releases they support.
+        /// </summary>
+        public const string CompatibleVersion = "15.0.3";
     }
 
     /// <summary>

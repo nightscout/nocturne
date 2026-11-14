@@ -62,6 +62,7 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.ReconcilePlatformAsync",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.ReconcileTenantAsync",
         "src/API/Nocturne.API/Services/Platform/Releases/ReleaseNoticeJob.cs: ReleaseNoticeJob.NotifyOwnersAsync",
+        "src/API/Nocturne.API/Services/Seeding/SampleDataLiveFeedService.cs: SampleDataLiveFeedService.AdvanceAllAsync",
 
         // Credential and identity lookups: subjects, grants, memberships and guest links, which no
         // category or history policy narrows.

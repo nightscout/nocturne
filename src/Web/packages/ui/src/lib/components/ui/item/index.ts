@@ -23,6 +23,8 @@ export const itemVariants = tv({
       demo: "border border-demo/30 bg-demo/5",
       // An option that adds something, like the add-item placeholder at the end of a list.
       dashed: "border border-dashed",
+      // A row in a ruled list (a bordered list divided by rules), which owns the corners.
+      row: "rounded-none focus-visible:ring-inset",
     },
     size: {
       default: "p-3",
@@ -36,7 +38,7 @@ export const itemVariants = tv({
     },
   },
   compoundVariants: [
-    { interactive: true, variant: ["default", "outline", "ghost"], class: "hover:not-disabled:bg-accent/50" },
+    { interactive: true, variant: ["default", "outline", "ghost", "row"], class: "hover:not-disabled:bg-accent/50" },
     { interactive: true, variant: "outline", class: "hover:not-disabled:border-primary/50" },
     { interactive: true, variant: "muted", class: "hover:not-disabled:bg-muted/80" },
     { interactive: true, variant: "success", class: "hover:not-disabled:bg-success/10" },

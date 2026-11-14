@@ -526,7 +526,7 @@ public class StatusServiceTests
     }
 
     [Fact]
-    public async Task GetSystemStatusAsync_ReportsTheAppVersion()
+    public async Task GetSystemStatusAsync_ReportsTheNightscoutLevelAndTheNocturneRelease()
     {
         _mockCacheService
             .Setup(x => x.GetAsync<StatusResponse>("status:system:00000000-0000-0000-0000-000000000001", default))
@@ -534,7 +534,35 @@ public class StatusServiceTests
 
         var result = await _statusService.GetSystemStatusAsync();
 
-        result.Version.Should().Be(AppVersion.Current);
+        result.Version.Should().Be("15.0.3");
+        result.NocturneVersion.Should().Be(AppVersion.Current);
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_WithNoTenant_ReportsTheNightscoutLevelAndTheNocturneRelease()
+    {
+        var unresolved = new Mock<ITenantAccessor>();
+        unresolved.Setup(x => x.IsResolved).Returns(false);
+        var service = CreateStatusService(_configuration, tenantAccessor: unresolved.Object);
+
+        var result = await service.GetSystemStatusAsync();
+
+        result.Status.Should().Be("setup_required");
+        result.Version.Should().Be("15.0.3");
+        result.NocturneVersion.Should().Be(AppVersion.Current);
+    }
+
+    [Fact]
+    public async Task GetV3SystemStatusAsync_ReportsTheNightscoutLevelAndTheNocturneRelease()
+    {
+        _mockCacheService
+            .Setup(x => x.GetAsync<StatusResponse>("status:system:00000000-0000-0000-0000-000000000001", default))
+            .ReturnsAsync(new StatusResponse { Status = "ok", Name = "Cached", Version = "0.0.1", ServerTime = DateTime.UtcNow });
+
+        var result = await _statusService.GetV3SystemStatusAsync();
+
+        result.Version.Should().Be("15.0.3");
+        result.NocturneVersion.Should().Be(AppVersion.Current);
     }
 
     #endregion

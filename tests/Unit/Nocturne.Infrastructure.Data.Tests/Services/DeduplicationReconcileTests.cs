@@ -1073,8 +1073,8 @@ public class DeduplicationReconcileTests : IDisposable
     [Fact]
     public async Task ReconcileNewLinksAsync_ALaterBatchFailingOnce_IsRetriedByTheNextPassNotSkipped()
     {
-        var now = DateTime.UtcNow;
-        await AddThreePairsCreatedAt(now.AddHours(-6), now.AddMinutes(-5));
+        var created = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        await AddThreePairsCreatedAt(created.AddHours(-6), created);
         var logger = new Mock<ILogger<DuplicateReconciler>>();
         var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
         var middle = await MiddlePairIdsAsync();
@@ -1103,8 +1103,8 @@ public class DeduplicationReconcileTests : IDisposable
     [Fact]
     public async Task ReconcileNewLinksAsync_ALaterBatchThatKeepsFailing_IsSkippedAndTheBatchAfterItMerges()
     {
-        var now = DateTime.UtcNow;
-        await AddThreePairsCreatedAt(now.AddHours(-6), now.AddMinutes(-5));
+        var created = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        await AddThreePairsCreatedAt(created.AddHours(-6), created);
         var logger = new Mock<ILogger<DuplicateReconciler>>();
         var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
         var middle = await MiddlePairIdsAsync();
@@ -1568,12 +1568,21 @@ public class DeduplicationReconcileTests : IDisposable
             var carbs = 50 + i * 10;
             var mylife = await AddCarb(t, "mylife-connector", carbs);
             var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", carbs);
-            AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
-            AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
+            AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector", LinkIdInOrder(createdAt, 2 * i));
+            AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector", LinkIdInOrder(createdAt, 2 * i + 1));
         }
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(createdAt);
     }
+
+    /// <summary>
+    /// A link id that sorts after every lower <paramref name="position"/>. Ids minted in one
+    /// millisecond sort at random, and the ids break the tie between links sharing one
+    /// <c>sys_created_at</c>, so without this a batch boundary would fall between different pairs
+    /// from run to run.
+    /// </summary>
+    private static Guid LinkIdInOrder(DateTime createdAt, int position) =>
+        Guid.CreateVersion7(new DateTimeOffset(DateTime.SpecifyKind(createdAt, DateTimeKind.Utc)).AddMilliseconds(position));
 
     [Fact]
     public async Task AFullRun_PagesPastTheBatchSizeWithoutSkippingOrRereadingARow()
@@ -1970,10 +1979,10 @@ public class DeduplicationReconcileTests : IDisposable
     /// Adds a primary <see cref="LinkedRecordEntity"/> with a fresh canonical id for the test tenant
     /// and returns that canonical id (handy for candidate-bounded reconcile tests).
     /// </summary>
-    private Guid AddPrimaryLink(RecordType recordType, Guid recordId, long mills, string source)
+    private Guid AddPrimaryLink(RecordType recordType, Guid recordId, long mills, string source, Guid? linkId = null)
     {
         var canonicalId = Guid.CreateVersion7();
-        AddLink(recordType, recordId, mills, source, canonicalId, isPrimary: true);
+        AddLink(recordType, recordId, mills, source, canonicalId, isPrimary: true, linkId);
         return canonicalId;
     }
 
@@ -1982,10 +1991,11 @@ public class DeduplicationReconcileTests : IDisposable
     /// collapsed — the case where a group spans far more than its primary's timestamp suggests.
     /// </summary>
     private void AddLink(
-        RecordType recordType, Guid recordId, long mills, string source, Guid canonicalId, bool isPrimary) =>
+        RecordType recordType, Guid recordId, long mills, string source, Guid canonicalId, bool isPrimary,
+        Guid? linkId = null) =>
         _context.LinkedRecords.Add(new LinkedRecordEntity
         {
-            Id = Guid.CreateVersion7(),
+            Id = linkId ?? Guid.CreateVersion7(),
             TenantId = TestTenantId,
             CanonicalId = canonicalId,
             RecordType = recordType.ToString().ToLowerInvariant(),

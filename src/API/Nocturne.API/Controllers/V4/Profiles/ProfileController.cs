@@ -381,15 +381,9 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return BadRequest(
-                new { error = $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'." }
-            );
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
 
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
         var data = (await _therapyRepo.GetAsync(
             from,
             to,

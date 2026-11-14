@@ -506,6 +506,9 @@ jobs:
           sudo chown -R "$USER:$USER" sdk/java/out
           chmod +x sdk/java/out/gradlew
 
+      - name: Verify models tolerate unknown fields and enum values
+        run: bash sdk/verify-tolerant-java-models.sh sdk/java/out
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:

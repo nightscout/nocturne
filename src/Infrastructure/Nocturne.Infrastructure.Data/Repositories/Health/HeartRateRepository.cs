@@ -7,9 +7,19 @@ using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories.Health;
 
-public sealed class HeartRateRepository(INocturneDbContextFactory contexts, TimeProvider time)
-    : ObservedHealthSeriesRepository<HeartRate, HeartRateEntity>(contexts, time), IHeartRateRepository
+public sealed class HeartRateRepository
+    : ObservedHealthSeriesRepository<HeartRate, HeartRateEntity>, IHeartRateRepository
 {
+    public HeartRateRepository(INocturneDbContextFactory contexts, TimeProvider time)
+        : base(contexts, time)
+    {
+    }
+
+    internal HeartRateRepository(DbUnitOfWork unit, TimeProvider time)
+        : base(unit, time)
+    {
+    }
+
     protected override DbSet<HeartRateEntity> Set(NocturneDbContext db) => db.HeartRates;
 
     protected override HeartRate ToDomain(HeartRateEntity entity) => HeartRateMapper.ToDomainModel(entity);
@@ -22,7 +32,8 @@ public sealed class HeartRateRepository(INocturneDbContextFactory contexts, Time
     public async Task<IReadOnlyList<HeartRate>> GetMinuteAveragesAsync(
         DateTime from, DateTime to, CancellationToken ct = default)
     {
-        await using var db = await Contexts.CreateAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
         var rangeStart = from;
         var rangeEnd = to;
         var buckets = await (

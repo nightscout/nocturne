@@ -17,13 +17,15 @@ public sealed class GoogleHealthAuthTokenProvider(
     ITenantAccessor tenantAccessor,
     IGoogleHealthPlatformSettings platformOptions,
     ILogger<GoogleHealthAuthTokenProvider> logger,
+    IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null)
     : AuthTokenProviderBase<GoogleHealthConnectorConfiguration>(
         httpClient,
         tokenCache,
         serverResolver,
         tenantAccessor,
-        logger)
+        logger,
+        retryDelayStrategy)
 {
     private const string RefreshTokenKey = "RefreshToken";
     private const string ScopesKey = "Scopes";
@@ -31,7 +33,6 @@ public sealed class GoogleHealthAuthTokenProvider(
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private readonly GoogleHealthOAuthClient oauth = new(httpClient, timeProvider);
 
-    protected override string ConnectorName => GoogleHealthConnectorService.ConnectorName;
     protected override int TokenLifetimeBufferMinutes => 1;
     protected override bool RethrowTokenAcquisitionExceptions => true;
 

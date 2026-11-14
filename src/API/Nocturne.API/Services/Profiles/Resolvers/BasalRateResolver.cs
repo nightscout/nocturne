@@ -114,7 +114,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
             if (SpanAt(spans, timeMills) is not { } span)
                 return DefaultBasalRate;
 
-            var at = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
+            var at = timeMills.ToUtcDateTime();
             var store = stores[span.ProfileName];
             var adjustment = span.Adjustment;
             var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);

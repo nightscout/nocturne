@@ -25,6 +25,11 @@ namespace Nocturne.API.Controllers.V4.Base;
 public static class V4ReadLimits
 {
     /// <summary>
+    /// The most a daylight saving change moves a zone's offset.
+    /// </summary>
+    public static readonly TimeSpan DaylightSavingMargin = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Maximum records a V4 list read may return.
     /// </summary>
     /// <remarks>
@@ -118,10 +123,16 @@ public static class V4ReadLimits
     /// <summary>
     /// Rejects a range read whose bounds are further apart than <paramref name="maxDays"/>.
     /// </summary>
+    /// <remarks>
+    /// A client cuts a range of <paramref name="maxDays"/> local calendar days from the first
+    /// midnight to the last millisecond of the last day, and a daylight saving change inside it
+    /// makes that span up to <see cref="DaylightSavingMargin"/> longer in UTC, so the check allows
+    /// that margin.
+    /// </remarks>
     /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
     public static ObjectResult? RejectDateSpan(
         this ControllerBase controller, DateTime? from, DateTime? to, int maxDays = MaxDateSpanDays) =>
-        from is { } start && to is { } end && (end - start).TotalDays > maxDays
+        from is { } start && to is { } end && end - start > TimeSpan.FromDays(maxDays) + DaylightSavingMargin
             ? DateSpanProblem(controller, maxDays)
             : null;
 
@@ -135,6 +146,33 @@ public static class V4ReadLimits
         (double)toMills - fromMills > (double)maxDays * TimeSpan.MillisecondsPerDay
             ? DateSpanProblem(controller, maxDays)
             : null;
+
+    /// <summary>
+    /// Reads the <c>sort</c> of a V4 list: <c>timestamp_desc</c> or <c>timestamp_asc</c>.
+    /// </summary>
+    /// <returns>The error response to return, or <c>null</c> when the sort is usable.</returns>
+    public static ObjectResult? RejectInvalidSort(this ControllerBase controller, string sort, out bool descending)
+    {
+        descending = sort == "timestamp_desc";
+        return sort is "timestamp_desc" or "timestamp_asc"
+            ? null
+            : controller.Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+    }
+
+    /// <summary>
+    /// Reads the <c>sort</c> of a V4 list and clamps its paging window to this class's ceilings.
+    /// </summary>
+    /// <returns>The error response to return, or <c>null</c> when the query is usable.</returns>
+    public static ObjectResult? PrepareListPage(
+        this ControllerBase controller, string sort, ref int limit, ref int offset, out bool descending)
+    {
+        if (controller.RejectInvalidSort(sort, out descending) is { } invalid)
+            return invalid;
+
+        limit = ClampLimit(limit);
+        offset = ClampOffset(offset);
+        return null;
+    }
 
     /// <summary>
     /// Rejects a CGM comparison or sleep trends range that covers more than

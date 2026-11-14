@@ -69,12 +69,6 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Converts nullable unix milliseconds to nullable DateTime.
-    /// </summary>
-    private static DateTime? MillsToDateTime(long? mills) =>
-        mills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(mills.Value).UtcDateTime : null;
-
     /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
         long? fromMills,
@@ -86,7 +80,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     {
         await using var db = await _contexts.CreateAsync(ct);
         var range = new LegacyTreatmentRange(
-            MillsToDateTime(fromMills), MillsToDateTime(toMills), limit, descending);
+            fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime(), limit, descending);
 
         var rows = await FetchAsync(table => table.InRangeAsync(_repositories, db, range, ct));
         var treatments = await AssembleAsync(db, rows, ct);
@@ -106,7 +100,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         CancellationToken ct = default
     )
     {
-        var at = instants.Distinct().Select(mills => MillsToDateTime(mills)!.Value).ToList();
+        var at = instants.Distinct().Select(mills => mills.ToUtcDateTime()).ToList();
         if (at.Count == 0)
             return [];
 
@@ -128,7 +122,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     {
         await using var db = await _contexts.CreateAsync(ct);
         var rows = await LegacyTreatmentTables.LatestOfTypeAsync(
-            _repositories, db, eventType, MillsToDateTime(fromMills)!.Value, MillsToDateTime(toMills)!.Value, ct);
+            _repositories, db, eventType, fromMills.ToUtcDateTime(), toMills.ToUtcDateTime(), ct);
 
         return (await AssembleAsync(db, rows, ct)).FirstOrDefault();
     }
@@ -423,7 +417,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         long? fromMills, long? toMills, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var (from, to) = (MillsToDateTime(fromMills), MillsToDateTime(toMills));
+        var (from, to) = (fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime());
         long count = 0;
         foreach (var table in LegacyTreatmentTables.All)
             count += await table.CountAsync(_repositories, db, from, to, _logger, ct);

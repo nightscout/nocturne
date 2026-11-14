@@ -21,14 +21,11 @@ public class TidepoolConnectorServiceTests
 {
     /// <summary>
     /// When authentication fails, the sync must report failure (so the connector surfaces as
-    /// unhealthy) rather than silently returning a successful, empty result. Previously a missing
-    /// token made the data fetches return null without error, so a bad-credential tenant was
-    /// recorded as healthy and never alerted. The failure takes the shared shape: the summary in
-    /// <c>Message</c> for the tenant's sync card and the source-qualified detail in <c>Errors</c>,
-    /// which is what gets persisted as the connector's last error.
+    /// unhealthy) rather than silently returning a successful, empty result, and say what the
+    /// tenant has to fix: a missing token makes the data fetches return null without error.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_ReportsFailure_WhenAuthenticationFails()
+    public async Task SyncDataAsync_LoginRefused_ReportsTheProvidersSignInReason()
     {
         var fixture = new ServiceFixture(new TidepoolFakeHandler { LoginSucceeds = false });
 
@@ -38,9 +35,34 @@ public class TidepoolConnectorServiceTests
             CancellationToken.None);
 
         result.Success.Should().BeFalse("an authentication failure must mark the sync unhealthy");
-        result.Message.Should().Be("Authentication failed");
-        result.Errors.Should().ContainSingle()
-            .Which.Should().Be($"Authentication failed for {DataSources.TidepoolConnector}");
+        fixture.TokenProvider.SignInFailureReason.Should().Contain("did not accept this sign-in");
+        result.Message.Should().Be(fixture.TokenProvider.SignInFailureReason);
+        result.Errors.Should().ContainSingle().Which.Should().Be(fixture.TokenProvider.SignInFailureReason);
+    }
+
+    /// <summary>
+    /// A run withdrawn while a fetch is backing off stops there, rather than spending the rest of
+    /// its attempts against a source nobody is waiting on, and still resolves the tenant's
+    /// in-progress indicator.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_CancelledDuringFetchRetry_StopsAndEndsInAFailedPhase()
+    {
+        using var cts = new CancellationTokenSource();
+        var handler = new TidepoolFakeHandler { DataStatus = HttpStatusCode.ServiceUnavailable };
+        var fixture = new ServiceFixture(handler, retryDelayStrategy: new CancellingRetryDelayStrategy(cts));
+        var progress = new RecordingProgressReporter();
+
+        var sync = () => fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            fixture.Config,
+            cts.Token,
+            progress);
+
+        await sync.Should().ThrowAsync<OperationCanceledException>();
+        handler.DataCalls.Should().Be(1, "no attempt is made once the run is withdrawn");
+        progress.Events.Should().NotBeEmpty();
+        progress.Events[^1].Phase.Should().Be(SyncPhase.Failed);
     }
 
     /// <summary>
@@ -264,6 +286,7 @@ public class TidepoolConnectorServiceTests
     private sealed class ServiceFixture
     {
         internal TidepoolConnectorService Service { get; }
+        internal TidepoolAuthTokenProvider TokenProvider { get; }
         internal TidepoolConnectorConfiguration Config { get; }
         internal List<Bolus> PublishedBoluses { get; } = [];
         internal List<CarbIntake> PublishedCarbIntakes { get; } = [];
@@ -272,7 +295,8 @@ public class TidepoolConnectorServiceTests
             TidepoolFakeHandler handler,
             bool withPublisher = false,
             TidepoolConnectorConfiguration? config = null,
-            TimeProvider? clock = null)
+            TimeProvider? clock = null,
+            IRetryDelayStrategy? retryDelayStrategy = null)
         {
             Config = config ?? new TidepoolConnectorConfiguration
             {
@@ -287,7 +311,7 @@ public class TidepoolConnectorServiceTests
             var serverResolver = new ConnectorServerResolver<TidepoolConnectorConfiguration>(
                 null, null, TidepoolFakeHandler.Host);
 
-            var tokenProvider = new TidepoolAuthTokenProvider(
+            TokenProvider = new TidepoolAuthTokenProvider(
                 new HttpClient(handler),
                 new ConnectorTokenCache(clock),
                 serverResolver,
@@ -327,8 +351,8 @@ public class TidepoolConnectorServiceTests
                 new HttpClient(handler),
                 serverResolver,
                 NullLogger<TidepoolConnectorService>.Instance,
-                Mock.Of<IRetryDelayStrategy>(),
-                tokenProvider,
+                retryDelayStrategy ?? Mock.Of<IRetryDelayStrategy>(),
+                TokenProvider,
                 publisher,
                 clock);
         }
@@ -356,6 +380,8 @@ public class TidepoolConnectorServiceTests
         internal string BolusJson { get; init; } = "[]";
         internal string FoodJson { get; init; } = "[]";
 
+        internal int DataCalls { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -377,6 +403,7 @@ public class TidepoolConnectorServiceTests
 
             if (path == $"/data/{UserId}")
             {
+                DataCalls++;
                 var query = Uri.UnescapeDataString(request.RequestUri.Query);
                 var isBolus = query.Contains($"type={TidepoolConstants.DataTypes.Bolus}", StringComparison.Ordinal);
                 var isFood = query.Contains($"type={TidepoolConstants.DataTypes.Food}", StringComparison.Ordinal);
@@ -398,5 +425,27 @@ public class TidepoolConnectorServiceTests
 
         private static HttpResponseMessage Json(string body) =>
             new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+    }
+
+    /// <summary>Withdraws the run partway through a delay, as a stopping host would.</summary>
+    private sealed class CancellingRetryDelayStrategy(CancellationTokenSource cts) : IRetryDelayStrategy
+    {
+        public Task ApplyRetryDelayAsync(int attemptNumber, CancellationToken cancellationToken)
+        {
+            cts.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingProgressReporter : ISyncProgressReporter
+    {
+        public List<SyncProgressEvent> Events { get; } = [];
+
+        public Task ReportProgressAsync(SyncProgressEvent progress, CancellationToken ct = default)
+        {
+            Events.Add(progress);
+            return Task.CompletedTask;
+        }
     }
 }

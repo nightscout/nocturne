@@ -31,7 +31,7 @@ Commercial platforms such as Clarity, Tidepool, and Sugarmate are not self-hoste
 ## Operating Context
 
 - **Surfaces:**
-  - the tenant web app (SvelteKit), with its dashboard, reports, alerts, food and meals, calendar, and time spans;
+  - the tenant web app (SvelteKit), with its dashboard, reports, alerts, food and meals, calendar, and therapy timeline;
   - configurable clock faces and fullscreen displays;
   - public share links (`{token}.share.{domain}`), which show anonymous viewers only the categories the owner granted;
   - the marketing and docs portal (`src/Portal`, `packages/portal`).

@@ -384,7 +384,7 @@ public class FoodController : ControllerBase
 
             food.ApplyUnitAndGiDefaults();
 
-            var updatedFood = await _foodService.UpdateFoodAsync(id, food, cancellationToken);
+            var updatedFood = await _foodService.UpdateFoodAsync(id, food, FoodWriteMode.Legacy, cancellationToken);
             if (updatedFood == null)
             {
                 _logger.LogDebug("Food record not found for update with ID: {Id}", id);

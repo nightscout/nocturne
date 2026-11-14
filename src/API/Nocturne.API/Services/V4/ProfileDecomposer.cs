@@ -317,7 +317,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         // place it where its client meant it instead. A zone-less startDate is read as UTC where
         // Nightscout reads it in the server's zone, which is UTC in its container image.
         if (profile.Mills != 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime;
+            return profile.Mills.ToUtcDateTime();
 
         return UploaderTimestamp.ParseUtcDateTime(profile.CreatedAt) ?? DateTime.UnixEpoch;
     }

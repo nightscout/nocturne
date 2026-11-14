@@ -36,7 +36,32 @@ public interface IHealthSeriesRepository<T>
     /// Soft-deletes the record with the given route id. Returns <see langword="false"/> when there is none.
     /// </summary>
     Task<bool> DeleteAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Hard-deletes every record <paramref name="source"/> wrote, user tombstones included, so that
+    /// none of its sync keys is held any more. Returns the number deleted.
+    /// </summary>
+    Task<int> PurgeSourceAsync(string source, CancellationToken ct = default);
+
+    /// <summary>
+    /// The live records <paramref name="source"/> wrote that carry a sync identifier and were observed
+    /// in <c>[from, to)</c>, at most <paramref name="limit"/> of them, in no order.
+    /// </summary>
+    Task<IReadOnlyList<SourceRecordKey>> GetSyncKeysAsync(
+        string source, DateTime from, DateTime to, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Soft-deletes the live records of <paramref name="ids"/> that <paramref name="source"/> wrote, as
+    /// a system delete that a later sync may re-create. Returns the number deleted.
+    /// </summary>
+    Task<int> RetireAsync(
+        string source, IReadOnlyCollection<Guid> ids, DateTime deletedAt, CancellationToken ct = default);
 }
+
+/// <summary>A stored record and the key its source identifies it by.</summary>
+/// <param name="Id">The record's own id.</param>
+/// <param name="Key">The source's identifier for the record.</param>
+public sealed record SourceRecordKey(Guid Id, string Key);
 
 /// <summary>
 /// <see cref="IHealthSeriesRepository{T}"/> for a series keyed on the instant each measurement was

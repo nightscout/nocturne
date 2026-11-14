@@ -504,7 +504,7 @@ public class FoodController : BaseV3Controller<Food>
 
             ProcessFoodForCreation(food);
 
-            var updatedFood = await _foodService.UpdateFoodAsync(id, food, cancellationToken);
+            var updatedFood = await _foodService.UpdateFoodAsync(id, food, FoodWriteMode.Legacy, cancellationToken);
 
             if (updatedFood == null)
             {

@@ -90,7 +90,7 @@ public class Entry : ProcessableDocumentBase
             // If date is not set but we have mills, calculate it
             if (_date == null && _mills > 0)
             {
-                return DateTimeOffset.FromUnixTimeMilliseconds(_mills).UtcDateTime;
+                return _mills.ToUtcDateTime();
             }
             // If date is not set but we have dateString, parse it
             if (_date == null && UploaderTimestamp.TryParse(_dateString, out var parsedDate))

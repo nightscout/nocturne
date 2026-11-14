@@ -69,9 +69,6 @@ internal sealed class DataFetchStage(
         var endTime = context.EndTime;
         var window = context.SeriesWindow;
 
-        // Helper to convert mills to DateTime for V4 repository calls
-        static DateTime? MillsToDateTime(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
-
         // Calculate reasonable limits based on the actual time range
         var rangeHours = (endTime - startTime) / (60.0 * 60 * 1000);
         // The canonical read returns one stream per bucket: twice a 1-minute stream's 60 readings an
@@ -87,8 +84,8 @@ internal sealed class DataFetchStage(
         var sensorGlucoseTask = FetchCanonicalGlucoseAsync();
         async Task<List<SensorGlucose>> FetchCanonicalGlucoseAsync() =>
             (await sensorGlucoseRepository.GetForAnalyticsAsync(
-                from: MillsToDateTime(startTime),
-                to: MillsToDateTime(endTime),
+                from: startTime.ToUtcDateTime(),
+                to: endTime.ToUtcDateTime(),
                 device: null,
                 source: null,
                 limit: entryLimit,
@@ -99,8 +96,8 @@ internal sealed class DataFetchStage(
             )).ToList();
 
         var bolusTask = bolusRepository.GetAsync(
-            from: MillsToDateTime(window.InsulinReadStart),
-            to: MillsToDateTime(window.ReadEnd),
+            from: window.InsulinReadStart.ToUtcDateTime(),
+            to: window.ReadEnd.ToUtcDateTime(),
             device: null,
             source: null,
             limit: treatmentLimit,
@@ -110,8 +107,8 @@ internal sealed class DataFetchStage(
         );
 
         var carbIntakeTask = carbIntakeRepository.GetAsync(
-            from: MillsToDateTime(window.InsulinReadStart),
-            to: MillsToDateTime(window.ReadEnd),
+            from: window.InsulinReadStart.ToUtcDateTime(),
+            to: window.ReadEnd.ToUtcDateTime(),
             device: null,
             source: null,
             limit: treatmentLimit,
@@ -122,8 +119,8 @@ internal sealed class DataFetchStage(
 
         // Fetch BG checks from v4 BGCheck table (display range only)
         var bgCheckTask = bgCheckRepository.GetAsync(
-            from: MillsToDateTime(startTime),
-            to: MillsToDateTime(endTime),
+            from: startTime.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             device: null,
             source: null,
             limit: treatmentLimit,
@@ -134,8 +131,8 @@ internal sealed class DataFetchStage(
 
         // Fetch device events from v4 DeviceEvent table (display range only)
         var deviceEventTask = deviceEventRepository.GetAsync(
-            from: MillsToDateTime(startTime),
-            to: MillsToDateTime(endTime),
+            from: startTime.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             device: null,
             source: null,
             limit: displayRangeLimit,
@@ -146,8 +143,8 @@ internal sealed class DataFetchStage(
 
         // Fetch basal injections from v4 BasalInjection table (display range only)
         var basalInjectionTask = basalInjectionRepository.GetAsync(
-            from: MillsToDateTime(startTime),
-            to: MillsToDateTime(endTime),
+            from: startTime.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             device: null,
             source: null,
             limit: displayRangeLimit,
@@ -157,8 +154,8 @@ internal sealed class DataFetchStage(
         );
 
         var tempBasalTask = tempBasalRepository.GetAsync(
-            from: MillsToDateTime(window.TempBasalReadStart),
-            to: MillsToDateTime(window.ReadEnd),
+            from: window.TempBasalReadStart.ToUtcDateTime(),
+            to: window.ReadEnd.ToUtcDateTime(),
             device: null,
             source: null,
             limit: Nocturne.API.Services.Analytics.ChartDataService.TempBasalQueryLimit,
@@ -169,26 +166,26 @@ internal sealed class DataFetchStage(
 
         // The slim projections are deliberate: full snapshots carry multi-KB JSON blob columns, and
         // a limit heuristic would truncate the newest rows for high-cadence uploaders.
-        var deviceReadUntil = MillsToDateTime(window.DeviceReadEnd)!.Value;
+        var deviceReadUntil = window.DeviceReadEnd.ToUtcDateTime();
         var apsSnapshotTask = apsSnapshotRepository.GetIobCobPointsAsync(
-            from: MillsToDateTime(window.DeviceReadStart)!.Value,
+            from: window.DeviceReadStart.ToUtcDateTime(),
             to: deviceReadUntil,
             ct: cancellationToken
         );
         var pumpIobTask = pumpSnapshotRepository.GetIobPointsAsync(
-            from: MillsToDateTime(window.DeviceReadStart)!.Value,
+            from: window.DeviceReadStart.ToUtcDateTime(),
             to: deviceReadUntil,
             ct: cancellationToken
         );
 
         var latestPumpSnapshotTask = pumpSnapshotRepository.GetLatestAsync(
-            asOf: MillsToDateTime(endTime),
+            asOf: endTime.ToUtcDateTime(),
             ct: cancellationToken
         );
 
         var sleepSessionTask = sleepService.GetSessionsAsync(
-            from: MillsToDateTime(startTime),
-            to: MillsToDateTime(endTime),
+            from: startTime.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             limit: displayRangeLimit,
             cancellationToken: cancellationToken
         );
@@ -204,8 +201,8 @@ internal sealed class DataFetchStage(
 
             var allStateSpans = await stateSpanRepository.GetByCategories(
                 stateSpanCategories,
-                MillsToDateTime(startTime),
-                MillsToDateTime(endTime),
+                startTime.ToUtcDateTime(),
+                endTime.ToUtcDateTime(),
                 cancellationToken
             );
 
@@ -233,14 +230,14 @@ internal sealed class DataFetchStage(
             if (context.IncludeHealthSeries)
             {
                 heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
-                    MillsToDateTime(startTime)!.Value,
-                    MillsToDateTime(endTime)!.Value,
+                    startTime.ToUtcDateTime(),
+                    endTime.ToUtcDateTime(),
                     cancellationToken: cancellationToken
                 )).ToList();
 
                 stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
-                    MillsToDateTime(startTime)!.Value,
-                    MillsToDateTime(endTime)!.Value,
+                    startTime.ToUtcDateTime(),
+                    endTime.ToUtcDateTime(),
                     cancellationToken: cancellationToken
                 )).ToList();
             }

@@ -211,6 +211,75 @@ public class GlookoConnectorServiceBackgroundWindowTests
         store.Saved.Should().ContainKey(Completed);
     }
 
+    [Fact]
+    public async Task ScheduledRun_WhenReadingTheScheduleTimesOut_Walks()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new FakeCursorStore
+        {
+            BeforeGet = _ => throw new TaskCanceledException("The store timed out."),
+        };
+
+        var result = await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenTheCallerCancelsDuringTheScheduleRead_Propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var store = new FakeCursorStore
+        {
+            BeforeGet = token =>
+            {
+                cancellation.Cancel();
+                token.ThrowIfCancellationRequested();
+            },
+        };
+
+        var run = () => Service(new GlookoEndpointHandler(), cursorStore: store)
+            .SyncDataAsync(ScheduledConfig(), cancellation.Token);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenRecordingTheWalkTimesOut_StillSucceeds()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new FakeCursorStore
+        {
+            BeforeSet = _ => throw new TaskCanceledException("The store timed out."),
+        };
+
+        var result = await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+        store.Saved.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenTheCallerCancelsDuringTheWalkRecord_Propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var store = new FakeCursorStore
+        {
+            BeforeSet = token =>
+            {
+                cancellation.Cancel();
+                token.ThrowIfCancellationRequested();
+            },
+        };
+
+        var run = () => Service(new GlookoEndpointHandler(), cursorStore: store)
+            .SyncDataAsync(ScheduledConfig(), cancellation.Token);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     /// <summary>
     /// A caller that names its own lower bound has already chosen; the schedule neither widens nor
     /// records.

@@ -46,23 +46,49 @@ internal abstract class PublishRoute
     public PublishOriginFamily Origin { get; }
 }
 
-internal sealed class PublishRoute<T> : PublishRoute where T : class
+internal class PublishRoute<T> : PublishRoute where T : class
 {
     public PublishRoute(
         SyncDataType[] dataTypes,
         PublishOriginFamily origin,
         Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<bool>> publish,
-        Action<T, BaseConnectorConfiguration>? prepare = null)
+        Action<T, BaseConnectorConfiguration>? prepare = null,
+        Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<int?>>? publishRecent = null)
         : base(typeof(T), dataTypes, origin)
     {
         Publish = publish;
         Prepare = prepare;
+        PublishRecent = publishRecent;
     }
 
     public Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<bool>> Publish { get; }
 
+    /// <summary>Returns how many records were written, or null when the publish failed.</summary>
+    public Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<int?>>? PublishRecent { get; }
+
     /// <summary>Runs on each record before it is published, for what only the connector's config knows.</summary>
     public Action<T, BaseConnectorConfiguration>? Prepare { get; }
+}
+
+/// <summary>
+///     A route whose publisher member hands back a result a caller needs. <see cref="PublishRoute{T}.Publish"/>
+///     reports a null result as a failed publish.
+/// </summary>
+internal sealed class PublishRoute<T, TResult> : PublishRoute<T>
+    where T : class
+    where TResult : class
+{
+    public PublishRoute(
+        SyncDataType[] dataTypes,
+        PublishOriginFamily origin,
+        Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<TResult?>> publishForResult)
+        : base(dataTypes, origin,
+            async (p, r, s, o, ct) => await publishForResult(p, r, s, o, ct) is not null)
+    {
+        PublishForResult = publishForResult;
+    }
+
+    public Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<TResult?>> PublishForResult { get; }
 }
 
 /// <summary>
@@ -73,7 +99,8 @@ internal static class PublishRoutes
 {
     private static readonly Dictionary<Type, PublishRoute> Table = Build(
         Route<Entry>([SyncDataType.Glucose], PublishOriginFamily.Glucose,
-            (p, r, s, o, ct) => p.Glucose.PublishEntriesAsync(r, s, o, ct)),
+            (p, r, s, o, ct) => p.Glucose.PublishEntriesAsync(r, s, o, ct),
+            publishRecent: (p, r, s, o, ct) => p.Glucose.PublishRecentEntriesAsync(r, s, o, ct)),
         Route<SensorGlucose>([SyncDataType.Glucose], PublishOriginFamily.Glucose,
             (p, r, s, o, ct) => p.Glucose.PublishSensorGlucoseAsync(r, s, o, ct),
             prepare: (record, config) =>
@@ -82,7 +109,8 @@ internal static class PublishRoutes
                 record.SmoothedMgdl ??= config.GlucoseProcessing == GlucoseProcessing.Smoothed ? record.Mgdl : null;
             }),
         Route<Treatment>([], PublishOriginFamily.Treatment,
-            (p, r, s, o, ct) => p.Treatments.PublishTreatmentsAsync(r, s, o, ct)),
+            (p, r, s, o, ct) => p.Treatments.PublishTreatmentsAsync(r, s, o, ct),
+            publishRecent: (p, r, s, o, ct) => p.Treatments.PublishRecentTreatmentsAsync(r, s, o, ct)),
         Route<Bolus>([SyncDataType.Boluses], PublishOriginFamily.Treatment,
             (p, r, s, o, ct) => p.Treatments.PublishBolusesAsync(r, s, o, ct)),
         Route<CarbIntake>([SyncDataType.CarbIntake], PublishOriginFamily.Treatment,
@@ -98,7 +126,10 @@ internal static class PublishRoutes
         Route<Note>([SyncDataType.Notes], PublishOriginFamily.Treatment,
             (p, r, s, o, ct) => p.Metadata.PublishNotesAsync(r, s, o, ct)),
         Route<DeviceStatus>([SyncDataType.DeviceStatus], PublishOriginFamily.Device,
-            (p, r, s, o, ct) => p.Device.PublishDeviceStatusAsync(r, s, o, ct)),
+            (p, r, s, o, ct) => p.Device.PublishDeviceStatusAsync(r, s, o, ct),
+            publishRecent: (p, r, s, o, ct) => p.Device.PublishRecentDeviceStatusAsync(r, s, o, ct)),
+        Route<PatientDevice>([], PublishOriginFamily.Device,
+            (p, r, s, o, ct) => p.Device.PublishPatientDevicesAsync(r, s, o, ct)),
         Route<DeviceEvent>([SyncDataType.DeviceEvents], PublishOriginFamily.Treatment,
             (p, r, s, o, ct) => p.Device.PublishDeviceEventsAsync(r, s, o, ct)),
         // System events have no sync data type of their own.
@@ -108,10 +139,11 @@ internal static class PublishRoutes
             (p, r, s, o, ct) => p.Metadata.PublishProfilesAsync(r, s, o, ct)),
         Route<Food>([SyncDataType.Food], PublishOriginFamily.Live,
             (p, r, s, o, ct) => p.Metadata.PublishFoodAsync(r, s, o, ct)),
-        Route<ConnectorFoodEntryImport>([SyncDataType.Food], PublishOriginFamily.Live,
-            async (p, r, s, o, ct) => await p.Metadata.PublishConnectorFoodEntriesAsync(r, s, o, ct) is not null),
+        ResultRoute<ConnectorFoodEntryImport, IReadOnlyList<ConnectorFoodEntry>>([SyncDataType.Food], PublishOriginFamily.Live,
+            (p, r, s, o, ct) => p.Metadata.PublishConnectorFoodEntriesAsync(r, s, o, ct)),
         Route<Activity>([SyncDataType.Activity], PublishOriginFamily.Live,
-            (p, r, s, o, ct) => p.Metadata.PublishActivityAsync(r, s, o, ct)),
+            (p, r, s, o, ct) => p.Metadata.PublishActivityAsync(r, s, o, ct),
+            publishRecent: (p, r, s, o, ct) => p.Metadata.PublishRecentActivityAsync(r, s, o, ct)),
         Route<StateSpan>([SyncDataType.StateSpans], PublishOriginFamily.Live,
             (p, r, s, o, ct) => p.Metadata.PublishStateSpansAsync(r, s, o, ct)),
         // Profile activations replace the Profile spans, which gated under StateSpans.
@@ -133,12 +165,27 @@ internal static class PublishRoutes
             : throw new InvalidOperationException(
                 $"{typeof(T).Name} has no publish route. Add it to {nameof(PublishRoutes)}.");
 
+    /// <exception cref="InvalidOperationException">The route for <typeparamref name="T"/> returns no result.</exception>
+    public static PublishRoute<T, TResult> ForResult<T, TResult>() where T : class where TResult : class =>
+        For<T>() as PublishRoute<T, TResult>
+        ?? throw new InvalidOperationException(
+            $"{typeof(T).Name} has no route returning {typeof(TResult).Name}.");
+
     private static PublishRoute Route<T>(
         SyncDataType[] dataTypes,
         PublishOriginFamily origin,
         Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<bool>> publish,
-        Action<T, BaseConnectorConfiguration>? prepare = null) where T : class =>
-        new PublishRoute<T>(dataTypes, origin, publish, prepare);
+        Action<T, BaseConnectorConfiguration>? prepare = null,
+        Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<int?>>? publishRecent = null)
+        where T : class =>
+        new PublishRoute<T>(dataTypes, origin, publish, prepare, publishRecent);
+
+    private static PublishRoute ResultRoute<T, TResult>(
+        SyncDataType[] dataTypes,
+        PublishOriginFamily origin,
+        Func<IConnectorPublisher, IEnumerable<T>, string, WriteOrigin, CancellationToken, Task<TResult?>> publish)
+        where T : class where TResult : class =>
+        new PublishRoute<T, TResult>(dataTypes, origin, publish);
 
     private static Dictionary<Type, PublishRoute> Build(params PublishRoute[] routes) =>
         routes.ToDictionary(route => route.RecordType);

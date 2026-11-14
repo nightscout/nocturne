@@ -2662,6 +2662,41 @@ public partial class StatisticsControllerTests
             It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    public static TheoryData<string> DateRangeActions() => new()
+    {
+        nameof(StatisticsController.GetRangeAnalytics),
+        nameof(StatisticsController.GetWeekdayAverages),
+        nameof(StatisticsController.GetHourlyPatterns),
+        nameof(StatisticsController.GetDailyBasalBolusRatios),
+        nameof(StatisticsController.GetPunchCardData),
+        nameof(StatisticsController.GetInsulinDeliveryStatistics),
+        nameof(StatisticsController.GetBasalAnalysis),
+        nameof(StatisticsController.GetHourlyInsulinDelivery),
+    };
+
+    [Theory]
+    [MemberData(nameof(DateRangeActions))]
+    public async Task DateRangeActions_RejectASpanOverTheReadLimit(string action)
+    {
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(V4ReadLimits.MaxDateSpanDays + 1);
+        var method = typeof(StatisticsController).GetMethod(action)!;
+        object?[] args = method.GetParameters()
+            .Select(p => p.ParameterType == typeof(DateOnly)
+                ? (object)DateOnly.FromDateTime(p.Name == "startDate" ? start : end)
+                : p.ParameterType == typeof(DateTime)
+                    ? p.Name == "startDate" ? start : end
+                    : p.HasDefaultValue ? p.DefaultValue : null)
+            .ToArray();
+
+        var task = (Task)method.Invoke(CreateController(), args)!;
+        await task;
+        var actionResult = task.GetType().GetProperty("Result")!.GetValue(task)!;
+        var result = actionResult.GetType().GetProperty("Result")!.GetValue(actionResult);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
     [Fact]
     public async Task GetAidSystemMetrics_PropagatesCancellationRatherThanReturningAPartialReport()
     {
