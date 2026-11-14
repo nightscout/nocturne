@@ -31,6 +31,7 @@
   import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { toast } from "svelte-sonner";
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { canWriteEntryKind } from "./can-log-events";
   import { useToastSubmission } from "#lib/forms/index.js";
   import {
     create as createBolusRemote,
@@ -171,7 +172,8 @@
   let inactiveSectionKeys = $derived(
     Object.keys(ENTRY_CATEGORIES)
       .filter(isEntryCategoryId)
-      .filter((k) => sections[k] == null),
+      .filter((k) => sections[k] == null)
+      .filter(canWriteEntryKind),
   );
 
   // Determine which form to use per section (create vs update)

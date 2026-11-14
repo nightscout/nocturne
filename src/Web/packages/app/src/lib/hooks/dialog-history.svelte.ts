@@ -91,8 +91,12 @@ export function useDialogHistory(
 
     if (open && !pushed && !adopted) {
       if (here) {
+        // An opaque key is this instance's own, so a token already present is the entry the
+        // last close is still popping: push once it has gone, rather than adopt it.
+        if (!param) return;
         // Opened from a token already in the URL (deep link / reload).
         adopted = true;
+        seen = true;
       } else if (param) {
         pushed = true;
         // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL plus one param, already resolved

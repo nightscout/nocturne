@@ -29,7 +29,7 @@
   const inspectOptions = $derived(markerPick ? [] : (inspection?.pickerOptions ?? []));
   const entries = $derived.by(() => {
     if (markerPick) return markerPick.entries;
-    if (pickingPoint && inspection?.timestamp) return findNearby(inspection.timestamp);
+    if (pickingPoint && canLog && inspection?.timestamp) return findNearby(inspection.timestamp);
     return [];
   });
 

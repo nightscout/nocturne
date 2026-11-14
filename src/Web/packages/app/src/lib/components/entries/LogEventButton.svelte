@@ -6,8 +6,8 @@
 
   interface Props {
     /**
-     * `inline` sits in a row of controls, from @md. `floating` is pinned to the bottom-right of a
-     * phone's viewport, where the row is hidden, and hides itself from md.
+     * `inline` sits in a row of controls and shows from viewport md; `floating` is pinned to the
+     * bottom-right below md. Both switch on the viewport so exactly one shows at any width.
      */
     placement?: "inline" | "floating";
   }
@@ -34,7 +34,7 @@
   {:else}
     <Button
       size="sm"
-      class="print:hidden"
+      class="max-md:hidden print:hidden"
       data-testid="log-event"
       onclick={() => (entryDialog.open = true)}
     >
