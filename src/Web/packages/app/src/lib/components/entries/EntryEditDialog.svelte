@@ -33,38 +33,54 @@
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { useToastSubmission } from "#lib/forms/index.js";
   import {
-    create as createBolusForm,
-    update as updateBolusForm,
+    create as createBolusRemote,
+    update as updateBolusRemote,
     remove as deleteBolus,
   } from "#lib/api/generated/bolus.generated.remote.js";
   import {
-    createCarbIntake as createCarbIntakeForm,
-    updateCarbIntake as updateCarbIntakeForm,
+    createCarbIntake as createCarbIntakeRemote,
+    updateCarbIntake as updateCarbIntakeRemote,
     deleteCarbIntake,
     addCarbIntakeFood,
   } from "#lib/api/generated/nutritions.generated.remote.js";
   import {
-    create as createBGCheckForm,
-    update as updateBGCheckForm,
+    create as createBGCheckRemote,
+    update as updateBGCheckRemote,
     remove as deleteBGCheck,
   } from "#lib/api/generated/bgChecks.generated.remote.js";
   import {
-    create as createNoteForm,
-    update as updateNoteForm,
+    create as createNoteRemote,
+    update as updateNoteRemote,
     remove as deleteNote,
   } from "#lib/api/generated/notes.generated.remote.js";
   import {
-    create as createDeviceEventForm,
-    update as updateDeviceEventForm,
+    create as createDeviceEventRemote,
+    update as updateDeviceEventRemote,
     remove as deleteDeviceEvent,
   } from "#lib/api/generated/deviceEvents.generated.remote.js";
   import {
-    create as createBasalInjectionForm,
-    update as updateBasalInjectionForm,
+    create as createBasalInjectionRemote,
+    update as updateBasalInjectionRemote,
     remove as deleteBasalInjection,
   } from "#lib/api/generated/basalInjections.generated.remote.js";
 
   const realtimeStore = tryGetRealtimeStore();
+
+  // Remote forms are module singletons and attach to one <form> each, so every instance of this
+  // dialog (the dashboard can mount several) takes its own keyed copy.
+  const formKey = $props.id();
+  const createBolusForm = createBolusRemote.for(formKey);
+  const updateBolusForm = updateBolusRemote.for(formKey);
+  const createCarbIntakeForm = createCarbIntakeRemote.for(formKey);
+  const updateCarbIntakeForm = updateCarbIntakeRemote.for(formKey);
+  const createBGCheckForm = createBGCheckRemote.for(formKey);
+  const updateBGCheckForm = updateBGCheckRemote.for(formKey);
+  const createNoteForm = createNoteRemote.for(formKey);
+  const updateNoteForm = updateNoteRemote.for(formKey);
+  const createDeviceEventForm = createDeviceEventRemote.for(formKey);
+  const updateDeviceEventForm = updateDeviceEventRemote.for(formKey);
+  const createBasalInjectionForm = createBasalInjectionRemote.for(formKey);
+  const updateBasalInjectionForm = updateBasalInjectionRemote.for(formKey);
 
   interface Sections {
     bolus: Partial<Bolus> | null;
@@ -79,6 +95,8 @@
     open: boolean;
     entry?: EntryRecord | null;
     correlatedRecords?: EntryRecord[];
+    /** The time a new entry starts at; now when absent. Ignored when editing. */
+    initialMills?: number;
     onClose: () => void;
   }
 
@@ -86,6 +104,7 @@
     open = $bindable(),
     entry = null,
     correlatedRecords = [],
+    initialMills,
     onClose,
   }: Props = $props();
 
@@ -268,7 +287,7 @@
         deviceEvent: null,
         basalInjection: null,
       };
-      mills = Date.now();
+      mills = initialMills ?? Date.now();
       carbsPendingFoods = [];
     }
   });
@@ -655,12 +674,12 @@
 {#snippet dialogBody()}
     <Dialog.Header>
       <Dialog.Title>
-        {isEditing ? "Edit entry" : "New entry"}
+        {isEditing ? "Edit entry" : "Log event"}
       </Dialog.Title>
       <Dialog.Description>
         {isEditing
           ? "Edit the details of this entry and its correlated records."
-          : "Create a new entry. Add multiple record types to correlate them."}
+          : "Record insulin, carbs, or a different event. Add a section for each record."}
       </Dialog.Description>
     </Dialog.Header>
 
@@ -793,7 +812,7 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
-            {isEditing ? "Save changes" : "Create"}
+            {isEditing ? "Save changes" : "Save"}
           {/if}
         </Button>
       </Dialog.Footer>
