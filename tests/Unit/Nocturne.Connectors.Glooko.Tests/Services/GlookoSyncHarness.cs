@@ -58,13 +58,23 @@ internal sealed class FakeCursorStore : IConnectorSyncCursorStore
     /// <summary>Observes each write as it happens, for tests that care when a stamp lands.</summary>
     public Action<string>? OnSet { get; init; }
 
+    /// <summary>Runs before each read, to fault it.</summary>
+    public Action<CancellationToken>? BeforeGet { get; init; }
+
+    /// <summary>Runs before each write, to fault it.</summary>
+    public Action<CancellationToken>? BeforeSet { get; init; }
+
     public Task<ConnectorSyncCursor?> GetAsync(
-        string connectorName, string resource, CancellationToken ct = default) =>
-        Task.FromResult(Saved.TryGetValue(resource, out var cursor) ? cursor : null);
+        string connectorName, string resource, CancellationToken ct = default)
+    {
+        BeforeGet?.Invoke(ct);
+        return Task.FromResult(Saved.TryGetValue(resource, out var cursor) ? cursor : null);
+    }
 
     public Task SetAsync(
         string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken ct = default)
     {
+        BeforeSet?.Invoke(ct);
         Saved[resource] = cursor;
         OnSet?.Invoke(resource);
         return Task.CompletedTask;

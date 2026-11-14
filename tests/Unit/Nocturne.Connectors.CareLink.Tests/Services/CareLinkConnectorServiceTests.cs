@@ -11,6 +11,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -477,6 +478,57 @@ public class CareLinkConnectorServiceTests
         SyncTempBasals = false,
     };
 
+    private const string MonitorDataWithTimeZone = """
+        {
+          "currentServerTime": 1767261600000,
+          "clientTimeZoneName": "Australia/Sydney",
+          "lastSG": {},
+          "markers": []
+        }
+        """;
+
+    [Fact]
+    public async Task SyncDataAsync_WhenSeedingTheTimezoneTimelineTimesOut_RunsOn()
+    {
+        var timeline = new Mock<ITimezoneTimelineService>();
+        timeline
+            .Setup(t => t.EnsureOriginAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TaskCanceledException("The timeline store timed out."));
+        var fixture = new ServiceFixture(
+            new CareLinkFakeHandler { MonitorDataJson = MonitorDataWithTimeZone },
+            timezoneTimeline: timeline.Object);
+
+        var run = () => fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        await run.Should().NotThrowAsync();
+        timeline.Verify(t => t.EnsureOriginAsync("Australia/Sydney", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_WhenTheCallerCancelsWhileSeedingTheTimezoneTimeline_Propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var timeline = new Mock<ITimezoneTimelineService>();
+        timeline
+            .Setup(t => t.EnsureOriginAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>((_, token) =>
+            {
+                cancellation.Cancel();
+                token.ThrowIfCancellationRequested();
+                return Task.FromResult(false);
+            });
+        var fixture = new ServiceFixture(
+            new CareLinkFakeHandler { MonitorDataJson = MonitorDataWithTimeZone },
+            timezoneTimeline: timeline.Object);
+
+        var run = () => fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, cancellation.Token);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+        timeline.Verify(t => t.EnsureOriginAsync("Australia/Sydney", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     /// <summary>Wires the connector service and a real token provider onto one fake handler.</summary>
     private sealed class ServiceFixture
     {
@@ -490,7 +542,8 @@ public class CareLinkConnectorServiceTests
         internal ServiceFixture(
             CareLinkFakeHandler handler,
             CareLinkConnectorConfiguration? config = null,
-            bool withPublisher = false)
+            bool withPublisher = false,
+            ITimezoneTimelineService? timezoneTimeline = null)
         {
             Config = config ?? new CareLinkConnectorConfiguration
             {
@@ -563,7 +616,8 @@ public class CareLinkConnectorServiceTests
                 configService.Object,
                 NullLogger<CareLinkConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                publisher);
+                publisher,
+                timezoneTimeline);
         }
     }
 

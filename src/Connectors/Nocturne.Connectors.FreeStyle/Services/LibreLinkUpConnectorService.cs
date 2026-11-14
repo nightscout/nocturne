@@ -178,7 +178,7 @@ public class LibreConnectorService(
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorStarts, config, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             RecordSyncError(result, ex);
         }

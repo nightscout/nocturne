@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Core.Contracts.Multitenancy;
 
@@ -230,7 +231,7 @@ public class CareLinkAuthTokenProvider(
         }
         // A HttpClient timeout arrives as a cancellation that the caller did not ask for, so it is a
         // transient failure; a real cancellation is left to propagate.
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, ct))
         {
             _logger.LogWarning("CareLink token refresh timed out");
             return new RefreshResult(RefreshOutcome.Transient, null, DateTime.MinValue, null);

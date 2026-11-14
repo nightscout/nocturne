@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
@@ -235,7 +236,7 @@ public class MyLifeConnectorService(
                     activations, config, cancellationToken, "from pump settings");
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             // A token MyLife has already rejected would otherwise stay cached until its nominal
             // 24-hour expiry, failing every sync in between.

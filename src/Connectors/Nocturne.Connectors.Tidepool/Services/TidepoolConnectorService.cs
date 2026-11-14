@@ -3,6 +3,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Mappers;
 using Nocturne.Connectors.Tidepool.Models;
@@ -77,7 +78,7 @@ public class TidepoolConnectorService
                         _sensorGlucoseMapper.MapBgValues(bgValues, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Glucose", ex);
             }
@@ -115,7 +116,7 @@ public class TidepoolConnectorService
                     await PublishRecordTypeAsync(result, activeTypes,
                         mappedCarbs, config, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Treatments", ex);
             }

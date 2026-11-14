@@ -193,7 +193,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         }
         // A run the caller withdrew still resolves the tenant's in-progress indicator: report one
         // reasonless terminal failure under CancellationToken.None, then let the cancellation travel.
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             await ReportSyncOutcomeAsync(false, null, CancellationToken.None);
             throw;
@@ -1033,7 +1033,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
             return result;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogError(
                 ex,
@@ -1208,7 +1208,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
                     return RetryStep<T>.RetryAfterDelay;
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
                 {
                     _logger.LogInformation(
                         "[{ConnectorSource}] {Operation} was cancelled",

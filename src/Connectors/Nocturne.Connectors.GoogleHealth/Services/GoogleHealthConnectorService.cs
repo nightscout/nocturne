@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Core.Constants;
@@ -333,7 +334,7 @@ public sealed class GoogleHealthConnectorService(
                     await ReadWithRefreshAsync(
                         config, accessToken, active, window.From, window.To, tenantId, result, cancellationToken);
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
                 {
                     await TryReduceBackfillWindowAsync(window);
                     throw;
@@ -360,7 +361,7 @@ public sealed class GoogleHealthConnectorService(
                 ? string.Empty
                 : GoogleHealthErrorCode.Encode("partial_consent", missingConsent));
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             logger.LogInformation("Google Health import was cancelled for tenant {TenantId}", tenantId);
             throw;
