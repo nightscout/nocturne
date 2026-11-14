@@ -1,0 +1,46 @@
+{{#isAdditionalPropertiesTrue}}
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private transient Map<String, Object> unknownProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   *
+   * @param key name of the property
+   * @param value value of the property
+   * @return the {{classname}} instance itself
+   */
+  public {{classname}} putUnknownProperty(String key, Object value) {
+    if (this.unknownProperties == null) {
+        this.unknownProperties = new HashMap<String, Object>();
+    }
+    this.unknownProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) property.
+   *
+   * @return a map of objects
+   */
+  public Map<String, Object> getUnknownProperties() {
+    return unknownProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   *
+   * @param key name of the property
+   * @return an object
+   */
+  public Object getUnknownProperty(String key) {
+    if (this.unknownProperties == null) {
+        return null;
+    }
+    return this.unknownProperties.get(key);
+  }
+{{/isAdditionalPropertiesTrue}}

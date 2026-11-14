@@ -19,3 +19,5 @@ additionalProperties:
   java8: false
   dateLibrary: java8
   openApiNullable: true
+  disallowAdditionalPropertiesIfNotPresent: false
+  enumUnknownDefaultCase: true
