@@ -11,6 +11,7 @@ import SocketIOServer, {
 } from './socketio-server.js';
 import { signHandshakeTicket, type RealtimeGrant } from './handshake-ticket.js';
 import MessageTranslator from './message-translator.js';
+import { LEGACY_DELTA_WINDOW_MS } from './legacy-delta.js';
 
 const SECRET = 'test-instance-key-0123456789';
 const TENANT_ID = '0198a3c4-7e21-7b10-9d2f-5c6e7f809a1b';
@@ -536,31 +537,159 @@ describe('SocketIOServer legacy LoopFollow connection', () => {
     });
     clients.push(client);
     const updates: unknown[] = [];
+    const events: string[] = [];
     client.on('dataUpdate', (payload: unknown) => updates.push(payload));
+    client.onAny((event: string) => events.push(event));
     const disconnected = new Promise<void>((resolve) => client.once('disconnect', () => resolve()));
     await new Promise<void>((resolve) => client.once('connect_ack', () => resolve()));
     const authorized: unknown = await client.emitWithAck('authorize', { client: 'LoopFollow', history: 1 });
-    return { client, updates, authorized, disconnected };
+    return { client, updates, events, authorized, disconnected };
   }
 
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+  const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
+  const pastDeltaWindow = () => settle(LEGACY_DELTA_WINDOW_MS + 150);
 
-  it('authorizes on its query token and receives dataUpdate', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ tenantRelay: true, categories: ['entries'], historyClamped: false }),
-    });
+  function admitting(grant: Record<string, unknown>) {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve(grant) });
     vi.stubGlobal('fetch', fetchMock);
-    const { server, port } = await listening();
+    return fetchMock;
+  }
 
-    const { updates, authorized } = await loopFollow(port, TOKEN);
-    server.broadcastDataUpdate({ sgvs: [{ mgdl: 120 }] }, 'rhys');
+  const FULL_GRANT = {
+    tenantRelay: true,
+    categories: ['entries', 'treatments', 'devicestatus', 'profiles', 'glucose', 'care', 'device', 'therapy'],
+    historyClamped: false,
+  };
+
+  it('authorizes on its query token and is told it is connected', async () => {
+    const fetchMock = admitting(FULL_GRANT);
+    const { server, port } = await listening();
+    server.setRelayState('rhys', true);
+
+    const { events, authorized } = await loopFollow(port, TOKEN);
     await settle();
 
     expect(authorized).toEqual(expect.objectContaining({ read: true }));
     expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('token')).toBe(TOKEN);
-    expect(updates).toEqual([{ sgvs: [{ mgdl: 120 }] }]);
+    expect(events).toContain('connected');
+    await server.stop();
+  });
+
+  it('receives the storage events of a loop cycle as one delta per collection', async () => {
+    admitting(FULL_GRANT);
+    const { server, port } = await listening();
+    server.setRelayState('rhys', true);
+    const relay = new MessageTranslator(server, 'rhys');
+
+    const { updates } = await loopFollow(port, TOKEN);
+    relay.handleStorageCreate({ colName: 'entries', doc: { _id: 'e2', type: 'sgv', sgv: 124, date: 2000 } });
+    relay.handleStorageCreate({ colName: 'entries', doc: { _id: 'e1', type: 'sgv', sgv: 120, date: 1000 } });
+    relay.handleStorageCreate({ colName: 'glucose', recordType: 'sensorGlucose', doc: { id: 'g1' } });
+    relay.handleStorageCreate({ colName: 'devicestatus', doc: { _id: 'd1', mills: 2000 } });
+    relay.handleStorageUpdate({ colName: 'treatments', doc: { _id: 't1', eventType: 'Carb Correction', mills: 2000 } });
+    await pastDeltaWindow();
+
+    expect(updates).toEqual([
+      {
+        delta: true,
+        sgvs: [
+          { _id: 'e1', type: 'sgv', sgv: 120, date: 1000, mills: 1000, mgdl: 120 },
+          { _id: 'e2', type: 'sgv', sgv: 124, date: 2000, mills: 2000, mgdl: 124 },
+        ],
+      },
+      { delta: true, devicestatus: [{ _id: 'd1', mills: 2000 }] },
+      { delta: true, treatments: [{ _id: 't1', eventType: 'Carb Correction', mills: 2000, action: 'update' }] },
+    ]);
+    await server.stop();
+  });
+
+  it('names the collection of a native V4 write that carries no v1 document', async () => {
+    admitting(FULL_GRANT);
+    const { server, port } = await listening();
+    server.setRelayState('rhys', true);
+    const relay = new MessageTranslator(server, 'rhys');
+
+    const { updates } = await loopFollow(port, TOKEN);
+    relay.handleStorageCreate({ colName: 'care', recordType: 'bolus', doc: { id: 'b1' } });
+    relay.handleStorageCreate({ colName: 'device', recordType: 'apsSnapshot', doc: { id: 'a1' } });
+    await pastDeltaWindow();
+
+    expect(updates).toEqual([
+      { delta: true, treatments: [] },
+      { delta: true, devicestatus: [] },
+    ]);
+    await server.stop();
+  });
+
+  it("does not receive the web app's dataUpdate, which is not a delta", async () => {
+    admitting(FULL_GRANT);
+    const { server, port } = await listening();
+    server.setRelayState('rhys', true);
+
+    const { updates } = await loopFollow(port, TOKEN);
+    new MessageTranslator(server, 'rhys').handleDataUpdate([{ _id: 'e1', sgv: 120, date: 1000 }]);
+    await settle();
+
+    expect(updates).toEqual([]);
+    await server.stop();
+  });
+
+  it('is told it is connected only once the tenant relay is up', async () => {
+    admitting(FULL_GRANT);
+    const { server, port } = await listening();
+
+    const { events } = await loopFollow(port, TOKEN);
+    await settle();
+    expect(events).not.toContain('connected');
+
+    server.setRelayState('rhys', true);
+    await settle();
+    expect(events.filter((event) => event === 'connected')).toHaveLength(1);
+    await server.stop();
+  });
+
+  it('closes its transport when the tenant relay is lost, so it polls again', async () => {
+    admitting(FULL_GRANT);
+    const { server, port } = await listening();
+    server.setRelayState('rhys', true);
+
+    const { client, disconnected } = await loopFollow(port, TOKEN);
+    server.setRelayState('rhys', false);
+    await disconnected;
+
+    expect(client.connected).toBe(false);
+    await server.stop();
+  });
+
+  it('is not told a history-clamped credential is connected, and sends it no delta', async () => {
+    admitting({ ...FULL_GRANT, historyClamped: true });
+    const { server, port } = await listening();
+    server.setRelayState('rhys', true);
+
+    const { events, updates, authorized } = await loopFollow(port, TOKEN);
+    new MessageTranslator(server, 'rhys').handleStorageCreate({ colName: 'entries', doc: { _id: 'e1', sgv: 120, date: 1000 } });
+    await pastDeltaWindow();
+
+    expect(authorized).toEqual(expect.objectContaining({ read: true }));
+    expect(events).not.toContain('connected');
+    expect(updates).toEqual([]);
+    await server.stop();
+  });
+
+  it('sends a credential only the deltas of the collections it may read', async () => {
+    admitting({ tenantRelay: false, categories: ['entries', 'glucose'], historyClamped: false });
+    const { server, port } = await listening();
+    server.setRelayState('rhys', true);
+    const relay = new MessageTranslator(server, 'rhys');
+
+    const { updates } = await loopFollow(port, TOKEN);
+    relay.handleStorageCreate({ colName: 'treatments', doc: { _id: 't1', mills: 1000 } });
+    relay.handleStorageCreate({ colName: 'entries', doc: { _id: 'm1', type: 'mbg', mbg: 99, date: 1000 } });
+    await pastDeltaWindow();
+
+    expect(updates).toEqual([
+      { delta: true, mbgs: [{ _id: 'm1', type: 'mbg', mbg: 99, date: 1000, mills: 1000, mgdl: 99 }] },
+    ]);
     await server.stop();
   });
 
@@ -570,8 +699,8 @@ describe('SocketIOServer legacy LoopFollow connection', () => {
 
     const { client, updates, authorized, disconnected } = await loopFollow(port, 'loopfollow-ffffffffffffffff');
     await disconnected;
-    server.broadcastDataUpdate({ sgvs: [{ mgdl: 120 }] }, 'rhys');
-    await settle();
+    new MessageTranslator(server, 'rhys').handleStorageCreate({ colName: 'entries', doc: { _id: 'e1', sgv: 120, date: 1000 } });
+    await pastDeltaWindow();
 
     expect(authorized).toEqual(expect.objectContaining({ read: false }));
     expect(client.connected).toBe(false);
@@ -696,6 +825,7 @@ describe('SocketIOServer.handleAuthorize', () => {
 
     expect(socket.join.mock.calls.map(([room]) => room)).toEqual([
       'tenant:rhys',
+      'tenant:rhys:legacy',
       `tenant:rhys:subject:${SUBJECT}`,
     ]);
   });
@@ -728,6 +858,7 @@ describe('SocketIOServer.handleAuthorize', () => {
     expect(socket.join.mock.calls.map(([room]) => room)).toEqual([
       'tenant:rhys:category:entries',
       'tenant:rhys:category:glucose',
+      'tenant:rhys:legacy:entries',
     ]);
   });
 
@@ -742,7 +873,7 @@ describe('SocketIOServer.handleAuthorize', () => {
 
     await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
 
-    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(['tenant:rhys']);
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(['tenant:rhys', 'tenant:rhys:legacy']);
   });
 
   it('passes a subject token through as a query parameter', async () => {
