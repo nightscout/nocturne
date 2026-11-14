@@ -223,7 +223,11 @@
     try {
       await migrationRemote.cancelMigration(jobId);
       activePoll = null;
-      activeMigration = await fresh(migrationRemote.getStatus(jobId));
+      // The cancel is done whether or not its status can be read back.
+      activeMigration = await fresh(migrationRemote.getStatus(jobId)).catch(() => ({
+        ...activeMigration,
+        state: MigrationJobState.Cancelled,
+      }));
       await refreshLists();
     } catch (err) {
       error = describeSubmitError(err, "Failed to cancel migration");

@@ -143,6 +143,79 @@ public class MigrationProgressTests
         status.ProgressPercentage.Should().Be(100);
     }
 
+    /// <summary>
+    /// A collection weighed at what it has served so far reads as nearly done for as long as it is
+    /// pulled, so one count the source did not give takes the whole run off document weighting.
+    /// </summary>
+    [Fact]
+    public async Task A_run_missing_one_count_steps_by_collection_and_estimates_nothing()
+    {
+        var time = new FakeTimeProvider(Start);
+        var newest = Start.ToUnixTimeMilliseconds() - 1000;
+        MigrationJob? running = null;
+        MigrationJobStatus? midRun = null;
+        var pages = 0;
+        var handler = new RecordingNightscout((path, _) =>
+        {
+            switch (path)
+            {
+                case "/api/v1/count/entries/where":
+                    return Json(Count(25_000));
+                case "/api/v1/entries.json" when pages++ == 0:
+                    return Json(FullPage(newest));
+                case "/api/v1/entries.json":
+                    time.Advance(TimeSpan.FromMinutes(2));
+                    midRun = running!.GetStatus();
+                    return Json("[]");
+                default:
+                    return NotFound();
+            }
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        await MigrationJobHarness.RunAsync(provider, job => running = job, ["entries", "treatments"], time: time);
+
+        handler.Requests.Should().Contain(r => r.StartsWith("/api/v1/count/treatments/where"));
+        midRun!.ProgressPercentage.Should().Be(0, "neither collection has finished");
+        midRun.EstimatedTimeRemaining.Should().BeNull();
+        midRun.CollectionProgress["entries"].TotalDocuments.Should().Be(25_000);
+    }
+
+    /// <summary>An empty collection is counted, as nothing; it is not a count the source withheld.</summary>
+    [Fact]
+    public async Task A_collection_counted_as_empty_keeps_the_run_measured_in_documents()
+    {
+        MigrationJob? running = null;
+        MigrationJobStatus? midRun = null;
+        var newest = Start.ToUnixTimeMilliseconds() - 1000;
+        var pages = 0;
+        var handler = new RecordingNightscout((path, _) =>
+        {
+            switch (path)
+            {
+                case "/api/v1/count/entries/where":
+                    return Json(Count(25_000));
+                case "/api/v1/count/treatments/where":
+                    return Json("[]");
+                case "/api/v1/entries.json" when pages++ == 0:
+                    return Json(FullPage(newest));
+                case "/api/v1/entries.json":
+                    midRun = running!.GetStatus();
+                    return Json("[]");
+                case "/api/v1/treatments.json":
+                    return Json("[]");
+                default:
+                    return NotFound();
+            }
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        await MigrationJobHarness.RunAsync(
+            provider, job => running = job, ["entries", "treatments"], time: new FakeTimeProvider(Start));
+
+        midRun!.ProgressPercentage.Should().Be(40);
+    }
+
     [Fact]
     public async Task A_run_in_flight_estimates_the_time_remaining_from_the_share_of_documents_done()
     {
@@ -211,13 +284,17 @@ public class MigrationProgressTests
 
     /// <summary>
     /// Nightscout's food route takes no paging, so a list of a full page or more is served again
-    /// for every <c>skip</c>.
+    /// for every <c>skip</c>, whether or not its foods carry an id.
     /// </summary>
-    [Fact]
-    public async Task A_food_list_served_whole_for_every_skip_is_imported_once_and_ends()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_food_list_served_whole_for_every_skip_is_imported_once_and_ends(bool withIds)
     {
         var foods = "[" + string.Join(",", Enumerable.Range(0, LegacyReadLimits.MaxMergedCount)
-            .Select(i => $$"""{"_id":"f{{i}}","name":"Food {{i}}","type":"food"}""")) + "]";
+            .Select(i => withIds
+                ? $$"""{"_id":"f{{i}}","name":"Food {{i}}","type":"food"}"""
+                : $$"""{"name":"Food {{i}}","type":"food"}""")) + "]";
         var handler = new RecordingNightscout((path, _) => path == "/api/v1/food.json" ? Json(foods) : NotFound());
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);

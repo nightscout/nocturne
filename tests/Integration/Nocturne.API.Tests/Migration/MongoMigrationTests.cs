@@ -179,8 +179,6 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
             $"{status.CollectionProgress.Count} collections");
     }
 
-    #region Helpers
-
     /// <summary>
     /// The fixture's 20 entries straddle 1746153849903: ten are dated at or after it. MongoDB mode
     /// streams the whole collection, so the range is applied to each document and the total is
@@ -203,6 +201,8 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
         await using var db = Fixture.CreateDbContext(Fixture.TenantId);
         (await db.SensorGlucose.CountAsync()).Should().Be(10);
     }
+
+    #region Helpers
 
     private async Task<List<JsonElement>> GetV3EntriesAsync()
     {

@@ -596,12 +596,20 @@ internal class MigrationJob
     /// <summary>
     /// The run's elapsed time scaled by the share of documents still to come, or
     /// <see langword="null"/> while that share is not known: before the pull starts, in its first
-    /// seconds, and for a source that gave no counts, where progress steps by collection.
+    /// seconds, for a source that did not count every collection it can, where progress steps by
+    /// collection, and while the collection in flight has no total.
     /// </summary>
     private TimeSpan? EstimateTimeRemaining()
     {
         if (_state != MigrationJobState.Running || !_documentWeighted || _pullStartedAt is not { } started)
             return null;
+
+        if (_currentCollection is { } current
+            && _collectionProgress.TryGetValue(current, out var inFlight)
+            && inFlight is { IsComplete: false, TotalDocuments: 0 })
+        {
+            return null;
+        }
 
         var elapsed = UtcNow - started;
         var progress = _progressPercentage;
@@ -954,11 +962,19 @@ internal class MigrationJob
         public bool Holds(DateTime instant) => (From is null || instant >= From.Value) && instant <= To;
     }
 
-    private ImportWindow RequestedWindow()
+    /// <param name="anchored">
+    /// Whether the end is held to the moment the run started. A MongoDB run reads the collection
+    /// whole and needs no anchor, so without an end date it keeps a record dated after now.
+    /// </param>
+    private ImportWindow RequestedWindow(bool anchored)
     {
-        var now = UtcNow;
+        var start = _request.StartDate?.AsUtc();
         var end = _request.EndDate?.AsUtc();
-        return new ImportWindow(_request.StartDate?.AsUtc(), end is { } requested && requested < now ? requested : now);
+        if (!anchored)
+            return new ImportWindow(start, end ?? DateTime.MaxValue);
+
+        var now = UtcNow;
+        return new ImportWindow(start, end is { } requested && requested < now ? requested : now);
     }
 
     /// <summary>
@@ -1024,16 +1040,19 @@ internal class MigrationJob
 
         _currentOperation = "Counting records";
         _phase = MigrationPhase.Counting;
-        _window = RequestedWindow();
+        _window = RequestedWindow(anchored: true);
 
         var counts = await Task.WhenAll(
             collectionsToMigrate.Select(c => FetchCollectionCountAsync(httpClient, c.name, ct)));
         for (var i = 0; i < collectionsToMigrate.Count; i++)
         {
             var name = collectionsToMigrate[i].name;
-            _collectionProgress[name] = new CollectionProgress { CollectionName = name, TotalDocuments = counts[i] };
+            _collectionProgress[name] = new CollectionProgress { CollectionName = name, TotalDocuments = counts[i] ?? 0 };
         }
-        _documentWeighted = counts.Any(c => c > 0);
+
+        // A collection the source could have counted and did not would be weighed at what it has
+        // served so far, which reads as nearly done for as long as it is pulled.
+        _documentWeighted = counts.All(c => c is not null) && counts.Any(c => c > 0);
         _pullStartedAt = UtcNow;
 
         for (var i = 0; i < collectionsToMigrate.Count; i++)
@@ -1269,8 +1288,9 @@ internal class MigrationJob
     private static readonly TimeSpan CountBudget = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// How many documents of a collection the run's window holds, by the source's count route, or
-    /// 0 when the source cannot say.
+    /// How many documents of a collection the run's window holds, by the source's count route: 0
+    /// for a collection the route does not serve, and <see langword="null"/> when it serves the
+    /// collection and gave no count.
     /// </summary>
     /// <remarks>
     /// The count carries the pull's own date filter; <see cref="_window"/> says what an undated one
@@ -1280,7 +1300,7 @@ internal class MigrationJob
     /// unreachable host is not tolerated: those defeat every collection, so the run fails here
     /// with the right words.
     /// </remarks>
-    private async Task<long> FetchCollectionCountAsync(
+    private async Task<long?> FetchCollectionCountAsync(
         HttpClient httpClient, string collectionName, CancellationToken ct)
     {
         if (!s_countableCollections.TryGetValue(collectionName, out var cursor))
@@ -1312,7 +1332,7 @@ internal class MigrationJob
             _logger.LogWarning(ex, "Failed to fetch count for {Collection}, continuing without total", collectionName);
         }
 
-        return 0;
+        return null;
     }
 
     private void BeginCollection(string collectionName, string label)
@@ -1736,6 +1756,7 @@ internal class MigrationJob
         var totalSkipped = 0;
         var failedIds = new HashSet<string>(StringComparer.Ordinal);
         var servedIds = new HashSet<string>(StringComparer.Ordinal);
+        string[]? previousPage = null;
 
         for (var pageNumber = 1; ; pageNumber++)
         {
@@ -1747,13 +1768,16 @@ internal class MigrationJob
 
             if (documents.Length == 0) break;
 
+            // Nightscout serves its whole food list whatever skip says, so a list of a full page or
+            // more comes back again for every skip. The same page twice is the end.
+            var served = documents.Select(d => d.GetRawText()).ToArray();
+            if (previousPage is not null && served.SequenceEqual(previousPage)) break;
+            previousPage = served;
+
             var (parsed, newlyFailed) = ParseDocuments<Food>(documents, collectionName, pageNumber, failedIds);
             totalFailed += newlyFailed;
 
-            // Nightscout serves its whole food list whatever skip says, so a list of a full page or
-            // more comes back again for every skip. A page holding nothing new is the end.
             var foods = parsed.Where(f => f.Id is not { Length: > 0 } id || servedIds.Add(id)).ToArray();
-            if (foods.Length == 0 && newlyFailed == 0) break;
 
             foreach (var food in foods)
             {
@@ -1838,21 +1862,22 @@ internal class MigrationJob
         var collectionsToMigrate =
             (_request.Collections.Count > 0
                 ? collectionList.Where(c => _request.Collections.Contains(c))
-                : collectionList
-                    .Where(c => c is "entries" or "treatments" or "devicestatus" or "profile" or "food" or "activity"))
+                : collectionList.Where(ImportableFromMongo))
             .OrderBy(ImportRank)
             .ToList();
 
         _currentOperation = "Counting records";
         _phase = MigrationPhase.Counting;
-        _window = RequestedWindow();
+        _window = RequestedWindow(anchored: false);
         foreach (var collectionName in collectionsToMigrate)
         {
             _collectionProgress[collectionName] = new CollectionProgress
             {
                 CollectionName = collectionName,
-                TotalDocuments = await database.GetCollection<BsonDocument>(collectionName)
-                    .CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct),
+                TotalDocuments = ImportableFromMongo(collectionName)
+                    ? await database.GetCollection<BsonDocument>(collectionName)
+                        .CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct)
+                    : 0,
             };
         }
         _documentWeighted = true;
@@ -1887,6 +1912,17 @@ internal class MigrationJob
             UpdateOverallProgress();
         }
     }
+
+    private static bool ImportableFromMongo(string collection) =>
+        collection is "entries" or "treatments" or "devicestatus" or "profile" or "food" or "activity";
+
+    /// <summary>The instant of a stored created_at, which MongoDB holds as a string or as a date.</summary>
+    private bool CreatedAtWithinWindow(BsonValue createdAt) => createdAt switch
+    {
+        { IsString: true } => BackwardTimePager.CreatedAtWithin(createdAt.AsString, _window.From, _window.To),
+        { IsValidDateTime: true } => _window.Holds(createdAt.ToUniversalTime()),
+        _ => true,
+    };
 
     /// <summary>
     /// Streams a MongoDB collection through the parsing and decomposer of the API path's
@@ -2028,9 +2064,7 @@ internal class MigrationJob
         {
             foreach (var doc in cursor.Current)
             {
-                if (windowed
-                    && doc.TryGetValue("created_at", out var createdAt) && createdAt.IsString
-                    && !BackwardTimePager.CreatedAtWithin(createdAt.AsString, _window.From, _window.To))
+                if (windowed && doc.TryGetValue("created_at", out var createdAt) && !CreatedAtWithinWindow(createdAt))
                 {
                     outsideWindow++;
                     continue;
