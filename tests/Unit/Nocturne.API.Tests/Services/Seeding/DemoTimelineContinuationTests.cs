@@ -19,14 +19,15 @@ public class DemoTimelineContinuationTests
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
 
     /// <summary>
-    /// Afternoon ends, when the phone gaps and manual mode the seed keeps clear of its end are likely,
-    /// on several days so some of them fall in that quiet window.
+    /// Ends at a different local time each day, so some fall in the quiet window the seed keeps clear
+    /// of interruptions and some split a step that issues a meal, a correction or a fingerstick.
     /// </summary>
     public static TheoryData<DateTimeOffset> SeedEnds()
     {
         var data = new TheoryData<DateTimeOffset>();
-        for (var day = 0; day < 8; day++)
-            data.Add(new DateTimeOffset(2026, 10, 5 + day, 4, 3 + 7 * day, 17, TimeSpan.Zero));
+        var first = new DateTimeOffset(2026, 10, 5, 0, 3, 17, TimeSpan.Zero);
+        for (var day = 0; day < 48; day++)
+            data.Add(first.AddDays(day).AddMinutes(day * 31));
         return data;
     }
 
@@ -53,18 +54,37 @@ public class DemoTimelineContinuationTests
             .TakeWhile(s => s.Utc < seedEnd.UtcDateTime.AddDays(1))
             .ToList();
 
-        var end = seedEnd.ToUnixTimeMilliseconds();
-        continued.Take(seed.Count).Select(s => Fingerprint(s, end)).Should().Equal(seed.Select(s => Fingerprint(s, end)));
+        continued.Take(seed.Count).Select(Fingerprint).Should().Equal(seed.Select(Fingerprint));
         continued.Skip(seed.Count - 1).Zip(continued.Skip(seed.Count), (a, b) => b.Utc - a.Utc)
             .Should().OnlyContain(gap => gap == TimeSpan.FromMinutes(5), "the timeline runs on past the seed's end");
         continued[^1].Utc.Should().BeAfter(seedEnd.UtcDateTime.AddHours(23));
     }
 
+    [Fact]
+    public void A_seed_that_ends_inside_a_step_is_repeated_up_to_its_end()
+    {
+        // Treatments off the five-minute grid (meals, their boluses, notes): ending the seed just
+        // before one leaves it to the step after the seed's last.
+        var reference = new DateTimeOffset(2026, 10, 20, 9, 0, 0, TimeSpan.Zero);
+        var splitEnds = Generator(reference).GenerateHistoricalTimeline()
+            .SelectMany(s => s.Treatments)
+            .Where(t => t.Mills % 300_000 > 1_000)
+            .Select(t => DateTimeOffset.FromUnixTimeMilliseconds(t.Mills - 1_000))
+            .Where(end => end < reference.AddDays(-1))
+            .DistinctBy(end => end.ToUnixTimeMilliseconds() / 300_000)
+            .Take(30)
+            .ToList();
+
+        splitEnds.Should().HaveCountGreaterThan(10);
+        foreach (var seedEnd in splitEnds)
+            The_continued_timeline_repeats_the_seed_then_carries_on(seedEnd);
+    }
+
     /// <summary>
-    /// A step as the chart, the loop and the treatment history read it. The seed's last step stops
-    /// issuing treatments at its end, and the continued one does not, so treatments are compared up to it.
+    /// A step as the chart, the loop and the treatment history read it.
     /// </summary>
-    private static string Fingerprint(DemoTimeStep step, long endMills) =>
+    private static string Fingerprint(DemoTimeStep step) =>
         $"{step.Utc:O} {step.Entry.Sgv} {step.Loop} {step.Iob:F4} {step.Cob:F4} {step.TempBasalRate} "
-        + string.Join(",", step.Treatments.Where(t => t.Mills < endMills).Select(t => $"{t.EventType}@{t.Mills}:{t.Insulin}/{t.Carbs}"));
+        + string.Join(",", step.Treatments.Select(t => $"{t.EventType}@{t.Mills}:{t.Insulin}/{t.Carbs}"))
+        + " " + string.Join(",", step.ExtraEntries.Select(e => $"{e.Type}@{e.Mills}:{e.Mgdl}"));
 }

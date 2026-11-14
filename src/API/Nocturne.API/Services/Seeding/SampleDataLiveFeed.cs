@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -77,6 +78,7 @@ public sealed class SampleDataLiveFeed
     /// </summary>
     private static readonly TimeSpan LiveGap = TimeSpan.FromMinutes(30);
 
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly INocturneDbContextFactory _contexts;
     private readonly IEntryService _entries;
     private readonly ITreatmentService _treatments;
@@ -90,6 +92,7 @@ public sealed class SampleDataLiveFeed
     private readonly ILogger<SampleDataLiveFeed> _logger;
 
     public SampleDataLiveFeed(
+        ITenantAccessor tenantAccessor,
         INocturneDbContextFactory contexts,
         IEntryService entries,
         ITreatmentService treatments,
@@ -102,6 +105,7 @@ public sealed class SampleDataLiveFeed
         ILoggerFactory loggerFactory,
         ILogger<SampleDataLiveFeed> logger)
     {
+        _tenantAccessor = tenantAccessor;
         _contexts = contexts;
         _entries = entries;
         _treatments = treatments;
@@ -127,6 +131,22 @@ public sealed class SampleDataLiveFeed
     /// whose advance throws drops the cursor: its steps may be taken without being written.
     /// </returns>
     internal async Task<SampleDataLiveCursor?> AdvanceAsync(SampleDataLiveCursor? cursor, CancellationToken ct)
+    {
+        // A seed holds the gate for minutes; its tenant is skipped until the next tick.
+        var gate = SampleDataTimeline.GateFor(_tenantAccessor.TenantId);
+        if (!await gate.WaitAsync(TimeSpan.Zero, ct))
+            return cursor;
+        try
+        {
+            return await AdvanceUngatedAsync(cursor, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<SampleDataLiveCursor?> AdvanceUngatedAsync(SampleDataLiveCursor? cursor, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var timeline = await SampleDataTimeline.ReadAsync(db, ct);

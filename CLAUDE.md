@@ -67,7 +67,7 @@ curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
 
 # Seeded sample data stays live: in run mode the API continues each seed's simulation every
 # minute (readings, treatments, loop status, heart rate, steps, sleep, device changes). The seed
-# records its timeline in the tenant's settings (`nocturne:sample-data-timeline`); a tenant seeded
+# records its timeline in the tenant's settings (`sample-data:timeline`); a tenant seeded
 # before that existed stays frozen until re-seeded. Turn it off to keep data as seeded:
 Dev__LiveSampleData=false aspire start
 

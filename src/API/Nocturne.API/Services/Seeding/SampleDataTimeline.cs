@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -23,9 +25,18 @@ internal sealed record SampleDataTimeline(
     string ZoneId,
     string DataSource)
 {
-    public const string SettingsKey = "nocturne:sample-data-timeline";
+    public const string SettingsKey = SettingsKeys.SampleDataPrefix + "timeline";
+
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> Gates = new();
 
     private const string SettingsApp = "nocturne-sample-data";
+
+    /// <summary>
+    /// Held by a seed for its whole run and by each live advance, one at a time per tenant, so the
+    /// feed neither writes the old simulation into a re-seed nor saves the old timeline over the new
+    /// one. In-process only: one API writes a dev stack.
+    /// </summary>
+    public static SemaphoreSlim GateFor(Guid tenantId) => Gates.GetOrAdd(tenantId, _ => new SemaphoreSlim(1, 1));
 
     public static async Task<SampleDataTimeline?> ReadAsync(NocturneDbContext db, CancellationToken ct)
     {

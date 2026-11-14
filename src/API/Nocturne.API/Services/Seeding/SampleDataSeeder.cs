@@ -193,7 +193,7 @@ public class SampleDataSeeder
     /// false, entries/treatments/device status are assumed already present and
     /// alarm history derives from the stored glucose instead of the generated
     /// stream. Re-seeding is idempotent for every type except
-    /// entries/treatments, which append.
+    /// treatments, which append.
     /// </summary>
     public async Task<SampleDataSeedResult> SeedAsync(
         TenantContext tenant,
@@ -202,6 +202,26 @@ public class SampleDataSeeder
         string dataSource = DevSampleDataSource,
         bool includeGlucose = true,
         CancellationToken ct = default)
+    {
+        var gate = SampleDataTimeline.GateFor(tenant.TenantId);
+        await gate.WaitAsync(ct);
+        try
+        {
+            return await SeedUngatedAsync(tenant, days, ownerSubjectId, dataSource, includeGlucose, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<SampleDataSeedResult> SeedUngatedAsync(
+        TenantContext tenant,
+        int days,
+        Guid? ownerSubjectId,
+        string dataSource,
+        bool includeGlucose,
+        CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         days = Math.Clamp(days, 1, MaxDays);
@@ -409,7 +429,11 @@ public class SampleDataSeeder
         var readings = DemoCoverageSeeds.CgmReadings(step);
         List<Entry> entries = [.. readings, .. step.ExtraEntries];
         foreach (var entry in entries)
+        {
             entry.DataSource = dataSource;
+            // Deterministic legacy id, so writing a step again updates its readings in place.
+            entry.Id = $"{entry.Mills:x16}{EntryKindCode(entry.Type):x8}";
+        }
         foreach (var treatment in step.Treatments)
             treatment.DataSource = dataSource;
 
@@ -419,6 +443,14 @@ public class SampleDataSeeder
 
         return new StepRecords(entries, step.Treatments, status, readings.Count > 0);
     }
+
+    private static int EntryKindCode(string? type) => type switch
+    {
+        "sgv" => 1,
+        "mbg" => 2,
+        "cal" => 3,
+        _ => 4,
+    };
 
     internal sealed record StepRecords(
         IReadOnlyList<Entry> Entries,

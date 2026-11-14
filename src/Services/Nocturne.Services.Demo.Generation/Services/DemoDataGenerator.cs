@@ -253,14 +253,19 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// <param name="firstLocalDay">The local date of the seed's first step.</param>
     /// <param name="seedEndUtc">The end the seed was generated to.</param>
     public IEnumerable<DemoTimeStep> ContinueTimeline(DateTime firstLocalDay, DateTime seedEndUtc) =>
-        Timeline(firstLocalDay.Date, endInstant: null, quietAnchor: _clock.ToLocal(seedEndUtc));
+        Timeline(firstLocalDay.Date, endInstant: null, quietAnchor: _clock.ToLocal(seedEndUtc), seedEndUtc);
 
     /// <param name="firstDay">The local date the first step starts at midnight of.</param>
     /// <param name="endInstant">The instant no step reaches; <c>null</c> for no end.</param>
     /// <param name="quietAnchor">
     /// The local end the loop interruptions keep clear of; see <see cref="DemoLoopInterruptions.On"/>.
     /// </param>
-    private IEnumerable<DemoTimeStep> Timeline(DateTime firstDay, DateTime? endInstant, DateTime quietAnchor)
+    /// <param name="seedEnd">
+    /// The end of the seed a continuation repeats. The step that spans it issues only what the seed's
+    /// last step did, and leaves the rest to the next step, so the simulation after it matches too.
+    /// </param>
+    private IEnumerable<DemoTimeStep> Timeline(
+        DateTime firstDay, DateTime? endInstant, DateTime quietAnchor, DateTime? seedEnd = null)
     {
         var end = quietAnchor;
         var lastDay = endInstant is { } e ? _clock.ToLocal(e).Date : DateTime.MaxValue.Date;
@@ -346,6 +351,8 @@ public class DemoDataGenerator : IDemoDataGenerator
                 // The final (partial) step must not emit anything past "now" —
                 // a future-dated planned item would outrank the realtime stream.
                 var consumeUntil = stepEnd < endTime ? stepEnd : endTime;
+                if (seedEnd is { } cut && instant < cut && cut < consumeUntil)
+                    consumeUntil = cut;
                 var stepTreatments = new List<Treatment>();
                 double? tempRate = null;
                 int? tempDuration = null;
