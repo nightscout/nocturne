@@ -197,4 +197,32 @@ describe("ConnectorConfigForm", () => {
 		await expect.element(page.getByRole("textbox").first()).toHaveValue("https://same.example");
 		expect(page.getByText("From env").elements()).toHaveLength(0);
 	});
+
+	it("offers a numeric choice by name and saves the number", async () => {
+		const onSave = vi.fn().mockResolvedValue(undefined);
+		render(ConnectorConfigForm, {
+			props: {
+				schema: {
+					type: "object",
+					properties: {
+						syncIntervalMinutes: { type: "integer", enum: [1, 5, 60, 240], default: 5 },
+					},
+					secrets: [],
+				},
+				configuration: { syncIntervalMinutes: 5 },
+				onSave,
+			},
+		});
+
+		await expect.element(page.getByRole("button", { name: "5 minutes" })).toBeVisible();
+		expect(page.getByRole("spinbutton").elements()).toHaveLength(0);
+
+		await page.getByRole("button", { name: "5 minutes" }).click();
+		await page.getByRole("option", { name: "4 hours" }).click();
+		await expect.element(page.getByRole("button", { name: "4 hours" })).toBeVisible();
+
+		await page.getByRole("button", { name: "Save" }).click();
+		await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+		expect(onSave.mock.calls[0][0]).toEqual({ syncIntervalMinutes: 240 });
+	});
 });
