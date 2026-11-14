@@ -351,9 +351,11 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Tests with coverage
         if: ${{ !cancelled() }}
+        # Cargo 1.100's build-dir layout puts the crate's own test exe under build/<pkg>/<hash>/out,
+        # which cargo-llvm-cov's rustc wrapper takes for a build script and leaves uninstrumented.
         run: |
           mkdir -p "$GITHUB_WORKSPACE/TestResults/desktop-rust"
-          cargo llvm-cov --locked --cobertura --output-path "$GITHUB_WORKSPACE/TestResults/desktop-rust/cobertura.xml"
+          cargo llvm-cov --locked --no-rustc-wrapper --cobertura --output-path "$GITHUB_WORKSPACE/TestResults/desktop-rust/cobertura.xml"
       - uses: actions/upload-artifact@v6
         if: always()
         with:
