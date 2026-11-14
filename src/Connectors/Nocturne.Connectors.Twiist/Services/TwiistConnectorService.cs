@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Mappers;
 using Nocturne.Connectors.Twiist.Models;
@@ -100,7 +101,7 @@ public class TwiistConnectorService
                 await SyncTempBasalsAsync(package.Status, result, activeTypes, config, cancellationToken);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogInformation("Twiist sync was canceled");
             throw;

@@ -44,6 +44,9 @@ public class SyncTerminalPhaseTests
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
 
+        public Task<string?> RetryAsync(Func<Task<string?>> operation, CancellationToken cancellationToken)
+            => ExecuteWithRetryAsync(operation, maxRetries: 3, cancellationToken: cancellationToken);
+
         public override Task<bool> AuthenticateAsync()
         {
             AuthenticateCalls++;
@@ -263,6 +266,53 @@ public class SyncTerminalPhaseTests
         result.Errors.Should().ContainSingle().Which.Should().Be("HttpClient.Timeout");
         reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
         reported[0].ErrorMessage.Should().Be("HttpClient.Timeout");
+    }
+
+    [Fact]
+    public async Task SourceTimingOutOnEveryAttempt_IsAFailedResultNotACancelledRun()
+    {
+        var (reporter, reported) = BuildReporter();
+        var attempts = 0;
+        TestConnectorService? service = null;
+        service = new TestConnectorService(_ => service!.RetryAsync(
+            () =>
+            {
+                attempts++;
+                throw new TaskCanceledException("HttpClient.Timeout");
+            },
+            CancellationToken.None));
+
+        var result = await service.SyncDataAsync(new TestConfig(), CancellationToken.None, null, reporter.Object);
+
+        result.Success.Should().BeFalse();
+        attempts.Should().Be(3);
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().Be("HttpClient.Timeout");
+    }
+
+    [Fact]
+    public async Task CancelledDuringARetriedRequest_StopsWithoutRetryAndReportsOneTerminalFailure()
+    {
+        var (reporter, reported) = BuildReporter();
+        using var cts = new CancellationTokenSource();
+        var attempts = 0;
+        TestConnectorService? service = null;
+        service = new TestConnectorService(_ => service!.RetryAsync(
+            () =>
+            {
+                attempts++;
+                cts.Cancel();
+                throw new TaskCanceledException("cancelled", null, cts.Token);
+            },
+            cts.Token));
+
+        var act = async () =>
+            await service.SyncDataAsync(new TestConfig(), cts.Token, null, reporter.Object);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        attempts.Should().Be(1);
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().BeNull();
     }
 
     [Fact]

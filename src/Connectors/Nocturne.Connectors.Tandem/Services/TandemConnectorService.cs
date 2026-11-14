@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Connectors.Tandem.Mappers;
@@ -109,7 +110,7 @@ public class TandemConnectorService
                 result.Message = string.Join(" ", new[] { ClampNotice(request, device, time), unclosed }
                     .Where(notice => notice is not null));
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogInformation("[{Source}] Tandem sync canceled", ConnectorSource);
             throw;
@@ -164,7 +165,7 @@ public class TandemConnectorService
         {
             return (await _cursorStore.GetAsync(TandemConstants.ConnectorName, resource, cancellationToken))?.LastGuid;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "[{Source}] Could not read the published profile; publishing", ConnectorSource);
             return null;
@@ -182,7 +183,7 @@ public class TandemConnectorService
             await _cursorStore.SetAsync(
                 TandemConstants.ConnectorName, resource, new ConnectorSyncCursor(null, fingerprint), cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "[{Source}] Could not record the published profile", ConnectorSource);
         }
