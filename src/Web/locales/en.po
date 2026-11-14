@@ -14934,16 +14934,12 @@ msgstr "10 GB"
 msgid "20 GB+"
 msgstr "20 GB+"
 
-#: ../portal/src/lib/components/docs/SystemRequirements.svelte
-msgid "Docker"
-msgstr "Docker"
+#~ msgid "Docker"
+#~ msgstr "Docker"
 
-#: ../portal/src/lib/components/docs/SystemRequirements.svelte
-#: ../portal/src/lib/components/docs/SystemRequirements.svelte
-msgid "Latest"
-msgstr "Latest"
+#~ msgid "Latest"
+#~ msgstr "Latest"
 
-#: ../portal/src/lib/components/docs/SystemRequirements.svelte
 #: ../portal/src/routes/docs/installation/+page.svelte
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Docker Compose"
@@ -18262,9 +18258,8 @@ msgstr "Get Involved"
 msgid "© {0} Nocturne. Open source under AGPL-3.0."
 msgstr "© {0} Nocturne. Open source under AGPL-3.0."
 
-#: ../portal/src/routes/docs/+page.svelte
-msgid "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more."
-msgstr "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more."
+#~ msgid "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more."
+#~ msgstr "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more."
 
 #: ../portal/src/routes/docs/+page.svelte
 msgid "Learn how to configure connectors, settings, and customize your instance."
@@ -18725,9 +18720,8 @@ msgstr "Commercial"
 msgid "The official managed Nocturne instance, run by the creator of the project. Automatic updates, daily backups, and zero maintenance. Just connect your CGM and go."
 msgstr "The official managed Nocturne instance, run by the creator of the project. Automatic updates, daily backups, and zero maintenance. Just connect your CGM and go."
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose from the command line."
-msgstr "Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose from the command line."
+#~ msgid "Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose from the command line."
+#~ msgstr "Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose from the command line."
 
 #: ../portal/src/routes/docs/installation/+page.svelte
 msgid "Deploy using the Portainer web interface. Great for managing your stack visually without SSH access."
@@ -18769,9 +18763,8 @@ msgstr "Email address for core maintainer"
 msgid "Submit your request by opening an issue on the <0>Nocturne GitHub repository</0>."
 msgstr "Submit your request by opening an issue on the <0>Nocturne GitHub repository</0>."
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "Choose a deployment method below to get Nocturne running on your infrastructure. All methods use the same Docker images and configuration."
-msgstr "Choose a deployment method below to get Nocturne running on your infrastructure. All methods use the same Docker images and configuration."
+#~ msgid "Choose a deployment method below to get Nocturne running on your infrastructure. All methods use the same Docker images and configuration."
+#~ msgstr "Choose a deployment method below to get Nocturne running on your infrastructure. All methods use the same Docker images and configuration."
 
 #~ msgid "Managed Instances"
 #~ msgstr "Managed Instances"
@@ -19231,9 +19224,8 @@ msgstr "Nocturne is dual-licensed. For individuals and community self-hosters, i
 msgid "Yes. Nocturne runs on Raspberry Pi 4 and newer with 64-bit Raspberry Pi OS; the Docker images are published for ARM64 as well as x86_64."
 msgstr "Yes. Nocturne runs on Raspberry Pi 4 and newer with 64-bit Raspberry Pi OS; the Docker images are published for ARM64 as well as x86_64."
 
-#: ../portal/src/routes/faq/+page.svelte
-msgid "Basic familiarity with Docker and the command line is helpful. Each release ships a ready-made compose file and an environment template; you fill in a domain name, an instance key, and four database passwords. Most people get running by following the installation guide."
-msgstr "Basic familiarity with Docker and the command line is helpful. Each release ships a ready-made compose file and an environment template; you fill in a domain name, an instance key, and four database passwords. Most people get running by following the installation guide."
+#~ msgid "Basic familiarity with Docker and the command line is helpful. Each release ships a ready-made compose file and an environment template; you fill in a domain name, an instance key, and four database passwords. Most people get running by following the installation guide."
+#~ msgstr "Basic familiarity with Docker and the command line is helpful. Each release ships a ready-made compose file and an environment template; you fill in a domain name, an instance key, and four database passwords. Most people get running by following the installation guide."
 
 #: ../portal/src/routes/faq/+page.svelte
 msgid "Yes. The bundle includes a PostgreSQL container, but you can point Nocturne at any PostgreSQL 17 database, including managed services such as RDS, Cloud SQL, Supabase, or Neon. The Bring Your Own PostgreSQL guide covers the one-time role setup."
@@ -19267,9 +19259,8 @@ msgstr "Yes. Nocturne implements the Nightscout API (v1, v2, and v3) plus its ow
 msgid "Yes. Nocturne is open source and welcomes contributions, and not only code: translations, documentation, and helping other self-hosters in Discord all count. See the Get involved page for tasks you can pick up today."
 msgstr "Yes. Nocturne is open source and welcomes contributions, and not only code: translations, documentation, and helping other self-hosters in Discord all count. See the Get involved page for tasks you can pick up today."
 
-#: ../portal/src/routes/features/+page.svelte
-msgid "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
-msgstr "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
+#~ msgid "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
+#~ msgstr "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
 
 #~ msgid "Run a household, a clinic, or a community on a single deployment. Each tenant lives in its own database schema, behind its own subdomain."
 #~ msgstr "Run a household, a clinic, or a community on a single deployment. Each tenant lives in its own database schema, behind its own subdomain."
@@ -19344,9 +19335,8 @@ msgstr "{0} reports, with your own target range drawn on them"
 #~ msgid "Ready to take a look?<0/> <1>Start with the demo.</1>"
 #~ msgstr "Ready to take a look?<0/> <1>Start with the demo.</1>"
 
-#: ../portal/src/routes/features/+page.svelte
-msgid "Poke around the demo, then run your own copy with Docker Compose. No account, no credit card, no waitlist."
-msgstr "Poke around the demo, then run your own copy with Docker Compose. No account, no credit card, no waitlist."
+#~ msgid "Poke around the demo, then run your own copy with Docker Compose. No account, no credit card, no waitlist."
+#~ msgstr "Poke around the demo, then run your own copy with Docker Compose. No account, no credit card, no waitlist."
 
 #: ../portal/src/routes/scalar/+page.svelte
 msgid "Interactive Nocturne API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne."
@@ -21211,9 +21201,8 @@ msgstr "Units, timezone, CGM sources and connector names. Never passwords, token
 msgid "Oracle Cloud"
 msgstr "Oracle Cloud"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "One command in the browser sets up a free server, HTTPS and Nocturne. No SSH or Docker knowledge needed."
-msgstr "One command in the browser sets up a free server, HTTPS and Nocturne. No SSH or Docker knowledge needed."
+#~ msgid "One command in the browser sets up a free server, HTTPS and Nocturne. No SSH or Docker knowledge needed."
+#~ msgstr "One command in the browser sets up a free server, HTTPS and Nocturne. No SSH or Docker knowledge needed."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Non-diabetic range"
@@ -21617,6 +21606,7 @@ msgstr "Starts an Ampere A1 server with 1 core and 6 GB of memory, half the Alwa
 #~ msgid "On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves, checking each of these again on every run"
 #~ msgstr "On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves, checking each of these again on every run"
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "What the script does"
 msgstr "What the script does"
@@ -21632,6 +21622,7 @@ msgstr "If Oracle has no free capacity"
 msgid "To have it keep trying for longer instead of re-running by hand:"
 msgstr "To have it keep trying for longer instead of re-running by hand:"
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "If anything goes wrong, run it again"
 msgstr "If anything goes wrong, run it again"
@@ -21698,6 +21689,7 @@ msgstr "Step 1: Open Cloud Shell"
 #~ msgid "Sign in to the <0>Oracle Cloud console</0> and click the terminal icon in the top-right toolbar, labelled <1>Developer tools</1>, then <2>Cloud Shell</2>. A terminal opens at the bottom of the page. It is already signed in as you, so there is nothing to install or configure."
 #~ msgstr "Sign in to the <0>Oracle Cloud console</0> and click the terminal icon in the top-right toolbar, labelled <1>Developer tools</1>, then <2>Cloud Shell</2>. A terminal opens at the bottom of the page. It is already signed in as you, so there is nothing to install or configure."
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Step 2: Run the installer"
 msgstr "Step 2: Run the installer"
@@ -22293,17 +22285,14 @@ msgstr "Sign in to a device account and readings arrive by themselves. Anything 
 msgid "Missing yours? <0>Ask for a connector</0>."
 msgstr "Missing yours? <0>Ask for a connector</0>."
 
-#: ../portal/src/routes/+page.svelte
-msgid "Two files and a domain name. That's the install."
-msgstr "Two files and a domain name. That's the install."
+#~ msgid "Two files and a domain name. That's the install."
+#~ msgstr "Two files and a domain name. That's the install."
 
-#: ../portal/src/routes/+page.svelte
-msgid "Download the compose file and its environment template, fill in your domain and passwords, and start it. Caddy fetches the certificate."
-msgstr "Download the compose file and its environment template, fill in your domain and passwords, and start it. Caddy fetches the certificate."
+#~ msgid "Download the compose file and its environment template, fill in your domain and passwords, and start it. Caddy fetches the certificate."
+#~ msgstr "Download the compose file and its environment template, fill in your domain and passwords, and start it. Caddy fetches the certificate."
 
-#: ../portal/src/routes/+page.svelte
-msgid "# BASE_DOMAIN, INSTANCE_KEY, four database passwords"
-msgstr "# BASE_DOMAIN, INSTANCE_KEY, four database passwords"
+#~ msgid "# BASE_DOMAIN, INSTANCE_KEY, four database passwords"
+#~ msgstr "# BASE_DOMAIN, INSTANCE_KEY, four database passwords"
 
 #: ../portal/src/routes/+page.svelte
 msgid ", and the latest release is <0/>"
@@ -24637,14 +24626,14 @@ msgstr "Watchtower is included and checks for image updates daily, except for Ca
 #~ msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well; <0>see below</0>."
 #~ msgstr "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well; <0>see below</0>."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/lib/components/docs/install/DuckDnsSteps.svelte
 msgid "Sign in at duckdns.org with one of the accounts it offers, such as GitHub or Google."
 msgstr "Sign in at duckdns.org with one of the accounts it offers, such as GitHub or Google."
 
 #~ msgid "Under <0>domains</0>, type a name and click <1>add domain</1>. Your domain is then <2/>."
 #~ msgstr "Under <0>domains</0>, type a name and click <1>add domain</1>. Your domain is then <2/>."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/lib/components/docs/install/DuckDnsSteps.svelte
 msgid "Copy the <0>token</0> shown at the top of the page. It looks like <1/>. It controls every name on your account, so keep it to yourself."
 msgstr "Copy the <0>token</0> shown at the top of the page. It looks like <1/>. It controls every name on your account, so keep it to yourself."
 
@@ -24675,6 +24664,7 @@ msgstr "To update Caddy and Postgres, run <0/> on the server."
 #~ msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy, which would keep more than five and be charged."
 #~ msgstr "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy, which would keep more than five and be charged."
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "No domain yet? Get one from DuckDNS"
 msgstr "No domain yet? Get one from DuckDNS"
@@ -29772,8 +29762,9 @@ msgstr "An <0>Oracle Cloud account</0>. Sign-up requires a payment card to verif
 msgid "Which option to choose"
 msgstr "Which option to choose"
 
-#~ msgid "Points your DuckDNS name at that address when you give it the token. For any other domain, it prints the two records to create by hand"
-#~ msgstr "Points your DuckDNS name at that address when you give it the token. For any other domain, it prints the two records to create by hand"
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Points your DuckDNS name at that address when you give it the token. For any other domain, it prints the two records to create by hand"
+msgstr "Points your DuckDNS name at that address when you give it the token. For any other domain, it prints the two records to create by hand"
 
 #~ msgid "Installs Folding@home on a nightly schedule if you chose it above"
 #~ msgstr "Installs Folding@home on a nightly schedule if you chose it above"
@@ -36059,12 +36050,13 @@ msgstr "Every service sets <0/>, so Docker restarts it when it exits or when the
 #~ msgstr "Every service also logs to the <0/> driver, rotated at three files of 10 MB. Left to its defaults, that driver never rotates, because <1/> defaults to unlimited (<2>Docker docs</2>). A logging driver set on a container replaces the daemon's default (<3>Docker docs</3>), so the bundle overrides any <4/> in your <5/>. To keep yours, set <6/> on the services in a <7/>. Compose reads that file only when you pass no <8/> (<9>Docker docs</9>). With the bring-your-own-proxy command, also pass <10/>."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Next steps"
 msgstr "Next steps"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/lib/components/docs/install/DuckDnsSteps.svelte
 msgid "Under <0>domains</0>, type a name and select <1>add domain</1>. Your domain is then <2/>."
 msgstr "Under <0>domains</0>, type a name and select <1>add domain</1>. Your domain is then <2/>."
 
@@ -36079,9 +36071,8 @@ msgstr "<0>Folding@home</0> is a research project that simulates how proteins fo
 msgid "Creates a spending alert that emails you if the account is ever charged. Also creates a quota policy that stops the account creating anything outside the Always Free compute shapes"
 msgstr "Creates a spending alert that emails you if the account is ever charged. Also creates a quota policy that stops the account creating anything outside the Always Free compute shapes"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "On the server, the installer opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
-msgstr "On the server, the installer opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
+#~ msgid "On the server, the installer opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
+#~ msgstr "On the server, the installer opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Ampere A1 servers are popular and regions often run out. The installer tries every availability domain in your region and keeps retrying for 30 minutes. It already requests the smallest size the installer offers, 1 core and 6 GB, so there is nothing smaller to fall back to. If it gives up, run the command again later. It remembers your domain, so the command no longer needs it. Everything already created is reused. Upgrading to Pay As You Go also tends to end these errors, since paying accounts are served first when servers are scarce."
@@ -36095,7 +36086,7 @@ msgstr "Running the installer a second time is the fix for almost any failure. I
 msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups. Take them by hand and delete old ones. Do not attach a scheduled policy, because it would keep more than five and be charged."
 msgstr "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups. Take them by hand and delete old ones. Do not attach a scheduled policy, because it would keep more than five and be charged."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/lib/components/docs/install/DuckDnsSteps.svelte
 msgid "<0>DuckDNS</0> is a free dynamic DNS service that gives out names under <1>duckdns.org</1>, each with a wildcard for the subdomains below it. The installer uses your DuckDNS token to point your name at your server, so there is nothing to configure by hand."
 msgstr "<0>DuckDNS</0> is a free dynamic DNS service that gives out names under <1>duckdns.org</1>, each with a wildcard for the subdomains below it. The installer uses your DuckDNS token to point your name at your server, so there is nothing to configure by hand."
 
@@ -39734,6 +39725,7 @@ msgid "HTTPS is automatic. The bundled Caddy reverse proxy obtains and renews Le
 msgstr "HTTPS is automatic. The bundled Caddy reverse proxy obtains and renews Let's Encrypt TLS certificates, with no API keys or certificate files to manage. The certificate for <0/> is issued on first start, and each tenant subdomain gets one on demand the first time it is visited."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Update Nocturne"
 msgstr "Update Nocturne"
@@ -39751,6 +39743,7 @@ msgid "This command does not delete the database in your host directory. A stack
 msgstr "This command does not delete the database in your host directory. A stack that you start again uses that database and its passwords."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Before you start"
 msgstr "Before you start"
@@ -39780,6 +39773,7 @@ msgid "Then copy the file to <0/> in the <1/> folder on your server:"
 msgstr "Then copy the file to <0/> in the <1/> folder on your server:"
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "After the installation"
 msgstr "After the installation"
@@ -39868,6 +39862,7 @@ msgstr "Then open <0/>. The bundled Caddy proxy obtains Let's Encrypt TLS certif
 msgid "Open Cloud Shell"
 msgstr "Open Cloud Shell"
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Run the installer"
 msgstr "Run the installer"
@@ -39876,6 +39871,7 @@ msgstr "Run the installer"
 msgid "Add the DNS records"
 msgstr "Add the DNS records"
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Create your first site"
 msgstr "Create your first site"
@@ -39900,14 +39896,17 @@ msgstr "The account stays Always Free and cannot be billed. A research client ru
 msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well."
 msgstr "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well."
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Your DuckDNS token"
 msgstr "Your DuckDNS token"
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "The installer uses the token in <0>Step 2</0>."
 msgstr "The installer uses the token in <0>Step 2</0>."
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Then enter your domain in the bar at the top of the page. If you already own a domain, enter that domain instead and ignore this section."
 msgstr "Then enter your domain in the bar at the top of the page. If you already own a domain, enter that domain instead and ignore this section."
@@ -39936,6 +39935,8 @@ msgstr "Paste this into Cloud Shell. The command contains your domain and your s
 msgid "Enter your domain in the bar at the top of the page, such as <0/>. The command below then contains it. Nocturne will answer on that name. Every site you create gets a subdomain under it, so pick something you are happy to keep. Then paste the command into Cloud Shell."
 msgstr "Enter your domain in the bar at the top of the page, such as <0/>. The command below then contains it. Nocturne will answer on that name. Every site you create gets a subdomain under it, so pick something you are happy to keep. Then paste the command into Cloud Shell."
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "A domain under duckdns.org:"
@@ -39945,6 +39946,7 @@ msgstr "A domain under duckdns.org:"
 msgid "<0/> The installer asks early on for your DuckDNS token. <1>Nothing appears on screen as you paste it</1>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another. If you press Enter with nothing pasted, the installer tells you the address to set yourself in <2>Step 3</2> instead."
 msgstr "<0/> The installer asks early on for your DuckDNS token. <1>Nothing appears on screen as you paste it</1>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another. If you press Enter with nothing pasted, the installer tells you the address to set yourself in <2>Step 3</2> instead."
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Any other domain:"
@@ -39981,3 +39983,204 @@ msgstr "Oracle switches off servers on Always Free accounts that it judges idle 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "The installer keeps working while the server boots, and waits for DNS before it requests certificates."
 msgstr "The installer keeps working while the server boots, and waits for DNS before it requests certificates."
+
+#: ../portal/src/routes/+page.svelte
+msgid "One script and a domain name. That's the install."
+msgstr "One script and a domain name. That's the install."
+
+#: ../portal/src/routes/+page.svelte
+msgid "Run the install script on a Linux server. It installs Docker, makes the keys and passwords, and starts Nocturne. Caddy fetches the certificate."
+msgstr "Run the install script on a Linux server. It installs Docker, makes the keys and passwords, and starts Nocturne. Caddy fetches the certificate."
+
+#: ../portal/src/routes/+page.svelte
+msgid "# Docker, keys, passwords, certificates: the script does them"
+msgstr "# Docker, keys, passwords, certificates: the script does them"
+
+#: ../portal/src/routes/faq/+page.svelte
+msgid "You need a Linux server, a domain name, and the ability to paste two commands into a terminal. The install script installs Docker, generates the keys and passwords, and starts Nocturne. If you have no server, the Oracle Cloud guide creates a free one from the browser. Docker Compose and Portainer guides are there for people who prefer to manage the stack themselves."
+msgstr "You need a Linux server, a domain name, and the ability to paste two commands into a terminal. The install script installs Docker, generates the keys and passwords, and starts Nocturne. If you have no server, the Oracle Cloud guide creates a free one from the browser. Docker Compose and Portainer guides are there for people who prefer to manage the stack themselves."
+
+#: ../portal/src/routes/docs/+page.svelte
+msgid "Step-by-step guides for deploying Nocturne with the install script, Docker Compose, Portainer, and more."
+msgstr "Step-by-step guides for deploying Nocturne with the install script, Docker Compose, Portainer, and more."
+
+#: ../portal/src/routes/features/+page.svelte
+msgid "Self-hosted with one install script, or with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
+msgstr "Self-hosted with one install script, or with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
+
+#: ../portal/src/routes/features/+page.svelte
+msgid "Poke around the demo, then run your own copy with one install script. No account, no credit card, no waitlist."
+msgstr "Poke around the demo, then run your own copy with one install script. No account, no credit card, no waitlist."
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Install script"
+msgstr "Install script"
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "Recommended. One script installs Docker and Nocturne on a Linux server, VPS, or Raspberry Pi. You do not need to know Docker."
+msgstr "Recommended. One script installs Docker and Nocturne on a Linux server, VPS, or Raspberry Pi. You do not need to know Docker."
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "Do the same steps by hand with Docker Compose. Use this guide for your own reverse proxy or a host directory for the database."
+msgstr "Do the same steps by hand with Docker Compose. Use this guide for your own reverse proxy or a host directory for the database."
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "No server yet? One command in the browser makes a free one and runs the install script on it. No SSH or Docker knowledge needed."
+msgstr "No server yet? One command in the browser makes a free one and runs the install script on it. No SSH or Docker knowledge needed."
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "If you have a Linux server, use the install script. The other guides are for a server that you do not have yet, or for a setup that you manage yourself. All methods use the same Docker images and configuration."
+msgstr "If you have a Linux server, use the install script. The other guides are for a server that you do not have yet, or for a setup that you manage yourself. All methods use the same Docker images and configuration."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Point your domain at the server"
+msgstr "Point your domain at the server"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "A Linux server where you can run commands as root. A VPS, a home server, or a Raspberry Pi 4 or newer with a 64-bit system is sufficient. Ubuntu and Debian are the usual selection. The server must use systemd."
+msgstr "A Linux server where you can run commands as root. A VPS, a home server, or a Raspberry Pi 4 or newer with a 64-bit system is sufficient. Ubuntu and Debian are the usual selection. The server must use systemd."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "A domain name. Nocturne gives each site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS is sufficient."
+msgstr "A domain name. Nocturne gives each site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS is sufficient."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Ports <0/> and <1/> open from the internet to the server. On a home network, forward the two ports on your router to the server."
+msgstr "Ports <0/> and <1/> open from the internet to the server. On a home network, forward the two ports on your router to the server."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "<0/> Do nothing here. The installer sets the record when you give it your DuckDNS token in <1>Step 2</1>."
+msgstr "<0/> Do nothing here. The installer sets the record when you give it your DuckDNS token in <1>Step 2</1>."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "<0/> Create two <1>A</1> records at your domain provider. Your server provider shows the public IP address of the server."
+msgstr "<0/> Create two <1>A</1> records at your domain provider. Your server provider shows the public IP address of the server."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The second one is a wildcard. It makes every site's subdomain resolve without a record each. If you use Cloudflare, leave the proxy off for both records, shown as a gray cloud. Cloudflare's proxy cannot carry the certificates Nocturne issues for its own subdomains. You can also do this step later: the installer shows the two records with the address that it found, and waits for them."
+msgstr "The second one is a wildcard. It makes every site's subdomain resolve without a record each. If you use Cloudflare, leave the proxy off for both records, shown as a gray cloud. Cloudflare's proxy cannot carry the certificates Nocturne issues for its own subdomains. You can also do this step later: the installer shows the two records with the address that it found, and waits for them."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Connect to your server and run these two commands. They contain your domain. Nocturne will answer on <0/>. Every site you create gets a subdomain under it."
+msgstr "Connect to your server and run these two commands. They contain your domain. Nocturne will answer on <0/>. Every site you create gets a subdomain under it."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Enter your domain in the bar at the top of the page. The commands below then contain it. Then connect to your server and run the two commands."
+msgstr "Enter your domain in the bar at the top of the page. The commands below then contain it. Then connect to your server and run the two commands."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "<0/> The installer asks early on for your DuckDNS token. <1>Nothing appears on screen as you paste it</1>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another."
+msgstr "<0/> The installer asks early on for your DuckDNS token. <1>Nothing appears on screen as you paste it</1>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Finds the public IP address of the server"
+msgstr "Finds the public IP address of the server"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Opens ports 80 and 443 in a ufw firewall on the server"
+msgstr "Opens ports 80 and 443 in a ufw firewall on the server"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Installs Docker on a server that does not have it"
+msgstr "Installs Docker on a server that does not have it"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Downloads the Nocturne release bundle to <0/>"
+msgstr "Downloads the Nocturne release bundle to <0/>"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Makes the keys and the database passwords, and writes them to <0/>. It does not change a value that exists"
+msgstr "Makes the keys and the database passwords, and writes them to <0/>. It does not change a value that exists"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Starts Nocturne when DNS resolves"
+msgstr "Starts Nocturne when DNS resolves"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Stops, and changes nothing, if Docker already holds Nocturne data from an installation that it did not make"
+msgstr "Stops, and changes nothing, if Docker already holds Nocturne data from an installation that it did not make"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Keeps itself on the server as <0/>, with a systemd unit that starts Nocturne after a restart"
+msgstr "Keeps itself on the server as <0/>, with a systemd unit that starts Nocturne after a restart"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Running the installer a second time is the fix for almost any failure. Each step checks before it acts, and it does not change keys or passwords that exist. It remembers your domain. The installer is also on the server as a command:"
+msgstr "Running the installer a second time is the fix for almost any failure. Each step checks before it acts, and it does not change keys or passwords that exist. It remembers your domain. The installer is also on the server as a command:"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Watchtower is included and checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres:"
+msgstr "Watchtower is included and checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres:"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Watchtower updates images, not the compose file. To get the compose file of the latest release, run <0/>."
+msgstr "Watchtower updates images, not the compose file. To get the compose file of the latest release, run <0/>."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Files, logs and restarts"
+msgstr "Files, logs and restarts"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Everything is in <0/>. The keys and passwords are in <1/> there. Keep a copy of that file in a location that is not this server. Nocturne starts again by itself when the server restarts. To see the logs:"
+msgstr "Everything is in <0/>. The keys and passwords are in <1/> there. Keep a copy of that file in a location that is not this server. Nocturne starts again by itself when the server restarts. To see the logs:"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The <0>Docker Compose guide</0> has the procedures for a lost <1/> file and for troubleshooting. Run its commands in <2/>."
+msgstr "The <0>Docker Compose guide</0> has the procedures for a lost <1/> file and for troubleshooting. Run its commands in <2/>."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "You operate your own reverse proxy, or you want the PostgreSQL data in a host directory: use the <0>Docker Compose guide</0>."
+msgstr "You operate your own reverse proxy, or you want the PostgreSQL data in a host directory: use the <0>Docker Compose guide</0>."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "You manage your server with Portainer: use the <0>Portainer guide</0>."
+msgstr "You manage your server with Portainer: use the <0>Portainer guide</0>."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "You do not have a server: the <0>Oracle Cloud guide</0> makes a free one and runs this same installer on it."
+msgstr "You do not have a server: the <0>Oracle Cloud guide</0> makes a free one and runs this same installer on it."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "When to use a different guide"
+msgstr "When to use a different guide"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "One script installs Nocturne on a Linux server. It installs Docker, makes the keys and passwords, gets the HTTPS certificates and starts Nocturne. You do not need to know Docker."
+msgstr "One script installs Nocturne on a Linux server. It installs Docker, makes the keys and passwords, gets the HTTPS certificates and starts Nocturne. You do not need to know Docker."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Step 1: Point your domain at the server"
+msgstr "Step 1: Point your domain at the server"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The installer waits ten minutes for the DNS records. If they are not ready then, the installer stops waiting, and the server continues to wait by itself. Nocturne starts when the records resolve."
+msgstr "The installer waits ten minutes for the DNS records. If they are not ready then, the installer stops waiting, and the server continues to wait by itself. Nocturne starts when the records resolve."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The installer ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager."
+msgstr "The installer ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager."
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Step 3: Create your first site"
+msgstr "Step 3: Create your first site"
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "When the script prints <0>Done</0>, open <1/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
+msgstr "When the script prints <0>Done</0>, open <1/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "On the server, it runs the install script. That script opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
+msgstr "On the server, it runs the install script. That script opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "On the server, it runs the same <0>install script</0> as any other Linux server. If you have a server, use that guide."
+msgstr "On the server, it runs the same <0>install script</0> as any other Linux server. If you have a server, use that guide."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The install script does these steps for you"
+msgstr "The install script does these steps for you"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On a Linux server with the bundled proxy and a Docker volume, the <0>install script</0> does every step on this page. Use this page to do the steps by hand, to use your own reverse proxy, or to keep the database in a host directory. A server that the install script made has its files in <1/>. Do not run the install script on a server that you installed from this page."
+msgstr "On a Linux server with the bundled proxy and a Docker volume, the <0>install script</0> does every step on this page. Use this page to do the steps by hand, to use your own reverse proxy, or to keep the database in a host directory. A server that the install script made has its files in <1/>. Do not run the install script on a server that you installed from this page."
