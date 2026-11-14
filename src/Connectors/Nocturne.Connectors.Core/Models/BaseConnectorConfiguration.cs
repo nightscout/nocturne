@@ -41,7 +41,7 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     public int BatchSize { get; set; } = 50;
 
     [ConnectorProperty(ConnectorPropertyKey.SyncIntervalMinutes, MinValue = 1, MaxValue = 60)]
-    public int SyncIntervalMinutes { get; set; } = 5;
+    public virtual int SyncIntervalMinutes { get; set; } = 5;
 
     [ConnectorProperty(ConnectorPropertyKey.GlucoseProcessing)]
     public GlucoseProcessing GlucoseProcessing { get; set; } = GlucoseProcessing.Smoothed;

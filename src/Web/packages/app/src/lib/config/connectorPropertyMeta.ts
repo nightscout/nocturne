@@ -9,6 +9,10 @@ export type PropertyMeta = {
   label: string;
   description: string;
   category: PropertyCategory;
+  /** What to call each value of a property the schema offers as a choice, keyed by the value. */
+  optionLabels?: Record<string, string>;
+  /** Stands in for `description` where the schema offers the property as a choice. */
+  choiceDescription?: string;
 };
 
 /**
@@ -41,6 +45,13 @@ export const connectorPropertyMeta = {
     label: 'Sync interval',
     description: 'How often to sync data from the source (in minutes)',
     category: 'Sync',
+    optionLabels: {
+      1: '1 minute',
+      5: '5 minutes',
+      60: '1 hour',
+      240: '4 hours',
+    },
+    choiceDescription: 'How often to sync data from the source',
   },
 
   // Sync toggles

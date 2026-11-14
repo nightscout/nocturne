@@ -33,7 +33,7 @@
     JsonSchema,
     JsonSchemaProperty,
   } from "#lib/utils/connector-json-schema.js";
-  import { getPropertyMeta } from "#lib/config/connectorPropertyMeta.js";
+  import { getPropertyMeta, type PropertyMeta } from "#lib/config/connectorPropertyMeta.js";
 
   interface Props {
     schema: JsonSchema;
@@ -249,6 +249,15 @@
     configuration = { ...configuration, [propName]: value };
   }
 
+  function optionLabel(meta: PropertyMeta, option: unknown): string {
+    return meta.optionLabels?.[String(option)] ?? String(option);
+  }
+
+  /** A select holds strings, so a numeric choice is read back as the number the schema lists. */
+  function optionValue(propSchema: JsonSchemaProperty, selected: string): string | number {
+    return propSchema.enum?.find((option) => String(option) === selected) ?? selected;
+  }
+
   function getSecretValue(propName: string): string {
     return secrets[propName] ?? "";
   }
@@ -359,22 +368,24 @@
           <Badge variant="outline">From env</Badge>
         {/if}
       </div>
+      {@const chosen = getPropertyValue(propName)}
+      {@const choiceDescription = meta.choiceDescription ?? meta.description}
       <Select
         type="single"
-        value={String(getPropertyValue(propName) ?? propSchema.default ?? "")}
-        onValueChange={(value) => setPropertyValue(propName, value)}
+        value={String(chosen ?? propSchema.default ?? "")}
+        onValueChange={(value) => setPropertyValue(propName, optionValue(propSchema, value))}
       >
         <SelectTrigger>
-          <span>{getPropertyValue(propName) ?? "Select..."}</span>
+          <span>{chosen === undefined || chosen === null ? "Select..." : optionLabel(meta, chosen)}</span>
         </SelectTrigger>
         <SelectContent>
           {#each propSchema.enum as option (option)}
-            <SelectItem value={option}>{option}</SelectItem>
+            <SelectItem value={String(option)}>{optionLabel(meta, option)}</SelectItem>
           {/each}
         </SelectContent>
       </Select>
-      {#if meta.description}
-        <p class="text-sm text-muted-foreground">{meta.description}</p>
+      {#if choiceDescription}
+        <p class="text-sm text-muted-foreground">{choiceDescription}</p>
       {/if}
       {@render envVarHint(propSchema["x-envVar"])}
     {:else if propSchema.type === "integer" || propSchema.type === "number"}
