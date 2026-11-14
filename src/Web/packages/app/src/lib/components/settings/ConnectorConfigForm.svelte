@@ -45,6 +45,8 @@
     hasSecrets?: boolean;
     /** Whether to show the .env variable name hints. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
+    /** Names the save, for a form whose save also starts something. The save is then the form's one large action. */
+    saveLabel?: string;
     onSave: (config: Record<string, unknown>, secrets: Record<string, string>) => Promise<void>;
   }
 
@@ -55,6 +57,7 @@
     effectiveConfig = null,
     hasSecrets = false,
     showEnvVarHints = true,
+    saveLabel,
     onSave,
   }: Props = $props();
 
@@ -607,7 +610,19 @@
   {/if}
 
   <!-- Sticky Save Bar -->
-  {#if hasAnyUnsavedChanges}
+  {#if hasAnyUnsavedChanges && saveLabel}
+    <div class="sticky bottom-0 -mx-3 @md:-mx-6 border-t bg-background px-3 @md:px-6 py-4 flex flex-col gap-2">
+      <Button size="xl" class="w-full" onclick={handleSave} disabled={isSaving}>
+        {#if isSaving}
+          <Loader2 class="animate-spin" />
+        {/if}
+        {saveLabel}
+      </Button>
+      <Button variant="ghost" onclick={handleCancel} disabled={isSaving}>
+        Cancel
+      </Button>
+    </div>
+  {:else if hasAnyUnsavedChanges}
     <div class="sticky bottom-0 -mx-3 @md:-mx-6 border-t bg-background px-3 @md:px-6 py-4 flex items-center justify-between gap-4">
       <p class="text-sm text-muted-foreground">You have unsaved changes</p>
       <div class="flex gap-2">

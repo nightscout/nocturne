@@ -225,4 +225,25 @@ describe("ConnectorConfigForm", () => {
 		await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
 		expect(onSave.mock.calls[0][0]).toEqual({ syncIntervalMinutes: 240 });
 	});
+
+	it("names the save and makes it the one large action when a label is given", async () => {
+		const onSave = vi.fn().mockResolvedValue(undefined);
+		render(ConnectorConfigForm, {
+			props: {
+				schema: testSchema,
+				configuration: { serverUrl: "https://example.com", pollingInterval: 300 },
+				saveLabel: "Start import",
+				onSave,
+			},
+		});
+
+		await page.getByRole("textbox").first().fill("https://other.example");
+
+		const start = page.getByRole("button", { name: "Start import" });
+		await expect.element(start).toHaveClass("h-14");
+		expect(page.getByRole("button", { name: "Save" }).elements()).toHaveLength(0);
+
+		await start.click();
+		await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+	});
 });
