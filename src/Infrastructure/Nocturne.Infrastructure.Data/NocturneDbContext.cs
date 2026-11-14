@@ -611,11 +611,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// the V4 record tables the legacy treatment projection reads (its state
     /// spans page on <c>ix_state_spans_tenant_category_updated_at</c>), the four tables a device
     /// status is decomposed into, the three glucose types the entry projection reads and the five
-    /// profile-decomposition tables.
+    /// profile-decomposition tables; and <see cref="BasalInjectionEntity"/>, which no history
+    /// endpoint pages but whose newest <c>sys_updated_at</c> the treatments last-modified read takes.
     /// </summary>
     internal static readonly Type[] V4HistoryPagedEntities =
     [
         typeof(BolusEntity),
+        typeof(BasalInjectionEntity),
         typeof(CarbIntakeEntity),
         typeof(BGCheckEntity),
         typeof(NoteEntity),
