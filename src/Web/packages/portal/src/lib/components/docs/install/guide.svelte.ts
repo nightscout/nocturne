@@ -160,6 +160,7 @@ export class InstallGuide {
         link.click();
         URL.revokeObjectURL(url);
         this.downloadedFile = this.envFile;
+        this.saved = false;
     }
 
     /** Browser only. */

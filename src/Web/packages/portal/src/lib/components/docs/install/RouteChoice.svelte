@@ -23,6 +23,13 @@
     let { id, label, options, fallback }: Props = $props();
 
     const guide = getInstallGuide();
+
+    // A stored choice that is not an option now would select no card and show no route.
+    $effect(() => {
+        if (guide && !options.some((option) => option.value === guide.choice(id, fallback))) {
+            guide.choose(id, fallback);
+        }
+    });
 </script>
 
 {#if guide}

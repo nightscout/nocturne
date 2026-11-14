@@ -13,6 +13,6 @@
 </script>
 
 <!-- scroll-mt clears the site header and the sticky guide bar. -->
-<h2 {id} data-install-step={installStep} class="text-2xl font-bold mt-12 mb-4 scroll-mt-36">
+<h2 {id} data-install-step={installStep} class="text-2xl font-bold mt-12 mb-4 scroll-mt-48 md:scroll-mt-36">
     {@render children()}
 </h2>

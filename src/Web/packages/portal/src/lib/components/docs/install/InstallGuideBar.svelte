@@ -106,7 +106,7 @@
                         </li>
                     {/each}
                 </ol>
-                <p class="m-0 truncate text-sm text-muted-foreground" aria-live="polite">
+                <p class="m-0 truncate text-sm text-muted-foreground">
                     {#if current >= 0}
                         <span class="text-foreground">{steps[current].title}</span>
                     {:else}

@@ -301,7 +301,8 @@
     {#if overrides}
         <p class="text-muted-foreground mb-4">
             Keep every <code class={CODE}>-f</code> argument, in this order, on every later
-            Compose command for this stack. The commands on this page include them. If you omit
+            Compose command for this stack. The commands on this page include them. If you use a
+            local override file, add its <code class={CODE}>-f</code> argument also. If you omit
             one, Compose can restore the named-volume mount or the bundled proxy configuration.
         </p>
     {/if}
@@ -430,6 +431,12 @@
         <CodeBlock code={logsCommand} class="mb-4" />
         <p class="text-muted-foreground mb-4">To start fresh, stop all services and remove volumes:</p>
         <CodeBlock code={resetCommand} class="mb-4" />
+        {#if hostData}
+            <p class="text-muted-foreground mb-4">
+                This command does not delete the database in your host directory. A stack that
+                you start again uses that database and its passwords.
+            </p>
+        {/if}
     </details>
 
     <SupportNocturne />
