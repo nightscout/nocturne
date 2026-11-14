@@ -19,10 +19,16 @@ public class StatusResponse
     public string? Name { get; set; }
 
     /// <summary>
-    /// Nightscout version
+    /// The Nightscout release Nocturne matches, <see cref="Nocturne.Core.Constants.ApplicationConstants.NightscoutApi.CompatibleVersion"/>
     /// </summary>
     [JsonPropertyName("version")]
     public string? Version { get; set; }
+
+    /// <summary>
+    /// Nocturne's own release version
+    /// </summary>
+    [JsonPropertyName("nocturneVersion")]
+    public string? NocturneVersion { get; set; }
 
     [JsonPropertyName("apiVersion")]
     public string? ApiVersion { get; set; }

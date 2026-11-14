@@ -130,7 +130,7 @@
     return buildDiagnosticReport({
       timestamp: new Date().toISOString(),
       build: status
-        ? { version: status.version, head: status.head, build: status.build }
+        ? { version: status.nocturneVersion, head: status.head, build: status.build }
         : null,
       includeDeviceInfo,
       device: readDiagnosticDevice(),

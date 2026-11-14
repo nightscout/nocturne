@@ -7,6 +7,7 @@
       status: ok,
       name: nightscout,
       version: {Scrubbed},
+      nocturneVersion: {Scrubbed},
       serverTime: {Scrubbed},
       srvDate: {Scrubbed},
       storage: {

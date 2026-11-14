@@ -131,7 +131,8 @@ public class StatusService : IStatusService
             {
                 Status = "setup_required",
                 Name = "Nocturne",
-                Version = AppVersion.Current,
+                Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+                NocturneVersion = AppVersion.Current,
                 ServerTime = _time.GetUtcNow().UtcDateTime,
                 ApiEnabled = false,
             };
@@ -157,7 +158,6 @@ public class StatusService : IStatusService
     {
         _logger.LogDebug("Generating system status response");
 
-        var version = AppVersion.Current;
         var serverTime = _time.GetUtcNow().UtcDateTime;
         var (settings, thresholdsDegraded) = await GetPublicSettingsAsync();
 
@@ -214,7 +214,8 @@ public class StatusService : IStatusService
         {
             Status = "ok",
             Name = _configuration[ServiceNames.ConfigKeys.NightscoutSiteName] ?? "nightscout",
-            Version = version,
+            Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+            NocturneVersion = AppVersion.Current,
             ServerTime = serverTime,
             ApiEnabled = true,
             CareportalEnabled = _configuration.GetValue<bool>("Features:CareportalEnabled", true),
@@ -232,7 +233,7 @@ public class StatusService : IStatusService
         _logger.LogDebug(
             "Status response generated for site: {SiteName}, version: {Version}, demoMode: {DemoMode}",
             response.Name,
-            response.Version,
+            response.NocturneVersion,
             _demoModeService.IsEnabled
         );
 
@@ -571,7 +572,8 @@ public class StatusService : IStatusService
             ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
             Status = basicStatus.Status,
             Name = basicStatus.Name ?? "Nocturne",
-            Version = basicStatus.Version ?? AppVersion.Current,
+            Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+            NocturneVersion = AppVersion.Current,
             ServerTime = serverTime,
             SrvDate = serverTime.ToMills(),
             ApiEnabled = basicStatus.ApiEnabled,

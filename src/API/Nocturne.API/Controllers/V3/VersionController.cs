@@ -78,7 +78,7 @@ public class VersionController : ControllerBase
                 {
                     Result = new V3VersionResult
                     {
-                        Version = AppVersion.Current,
+                        Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
                         ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
                         SrvDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         Storage = new StorageInfo { Version = "unknown" },
