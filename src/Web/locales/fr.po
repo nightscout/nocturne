@@ -39152,3 +39152,8 @@ msgstr ""
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 msgid "When the address changes, apps that use the old address stop working. Server administrators can always change the address of a site that they own."
 msgstr ""
+
+#. 0: maxDays
+#: src/lib/components/layout/ReportsFilterSidebar.svelte
+msgid "The date range must not be longer than {0} days."
+msgstr ""
