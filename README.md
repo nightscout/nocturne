@@ -136,11 +136,22 @@ dotnet user-secrets set "LocalDev:Domain" "nocturne.test"
 
 This requires mkcert and one hosts-file line per tenant slug (`127.0.0.1 dev.nocturne.test` — hosts files don't support wildcards). The app is then at `https://nocturne.test` with no port.
 
-## Production Deployment (Docker Compose)
+## Production Deployment
 
-The easiest way to deploy Nocturne is with the production Docker Compose bundle. Each [GitHub Release](https://github.com/nightscout/nocturne/releases) includes ready-to-use artifacts, or you can generate them locally.
+The easiest way to deploy Nocturne is the install script. On a Linux server with systemd, as root:
 
-### Using a release
+```bash
+curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/install.sh -o install.sh
+sudo BASE_DOMAIN=nocturne.example.com bash install.sh
+```
+
+It installs Docker when it is absent, downloads the production Docker Compose bundle to `/opt/nocturne`, generates the keys and passwords, sets the DNS record for a DuckDNS name (or prints the two records to create), and starts the stack. Re-running it repairs a failed install. See the [install script guide](https://getnocturne.dev/docs/installation/install-script). The Oracle Cloud installer (`oracle-cloud-install.sh`) provisions a free server and runs this same script on it.
+
+Both scripts are generated: edit their sources in `src/Aspire/Nocturne.Aspire.Host/install/` and regenerate with `dotnet run scripts/publish-release.cs`.
+
+### Using the Docker Compose bundle by hand
+
+Each [GitHub Release](https://github.com/nightscout/nocturne/releases) includes the bundle the script uses, or you can generate it locally.
 
 Download `docker-compose.yaml` and `.env.example` from the [latest release](https://github.com/nightscout/nocturne/releases).
 

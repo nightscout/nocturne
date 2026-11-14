@@ -10,6 +10,8 @@
     import RouteChoice from "#lib/components/docs/install/RouteChoice.svelte";
     import Domain from "#lib/components/docs/install/Domain.svelte";
     import SiteLink from "#lib/components/docs/install/SiteLink.svelte";
+    import DuckDnsSteps from "#lib/components/docs/install/DuckDnsSteps.svelte";
+    import { resolve } from "$app/paths";
     import { createInstallGuide } from "#lib/components/docs/install/guide.svelte.js";
     import installScript from "#lib/release/oracle-cloud/oracle-cloud-install.sh?raw";
 
@@ -67,6 +69,11 @@
         up the server, the network, HTTPS and Nocturne itself. No SSH or Docker knowledge
         needed.
     </p>
+    <p class="text-muted-foreground mb-8">
+        On the server, it runs the same
+        <a href={resolve("/docs/installation/install-script")} class="text-primary hover:underline">install script</a>
+        as any other Linux server. If you have a server, use that guide.
+    </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">What you need</h2>
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">
@@ -87,25 +94,7 @@
     <h2 id="duckdns" class="text-2xl font-bold mt-8 mb-4 scroll-mt-36">
         {#if duckDns}Your DuckDNS token{:else}No domain yet? Get one from DuckDNS{/if}
     </h2>
-    <p class="text-muted-foreground mb-4">
-        <a href="https://www.duckdns.org" class="text-primary hover:underline">DuckDNS</a> is a
-        free dynamic DNS service that gives out names under <strong>duckdns.org</strong>, each
-        with a wildcard for the subdomains below it. The installer uses your DuckDNS token to
-        point your name at your server, so there is nothing to configure by hand.
-    </p>
-    <ol class="list-decimal list-inside space-y-2 text-muted-foreground mb-8">
-        <li>Sign in at duckdns.org with one of the accounts it offers, such as GitHub or Google.</li>
-        <li>
-            Under <strong>domains</strong>, type a name and select <strong>add domain</strong>.
-            Your domain is then
-            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">yourname.duckdns.org</code>.
-        </li>
-        <li>
-            Copy the <strong>token</strong> shown at the top of the page. It looks like
-            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">01234567-89ab-cdef-0123-456789abcdef</code>.
-            It controls every name on your account, so keep it to yourself.
-        </li>
-    </ol>
+    <DuckDnsSteps />
     <p class="text-muted-foreground mb-8">
         {#if duckDns}
             The installer uses the token in
@@ -239,7 +228,7 @@
             {#if folding}
                 <li>Installs Folding@home on a nightly schedule</li>
             {/if}
-            <li>On the server, the installer opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run</li>
+            <li>On the server, it runs the install script. That script opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run</li>
         </ul>
         <CodeBlock code={installScript} class="mt-2" maxHeight="400px" />
     </details>
