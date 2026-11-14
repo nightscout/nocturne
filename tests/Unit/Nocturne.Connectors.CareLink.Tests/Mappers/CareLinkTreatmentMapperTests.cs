@@ -155,6 +155,36 @@ public class CareLinkTreatmentMapperTests
     }
 
     [Fact]
+    public void TempBasals_AreKeyedOnTheirStart_WhateverTheMarkerIdIndexOrNextMarker()
+    {
+        var alone = Data(
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:54:39", Id = 119, BolusAmount = 0.275, Index = 0 });
+        var followed = Data(
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:51:00", Id = 7, BolusAmount = 0.2, Index = 0 },
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:54:39", Id = 1, BolusAmount = 0.3, Index = 1 },
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:57:00", Id = 2, BolusAmount = 0.1, Index = 2 });
+
+        var once = CareLinkTreatmentMapper.MapTempBasals(alone, NoOffset, Now).Single();
+        var again = CareLinkTreatmentMapper.MapTempBasals(followed, NoOffset, Now)[1];
+
+        once.LegacyId.Should().Be("carelink_autobasal_1781092479000");
+        once.SyncIdentifier.Should().Be(once.LegacyId);
+        again.LegacyId.Should().Be(once.LegacyId);
+        again.SyncIdentifier.Should().Be(once.SyncIdentifier);
+    }
+
+    [Fact]
+    public void TempBasals_KeyOnTheUtcStart_AfterThePumpOffset()
+    {
+        var data = Data(
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T21:54:39", BolusAmount = 0.275 });
+
+        var basal = CareLinkTreatmentMapper.MapTempBasals(data, TimeSpan.FromHours(10).TotalMilliseconds, Now).Single();
+
+        basal.LegacyId.Should().Be("carelink_autobasal_1781092479000");
+    }
+
+    [Fact]
     public void CarbIntakes_SyncIdentifier_IsIndependentOfArrayIndex()
     {
         CareLinkMarker MakeAt(int index) => new()
