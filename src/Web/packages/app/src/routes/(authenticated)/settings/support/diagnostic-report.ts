@@ -13,7 +13,7 @@ export interface DiagnosticDevice {
 }
 
 export interface DiagnosticBuild {
-  /** Server version string from /api/v1/status. */
+  /** Nocturne release from the status `nocturneVersion`. */
   version?: string | null;
   /** Commit the running server was built from. */
   head?: string | null;

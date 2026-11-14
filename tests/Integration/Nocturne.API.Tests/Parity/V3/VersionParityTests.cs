@@ -18,7 +18,6 @@ public class VersionParityTests : ParityTestBase
     {
         // Version endpoint has fields that will differ between implementations
         return ComparisonOptions.Default.WithIgnoredFields(
-            "version",        // Nocturne has different version string
             "apiVersion",     // May differ
             "srvDate",        // Current server timestamp
             "storage",        // Storage backend differs (PostgreSQL vs MongoDB)

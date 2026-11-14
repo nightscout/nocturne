@@ -18,7 +18,6 @@ public class StatusParityTests : ParityTestBase
     {
         // Status responses include server-specific values that will differ
         return ComparisonOptions.Default.WithIgnoredFields(
-            "version",           // Different version strings
             "apiVersion",        // May differ between implementations
             "serverTime",        // Current server time
             "serverTimeEpoch",   // Same as above in epoch

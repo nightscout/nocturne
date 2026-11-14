@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Services.Platform;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
@@ -79,7 +81,8 @@ public class StatusController : ControllerBase
                 {
                     Status = "error",
                     Name = "Nocturne",
-                    Version = "unknown",
+                    Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+                    NocturneVersion = AppVersion.Current,
                     ServerTime = DateTime.UtcNow,
                     TenantSlug = _tenantAccessor.Context?.Slug,
                 }

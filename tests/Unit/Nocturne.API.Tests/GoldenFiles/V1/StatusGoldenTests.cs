@@ -16,7 +16,7 @@ public class StatusGoldenTests : GoldenFileTestBase
         var captured = await CaptureResponse(response);
 
         await Verify(captured)
-            .ScrubMembers("serverTime", "serverTimeEpoch", "version");
+            .ScrubMembers("serverTime", "serverTimeEpoch", "nocturneVersion");
     }
 
     #endregion
@@ -30,7 +30,7 @@ public class StatusGoldenTests : GoldenFileTestBase
         var captured = await CaptureResponse(response);
 
         await Verify(captured)
-            .ScrubMembers("serverTime", "serverTimeEpoch", "version");
+            .ScrubMembers("serverTime", "serverTimeEpoch", "nocturneVersion");
     }
 
     #endregion
