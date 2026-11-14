@@ -1108,7 +1108,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     )
     {
         var opName = operationName ?? "operation";
-        HttpRequestException? lastException = null;
+        Exception? lastException = null;
 
         return await ConnectorRetryLoop.RunAsync<T>(
             async (attempt, attempts) =>
@@ -1188,6 +1188,18 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                     );
                     TrackFailedRequest("JSON parsing error");
                     return RetryStep<T>.Complete(default);
+                }
+                catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, cancellationToken))
+                {
+                    lastException = ex;
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] {Operation} timed out (attempt {Attempt})",
+                        ConnectorSource,
+                        opName,
+                        attempt + 1
+                    );
+
+                    return RetryStep<T>.RetryAfterDelay;
                 }
                 catch (OperationCanceledException)
                 {

@@ -167,6 +167,33 @@ public class TwiistConnectorServiceTests
         result.Errors.Should().ContainSingle().Which.Should().Contain("no data");
     }
 
+    [Fact]
+    public async Task SyncDataAsync_PackageRequestTimesOut_IsAFailedRunNotACancelledOne()
+    {
+        var fixture = new ServiceFixture(
+            responses: new(), patientId: PwdId, timesOutOn: "/package");
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Contain("timed out");
+        fixture.RequestedPaths.Should().HaveCountGreaterThan(1, "a timeout is retried before the run gives up");
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_CancelledRun_PropagatesTheCancellationRatherThanFailing()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fixture = new ServiceFixture(
+            responses: new(), patientId: PwdId, timesOutOn: "/package", cancellation: cancellation);
+
+        var run = () => fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, cancellation.Token);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     private static HttpResponseMessage Json<T>(T content) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(JsonSerializer.Serialize(content), Encoding.UTF8, "application/json")
@@ -194,13 +221,20 @@ public class TwiistConnectorServiceTests
         }
     }
 
-    private sealed class CapturingHandler(Dictionary<string, HttpResponseMessage> responses, List<string> requested)
+    private sealed class CapturingHandler(
+        Dictionary<string, HttpResponseMessage> responses, List<string> requested, string? timesOutOn = null,
+        CancellationTokenSource? cancelsOnTimeout = null)
         : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.PathAndQuery ?? string.Empty;
             requested.Add(path);
+            if (timesOutOn is not null && path.Contains(timesOutOn, StringComparison.OrdinalIgnoreCase))
+            {
+                cancelsOnTimeout?.Cancel();
+                throw new TaskCanceledException("The request timed out.");
+            }
             foreach (var (key, response) in responses)
                 if (path.Contains(key, StringComparison.OrdinalIgnoreCase))
                     return Task.FromResult(response);
@@ -217,7 +251,9 @@ public class TwiistConnectorServiceTests
         public ServiceFixture(
             Dictionary<string, HttpResponseMessage> responses,
             string? token = "valid-token",
-            string patientId = "")
+            string patientId = "",
+            string? timesOutOn = null,
+            CancellationTokenSource? cancellation = null)
         {
             Config = new TwiistConnectorConfiguration
             {
@@ -226,7 +262,7 @@ public class TwiistConnectorServiceTests
                 PatientId = patientId
             };
 
-            var httpClient = new HttpClient(new CapturingHandler(responses, RequestedPaths));
+            var httpClient = new HttpClient(new CapturingHandler(responses, RequestedPaths, timesOutOn, cancellation));
             var publisher = new Mock<IConnectorPublisher>();
             publisher.Setup(p => p.IsAvailable).Returns(true);
 

@@ -600,6 +600,59 @@ public class TandemE2eSyncTests
         fixture.Publisher.Profiles.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task A_source_that_times_out_fails_the_run_rather_than_cancelling_it()
+    {
+        var fixture = new Fixture(timesOutOn: "/api/reports/bff/pumper/");
+
+        var result = await fixture.RunAsync();
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Contain("timed out");
+    }
+
+    [Fact]
+    public async Task A_cancelled_run_propagates_the_cancellation_rather_than_failing()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fixture = new Fixture(timesOutOn: "/api/reports/bff/pumper/", cancellation: cancellation);
+
+        var run = () => fixture.RunAsync();
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task A_cursor_store_that_times_out_still_lets_the_profile_publish()
+    {
+        var fixture = new Fixture(
+            PumperWithSettings(basalRate: 1000),
+            cursorStoreOnGet: _ => throw new TaskCanceledException("The store timed out."));
+
+        var result = await fixture.RunAsync(ProfilesOnly);
+
+        result.Success.Should().BeTrue();
+        fixture.Publisher.Profiles.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_cursor_store_read_cancelled_by_the_run_propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fixture = new Fixture(
+            PumperWithSettings(basalRate: 1000),
+            cancellation: cancellation,
+            cursorStoreOnGet: token =>
+            {
+                cancellation.Cancel();
+                token.ThrowIfCancellationRequested();
+            });
+
+        var run = () => fixture.RunAsync(ProfilesOnly);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     private static readonly SyncRequest ProfilesOnly = new() { DataTypes = [SyncDataType.Profiles] };
 
     /// <summary><see cref="PumperJson"/>'s pump carrying one pump profile at <paramref name="basalRate"/> milliunits/hour.</summary>
@@ -627,7 +680,9 @@ public class TandemE2eSyncTests
     /// </param>
     private sealed class CapturingHandler(
         Dictionary<string, string> responses, List<CapturedRequest> requests,
-        bool servesEveryWindow = false)
+        bool servesEveryWindow = false,
+        string? timesOutOn = null,
+        CancellationTokenSource? cancelsOnTimeout = null)
         : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
@@ -641,6 +696,12 @@ public class TandemE2eSyncTests
                 request.Headers.TryGetValues("Referer", out var referer) ? referer.First() : null));
 
             var path = request.RequestUri?.AbsolutePath ?? string.Empty;
+            if (timesOutOn is not null && path.Contains(timesOutOn, StringComparison.OrdinalIgnoreCase))
+            {
+                cancelsOnTimeout?.Cancel();
+                throw new TaskCanceledException("The request timed out.");
+            }
+
             foreach (var (key, json) in responses)
                 if (path.Contains(key, StringComparison.OrdinalIgnoreCase))
                 {
@@ -726,12 +787,15 @@ public class TandemE2eSyncTests
         }
     }
 
-    private sealed class InMemoryCursorStore : IConnectorSyncCursorStore
+    private sealed class InMemoryCursorStore(Action<CancellationToken>? onGet = null) : IConnectorSyncCursorStore
     {
         private readonly Dictionary<(string, string), ConnectorSyncCursor> _cursors = [];
 
-        public Task<ConnectorSyncCursor?> GetAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_cursors.GetValueOrDefault((connectorName, resource)));
+        public Task<ConnectorSyncCursor?> GetAsync(string connectorName, string resource, CancellationToken cancellationToken = default)
+        {
+            onGet?.Invoke(cancellationToken);
+            return Task.FromResult(_cursors.GetValueOrDefault((connectorName, resource)));
+        }
 
         public Task SetAsync(string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default)
         {
@@ -878,6 +942,7 @@ public class TandemE2eSyncTests
         private readonly TandemConnectorService _service;
         private readonly TandemConnectorConfiguration _config;
         private readonly Dictionary<string, string> _responses;
+        private readonly CancellationTokenSource? _cancellation;
 
         public Fixture(
             string pumperJson = PumperJson,
@@ -885,8 +950,12 @@ public class TandemE2eSyncTests
             DateTime? latestEntry = null,
             DateTime? latestTreatment = null,
             bool servesEveryWindow = false,
-            TimeProvider? clock = null)
+            TimeProvider? clock = null,
+            string? timesOutOn = null,
+            CancellationTokenSource? cancellation = null,
+            Action<CancellationToken>? cursorStoreOnGet = null)
         {
+            _cancellation = cancellation;
             // Default watermarks put the catch-up start just before the pump's available range so
             // the sync window is deterministic (no dependence on "now" via the initial-sync floor).
             latestEntry ??= Utc(2026, 5, 13, 0, 0, 0);
@@ -907,7 +976,7 @@ public class TandemE2eSyncTests
                 ["/api/reports/bff/pumper/"] = pumperJson,
                 ["/api/reports/bff/pump-logs/"] = pumpLogsJson,
             };
-            var handler = new CapturingHandler(_responses, Requests, servesEveryWindow);
+            var handler = new CapturingHandler(_responses, Requests, servesEveryWindow, timesOutOn, cancellation);
 
             _service = new TandemConnectorService(
                 new HttpClient(handler),
@@ -916,13 +985,13 @@ public class TandemE2eSyncTests
                 Mock.Of<IRetryDelayStrategy>(),
                 new FakeTandemAuthTokenProvider(),
                 Publisher,
-                new InMemoryCursorStore(),
+                new InMemoryCursorStore(cursorStoreOnGet),
                 clock);
         }
 
         public void ServePumper(string pumperJson) => _responses["/api/reports/bff/pumper/"] = pumperJson;
 
         public Task<SyncResult> RunAsync(SyncRequest? request = null) =>
-            _service.SyncDataAsync(request ?? new SyncRequest(), _config, CancellationToken.None);
+            _service.SyncDataAsync(request ?? new SyncRequest(), _config, _cancellation?.Token ?? CancellationToken.None);
     }
 }
