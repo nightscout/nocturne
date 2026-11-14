@@ -313,9 +313,8 @@ if [[ -z "$INSTANCE_ID" ]]; then
 
   # OCI caps user-data at 16 KB once base64-encoded, which the files above exceed
   # as text. cloud-init unpacks gzipped user-data itself.
-  gzip -9 -c "$CLOUD_INIT" > "$CLOUD_INIT.gz"
-  ENCODED=$(( ( $(wc -c < "$CLOUD_INIT.gz") + 2 ) / 3 * 4 ))
-  (( ENCODED < 16384 )) || die "the generated cloud-init is $ENCODED bytes encoded, over Oracle's 16 KB user-data limit"
+  USER_DATA=$(gzip -9 -c "$CLOUD_INIT" | base64 | tr -d '\n')
+  (( ${#USER_DATA} < 16384 )) || die "the generated cloud-init is ${#USER_DATA} bytes encoded, over Oracle's 16 KB user-data limit"
 
   mapfile -t ADS < <(oci iam availability-domain list --compartment-id "$COMPARTMENT_ID" --query 'data[].name' --raw-output | jq -r '.[]')
   deadline=$((SECONDS + CAPACITY_RETRY_MINUTES * 60))
@@ -326,7 +325,7 @@ if [[ -z "$INSTANCE_ID" ]]; then
           --shape "VM.Standard.A1.Flex" --shape-config "{\"ocpus\":$OCPUS,\"memoryInGBs\":$MEMORY_GB}" \
           --image-id "$IMAGE_ID" --subnet-id "$SUBNET_ID" --assign-public-ip false \
           --boot-volume-size-in-gbs "$BOOT_VOLUME_GB" \
-          --ssh-authorized-keys-file "$SSH_PUBLIC_KEY_FILE" --user-data-file "$CLOUD_INIT.gz" \
+          --ssh-authorized-keys-file "$SSH_PUBLIC_KEY_FILE" --metadata "{\"user_data\":\"$USER_DATA\"}" \
           --wait-for-state RUNNING --query 'data.id' --raw-output 2>&1); then
         INSTANCE_ID="$out"
         info "instance is running"

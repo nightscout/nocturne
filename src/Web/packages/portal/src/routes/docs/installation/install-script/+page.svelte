@@ -37,7 +37,7 @@
         `${domainName}      A   <the IP address of your server>\n*.${domainName}    A   <the IP address of your server>`,
     );
     // @wc-ignore
-    const repairCommand = "sudo nocturne-up";
+    const repairCommand = "sudo /usr/local/sbin/nocturne-up";
     // @wc-ignore
     const updateCommand = "cd /opt/nocturne && sudo docker compose pull && sudo docker compose up -d";
     // @wc-ignore
@@ -175,6 +175,7 @@
             <li>Downloads the Nocturne release bundle to <code class={CODE}>/opt/nocturne</code></li>
             <li>Makes the keys and the database passwords, and writes them to <code class={CODE}>/opt/nocturne/.env</code>. It does not change a value that exists</li>
             <li>Starts Nocturne when DNS resolves</li>
+            <li>Stops, and changes nothing, if Docker already holds Nocturne data from an installation that it did not make</li>
             <li>Keeps itself on the server as <code class={CODE}>nocturne-up</code>, with a systemd unit that starts Nocturne after a restart</li>
         </ul>
         <CodeBlock code={installScript} class="mt-2" maxHeight="400px" />
@@ -190,7 +191,7 @@
 
     <StepHeading id="step-3" installStep="3">Step 3: Create your first site</StepHeading>
     <p class="text-muted-foreground mb-8">
-        Once the script reports that Nocturne is answering, open <SiteLink /> in a browser.
+        When the script prints <strong>Done</strong>, open <SiteLink /> in a browser.
         You are taken to the setup page to name your first site and create the
         owner account, with a passkey or a sign-in provider. A passkey is your phone's or
         computer's built-in unlock. If you choose one, register a second device as soon as you

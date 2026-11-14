@@ -159,6 +159,7 @@
             own reverse proxy, or to keep the database in a host directory. A server that the
             install script made has its files in
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">/opt/nocturne</code>.
+            Do not run the install script on a server that you installed from this page.
         </p>
     </Callout>
 

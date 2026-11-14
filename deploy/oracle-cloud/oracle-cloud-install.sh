@@ -118,6 +118,10 @@ INSTALL_ENV="$INSTALL_DIR/install.env"
 SELF_PATH=/usr/local/sbin/nocturne-up
 UNIT_PATH=/etc/systemd/system/nocturne.service
 RELEASES=https://github.com/nightscout/nocturne/releases
+# Empty when this script was piped into bash.
+SCRIPT_FILE="${BASH_SOURCE[0]:-}"
+# The oldest Docker Compose that reads the release bundle.
+MIN_COMPOSE=2.23.1
 
 # The secret parameters of the Aspire AppHost that a deployment form shows.
 GENERATED_SECRETS=(INSTANCE_KEY POSTGRES_APP_PASSWORD POSTGRES_MIGRATOR_PASSWORD POSTGRES_PASSWORD POSTGRES_WEB_PASSWORD WATCHTOWER_API_TOKEN)
@@ -267,14 +271,15 @@ install_env() {
   printf 'BASE_DOMAIN=%s\nPUBLIC_IP=%s\nNOCTURNE_VERSION=%s\n' "$BASE_DOMAIN" "$PUBLIC_IP" "$NOCTURNE_VERSION"
 }
 
-# A value the caller set wins over the remembered one.
+# Read as text, never run as shell. With "unset", a value the caller set wins
+# over the remembered one.
 load_install_env() {
   [[ -f "$INSTALL_ENV" ]] || return 0
-  local line key
+  local only_unset="${1:-}" line key
   while IFS= read -r line; do
     key=${line%%=*}
     [[ "$key" =~ ^[A-Z_][A-Z0-9_]*$ ]] || continue
-    [[ -n "${!key:-}" ]] || printf -v "$key" '%s' "${line#*=}"
+    [[ -n "$only_unset" && -n "${!key:-}" ]] || printf -v "$key" '%s' "${line#*=}"
   done < "$INSTALL_ENV"
 }
 
@@ -309,21 +314,26 @@ WantedBy=multi-user.target
 UNIT_EOF
 }
 
-# Renames into place: bash reads a running script by file offset, so a file
-# rewritten underneath a live interpreter resumes it mid-line.
+# Keeps the installer of the release being installed, so the generated secrets
+# and the bundle it converges on belong together; a release from before this
+# script existed has none, and this copy stands in. Renames into place: bash
+# reads a running script by file offset, so a file rewritten underneath a live
+# interpreter resumes it mid-line.
 install_self() {
-  local source="${BASH_SOURCE[0]}"
-  if [[ -f "$source" ]]; then
-    if [[ "$(readlink -f "$source")" != "$SELF_PATH" ]]; then
-      install -m 755 "$source" "$SELF_PATH.new"
-      mv "$SELF_PATH.new" "$SELF_PATH"
-    fi
-  else
-    # Piped into bash, there is no file to copy.
-    curl -fsSL -o "$SELF_PATH.new" "$RELEASES/download/$NOCTURNE_VERSION/install.sh" \
-      || die "could not download install.sh for $NOCTURNE_VERSION to keep on this server"
+  if curl -fsSL -o "$SELF_PATH.new" "$RELEASES/download/$NOCTURNE_VERSION/install.sh" 2>/dev/null \
+     && bash -n "$SELF_PATH.new" 2>/dev/null; then
     chmod 755 "$SELF_PATH.new"
     mv "$SELF_PATH.new" "$SELF_PATH"
+  else
+    rm -f "$SELF_PATH.new"
+    if [[ -n "$SCRIPT_FILE" && -f "$SCRIPT_FILE" ]]; then
+      if [[ "$(readlink -f "$SCRIPT_FILE")" != "$SELF_PATH" ]]; then
+        install -m 755 "$SCRIPT_FILE" "$SELF_PATH.new"
+        mv "$SELF_PATH.new" "$SELF_PATH"
+      fi
+    elif [[ ! -x "$SELF_PATH" ]]; then
+      die "could not download install.sh for $NOCTURNE_VERSION to keep on this server"
+    fi
   fi
   unit_file > "$UNIT_PATH"
   systemctl daemon-reload
@@ -378,8 +388,17 @@ ensure_docker() {
     info "could not install Docker (attempt $try); this server may have no internet access yet. Retrying in 30s"
     sleep 30
   done
-  warn "giving up on installing Docker. Check that this server can reach the internet."
+  warn "giving up on installing Docker. Check that this server can reach the internet. If it can, get.docker.com may not support this system: install Docker yourself and run this again."
   return 1
+}
+
+ensure_compose() {
+  local have
+  have=$(docker compose version --short 2>/dev/null) \
+    || die "Docker is installed without its Compose plugin. Install the docker-compose-plugin package (docker-compose-v2 on Ubuntu's own Docker) and run this again."
+  have=${have#v}
+  [[ "$(printf '%s\n%s\n' "$MIN_COMPOSE" "$have" | sort -V | head -n 1)" == "$MIN_COMPOSE" ]] \
+    || die "Docker Compose $have is too old; Nocturne needs $MIN_COMPOSE or newer. Update Docker and run this again."
 }
 
 ensure_bundle() {
@@ -412,6 +431,12 @@ get_env() { sed -n "s|^$1=||p" .env; }
 
 ensure_env() {
   if [[ ! -f .env ]]; then
+    # Compose names a project after its directory, so an install made by hand in
+    # a directory called nocturne owns the same volumes as this one. Its database
+    # keeps the passwords it started with: new ones would lock Nocturne out of it.
+    if [[ -n "$(docker volume ls -q --filter label=com.docker.compose.project=nocturne 2>/dev/null)" ]]; then
+      die "Docker already holds the data of a Nocturne installation, and $INSTALL_DIR/.env does not exist. New passwords would lock Nocturne out of that database. Copy the .env of that installation to $INSTALL_DIR/.env and run this again."
+    fi
     install -m 600 default.env.example .env
     info "created .env"
   fi
@@ -464,8 +489,7 @@ wait_for_dns() {
 # time, as often as you like.
 converge() {
   [[ -f "$INSTALL_ENV" ]] || die "$INSTALL_ENV does not exist. Run this script without --converge first."
-  # shellcheck disable=SC1090
-  . "$INSTALL_ENV"
+  load_install_env
   cd "$INSTALL_DIR"
 
   # Serialise against the boot-time run of this same script.
@@ -474,6 +498,7 @@ converge() {
 
   ensure_firewall
   ensure_docker
+  ensure_compose
   ensure_bundle
   ensure_env
   wait_for_dns
@@ -511,8 +536,8 @@ run_install() {
   require_server
   mkdir -p "$INSTALL_DIR"
 
-  local requested_version="${NOCTURNE_VERSION:-}" source
-  load_install_env
+  local requested_version="${NOCTURNE_VERSION:-}" requested_ip="${PUBLIC_IP:-}" source
+  load_install_env unset
   source=$(ask_source)
 
   if [[ -z "${BASE_DOMAIN:-}" ]]; then
@@ -525,8 +550,14 @@ run_install() {
   NOCTURNE_VERSION="$requested_version"
   [[ -n "$NOCTURNE_VERSION" ]] || NOCTURNE_VERSION=$(latest_version)
 
-  if [[ -z "${PUBLIC_IP:-}" ]]; then
-    PUBLIC_IP=$(detect_public_ip) || die "could not find this server's public IP address; set PUBLIC_IP"
+  # A home connection changes its address, so the remembered one is only the
+  # fallback for a run that cannot find it again.
+  local detected
+  if [[ -z "$requested_ip" ]]; then
+    if detected=$(detect_public_ip); then
+      PUBLIC_IP="$detected"
+    fi
+    [[ -n "${PUBLIC_IP:-}" ]] || die "could not find this server's public IP address; set PUBLIC_IP"
   fi
 
   log "Nocturne $NOCTURNE_VERSION on $BASE_DOMAIN, at $PUBLIC_IP"
@@ -536,6 +567,9 @@ run_install() {
 
   log "Setup scripts"
   systemctl stop nocturne.service >/dev/null 2>&1 || true
+  # --no-block, because the unit's own run has no DNS deadline: a blocking start
+  # could sit here for ever. On exit, so an interrupted run leaves it waiting too.
+  trap 'systemctl start --no-block nocturne.service >/dev/null 2>&1 || true' EXIT
   save_install_env
   install_self
   info "installed $SELF_PATH and the nocturne systemd unit"
@@ -549,9 +583,6 @@ run_install() {
     info "The server did not finish configuring itself. Nothing is lost: fix what it reported"
     info "and run this script again, which resumes from wherever it stopped."
   fi
-  # --no-block, because the unit's own run has no DNS deadline: a blocking start
-  # could sit here for ever.
-  systemctl start --no-block nocturne.service >/dev/null 2>&1 || true
 
   summary
 }
@@ -594,7 +625,11 @@ summary() {
 }
 
 if [[ -z "${NOCTURNE_INSTALL_LIB:-}" ]]; then
-  case "${1:-}" in
+  # systemd sets INVOCATION_ID. A unit from before --converge existed passes no
+  # argument, and an install run from inside the unit would stop that unit.
+  MODE="${1:-}"
+  [[ -n "$MODE" || -z "${INVOCATION_ID:-}" || ! -f "$INSTALL_ENV" ]] || MODE=--converge
+  case "$MODE" in
     --converge) converge ;;
     "") run_install ;;
     *) die "unknown option $1" ;;
@@ -933,9 +968,8 @@ if [[ -z "$INSTANCE_ID" ]]; then
 
   # OCI caps user-data at 16 KB once base64-encoded, which the files above exceed
   # as text. cloud-init unpacks gzipped user-data itself.
-  gzip -9 -c "$CLOUD_INIT" > "$CLOUD_INIT.gz"
-  ENCODED=$(( ( $(wc -c < "$CLOUD_INIT.gz") + 2 ) / 3 * 4 ))
-  (( ENCODED < 16384 )) || die "the generated cloud-init is $ENCODED bytes encoded, over Oracle's 16 KB user-data limit"
+  USER_DATA=$(gzip -9 -c "$CLOUD_INIT" | base64 | tr -d '\n')
+  (( ${#USER_DATA} < 16384 )) || die "the generated cloud-init is ${#USER_DATA} bytes encoded, over Oracle's 16 KB user-data limit"
 
   mapfile -t ADS < <(oci iam availability-domain list --compartment-id "$COMPARTMENT_ID" --query 'data[].name' --raw-output | jq -r '.[]')
   deadline=$((SECONDS + CAPACITY_RETRY_MINUTES * 60))
@@ -946,7 +980,7 @@ if [[ -z "$INSTANCE_ID" ]]; then
           --shape "VM.Standard.A1.Flex" --shape-config "{\"ocpus\":$OCPUS,\"memoryInGBs\":$MEMORY_GB}" \
           --image-id "$IMAGE_ID" --subnet-id "$SUBNET_ID" --assign-public-ip false \
           --boot-volume-size-in-gbs "$BOOT_VOLUME_GB" \
-          --ssh-authorized-keys-file "$SSH_PUBLIC_KEY_FILE" --user-data-file "$CLOUD_INIT.gz" \
+          --ssh-authorized-keys-file "$SSH_PUBLIC_KEY_FILE" --metadata "{\"user_data\":\"$USER_DATA\"}" \
           --wait-for-state RUNNING --query 'data.id' --raw-output 2>&1); then
         INSTANCE_ID="$out"
         info "instance is running"
