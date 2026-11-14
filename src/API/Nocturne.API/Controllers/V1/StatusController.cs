@@ -6,6 +6,7 @@ using Microsoft.Net.Http.Headers;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
+using IAuthorizationService = Nocturne.Core.Contracts.Identity.IAuthorizationService;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -37,6 +38,7 @@ public class StatusController : ControllerBase
     ];
 
     private readonly IStatusService _statusService;
+    private readonly IAuthorizationService _authorizationService;
     private readonly ILogger<StatusController> _logger;
 
     /// <summary>
@@ -54,10 +56,15 @@ public class StatusController : ControllerBase
     /// Initializes a new instance of <see cref="StatusController"/>.
     /// </summary>
     /// <param name="statusService">Service providing system status information.</param>
+    /// <param name="authorizationService">The access-token exchange that fills <see cref="StatusResponse.Authorized"/>.</param>
     /// <param name="logger">Logger instance.</param>
-    public StatusController(IStatusService statusService, ILogger<StatusController> logger)
+    public StatusController(
+        IStatusService statusService,
+        IAuthorizationService authorizationService,
+        ILogger<StatusController> logger)
     {
         _statusService = statusService;
+        _authorizationService = authorizationService;
         _logger = logger;
     }
 
@@ -65,6 +72,8 @@ public class StatusController : ControllerBase
     /// Get the current system status in the first format the <c>Accept</c> header allows, in
     /// Nightscout's order: HTML, PNG, SVG, JavaScript, plain text, then JSON. A wildcard-only
     /// header therefore gets HTML, and JSON needs <c>application/json</c> (or <c>.json</c>).
+    /// A <c>?token=</c> that the access-token exchange accepts puts that exchange's result in
+    /// <c>authorized</c>, as Nightscout does; any other token leaves it null.
     /// </summary>
     /// <returns>The status as HTML, plain text, JavaScript or JSON, or a redirect to a badge.</returns>
     [HttpGet]
@@ -94,7 +103,7 @@ public class StatusController : ControllerBase
         try
         {
             var status = await _statusService.GetSystemStatusAsync();
-            return RenderStatus(format, status);
+            return RenderStatus(format, await AuthorizeAsync(status));
         }
         catch (Exception ex)
         {
@@ -116,6 +125,22 @@ public class StatusController : ControllerBase
                 }
             );
         }
+    }
+
+    /// <remarks>
+    /// The body then differs per token, so it is marked <c>no-store</c> for every cache on the way.
+    /// </remarks>
+    private async Task<StatusResponse> AuthorizeAsync(StatusResponse status)
+    {
+        var token = Request.Query["token"].FirstOrDefault();
+        if (string.IsNullOrEmpty(token))
+        {
+            return status;
+        }
+
+        Response.Headers.CacheControl = "no-store";
+        var authorized = await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
+        return authorized is null ? status : status.WithAuthorized(authorized);
     }
 
     private IActionResult RenderStatus(StatusFormat format, StatusResponse status)

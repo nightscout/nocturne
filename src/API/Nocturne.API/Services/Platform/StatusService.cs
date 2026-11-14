@@ -223,7 +223,6 @@ public class StatusService : IStatusService
             Build = GetBuildDate(),
             Settings = settings,
             ExtendedSettings = GetExtendedSettings(),
-            Authorized = null, // Nightscout returns null for unauthenticated requests
             RuntimeState = _demoModeService.IsEnabled ? "demo" : "loaded",
             IsDemo = isDemo,
             NextResetAt = nextResetAt,

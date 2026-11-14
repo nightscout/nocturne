@@ -165,6 +165,22 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             It.IsAny<Guid?>()), Times.Once);
     }
 
+    [Fact]
+    public async Task GenerateJwtFromAccessTokenAsync_NocToken_ListsTheGrantsShiroPermissionsAsOneGroup()
+    {
+        var token = "noc_dashboardtoken";
+        SeedGrant(token, scopes: ["glucose.read", "treatments.readwrite"]);
+        SetupActiveSubject();
+        SetupMintedJwt();
+
+        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
+
+        var group = Assert.Single(result!.PermissionGroups);
+        Assert.Equal(
+            ["api:entries:read", "api:treatments:create", "api:treatments:delete", "api:treatments:read", "api:treatments:update"],
+            group);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
