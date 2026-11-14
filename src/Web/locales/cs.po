@@ -309,6 +309,7 @@ msgstr "Nepodařilo se načíst historická data"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/components/treatments/edit-dialog/NoteFormFields.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 msgid "Announcement"
 msgstr "Oznámení"
 
@@ -2181,6 +2182,7 @@ msgid "Recent"
 msgstr "Nedávné"
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 msgid "BG checks"
 msgstr "Měření glykémie"
 
@@ -3344,6 +3346,7 @@ msgstr "Posledních 24 hodin"
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
@@ -3360,6 +3363,8 @@ msgstr "Bolus"
 #: src/lib/components/reports/loop-analysis/EventList.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -3372,6 +3377,7 @@ msgstr "Sacharidy"
 
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Note"
 msgstr "Poznámka"
@@ -3632,6 +3638,8 @@ msgstr "Propojte potraviny s tímto příjmem sacharidů."
 #. 0: food.carbs
 #. 0: food.carbs
 #. 0: food.carbs
+#. 0: formatCarbDisplay(entry.data.carbs)
+#. 0: formatCarbDisplay(entry.data.carbs)
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/entries/CarbIntakeSection.svelte
@@ -3642,6 +3650,8 @@ msgstr "Propojte potraviny s tímto příjmem sacharidů."
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
+#: src/lib/utils/entry-summary.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 msgid "{0}g carbs"
 msgstr "{0} g sacharidů"
 
@@ -3702,6 +3712,7 @@ msgstr "Nespecifikováno {0} g"
 #~ msgstr "Obnovení chodu pumpy"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Priming"
 msgstr "Plnění (Priming)"
 
@@ -3712,6 +3723,7 @@ msgstr "Plnění (Priming)"
 #~ msgstr "Plnění jehly"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Rewind"
 msgstr "Zajetí pístu"
 
@@ -3746,6 +3758,7 @@ msgstr "Zajetí pístu"
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/edit-dialog/BasalInjectionFormFields.svelte
 #: src/lib/components/treatments/edit-dialog/DeviceEventFormFields.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Notes"
 msgstr "Poznámky"
@@ -4389,6 +4402,7 @@ msgstr "Současným filtrům neodpovídají žádná jídla."
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Insulin"
@@ -5338,7 +5352,11 @@ msgid "Average"
 msgstr "Průměr"
 
 #. 0: Math.round(currentGlucose)
+#. 0: entry.data.mgdl
+#. 0: entry.data.mgdl
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
+#: src/lib/utils/entry-summary.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 msgid "{0} mg/dL"
 msgstr "{0} mg/dL"
 
@@ -7353,7 +7371,7 @@ msgstr "GI"
 #~ msgid "No GI found."
 #~ msgstr "GI nebyl nalezen."
 
-#. 0: activeCategory.name.toLowerCase()
+#. 0: entryCategoryName(activeRecord.kind).toLowerCase()
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Edit the details of this {0} record."
 msgstr "Upravte podrobnosti tohoto záznamu typu {0}."
@@ -8272,6 +8290,7 @@ msgstr "Odebírání..."
 #~ msgstr ""
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
+#: src/lib/utils/insight-messages.svelte.ts
 msgid "Variability"
 msgstr "Variabilita"
 
@@ -14598,8 +14617,10 @@ msgstr "Konektory"
 msgid "Settings - Nocturne"
 msgstr "Nastavení – Nocturne"
 
-#~ msgid "{0}u insulin"
-#~ msgstr ""
+#. 0: formatInsulinDisplay(entry.data.insulin)
+#: src/lib/utils/entry-summary.svelte.ts
+msgid "{0}u insulin"
+msgstr ""
 
 #: src/lib/components/alerts/channelText.svelte.ts
 msgid "Email"
@@ -15716,10 +15737,14 @@ msgstr "Znovu synchronizovat data ze všech aktivních konektorů za nastavené 
 #~ msgid "{0} synced successfully."
 #~ msgstr ""
 
-#~ msgid "{0}u basal"
-#~ msgstr ""
+#. 0: formatInsulinDisplay(entry.data.units)
+#: src/lib/utils/entry-summary.svelte.ts
+msgid "{0}u basal"
+msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Long-acting injection"
 msgstr "Injekce dlouhodobého inzulinu"
@@ -16453,7 +16478,7 @@ msgstr "Počet porcí: {0}"
 #~ msgid "Edit Record"
 #~ msgstr "Upravit záznam"
 
-#. 0: activeCategory.name.toLowerCase()
+#. 0: entryCategoryName(activeRecord.kind).toLowerCase()
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Log a new {0} record."
 msgstr "Zaznamenat novou položku typu {0}."
@@ -18066,6 +18091,7 @@ msgstr "Sacharidy 52 g · ovesná kaše"
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor change"
 msgstr ""
 
@@ -19492,6 +19518,7 @@ msgstr "{0} · posledních 14 dní"
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/utils/insight-messages.svelte.ts
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
@@ -19589,6 +19616,7 @@ msgstr "84 % v rozmezí přes noc · bez nízkých hodnot"
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Site change"
 msgstr "Výměna infuzního setu"
 
@@ -22446,6 +22474,7 @@ msgstr "Konsenzuální cíl: alespoň 70 % času v cílovém rozmezí."
 msgid "Coefficient of variation"
 msgstr "Variační koeficient"
 
+#: src/lib/utils/insight-messages.svelte.ts
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 msgid "Time below range"
@@ -28057,6 +28086,7 @@ msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor start"
 msgstr ""
 
@@ -33317,30 +33347,36 @@ msgid "<0/> Carb intake"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor stop"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Insulin change"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump battery change"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod change"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Reservoir change"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Cannula change"
 msgstr ""
 
@@ -33349,42 +33385,52 @@ msgid "Transmitter/sensor insert"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod activated"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod deactivated"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump suspend"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump resume"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Tube priming"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Needle priming"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Date changed"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Time changed"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Bolus max changed"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Basal max changed"
 msgstr ""
 
@@ -33392,6 +33438,7 @@ msgstr ""
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/VersionRibbon.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Profile switch"
 msgstr ""
 
@@ -34345,11 +34392,13 @@ msgid "Carb intake"
 msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "BG check"
 msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Device event"
 msgstr ""
@@ -39369,4 +39418,116 @@ msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
 msgid "Edit an entry"
+msgstr ""
+
+#: src/lib/constants/device-event-types.svelte.ts
+msgid "Transmitter / Sensor Insert"
+msgstr ""
+
+#: src/lib/constants/entry-category-labels.svelte.ts
+msgid "Device events"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range at or above target"
+msgstr ""
+
+#. 0: actual; 1: target
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range was {0}% (consensus target: at least {1}%)."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "No time very low"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "No readings in this period were very low."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Variability within target"
+msgstr ""
+
+#. 0: figure("cv")
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was {0}%, within its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "All consensus targets met"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Every figure in this period was within its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range below target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range was below its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Variability above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low"
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high"
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was {0}% (consensus target: at most {1}%)."
 msgstr ""

@@ -311,6 +311,7 @@ msgstr "No se pudieron cargar los datos históricos"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/components/treatments/edit-dialog/NoteFormFields.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 msgid "Announcement"
 msgstr "Aviso"
 
@@ -2217,6 +2218,7 @@ msgid "Recent"
 msgstr "Recientes"
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 msgid "BG checks"
 msgstr "Mediciones de glucosa"
 
@@ -3400,6 +3402,7 @@ msgstr "Últimas 24 horas"
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
@@ -3416,6 +3419,8 @@ msgstr "Bolo"
 #: src/lib/components/reports/loop-analysis/EventList.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -3428,6 +3433,7 @@ msgstr "Carbohidratos"
 
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Note"
 msgstr "Nota"
@@ -3692,6 +3698,8 @@ msgstr "Vincula alimentos a esta ingesta de carbohidratos."
 #. 0: food.carbs
 #. 0: food.carbs
 #. 0: food.carbs
+#. 0: formatCarbDisplay(entry.data.carbs)
+#. 0: formatCarbDisplay(entry.data.carbs)
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/entries/CarbIntakeSection.svelte
@@ -3702,6 +3710,8 @@ msgstr "Vincula alimentos a esta ingesta de carbohidratos."
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
+#: src/lib/utils/entry-summary.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #, python-brace-format
 msgid "{0}g carbs"
 msgstr "{0} g de carbohidratos"
@@ -3765,6 +3775,7 @@ msgstr "{0} g sin especificar"
 #~ msgstr "Reanudación de la bomba"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Priming"
 msgstr "Cebado"
 
@@ -3775,6 +3786,7 @@ msgstr "Cebado"
 #~ msgstr "Cebado de la aguja"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Rewind"
 msgstr "Rebobinado"
 
@@ -3809,6 +3821,7 @@ msgstr "Rebobinado"
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/edit-dialog/BasalInjectionFormFields.svelte
 #: src/lib/components/treatments/edit-dialog/DeviceEventFormFields.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Notes"
 msgstr "Notas"
@@ -4458,6 +4471,7 @@ msgstr "Ninguna comida coincide con los filtros actuales."
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Insulin"
@@ -5434,7 +5448,11 @@ msgid "Average"
 msgstr "Media"
 
 #. 0: Math.round(currentGlucose)
+#. 0: entry.data.mgdl
+#. 0: entry.data.mgdl
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
+#: src/lib/utils/entry-summary.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #, python-brace-format
 msgid "{0} mg/dL"
 msgstr "{0} mg/dL"
@@ -7500,7 +7518,7 @@ msgstr "IG"
 #~ msgid "No GI found."
 #~ msgstr "No se encontró IG."
 
-#. 0: activeCategory.name.toLowerCase()
+#. 0: entryCategoryName(activeRecord.kind).toLowerCase()
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #, python-brace-format
 msgid "Edit the details of this {0} record."
@@ -8445,6 +8463,7 @@ msgstr "Eliminando..."
 #~ msgstr "A1C estimada"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
+#: src/lib/utils/insight-messages.svelte.ts
 msgid "Variability"
 msgstr "Variabilidad"
 
@@ -14878,8 +14897,10 @@ msgstr "Conectores"
 msgid "Settings - Nocturne"
 msgstr "Ajustes - Nocturne"
 
-#~ msgid "{0}u insulin"
-#~ msgstr ""
+#. 0: formatInsulinDisplay(entry.data.insulin)
+#: src/lib/utils/entry-summary.svelte.ts
+msgid "{0}u insulin"
+msgstr ""
 
 #: src/lib/components/alerts/channelText.svelte.ts
 msgid "Email"
@@ -16012,10 +16033,14 @@ msgstr "Volver a sincronizar los datos de todos los conectores habilitados para 
 #~ msgid "{0} synced successfully."
 #~ msgstr ""
 
-#~ msgid "{0}u basal"
-#~ msgstr ""
+#. 0: formatInsulinDisplay(entry.data.units)
+#: src/lib/utils/entry-summary.svelte.ts
+msgid "{0}u basal"
+msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Long-acting injection"
 msgstr "Inyección de insulina de acción prolongada"
@@ -16772,7 +16797,7 @@ msgstr "{0} porción{1}"
 #~ msgid "Edit Record"
 #~ msgstr "Editar registro"
 
-#. 0: activeCategory.name.toLowerCase()
+#. 0: entryCategoryName(activeRecord.kind).toLowerCase()
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #, python-brace-format
 msgid "Log a new {0} record."
@@ -18419,6 +18444,7 @@ msgstr "Carbohidratos 52 g · avena"
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor change"
 msgstr "Cambio de sensor"
 
@@ -19858,6 +19884,7 @@ msgstr "{0} · últimos 14 días"
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/utils/insight-messages.svelte.ts
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
@@ -19961,6 +19988,7 @@ msgstr "84% en rango durante la noche · sin bajadas"
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Site change"
 msgstr "Cambio de sitio"
 
@@ -22898,6 +22926,7 @@ msgstr "Objetivo de consenso: al menos un 70% de tiempo en rango."
 msgid "Coefficient of variation"
 msgstr "Coeficiente de variación"
 
+#: src/lib/utils/insight-messages.svelte.ts
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 msgid "Time below range"
@@ -28717,6 +28746,7 @@ msgstr "Bolo corrector"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor start"
 msgstr "Inicio del sensor"
 
@@ -34118,30 +34148,36 @@ msgid "<0/> Carb intake"
 msgstr "<0/> Ingesta de hidratos de carbono"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor stop"
 msgstr "Detención del sensor"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Insulin change"
 msgstr "Cambio de insulina"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump battery change"
 msgstr "Cambio de batería de la bomba"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod change"
 msgstr "Cambio de pod"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Reservoir change"
 msgstr "Cambio de reservorio"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Cannula change"
 msgstr "Cambio de cánula"
 
@@ -34150,42 +34186,52 @@ msgid "Transmitter/sensor insert"
 msgstr "Inserción del transmisor/sensor"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod activated"
 msgstr "Pod activado"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod deactivated"
 msgstr "Pod desactivado"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump suspend"
 msgstr "Suspensión de la bomba"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump resume"
 msgstr "Reanudación de la bomba"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Tube priming"
 msgstr "Cebado del tubo"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Needle priming"
 msgstr "Cebado de la aguja"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Date changed"
 msgstr "Fecha modificada"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Time changed"
 msgstr "Hora modificada"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Bolus max changed"
 msgstr "Bolo máximo modificado"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Basal max changed"
 msgstr "Basal máxima modificada"
 
@@ -34193,6 +34239,7 @@ msgstr "Basal máxima modificada"
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/VersionRibbon.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Profile switch"
 msgstr "Cambio de perfil"
 
@@ -35150,11 +35197,13 @@ msgid "Carb intake"
 msgstr "Ingesta de hidratos de carbono"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "BG check"
 msgstr "Comprobación de glucemia"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Device event"
 msgstr "Evento del dispositivo"
@@ -40275,4 +40324,116 @@ msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
 msgid "Edit an entry"
+msgstr ""
+
+#: src/lib/constants/device-event-types.svelte.ts
+msgid "Transmitter / Sensor Insert"
+msgstr ""
+
+#: src/lib/constants/entry-category-labels.svelte.ts
+msgid "Device events"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range at or above target"
+msgstr ""
+
+#. 0: actual; 1: target
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range was {0}% (consensus target: at least {1}%)."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "No time very low"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "No readings in this period were very low."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Variability within target"
+msgstr ""
+
+#. 0: figure("cv")
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was {0}%, within its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "All consensus targets met"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Every figure in this period was within its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range below target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range was below its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Variability above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low"
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high"
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was {0}% (consensus target: at most {1}%)."
 msgstr ""
