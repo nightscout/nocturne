@@ -123,7 +123,9 @@ internal static class MigrationJobHarness
         string nightscoutUrl = "https://example-nightscout.invalid",
         TenantContext? owner = null,
         Guid? tenantId = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        DateTime? startDate = null,
+        DateTime? endDate = null)
     {
         var tenant = owner ?? NewTenant(tenantId);
 
@@ -135,6 +137,8 @@ internal static class MigrationJobHarness
                 Mode = MigrationMode.Api,
                 NightscoutUrl = nightscoutUrl,
                 Collections = [.. collections],
+                StartDate = startDate,
+                EndDate = endDate,
             },
             new MigrationJobInfo
             {

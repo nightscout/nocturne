@@ -510,6 +510,8 @@ internal class MigrationJob
     private readonly Lock _statusLock = new();
     private MigrationJobState _state = MigrationJobState.Pending;
     private string? _currentOperation;
+    private MigrationPhase _phase = MigrationPhase.Connecting;
+    private string? _currentCollection;
     private string? _errorMessage;
     private double _progressPercentage;
     private DateTime _startedAt;
@@ -577,12 +579,36 @@ internal class MigrationJob
                 State = _state,
                 ProgressPercentage = _progressPercentage,
                 CurrentOperation = _currentOperation,
+                Phase = _state.IsLive() ? _phase : null,
+                CurrentCollection = _state.IsLive() ? _currentCollection : null,
                 ErrorMessage = _errorMessage,
                 StartedAt = _startedAt,
                 CompletedAt = _completedAt,
+                EstimatedTimeRemaining = EstimateTimeRemaining(),
+                HasFailures = HasFailures(_state, _collectionProgress.Values),
                 CollectionProgress = _collectionProgress.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
             };
         }
+    }
+
+    private static readonly TimeSpan MinimumElapsedForEstimate = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The run's elapsed time scaled by the share of documents still to come, or
+    /// <see langword="null"/> while that share is not known: before the pull starts, in its first
+    /// seconds, and for a source that gave no counts, where progress steps by collection.
+    /// </summary>
+    private TimeSpan? EstimateTimeRemaining()
+    {
+        if (_state != MigrationJobState.Running || !_documentWeighted || _pullStartedAt is not { } started)
+            return null;
+
+        var elapsed = UtcNow - started;
+        var progress = _progressPercentage;
+        if (elapsed < MinimumElapsedForEstimate || progress < 1)
+            return null;
+
+        return TimeSpan.FromSeconds(Math.Ceiling(elapsed.TotalSeconds * (100 - progress) / progress));
     }
 
     public void Cancel()
@@ -818,6 +844,7 @@ internal class MigrationJob
         var state = Enum.TryParse<MigrationJobState>(run.State, out var s)
             ? s
             : MigrationJobState.Interrupted;
+        var outcomes = OutcomesFromRecord(run, state);
 
         return new MigrationJobStatus
         {
@@ -827,9 +854,17 @@ internal class MigrationJob
             ErrorMessage = run.ErrorMessage,
             StartedAt = run.StartedAt,
             CompletedAt = run.CompletedAt,
-            CollectionProgress = OutcomesFromRecord(run, state),
+            HasFailures = HasFailures(state, outcomes.Values),
+            CollectionProgress = outcomes,
         };
     }
+
+    /// <summary>
+    /// Whether a run's message reports a fault. A Failed run's does whether or not a collection
+    /// recorded one, since it can end before reaching any collection at all.
+    /// </summary>
+    private static bool HasFailures(MigrationJobState state, IEnumerable<CollectionProgress> collections) =>
+        state is MigrationJobState.Failed || collections.Any(c => c.FailureReason is not null);
 
     /// <summary>
     /// Per-collection outcomes for a persisted run. Runs recorded before
@@ -889,15 +924,42 @@ internal class MigrationJob
             StartedAt = run.StartedAt,
             CompletedAt = run.CompletedAt,
             ErrorMessage = run.ErrorMessage,
-            // A Failed run's message is a fault whether or not a collection recorded one — it can
-            // end before reaching any collection at all.
-            HasFailures = state is MigrationJobState.Failed
-                || OutcomesFromRecord(run, state).Values.Any(c => c.FailureReason is not null),
+            HasFailures = HasFailures(state, OutcomesFromRecord(run, state).Values),
         };
     }
 
-    private long _totalDocumentsAllCollections;
-    private long _migratedDocumentsAllCollections; // computed by UpdateOverallProgress
+    /// <summary>
+    /// Whether overall progress is measured in documents. False until a source count or a MongoDB
+    /// count gives the run a total; progress then steps by finished collection.
+    /// </summary>
+    private bool _documentWeighted;
+
+    /// <summary>When the first collection started, after the counts, for <see cref="EstimateTimeRemaining"/>.</summary>
+    private DateTime? _pullStartedAt;
+
+    /// <summary>
+    /// The time range this run imports: the requested dates, with the end no later than the moment
+    /// the run started. One range for the whole run, so the counts and every pull agree on it.
+    /// </summary>
+    /// <remarks>
+    /// The end is never open. Nightscout applies an implicit recency window (roughly the last four
+    /// days) to any query carrying no date filter, which truncates an unbounded first page; the
+    /// short page then ends pagination, importing days of history instead of years, and the same
+    /// window makes an undated count a count of those days. Every request is explicitly dated.
+    /// </remarks>
+    private ImportWindow _window;
+
+    private readonly record struct ImportWindow(DateTime? From, DateTime To)
+    {
+        public bool Holds(DateTime instant) => (From is null || instant >= From.Value) && instant <= To;
+    }
+
+    private ImportWindow RequestedWindow()
+    {
+        var now = UtcNow;
+        var end = _request.EndDate?.AsUtc();
+        return new ImportWindow(_request.StartDate?.AsUtc(), end is { } requested && requested < now ? requested : now);
+    }
 
     /// <summary>
     /// The source's alarm settings as <see cref="NightscoutAlarmSettings.ToJson"/>, for
@@ -960,23 +1022,19 @@ internal class MigrationJob
             .OrderBy(c => ImportRank(c.name))
             .ToList();
 
-        // Fetch counts upfront so we can show real X / Y progress
         _currentOperation = "Counting records";
-        _totalDocumentsAllCollections = 0;
+        _phase = MigrationPhase.Counting;
+        _window = RequestedWindow();
 
-        foreach (var (name, _) in collectionsToMigrate)
+        var counts = await Task.WhenAll(
+            collectionsToMigrate.Select(c => FetchCollectionCountAsync(httpClient, c.name, ct)));
+        for (var i = 0; i < collectionsToMigrate.Count; i++)
         {
-            var count = await FetchCollectionCountAsync(httpClient, name, ct);
-            _collectionProgress[name] = new CollectionProgress
-            {
-                CollectionName = name,
-                TotalDocuments = count,
-                DocumentsMigrated = 0,
-                DocumentsFailed = 0,
-                IsComplete = false,
-            };
-            _totalDocumentsAllCollections += count;
+            var name = collectionsToMigrate[i].name;
+            _collectionProgress[name] = new CollectionProgress { CollectionName = name, TotalDocuments = counts[i] };
         }
+        _documentWeighted = counts.Any(c => c > 0);
+        _pullStartedAt = UtcNow;
 
         for (var i = 0; i < collectionsToMigrate.Count; i++)
         {
@@ -984,6 +1042,7 @@ internal class MigrationJob
             try
             {
                 await migrate(httpClient, ct);
+                UpdateOverallProgress();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -995,6 +1054,7 @@ internal class MigrationJob
                     ex);
 
                 RecordCollectionFailure(name, ReasonFor(failure));
+                UpdateOverallProgress();
 
                 if (IsFatal(failure.Cause))
                     throw new MigrationSourceException(failure.Message, failure.Cause);
@@ -1205,39 +1265,46 @@ internal class MigrationJob
         "Nightscout refused to hand this over. The API secret was accepted for other data, so it "
         + "may not be allowed to read this.";
 
+    /// <summary>How long a count may take before the run goes on without it.</summary>
+    private static readonly TimeSpan CountBudget = TimeSpan.FromSeconds(30);
+
     /// <summary>
-    /// Fetches the document count for a collection via the Nightscout count API.
-    /// Collections that don't support the count endpoint return 0.
+    /// How many documents of a collection the run's window holds, by the source's count route, or
+    /// 0 when the source cannot say.
     /// </summary>
     /// <remarks>
-    /// A count is optional — it only sharpens the progress bar — so an error status is tolerated:
-    /// Nightscout versions that lack the route answer 404, and the collection pull that follows
-    /// reports the same status properly if it is real. A rejected secret or an unreachable host is
-    /// not tolerated: those defeat every collection, so the run fails here with the right words.
+    /// The count carries the pull's own date filter; <see cref="_window"/> says what an undated one
+    /// counts. A count is optional, so an error status or a count that outlasts
+    /// <see cref="CountBudget"/> is tolerated: Nightscout versions that lack the route answer 404,
+    /// and the pull that follows reports a real fault properly. A rejected secret or an
+    /// unreachable host is not tolerated: those defeat every collection, so the run fails here
+    /// with the right words.
     /// </remarks>
     private async Task<long> FetchCollectionCountAsync(
         HttpClient httpClient, string collectionName, CancellationToken ct)
     {
-        // Only entries, treatments, devicestatus support the count endpoint
-        var countableCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "entries", "treatments", "devicestatus" };
-
-        if (!countableCollections.Contains(collectionName))
+        if (!s_countableCollections.TryGetValue(collectionName, out var cursor))
             return 0;
+
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(CountBudget);
 
         try
         {
+            var filter = WindowFilter(cursor, _window.To + cursor.Envelope).TrimStart('&');
             var content = await ReadFromSourceAsync(
-                httpClient, $"api/v1/count/{collectionName}/where", collectionName, ct);
+                httpClient, $"api/v1/count/{collectionName}/where?{filter}", collectionName, budget.Token);
 
-            // Nightscout returns [{"_id": null, "count": N}]
+            // Nightscout returns [{"_id": null, "count": N}], and [] when nothing matches.
             var results = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(content);
-            if (results is { Length: > 0 })
-            {
-                return results[0].TryGetProperty("count", out var countProp)
-                    ? countProp.GetInt64()
-                    : 0;
-            }
+            return results is { Length: > 0 } && results[0].TryGetProperty("count", out var count)
+                ? count.GetInt64()
+                : 0;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "Counting {Collection} took longer than {Budget}; continuing without a total", collectionName, CountBudget);
         }
         catch (Exception ex) when (ex is not OperationCanceledException
             && (ex as MigrationSourceException)?.Cause is null or MigrationFailureCause.Status)
@@ -1248,21 +1315,43 @@ internal class MigrationJob
         return 0;
     }
 
+    private void BeginCollection(string collectionName, string label)
+    {
+        _currentOperation = $"Migrating {label}";
+        _currentCollection = collectionName;
+        _phase = MigrationPhase.Importing;
+    }
+
+    /// <summary>The highest progress a run reports before it ends.</summary>
+    private const double HighestRunningProgress = 99;
+
+    private static long DocumentsSeen(CollectionProgress c) => c.DocumentsProcessed + c.DocumentsFailed;
+
     /// <summary>
-    /// Updates _totalDocumentsAllCollections by summing TotalDocuments across
-    /// all tracked collections, then computes _progressPercentage.
-    /// This handles both the upfront-count case and the fallback case where
-    /// totals are only known after each collection is fetched.
+    /// Sets the run's progress: documents dealt with over documents expected, where a collection
+    /// in flight with no total is expected to hold what it has served so far. A run with no total
+    /// at all (<see cref="_documentWeighted"/>) steps by finished collection instead, because the
+    /// same sum would read complete from its first page.
     /// </summary>
     private void UpdateOverallProgress()
     {
-        _totalDocumentsAllCollections = _collectionProgress.Values.Sum(c => c.TotalDocuments);
-        _migratedDocumentsAllCollections = _collectionProgress.Values.Sum(c => c.DocumentsProcessed);
+        var collections = _collectionProgress.Values.ToList();
+        if (collections.Count == 0)
+            return;
 
-        if (_totalDocumentsAllCollections > 0)
+        double share;
+        if (_documentWeighted)
         {
-            _progressPercentage = (double)_migratedDocumentsAllCollections / _totalDocumentsAllCollections * 100;
+            var seen = collections.Sum(DocumentsSeen);
+            var expected = collections.Sum(c => c.IsComplete ? DocumentsSeen(c) : Math.Max(c.TotalDocuments, DocumentsSeen(c)));
+            share = expected > 0 ? (double)seen / expected : 0;
         }
+        else
+        {
+            share = (double)collections.Count(c => c.IsComplete) / collections.Count;
+        }
+
+        _progressPercentage = Math.Min(HighestRunningProgress, share * 100);
     }
 
     internal void UpdateCollectionProgress(
@@ -1300,15 +1389,6 @@ internal class MigrationJob
     }
 
     /// <summary>
-    ///     Anchor for the first page of a collection fetch. Nightscout applies an implicit
-    ///     recency window (roughly the last four days) to any query carrying no date filter,
-    ///     which truncates an unbounded first page — the short page then ends pagination,
-    ///     silently importing days of history instead of years. Anchoring the upper bound
-    ///     keeps every request explicitly dated.
-    /// </summary>
-    private DateTime FirstPageAnchor => UtcNow;
-
-    /// <summary>
     ///     Page size for every legacy-API pull. The merged v1 reads (devicestatus, activity) clamp
     ///     to <see cref="LegacyReadLimits.MaxMergedCount"/>, and the loops terminate on a short
     ///     page, so a larger value here would silently end those pulls after one page.
@@ -1321,19 +1401,28 @@ internal class MigrationJob
     ///     <paramref name="Oldest"/> reads the page's oldest record, answering <c>null</c> when the
     ///     page carries no usable timestamp to page back from, <paramref name="AdmittedThrough"/>
     ///     is the latest record time the filter for a cursor admits, <paramref name="Envelope"/> is
-    ///     how far above the anchor the first page reaches, <paramref name="AtOrBefore"/> is
-    ///     whether a record's instant is at or before the anchor, and <paramref name="Newest"/>
-    ///     reads the page's newest instant, for
-    ///     <see cref="MigrationSourceEntity.LastMigratedDataTimestamp"/>.
+    ///     how far outside the window the source is asked, <paramref name="LowerFilter"/> is the
+    ///     fragment restricting a read to records at or after a time, <paramref name="Within"/> is
+    ///     whether a record's instant is inside the window, and <paramref name="Newest"/> reads the
+    ///     page's newest instant, for <see cref="MigrationSourceEntity.LastMigratedDataTimestamp"/>.
     /// </summary>
     private sealed record PageCursor(
         Func<DateTime, string> Filter,
         Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Oldest,
         Func<DateTime, DateTime> AdmittedThrough,
         TimeSpan Envelope,
-        Func<ProcessableDocumentBase, DateTime, bool> AtOrBefore,
+        Func<DateTime, string> LowerFilter,
+        Func<ProcessableDocumentBase, ImportWindow, bool> Within,
         Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Newest
     );
+
+    /// <summary>
+    ///     The date filter every read of a windowed collection carries, the count included:
+    ///     <paramref name="upper"/> and, for a run with a start date, the window's lower edge, each
+    ///     as far out as the cursor's envelope.
+    /// </summary>
+    private string WindowFilter(PageCursor cursor, DateTime upper) =>
+        cursor.Filter(upper) + (_window.From is { } from ? cursor.LowerFilter(from - cursor.Envelope) : "");
 
     /// <summary>Entries page on the numeric <c>date</c> field, which mirrors mills exactly.</summary>
     private static readonly PageCursor s_dateCursor = new(
@@ -1347,7 +1436,8 @@ internal class MigrationJob
         },
         to => to,
         TimeSpan.Zero,
-        (_, _) => true,
+        from => $"&find[date][$gte]={from.ToMills()}",
+        (d, window) => d.Mills <= 0 || window.Holds(d.Mills.ToUtcDateTime()),
         page => page.Any(d => d.Mills > 0)
             ? page.Max(d => d.Mills).ToUtcDateTime()
             : null);
@@ -1361,12 +1451,26 @@ internal class MigrationJob
         page => BackwardTimePager.OldestWrittenCreatedAt(page, d => d.CreatedAt),
         BackwardTimePager.CreatedAtAdmittedThrough,
         BackwardTimePager.CreatedAtOffsetEnvelope,
-        (d, anchor) => BackwardTimePager.CreatedAtWithin(d.CreatedAt, null, anchor),
+        // Millisecond precision sorts at or below both spellings of its instant ("...:00.000Z" and
+        // "...:00Z") in a source that compares created_at as a string.
+        from => $"&find[created_at][$gte]={from.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture)}",
+        (d, window) => BackwardTimePager.CreatedAtWithin(d.CreatedAt, window.From, window.To),
         page => page
             .Select(d => UploaderTimestamp.TryParse(d.CreatedAt, out var parsed)
                 ? parsed.UtcDateTime
                 : (DateTime?)null)
             .Max());
+
+    /// <summary>
+    ///     The collections Nightscout's count route serves, by the cursor their pull pages on. It
+    ///     answers any other name with the count of entries.
+    /// </summary>
+    private static readonly Dictionary<string, PageCursor> s_countableCollections = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["entries"] = s_dateCursor,
+        ["treatments"] = s_createdAtCursor,
+        ["devicestatus"] = s_createdAtCursor,
+    };
 
     /// <summary>
     ///     A legacy collection pulled page by page over a time cursor. <paramref name="Name"/> is
@@ -1467,12 +1571,13 @@ internal class MigrationJob
         CancellationToken ct
     ) where T : ProcessableDocumentBase
     {
-        _currentOperation = $"Migrating {collection.Label}";
+        BeginCollection(collection.Name, collection.Label);
         var knownTotal = _collectionProgress.TryGetValue(collection.Name, out var existing)
             ? existing.TotalDocuments : 0;
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
+        var outsideWindow = 0L;
         var tally = new DecompositionTally();
         var failedIds = new HashSet<string>(StringComparer.Ordinal);
         var pageNumber = 0;
@@ -1480,10 +1585,15 @@ internal class MigrationJob
         using var scope = CreateTenantScope();
         var decompose = collection.Decompose(scope.ServiceProvider);
 
-        var anchor = FirstPageAnchor;
+        long Seen() => totalMigrated + totalFailed + tally.DocumentsSkipped;
+
+        // The count reaches as far as the envelope, so what the window turns away comes off it.
+        long Expected() => knownTotal > 0 ? Math.Max(knownTotal - outsideWindow, Seen()) : 0;
+
+        var window = _window;
         var pages = BackwardTimePager.PageAsync<T>(
-            from: null,
-            to: anchor + collection.Cursor.Envelope,
+            from: window.From - collection.Cursor.Envelope,
+            to: window.To + collection.Cursor.Envelope,
             ApiPageSize,
             BackwardTimePager.WidestPageSize(ApiPageSize),
             async (bound, count) =>
@@ -1491,9 +1601,8 @@ internal class MigrationJob
                 ct.ThrowIfCancellationRequested();
                 pageNumber++;
 
-                var url = $"api/v1/{collection.Name}.json?count={count}";
-                if (bound.HasValue)
-                    url += collection.Cursor.Filter(bound.Value);
+                var url = $"api/v1/{collection.Name}.json?count={count}"
+                    + WindowFilter(collection.Cursor, bound ?? window.To + collection.Cursor.Envelope);
 
                 var documents = await ReadPageFromSourceAsync<System.Text.Json.JsonElement>(
                     httpClient, url, collection.Label, ct);
@@ -1514,7 +1623,8 @@ internal class MigrationJob
 
         await foreach (var served in pages)
         {
-            var page = served.Where(d => collection.Cursor.AtOrBefore(d, anchor)).ToArray();
+            var page = served.Where(d => collection.Cursor.Within(d, window)).ToArray();
+            outsideWindow += served.Length - page.Length;
             if (page.Length > 0)
             {
                 try
@@ -1531,16 +1641,19 @@ internal class MigrationJob
                 }
             }
 
-            UpdateCollectionProgress(collection.Name,
-                Math.Max(knownTotal, totalMigrated + totalFailed + tally.DocumentsSkipped),
-                totalMigrated, totalFailed, false, tally);
+            UpdateCollectionProgress(collection.Name, Expected(), totalMigrated, totalFailed, false, tally);
             UpdateOverallProgress();
         }
 
-        UpdateCollectionProgress(collection.Name,
-            Math.Max(knownTotal, totalMigrated + totalFailed + tally.DocumentsSkipped),
-            totalMigrated, totalFailed, true, tally);
+        // A finished collection holds what the source served, whatever it counted beforehand.
+        UpdateCollectionProgress(collection.Name, Seen(), totalMigrated, totalFailed, true, tally);
         UpdateOverallProgress();
+        if (Seen() < knownTotal - outsideWindow)
+        {
+            _logger.LogWarning(
+                "Nightscout counted {Counted} {Collection} and served {Served}",
+                knownTotal - outsideWindow, collection.Label, Seen());
+        }
         _logger.LogInformation(
             "Migrated {Count} {Collection} via API as {Stored} records, skipped {Unsupported} of an unsupported kind and {Deleted} deleted records",
             totalMigrated, collection.Label, tally.RecordsStored, tally.DocumentsSkippedUnsupported, tally.RecordsSkippedDeleted);
@@ -1551,8 +1664,8 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        _currentOperation = "Migrating profiles";
         var collectionName = "profile";
+        BeginCollection(collectionName, "profiles");
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
@@ -1615,15 +1728,14 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        _currentOperation = "Migrating food";
         const string collectionName = "food";
-        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
-            ? existing.TotalDocuments : 0;
+        BeginCollection(collectionName, "food");
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
         var totalSkipped = 0;
         var failedIds = new HashSet<string>(StringComparer.Ordinal);
+        var servedIds = new HashSet<string>(StringComparer.Ordinal);
 
         for (var pageNumber = 1; ; pageNumber++)
         {
@@ -1635,8 +1747,13 @@ internal class MigrationJob
 
             if (documents.Length == 0) break;
 
-            var (foods, newlyFailed) = ParseDocuments<Food>(documents, collectionName, pageNumber, failedIds);
+            var (parsed, newlyFailed) = ParseDocuments<Food>(documents, collectionName, pageNumber, failedIds);
             totalFailed += newlyFailed;
+
+            // Nightscout serves its whole food list whatever skip says, so a list of a full page or
+            // more comes back again for every skip. A page holding nothing new is the end.
+            var foods = parsed.Where(f => f.Id is not { Length: > 0 } id || servedIds.Add(id)).ToArray();
+            if (foods.Length == 0 && newlyFailed == 0) break;
 
             foreach (var food in foods)
             {
@@ -1678,16 +1795,13 @@ internal class MigrationJob
             await dbContext.SaveChangesAsync(ct);
             totalSkipped += documents.Length;
 
-            UpdateCollectionProgress(collectionName,
-                Math.Max(knownTotal, totalSkipped),
-                totalMigrated, totalFailed, false);
+            UpdateCollectionProgress(collectionName, 0, totalMigrated, totalFailed, false);
             UpdateOverallProgress();
 
             if (documents.Length < ApiPageSize) break;
         }
 
-        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
-            totalMigrated, totalFailed, true);
+        UpdateCollectionProgress(collectionName, totalMigrated + totalFailed, totalMigrated, totalFailed, true);
         UpdateOverallProgress();
 
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
@@ -1729,14 +1843,26 @@ internal class MigrationJob
             .OrderBy(ImportRank)
             .ToList();
 
-        var totalCollections = collectionsToMigrate.Count;
-        var processedCollections = 0;
+        _currentOperation = "Counting records";
+        _phase = MigrationPhase.Counting;
+        _window = RequestedWindow();
+        foreach (var collectionName in collectionsToMigrate)
+        {
+            _collectionProgress[collectionName] = new CollectionProgress
+            {
+                CollectionName = collectionName,
+                TotalDocuments = await database.GetCollection<BsonDocument>(collectionName)
+                    .CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct),
+            };
+        }
+        _documentWeighted = true;
+        _pullStartedAt = UtcNow;
 
         foreach (var collectionName in collectionsToMigrate)
         {
             ct.ThrowIfCancellationRequested();
 
-            _currentOperation = $"Migrating {collectionName}";
+            BeginCollection(collectionName, collectionName);
 
             switch (collectionName)
             {
@@ -1758,8 +1884,7 @@ internal class MigrationJob
                     break;
             }
 
-            processedCollections++;
-            _progressPercentage = (double)processedCollections / totalCollections * 100;
+            UpdateOverallProgress();
         }
     }
 
@@ -1775,12 +1900,12 @@ internal class MigrationJob
     ) where T : ProcessableDocumentBase
     {
         var source = database.GetCollection<BsonDocument>(collection.Name);
-        var totalDocs = await source.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct);
-
-        UpdateCollectionProgress(collection.Name, totalDocs, 0, 0, false);
+        var totalDocs = Progress(collection.Name).TotalDocuments;
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
+        var outsideWindow = 0L;
+        var window = _window;
         var tally = new DecompositionTally();
         var failedIds = new HashSet<string>(StringComparer.Ordinal);
 
@@ -1813,8 +1938,12 @@ internal class MigrationJob
             }
             if (documents.Count == 0) continue;
 
-            var (page, newlyFailed) = ParseDocuments<T>([.. documents], collection.Label, batchNumber, failedIds);
+            var (parsed, newlyFailed) = ParseDocuments<T>([.. documents], collection.Label, batchNumber, failedIds);
             totalFailed += newlyFailed;
+
+            // The collection is streamed whole, so the count holds what the window turns away.
+            var page = parsed.Where(d => collection.Cursor.Within(d, window)).ToArray();
+            outsideWindow += parsed.Length - page.Length;
 
             if (page.Length > 0)
             {
@@ -1832,13 +1961,13 @@ internal class MigrationJob
             }
 
             UpdateCollectionProgress(collection.Name,
-                Math.Max(totalDocs, totalMigrated + totalFailed + tally.DocumentsSkipped),
+                Math.Max(totalDocs - outsideWindow, totalMigrated + totalFailed + tally.DocumentsSkipped),
                 totalMigrated, totalFailed, false, tally);
+            UpdateOverallProgress();
         }
 
         UpdateCollectionProgress(collection.Name,
-            Math.Max(totalDocs, totalMigrated + totalFailed + tally.DocumentsSkipped),
-            totalMigrated, totalFailed, true, tally);
+            totalMigrated + totalFailed + tally.DocumentsSkipped, totalMigrated, totalFailed, true, tally);
         _logger.LogInformation(
             "Migrated {Count} {Collection} from MongoDB as {Stored} records, skipped {Unsupported} of an unsupported kind and {Deleted} deleted records",
             totalMigrated, collection.Label, tally.RecordsStored, tally.DocumentsSkippedUnsupported, tally.RecordsSkippedDeleted);
@@ -1880,22 +2009,12 @@ internal class MigrationJob
     )
     {
         var collection = database.GetCollection<BsonDocument>(collectionName);
-        var totalDocs = await collection.CountDocumentsAsync(
-            FilterDefinition<BsonDocument>.Empty,
-            cancellationToken: ct
-        );
-
-        _collectionProgress[collectionName] = new CollectionProgress
-        {
-            CollectionName = collectionName,
-            TotalDocuments = totalDocs,
-            DocumentsMigrated = 0,
-            DocumentsFailed = 0,
-            IsComplete = false,
-        };
+        var totalDocs = Progress(collectionName).TotalDocuments;
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
+        var outsideWindow = 0L;
+        var windowed = collectionName == "devicestatus";
         var batchSize = 1000;
 
         var findOptions = new FindOptions<BsonDocument> { BatchSize = batchSize };
@@ -1909,6 +2028,14 @@ internal class MigrationJob
         {
             foreach (var doc in cursor.Current)
             {
+                if (windowed
+                    && doc.TryGetValue("created_at", out var createdAt) && createdAt.IsString
+                    && !BackwardTimePager.CreatedAtWithin(createdAt.AsString, _window.From, _window.To))
+                {
+                    outsideWindow++;
+                    continue;
+                }
+
                 try
                 {
                     await TransformAndSaveDocumentAsync(collectionName, doc, dbContext, ct);
@@ -1929,15 +2056,19 @@ internal class MigrationJob
 
             _collectionProgress[collectionName] = Progress(collectionName) with
             {
-                TotalDocuments = totalDocs,
+                TotalDocuments = Math.Max(totalDocs - outsideWindow, totalMigrated + totalFailed),
                 DocumentsMigrated = totalMigrated,
                 DocumentsFailed = totalFailed,
                 IsComplete = false,
             };
+            UpdateOverallProgress();
         }
 
-        _collectionProgress[collectionName] = _collectionProgress[collectionName] with
+        _collectionProgress[collectionName] = Progress(collectionName) with
         {
+            TotalDocuments = totalMigrated + totalFailed,
+            DocumentsMigrated = totalMigrated,
+            DocumentsFailed = totalFailed,
             IsComplete = true,
         };
 
@@ -2120,8 +2251,8 @@ internal class MigrationJob
         IRoleRepository roleCatalogue,
         CancellationToken ct)
     {
-        _currentOperation = "Migrating subjects";
         var collectionName = "subjects";
+        BeginCollection(collectionName, "subjects");
 
         var totalMigrated = 0L;
         var totalFailed = 0L;

@@ -36,6 +36,17 @@ public enum MigrationJobState
     Interrupted = 6
 }
 
+/// <summary>What a live migration job is doing.</summary>
+public enum MigrationPhase
+{
+    /// <summary>Reaching the source.</summary>
+    Connecting = 0,
+    /// <summary>Asking the source how many documents each collection holds.</summary>
+    Counting = 1,
+    /// <summary>Pulling <see cref="MigrationJobStatus.CurrentCollection"/>.</summary>
+    Importing = 2,
+}
+
 /// <summary>
 /// The one definition of which <see cref="MigrationJobState"/> values mean a job is in flight.
 /// </summary>
@@ -142,10 +153,24 @@ public record MigrationJobStatus
     public required MigrationJobState State { get; init; }
     public required double ProgressPercentage { get; init; }
     public string? CurrentOperation { get; init; }
+
+    /// <summary>What the job is doing, or <see langword="null"/> once it has ended.</summary>
+    public MigrationPhase? Phase { get; init; }
+
+    /// <summary>
+    /// The key in <see cref="CollectionProgress"/> of the collection being pulled, or
+    /// <see langword="null"/> when none is.
+    /// </summary>
+    public string? CurrentCollection { get; init; }
+
     public string? ErrorMessage { get; init; }
     public DateTime StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
     public TimeSpan? EstimatedTimeRemaining { get; init; }
+
+    /// <inheritdoc cref="MigrationJobInfo.HasFailures"/>
+    public bool HasFailures { get; init; }
+
     public Dictionary<string, CollectionProgress> CollectionProgress { get; init; } = [];
 }
 
@@ -155,6 +180,11 @@ public record MigrationJobStatus
 public record CollectionProgress
 {
     public required string CollectionName { get; init; }
+
+    /// <summary>
+    /// Documents the collection is expected to hold: the source's count while it is in flight, 0
+    /// while the source has given none, and what the source served once it is complete.
+    /// </summary>
     public long TotalDocuments { get; init; }
 
     /// <summary>
