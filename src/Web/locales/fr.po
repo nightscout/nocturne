@@ -73,7 +73,6 @@ msgid "Error"
 msgstr ""
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
-#: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr ""
 
@@ -2862,6 +2861,7 @@ msgid "Completed"
 msgstr ""
 
 #: src/lib/components/admin/JobsTabContent.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/(authenticated)/notifications/+page.svelte
@@ -2929,7 +2929,6 @@ msgid "Initializing"
 msgstr ""
 
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/routes/(authenticated)/settings/migration/+page.svelte
 #: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Progress"
 msgstr ""
@@ -5118,9 +5117,9 @@ msgstr ""
 #~ msgid "Blood Glucose"
 #~ msgstr ""
 
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Treatments"
 msgstr ""
 
@@ -5669,6 +5668,7 @@ msgstr ""
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
+#: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
 msgid "Try again"
 msgstr ""
@@ -6315,12 +6315,12 @@ msgstr ""
 msgid "<0/> Inactive"
 msgstr ""
 
+#. 0: formatNumber(lane.migrated)
 #. 0: rejectedCount
 #. 0: formatNumber(allRows.length)
-#. 0: formatCount(col.migrated)
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "{0} records"
 msgstr ""
 
@@ -12243,6 +12243,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
+#: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Failed to load migration data"
 msgstr ""
 
@@ -12297,9 +12298,8 @@ msgstr ""
 #~ msgid "API Secret"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Your API secret"
-msgstr ""
+#~ msgid "Your API secret"
+#~ msgstr ""
 
 #~ msgid "MongoDB Connection String"
 #~ msgstr ""
@@ -13201,64 +13201,58 @@ msgstr ""
 #~ msgid "<0/> Run side-by-side during the switchover"
 #~ msgstr ""
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "Entries"
 msgstr ""
 
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Profiles"
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "Device statuses"
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "Food library"
 msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "Activities"
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "Failed to find active migration"
-msgstr ""
+#~ msgid "Failed to find active migration"
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Bringing your <0>history</0> across."
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "Finding active migration..."
-msgstr ""
+#~ msgid "Finding active migration..."
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Overall progress"
 msgstr ""
 
-#. 0: formatCount(totalMigrated)
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "About <0/> remaining · {0} records"
-msgstr ""
+#~ msgid "About <0/> remaining · {0} records"
+#~ msgstr ""
 
-#. 0: formatCount(totalMigrated)
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "{0} records migrated"
-msgstr ""
+#~ msgid "{0} records migrated"
+#~ msgstr ""
 
-#. 0: formatCount(col.migrated); 1: formatCount(col.total)
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#. 0: formatNumber(lane.migrated); 1: formatNumber(lane.total)
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "{0} / {1} records"
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "no records"
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "pending"
 msgstr ""
 
@@ -16984,9 +16978,8 @@ msgstr ""
 #~ msgid "Your deployment is configured for migration. The form below has been pre-populated with your settings. Review and start the migration when ready."
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Import entries and treatments from an existing Nightscout instance."
-msgstr ""
+#~ msgid "Import entries and treatments from an existing Nightscout instance."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Leave empty to import all data, or specify a range to import partial data."
@@ -17327,20 +17320,14 @@ msgstr ""
 msgid "Choose a slug and display name for your Nocturne instance. The slug is a short, URL-friendly identifier that cannot be changed later."
 msgstr ""
 
-#. 0: minutes; 1: seconds
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "{0} min {1} sec"
-msgstr ""
+#~ msgid "{0} min {1} sec"
+#~ msgstr ""
 
-#. 0: seconds
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "{0} sec"
-msgstr ""
+#~ msgid "{0} sec"
+#~ msgstr ""
 
-#. 0: String(status.state).toLowerCase()
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "Migration {0}"
-msgstr ""
+#~ msgid "Migration {0}"
+#~ msgstr ""
 
 #~ msgid "Lost connection to migration status"
 #~ msgstr ""
@@ -22420,6 +22407,7 @@ msgid "Nocturne's development milestones, live from GitHub: what's being built n
 msgstr ""
 
 #: ../portal/src/routes/roadmap/+page.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 msgid "In progress"
 msgstr ""
@@ -29578,7 +29566,7 @@ msgstr ""
 msgid "We could not start this sync. Try again."
 msgstr ""
 
-#. 0: result.entryCount ?? 0; 1: result.treatmentCount ?? 0
+#. 0: formatNumber(result.entryCount); 1: formatNumber(result.treatmentCount)
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connected. Found {0} entries and {1} treatments."
 msgstr ""
@@ -31270,9 +31258,8 @@ msgstr ""
 msgid "Bringing the <0>history</0> across."
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "We are streaming entries, treatments, and profiles from Nightscout into Nocturne's store. This keeps running on the server even if you close this page."
-msgstr ""
+#~ msgid "We are streaming entries, treatments, and profiles from Nightscout into Nocturne's store. This keeps running on the server even if you close this page."
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
 msgid "Connect a CGM, pump, or phone app"
@@ -35446,13 +35433,11 @@ msgstr ""
 msgid "Active migration <0/>"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Current operation"
-msgstr ""
+#~ msgid "Current operation"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Collection progress"
-msgstr ""
+#~ msgid "Collection progress"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "<0/> Cancel migration"
@@ -39533,4 +39518,123 @@ msgstr ""
 #. 0: actual; 1: target
 #: src/lib/utils/insight-messages.svelte.ts
 msgid "Coefficient of variation was {0}% (consensus target: at most {1}%)."
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "Access tokens"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "not imported"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "starting"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "skipped"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "Complete"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "1 record could not be imported."
+msgstr ""
+
+#. 0: formatNumber(lane.failed)
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "{0} records could not be imported."
+msgstr ""
+
+#: src/lib/components/migration/TimeRemaining.svelte
+msgid "Less than 1 minute remaining"
+msgstr ""
+
+#. 0: Math.round(minutes)
+#: src/lib/components/migration/TimeRemaining.svelte
+msgid "About {0} min remaining"
+msgstr ""
+
+#. 0: Math.floor(minutes / 60); 1: Math.round(minutes % 60)
+#: src/lib/components/migration/TimeRemaining.svelte
+msgid "About {0} h {1} min remaining"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Could not look for the import."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "The import was canceled."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "The import stopped because the server restarted. Start it again from Settings."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "The import stopped because of an error."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Nocturne is copying entries, treatments, and profiles from Nightscout. The import continues on the server if you close this page."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Looking for the import..."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Connecting to Nightscout"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Counting the records in Nightscout"
+msgstr ""
+
+#. 0: formatNumber(totalMigrated)
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "<0/> · {0} records"
+msgstr ""
+
+#. 0: formatNumber(totalMigrated)
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "{0} records imported"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Import the history of a Nightscout site: entries, treatments, device statuses, profiles, foods, and activities."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Leave blank if the site needs none"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "The end date is before the start date."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Connected."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Counting the records in the source"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Connecting to the source"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Last migration"
+msgstr ""
+
+#. 0: formatMediumDateTime(job.completedAt)
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Ended: {0}"
 msgstr ""
