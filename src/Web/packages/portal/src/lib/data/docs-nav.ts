@@ -30,6 +30,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         title: "Installation",
         items: [
             { href: "/docs/installation", label: "Overview" },
+            { href: "/docs/installation/install-script", label: "Install script" },
             { href: "/docs/installation/docker-compose", label: "Docker Compose" },
             { href: "/docs/installation/portainer", label: "Portainer" },
             { href: "/docs/installation/oracle-cloud", label: "Oracle Cloud" },

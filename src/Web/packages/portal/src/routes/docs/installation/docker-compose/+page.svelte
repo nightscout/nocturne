@@ -151,6 +151,16 @@
     <p class="text-lg text-muted-foreground mb-8">
         Deploy Nocturne on any server with Docker Compose from the command line.
     </p>
+    <Callout type="tip" title="The install script does these steps for you">
+        <p>
+            On a Linux server with the bundled proxy and a Docker volume, the
+            <a href={resolve("/docs/installation/install-script")} class="text-primary hover:underline">install script</a>
+            does every step on this page. Use this page to do the steps by hand, to use your
+            own reverse proxy, or to keep the database in a host directory. A server that the
+            install script made has its files in
+            <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">/opt/nocturne</code>.
+        </p>
+    </Callout>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Before you start</h2>
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">

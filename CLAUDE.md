@@ -112,6 +112,8 @@ Files covered:
 
 The Docker Compose bundles (`deploy/docker-compose/`, `deploy/portainer/`) are tracked and not hidden; a checkout that hid them with an older `hide-generated` clears the bits with `pnpm run unhide-generated`. Regenerate them with `dotnet run scripts/publish-release.cs` in any PR that changes an input; the `compose-bundle-drift` job in `tests.yml` fails a PR whose bundle differs from a regeneration.
 
+The install scripts under `deploy/install/` and `deploy/oracle-cloud/` are generated the same way, by the `install-scripts` publish step (`InstallScriptPublisher`). Edit their sources in `src/Aspire/Nocturne.Aspire.Host/install/`, never the copies in `deploy/`. `install.sh` is the installer for any Linux server; `oracle-cloud-install.sh` embeds it whole, runs it on the instance and sources it for the shared DNS setup. The secrets `install.sh` generates are the AppHost's secret parameters that carry publish metadata.
+
 To stage translation changes after editing `.po` files or adding new strings, use `pnpm run translations:stage` (it unhides the locales files, then stages them).
 
 The `--skip-worktree` bits may be cleared by git during branch switches that touch those files. Re-run `hide-generated` if any of the above reappear in `git status`.
