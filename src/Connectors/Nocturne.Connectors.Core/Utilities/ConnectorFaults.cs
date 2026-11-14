@@ -25,6 +25,14 @@ public static class ConnectorFaults
             or JsonException;
 
     /// <summary>
+    ///     A request that ran out of time. An HttpClient timeout surfaces as an
+    ///     <see cref="OperationCanceledException"/> while the caller's token is still live; with the
+    ///     token cancelled the same exception is a cancellation the caller asked for.
+    /// </summary>
+    public static bool IsTimeout(Exception ex, CancellationToken cancellationToken) =>
+        ex is OperationCanceledException && !cancellationToken.IsCancellationRequested;
+
+    /// <summary>
     ///     A source that did not answer usably: unreachable, refused, timed out, or answered with a
     ///     payload that will not read. A fetch catches these to report its types as not fetched and let
     ///     the rest of the run continue. A cancellation the caller asked for through
@@ -33,7 +41,7 @@ public static class ConnectorFaults
     /// </summary>
     public static bool IsSourceFailure(Exception ex, CancellationToken cancellationToken) =>
         ex is HttpRequestException or TimeoutException or IOException or InvalidDataException
-        || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        || IsTimeout(ex, cancellationToken)
         || IsMalformedRecord(ex);
 
     /// <summary>

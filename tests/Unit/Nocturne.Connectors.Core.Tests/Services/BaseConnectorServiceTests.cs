@@ -44,9 +44,10 @@ public class BaseConnectorServiceTests
         public Task<string?> InvokeExecuteWithRetryAsync(
             Func<Task<string?>> operation,
             int maxRetries,
-            Func<Task<bool>>? reAuthenticateOnUnauthorized = null)
+            Func<Task<bool>>? reAuthenticateOnUnauthorized = null,
+            CancellationToken cancellationToken = default)
             => ExecuteWithRetryAsync(
-                operation, reAuthenticateOnUnauthorized, maxRetries);
+                operation, reAuthenticateOnUnauthorized, maxRetries, cancellationToken: cancellationToken);
 
         // Expose the protected per-run publish-origin resolvers so the watermark→origin mapping
         // and the per-run memoization (anti-flood guard) can be asserted directly.
@@ -266,6 +267,75 @@ public class BaseConnectorServiceTests
         // Assert
         result.Should().BeNull();
         attempts.Should().Be(1, "there is nothing to retry with once re-authentication fails");
+        delays.DelayedAttempts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_TimeoutOnALiveToken_IsRetriedAndCanSucceed()
+    {
+        var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
+        var attempts = 0;
+        Func<Task<string?>> timesOutOnce = () =>
+        {
+            attempts++;
+            if (attempts == 1)
+                throw new TaskCanceledException("HttpClient.Timeout");
+            return Task.FromResult<string?>("ok");
+        };
+
+        var result = await service.InvokeExecuteWithRetryAsync(timesOutOnce, maxRetries: 3);
+
+        result.Should().Be("ok");
+        attempts.Should().Be(2);
+        delays.DelayedAttempts.Should().Equal([0], "the timeout waits out the same backoff as any transient failure");
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_TimeoutOnEveryAttempt_EndsLikeAnyExhaustedTransientFailure()
+    {
+        var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
+        var attempts = 0;
+        Func<Task<string?>> alwaysTimesOut = () =>
+        {
+            attempts++;
+            throw new TaskCanceledException("HttpClient.Timeout");
+        };
+        using var live = new CancellationTokenSource();
+
+        var act = async () =>
+            await service.InvokeExecuteWithRetryAsync(alwaysTimesOut, maxRetries: 4, cancellationToken: live.Token);
+
+        var thrown = await act.Should().ThrowAsync<TaskCanceledException>();
+        thrown.Which.Message.Should().Be("HttpClient.Timeout");
+        attempts.Should().Be(4);
+        delays.DelayedAttempts.Should().Equal([0, 1, 2]);
+        live.IsCancellationRequested.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_CancelledToken_StopsAtOnceWithoutRetrying()
+    {
+        var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
+        using var cts = new CancellationTokenSource();
+        var attempts = 0;
+        Func<Task<string?>> cancelsMidRequest = () =>
+        {
+            attempts++;
+            cts.Cancel();
+            throw new TaskCanceledException("cancelled", null, cts.Token);
+        };
+
+        var act = async () =>
+            await service.InvokeExecuteWithRetryAsync(cancelsMidRequest, maxRetries: 5, cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        attempts.Should().Be(1);
         delays.DelayedAttempts.Should().BeEmpty();
     }
 
