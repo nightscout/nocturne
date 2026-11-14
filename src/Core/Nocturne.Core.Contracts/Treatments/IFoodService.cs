@@ -28,6 +28,7 @@ public interface IFoodService
     /// Create new food records with WebSocket broadcasting
     /// </summary>
     /// <param name="mode">The write rules. V1 and V3 pass <see cref="FoodWriteMode.Legacy"/>.</param>
+    /// <remarks>A <see cref="FoodWriteMode.Native"/> batch skips a food whose name sanitizes to empty and creates the rest.</remarks>
     /// <returns>Created food records with assigned IDs</returns>
     Task<IEnumerable<Food>> CreateFoodAsync(
         IEnumerable<Food> foods,
@@ -36,13 +37,22 @@ public interface IFoodService
     );
 
     /// <summary>
+    /// Create one food record under the <see cref="FoodWriteMode.Native"/> rules.
+    /// </summary>
+    /// <exception cref="FoodNameRequiredException">The name sanitizes to empty.</exception>
+    Task<Food> CreateNativeFoodAsync(Food food, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Update an existing food record with WebSocket broadcasting
     /// </summary>
     /// <param name="food">Updated food data</param>
+    /// <param name="mode">The write rules. V1 and V3 pass <see cref="FoodWriteMode.Legacy"/>.</param>
+    /// <exception cref="FoodNameRequiredException">A <see cref="FoodWriteMode.Native"/> write leaves the name empty.</exception>
     /// <returns>Updated food record if successful, null otherwise</returns>
     Task<Food?> UpdateFoodAsync(
         string id,
         Food food,
+        FoodWriteMode mode,
         CancellationToken cancellationToken = default
     );
 
