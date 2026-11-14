@@ -196,7 +196,7 @@ public static class EntryTools
                     .Where(e => e.Mgdl > 0)
                     .Select(e => new SensorGlucose
                     {
-                        Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(e.Mills).UtcDateTime,
+                        Timestamp = e.Mills.ToUtcDateTime(),
                         Mgdl = e.Mgdl,
                     }));
 

@@ -170,9 +170,7 @@ public sealed class AidSystemMetricsReader(
     {
         var window = deviceDates.Window(device.StartDate, device.EndDate, openEnd: 0);
         return (
-            device.StartDate.HasValue ? Utc(window.Start) : null,
-            device.EndDate.HasValue ? Utc(window.End) : null);
+            device.StartDate.HasValue ? window.Start.ToUtcDateTime() : null,
+            device.EndDate.HasValue ? window.End.ToUtcDateTime() : null);
     }
-
-    private static DateTime Utc(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
 }

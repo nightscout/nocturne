@@ -295,7 +295,7 @@ public class SampleDataSeeder
                 }
                 if (readings.Count > 0)
                     episodeTracker.Observe(
-                        DateTimeOffset.FromUnixTimeMilliseconds(step.Entry.Mills).UtcDateTime, step.Entry.Sgv);
+                        step.Entry.Mills.ToUtcDateTime(), step.Entry.Sgv);
                 foreach (var extra in step.ExtraEntries)
                 {
                     extra.DataSource = dataSource;
@@ -307,7 +307,7 @@ public class SampleDataSeeder
                     treatment.DataSource = dataSource;
                     treatmentBatch.Add(treatment);
                     if (treatment.EventType == "Carbs" && treatment.FoodType is { Length: > 0 })
-                        mealCarbLinks.Add((DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime, treatment.FoodType));
+                        mealCarbLinks.Add((treatment.Mills.ToUtcDateTime(), treatment.FoodType));
                 }
 
                 if (DemoDeviceStatusGenerator.ForStep(step, clock.Demo, config.TargetGlucose, config.BasalRate) is { } status)

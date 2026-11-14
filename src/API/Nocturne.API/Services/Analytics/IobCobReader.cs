@@ -47,7 +47,7 @@ public sealed class IobCobReader(
     /// <inheritdoc />
     public async Task<IobCobInputs> ReadInputsAsync(long at, CancellationToken ct = default)
     {
-        var to = DateTimeOffset.FromUnixTimeMilliseconds(at).UtcDateTime;
+        var to = at.ToUtcDateTime();
         var insulinFrom = to.AddMilliseconds(-DailyProfileCalculator.ActingMs);
 
         var boluses = await bolusRepository.GetAsync(
@@ -101,14 +101,14 @@ public sealed class IobCobReader(
     public async Task<IobCobSeriesReading> ReadSeriesAsync(
         IobCobSeriesWindow window, long nowMills, bool readCarbs, CancellationToken ct = default)
     {
-        var to = DateTimeOffset.FromUnixTimeMilliseconds(window.ReadEnd).UtcDateTime;
-        var insulinFrom = DateTimeOffset.FromUnixTimeMilliseconds(window.InsulinReadStart).UtcDateTime;
+        var to = window.ReadEnd.ToUtcDateTime();
+        var insulinFrom = window.InsulinReadStart.ToUtcDateTime();
 
         List<Bolus> boluses = [.. await bolusRepository.GetAsync(
             from: insulinFrom, to: to, device: null, source: null,
             limit: SeriesTreatmentLimit, offset: 0, descending: false, ct: ct)];
         List<TempBasal> tempBasals = [.. await tempBasalRepository.GetAsync(
-            from: DateTimeOffset.FromUnixTimeMilliseconds(window.TempBasalReadStart).UtcDateTime, to: to,
+            from: window.TempBasalReadStart.ToUtcDateTime(), to: to,
             device: null, source: null,
             limit: ChartDataService.TempBasalQueryLimit, offset: 0, descending: false, ct: ct)];
         List<CarbIntake> carbIntakes = readCarbs
@@ -122,8 +122,8 @@ public sealed class IobCobReader(
             timeline.BasalSegments(),
             await ScheduledBasal.OverridesAsync(stateSpanRepository, window.TherapyStart, window.OverrideEnd, ct));
 
-        var deviceFrom = DateTimeOffset.FromUnixTimeMilliseconds(window.DeviceReadStart).UtcDateTime;
-        var deviceTo = DateTimeOffset.FromUnixTimeMilliseconds(window.DeviceReadEnd).UtcDateTime;
+        var deviceFrom = window.DeviceReadStart.ToUtcDateTime();
+        var deviceTo = window.DeviceReadEnd.ToUtcDateTime();
         var devices = DeviceReadings.Of(
             await apsSnapshotRepository.GetIobCobPointsAsync(deviceFrom, deviceTo, ct),
             await pumpSnapshotRepository.GetIobPointsAsync(deviceFrom, deviceTo, ct));

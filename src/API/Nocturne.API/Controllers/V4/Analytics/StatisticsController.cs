@@ -143,8 +143,8 @@ public class StatisticsController : ControllerBase
         {
             tempBasals.Add(new TempBasal
             {
-                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(step.Start).UtcDateTime,
-                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(step.End).UtcDateTime,
+                StartTimestamp = step.Start.ToUtcDateTime(),
+                EndTimestamp = step.End.ToUtcDateTime(),
                 Rate = step.Rate,
                 Origin = TempBasalOrigin.Scheduled,
             });

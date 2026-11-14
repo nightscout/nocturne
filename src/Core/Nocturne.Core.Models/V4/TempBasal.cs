@@ -147,8 +147,8 @@ public class TempBasal : IV4Record, IDeviceAttributed
     {
         var copy = (TempBasal)MemberwiseClone();
         copy._recordStartMills = RecordStartMills;
-        copy.StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime;
-        copy.EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime;
+        copy.StartTimestamp = startMills.ToUtcDateTime();
+        copy.EndTimestamp = endMills.ToUtcDateTime();
         return copy;
     }
 

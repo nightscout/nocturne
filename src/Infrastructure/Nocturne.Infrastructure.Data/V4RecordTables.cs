@@ -289,10 +289,9 @@ internal static class V4RecordTables
             })
             .ToListAsync(ct);
 
-        static DateTime Utc(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
         return stats
             .Select(s => new SourceBucket(
-                type, s.Key, s.Count, s.Count24H, Utc(s.Latest), Utc(s.Oldest), HandleOf(s.FromDataSource)))
+                type, s.Key, s.Count, s.Count24H, s.Latest.ToUtcDateTime(), s.Oldest.ToUtcDateTime(), HandleOf(s.FromDataSource)))
             .ToList();
     }
 
