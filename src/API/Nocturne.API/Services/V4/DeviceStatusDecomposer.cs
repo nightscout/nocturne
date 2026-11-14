@@ -1129,7 +1129,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     internal DateTime ResolveTimestamp(DeviceStatus ds)
     {
         if (ds.Mills > 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(ds.Mills).UtcDateTime;
+            return ds.Mills.ToUtcDateTime();
 
         if (ParseTimestampToDateTime(ds.OpenAps?.Iob?.Time) is { } iobTime)
             return iobTime;

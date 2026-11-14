@@ -348,8 +348,8 @@ public class StateSpansController : ControllerBase
         {
             Category = request.Category,
             State = request.State,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(request.StartMills).UtcDateTime,
-            EndTimestamp = request.EndMills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(request.EndMills.Value).UtcDateTime : null,
+            StartTimestamp = request.StartMills.ToUtcDateTime(),
+            EndTimestamp = request.EndMills.HasValue ? request.EndMills.Value.ToUtcDateTime() : null,
             Source = request.Source ?? "manual",
             Metadata = request.Metadata,
             OriginalId = request.OriginalId,
@@ -395,10 +395,10 @@ public class StateSpansController : ControllerBase
             Category = request.Category ?? existing.Category,
             State = request.State ?? existing.State,
             StartTimestamp = request.StartMills.HasValue
-                ? DateTimeOffset.FromUnixTimeMilliseconds(request.StartMills.Value).UtcDateTime
+                ? request.StartMills.Value.ToUtcDateTime()
                 : existing.StartTimestamp,
             EndTimestamp = request.EndMills.HasValue
-                ? DateTimeOffset.FromUnixTimeMilliseconds(request.EndMills.Value).UtcDateTime
+                ? request.EndMills.Value.ToUtcDateTime()
                 : existing.EndTimestamp,
             Source = request.Source ?? existing.Source,
             Metadata = request.Metadata ?? existing.Metadata,

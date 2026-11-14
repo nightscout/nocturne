@@ -37,7 +37,7 @@ internal sealed partial class LoopAnalysisService
     {
         var to = window.To;
         var cyclesTask = apsSnapshotRepository.GetLoopCyclesAsync(
-            ToUtc(window.From - LoopHealthCalculator.TempLookbackMs - LoopHealthCalculator.SetterWindowMs), ToUtc(to), ct);
+            (window.From - LoopHealthCalculator.TempLookbackMs - LoopHealthCalculator.SetterWindowMs).ToUtcDateTime(), to.ToUtcDateTime(), ct);
         var commonTask = LoadCommonAsync(window, ct);
         await Task.WhenAll(cyclesTask, commonTask);
 
@@ -77,8 +77,8 @@ internal sealed partial class LoopAnalysisService
         var range = LoopHealthCalculator.Calculate(
             inputs, Mask(filter, window, zone, loaded.Sources), window.From, window.To);
 
-        var start = ToUtc(window.From);
-        var end = ToUtc(window.To);
+        var start = window.From.ToUtcDateTime();
+        var end = window.To.ToUtcDateTime();
         var overall = aidSystemMetrics.Calculate(
             new AidSystemMetricsRecords(
                 loaded.Devices,

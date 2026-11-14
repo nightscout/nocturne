@@ -300,8 +300,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     /// </summary>
     private static ProfileActivation ToProfileActivation(ProfileActivationDto remote) => new()
     {
-        StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(remote.StartMills).UtcDateTime,
-        EndTimestamp = remote.EndMills is { } end ? DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime : null,
+        StartTimestamp = remote.StartMills.ToUtcDateTime(),
+        EndTimestamp = remote.EndMills is { } end ? end.ToUtcDateTime() : null,
         RequestedDurationMs = remote.IsTemporary && remote.EndMills is { } temporaryEnd
             ? temporaryEnd - remote.StartMills
             : null,
@@ -580,14 +580,14 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     private static DateTime? DeviceStatusTime(DeviceStatus status) =>
         status.Mills > 0
-            ? DateTimeOffset.FromUnixTimeMilliseconds(status.Mills).UtcDateTime
+            ? status.Mills.ToUtcDateTime()
             : UploaderTimestamp.ParseUtcDateTime(status.CreatedAt);
 
     private static DateTime? OldestDeviceStatusTime(DeviceStatus[] statuses)
     {
         var mills = statuses.Where(d => d.Mills > 0).Select(d => (long?)d.Mills).Min();
         if (mills.HasValue)
-            return DateTimeOffset.FromUnixTimeMilliseconds(mills.Value).UtcDateTime;
+            return mills.Value.ToUtcDateTime();
 
         return statuses
             .Select(d => UploaderTimestamp.ParseUtcDateTime(d.CreatedAt))

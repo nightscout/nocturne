@@ -165,7 +165,7 @@ internal sealed class ActiveProfileSchedulesService : IActiveProfileSchedulesSer
                 ChangedDuringPeriod = changeTimes.Count > 0,
                 ChangeCount = changeTimes.Count,
                 LastChangedAt = changeTimes.Count > 0
-                    ? DateTimeOffset.FromUnixTimeMilliseconds(changeTimes[^1]).UtcDateTime
+                    ? changeTimes[^1].ToUtcDateTime()
                     : null,
             });
     }

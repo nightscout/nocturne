@@ -98,8 +98,8 @@ public sealed class ScheduledBasal
         IStateSpanRepository stateSpans, long from, long to, CancellationToken ct) =>
         (await stateSpans.GetByCategories(
             [StateSpanCategory.Override],
-            DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            from.ToUtcDateTime(),
+            to.ToUtcDateTime(),
             ct)).GetValueOrDefault(StateSpanCategory.Override) ?? [];
 
     /// <summary><see cref="Overrides"/> of <see cref="ReadOverridesAsync"/>.</summary>

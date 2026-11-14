@@ -92,7 +92,7 @@ public static class ActivityStateSpanMapper
     {
         ArgumentNullException.ThrowIfNull(activity);
 
-        var start = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime;
+        var start = activity.Mills.ToUtcDateTime();
         var end = activity.Duration is > 0
             ? start.AddMinutes(activity.Duration.Value)
             : start.AddHours(8); // default 8-hour session when no duration provided
@@ -215,7 +215,7 @@ public static class ActivityStateSpanMapper
                     ? GetMetadataString(props, MotionClassKey)
                     : null)
                 ?? activity.Type ?? category.ToString().ToLowerInvariant(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime,
+            StartTimestamp = activity.Mills.ToUtcDateTime(),
             EndTimestamp = CalculateEndTimestamp(activity),
             // DataSource is the connector a resume watermark is scoped by; EnteredBy is the
             // uploader name, and stays the fallback for activities posted through the v1 API.
@@ -282,7 +282,7 @@ public static class ActivityStateSpanMapper
     {
         if (activity.Duration.HasValue && activity.Duration.Value > 0)
         {
-            var start = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime;
+            var start = activity.Mills.ToUtcDateTime();
             return start.AddMinutes(activity.Duration.Value);
         }
 

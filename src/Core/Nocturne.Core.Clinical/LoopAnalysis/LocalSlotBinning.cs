@@ -56,7 +56,7 @@ public static class LocalSlotBinning
     }
 
     public static DateTime LocalTime(long mills, TimeZoneInfo tz) =>
-        TimeZoneInfo.ConvertTimeFromUtc(DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime, tz);
+        TimeZoneInfo.ConvertTimeFromUtc(mills.ToUtcDateTime(), tz);
 
     /// <summary>The local date (yyyy-MM-dd) and time (HH:mm) Day in Review is linked to an instant by.</summary>
     public static (string Date, string Time) DayInReview(long mills, TimeZoneInfo tz)

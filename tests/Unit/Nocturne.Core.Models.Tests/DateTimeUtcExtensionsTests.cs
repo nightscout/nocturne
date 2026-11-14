@@ -28,4 +28,38 @@ public class DateTimeUtcExtensionsTests
     {
         UtcValue.ToLocalTime().ToMills().Should().Be(Instant);
     }
+
+    [Fact]
+    public void ToUtcDateTime_RoundTripsWithToMills()
+    {
+        Instant.ToUtcDateTime().ToMills().Should().Be(Instant);
+    }
+
+    [Fact]
+    public void ToUtcDateTime_IsUtcKind()
+    {
+        Instant.ToUtcDateTime().Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Fact]
+    public void ToUtcDateTime_ReadsZeroAsTheEpoch()
+    {
+        0L.ToUtcDateTime().Should().Be(DateTime.UnixEpoch);
+    }
+
+    [Fact]
+    public void ToUtcDateTime_ReadsNegativeBeforeTheEpoch()
+    {
+        (-1L).ToUtcDateTime().Should().Be(DateTime.UnixEpoch.AddMilliseconds(-1));
+    }
+
+    [Theory]
+    [InlineData(long.MaxValue)]
+    [InlineData(long.MinValue)]
+    public void ToUtcDateTime_ThrowsOutsideTheRepresentableRange(long mills)
+    {
+        var act = () => mills.ToUtcDateTime();
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
 }

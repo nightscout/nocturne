@@ -295,8 +295,8 @@ public static class PredictionAccuracyCalculator
 
         var result = new PredictionAccuracyRange
         {
-            From = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            To = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            From = from.ToUtcDateTime(),
+            To = to.ToUtcDateTime(),
             Predictions = predictions,
             Algorithms = [.. algorithms],
         };

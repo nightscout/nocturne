@@ -14,4 +14,7 @@ public static class DateTimeUtcExtensions
 
     /// <summary>The Unix milliseconds of <paramref name="value"/> read as a UTC instant.</summary>
     public static long ToMills(this DateTime value) => new DateTimeOffset(value.AsUtc()).ToUnixTimeMilliseconds();
+
+    /// <summary>The UTC instant of <paramref name="mills"/> Unix milliseconds; throws outside the range <see cref="DateTimeOffset"/> holds.</summary>
+    public static DateTime ToUtcDateTime(this long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
 }

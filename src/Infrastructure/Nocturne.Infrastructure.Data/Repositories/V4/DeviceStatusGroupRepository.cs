@@ -86,7 +86,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var rows = Rows.IncludingDeleted(ctx);
-        var since = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
+        var since = (cursorMills + 1).ToUtcDateTime();
         var horizon = await HistoryHorizon.GetAsync(ctx, _logger, ct) ?? DateTime.MaxValue;
 
         // A status's rows are written together, so a quarter more rows than the page usually settles
@@ -166,7 +166,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     }
 
     private static DateTime Millisecond(DateTime stamp) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(stamp.ToMills()).UtcDateTime;
+        stamp.ToMills().ToUtcDateTime();
 
     private static IEnumerable<AnchorRow> Ordered(IEnumerable<AnchorRow> anchors, bool descending) =>
         descending

@@ -35,15 +35,15 @@ internal sealed partial class LoopAnalysisService
         Window window, TimeZoneInfo zone, bool needsProfiles, LoopAnalysisFilter filter, CancellationToken ct)
     {
         var (from, to) = (window.From, window.To);
-        var fromUtc = ToUtc(from);
-        var toUtc = ToUtc(to);
+        var fromUtc = from.ToUtcDateTime();
+        var toUtc = to.ToUtcDateTime();
         var readingsEnd = to + PredictionAccuracyCalculator.ReadingsAfterRangeMs;
-        var readingsEndUtc = ToUtc(readingsEnd);
-        var lookbackUtc = ToUtc(from - PredictionAccuracyCalculator.ContextLookbackMs);
-        var treatmentsEndUtc = ToUtc(to + PredictionAccuracyCalculator.TreatmentsAfterRangeMs);
+        var readingsEndUtc = readingsEnd.ToUtcDateTime();
+        var lookbackUtc = (from - PredictionAccuracyCalculator.ContextLookbackMs).ToUtcDateTime();
+        var treatmentsEndUtc = (to + PredictionAccuracyCalculator.TreatmentsAfterRangeMs).ToUtcDateTime();
 
         var predictionTask = apsSnapshotRepository.GetPredictionsAsync(fromUtc, toUtc, ct);
-        var evidenceTask = apsSnapshotRepository.GetIobCobPointsAsync(ToUtc(from - DeviceReportedValues.RecencyThresholdMs), toUtc, ct);
+        var evidenceTask = apsSnapshotRepository.GetIobCobPointsAsync((from - DeviceReportedValues.RecencyThresholdMs).ToUtcDateTime(), toUtc, ct);
         var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, readingsEndUtc, null, null, int.MaxValue, descending: false, ct: ct, streams: GlucoseStreams.Canonical);
         var bolusTask = bolusRepository.GetAsync(lookbackUtc, treatmentsEndUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var carbTask = carbIntakeRepository.GetAsync(lookbackUtc, treatmentsEndUtc, null, null, int.MaxValue, descending: false, ct: ct);
