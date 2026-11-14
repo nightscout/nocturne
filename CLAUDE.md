@@ -65,6 +65,12 @@ curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
   -H "Content-Type: application/json" \
   -d '{"slug":"test","displayName":"Test","ownerUsername":"dev","sampleData":true}'
 
+# Seeded sample data stays live: in run mode the API continues each seed's simulation every
+# minute (readings, treatments, loop status, heart rate, steps, sleep, device changes). The seed
+# records its timeline in the tenant's settings (`sample-data:timeline`); a tenant seeded
+# before that existed stays frozen until re-seeded. Turn it off to keep data as seeded:
+Dev__LiveSampleData=false aspire start
+
 # End-to-end smoke of the local stack (seed -> data -> login link -> tenant UI)
 dotnet run scripts/dev-smoke.cs
 

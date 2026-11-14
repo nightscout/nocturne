@@ -526,6 +526,9 @@ class Program
 
         if (builder.ExecutionContext.IsRunMode)
         {
+            if (devOptions.LiveSampleData)
+                apiEnvironment.WithEnvironment("SampleData__Live", "true");
+
             var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
             var bridge = builder.AddPnpmApp(
                 "nocturne-bridge-build",
