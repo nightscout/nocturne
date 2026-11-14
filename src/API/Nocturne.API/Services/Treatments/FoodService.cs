@@ -11,8 +11,8 @@ namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
 /// Domain service implementation for <see cref="Food"/> operations with WebSocket broadcasting.
-/// On a <see cref="FoodWriteMode.Native"/> create, sanitizes food records via
-/// <see cref="IDocumentProcessingService"/> and deduplicates by a composite key built from all food properties.
+/// On a <see cref="FoodWriteMode.Native"/> create or update, sanitizes food records via
+/// <see cref="IDocumentProcessingService"/> and on create deduplicates by a composite key built from all food properties.
 /// </summary>
 /// <seealso cref="IFoodService"/>
 /// <seealso cref="IFoodRepository"/>
@@ -108,32 +108,10 @@ public class FoodService : IFoodService
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var foodList = foods.Where(f => f != null).ToList();
-            _logger.LogDebug("Creating {Count} food records", foodList.Count);
+        var foodList = foods.Where(f => f != null).ToList();
+        _logger.LogDebug("Creating {Count} food records", foodList.Count);
 
-            var processedFoods = ProcessFoodDocuments(foodList);
-            var processedList = processedFoods.ToList();
-
-            // Create in database
-            var createdFoods = await _food.CreateFoodAsync(
-                processedList,
-                cancellationToken
-            );
-            var resultList = createdFoods.ToList();
-
-            await _sideEffects.OnCreatedAsync(CollectionName, resultList, cancellationToken: cancellationToken);
-            await _events.OnCreatedAsync(resultList, cancellationToken);
-
-            _logger.LogDebug("Successfully created {Count} food records", resultList.Count);
-            return resultList;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating food records");
-            throw;
-        }
+        return await PersistCreatedAsync(ProcessFoodDocuments(foodList).ToList(), cancellationToken);
 
         IEnumerable<Food> ProcessFoodDocuments(IEnumerable<Food> documents)
         {
@@ -148,7 +126,11 @@ public class FoodService : IFoodService
                     continue;
                 }
 
-                SanitizeFood(food);
+                if (!TrySanitizeFood(food))
+                {
+                    _logger.LogWarning("Skipping food entry {Id} whose name is empty after sanitizing", food.Id);
+                    continue;
+                }
 
                 var dedupKey = BuildDedupKey(food);
                 if (!seenKeys.Add(dedupKey))
@@ -161,43 +143,6 @@ public class FoodService : IFoodService
             }
 
             return processed;
-        }
-
-        void SanitizeFood(Food food)
-        {
-            food.Type = Sanitize(food.Type, "food");
-            food.Category = Sanitize(food.Category);
-            food.Subcategory = Sanitize(food.Subcategory);
-            food.Name = Sanitize(food.Name);
-            food.Unit = Sanitize(food.Unit);
-            food.ApplyUnitAndGiDefaults();
-
-            if (food.Foods == null || food.Foods.Count == 0)
-            {
-                return;
-            }
-
-            foreach (var quickPick in food.Foods)
-            {
-                quickPick.Name = Sanitize(quickPick.Name);
-                quickPick.Unit = Sanitize(quickPick.Unit, quickPick.Unit ?? string.Empty);
-            }
-        }
-
-        string Sanitize(string? value, string defaultValue = "")
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return defaultValue;
-            }
-
-            var sanitized = _documentProcessingService.SanitizeHtml(value);
-            if (string.IsNullOrWhiteSpace(sanitized))
-            {
-                return value.Trim();
-            }
-
-            return sanitized.Trim();
         }
 
         string BuildDedupKey(Food food)
@@ -265,12 +210,89 @@ public class FoodService : IFoodService
     }
 
     /// <inheritdoc />
+    public async Task<Food> CreateNativeFoodAsync(Food food, CancellationToken cancellationToken = default)
+    {
+        if (!TrySanitizeFood(food))
+        {
+            throw new FoodNameRequiredException();
+        }
+
+        var created = await PersistCreatedAsync([food], cancellationToken);
+        return created.First();
+    }
+
+    private async Task<List<Food>> PersistCreatedAsync(List<Food> processedList, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var createdFoods = await _food.CreateFoodAsync(processedList, cancellationToken);
+            var resultList = createdFoods.ToList();
+
+            await _sideEffects.OnCreatedAsync(CollectionName, resultList, cancellationToken: cancellationToken);
+            await _events.OnCreatedAsync(resultList, cancellationToken);
+
+            _logger.LogDebug("Successfully created {Count} food records", resultList.Count);
+            return resultList;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating food records");
+            throw;
+        }
+    }
+
+    private bool TrySanitizeFood(Food food)
+    {
+        food.Type = Sanitize(food.Type, "food");
+        food.Category = Sanitize(food.Category);
+        food.Subcategory = Sanitize(food.Subcategory);
+        food.Name = Sanitize(food.Name);
+        if (food.Name.Length == 0)
+        {
+            return false;
+        }
+
+        food.Unit = Sanitize(food.Unit);
+        food.ApplyUnitAndGiDefaults();
+
+        if (food.Foods == null || food.Foods.Count == 0)
+        {
+            return true;
+        }
+
+        foreach (var quickPick in food.Foods)
+        {
+            quickPick.Name = Sanitize(quickPick.Name);
+            quickPick.Unit = Sanitize(quickPick.Unit);
+        }
+
+        return true;
+    }
+
+    private string Sanitize(string? value, string defaultValue = "")
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        var sanitized = _documentProcessingService.SanitizeHtml(value).Trim();
+        return sanitized.Length == 0 ? defaultValue : sanitized;
+    }
+
+    /// <inheritdoc />
     public async Task<Food?> UpdateFoodAsync(
         string id,
         Food food,
+        FoodWriteMode mode,
         CancellationToken cancellationToken = default
     )
     {
+        if (mode == FoodWriteMode.Native && !TrySanitizeFood(food))
+        {
+            throw new FoodNameRequiredException();
+        }
+
         try
         {
             _logger.LogDebug("Updating food record with ID: {Id}", id);

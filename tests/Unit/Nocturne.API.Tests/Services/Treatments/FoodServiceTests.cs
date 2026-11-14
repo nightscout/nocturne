@@ -27,6 +27,9 @@ public class FoodServiceTests
     {
         _mockFoodRepository = new Mock<IFoodRepository>();
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
+        _mockDocumentProcessingService
+            .Setup(d => d.SanitizeHtml(It.IsAny<string?>()))
+            .Returns((string? value) => value ?? string.Empty);
         _mockSideEffects = new Mock<IWriteSideEffects>();
         _mockLogger = new Mock<ILogger<FoodService>>();
 
@@ -619,7 +622,7 @@ public class FoodServiceTests
             .ReturnsAsync(updatedFood);
 
         // Act
-        var result = await _foodService.UpdateFoodAsync(foodId, updateFood, CancellationToken.None);
+        var result = await _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();
@@ -656,7 +659,7 @@ public class FoodServiceTests
             .ReturnsAsync((Food?)null);
 
         // Act
-        var result = await _foodService.UpdateFoodAsync(foodId, updateFood, CancellationToken.None);
+        var result = await _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().BeNull();
@@ -693,7 +696,7 @@ public class FoodServiceTests
 
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.UpdateFoodAsync(foodId, updateFood, CancellationToken.None)
+            _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None)
         );
         exception.Should().Be(expectedException);
     }
@@ -724,7 +727,7 @@ public class FoodServiceTests
 
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.UpdateFoodAsync(foodId, updateFood, CancellationToken.None)
+            _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None)
         );
         exception.Should().Be(expectedException);
     }
