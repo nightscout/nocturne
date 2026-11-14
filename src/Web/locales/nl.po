@@ -637,7 +637,10 @@ msgstr ""
 #: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
 #: src/lib/components/reports/loop-analysis/SlotDays.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
+#: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Glucose"
 msgstr ""
 
@@ -1745,6 +1748,7 @@ msgstr ""
 #: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
 #: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 #: src/routes/(authenticated)/settings/profile/+page.svelte
+#: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Profile"
 msgstr ""
 
@@ -2415,6 +2419,7 @@ msgstr ""
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
 #: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
@@ -3200,9 +3205,11 @@ msgid "({0} min)"
 msgstr ""
 
 #: src/lib/components/settings/ClientDevices.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/setup-hub/items.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 #: src/routes/(authenticated)/settings/patient/+page.svelte
+#: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Devices"
 msgstr ""
 
@@ -3895,6 +3902,7 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
@@ -3960,9 +3968,11 @@ msgstr ""
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/status-pills/BasalPill.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/VersionList.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
-#: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Basal"
 msgstr ""
 
@@ -4152,6 +4162,7 @@ msgstr ""
 msgid "Appearance"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 msgid "Therapy"
 msgstr ""
@@ -5176,12 +5187,18 @@ msgstr ""
 
 #: src/lib/components/reports/AidSystemUseCard.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/VersionList.svelte
 msgid "Target"
 msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/VersionList.svelte
 msgid "Sensitivity"
 msgstr ""
 
@@ -5563,7 +5580,9 @@ msgstr ""
 #~ msgid "Clinical Note:"
 #~ msgstr ""
 
+#. 0: source
 #. 0: sourceLabel
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 msgid "Source: {0}"
 msgstr ""
@@ -6599,6 +6618,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Activity"
@@ -8878,9 +8898,8 @@ msgstr ""
 #~ msgid "State Spans Timeline"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/time-spans/+page.svelte
-msgid "View pump modes, profiles, temp basals, overrides, and activities over time"
-msgstr ""
+#~ msgid "View pump modes, profiles, temp basals, overrides, and activities over time"
+#~ msgstr ""
 
 #~ msgid "Toggle pump modes"
 #~ msgstr ""
@@ -9154,6 +9173,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "Override"
 msgstr ""
 
@@ -9169,7 +9189,6 @@ msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
-#: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Overrides"
 msgstr ""
 
@@ -9206,12 +9225,14 @@ msgstr ""
 
 #. 0: basic.count
 #. 0: formatNumber(totalReadings)
+#. 0: side.window.readings
 #. 0: formatNumber(readingCount)
 #. 0: formatNumber(readingCount)
 #. 0: readings.length
 #. 0: formatNumber(readingCount)
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
@@ -9231,14 +9252,11 @@ msgstr ""
 msgid "Error:"
 msgstr ""
 
-#: src/lib/components/dashboard/state-spans-timeline/state-spans-timeline.svelte
-msgid "No tracks selected. Enable at least one category above."
-msgstr ""
+#~ msgid "No tracks selected. Enable at least one category above."
+#~ msgstr ""
 
-#. 0: formatElapsedDuration(hoveredSpan.startTime, hoveredSpan.endTime)
-#: src/lib/components/dashboard/state-spans-timeline/state-spans-timeline.svelte
-msgid "Duration: {0}"
-msgstr ""
+#~ msgid "Duration: {0}"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/engine/point-inspection.svelte.ts
 msgid "Delivery"
@@ -13167,7 +13185,7 @@ msgstr ""
 msgid "Entries"
 msgstr ""
 
-#: src/routes/(authenticated)/time-spans/+page.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Profiles"
 msgstr ""
@@ -13181,7 +13199,6 @@ msgid "Food library"
 msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
-#: src/routes/(authenticated)/time-spans/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Activities"
 msgstr ""
@@ -13914,6 +13931,7 @@ msgstr ""
 
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/tenants/TenantsOverview.svelte
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/+page.svelte
 msgid "Loading…"
 msgstr ""
@@ -14403,6 +14421,7 @@ msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "Temporary target"
 msgstr ""
 
@@ -14809,9 +14828,11 @@ msgstr ""
 #. 0: (point.profileBasalRate ?? 0).toFixed(2)
 #. 0: d.basalRate.toFixed(2)
 #. 0: d.scheduledBasalRate.toFixed(2)
+#. 0: attributeValue(ProfileAttribute.Basal, basal.value)
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "{0} U/h"
 msgstr ""
 
@@ -15216,10 +15237,8 @@ msgstr ""
 #~ msgid "No analyses found. Make sure the compatibility proxy service is running and receiving traffic."
 #~ msgstr ""
 
-#. 0: formatShortDate(fromDate); 1: formatShortDate(toDate, true); 2: dayCount
-#: src/routes/(authenticated)/time-spans/+page.svelte
-msgid "{0} - {1} ({2} days)"
-msgstr ""
+#~ msgid "{0} - {1} ({2} days)"
+#~ msgstr ""
 
 #. 0: activeAlerts.length
 #: src/routes/(authenticated)/alerts/+page.svelte
@@ -17657,6 +17676,7 @@ msgstr ""
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "U/h"
 msgstr ""
 
@@ -18047,6 +18067,9 @@ msgid "Carbs 52g · oatmeal"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "Sensor change"
 msgstr ""
 
@@ -19399,10 +19422,8 @@ msgstr ""
 #~ msgid "Pump Modes"
 #~ msgstr ""
 
-#. 0: category.label.toLowerCase()
-#: src/routes/(authenticated)/time-spans/+page.svelte
-msgid "Toggle {0}"
-msgstr ""
+#~ msgid "Toggle {0}"
+#~ msgstr ""
 
 #. 0: rangeLabel; 1: Math.round(personalRange.inRangePercent ?? 0)
 #: src/routes/(authenticated)/reports/+page.svelte
@@ -19570,6 +19591,8 @@ msgstr ""
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "Site change"
 msgstr ""
 
@@ -22059,6 +22082,7 @@ msgid "Metric"
 msgstr ""
 
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
+#: src/routes/(authenticated)/time-spans/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
 msgid "Change"
@@ -23381,6 +23405,7 @@ msgstr ""
 msgid "Too little data"
 msgstr ""
 
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "No readings"
@@ -27894,6 +27919,9 @@ msgstr ""
 
 #: src/lib/components/reports/ScheduleFooter.svelte
 #: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/VersionList.svelte
 msgid "Carb ratio"
 msgstr ""
 
@@ -30263,6 +30291,7 @@ msgstr ""
 #: src/lib/components/alerts/factText.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "Pump mode"
 msgstr ""
 
@@ -32309,9 +32338,8 @@ msgstr ""
 msgid "Error loading data"
 msgstr ""
 
-#: src/lib/navigation/app-navigation.svelte.ts
-msgid "Time spans"
-msgstr ""
+#~ msgid "Time spans"
+#~ msgstr ""
 
 #~ msgid "Dev tools"
 #~ msgstr ""
@@ -32321,6 +32349,7 @@ msgid "Test endpoint compatibility"
 msgstr ""
 
 #: src/lib/components/rbac/permission-categories.svelte.ts
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Patient record"
@@ -32607,18 +32636,15 @@ msgstr ""
 msgid "<0/> Notification history"
 msgstr ""
 
-#: src/routes/(authenticated)/time-spans/+page.svelte
-msgid "Pump modes"
-msgstr ""
+#~ msgid "Pump modes"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/compatibility/test/+page.svelte
-#: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "<0/> Back to dashboard"
 msgstr ""
 
-#: src/routes/(authenticated)/time-spans/+page.svelte
-msgid "State spans timeline"
-msgstr ""
+#~ msgid "State spans timeline"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/tools/+page.svelte
 msgid "Packing calculator"
@@ -33303,14 +33329,18 @@ msgid "Insulin change"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "Pump battery change"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "Pod change"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "Reservoir change"
 msgstr ""
 
@@ -33363,6 +33393,9 @@ msgid "Basal max changed"
 msgstr ""
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/VersionRibbon.svelte
 msgid "Profile switch"
 msgstr ""
 
@@ -36485,8 +36518,10 @@ msgstr ""
 
 #. 0: LABELS[id]
 #. 0: legacyKindLabelWithNightscoutName(kind)
+#. 0: group.label.toLowerCase()
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
+#: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Show {0}"
 msgstr ""
 
@@ -37665,6 +37700,7 @@ msgstr ""
 
 #: src/lib/components/layout/NotificationItem.svelte
 #: src/lib/components/notifications/ReleaseNotesDialog.svelte
+#: src/lib/components/therapy-timeline/VersionList.svelte
 msgid "Version"
 msgstr ""
 
@@ -39153,4 +39189,152 @@ msgstr ""
 #. 0: maxDays
 #: src/lib/components/layout/ReportsFilterSidebar.svelte
 msgid "The date range must not be longer than {0} days."
+msgstr ""
+
+#: src/lib/navigation/app-navigation.svelte.ts
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Therapy timeline"
+msgstr ""
+
+#: src/lib/navigation/app-navigation.svelte.ts
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Timeline"
+msgstr ""
+
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/components/therapy-timeline/VersionRibbon.svelte
+msgid "Profile edit"
+msgstr ""
+
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
+msgid "The schedules are the same before and after this change."
+msgstr ""
+
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
+msgid "Before"
+msgstr ""
+
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
+msgid "After"
+msgstr ""
+
+#. 0: bgLabel()
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
+msgid "{0} average"
+msgstr ""
+
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
+msgid "time in range"
+msgstr ""
+
+#: src/lib/components/therapy-timeline/ChangeDetail.svelte
+msgid "Glucose around this change"
+msgstr ""
+
+#: src/lib/components/therapy-timeline/VersionList.svelte
+msgid "00–24 h"
+msgstr ""
+
+#. 0: (rate.rate ?? 0).toFixed(2)
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+msgid "{0} U/h delivered"
+msgstr ""
+
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+msgid "Therapy timeline lanes"
+msgstr ""
+
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+msgid "Point at the lanes to read the values at a time."
+msgstr ""
+
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+msgid "No profile is recorded for this time."
+msgstr ""
+
+#: src/lib/components/therapy-timeline/TimelineStage.svelte
+msgid "No glucose readings in this time."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Pump and loop"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Activity and sleep"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Therapy timeline - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "The profile in time, with the glucose and the pump, activity, and device data beside it."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Profile versions"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "The profile versions did not load. Select a shorter range, or load the page again."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "You do not have access to therapy settings."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "The profile did not change in this range."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Versions"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Window length"
+msgstr ""
+
+#. 0: days
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "{0} d"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Earlier"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Later"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "<0/> Scheduled"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "<0/> In effect"
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "The timeline did not load. Load the page again."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "The profile versions did not load."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "The changes did not load."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "Select a change mark to see the values before and after it."
+msgstr ""
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "There are no changes in this range."
 msgstr ""
