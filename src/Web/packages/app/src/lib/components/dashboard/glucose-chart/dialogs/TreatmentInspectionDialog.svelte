@@ -13,10 +13,11 @@
     time,
   } from "#lib/utils/formatting.js";
   import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
-  import { entrySummary } from "#lib/utils/entry-summary.js";
+  import { entrySummary } from "#lib/utils/entry-summary.svelte.js";
   import type { BolusCalculation, MealPeriod } from "#lib/api/index.js";
   import { CalculationType } from "#lib/api/index.js";
   import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
   import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import { getAll as getBolusCalculations } from "#lib/api/generated/bolusCalculations.generated.remote.js";
   import { carbMarkerName } from "../meal-period-labels.svelte";
@@ -323,7 +324,7 @@
                 </div>
               </div>
               <Badge variant={category.badge}>
-                {category.name}
+                {entryCategoryName(record.kind)}
               </Badge>
             </Item>
           {/each}

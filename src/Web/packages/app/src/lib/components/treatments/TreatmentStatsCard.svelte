@@ -3,6 +3,7 @@
   import type { TreatmentLogCounts, TreatmentSummary } from "#lib/api/index.js";
   import { plural } from "#lib/utils/plural.js";
   import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
 
   interface Props {
     /** Absent when the filtered records hold no boluses or carb intakes. */
@@ -18,7 +19,7 @@
   const categoryBreakdown = $derived(
     Object.values(ENTRY_CATEGORIES)
       .filter((cat) => (counts[cat.id] ?? 0) > 0)
-      .map((cat) => `${cat.name} ${counts[cat.id]}`)
+      .map((cat) => `${entryCategoryName(cat.id)} ${counts[cat.id]}`)
       .join(" · ")
   );
 </script>

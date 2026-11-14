@@ -9,7 +9,7 @@
  */
 
 import type { EntryRecord } from "#lib/constants/entry-categories.js";
-import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
 import { formatCarbDisplay, formatInsulinDisplay } from "#lib/utils/formatting.js";
 
 /**
@@ -91,5 +91,5 @@ export function entrySummary(entry: EntryRecord): string {
         parts.push(`${formatInsulinDisplay(entry.data.units)}U`);
       break;
   }
-  return parts.join(" · ") || ENTRY_CATEGORIES[entry.kind].name;
+  return parts.join(" · ") || entryCategoryName(entry.kind);
 }

@@ -270,14 +270,14 @@ describe("TrackerEditorDialog device events", () => {
     await expect.element(page.getByRole("listbox")).toBeVisible();
 
     const options = [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim());
-    expect(options).toEqual(["None", "Sensor Start", "Sensor Stop", "Pod Change"]);
+    expect(options).toEqual(["None", "Sensor start", "Sensor stop", "Pod change"]);
   });
 
   it("posts the chosen start and completion events", async () => {
     open(TrackerCategory.Sensor);
 
-    await pick("startEventType", "Sensor Start");
-    await pick("completionEventType", "Sensor Stop");
+    await pick("startEventType", "Sensor start");
+    await pick("completionEventType", "Sensor stop");
 
     expect(posted("startEventType")).toBe("Sensor Start");
     expect(posted("completionEventType")).toBe("Sensor Stop");
