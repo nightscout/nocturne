@@ -368,6 +368,8 @@ public class TenantSettingsControllerTests
         var (controller, tenants) = BuildForSubdomain(policyAllows: true, isPlatformAdmin: false, Scope.FullAccess);
         tenants.Setup(t => t.ChangeSlugAsync(TenantId, "new", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugValidationResult(true));
+        tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantSettingsDto(false, "new", "Old", DateTime.UtcNow));
 
         var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
 
@@ -385,6 +387,19 @@ public class TenantSettingsControllerTests
         var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task The_subdomain_reports_when_it_may_next_change()
+    {
+        var (controller, tenants) = BuildForSubdomain(policyAllows: true, isPlatformAdmin: false, Scope.FullAccess);
+        var next = new DateTime(2026, 11, 14, 10, 0, 0, DateTimeKind.Utc);
+        tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantSettingsDto(false, "sam", "Sam", DateTime.UtcNow, next));
+
+        var read = await controller.GetSubdomain(CancellationToken.None);
+
+        ((TenantSubdomainDto)((OkObjectResult)read.Result!).Value!).NextChangeAt.Should().Be(next);
     }
 
     [Fact]

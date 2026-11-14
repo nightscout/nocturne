@@ -97,4 +97,21 @@ describe("SiteAddressCard", () => {
 
     await expect.element(page.getByText("This name is reserved")).toBeVisible();
   });
+
+  it("waits an hour after a change, and says when the next change is possible", async () => {
+    mocks.subdomain = { ...mocks.subdomain, nextChangeAt: new Date(Date.now() + 30 * 60_000).toISOString() } as typeof mocks.subdomain;
+    render(SiteAddressCard);
+
+    await expect.element(page.getByRole("button", { name: "Change address" })).toBeDisabled();
+    await expect
+      .element(page.getByText("You can change the address one time each hour.", { exact: false }))
+      .toBeVisible();
+  });
+
+  it("offers the change again once the hour has passed", async () => {
+    mocks.subdomain = { ...mocks.subdomain, nextChangeAt: new Date(Date.now() - 60_000).toISOString() } as typeof mocks.subdomain;
+    render(SiteAddressCard);
+
+    await expect.element(page.getByRole("button", { name: "Change address" })).toBeEnabled();
+  });
 });

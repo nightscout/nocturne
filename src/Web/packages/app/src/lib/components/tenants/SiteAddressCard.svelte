@@ -17,7 +17,7 @@
   import { validateSlug } from "#lib/api/generated/myTenants.generated.remote.js";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { formatNumericDate } from "#lib/utils/formatting.js";
+  import { formatClock, formatNumericDate } from "#lib/utils/formatting.js";
   import { createSlugAvailability } from "./slug-availability.svelte.js";
 
   interface Props {
@@ -32,6 +32,20 @@
   const subdomainQuery = getSubdomain();
   retainQuery(() => subdomainQuery);
   const subdomain = $derived(subdomainQuery.current);
+
+  // The API refuses a change within an hour of the last one; until then the button says when.
+  let waitUntil = $state<Date | null>(null);
+  $effect(() => {
+    const next = subdomain?.nextChangeAt ? new Date(subdomain.nextChangeAt) : null;
+    const remaining = next ? next.getTime() - Date.now() : 0;
+    if (!next || remaining <= 0) {
+      waitUntil = null;
+      return;
+    }
+    waitUntil = next;
+    const timer = setTimeout(() => (waitUntil = null), remaining);
+    return () => clearTimeout(timer);
+  });
 
   let open = $state(false);
   let newSlug = $state("");
@@ -114,7 +128,12 @@
     </dl>
 
     {#if subdomain?.canChange && !isDemo}
-      <Button variant="outline" onclick={openDialog}>Change address</Button>
+      <Button variant="outline" onclick={openDialog} disabled={waitUntil !== null}>Change address</Button>
+      {#if waitUntil}
+        <p class="text-sm text-muted-foreground">
+          You can change the address one time each hour. You can change it again at {formatClock(waitUntil)}.
+        </p>
+      {/if}
     {:else if subdomain}
       <p class="text-sm text-muted-foreground">
         You cannot change the address of this site.

@@ -5505,6 +5505,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("slug");
 
+                    b.Property<DateTime?>("SlugChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("slug_changed_at");
+
                     b.Property<DateTime>("SysCreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
