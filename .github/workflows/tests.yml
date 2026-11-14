@@ -33,6 +33,7 @@ jobs:
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
       composeBundle: ${{ steps.filter.outputs.composeBundle == 'true' || github.event_name != 'pull_request' }}
+      sdk: ${{ steps.filter.outputs.sdk == 'true' || github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -89,6 +90,10 @@ jobs:
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
+            sdk:
+              - *shared
+              - 'sdk/**'
+              - '.github/workflows/sdk-publish.yml'
             composeBundle:
               - *shared
               - 'src/Aspire/**'
@@ -107,7 +112,7 @@ jobs:
     needs: changes
     if: >-
       needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.crates == 'true'
-      || needs.changes.outputs.web == 'true'
+      || needs.changes.outputs.web == 'true' || needs.changes.outputs.sdk == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -894,6 +899,37 @@ jobs:
             exit 1
           fi
 
+  # Generates the Java SDK from the filtered spec of the API build and fails when a model rejects
+  # an unknown response field or enum value. Only sdk/** (filter, config, templates) or a generator
+  # bump can bring that back: the filter strips the setting from every schema the API emits.
+  sdk-tolerant-models:
+    needs: [changes, build]
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v5
+        with:
+          name: api-client
+          path: src/Web/packages/app/src/lib/api
+      - name: Filter spec to SDK endpoints (V4 + OAuth)
+        run: node sdk/filter-v4-spec.js src/Web/packages/app/src/lib/api/generated/openapi.json sdk/openapi-v4.json
+      - name: Generate Java SDK
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
+        with:
+          args: >-
+            generate
+            -i sdk/openapi-v4.json
+            -c sdk/java/config.yaml
+            -o sdk/java/out
+            --ignore-file-override sdk/java/.openapi-generator-ignore
+      - name: Verify models tolerate unknown fields and enum values
+        run: bash sdk/verify-tolerant-java-models.sh sdk/java/out
+
   # The single check to require on the branch: green when every job it needs passed or was
   # skipped for want of relevant changes.
   tests-passed:
@@ -912,6 +948,7 @@ jobs:
       - e2e
       - migration-upgrade
       - compose-bundle-drift
+      - sdk-tolerant-models
       - coverage
     if: always()
     runs-on: ubuntu-latest
