@@ -197,6 +197,8 @@ public class TenantRepository : ITenantRepository
             entity.DisplayName = edit.DisplayName;
         if (edit.Slug is not null)
             entity.Slug = edit.Slug;
+        if (edit.SlugChangedAt is { } slugChanged)
+            entity.SlugChangedAt = slugChanged;
         if (edit.IsActive is { } active)
             entity.IsActive = active;
         if (edit.IsDemo is { } demo)
@@ -305,5 +307,6 @@ public class TenantRepository : ITenantRepository
                 tenant.DemoConfig.AccessMode,
                 tenant.DemoConfig.BackfillDays,
                 tenant.DemoConfig.IntervalMinutes,
-                tenant.DemoConfig.ResetIntervalMinutes));
+                tenant.DemoConfig.ResetIntervalMinutes),
+            tenant.SlugChangedAt);
 }

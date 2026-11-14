@@ -246,13 +246,17 @@ public partial class TenantService : ITenantService
         if (normalized == tenant.Slug)
             return new SlugValidationResult(false, "This is already the tenant's subdomain");
 
+        if (NextSlugChangeAt(tenant) is not null)
+            return new SlugValidationResult(false, "You can change the address one time each hour. Try again later.");
+
         var validation = await ValidateSlugAsync(normalized, ct);
         if (!validation.IsValid)
             return validation;
 
         try
         {
-            await _tenants.UpdateAsync(id, new TenantEdit(Slug: normalized), ct);
+            await _tenants.UpdateAsync(
+                id, new TenantEdit(Slug: normalized, SlugChangedAt: _time.GetUtcNow().UtcDateTime), ct);
         }
         catch (DbUpdateException)
         {
@@ -584,6 +588,16 @@ public partial class TenantService : ITenantService
     private static TenantDto ToDto(TenantRecord t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
 
-    private static TenantSettingsDto ToSettingsDto(TenantRecord t) =>
-        new(t.AllowPublicDocs, t.Slug, t.DisplayName, t.SysCreatedAt);
+    private TenantSettingsDto ToSettingsDto(TenantRecord t) =>
+        new(t.AllowPublicDocs, t.Slug, t.DisplayName, t.SysCreatedAt, NextSlugChangeAt(t));
+
+    /// <summary>
+    /// When <paramref name="tenant"/>'s subdomain may next change, or null when it may change now.
+    /// </summary>
+    private DateTime? NextSlugChangeAt(TenantRecord tenant) =>
+        tenant.SlugChangedAt is { } changedAt
+        && changedAt + ITenantService.SlugChangeInterval is var next
+        && next > _time.GetUtcNow().UtcDateTime
+            ? next
+            : null;
 }
