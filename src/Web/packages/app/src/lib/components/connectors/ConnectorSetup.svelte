@@ -62,6 +62,8 @@
     primaryAction?: "save-and-finish" | "save-only";
     /** Whether to show .env variable name hints in the config form. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
+    /** See the config form's `saveLabel`. */
+    saveLabel?: string;
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
@@ -77,6 +79,7 @@
     showCapabilities = false,
     primaryAction = connectorId ? "save-only" : "save-and-finish",
     showEnvVarHints = true,
+    saveLabel,
     extras,
   }: Props = $props();
 
@@ -431,6 +434,7 @@
           {effectiveConfig}
           {hasSecrets}
           {showEnvVarHints}
+          {saveLabel}
           onSave={handleSave}
         />
       {:else}

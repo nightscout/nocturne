@@ -481,7 +481,7 @@
             {/if}
 
             <!-- Actions -->
-            <div class="flex gap-3">
+            <div class="flex flex-col gap-3">
               <form
                 {...testConnectionForm.enhance(async ({ submit }) => {
                   const source = sourceKey;
@@ -568,15 +568,17 @@
                 {/if}
                 <Button
                   type="submit"
+                  size="xl"
+                  class="w-full"
                   disabled={!isFormValid ||
                     !shownTestResult?.success ||
                     !!startMigrationForm.pending ||
                     !!hasActiveMigration}
                 >
                   {#if startMigrationForm.pending}
-                    <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 class="animate-spin" />
                   {:else}
-                    <Play class="h-4 w-4 mr-2" />
+                    <Play />
                   {/if}
                   Start migration
                 </Button>

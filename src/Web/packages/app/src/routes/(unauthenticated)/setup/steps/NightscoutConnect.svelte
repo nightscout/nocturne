@@ -26,6 +26,7 @@
   <ConnectorSetup
     connectorId="nightscout"
     primaryAction="save-and-finish"
+    saveLabel="Start import"
     showToggle={false}
     showDangerZone={false}
     showCapabilities={true}
