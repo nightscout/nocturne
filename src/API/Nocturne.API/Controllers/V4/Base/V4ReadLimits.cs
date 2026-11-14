@@ -25,6 +25,11 @@ namespace Nocturne.API.Controllers.V4.Base;
 public static class V4ReadLimits
 {
     /// <summary>
+    /// The most a daylight saving change moves a zone's offset.
+    /// </summary>
+    public static readonly TimeSpan DaylightSavingMargin = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Maximum records a V4 list read may return.
     /// </summary>
     /// <remarks>
@@ -118,10 +123,16 @@ public static class V4ReadLimits
     /// <summary>
     /// Rejects a range read whose bounds are further apart than <paramref name="maxDays"/>.
     /// </summary>
+    /// <remarks>
+    /// A client cuts a range of <paramref name="maxDays"/> local calendar days from the first
+    /// midnight to the last millisecond of the last day, and a daylight saving change inside it
+    /// makes that span up to <see cref="DaylightSavingMargin"/> longer in UTC, so the check allows
+    /// that margin.
+    /// </remarks>
     /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
     public static ObjectResult? RejectDateSpan(
         this ControllerBase controller, DateTime? from, DateTime? to, int maxDays = MaxDateSpanDays) =>
-        from is { } start && to is { } end && (end - start).TotalDays > maxDays
+        from is { } start && to is { } end && end - start > TimeSpan.FromDays(maxDays) + DaylightSavingMargin
             ? DateSpanProblem(controller, maxDays)
             : null;
 

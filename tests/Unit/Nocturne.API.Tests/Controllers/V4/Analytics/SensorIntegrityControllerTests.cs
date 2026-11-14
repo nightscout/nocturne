@@ -71,7 +71,7 @@ public class SensorIntegrityControllerTests
     [Fact]
     public async Task Analyze_with_a_range_over_the_cap_returns_bad_request_without_calling_service()
     {
-        var result = await _controller.Analyze(Start, Start.AddDays(V4ReadLimits.MaxDateSpanDays).AddMilliseconds(1));
+        var result = await _controller.Analyze(Start, Start.AddDays(V4ReadLimits.MaxDateSpanDays).Add(V4ReadLimits.DaylightSavingMargin).AddMilliseconds(1));
 
         ProblemOf(result).Detail.Should().Be($"Date range must not exceed {V4ReadLimits.MaxDateSpanDays} days.");
         VerifyNotAnalyzed();
