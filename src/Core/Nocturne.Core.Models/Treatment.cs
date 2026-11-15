@@ -59,7 +59,7 @@ public class Treatment : ProcessableDocumentBase
     public string? Identifier => Id;
 
     /// <summary>A copy whose reference members, such as <see cref="AdditionalProperties"/>, are shared.</summary>
-    internal Treatment ShallowCopy() => (Treatment)MemberwiseClone();
+    public Treatment ShallowCopy() => (Treatment)MemberwiseClone();
 
     /// <summary>
     /// Server-modified timestamp for V3 compatibility.
