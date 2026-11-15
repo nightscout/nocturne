@@ -182,13 +182,22 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
             .Where(p => p.Length == 2 && p[0].StartsWith("find[", StringComparison.Ordinal))
             .ToList();
 
-        return Documents.Where(d => finds.All(f => f[0] switch
-        {
-            "find[created_at][$gte]" => string.CompareOrdinal(Str(d, "created_at"), f[1]) >= 0,
-            "find[created_at][$lte]" => string.CompareOrdinal(Str(d, "created_at"), f[1]) <= 0,
-            "find[eventType]" => Str(d, "eventType") == f[1],
-            _ => throw new NotSupportedException(f[0]),
-        }));
+        var identifiers = InValues("identifier");
+        var ids = InValues("_id");
+        return Documents.Where(d =>
+            (identifiers.Count == 0 || identifiers.Contains(Str(d, "identifier")))
+            && (ids.Count == 0 || ids.Contains(Id(d)))
+            && finds.Where(f => !f[0].Contains("[$in]", StringComparison.Ordinal)).All(f => f[0] switch
+            {
+                "find[created_at][$gte]" => string.CompareOrdinal(Str(d, "created_at"), f[1]) >= 0,
+                "find[created_at][$lte]" => string.CompareOrdinal(Str(d, "created_at"), f[1]) <= 0,
+                "find[eventType]" => Str(d, "eventType") == f[1],
+                "find[_id]" => Id(d) == f[1],
+                _ => throw new NotSupportedException(f[0]),
+            }));
+
+        List<string?> InValues(string field) =>
+            [.. finds.Where(f => f[0].StartsWith($"find[{field}][$in][", StringComparison.Ordinal)).Select(f => (string?)f[1])];
     }
 
     private static string Serve(IEnumerable<JsonObject> documents)

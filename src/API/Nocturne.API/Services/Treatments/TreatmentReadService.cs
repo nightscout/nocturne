@@ -216,6 +216,7 @@ internal class TreatmentReadService : ITreatmentStore
         var results = new List<Treatment>(treatments.Count);
         var rejected = Rejections(treatments, decomposition);
         var accepted = Enumerable.Range(0, treatments.Count).Where(i => !decomposition.Rejected.ContainsKey(i)).ToList();
+        var updated = accepted.Where(i => UpdatedStoredRecord(treatments[i], decomposition.Of(i))).ToHashSet();
         IReadOnlyList<StoredTreatment> created;
         try
         {
@@ -256,7 +257,7 @@ internal class TreatmentReadService : ITreatmentStore
             {
                 results.Add(created[k].Created);
                 if (Wrote(decomposition.Of(accepted[k])))
-                    stored?.Add(created[k]);
+                    stored?.Add(created[k] with { Updated = updated.Contains(accepted[k]) });
             }
         }
 
@@ -321,6 +322,17 @@ internal class TreatmentReadService : ITreatmentStore
     public Task<IReadOnlyList<Treatment?>> ReadBackAsync(
         IReadOnlyList<StoredTreatment> stored, CancellationToken ct = default) =>
         _store.ReadBackAsync(stored, ct);
+
+    /// <summary>
+    /// Whether decomposing <paramref name="treatment"/> updated a record already stored for it: one of
+    /// its records, or the span it is stored as (an override, a temporary target), which carries the
+    /// treatment's id as its original id. Another span the decomposition updated, such as the
+    /// suspension a pump resume closes, belongs to another treatment. Read before
+    /// <see cref="LegacyTreatmentStore.ToCreatedAsync"/> rewrites the treatment's id.
+    /// </summary>
+    private static bool UpdatedStoredRecord(Treatment treatment, DecompositionResult result) =>
+        result.UpdatedRecords.Any(r => r is IV4Record
+            || (r is StateSpan { OriginalId: { Length: > 0 } originalId } && originalId == treatment.Id));
 
     /// <summary>
     /// A treatment stored only as rows that already held what it carries is served in the response

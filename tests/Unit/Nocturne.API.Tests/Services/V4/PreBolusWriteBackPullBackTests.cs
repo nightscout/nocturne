@@ -128,8 +128,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
 
         var calculation = await _context.BolusCalculations.AsNoTracking().SingleAsync();
         calculation.CarbInput.Should().Be(45);
-        calculation.PreBolus.Should().BeNull(
-            "a pulled copy replaces the calculation, and the copy upstream cannot carry preBolus beside its carbs");
+        calculation.PreBolus.Should().Be(20, "the pulled copy is the calculation's write-back echo, which writes nothing");
         (await _context.CarbIntakes.AsNoTracking().SingleAsync()).Carbs.Should().Be(45);
         (await _context.Boluses.AsNoTracking().CountAsync()).Should().Be(1);
     }

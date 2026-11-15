@@ -135,6 +135,12 @@ internal interface ITreatmentStore
 internal abstract record StoredTreatment(Treatment Created)
 {
     /// <summary>
+    /// Whether the create updated a record already stored for the treatment rather than inserting
+    /// one: a client's resend, a connector republish, a span sent again.
+    /// </summary>
+    public bool Updated { get; init; }
+
+    /// <summary>
     /// A temp basal, mapped from the record <paramref name="RecordId"/> as written. A later write of
     /// the batch can change that record: a re-send of it, or a Profile Switch that re-resolves its
     /// rate from the schedule.
