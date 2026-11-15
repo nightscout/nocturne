@@ -82,11 +82,27 @@ internal enum ReportSpanKind
     [Description("Temp basals")]
     [JsonStringEnumMemberName("temp_basal")]
     TempBasal,
+
+    [Description("Temporary targets")]
+    [JsonStringEnumMemberName("temporary_target")]
+    TemporaryTarget,
+
+    [Description("Pump connection")]
+    [JsonStringEnumMemberName("pump_connectivity")]
+    PumpConnectivity,
+
+    [Description("Data left out")]
+    [JsonStringEnumMemberName("data_exclusion")]
+    DataExclusion,
+
+    [Description("Motion")]
+    [JsonStringEnumMemberName("motion")]
+    Motion,
 }
 
 [Description(
     "state_spans: pump modes, profiles, overrides, activities and temp basals, each from its start to its end, as the "
-    + "dashboard chart's lanes draw them.")]
+    + "dashboard chart's lanes draw them, and temporary targets, pump connection, data left out and motion.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record StateSpansParameters : ReportDatasetParameters
 {
@@ -95,9 +111,9 @@ internal sealed record StateSpansParameters : ReportDatasetParameters
     [JsonIgnore]
     public override string DatasetName => Name;
 
-    [Description("The kinds to read. Optional; every kind when missing.")]
+    [Description("The kinds to read. Optional; when missing, the kinds the dashboard chart draws: pump_mode, profile, override, activity and temp_basal.")]
     [DisplayName("Kinds")]
-    [Length(1, 5)]
+    [Length(1, 9)]
     public IReadOnlyList<ReportSpanKind>? Kinds { get; init; }
 }
 

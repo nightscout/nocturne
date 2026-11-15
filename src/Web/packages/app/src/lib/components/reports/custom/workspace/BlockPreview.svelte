@@ -5,11 +5,11 @@
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { ReportPanel } from "@nocturne/charts/core";
+  import { readReport, type ReportPanel } from "@nocturne/charts/core";
   import { untrack } from "svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-  import type { PreviewRunner } from "../builder/preview-runner.svelte.js";
+  import type { PreviewRunner } from "./preview-runner.svelte.js";
   import CustomReportRun from "../CustomReportRun.svelte";
   import type { BlockKind } from "./report.svelte.js";
 
@@ -37,6 +37,12 @@
     table: "Table updated.",
     comparison: "Comparison updated.",
   };
+  const NOT_SHOWN: Record<BlockKind, string> = {
+    chart: "The chart could not be shown.",
+    figures: "The figures could not be shown.",
+    table: "The table could not be shown.",
+    comparison: "The comparison could not be shown.",
+  };
 
   $effect(() => {
     const next = spec;
@@ -52,7 +58,17 @@
   const stale = $derived(
     runner.running || (runner.failure === null && runner.ran !== null && runner.ran !== current)
   );
-  const settled = $derived(runner.ran !== null && !runner.running && runner.failure === null ? UPDATED[kind] : "");
+  /** The run came back but drew nothing: its spec was refused, or every panel failed or was not read. */
+  const notShown = $derived.by(() => {
+    const run = runner.run;
+    if (!run) return false;
+    if ((run.errors ?? []).length > 0) return true;
+    const panels = readReport(run.result)?.panels ?? [];
+    return panels.length === 0 || panels.every((p) => p.status !== "ok");
+  });
+  const settled = $derived(
+    runner.ran === null || runner.running ? "" : runner.failure !== null || notShown ? NOT_SHOWN[kind] : UPDATED[kind]
+  );
 </script>
 
 {#if incomplete || !spec}

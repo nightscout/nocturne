@@ -116,6 +116,10 @@ describe("the words of the vocabulary", () => {
       for (const id of ids) if (!Object.hasOwn(words, id)) missing.push(`${kind} ${id}`);
     };
     check("signal", ws.signals.map((s) => s.id), words.signalLabels());
+    check("signal description", ws.signals.map((s) => s.id), words.signalDescriptions());
+    check("section", [...ws.sections.map((s) => s.id), ...ws.signals.map((s) => s.section)], words.sectionLabels());
+    check("signal group", [...ws.sections.flatMap((s) => s.groups), ...ws.signals.map((s) => s.group)], words.signalGroupLabels());
+    check("search key", ws.signals.flatMap((s) => s.searchKeys), Object.fromEntries(Object.keys(words.searchTermWords()).map((k) => [k, k])));
     check("lens", ws.lenses, words.lensLabels());
     check("lens description", ws.lenses, words.lensDescriptions());
     check("family", ws.families.map((f) => f.id), words.familyLabels());

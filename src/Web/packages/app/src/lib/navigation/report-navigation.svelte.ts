@@ -451,7 +451,7 @@ function reportSubRoutes(): Record<string, { title: string; description: string 
     },
     "/reports/custom/[id]/edit": {
       title: "Edit custom report",
-      description: "Change the panels of a saved custom report",
+      description: "Change the blocks of a saved custom report",
     },
     "/reports/custom/[id]": {
       title: "Custom report",

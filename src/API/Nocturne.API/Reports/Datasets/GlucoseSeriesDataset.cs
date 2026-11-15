@@ -91,7 +91,7 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = Rows(sampled, data, thresholds, request.UseMmol),
-            Summary = GlucoseSummary.Build(data, statistics, request.UseMmol, request.From, request.To, [.. omitted.Select(o => o.Field)]),
+            Summary = GlucoseSummary.Build(data, statistics, request.UseMmol, request.From, request.To, [.. omitted.Select(o => o.Field)], request.Zone),
             Facts = [.. facts.Select(f => f.Of(GlucoseFields))],
             Sentence = sentence,
             SentenceAbout = GlucoseFields,

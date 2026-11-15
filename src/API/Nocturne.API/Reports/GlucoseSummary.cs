@@ -45,13 +45,14 @@ internal static class GlucoseSummary
         bool useMmol,
         DateTimeOffset from,
         DateTimeOffset to,
-        IReadOnlyList<string>? omittedFields = null)
+        IReadOnlyList<string>? omittedFields = null,
+        TimeZoneInfo? zone = null)
     {
         var text = new StringBuilder();
         var units = useMmol ? "mmol/L" : "mg/dL";
 
         text.Append(CultureInfo.InvariantCulture,
-            $"Glucose from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC");
+            $"Glucose from {ReportFacts.Window(from, to, zone)}");
         text.Append(".").Append('\n');
 
         var basic = statistics.CalculateBasicStats(data.GlucoseData.Select(r => r.Sgv));

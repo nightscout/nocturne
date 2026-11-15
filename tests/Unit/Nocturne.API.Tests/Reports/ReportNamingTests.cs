@@ -68,11 +68,79 @@ public class ReportNamingTests
         var layers = panel.Tracks![0].Layers;
         panel.Title.Should().BeNull("the lead's name would head both groups as if it were one; the host's caption names the comparison");
         panel.Context.Should().BeNull("the lead's range line counts only its own days");
-        layers.Select(l => l.Title).Should().Equal("Days with a low", "All other days", "Glucose median, days with a low minus Glucose median, all other days");
+        layers.Select(l => l.Title).Should().Equal("Glucose", "Glucose", "Glucose median, days with a low minus Glucose median, all other days");
+        layers.Select(l => l.Group).Should().Equal("Days with a low", "All other days", null);
         layers[0].Days.Should().Be(new ReportDayCounts(Kept: 4, Total: 29, Matching: 4, NotMatching: 23, Partial: 1, Undecided: 1));
         layers[1].Days!.Kept.Should().Be(23);
         JsonSerializer.Serialize(layers[0], new JsonSerializerOptions(JsonSerializerDefaults.Web))
             .Should().Contain("\"days\":{\"kept\":4,\"total\":29,\"matching\":4,\"notMatching\":23,\"partial\":1,\"undecided\":1}");
+    }
+
+    [Theory]
+    [InlineData("Glucose median", "Glucose")]
+    [InlineData("Glucose P25", "Glucose")]
+    [InlineData("IOB median", "Insulin on board")]
+    [InlineData("COB", "Carbs on board")]
+    [InlineData("Net loop correction median", "Net loop correction")]
+    [InlineData("Basal rate", "Basal rate")]
+    [InlineData("P50", "P50")]
+    public void A_field_is_named_by_its_signal_without_the_statistic(string label, string signal) =>
+        ReportNames.Signal(label).Should().Be(signal);
+
+    [Theory]
+    [InlineData(EventAnchorKind.LowStart, 0, 360, true, "Lows that start from 12:00 AM to 6:00 AM", "No lows started from 12:00 AM to 6:00 AM")]
+    [InlineData(EventAnchorKind.LowStart, 0, 360, false, "Lows that start from 00:00 to 06:00", "No lows started from 00:00 to 06:00")]
+    [InlineData(EventAnchorKind.Meal, 390, 600, true, "Meals from 6:30 AM to 10:00 AM", "No meals from 6:30 AM to 10:00 AM")]
+    [InlineData(EventAnchorKind.HighStart, null, null, true, "Highs", "No highs")]
+    public void An_event_group_is_written_in_words_on_the_tenants_clock(
+        EventAnchorKind anchor, int? from, int? to, bool hour12, string heading, string none)
+    {
+        var words = Nocturne.API.Reports.Datasets.EventResponseDataset.Words(
+            new EventCohortDefinition { Anchor = anchor, FromMinute = from, ToMinute = to }, new Dictionary<Guid, string>(), true, false, hour12);
+
+        words.Should().Be(new Nocturne.API.Reports.Datasets.EventResponseDataset.CohortWords(heading, none));
+    }
+
+    [Fact]
+    public void An_event_groups_filters_follow_its_name_and_its_weekdays_come_last()
+    {
+        var words = Nocturne.API.Reports.Datasets.EventResponseDataset.Words(
+            new EventCohortDefinition { Anchor = EventAnchorKind.Meal, MinGrams = 40, DaysOfWeek = [DayOfWeek.Monday, DayOfWeek.Tuesday] },
+            new Dictionary<Guid, string>(), true, false, true);
+
+        words.Heading.Should().Be("Meals with at least 40 g on Mon, Tue");
+        Nocturne.API.Reports.Datasets.EventResponseDataset.Words(
+                new EventCohortDefinition { Anchor = EventAnchorKind.Meal, Others = true }, new Dictionary<Guid, string>(), true, false, true)
+            .Heading.Should().Be("All other meals");
+    }
+
+    [Fact]
+    public void A_group_with_no_events_says_what_was_looked_for_and_where()
+    {
+        var now = new DateTimeOffset(2026, 11, 16, 5, 0, 0, TimeSpan.Zero);
+        ReportDatasetRequest Request(DateTimeOffset to) => new(null!, ReportPanelKind.Chart, to.AddDays(-90), to, false,
+            new HashSet<string>(), null!, new ReportReadLog(), Now: now);
+        var words = new Nocturne.API.Reports.Datasets.EventResponseDataset.CohortWords("Lows that start from 12:00 AM to 6:00 AM", "No lows started from 12:00 AM to 6:00 AM");
+
+        Nocturne.API.Reports.Datasets.EventResponseDataset.NoneSentence(words, Nocturne.API.Reports.Datasets.EventResponseDataset.RangeWords(Request(now)))
+            .Should().Be("No lows started from 12:00 AM to 6:00 AM in the last 90 days.");
+        Nocturne.API.Reports.Datasets.EventResponseDataset.RangeWords(Request(now.AddDays(-100)))
+            .Should().Be("from 2026-05-10 to 2026-08-08");
+    }
+
+    [Fact]
+    public void A_lane_is_named_by_each_signal_it_draws_with_its_unit()
+    {
+        ReportLayerResult Layer(string title, string? unit, ReportMark mark = ReportMark.Line) => new()
+        {
+            Id = title, Title = title, Mark = mark, Bindings = new ReportLayerBindings(), XKind = ReportXKind.Offset, Unit = unit,
+            Side = ReportAxisSide.Left, Status = ReportPanelStatus.Ok, Window = new ReportWindow(0, 1),
+        };
+
+        ReportSpecRunner.LaneTitle(new ReportTrackResult("t", null, 1, ReportXKind.Offset, [Layer("Insulin on board", "U")]))
+            .Should().Be("Insulin on board (U)");
+        ReportSpecRunner.LaneTitle(new ReportTrackResult("t", null, 1, ReportXKind.Time, [Layer("Modes", null, ReportMark.Spans)]))
+            .Should().BeNull("a lane of spans names each of its rows");
     }
 
     [Fact]

@@ -98,7 +98,7 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(bands, count, request.From, request.To, useMmol),
+            Summary = Summarise(bands, count, request.From, request.To, useMmol, request.Zone),
             Facts = count == 0 ? [] : [.. bands.Select(b => ReportFacts.Percent(b.Label, Math.Round(b.Percent, 1), Limits(b, useMmol)).Of("percent|minutes"))],
             Sentence = count == 0
                 ? "No glucose readings in this period."
@@ -137,10 +137,10 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
         };
     }
 
-    internal static string Summarise(IReadOnlyList<Band> bands, int readings, DateTimeOffset from, DateTimeOffset to, bool useMmol)
+    internal static string Summarise(IReadOnlyList<Band> bands, int readings, DateTimeOffset from, DateTimeOffset to, bool useMmol, TimeZoneInfo? zone = null)
     {
         var head = string.Create(CultureInfo.InvariantCulture,
-            $"Glucose distribution from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC.");
+            $"Glucose distribution from {ReportFacts.Window(from, to, zone)}.");
         if (readings == 0)
             return head + "\nNo glucose readings in this period.";
 

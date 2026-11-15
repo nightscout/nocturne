@@ -1,15 +1,15 @@
 <!--
-  The open chart block: the signal rail beside the canvas. The canvas holds the chart's title and
-  range, the lens, what the lens compares, its quiet options, the chart's caption, the placed
-  signals and the chart.
+  The open chart block, chart first: the lens, the chart's caption, the chart and its placed signals
+  in the main column; beside it on a wide block (under it on a narrow one) the signals on the chart,
+  what the lens compares, its quiet options, the chart's title and range, and the advanced settings.
+  On a narrow block the signals are one disclosure above the chart, closed once the chart has a signal.
 -->
 <script lang="ts">
   import { lensLabel, lensDescription, eventShowLabel } from "./vocabulary-words.svelte.js";
-  import { untrack } from "svelte";
+  import { tick, untrack, type Snippet } from "svelte";
   import { readReport, type ReportPanel } from "@nocturne/charts/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
@@ -17,15 +17,16 @@
   import ChartScatter from "@lucide/svelte/icons/chart-scatter";
   import Clock from "@lucide/svelte/icons/clock";
   import Flag from "@lucide/svelte/icons/flag";
-  import type { PreviewRunner } from "../builder/preview-runner.svelte.js";
+  import type { PreviewRunner } from "./preview-runner.svelte.js";
   import AgainstStrip from "./AgainstStrip.svelte";
   import BlockPreview from "./BlockPreview.svelte";
+  import BlockTitleRange from "./BlockTitleRange.svelte";
   import ChartOptions from "./ChartOptions.svelte";
   import DayGroups from "./DayGroups.svelte";
   import EventGroups from "./EventGroups.svelte";
-  import RangeChoices from "./RangeChoices.svelte";
   import SignalChips from "./SignalChips.svelte";
   import SignalRail from "./SignalRail.svelte";
+  import SignalChartAdvanced from "./SignalChartAdvanced.svelte";
   import EventViewRail from "./EventViewRail.svelte";
   import { captionJoin, lowerFirst } from "./workspace.svelte.js";
   import { describe } from "./describe.js";
@@ -42,14 +43,12 @@
 
   const ws = $derived(block.ws);
 
-  /**
-   * Under the canvas's two-column width the rail is one disclosure above the
-   * chart, closed once the chart has a signal.
-   */
   let gridWidth = $state(0);
   const narrow = $derived(gridWidth > 0 && gridWidth < 896);
   // svelte-ignore state_referenced_locally
   let railOpen = $state(block.ws.empty);
+  let optionsOpen = $state(false);
+  let titleOpen = $state(false);
 
   /** Each lens's icon; a lens the web has none for yet takes the timeline's. */
   const LENS_ICONS: Record<string, typeof ChartLine> = {
@@ -105,7 +104,12 @@
     }
   }
 
-  function focusOwner(kind: CaptionKind) {
+  /** Focuses the control that owns a part of the caption, opening the disclosure it is in first. */
+  async function focusOwner(kind: CaptionKind) {
+    if (kind === "range") titleOpen = true;
+    if (kind === "options") optionsOpen = true;
+    if (kind === "signals" && narrow) railOpen = true;
+    await tick();
     document.querySelector<HTMLElement>(target(kind))?.focus();
   }
 </script>
@@ -115,14 +119,43 @@
   {at ? ws.groupHeading(Number(at[1]) - 1) : (panel.title ?? "")}
 {/snippet}
 
+{#snippet rail()}
+  {#if ws.eventList}<EventViewRail {ws} />{:else}<SignalRail {report} {block} />{/if}
+{/snippet}
+
+{#snippet disclosure(label: string, open: boolean, setOpen: (v: boolean) => void, testid: string, content: Snippet)}
+  <Collapsible.Root {open} onOpenChange={setOpen}>
+    <Collapsible.Trigger>
+      {#snippet child({ props }: { props: Record<string, unknown> })}
+        <Button {...props} variant="subtle" size="xs" class="group max-w-full justify-start text-left whitespace-normal" data-testid={testid}>
+          <ChevronRight
+            class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
+            aria-hidden="true"
+          />
+          {label}
+        </Button>
+      {/snippet}
+    </Collapsible.Trigger>
+    <Collapsible.Content class="pt-2">
+      {@render content()}
+    </Collapsible.Content>
+  </Collapsible.Root>
+{/snippet}
+
+{#snippet options()}
+  <ChartOptions {ws} />
+{/snippet}
+
+{#snippet titleRange()}
+  <BlockTitleRange {report} {block} rangeId="chart-range-{block.key}" />
+{/snippet}
+
 <div
   bind:clientWidth={gridWidth}
-  class="grid gap-6 @4xl:grid-cols-[232px_minmax(0,1fr)]"
+  class="grid gap-x-6 gap-y-5 @4xl:grid-cols-[minmax(0,1fr)_20rem]"
   data-testid="chart-workspace"
 >
-  <aside
-    class="@4xl:sticky @4xl:top-[calc(var(--headroom-top,0px)+1rem)] @4xl:max-h-[calc(100dvh-var(--headroom-top,0px)-2rem)] @4xl:self-start @4xl:overflow-y-auto"
-  >
+  <div class="min-w-0 space-y-3">
     {#if narrow}
       <Collapsible.Root bind:open={railOpen}>
         <Collapsible.Trigger>
@@ -147,56 +180,10 @@
           {/snippet}
         </Collapsible.Trigger>
         <Collapsible.Content class="pt-3">
-          {#if ws.eventList}<EventViewRail {ws} />{:else}<SignalRail {ws} />{/if}
+          {@render rail()}
         </Collapsible.Content>
       </Collapsible.Root>
-    {:else}
-      {#if ws.eventList}
-        <EventViewRail {ws} />
-      {:else}
-        <SignalRail {ws} />
-      {/if}
     {/if}
-  </aside>
-  <div class="min-w-0 space-y-5">
-    <Collapsible.Root>
-      <Collapsible.Trigger>
-        {#snippet child({ props }: { props: Record<string, unknown> })}
-          <Button {...props} variant="subtle" size="xs" class="group" data-testid="chart-title-range">
-            <ChevronRight
-              class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
-              aria-hidden="true"
-            />
-            Title and range:
-            {ws.title.trim() || "Untitled chart"},
-            {lowerFirst(
-              report.blockRanges(block).find((o) => o.id === report.blockRangeId(block))?.label ??
-                ""
-            )}
-          </Button>
-        {/snippet}
-      </Collapsible.Trigger>
-      <Collapsible.Content class="space-y-3 pt-3">
-      <Input
-        variant="title"
-        size="heading"
-        aria-label="Chart title"
-        placeholder="Untitled chart"
-        maxlength={report.catalogue.maxTitleLength}
-        bind:value={() => ws.title, (v: string) => (ws.title = v)}
-      />
-      <RangeChoices
-        id="chart-range-{block.key}"
-        label="Range of this chart"
-        options={report.blockRanges(block)}
-        value={report.blockRangeId(block)}
-        onchange={(id) => {
-          const option = report.blockRanges(block).find((o) => o.id === id);
-          if (option) report.setBlockRange(block, option.hours);
-        }}
-      />
-      </Collapsible.Content>
-    </Collapsible.Root>
 
     <div class="space-y-1.5">
       <ToggleGroup.Root
@@ -227,7 +214,7 @@
       {/each}
       {#if ws.lens === "event"}
         {@const shows = ws.vocab.shows.map((id) => ({ id, reason: ws.showReason(id) }))}
-        <div class="space-y-1 pt-2">
+        <div class="space-y-1 pt-1">
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-xs text-muted-foreground" id="event-show-label">Show</span>
             <ToggleGroup.Root
@@ -269,6 +256,35 @@
       {/if}
     </div>
 
+    {#if !ws.empty}
+      <!-- prettier-ignore -->
+      <p class="text-sm text-foreground" data-testid="chart-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<Button variant="prose" size="inline" onclick={() => focusOwner(part.kind)}>{part.text}</Button>{/each}</p>
+    {/if}
+    <div data-testid="chart-preview" data-lens={ws.lens}>
+      <!-- The legend sits under the plot it names; around an event the group rows give each group's figures. -->
+      <BlockPreview
+        spec={preview}
+        {runner}
+        kind="chart"
+        incomplete={ws.incomplete}
+        facts={ws.lens !== "event"}
+        heading={ws.smallMultiples ? groupHeading : undefined}
+      />
+    </div>
+    {#if !ws.empty && !ws.eventList}
+      <SignalChips {ws} report={result} {perGroup} />
+    {/if}
+    <p class="sr-only" aria-live="polite">{announcement}</p>
+  </div>
+
+  <aside
+    class="min-w-0 space-y-5 @4xl:sticky @4xl:top-[calc(var(--headroom-top,0px)+1rem)] @4xl:max-h-[calc(100dvh-var(--headroom-top,0px)-2rem)] @4xl:self-start @4xl:overflow-y-auto"
+    data-testid="chart-side"
+  >
+    {#if !narrow}
+      {@render rail()}
+    {/if}
+
     {#if ws.lens === "event"}
       <EventGroups {ws} report={result} />
     {:else if ws.groupsDays}
@@ -277,45 +293,12 @@
       <AgainstStrip {ws} />
     {/if}
 
-    {#if ws.lens === "event" || ws.leaveOutApplies}
-      <Collapsible.Root>
-        <Collapsible.Trigger>
-          {#snippet child({ props }: { props: Record<string, unknown> })}
-            <Button {...props} variant="subtle" size="xs" class="group" data-testid="chart-options-toggle">
-              <ChevronRight
-                class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
-                aria-hidden="true"
-              />
-              Options: {ws.optionsSummary}
-            </Button>
-          {/snippet}
-        </Collapsible.Trigger>
-        <Collapsible.Content class="pt-2">
-          <ChartOptions {ws} />
-        </Collapsible.Content>
-      </Collapsible.Root>
-    {/if}
-
-    <div class="space-y-3">
-      {#if !ws.empty}
-        <!-- prettier-ignore -->
-        <p class="text-base text-foreground" data-testid="chart-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<Button variant="prose" size="inline" onclick={() => focusOwner(part.kind)}>{part.text}</Button>{/each}</p>
-        {#if !ws.eventList}
-          <SignalChips {ws} report={result} {perGroup} />
-        {/if}
+    <div class="space-y-1 border-t border-border pt-3">
+      {#if ws.lens === "event" || ws.leaveOutApplies}
+        {@render disclosure(`Options: ${ws.optionsSummary}`, optionsOpen, (v) => (optionsOpen = v), "chart-options-toggle", options)}
       {/if}
-      <div data-testid="chart-preview" data-lens={ws.lens}>
-        <!-- The legend sits under the plot it names; around an event the group rows give each group's figures. -->
-        <BlockPreview
-          spec={preview}
-          {runner}
-          kind="chart"
-          incomplete={ws.incomplete}
-          facts={ws.lens !== "event"}
-          heading={ws.smallMultiples ? groupHeading : undefined}
-        />
-      </div>
-      <p class="sr-only" aria-live="polite">{announcement}</p>
+      {@render disclosure(`Title and range: ${ws.title.trim() || "Untitled chart"}, ${lowerFirst(report.blockRanges(block).find((o) => o.id === report.blockRangeId(block))?.label ?? "")}`, titleOpen, (v) => (titleOpen = v), "chart-title-range", titleRange)}
+      <SignalChartAdvanced {report} {block} />
     </div>
-  </div>
+  </aside>
 </div>

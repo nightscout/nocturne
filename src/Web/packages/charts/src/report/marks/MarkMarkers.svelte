@@ -1,14 +1,15 @@
 <!--
   A markers layer: the dashboard's bolus and carb glyphs (a long-acting injection as a bolus in the
   basal colour, a BG check as a ring) at their amounts, on the track's first line where it has one,
-  with each amount written beside it. Whether a bolus was the algorithm's (drawn outlined) is the
-  API's. No glyph is drawn without the chart's words.
+  with its amount written beside it where it is clear of the last one written; the tooltip has every
+  amount. Whether a bolus was the algorithm's (drawn outlined) is the API's. No glyph is drawn without
+  the chart's words.
 -->
 <script lang="ts">
   import { Circle, Path, Text } from "layerchart";
   import type { ChartLabels } from "../../labels.js";
   import { markerPath } from "../static/static-marks.js";
-  import { placeGlyphs, type TrackBand } from "../layered/layered-layout.js";
+  import { labelledGlyphs, placeGlyphs, type TrackBand } from "../layered/layered-layout.js";
   import type { ReportLayer, ReportTrack } from "../types.js";
   import type { MarkText } from "./mark-text.js";
 
@@ -26,6 +27,9 @@
   let { layer, track, band, x, yOf, paint, labels, text }: Props = $props();
 
   const glyphs = $derived(placeGlyphs(layer, track, band, x, yOf));
+  /** The pixels an amount takes, so two written amounts of one kind never touch. */
+  const AMOUNT_ROOM = 30;
+  const written = $derived(labelledGlyphs(glyphs, AMOUNT_ROOM));
 
   const COLORS = {
     bolus: "var(--insulin-bolus)",
@@ -56,6 +60,7 @@
         data-testid="report-marker"
       />
     {/if}
+    {#if written.has(glyph.key)}
     <Text
       x={glyph.x}
       y={glyph.kind === "carbs" ? glyph.y - 11 : glyph.kind === "bg_check" ? glyph.y - 8 : glyph.y + 20}
@@ -65,5 +70,6 @@
       {...text.strong}
       fill={color}
     />
+    {/if}
   {/each}
 {/if}

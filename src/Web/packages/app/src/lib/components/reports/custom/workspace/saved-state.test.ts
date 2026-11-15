@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { liveCatalogue } from "./catalogue.fixtures.js";
 import { Report } from "./report.svelte.js";
 import { vocabularyOf } from "./workspace.svelte.js";
-import { openSaved, specToSave, stateTooLarge } from "./saved-report.js";
+import { openSaved, sameSpec, specToSave, stateTooLarge } from "./saved-report.js";
 import {
   BUILDER_KIND,
   BUILDER_VERSION,
@@ -143,36 +143,44 @@ describe("opening a saved report", () => {
     return { ...(await normalise(report.spec())), builder: { kind: BUILDER_KIND, version: BUILDER_VERSION, state: travelled(report) } };
   }
 
-  it("opens in the workspace when the state still makes the spec saved", async () => {
+  it("opens from its state when the state still makes the spec saved", async () => {
     const report = new Report(liveCatalogue, starter("meals-start-high")!);
-    const opening = await openSaved(liveCatalogue, await savedSpec(report), normalise);
+    const opened = await openSaved(liveCatalogue, await savedSpec(report), normalise);
 
-    expect(opening.builder).toBe("workspace");
-    if (opening.builder === "workspace") expect(opening.report.spec()).toEqual(report.spec());
+    expect(opened?.blocks.map((b) => b.kind)).toEqual(["chart"]);
+    expect(opened?.spec()).toEqual(report.spec());
   });
 
-  it("opens in the form when the spec was changed outside the workspace", async () => {
+  it("opens from the spec, unchanged, when the spec was changed elsewhere", async () => {
     const saved = await savedSpec(new Report(liveCatalogue, starter("meals-start-high")!));
-    const changed = { ...saved, title: "Changed in the form" };
+    const changed = { ...saved, title: "Changed elsewhere" };
+    const opened = await openSaved(liveCatalogue, changed, normalise);
 
-    expect(await openSaved(liveCatalogue, changed, normalise)).toEqual({ builder: "form", reason: "changed" });
+    expect(opened?.title).toBe("Changed elsewhere");
+    expect(opened?.blocks.map((b) => b.kind)).toEqual(["given"]);
+    expect(sameSpec(opened?.spec(), changed)).toBe(true);
   });
 
-  it("does not answer when the check could not be made, so nothing opens in the form on a failure", async () => {
+  it("does not answer when the check could not be made", async () => {
     const saved = await savedSpec(new Report(liveCatalogue, starter("meals-start-high")!));
 
     await expect(openSaved(liveCatalogue, saved, () => Promise.reject(new Error("offline")))).rejects.toThrow("offline");
   });
 
-  it("opens in the form with no state, a state of another version, or a spec that does not validate", async () => {
+  it("opens from the spec with no state, a state of another version, or a spec that does not validate", async () => {
     const report = new Report(liveCatalogue, starter("dawn-rise")!);
     const saved = await savedSpec(report);
     const check = vi.fn(normalise);
 
-    expect(await openSaved(liveCatalogue, withoutBuilder(saved), check)).toEqual({ builder: "form", reason: "notMade" });
-    expect(await openSaved(liveCatalogue, { ...saved, builder: { ...saved.builder, version: 99 } }, check)).toEqual({ builder: "form", reason: "notMade" });
-    expect(check).not.toHaveBeenCalled();
-    expect((await openSaved(liveCatalogue, saved, () => Promise.resolve(null))).builder).toBe("form");
+    for (const spec of [withoutBuilder(saved), { ...saved, builder: { ...saved.builder, version: 99 } }]) {
+      const opened = await openSaved(liveCatalogue, spec, check);
+      expect(opened?.blocks.every((b) => b.kind === "given")).toBe(true);
+      expect(sameSpec(opened?.spec(), spec)).toBe(true);
+    }
+    expect(check).toHaveBeenCalledTimes(2);
+    const unchecked = await openSaved(liveCatalogue, saved, () => Promise.resolve(null));
+    expect(sameSpec(unchecked?.spec(), saved)).toBe(true);
+    expect(await openSaved(liveCatalogue, { version: 1, panels: [] }, check)).toBeNull();
   });
 });
 

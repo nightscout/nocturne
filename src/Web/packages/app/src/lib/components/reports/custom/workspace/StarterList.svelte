@@ -15,7 +15,7 @@
 
   interface Props {
     onstart: (starter: Starter | null) => void;
-    /** The API's ready-made reports, which open in the form; listed last. */
+    /** The API's ready-made reports, listed after the questions. */
     templates?: CustomReportTemplate[];
     ontemplate?: (template: CustomReportTemplate) => void;
   }

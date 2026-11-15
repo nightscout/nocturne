@@ -254,7 +254,7 @@ internal sealed class ReportCatalogue(
     internal static string PanelKindLabel(ReportPanelKind kind) => kind switch
     {
         ReportPanelKind.Chart => "Chart",
-        ReportPanelKind.StatTiles => "Statistics tiles",
+        ReportPanelKind.StatTiles => "Figures",
         ReportPanelKind.Table => "Table",
         ReportPanelKind.Comparison => "Comparison",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),

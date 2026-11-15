@@ -3,9 +3,8 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import type { CustomReport, CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
-import { catalogue, resultFor, statisticsTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
-import { runOf, statTilesResult } from "../../custom-report-fixtures.js";
+import type { CustomReport } from "#lib/api/generated/nocturne-api-client.js";
+import { chartTemplate, runOf, statisticsTemplate } from "../../custom-report-fixtures.js";
 import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
 import { minuteLabel } from "#lib/components/reports/custom/workspace/clock.js";
 import { Report } from "#lib/components/reports/custom/workspace/report.svelte.js";
@@ -16,19 +15,19 @@ const calls = vi.hoisted(() => ({ runs: [] as unknown[], validations: [] as unkn
 /** How the validator answers: as the engine does, or by failing to answer, as a network error does. */
 let validatorDown = false;
 let saved: CustomReport;
-/** The catalogue the page reads: the form's fixture, or a live one for a report made in the workspace. */
-let known: CustomReportCatalogue = catalogue;
+
+type Saved = { request: { name: string; spec: { builder?: { kind: string }; title?: string; panels: Record<string, unknown>[] } } };
 
 vi.mock("#lib/api/report-image.remote.js", () => ({ drawReportPanelImage: () => Promise.resolve("") }));
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   getCustomReport: () => remoteQuery(() => saved),
-  getCustomReportCatalogue: () => remoteQuery(() => known),
+  getCustomReportCatalogue: () => remoteQuery(() => liveCatalogue),
+  getCustomReportSignalAvailability: () => remoteQuery(() => ({ hours: 336, signals: [] })),
   getCustomReports: () => remoteQuery(() => []),
   runCustomReport: remoteCommand((arg) => {
     calls.runs.push(arg);
-    const spec = (arg as { spec: Record<string, unknown> }).spec;
-    return known === catalogue ? { result: resultFor(spec, statTilesResult()), spec, errors: [] } : runOf(spec);
+    return runOf((arg as { spec: Record<string, unknown> }).spec);
   }),
   validateCustomReport: remoteCommand((arg) => {
     calls.validations.push(arg);
@@ -43,7 +42,6 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
     calls.creates.push(arg);
     return { id: "copy-id" };
   }),
-  deleteCustomReport: remoteCommand(() => undefined),
 }));
 
 vi.mock("$app/navigation", () => ({
@@ -55,52 +53,88 @@ vi.mock("$app/navigation", () => ({
 
 import EditCustomReportPage from "./+page.svelte";
 
-describe("editing a saved custom report", () => {
+async function saveAs(name: string) {
+  await page.getByTestId("save-trigger").click();
+  await page.getByLabelText("Name", { exact: true }).fill(name);
+  await page.getByRole("button", { name: "Save the report" }).click();
+}
+
+beforeEach(async () => {
+  calls.runs.length = 0;
+  calls.validations.length = 0;
+  calls.updates.length = 0;
+  calls.creates.length = 0;
+  calls.gotos.length = 0;
+  validatorDown = false;
+  pageState.params = { id: "r1" };
+  pageState.data = {};
+  await page.viewport(1280, 900);
+});
+
+describe("editing a report saved without the workspace's state", () => {
   beforeEach(() => {
-    calls.runs.length = 0;
-    calls.updates.length = 0;
-    calls.creates.length = 0;
-    calls.gotos.length = 0;
-    pageState.params = { id: "r1" };
     saved = { id: "r1", name: "Fortnight", spec: statisticsTemplate.spec, errors: [], canEdit: true };
-    known = catalogue;
-    pageState.data = {};
   });
 
-  it("opens a report made in the form in the form, and says why", async () => {
+  it("opens it in the workspace, a panel of figures as a block of figures", async () => {
     render(EditCustomReportPage, {});
 
-    await expect.element(page.getByTestId("opened-in-form")).toHaveTextContent("not made in this builder, or it was changed outside it");
-    await expect.element(page.getByLabelText("Title", { exact: true })).toHaveValue("Two weeks");
-    expect(page.getByTestId("report-workspace").elements()).toHaveLength(0);
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("Two weeks");
+    await expect.element(page.getByTestId("block-editor-figures")).toBeVisible();
+    expect(page.getByTestId("change-in-form").elements()).toHaveLength(0);
   });
 
-  it("keeps a member limited to the last 24 hours in the form, unable to change or copy", async () => {
+  it("saves the spec it opened, with the workspace's state, and its name", async () => {
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByLabelText("Report title").fill("Three weeks");
+    await saveAs("Three weeks of figures");
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
+    const { request } = calls.updates[0] as Saved;
+    expect(request.name).toBe("Three weeks of figures");
+    expect(request.spec).toMatchObject({
+      title: "Three weeks",
+      panels: [{ id: "p1", kind: "stat_tiles", dataset: { name: "glucose_statistics" }, bindings: { columns: ["timeInRangePercent", "mean", "tdd"] }, range: { hours: 336 } }],
+    });
+    expect(request.spec.builder?.kind).toBe(BUILDER_KIND);
+    await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/r1"]));
+  });
+
+  it("opens a chart signal by signal, changes one in the advanced settings, and saves the rest as it was", async () => {
+    saved = { id: "r1", name: "Glucose", spec: chartTemplate.spec, errors: [], canEdit: true };
+    render(EditCustomReportPage, {});
+
+    const rail = page.getByTestId("signal-rail");
+    await expect.element(rail.getByText("Glucose", { exact: true })).toBeVisible();
+    await expect.element(rail.getByText("IOB", { exact: true })).toBeVisible();
+    await page.getByTestId("block-advanced").click();
+    const iob = page.getByTestId("given-advanced").getByRole("listitem").nth(1);
+    await iob.getByRole("checkbox", { name: "Own scale" }).click();
+    await iob.getByLabelText("Name in the legend").fill("Insulin on board");
+    await iob.getByLabelText("Name in the legend").element().dispatchEvent(new Event("change", { bubbles: true }));
+    await expect.element(rail.getByText("Insulin on board", { exact: true })).toBeVisible();
+    await saveAs("Glucose");
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
+    const [panel] = (calls.updates[0] as Saved).request.spec.panels;
+    expect(panel).toMatchObject({
+      id: "glucose",
+      tracks: [
+        { id: "glucose", height: 2, layers: [{ id: "glucose", dataset: { name: "glucose_series" }, mark: "line" }, { id: "iob", title: "Insulin on board" }] },
+      ],
+    });
+  });
+
+  it("keeps a member limited to the last 24 hours from changing or copying it", async () => {
     pageState.data = { limitTo24Hours: true };
     render(EditCustomReportPage, {});
 
     await expect.element(page.getByTestId("clamped-note")).toBeVisible();
-    await expect.element(page.getByLabelText("Title", { exact: true })).toHaveValue("Two weeks");
-    expect(page.getByRole("button", { name: "Save", exact: true }).elements()).toHaveLength(0);
-    expect(page.getByRole("button", { name: "Save as" }).elements()).toHaveLength(0);
-  });
-
-  it("opens the saved spec, and saves a change to it and its name", async () => {
-    render(EditCustomReportPage, {});
-
-    const title = page.getByLabelText("Title", { exact: true });
-    await expect.element(title).toHaveValue("Two weeks");
-    await expect.element(page.getByText("72.4")).toBeVisible();
-    await title.fill("Three weeks");
-    await page.getByLabelText("Name", { exact: true }).fill("Three weeks of figures");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-
-    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
-    expect(calls.updates[0]).toMatchObject({
-      id: "r1",
-      request: { name: "Three weeks of figures", spec: { title: "Three weeks", panels: [{ id: "p1", dataset: { name: "glucose_statistics" } }] } },
-    });
-    await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/r1"]));
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    expect(page.getByTestId("save-trigger").elements()).toHaveLength(0);
+    expect(page.getByTestId("save-copy-trigger").elements()).toHaveLength(0);
   });
 
   it("lets a member who cannot change the report save a copy only", async () => {
@@ -108,10 +142,10 @@ describe("editing a saved custom report", () => {
     render(EditCustomReportPage, {});
 
     await expect.element(page.getByTestId("read-only-note")).toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Save", exact: true })).not.toBeInTheDocument();
-    await expect.element(page.getByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    await expect.element(page.getByTestId("save-copy-trigger")).toBeVisible();
+    expect(page.getByTestId("save-trigger").elements()).toHaveLength(0);
 
-    await page.getByRole("button", { name: "Save as" }).click();
+    await page.getByTestId("save-copy-trigger").click();
     await page.getByLabelText("Name of the copy").fill("My copy");
     await page.getByRole("button", { name: "Save the copy" }).click();
 
@@ -129,64 +163,51 @@ describe("editing a report made in the workspace", () => {
     return { id: "r1", name: "Dawn", spec: withBuilder(change(report.spec()), report.toState()), errors: [], canEdit: true };
   }
 
-  beforeEach(async () => {
-    calls.runs.length = 0;
-    calls.validations.length = 0;
-    validatorDown = false;
-    calls.updates.length = 0;
-    calls.creates.length = 0;
-    calls.gotos.length = 0;
-    pageState.params = { id: "r1" };
-    pageState.data = {};
-    known = liveCatalogue;
-    await page.viewport(1280, 900);
-  });
-
-  it("reopens it in the workspace, and saves a change with the state", async () => {
+  it("reopens it from its state, and saves a change with the state", async () => {
     saved = madeInWorkspace();
     render(EditCustomReportPage, {});
 
     await expect.element(page.getByTestId("report-workspace")).toBeVisible();
-    expect(page.getByTestId("opened-in-form").elements()).toHaveLength(0);
     await expect.element(page.getByTestId("chart-caption")).toHaveTextContent("over a typical day");
 
-    await page.getByTestId("signal-rail").getByRole("button", { name: "Target range" }).click();
+    await page.getByTestId("signal-rail").getByRole("button", { name: "Remove Target range" }).click();
     await page.getByTestId("save-trigger").click();
     await expect.element(page.getByLabelText("Name", { exact: true })).toHaveValue("Dawn");
     await page.getByRole("button", { name: "Save the report" }).click();
 
     await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
-    const { request } = calls.updates[0] as { request: { name: string; spec: { builder: { kind: string }; panels: unknown[] } } };
+    const { request } = calls.updates[0] as Saved;
     expect(request.name).toBe("Dawn");
-    expect(request.spec.builder.kind).toBe(BUILDER_KIND);
+    expect(request.spec.builder?.kind).toBe(BUILDER_KIND);
     expect(JSON.stringify(request.spec.panels)).not.toContain(`"id":"target"`);
     await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/r1"]));
   });
 
-  it("opens it in the form when the spec was changed outside the workspace", async () => {
+  it("opens it from the spec when the spec was changed elsewhere, and saves the change kept", async () => {
     saved = madeInWorkspace((spec) => ({ ...spec, title: "Changed elsewhere" }));
     render(EditCustomReportPage, {});
 
-    await expect.element(page.getByTestId("opened-in-form")).toBeVisible();
-    await expect.element(page.getByLabelText("Title", { exact: true })).toHaveValue("Changed elsewhere");
-    expect(page.getByTestId("report-workspace").elements()).toHaveLength(0);
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("Changed elsewhere");
+    await expect.element(page.getByTestId("given-workspace")).toBeVisible();
+    await saveAs("Dawn");
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect((calls.updates[0] as Saved).request.spec.title).toBe("Changed elsewhere");
   });
 
-  it("moves it to the form after a confirm, with the spec as it is now", async () => {
+  it("changes a chart of signals signal by signal after a confirm, keeping what it shows", async () => {
     saved = madeInWorkspace();
     render(EditCustomReportPage, {});
 
-    await page.getByRole("button", { name: "All settings" }).click();
-    await page.getByTestId("change-in-form").click();
+    await page.getByTestId("block-advanced").click();
+    await page.getByTestId("signal-by-signal").click();
     const dialog = page.getByRole("alertdialog");
-    await expect.element(dialog).toHaveTextContent("it cannot open in this builder again");
-    await dialog.getByRole("button", { name: "Change in the form" }).click();
+    await expect.element(dialog).toHaveTextContent("you cannot change its view or its groups");
+    await dialog.getByRole("button", { name: "Change signal by signal" }).click();
 
-    await expect.element(page.getByTestId("track-section").first()).toBeVisible();
-    expect(page.getByTestId("opened-in-form").elements()).toHaveLength(0);
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
-    expect((calls.updates[0] as { request: { spec: Record<string, unknown> } }).request.spec).not.toHaveProperty("builder");
+    await expect.element(page.getByTestId("given-workspace")).toBeVisible();
+    await expect.element(page.getByRole("radio", { name: "Typical day" })).not.toBeInTheDocument();
   });
 
   it("lets a member who cannot change it save a copy with the state", async () => {
@@ -211,8 +232,6 @@ describe("editing a report made in the workspace", () => {
 
     await expect.element(page.getByTestId("opening-failed")).toHaveTextContent("Could not check how this report opens");
     expect(page.getByTestId("report-workspace").elements()).toHaveLength(0);
-    expect(page.getByTestId("panel-card").elements()).toHaveLength(0);
-    expect(page.getByRole("button", { name: "Save", exact: true }).elements()).toHaveLength(0);
 
     validatorDown = false;
     await page.getByRole("button", { name: "Try again" }).click();
@@ -227,32 +246,5 @@ describe("editing a report made in the workspace", () => {
     await expect.element(page.getByTestId("report-workspace")).toBeVisible();
     expect(calls.validations).toHaveLength(1);
     expect((calls.validations[0] as { spec: Record<string, unknown> }).spec).not.toHaveProperty("builder");
-  });
-
-  it("asks before a save from the form removes the state of the builder it was made in", async () => {
-    saved = madeInWorkspace((spec) => ({ ...spec, title: "Changed elsewhere" }));
-    render(EditCustomReportPage, {});
-    await expect.element(page.getByTestId("opened-in-form")).toBeVisible();
-
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    const dialog = page.getByRole("alertdialog");
-    await expect.element(dialog).toHaveTextContent("Saving from the form removes those settings");
-    expect(calls.updates).toEqual([]);
-    await dialog.getByRole("button", { name: "Save" }).click();
-
-    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
-    expect((calls.updates[0] as { request: { spec: Record<string, unknown> } }).request.spec).not.toHaveProperty("builder");
-  });
-
-  it("asks nothing before a save from the form of a report made in the form", async () => {
-    saved = { id: "r1", name: "Fortnight", spec: statisticsTemplate.spec, errors: [], canEdit: true };
-    known = catalogue;
-    render(EditCustomReportPage, {});
-    await expect.element(page.getByTestId("opened-in-form")).toBeVisible();
-
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-
-    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
-    expect(page.getByRole("alertdialog").elements()).toHaveLength(0);
   });
 });

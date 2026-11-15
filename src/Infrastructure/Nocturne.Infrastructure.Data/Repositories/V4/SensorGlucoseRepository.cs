@@ -288,6 +288,8 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 Device = e.Device,
                 UtcOffset = e.UtcOffset,
                 Direction = SensorGlucoseMapper.ParseDirection(e.Direction),
+                TrendRate = e.TrendRate,
+                Noise = e.Noise,
             })
             .ToListAsync(ct);
     }

@@ -116,8 +116,10 @@ export interface ReportBandSpan {
 /** One layer of a chart: its rows, its mark and the axis it is drawn on. */
 export interface ReportLayer {
   id: string;
-  /** The layer's name in the legend, the API's. */
+  /** The layer's name in the legend, the API's: the signal it draws. */
   title: string;
+  /** The group the layer's rows are, the API's words ("Days with a low"), where the chart draws more than one group. */
+  group?: string | null;
   mark: ReportMark;
   bindings: ReportLayerBindings;
   xKind: ReportXKind;

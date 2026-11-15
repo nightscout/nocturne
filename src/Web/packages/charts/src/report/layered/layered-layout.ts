@@ -86,6 +86,31 @@ export function axisGroups(panel: ReportPanel): AxisGroup[] {
   return groups;
 }
 
+/** The point the reader is at: a run of tracks (an axis group), its slot there and that slot's pixel. */
+export interface PlotFocus {
+  group: number;
+  raw: number;
+  x: number;
+}
+
+/** The pixels from the top of a group's first track to the bottom of its last. */
+export function groupSpan(groups: readonly AxisGroup[], bands: readonly TrackBand[], g: number): { top: number; bottom: number } {
+  const first = groups[g].first;
+  const last = g + 1 < groups.length ? groups[g + 1].first - 1 : bands.length - 1;
+  return { top: bands[first]?.top ?? 0, bottom: bands[last]?.bottom ?? 0 };
+}
+
+/** The group a point `y` pixels down the plot is over: the first whose tracks, or the axis under them, reach it. */
+export function groupAt(groups: readonly AxisGroup[], bands: readonly TrackBand[], y: number): number {
+  for (let g = 0; g < groups.length - 1; g++) if (y <= groupSpan(groups, bands, g).bottom + AXIS_ROOM) return g;
+  return Math.max(0, groups.length - 1);
+}
+
+/** The value of `xs` (sorted) nearest `raw`, or null for none. */
+export function nearestSlot(xs: readonly number[], raw: number): number | null {
+  return xs.length === 0 ? null : nearestBy(xs, (x) => x, raw);
+}
+
 /**
  * The raw x in each group at the horizontal position of `raw` in the first: every axis maps its raw
  * values to pixels linearly, so a position is the same fraction of each group's extent.
@@ -135,6 +160,7 @@ export function xExtent(panel: Pick<ReportPanel, "tracks" | "window" | "xKind">)
   let min = Math.min(...xs);
   let max = Math.max(...xs);
   if (kind === "day") return [min, max + DAY];
+  if (kind === "offset") return [min, max + smallestStep(xs)];
   if (min === max) {
     min -= 1;
     max += 1;
@@ -144,6 +170,14 @@ export function xExtent(panel: Pick<ReportPanel, "tracks" | "window" | "xKind">)
     return [min - pad, max + pad];
   }
   return [min, max];
+}
+
+/** The least distance between two distinct values: the width of a slot that starts at each. */
+function smallestStep(xs: readonly number[]): number {
+  const sorted = [...new Set(xs)].sort((a, b) => a - b);
+  let step = Infinity;
+  for (let i = 1; i < sorted.length; i++) step = Math.min(step, sorted[i] - sorted[i - 1]);
+  return Number.isFinite(step) ? step : 0;
 }
 
 /** The fields whose values a layer puts on its axis: its lines, edges and fit. */
@@ -555,6 +589,48 @@ export function placeGlyphs(layer: ReportLayer, track: ReportTrack, band: TrackB
   });
 }
 
+/**
+ * The glyphs whose amounts are written: from the left, each whose kind's last written amount is at least `gap`
+ * pixels before it, so close glyphs do not write over each other. The rest show their amounts in the tooltip.
+ */
+export function labelledGlyphs(glyphs: readonly PlacedGlyph[], gap: number): Set<string> {
+  const last = new Map<PlacedGlyph["kind"], number>();
+  const keep = new Set<string>();
+  for (const glyph of [...glyphs].sort((a, b) => a.x - b.x)) {
+    const before = last.get(glyph.kind);
+    if (before !== undefined && glyph.x - before < gap) continue;
+    last.set(glyph.kind, glyph.x);
+    keep.add(glyph.key);
+  }
+  return keep;
+}
+
+/** The pixels a lane name of `text` takes at the lanes' 10px type, with the room around it. */
+export function laneNameWidth(text: string): number {
+  return Math.ceil(text.length * 5.6) + 12;
+}
+
+/** The names of every spans lane on the panel's drawn tracks, in the order they are drawn. */
+export function laneNames(panel: Pick<ReportPanel, "tracks">): string[] {
+  return panel.tracks.flatMap((track) =>
+    drawnLayers(track)
+      .filter((l) => l.mark === "spans")
+      .flatMap((l) => [...new Set(l.rows.map((r) => String(r[l.bindings.category ?? ""] ?? "")))]),
+  );
+}
+
+/** Whether a drawn layer has a value in some row: a chart with none draws no plot. */
+export function hasValues(panel: Pick<ReportPanel, "tracks">): boolean {
+  return panel.tracks.some((track) =>
+    drawnLayers(track).some((layer) => {
+      if (layer.mark === "markers") return (layer.markers ?? []).length > 0;
+      if (layer.mark === "spans") return layer.rows.length > 0;
+      const fields = valueFields(layer);
+      return layer.rows.some((row) => fields.some((f) => num(row, f.name) !== null));
+    }),
+  );
+}
+
 /** One span of a spans layer, in pixels, in its lane. */
 export interface SpanRect {
   key: string;
@@ -566,6 +642,9 @@ export interface SpanRect {
   label: string;
   lane: string;
 }
+
+/** The narrowest a span is drawn, in pixels, so a span of one instant (a site change, an alarm) shows as a tick. */
+const MIN_SPAN_WIDTH = 2;
 
 /** A spans layer's spans, a lane for each value of its category, in the order they first appear. */
 export function spanRects(layer: ReportLayer, band: TrackBand, x: XPixel): { lanes: { name: string; y: number; height: number }[]; spans: SpanRect[] } {
@@ -585,7 +664,7 @@ export function spanRects(layer: ReportLayer, band: TrackBand, x: XPixel): { lan
       key: `${i}`,
       x: x(from),
       y: lane.y + 1,
-      width: Math.max(1, x(to) - x(from)),
+      width: Math.max(MIN_SPAN_WIDTH, x(to) - x(from)),
       height: Math.max(1, lane.height - 2),
       color: isChartColor(theme) ? resolveChartColor(theme) : "var(--muted-foreground)",
       label: String(row[labelField] ?? ""),
@@ -629,7 +708,8 @@ export function rowMatch(panel: Pick<ReportPanel, "tracks" | "window" | "xKind" 
 }
 
 /**
- * A layer's rows under the pointer at `raw`: the spans that cover it; for a line or area of step fields
+ * A layer's rows under the pointer at `raw`: the spans that cover it, and a span shorter than a marker's tolerance
+ * within that tolerance of it; for a line or area of step fields
  * the last row of each series at or before it, which is the value the step draws there; for a layer
  * along days the day that holds it, on a day or a time axis alike; on a gridded panel the rows on that
  * slot; else every series' row at the nearest x, within the match's tolerance.
@@ -637,7 +717,12 @@ export function rowMatch(panel: Pick<ReportPanel, "tracks" | "window" | "xKind" 
 export function rowsAt(layer: ReportLayer, raw: number, match: RowMatch): ReportRow[] {
   if (layer.mark === "spans") {
     const { start, end } = layer.bindings;
-    return layer.rows.filter((r) => (num(r, start) ?? Infinity) <= raw && raw <= (num(r, end) ?? -Infinity));
+    return layer.rows.filter((r) => {
+      const from = num(r, start) ?? Infinity;
+      const to = num(r, end) ?? -Infinity;
+      const pad = to - from < match.markerTolerance ? match.markerTolerance / 2 : 0;
+      return from - pad <= raw && raw <= to + pad;
+    });
   }
   const xName = layer.bindings.x ?? "";
   const placed = layer.rows.filter((r) => num(r, xName) !== null);
@@ -683,18 +768,24 @@ export function tipEntries(layer: ReportLayer, rows: readonly ReportRow[], text:
   const withNotes = (entries: TipEntry[]) => (entries.length > 0 ? entries.map((e, i) => (i === entries.length - 1 ? { ...e, notes } : e)) : entries);
   if (layer.mark === "spans") {
     const name = layer.fields.find((f) => f.colorField)?.name ?? layer.bindings.category ?? "";
-    return withNotes(rows.map((row, i) => ({ key: `${layer.id}-${i}`, label: layer.title, value: String(row[name] ?? ""), range: null, color: null, notes: [] })));
+    const lane = layer.bindings.category ?? "";
+    return withNotes(
+      rows.map((row, i) => ({ key: `${layer.id}-${i}`, label: String(row[lane] ?? layer.title), value: String(row[name] ?? ""), range: null, color: null, notes: [] })),
+    );
   }
+  const title = layer.group ? `${layer.title} · ${layer.group}` : layer.title;
+  const series = layer.bindings.series;
+  const severalSeries = !!series && new Set(layer.rows.map((r) => r[series])).size > 1;
   const edges = layer.bindings.edges ?? [];
   const middle = boundFields(layer, layer.bindings.y)[0];
-  if (layer.mark === "band" && !layer.bindings.series && middle && (edges.length === 2 || edges.length === 4)) {
+  if (layer.mark === "band" && !severalSeries && middle && (edges.length === 2 || edges.length === 4)) {
     const [low, high] = boundFields(layer, edges.length === 4 ? [edges[1], edges[2]] : edges);
     return withNotes(
       rows
         .filter((row) => row[middle.name] !== null && row[middle.name] !== undefined)
         .map((row, i) => ({
           key: `${layer.id}-${i}`,
-          label: layer.title,
+          label: title,
           value: text(row[middle.name], middle, true),
           range: low && high && row[low.name] != null && row[high.name] != null ? `${text(row[low.name], low, false)}–${text(row[high.name], high, false)}` : null,
           color: fieldColor(layer, middle),
@@ -709,7 +800,7 @@ export function tipEntries(layer: ReportLayer, rows: readonly ReportRow[], text:
         .filter((f) => row[f.name] !== null && row[f.name] !== undefined)
         .map((field) => ({
           key: `${layer.id}-${i}-${field.name}`,
-          label: fields.length > 1 || layer.bindings.series ? `${layer.title} · ${layer.bindings.series ? `${row[layer.bindings.series] ?? ""} ` : ""}${field.label}` : layer.title,
+          label: [title, severalSeries ? String(row[series!] ?? "") : null, fields.length > 1 ? field.label : null].filter(Boolean).join(" · "),
           value: text(row[field.name], field, true),
           range: null,
           color: fieldColor(layer, field),
@@ -771,6 +862,8 @@ export interface LegendEntry {
   mark: ReportLayer["mark"];
   /** How the layer was folded onto the grid, or null. */
   context: string | null;
+  /** The group the layer's rows are, where the chart draws more than one; else null. */
+  group: string | null;
   /** A band's middle line and shaded spans, each with its swatch; empty for every other mark. */
   parts: LegendPart[];
 }
@@ -787,6 +880,7 @@ export function legend(panel: Pick<ReportPanel, "tracks">): LegendEntry[] {
         texture: fillTexture(layer),
         mark: layer.mark,
         context: layer.context ?? null,
+        group: layer.group ?? null,
         parts: bandParts(layer),
       };
     }),

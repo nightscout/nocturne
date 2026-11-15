@@ -228,12 +228,37 @@ export interface SignalOption {
   reason: Reason;
 }
 
-/** A signal another lens draws: choosing it switches to that lens and places it. */
-export interface ElsewhereOption {
+/** A signal as the catalogue lists it under the chart's lens and range. */
+export interface CatalogueEntry {
   id: SignalId;
-  lens: LensId;
   placed: boolean;
+  /** The chart's lens draws it. */
+  drawable: boolean;
+  /** The reader's access cannot read any of its cells. */
+  noAccess: boolean;
+  /** Why the reader cannot read it: the scopes its cells need; null when it can. */
+  accessReason: Reason;
+  /**
+   * The longest range it is drawn over: under the chart's lens when that draws it, else under any lens. Null when
+   * that is the longest range a report covers, so the range does not limit it.
+   */
+  upTo: number | null;
+  /** The chart's lens draws it, but not over a range as long as the chart's. */
+  needsShorter: boolean;
+  /**
+   * Why it cannot be placed now: under the chart's lens when that draws it, for any reason but the range; else
+   * why switching to the first other lens that draws it cannot place it. Null when it can, or is placed.
+   */
   reason: Reason;
+  /** The lenses the reader can read it under, other than the chart's. */
+  otherLenses: LensId[];
+}
+
+/** Signals the chart's lens draws that need a range of at most `hours`, and the longest preset that fits. */
+export interface RangeNeed {
+  hours: number;
+  signals: SignalId[];
+  preset: RangeOption | null;
 }
 
 export interface RangeOption {
@@ -1689,24 +1714,65 @@ export class Workspace {
     });
   }
 
-  /** Signals only other lenses draw: one option for each lens that draws one. */
-  get elsewhere(): ElsewhereOption[] {
-    return this.#vocab.signals.filter((s) => !this.#vocab.cellOf(this.state.lens, s.id)).flatMap((s) =>
-      this.#vocab.lensesOf(s.id)
-        .filter((lens) => this.#vocab.cellOf(lens, s.id)?.permitted === true)
-        .map((lens) => {
-        const placed = this.state.placed.some((p) => p.id === s.id);
-        return {
-          id: s.id,
-          lens,
-          placed,
-          reason: this.#reason((d) => {
-            this.#switchLens(d, lens);
-            return placed ? null : this.#place(d, s.id);
-          }),
-        };
-      })
-    );
+  /** Every signal of the catalogue, whatever the lens, with what the chart can do with it now. */
+  get catalogueEntries(): CatalogueEntry[] {
+    const lens = this.state.lens;
+    const hours = this.rangeHours;
+    const most = this.#catalogue.maxRangeHours;
+    return this.#vocab.signals.map((s) => {
+      const cell = this.#vocab.cellOf(lens, s.id);
+      const placed = this.state.placed.some((p) => p.id === s.id);
+      const drawable = cell !== undefined && cell.permitted;
+      const otherLenses = s.lenses.filter((l) => l !== lens && this.#vocab.cellOf(l, s.id)?.permitted === true);
+      const limit = drawable ? cell.maxRangeHours : s.maxRangeHours;
+      const needsShorter = drawable && cell.maxRangeHours < hours;
+      let reason: Reason = null;
+      if (!placed && drawable && !needsShorter) reason = this.#reason((d) => this.#place(d, s.id));
+      else if (!placed && !drawable && otherLenses.length > 0) reason = this.placeInReason(s.id, otherLenses[0]);
+      return {
+        id: s.id,
+        placed,
+        drawable,
+        noAccess: !s.permitted,
+        accessReason: s.permitted
+          ? null
+          : accessReason(
+              this.#vocab.ws.cells
+                .filter((c) => c.signal === s.id)
+                .flatMap((c) => c.scopes)
+                .filter((scope, i, all) => all.indexOf(scope) === i)
+            ),
+        upTo: limit < most ? limit : null,
+        needsShorter,
+        reason,
+        otherLenses,
+      };
+    });
+  }
+
+  /**
+   * The signals the chart's lens draws, placed or not, whose data does not cover the chart's range, grouped by the
+   * longest range each covers, the shortest last.
+   */
+  get rangeNeeds(): RangeNeed[] {
+    const limited = this.catalogueEntries
+      .filter((e) => e.needsShorter)
+      .map((e) => ({ id: e.id, hours: this.#vocab.cellOf(this.state.lens, e.id)?.maxRangeHours ?? 0 }));
+    const ranges = this.ranges;
+    return limited
+      .map((l) => l.hours)
+      .filter((h, i, all) => all.indexOf(h) === i)
+      .sort((a, b) => b - a)
+      .map((hours) => ({
+        hours,
+        signals: limited.filter((l) => l.hours === hours).map((l) => l.id),
+        preset: ranges.filter((r) => r.hours <= hours && r.reason === null).at(-1) ?? null,
+      }));
+  }
+
+  /** Why switching to `lens` and placing the signal there cannot be done now, or null. */
+  placeInReason(id: SignalId, lens: LensId): Reason {
+    return this.#reason((d) => this.#placeIn(d, id, lens));
   }
 
   /** The spec layer ids a placed signal produced. */
@@ -1789,9 +1855,7 @@ export class Workspace {
       return hours !== undefined && hours < limit.hours ? { hours, by: null } : limit;
     }
     for (const id of shownSignals(state, this.#vocab)) {
-      const hours = this.#catalogue.datasets.find(
-        (d) => d.name === this.#vocab.cellOf(state.lens, id)?.dataset
-      )?.maxRangeHours;
+      const hours = this.#vocab.cellOf(state.lens, id)?.maxRangeHours;
       if (hours !== undefined && hours < limit.hours) limit = { hours, by: id };
     }
     return limit;
@@ -1862,10 +1926,24 @@ export class Workspace {
 
   /** Switches to `lens` and places the signal there. */
   placeIn(id: SignalId, lens: LensId): Reason {
-    return this.#commit((d) => {
-      this.#switchLens(d, lens);
-      return this.#place(d, id);
-    });
+    return this.#commit((d) => this.#placeIn(d, id, lens));
+  }
+
+  /**
+   * The range a switch to `lens` to place the signal gives the chart: the longest preset its data there covers,
+   * when the chart's range is longer; else null, and the range stays.
+   */
+  placeInRange(id: SignalId, lens: LensId): number | null {
+    const limit = this.#vocab.cellOf(lens, id)?.maxRangeHours;
+    if (limit === undefined || limit >= this.rangeHours) return null;
+    return this.#vocab.rangePresets.filter((p) => p.hours <= limit).at(-1)?.hours ?? null;
+  }
+
+  #placeIn(d: WorkspaceState, id: SignalId, lens: LensId): Reason {
+    const range = this.placeInRange(id, lens);
+    this.#toLens(d, lens);
+    if (range !== null) d.range = range;
+    return this.#place(d, id);
   }
 
   /** Whether the signal can have a lane of its own (spans share one layer). */

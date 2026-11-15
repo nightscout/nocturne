@@ -1,32 +1,31 @@
 /**
- * Opening and saving a report made in the workspace. The spec carries the workspace's state in its
- * `builder` member (see saved-state.ts); a saved report reopens in the workspace only when that
- * state still produces the spec, so a report changed anywhere else opens in the form.
+ * Opening and saving a report in the workspace. The spec carries the workspace's state in its
+ * `builder` member (see saved-state.ts); a saved report reopens from that state when the state still
+ * produces the spec, and from the spec alone (`Report.fromSpec`) when it carries none or the spec was
+ * changed elsewhere since.
  */
 import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
 import { Report } from "./report.svelte.js";
 import type { DateSpan } from "./workspace.svelte.js";
-import { BUILDER_MAX_BYTES, builderOf, sameJson, withBuilder, withoutBuilder } from "./saved-state.js";
-
-/**
- * Which builder a saved report opens in. The form says why: the report carries no state of this
- * builder (or one of another version), or its state no longer makes the spec saved.
- */
-export type Opening =
-  | { builder: "workspace"; report: Report }
-  | { builder: "form"; reason: "notMade" | "changed" };
+import { BUILDER_MAX_BYTES, builderOf, sameJson, withBuilder, withoutBuilder, withoutNulls } from "./saved-state.js";
 
 /**
  * The spec as the engine stores it (version stamped, ids assigned, defaults written), or null when it
  * does not validate. It throws when the engine could not be asked, which is not an answer: the
- * caller says so and offers to try again, and never opens the form on it.
+ * caller says so and offers to try again.
  */
 export type Normalise = (spec: Record<string, unknown>) => Promise<unknown>;
 
+/** Whether two specs are the same as the engine reads them: the builder member and null members aside. */
+export function sameSpec(a: unknown, b: unknown): boolean {
+  return sameJson(withoutNulls(withoutBuilder(a)), withoutNulls(withoutBuilder(b)));
+}
+
 /**
- * The builder a saved report opens in: the workspace when its spec carries a workspace state of a
- * known version and that state, normalised, produces the spec saved; the form when there is no such
- * state or it makes another spec. Rejects, as `normalise` does, when that could not be checked.
+ * The report a saved spec opens as. From its workspace state when that state, normalised, produces
+ * the spec saved; else from the spec, with each panel a block of figures, a table or a comparison makes
+ * exactly opened as one, and when that does not reproduce the spec, every panel held as given. Null
+ * when the spec has no panels to open. Rejects, as `normalise` does, when that could not be checked.
  */
 export async function openSaved(
   catalogue: CustomReportCatalogue,
@@ -34,15 +33,18 @@ export async function openSaved(
   normalise: Normalise,
   clock?: (minute: number) => string,
   dates?: (span: DateSpan) => string
-): Promise<Opening> {
+): Promise<Report | null> {
   const member = builderOf(spec);
-  if (!member) return { builder: "form", reason: "notMade" };
-  const report = Report.fromState(catalogue, member.version, member.state, clock, dates);
-  if (!report) return { builder: "form", reason: "notMade" };
+  const restored = member ? Report.fromState(catalogue, member.version, member.state, clock, dates) : null;
+  if (restored) {
+    const produced = await normalise(restored.spec());
+    if (produced !== null && sameSpec(produced, spec)) return restored;
+  }
+  const bare = withoutBuilder(spec);
+  const report = Report.fromSpec(catalogue, bare, clock, dates);
+  if (!report) return null;
   const produced = await normalise(report.spec());
-  return produced !== null && sameJson(withoutBuilder(produced), withoutBuilder(spec))
-    ? { builder: "workspace", report }
-    : { builder: "form", reason: "changed" };
+  return produced !== null && sameSpec(produced, spec) ? report : Report.fromSpec(catalogue, bare, clock, dates, false);
 }
 
 /** Asks the engine's validator for the stored form of a spec; it reads no data. */

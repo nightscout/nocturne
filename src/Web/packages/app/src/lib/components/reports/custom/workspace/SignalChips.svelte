@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
   import { before, removeThenFocus } from "./refocus.js";
-  import { signalLabel, familyLabel } from "./vocabulary-words.svelte.js";
+  import { signalLabel, familyLabel, markLabel } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -90,13 +90,13 @@
   }
 
   /**
-   * Removes a chip's signal or line; the focus goes to the chip before it, else to the signal in the
+   * Removes a chip's signal or line; the focus goes to the chip before it, else to "Add a signal" in the
    * rail, else to the lens switch.
    */
-  function removeChip(selector: string, signal: string | null, remove: () => unknown) {
+  function removeChip(selector: string, remove: () => unknown) {
     const chips = [...document.querySelectorAll("[data-testid='signal-chips'] [data-signal-chip], [data-testid='signal-chips'] [data-combo-chip]")];
     const fallback = () =>
-      (signal ? document.querySelector(`[data-testid='signal-rail'] [data-signal="${signal}"]`) : null) ??
+      document.querySelector("[data-testid='signal-rail'] [data-testid='add-signal']") ??
       document.querySelector("#lens-switch [data-state='on']");
     void removeThenFocus(before(chips, document.querySelector(selector), fallback), remove);
   }
@@ -146,9 +146,10 @@
                   data-combo-chip={combo.key}
                 >
                   {comboLabel(combo)}
-                  {#if Glyph}
-                    <Glyph class="text-muted-foreground" aria-hidden="true" />
-                  {/if}
+                  <span class="flex items-center gap-1 text-muted-foreground">
+                    {#if Glyph}<Glyph aria-hidden="true" />{/if}
+                    {markLabel(chosen)}
+                  </span>
                 </Button>
               {/snippet}
             </Popover.Trigger>
@@ -189,7 +190,7 @@
               <Button
                 variant="ghost-destructive"
                 size="sm"
-                onclick={() => removeChip(`[data-combo-chip="${combo.key}"]`, null, () => ws.removeCombo(combo.key))}
+                onclick={() => removeChip(`[data-combo-chip="${combo.key}"]`, () => ws.removeCombo(combo.key))}
               >
                 Remove from chart
               </Button>
@@ -203,8 +204,10 @@
 
 {#snippet chip(id: SignalId)}
   {@const marks = ws.marksFor(id)}
-  {@const chosen = marks.find((m) => m.chosen)?.mark}
+  {@const chosenMark = marks.find((m) => m.chosen)}
+  {@const chosen = chosenMark?.mark}
   {@const Glyph = ws.lens === "against" ? CircleDot : glyph(chosen)}
+  {@const drawn = ws.lens === "against" ? markLabel("points") : (chosenMark?.label ?? null)}
   {@const options = ws.relateOptions(id)}
   {@const relate = ws.relate(id)}
   {@const smoothChoices = options.smooth.map((minutes) => ({
@@ -246,8 +249,11 @@
             swatch={signalSwatch(report, ws.vocab, id, ws.layersOf(id), perGroup)}
           />
           {signalLabel(id)}
-          {#if Glyph}
-            <Glyph class="text-muted-foreground" aria-hidden="true" />
+          {#if drawn}
+            <span class="flex items-center gap-1 text-muted-foreground">
+              {#if Glyph}<Glyph aria-hidden="true" />{/if}
+              {drawn}
+            </span>
           {/if}
         </Button>
       {/snippet}
@@ -481,7 +487,7 @@
       <Button
         variant="ghost-destructive"
         size="sm"
-        onclick={() => removeChip(`[data-signal-chip="${id}"]`, id, () => ws.toggleSignal(id))}
+        onclick={() => removeChip(`[data-signal-chip="${id}"]`, () => ws.toggleSignal(id))}
       >
         Remove from chart
       </Button>

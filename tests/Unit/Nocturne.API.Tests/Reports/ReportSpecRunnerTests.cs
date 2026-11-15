@@ -300,7 +300,7 @@ public class ReportSpecRunnerTests
         layer.Rows[0]["time"].Should().Be(Now.AddHours(-3).ToUnixTimeMilliseconds());
         layer.Rows[0]["glucose"].Should().Be(105.5, "the mean of the twelve readings 100 to 111 in the first hour");
         layer.Summary.Should().EndWith("Folded onto a grid of 60 minutes.");
-        layer.Context.Should().Be("Glucose, mean per 1 hour");
+        layer.Context.Should().Be("mean per hour", "the legend writes it after the layer's name, which names the signal");
     }
 
     [Fact]
@@ -308,7 +308,8 @@ public class ReportSpecRunnerTests
     {
         ReportField Field(string label, ReportAggregate aggregate) => new(label, label, ReportFieldKind.Number, "U/h", label, Aggregate: aggregate);
 
-        ReportSpecRunner.FoldWords([Field("Basal rate", ReportAggregate.Last)], 1440).Should().Be("Basal rate, last value per 1 day");
+        ReportSpecRunner.FoldWords([Field("Basal rate", ReportAggregate.Last)], 1440).Should().Be("last value per day");
+        ReportSpecRunner.FoldWords([Field("Median", ReportAggregate.Mean), Field("P25", ReportAggregate.Mean)], 120).Should().Be("mean per 2 hours");
         ReportSpecRunner.FoldWords([Field("Bolus", ReportAggregate.Sum), Field("Peak", ReportAggregate.Max)], 15)
             .Should().Be("Bolus, total per 15 minutes; Peak, highest value per 15 minutes");
     }
@@ -488,8 +489,8 @@ public class ReportSpecRunnerTests
 
         var result = await runner.RunAsync(spec, context, CancellationToken.None);
 
-        result.Summary.Should().StartWith("Two panels\n\n[a] Glucose\n[Glucose readings · Glucose]\nGlucose from 2026-10-29 10:00")
-            .And.Contain("\n\n[b] glucose_series\nGlucose from");
+        result.Summary.Should().StartWith("Two panels\n\n[a] Glucose\n[Glucose]\nGlucose from 2026-10-29 10:00")
+            .And.Contain("\n\n[b] Glucose readings\nGlucose from");
         var layer = result.Panels[0].Tracks[0].Layers[0];
         layer.Fields.Select(f => f.Name).Should().Equal("time", "glucose");
         layer.Fields.Single(f => f.Name == "glucose").Unit.Should().Be("mg/dL");
@@ -560,7 +561,7 @@ public class ReportSpecRunnerTests
         var panel = result.Panels.Single();
         panel.Status.Should().Be(ReportPanelStatus.Ok);
         panel.Tracks[0].Layers.Select(l => l.Status).Should().Equal(ReportPanelStatus.Failed, ReportPanelStatus.Ok);
-        panel.Sentence.Should().Contain("Not shown: broken · Value (an error occurred when it was read).");
+        panel.Sentence.Should().Contain("Not shown: Value (an error occurred when it was read).");
         result.Warnings.Should().ContainSingle().Which.Should().StartWith("Panel p1 (layer a): an error occurred");
     }
 

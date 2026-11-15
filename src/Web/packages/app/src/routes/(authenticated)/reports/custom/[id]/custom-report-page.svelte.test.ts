@@ -5,6 +5,7 @@ import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import type { CustomReport } from "#lib/api/generated/nocturne-api-client.js";
 import { chartResult, normalisedSpec, statTilesResult } from "../custom-report-fixtures.js";
+import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
 
 const calls = vi.hoisted(() => ({
   runs: [] as unknown[],
@@ -19,6 +20,7 @@ let runResult: () => unknown = statTilesResult;
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   getCustomReport: () => remoteQuery(() => saved),
+  getCustomReportCatalogue: () => remoteQuery(() => liveCatalogue),
   runCustomReport: remoteCommand((arg) => {
     calls.runs.push(arg);
     return { result: runResult(), spec: normalisedSpec, errors: [] };
@@ -111,26 +113,43 @@ describe("saved custom report page", () => {
     }
   });
 
-  it("runs the saved spec and draws it under the report's name", async () => {
+  it("runs the saved spec as saved, with Edit and one menu of the other actions", async () => {
     render(CustomReportPage, {});
 
-    await expect.element(page.getByRole("heading", { name: "Fortnight" })).toBeVisible();
     await expect.element(page.getByText("Readings: 4025.")).toBeVisible();
     expect(calls.runs).toEqual([{ spec: normalisedSpec }]);
+    await expect.element(page.getByRole("link", { name: "Edit" })).toBeVisible();
+    await expect.element(page.getByRole("radio", { name: "As saved" })).toHaveAttribute("data-state", "on");
+    await expect.element(page.getByTestId("report-actions")).toBeVisible();
+  });
+
+  it("runs the report over another range without changing what is saved", async () => {
+    render(CustomReportPage, {});
+    await vi.waitFor(() => expect(calls.runs).toHaveLength(1));
+
+    await page.getByRole("radio", { name: "7 days" }).click();
+
+    await vi.waitFor(() => expect(calls.runs).toHaveLength(2));
+    expect(calls.runs[1]).toEqual({ spec: { ...normalisedSpec, range: { hours: 168 }, panels: [{ ...normalisedSpec.panels[0], range: { hours: 168 } }] } });
+    await expect.element(page.getByTestId("range-note")).toHaveTextContent("Nothing in the saved report changes.");
+    expect(calls.updates).toEqual([]);
   });
 
   it("renames, copies the link and deletes after the reader confirms", async () => {
     render(CustomReportPage, {});
 
-    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByTestId("report-actions").click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
     await page.getByLabelText("Name").fill("Two weeks of lunches");
     await page.getByRole("button", { name: "Save" }).click();
     await vi.waitFor(() => expect(calls.updates).toEqual([{ id: "a1", request: { name: "Two weeks of lunches" } }]));
 
-    await page.getByRole("button", { name: "Copy link" }).click();
+    await page.getByTestId("report-actions").click();
+    await page.getByRole("menuitem", { name: "Copy link" }).click();
     await vi.waitFor(() => expect(calls.copied).toEqual(["http://localhost/reports/custom/a1"]));
 
-    await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByTestId("report-actions").click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
     expect(calls.deletes).toEqual([]);
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
     await vi.waitFor(() => expect(calls.deletes).toEqual(["a1"]));
@@ -141,9 +160,11 @@ describe("saved custom report page", () => {
     saved = { ...saved, canEdit: false };
     render(CustomReportPage, {});
 
-    await expect.element(page.getByRole("button", { name: "Copy link" })).toBeVisible();
-    expect(page.getByRole("button", { name: "Rename" }).elements()).toHaveLength(0);
-    expect(page.getByRole("button", { name: "Delete" }).elements()).toHaveLength(0);
+    await page.getByTestId("report-actions").click();
+    await expect.element(page.getByRole("menuitem", { name: "Copy link" })).toBeVisible();
+    expect(page.getByRole("menuitem", { name: "Rename" }).elements()).toHaveLength(0);
+    expect(page.getByRole("menuitem", { name: "Delete" }).elements()).toHaveLength(0);
+    await expect.element(page.getByRole("link", { name: "Edit a copy" })).toBeVisible();
   });
 
   it("shows why a stored spec no longer runs, and does not run it", async () => {

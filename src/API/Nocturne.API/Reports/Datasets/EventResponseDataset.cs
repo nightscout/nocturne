@@ -226,14 +226,28 @@ internal sealed class EventResponseDataset : IReportDataset
         IReadOnlyDictionary<int, int> Number,
         List<string> Notes,
         IReadOnlyList<string> AskedLabels,
-        IReadOnlyList<ReportCohort>? Cohorts = null)
+        IReadOnlyList<ReportCohort>? Cohorts = null,
+        IReadOnlyList<CohortWords>? AskedWords = null)
     {
         /// <summary>The name of a layer of one group: its label, where the layer draws one group (<paramref name="group"/>) or only one was asked.</summary>
         public string? NameOf(int? group) =>
             group is { } n && n >= 1 && n <= AskedLabels.Count ? AskedLabels[n - 1]
             : AskedLabels.Count == 1 ? AskedLabels[0]
             : null;
+
+        /// <summary>The words for the one group <see cref="NameOf"/> names, or null.</summary>
+        public CohortWords? WordsOf(int? group) =>
+            AskedWords is not { } words ? null
+            : group is { } n && n >= 1 && n <= words.Count ? words[n - 1]
+            : words.Count == 1 ? words[0]
+            : null;
     }
+
+    /// <summary>
+    /// A group in words: its heading ("Lows that start from 12:00 AM to 6:00 AM"), and the sentence that says none
+    /// was found ("No lows started from 12:00 AM to 6:00 AM"), to which the range is added.
+    /// </summary>
+    internal sealed record CohortWords(string Heading, string None);
 
     private static readonly System.Text.Json.JsonSerializerOptions SharedKeyOptions = new() { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
 
@@ -334,14 +348,15 @@ internal sealed class EventResponseDataset : IReportDataset
                 ? new(ReportCohortOmission.ScopeReason, scope)
                 : new(ReportCohortOmission.SiblingReason, Group: asked.Select((c, j) => (c, j)).FirstOrDefault(x => x.c.Anchor == k.Cohort.Anchor && !x.c.Others).j + 1));
         IReadOnlyList<ReportCohort> cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label, omitted.GetValueOrDefault(i + 1)))];
-        return new EventRun(report, labels, number, notes, askedLabels, cohorts);
+        var askedWords = askedDefinition.Cohorts.Select(c => Words(c, foodNames, foodRead, useMmol, request.Hour12 ?? true)).ToList();
+        return new EventRun(report, labels, number, notes, askedLabels, cohorts, askedWords);
     }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var useMmol = request.UseMmol;
         var run = await ComputeAsync(request, (EventResponseParameters)request.Parameters, cancellationToken);
-        var (report, labels, number, shared, askedLabels, _) = run;
+        var (report, labels, number, shared, _, _, _) = run;
         var notes = new List<string>(shared);
         var slotMinutes = EventResponseCalculator.SlotMinutes(report.Definition);
         var events = report.Primary.Events;
@@ -365,10 +380,14 @@ internal sealed class EventResponseDataset : IReportDataset
         if (request.Kind == ReportPanelKind.Table && events.Count > MaxEvents)
             notes.Add($"The table shows the first {MaxEvents} of {events.Count} events.");
 
-        var sentence = NoTimeZone(report, "Meals & events") ?? WindowSentence(report.Definition);
         var counted = report.WithheldSeries.Contains(LoopAnalysisSeries.EventList)
             ? report.Primary.Cohorts.Sum(c => c.Events)
             : report.Primary.Events.Count;
+        var sentence = NoTimeZone(report, "Meals & events")
+            ?? (counted == 0 && report.Definition.Cohorts.Count > 0 && !report.RangeOutsideHistory
+                ? NoneSentence(run.WordsOf(null), RangeWords(request))
+                : WindowSentence(report.Definition));
+        var anchors = report.Definition.Cohorts.Select(c => c.Anchor).Distinct().ToList();
 
         return new ReportDatasetOutput
         {
@@ -381,7 +400,95 @@ internal sealed class EventResponseDataset : IReportDataset
             Window = Window(report),
             Cohorts = run.Cohorts!,
             Name = run.NameOf(null),
+            Heading = run.WordsOf(null)?.Heading,
+            FieldLabels = new Dictionary<string, string>
+            {
+                ["minute"] = $"Minutes from the {(anchors.Count == 1 ? AnchorNoun(anchors[0]) : "event")}",
+            },
         };
+    }
+
+    /// <summary>"No lows started from 12:00 AM to 6:00 AM in the last 90 days.", or for several groups "No group had an event in ...".</summary>
+    internal static string NoneSentence(CohortWords? words, string range) =>
+        words is null ? $"No group had an event {range}." : $"{words.None} {range}.";
+
+    /// <summary>The range as words: "in the last 90 days" for a range that ends now, else its local dates.</summary>
+    internal static string RangeWords(ReportDatasetRequest request)
+    {
+        if (request.Now is { } now && (now - request.To).Duration() < TimeSpan.FromMinutes(2))
+            return $"in the last {ReportSpecValidator.Describe(request.To - request.From)}";
+        var zone = request.Zone ?? TimeZoneInfo.Utc;
+        string Day(DateTimeOffset at) => TimeZoneInfo.ConvertTime(at, zone).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return $"from {Day(request.From)} to {Day(request.To)}";
+    }
+
+    /// <summary>The event as the object of "from the": "low", "meal", "start of exercise".</summary>
+    internal static string AnchorNoun(EventAnchorKind anchor) => anchor switch
+    {
+        EventAnchorKind.LowStart => "low",
+        EventAnchorKind.HighStart => "high",
+        EventAnchorKind.ExerciseStart => "start of exercise",
+        EventAnchorKind.OverrideStart => "start of the override",
+        EventAnchorKind.TemporaryTargetStart => "start of the temporary target",
+        EventAnchorKind.SleepStart => "start of sleep",
+        EventAnchorKind.Wake => "wake-up",
+        _ => AnchorWords(anchor).ToLowerInvariant(),
+    };
+
+    /// <summary>
+    /// The events of an anchor as a plural noun, and whether each is the start of something, which a time window
+    /// then qualifies with "that start".
+    /// </summary>
+    private static (string Plural, bool Starts) AnchorPlural(EventAnchorKind anchor) => anchor switch
+    {
+        EventAnchorKind.Meal => ("meals", false),
+        EventAnchorKind.CorrectionBolus => ("correction boluses", false),
+        EventAnchorKind.SensorStart => ("sensor starts", false),
+        EventAnchorKind.ExerciseStart => ("exercise sessions", true),
+        EventAnchorKind.OverrideStart => ("overrides", true),
+        EventAnchorKind.TemporaryTargetStart => ("temporary targets", true),
+        EventAnchorKind.UnannouncedRise => ("unannounced rises", true),
+        EventAnchorKind.LowStart => ("lows", true),
+        EventAnchorKind.HighStart => ("highs", true),
+        EventAnchorKind.SiteChange => ("site changes", false),
+        EventAnchorKind.SleepStart => ("sleep periods", true),
+        EventAnchorKind.Wake => ("wake-ups", false),
+        EventAnchorKind.LowTreatment => ("low treatments", false),
+        EventAnchorKind.AnyBolus => ("boluses", false),
+        _ => (anchor.ToString().ToLowerInvariant(), false),
+    };
+
+    /// <summary>A local time of day on the tenant's clock: "6:00 AM" on a 12-hour clock, "06:00" on a 24-hour one.</summary>
+    internal static string ClockWords(int minuteOfDay, bool hour12)
+    {
+        var at = DateTime.MinValue.AddMinutes(((minuteOfDay % 1440) + 1440) % 1440);
+        return at.ToString(hour12 ? "h:mm tt" : "HH:mm", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// A group in words: "Lows that start from 12:00 AM to 6:00 AM", "Meals from 6:00 AM to 10:00 AM with Penne or Rice",
+    /// "All other meals"; and the sentence that none was found: "No lows started from 12:00 AM to 6:00 AM".
+    /// </summary>
+    internal static CohortWords Words(
+        EventCohortDefinition cohort, IReadOnlyDictionary<Guid, string> foodNames, bool foodRead, bool useMmol, bool hour12)
+    {
+        var (plural, starts) = AnchorPlural(cohort.Anchor);
+        if (cohort.Others)
+            return new CohortWords($"All other {plural}", $"No other {plural}");
+        var window = cohort.FromMinute is not null || cohort.ToMinute is not null
+            ? $"from {ClockWords(cohort.FromMinute ?? 0, hour12)} to {ClockWords(cohort.ToMinute ?? 0, hour12)}"
+            : null;
+        var parts = FilterParts(cohort, foodNames, foodRead, useMmol, time: false);
+        var days = cohort.DaysOfWeek is { Count: > 0 } weekdays
+            ? $" on {string.Join(", ", weekdays.Select(d => CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedDayName(d)))}"
+            : "";
+        var rest = (parts.Count == 0 ? "" : $" with {string.Join(", ", parts)}") + days;
+        var head = char.ToUpperInvariant(plural[0]) + plural[1..];
+        if (window is null)
+            return new CohortWords($"{head}{rest}", $"No {plural}{rest}");
+        return starts
+            ? new CohortWords($"{head} that start {window}{rest}", $"No {plural} started {window}{rest}")
+            : new CohortWords($"{head} {window}{rest}", $"No {plural} {window}{rest}");
     }
 
     /// <summary>The category each anchor's events are records of, as the read audit names it.</summary>
@@ -442,6 +549,14 @@ internal sealed class EventResponseDataset : IReportDataset
     {
         if (cohort.Others)
             return $"{AnchorWords(cohort.Anchor)}: all others";
+        var parts = FilterParts(cohort, foodNames, foodRead, useMmol, time: true);
+        return $"{AnchorWords(cohort.Anchor)}: {(parts.Count == 0 ? "all" : string.Join(", ", parts))}";
+    }
+
+    /// <summary>The filters of a group in the order <see cref="CohortLabel"/> writes them; its time window and weekdays only where <paramref name="time"/>.</summary>
+    private static List<string> FilterParts(
+        EventCohortDefinition cohort, IReadOnlyDictionary<Guid, string> foodNames, bool foodRead, bool useMmol, bool time)
+    {
         var parts = new List<string>();
         if (cohort.HasFoodFilter && !foodRead)
             parts.Add("a food filter");
@@ -452,12 +567,12 @@ internal sealed class EventResponseDataset : IReportDataset
             if (cohort.FoodCategory is { } category && !string.IsNullOrWhiteSpace(category))
                 parts.Add($"category {category.Trim()}");
         }
-        if (cohort.FromMinute is not null || cohort.ToMinute is not null)
+        if (time && (cohort.FromMinute is not null || cohort.ToMinute is not null))
             parts.Add($"{Clock(cohort.FromMinute ?? 0)}-{Clock(cohort.ToMinute ?? 0)}");
         if (cohort.MinGrams is not null || cohort.MaxGrams is not null)
             parts.Add(cohort.MinGrams is { } min && cohort.MaxGrams is { } max ? $"{Number(min)}-{Number(max)} g"
                 : cohort.MinGrams is { } atLeast ? $"at least {Number(atLeast)} g" : $"at most {Number(cohort.MaxGrams!.Value)} g");
-        if (cohort.DaysOfWeek is { Count: > 0 } days)
+        if (time && cohort.DaysOfWeek is { Count: > 0 } days)
             parts.Add(string.Join(' ', days.Select(d => CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedDayName(d))));
         if (MinutesSinceMealWords(cohort.MinMinutesSinceMeal, cohort.MaxMinutesSinceMeal) is { } since)
             parts.Add(since);
@@ -469,7 +584,7 @@ internal sealed class EventResponseDataset : IReportDataset
         }
         if (cohort.HasIob)
             parts.Add("IOB " + Bounds(cohort.MinIob, cohort.MaxIob, v => Number(v), "U"));
-        return $"{AnchorWords(cohort.Anchor)}: {(parts.Count == 0 ? "all" : string.Join(", ", parts))}";
+        return parts;
     }
 
     /// <summary>"70 to 180 mg/dL", "at least 180 mg/dL" or "at most 0.5 U".</summary>

@@ -13,7 +13,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
-  import FoodCategoryInput from "../builder/FoodCategoryInput.svelte";
+  import FoodCategoryInput from "./FoodCategoryInput.svelte";
   import { windowLabel } from "./clock.js";
   import FoodNarrowing from "./FoodNarrowing.svelte";
   import MealSizeEditor from "./MealSizeEditor.svelte";
@@ -29,8 +29,7 @@
   import Swatch from "./Swatch.svelte";
   import TimeOfDayEditor from "./TimeOfDayEditor.svelte";
   import WeekdayToggles from "./WeekdayToggles.svelte";
-  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Info from "@lucide/svelte/icons/info";
   import {
     GROUP_LETTERS,
     boundsText,
@@ -540,26 +539,23 @@
         </div>
         {#if !moment.everythingElse && ws.anchorRule(moment.what) && ws.momentViews.findIndex((m) => !m.everythingElse && ws.anchorRule(m.what) === ws.anchorRule(moment.what)) === i}
           {@const rule = ruleParts(ws.anchorRule(moment.what) ?? "")}
-          <div class="mt-1 pl-10 text-xs text-muted-foreground" data-testid="anchor-rule">
-            <p>{rule.first}</p>
-            {#if rule.rest}
-              <Collapsible.Root>
-                <Collapsible.Trigger>
-                  {#snippet child({ props }: { props: Record<string, unknown> })}
-                    <Button {...props} variant="subtle" size="inline-xs" class="group">
-                      <ChevronRight
-                        class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
-                        aria-hidden="true"
-                      />
-                      More
-                    </Button>
-                  {/snippet}
-                </Collapsible.Trigger>
-                <Collapsible.Content>
-                  <p>{rule.rest}</p>
-                </Collapsible.Content>
-              </Collapsible.Root>
-            {/if}
+          <div class="mt-1 pl-10" data-testid="anchor-rule">
+            <Popover.Root>
+              <Popover.Trigger>
+                {#snippet child({ props }: { props: Record<string, unknown> })}
+                  <Button {...props} variant="subtle" size="inline-xs">
+                    <Info aria-hidden="true" />
+                    How Nocturne finds {anchorPhrase(moment.what)}
+                  </Button>
+                {/snippet}
+              </Popover.Trigger>
+              <Popover.Content align="start" class="w-80">
+                <div class="space-y-2 text-xs text-muted-foreground">
+                  <p>{rule.first}</p>
+                  {#if rule.rest}<p>{rule.rest}</p>{/if}
+                </div>
+              </Popover.Content>
+            </Popover.Root>
           </div>
         {/if}
         {#each leftOut(i) as note (note)}

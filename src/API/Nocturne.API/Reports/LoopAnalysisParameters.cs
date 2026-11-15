@@ -104,6 +104,31 @@ internal static class ReportNames
             _ => null,
         };
     }
+
+    /// <summary>
+    /// The signal a field's values are of, without the statistic taken of them: "Glucose median" and "Glucose P25" are
+    /// "Glucose", "IOB median" is "Insulin on board". A legend names a layer by its signal and unit.
+    /// </summary>
+    public static string Signal(string label)
+    {
+        var words = label.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        while (words.Count > 1 && Statistic(words[^1]))
+            words.RemoveAt(words.Count - 1);
+        if (words.Count > 0 && Abbreviations.TryGetValue(words[0], out var full))
+            words[0] = full;
+        var text = string.Join(' ', words);
+        return text.Length == 0 ? label : char.ToUpperInvariant(text[0]) + text[1..];
+    }
+
+    private static readonly IReadOnlyDictionary<string, string> Abbreviations = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["IOB"] = "Insulin on board",
+        ["COB"] = "Carbs on board",
+    };
+
+    private static bool Statistic(string word) =>
+        word is "median" or "mean" or "average"
+        || (word.Length > 1 && word[0] == 'P' && word[1..].All(char.IsAsciiDigit));
 }
 
 /// <summary>A local weekday, as a cohort filter names it.</summary>

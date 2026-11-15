@@ -28,6 +28,24 @@ internal sealed record GlucoseEpisode(
     public double DurationMinutes => (EndAt - StartAt).TotalMinutes;
 }
 
+/// <summary>One glucose episode as a reader outside this assembly sees it: <see cref="GlucoseEpisode"/> with its extreme's value.</summary>
+public sealed record GlucoseEpisodeSpan(bool BelowRange, bool Severe, DateTime StartAt, DateTime EndAt, double ExtremeMgdl);
+
+/// <summary>The episodes <see cref="GlucoseEpisodeDetector"/> finds, for a reader outside this assembly.</summary>
+public static class GlucoseEpisodes
+{
+    /// <summary>
+    /// The episodes in <paramref name="readings"/>, in the order they began. Implausible readings are left out and the
+    /// rest put in time order, as the statistics take them.
+    /// </summary>
+    public static IReadOnlyList<GlucoseEpisodeSpan> Find(IEnumerable<SensorGlucose> readings, GlycemicThresholds thresholds) =>
+    [
+        .. GlucoseEpisodeDetector.Detect(
+                readings.Where(r => GlucoseStatistics.IsPlausibleReading(r.Mgdl)).OrderBy(r => r.Timestamp).ToList(), thresholds)
+            .Select(e => new GlucoseEpisodeSpan(e.BelowRange, e.Severe, e.StartAt, e.EndAt, e.Extreme.Mgdl)),
+    ];
+}
+
 /// <summary>
 /// Finds the episodes in a series of readings. Every report that counts or lists glucose episodes
 /// takes them from here, so that each finds the same episodes with the same durations.

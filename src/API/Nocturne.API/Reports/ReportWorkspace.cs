@@ -28,6 +28,7 @@ namespace Nocturne.API.Reports;
 public sealed record CustomReportWorkspace(
     [property: Required] IReadOnlyList<string> Lenses,
     [property: Required] IReadOnlyList<CustomReportWorkspaceFamily> Families,
+    [property: Required] IReadOnlyList<CustomReportWorkspaceSection> Sections,
     [property: Required] IReadOnlyList<CustomReportWorkspaceSignal> Signals,
     [property: Required] IReadOnlyList<CustomReportWorkspaceCell> Cells,
     [property: Required] IReadOnlyList<string> AnchorGroups,
@@ -47,14 +48,36 @@ public sealed record CustomReportWorkspace(
 /// <summary>A family of signals and the share of a chart's height its lane takes.</summary>
 public sealed record CustomReportWorkspaceFamily([property: Required] string Id, [property: Required] double LaneHeight);
 
-/// <summary>A signal: its family, the lane it is drawn in when not its family's, and its theme color token.</summary>
+/// <summary>
+/// A section of the signal catalogue and its groups, in the order the catalogue lists them. A section may have no
+/// signals yet; the catalogue shows only the ones that do.
+/// </summary>
+public sealed record CustomReportWorkspaceSection([property: Required] string Id, [property: Required] IReadOnlyList<string> Groups);
+
+/// <summary>
+/// A signal: the lane family it is drawn in, the lane it is drawn in when not its family's, its theme color token,
+/// and where the catalogue lists it, independent of any lens.
+/// </summary>
+/// <param name="Family">The family whose lane draws it: a chart's lanes and their heights (<see cref="CustomReportWorkspace.Families"/>).</param>
+/// <param name="Section">The catalogue section it is listed under (<see cref="CustomReportWorkspace.Sections"/>).</param>
+/// <param name="Group">Its group within the section.</param>
+/// <param name="Unit">The unit of its first cell that has one, as the cells write it (<c>glucose</c> for the display unit); null for none.</param>
+/// <param name="Lenses">The lenses that draw it, in lens order.</param>
+/// <param name="MaxRangeHours">The longest range any lens draws it over: the most its datasets cover.</param>
+/// <param name="SearchKeys">Ids of the words, besides its name, a search finds it by (abbreviations and other names); the web gives the words.</param>
 /// <param name="Permitted">Whether the caller holds the scopes of at least one of its cells.</param>
 public sealed record CustomReportWorkspaceSignal(
     [property: Required] string Id,
     [property: Required] string Family,
     string? Lane,
     [property: Required] string Color,
-    [property: Required] bool Permitted);
+    [property: Required] bool Permitted,
+    [property: Required] string Section,
+    [property: Required] string Group,
+    string? Unit,
+    [property: Required] IReadOnlyList<string> Lenses,
+    [property: Required] double MaxRangeHours,
+    [property: Required] IReadOnlyList<string> SearchKeys);
 
 /// <summary>How one signal is drawn under one lens.</summary>
 /// <param name="Parameters">The dataset parameters the cell always sends, beside its name; null for none.</param>
@@ -71,6 +94,7 @@ public sealed record CustomReportWorkspaceSignal(
 /// <param name="LeaveOut">The dataset takes the leave-out parameters (<see cref="CustomReportWorkspace.LeaveOuts"/>). Read off its parameter schema.</param>
 /// <param name="SpanKind">A kind of state span (also in <paramref name="Parameters"/>): a lane draws every placed kind in one layer.</param>
 /// <param name="Scopes">The read scopes the cell needs: its dataset's and its fields'.</param>
+/// <param name="MaxRangeHours">The longest range the cell's dataset covers.</param>
 public sealed record CustomReportWorkspaceCell(
     [property: Required] string Lens,
     [property: Required] string Signal,
@@ -89,7 +113,8 @@ public sealed record CustomReportWorkspaceCell(
     [property: Required] bool LeaveOut,
     string? SpanKind,
     [property: Required] IReadOnlyList<string> Scopes,
-    [property: Required] bool Permitted);
+    [property: Required] bool Permitted,
+    [property: Required] double MaxRangeHours);
 
 /// <summary>One way a cell is drawn: the spec's mark, the word id the web offers it by, and its bindings.</summary>
 /// <param name="Word">line, lines, area, points, bars, stacked, medianBand, band, range, percentiles, median, markers or spans.</param>
@@ -317,49 +342,170 @@ internal static class ReportWorkspace
         AgainstCell("cob", GlucoseSeriesParameters.Name, "cob"),
         AgainstCell("basal", BasalDeliveryParameters.Name, "delivered"),
         AgainstCell("heartRate", HeartRateParameters.Name, "bpm"),
+
+        Lanes("sensorChanges", DeviceEventsParameters.Name, ReportDeviceEventGroup.Sensor),
+        Lanes("siteChanges", DeviceEventsParameters.Name, ReportDeviceEventGroup.Site),
+        Lanes("pumpEvents", DeviceEventsParameters.Name, ReportDeviceEventGroup.Pump),
+        Lanes("deviceAlarms", SystemEventsParameters.Name),
+        Lanes("trackers", TrackersParameters.Name),
+        Span("temporaryTargets", ReportSpanKind.TemporaryTarget),
+        Span("pumpConnection", ReportSpanKind.PumpConnectivity),
+        Span("dataExclusions", ReportSpanKind.DataExclusion),
+        Span("motion", ReportSpanKind.Motion),
+        Lanes("sleepStages", SleepStagesParameters.Name),
+        Lanes("alertPeriods", AlertExcursionsParameters.Name),
+        Lanes("alertsRaised", AlertInstancesParameters.Name),
+        Lanes("doNotDisturb", DndWindowsParameters.Name),
+        Lanes("compressionLows", CompressionLowsParameters.Name),
+        Lanes("glucoseEpisodes", GlucoseEpisodesParameters.Name),
+        Night("sleepScore", "score"),
+        Night("sleepEfficiency", "efficiency"),
+        Night("sleepLatency", "latency"),
+        Night("restlessPeriods", "restless"),
+        Night("sleepHeartRate", "avgHeartRate") with
+        {
+            Marks = [Lines("night", ["avgHeartRate", "minHeartRate"]), Points("night", "avgHeartRate", "minHeartRate")],
+        },
+        Night("sleepHrv", "hrv"),
+        Night("sleepSpo2", "spo2"),
+        Night("sleepBreathing", "breathingRate"),
+        Measured("heartRateInSleep", SleepBiometricsParameters.Name, "heartRate"),
+        Measured("hrvInSleep", SleepBiometricsParameters.Name, "hrv"),
+        Measured("spo2InSleep", SleepBiometricsParameters.Name, "spo2"),
+        Measured("breathingInSleep", SleepBiometricsParameters.Name, "breathingRate"),
+        new(Timeline, "labHbA1c", LabHbA1cParameters.Name, null, "hba1c", [Points("day", "hba1c"), Line("day", "hba1c")], [], false),
+        new(Daily, "labHbA1c", LabHbA1cParameters.Name, null, "hba1c", [Points("day", "hba1c"), Line("day", "hba1c")], [], false),
+        Measured("weight", BodyWeightParameters.Name, "weight") with { Smooth = [] },
+        Measured("bodyFat", BodyWeightParameters.Name, "bodyFat") with { Smooth = [] },
+        Measured("leanMass", BodyWeightParameters.Name, "leanMass") with { Smooth = [] },
+        Measured("trendRate", SensorDetailParameters.Name, "trendRate") with { Combine = true },
+        new(Timeline, "sensorNoise", SensorDetailParameters.Name, null, "noise", [Points("time", "noise"), Bars("time", "noise")], [], false),
+        new(Timeline, "meterGlucose", MeterGlucoseParameters.Name, null, "meterGlucose", [Points("time", "meterGlucose")], [], false),
     ];
 
+    /// <summary>A timeline cell of a lane dataset (<see cref="LaneDataset"/>), narrowed to one group of device events where one is named.</summary>
+    private static CellSpec Lanes(string signal, string dataset, ReportDeviceEventGroup? group = null) =>
+        new(Timeline, signal, dataset,
+            group is { } g ? new Dictionary<string, object> { ["groups"] = new[] { ReportWire.Name(g) } } : null,
+            null, [Spans], [], false);
+
+    /// <summary>A daily cell of one sleep session's figure, along the night it ended.</summary>
+    private static CellSpec Night(string signal, string field) =>
+        new(Daily, signal, SleepNightsParameters.Name, null, field, [Points("night", field), Line("night", field), Bars("night", field)], [], true);
+
+    /// <summary>A timeline cell of a measured series drawn as a line or its points.</summary>
+    private static CellSpec Measured(string signal, string dataset, string field) =>
+        new(Timeline, signal, dataset, null, field, [Line("time", field), Points("time", field)], TimeSmooth, true);
+
     /// <summary>
-    /// The signals. A signal's color is that of its first cell's field (<see cref="LeadColor"/>); the color here is
-    /// used only where none of its cells has a field with one.
+    /// A signal as the table writes it. <paramref name="Family"/> is the lane family that draws it, and
+    /// <paramref name="Section"/> and <paramref name="Group"/> are where the catalogue lists it.
+    /// <paramref name="Search"/> are ids of other words a search finds it by. <paramref name="Sources"/> are the
+    /// <see cref="ReportDataSources"/> whose records it draws: it has data in a range when any of them has a record there.
     /// </summary>
-    private static readonly (string Id, string Family, string Color, string? Lane)[] SignalTable =
+    internal sealed record SignalSpec(
+        string Id, string Family, string Color, string Section, string Group, string[] Search, string[] Sources, string? Lane = null);
+
+    /// <summary>
+    /// The signals; the catalogue lists each group's in this order. A signal's color is that of its first
+    /// cell's field (<see cref="LeadColor"/>); the color here is used only where none of its cells has a field with one.
+    /// A new signal is one row here and its cells in <see cref="Table"/>; the web adds its words.
+    /// </summary>
+    internal static readonly IReadOnlyList<SignalSpec> SignalTable =
     [
-        ("glucose", "Glucose", "glucose-in-range", null),
-        ("target", "Glucose", "glucose-tight-range", null),
-        ("glucoseWide", "Glucose", "glucose-in-range", null),
-        ("mean", "Glucose", "glucose-in-range", null),
-        ("timeInRange", "Glucose", "glucose-tight-range", null),
-        ("timeBelow", "Glucose", "glucose-low", null),
-        ("timeAbove", "Glucose", "glucose-high", null),
-        ("ranges", "Glucose", "glucose-in-range", null),
-        ("readings", "Glucose", "system-event-info", null),
-        ("iob", "Insulin", "insulin", null),
-        ("basal", "Insulin", "basal", null),
-        ("basalScheduled", "Insulin", "insulin-scheduled-basal", null),
-        ("boluses", "Insulin", "insulin-bolus", null),
-        ("injections", "Insulin", "insulin-basal", null),
-        ("netLoop", "Insulin", "insulin-additional-basal", null),
-        ("totalInsulin", "Insulin", "insulin", null),
-        ("totalBolus", "Insulin", "insulin-bolus", null),
-        ("totalBasal", "Insulin", "basal", null),
-        ("cob", "Food", "carbs-on-board", null),
-        ("carbs", "Food", "carbs", null),
-        ("reservoir", "Devices", "insulin-basal", null),
-        ("pumpBattery", "Devices", "pump-mode-boost", null),
-        ("uploaderBattery", "Devices", "pump-mode-sleep", null),
-        ("settingBasal", "Settings", "basal", null),
-        ("settingIsf", "Settings", "insulin", null),
-        ("settingCarbRatio", "Settings", "carbs", null),
-        ("heartRate", "Body", "heart-rate", null),
-        ("steps", "Body", "steps", null),
-        ("sleep", "Body", "pump-mode-sleep", "Context"),
-        ("pumpModes", "Context", "pump-mode-automatic", null),
-        ("profiles", "Context", "pump-mode-liberty", null),
-        ("overrides", "Context", "pump-mode-boost", null),
-        ("activities", "Context", "pump-mode-exercise", null),
-        ("tempBasals", "Context", "insulin-temp-basal", null),
-        ("bgChecks", "Context", "glucose-in-range", null),
+        new("glucose", "Glucose", "glucose-in-range", "glucose", "sensor", ["bg", "bloodSugar", "sensor", "cgm"], [ReportDataSources.SensorGlucose]),
+        new("target", "Glucose", "glucose-tight-range", "glucose", "sensor", ["targetRange", "bg"], [ReportDataSources.SensorGlucose]),
+        new("glucoseWide", "Glucose", "glucose-in-range", "glucose", "sensor", ["percentile", "bg", "cgm"], [ReportDataSources.SensorGlucose]),
+        new("mean", "Glucose", "glucose-in-range", "glucose", "statistics", ["average", "bg"], [ReportDataSources.SensorGlucose]),
+        new("timeInRange", "Glucose", "glucose-tight-range", "glucose", "ranges", ["tir", "range"], [ReportDataSources.SensorGlucose]),
+        new("timeBelow", "Glucose", "glucose-low", "glucose", "ranges", ["tbr", "low", "range"], [ReportDataSources.SensorGlucose]),
+        new("timeAbove", "Glucose", "glucose-high", "glucose", "ranges", ["tar", "high", "range"], [ReportDataSources.SensorGlucose]),
+        new("ranges", "Glucose", "glucose-in-range", "glucose", "ranges", ["tir", "range"], [ReportDataSources.SensorGlucose]),
+        new("readings", "Glucose", "system-event-info", "dataQuality", "coverage", ["sensor", "cgm", "gaps"], [ReportDataSources.SensorGlucose]),
+        new("iob", "Insulin", "insulin", "insulin", "onBoard", ["iob", "insulin"],
+            [ReportDataSources.ApsSnapshots, ReportDataSources.Boluses, ReportDataSources.TempBasals]),
+        new("basal", "Insulin", "basal", "insulin", "basal", ["rate", "tempBasal", "insulin"],
+            [ReportDataSources.TempBasals, ReportDataSources.ProfileActivations]),
+        new("basalScheduled", "Insulin", "insulin-scheduled-basal", "insulin", "basal", ["rate", "profile", "insulin"],
+            [ReportDataSources.TempBasals, ReportDataSources.ProfileActivations]),
+        new("boluses", "Insulin", "insulin-bolus", "insulin", "bolus", ["bolus", "dose", "insulin"], [ReportDataSources.Boluses]),
+        new("injections", "Insulin", "insulin-basal", "insulin", "basal", ["mdi", "pen", "dose", "insulin"], [ReportDataSources.BasalInjections]),
+        new("netLoop", "Insulin", "insulin-additional-basal", "loop", "corrections", ["loop", "automation", "insulin"],
+            [ReportDataSources.TempBasals, ReportDataSources.ApsSnapshots]),
+        new("totalInsulin", "Insulin", "insulin", "insulin", "totals", ["tdd", "dose", "insulin"],
+            [ReportDataSources.Boluses, ReportDataSources.TempBasals, ReportDataSources.BasalInjections]),
+        new("totalBolus", "Insulin", "insulin-bolus", "insulin", "bolus", ["bolus", "dose", "insulin"], [ReportDataSources.Boluses]),
+        new("totalBasal", "Insulin", "basal", "insulin", "basal", ["tdd", "insulin"],
+            [ReportDataSources.TempBasals, ReportDataSources.ProfileActivations, ReportDataSources.BasalInjections]),
+        new("cob", "Food", "carbs-on-board", "food", "carbs", ["cob", "meal", "food"], [ReportDataSources.ApsSnapshots, ReportDataSources.Carbs]),
+        new("carbs", "Food", "carbs", "food", "carbs", ["meal", "food"], [ReportDataSources.Carbs]),
+        new("reservoir", "Devices", "insulin-basal", "pumpDevices", "pump", ["pump", "pod", "insulin"], [ReportDataSources.PumpSnapshots]),
+        new("pumpBattery", "Devices", "pump-mode-boost", "pumpDevices", "pump", ["pump", "pod", "battery"], [ReportDataSources.PumpSnapshots]),
+        new("uploaderBattery", "Devices", "pump-mode-sleep", "pumpDevices", "phone", ["phone", "battery"], [ReportDataSources.UploaderSnapshots]),
+        new("settingBasal", "Settings", "basal", "settings", "againstData", ["profile", "rate"], [ReportDataSources.SensorGlucose]),
+        new("settingIsf", "Settings", "insulin", "settings", "againstData", ["isf", "sensitivity", "profile"], [ReportDataSources.SensorGlucose]),
+        new("settingCarbRatio", "Settings", "carbs", "settings", "againstData", ["icr", "profile"], [ReportDataSources.SensorGlucose]),
+        new("heartRate", "Body", "heart-rate", "activityBody", "heart", ["hr", "pulse", "exercise"], [ReportDataSources.HeartRates]),
+        new("steps", "Body", "steps", "activityBody", "movement", ["walking", "exercise"], [ReportDataSources.StepCounts]),
+        new("sleep", "Body", "pump-mode-sleep", "sleep", "sessions", ["night", "bed"], [ReportDataSources.SleepSessions], Lane: "Context"),
+        new("pumpModes", "Context", "pump-mode-automatic", "loop", "modes", ["loop", "automation", "pump"], [ReportDataSources.PumpModeSpans]),
+        new("profiles", "Context", "pump-mode-liberty", "settings", "profiles", ["profile"], [ReportDataSources.ProfileActivations]),
+        new("overrides", "Context", "pump-mode-boost", "context", "marked", ["override", "targetRange", "loop"], [ReportDataSources.OverrideSpans]),
+        new("activities", "Context", "pump-mode-exercise", "context", "marked", ["exercise", "illness"], [ReportDataSources.ActivitySpans]),
+        new("tempBasals", "Context", "insulin-temp-basal", "loop", "corrections", ["tempBasal", "loop", "rate"], [ReportDataSources.TempBasals]),
+        new("bgChecks", "Context", "glucose-in-range", "glucose", "meter", ["bg", "meter", "fingerstick"], [ReportDataSources.BgChecks]),
+        new("meterGlucose", "Glucose", "glucose-in-range", "glucose", "meter", ["bg", "meter", "fingerstick", "pump"], [ReportDataSources.MeterGlucose]),
+        new("trendRate", "Glucose", "chart-4", "glucose", "sensor", ["roc", "trend", "cgm"], [ReportDataSources.SensorTrendRates]),
+        new("glucoseEpisodes", "Context", "glucose-low", "glucose", "ranges", ["low", "high", "episode"], [ReportDataSources.SensorGlucose]),
+        new("labHbA1c", "Body", "glucose-in-range", "glucose", "lab", ["a1c", "lab"], [ReportDataSources.LabHbA1c]),
+        new("sensorChanges", "Devices", "tracker-sensor", "pumpDevices", "sensor", ["sensor", "cgm", "sage"], [ReportDataSources.SensorEvents], Lane: "Context"),
+        new("siteChanges", "Devices", "tracker-cannula", "pumpDevices", "pump", ["site", "cannula", "pod", "cage", "insulin"],
+            [ReportDataSources.SiteEvents], Lane: "Context"),
+        new("pumpEvents", "Devices", "pump-mode-suspended", "pumpDevices", "pump", ["pump", "suspend", "battery"], [ReportDataSources.PumpEvents], Lane: "Context"),
+        new("pumpConnection", "Context", "pump-mode-automatic", "pumpDevices", "pump", ["pump", "bluetooth"], [ReportDataSources.PumpConnectivitySpans]),
+        new("trackers", "Devices", "tracker-consumable", "pumpDevices", "consumables", ["sage", "cage", "consumable", "site", "sensor"],
+            [ReportDataSources.Trackers], Lane: "Context"),
+        new("sleepStages", "Body", "activity-sleep", "sleep", "sessions", ["hypnogram", "rem", "night"], [ReportDataSources.SleepStages], Lane: "Context"),
+        new("sleepScore", "Body", "activity-sleep", "sleep", "nightly", ["night", "score"], [ReportDataSources.SleepSessions]),
+        new("sleepEfficiency", "Body", "chart-4", "sleep", "nightly", ["night"], [ReportDataSources.SleepSessions]),
+        new("sleepLatency", "Body", "chart-5", "sleep", "nightly", ["night", "bed"], [ReportDataSources.SleepSessions]),
+        new("restlessPeriods", "Body", "chart-3", "sleep", "nightly", ["night"], [ReportDataSources.SleepSessions]),
+        new("sleepHeartRate", "Body", "heart-rate", "sleep", "nightly", ["hr", "pulse", "night"], [ReportDataSources.SleepSessions]),
+        new("sleepHrv", "Body", "chart-4", "sleep", "nightly", ["hrv", "night"], [ReportDataSources.SleepSessions]),
+        new("sleepSpo2", "Body", "chart-3", "sleep", "nightly", ["spo2", "night"], [ReportDataSources.SleepSessions]),
+        new("sleepBreathing", "Body", "chart-5", "sleep", "nightly", ["breathing", "night"], [ReportDataSources.SleepSessions]),
+        new("heartRateInSleep", "Body", "heart-rate", "sleep", "body", ["hr", "pulse", "night"], [ReportDataSources.SleepBiometrics]),
+        new("hrvInSleep", "Body", "chart-4", "sleep", "body", ["hrv", "night"], [ReportDataSources.SleepBiometrics]),
+        new("spo2InSleep", "Body", "chart-3", "sleep", "body", ["spo2", "night"], [ReportDataSources.SleepBiometrics]),
+        new("breathingInSleep", "Body", "chart-5", "sleep", "body", ["breathing", "night"], [ReportDataSources.SleepBiometrics]),
+        new("motion", "Context", "steps", "activityBody", "movement", ["walking", "exercise"], [ReportDataSources.MotionSpans]),
+        new("weight", "Body", "chart-4", "activityBody", "weight", ["weight"], [ReportDataSources.BodyWeights]),
+        new("bodyFat", "Body", "chart-5", "activityBody", "weight", ["weight"], [ReportDataSources.BodyFat]),
+        new("leanMass", "Body", "chart-3", "activityBody", "weight", ["weight"], [ReportDataSources.LeanMass]),
+        new("temporaryTargets", "Context", "chart-3", "context", "marked", ["targetRange", "loop"], [ReportDataSources.TemporaryTargetSpans]),
+        new("alertPeriods", "Context", "system-event-alarm", "alerts", "alertRules", ["alert", "alarm"], [ReportDataSources.AlertExcursions]),
+        new("alertsRaised", "Context", "system-event-warning", "alerts", "alertRules", ["alert", "alarm", "snooze"], [ReportDataSources.AlertInstances]),
+        new("doNotDisturb", "Context", "pump-mode-sleep", "alerts", "quiet", ["dnd", "alert"], [ReportDataSources.DndWindows]),
+        new("deviceAlarms", "Devices", "system-event-alarm", "alerts", "deviceAlarms", ["alarm", "pump", "cgm"], [ReportDataSources.SystemEvents], Lane: "Context"),
+        new("dataExclusions", "Context", "muted-foreground", "dataQuality", "coverage", ["gaps", "compression"], [ReportDataSources.DataExclusionSpans]),
+        new("compressionLows", "Context", "glucose-low", "dataQuality", "coverage", ["compression", "low", "night"], [ReportDataSources.CompressionLows]),
+        new("sensorNoise", "Devices", "muted-foreground", "dataQuality", "coverage", ["noise", "sensor", "cgm"], [ReportDataSources.SensorNoise]),
+    ];
+
+    /// <summary>The catalogue's sections and the groups in each, in the order it lists them.</summary>
+    private static readonly (string Id, string[] Groups)[] SectionTable =
+    [
+        ("glucose", ["sensor", "meter", "ranges", "statistics", "lab"]),
+        ("insulin", ["onBoard", "bolus", "basal", "totals"]),
+        ("food", ["carbs"]),
+        ("loop", ["corrections", "modes"]),
+        ("pumpDevices", ["pump", "phone", "sensor", "consumables"]),
+        ("sleep", ["sessions", "nightly", "body"]),
+        ("activityBody", ["heart", "movement", "weight"]),
+        ("settings", ["againstData", "profiles"]),
+        ("context", ["marked"]),
+        ("alerts", ["alertRules", "deviceAlarms", "quiet"]),
+        ("dataQuality", ["coverage"]),
     ];
 
     private static readonly (string Id, double Height)[] FamilyTable =
@@ -413,9 +559,20 @@ internal static class ReportWorkspace
         return new CustomReportWorkspace(
             [Timeline, TypicalDay, Event, Daily, Against],
             [.. FamilyTable.Select(f => new CustomReportWorkspaceFamily(f.Id, f.Height))],
-            [.. SignalTable.Select(s => new CustomReportWorkspaceSignal(s.Id, s.Family, s.Lane,
-                Table.Where(c => c.Signal == s.Id).Select(c => LeadColor(c, registry)).OfType<ChartColor>().Select(ReportWire.Name).FirstOrDefault(s.Color),
-                cells.Any(c => c.Signal == s.Id && c.Permitted)))],
+            [.. SectionTable.Select(s => new CustomReportWorkspaceSection(s.Id, s.Groups))],
+            [.. SignalTable.Select(s =>
+            {
+                var own = cells.Where(c => c.Signal == s.Id).ToList();
+                var lenses = new[] { Timeline, TypicalDay, Event, Daily, Against }.Where(l => own.Any(c => c.Lens == l)).ToList();
+                return new CustomReportWorkspaceSignal(s.Id, s.Family, s.Lane,
+                    Table.Where(c => c.Signal == s.Id).Select(c => LeadColor(c, registry)).OfType<ChartColor>().Select(ReportWire.Name).FirstOrDefault(s.Color),
+                    own.Any(c => c.Permitted),
+                    s.Section, s.Group,
+                    own.Select(c => c.Unit).FirstOrDefault(u => u is not null),
+                    lenses,
+                    own.Count == 0 ? 0 : own.Max(c => c.MaxRangeHours),
+                    s.Search);
+            })],
             cells,
             [.. AnchorTable.Select(a => a.Group).Distinct()],
             [.. AnchorTable.Select(a =>
@@ -487,6 +644,7 @@ internal static class ReportWorkspace
             c.Lens, c.Signal, c.Dataset,
             c.Parameters is null ? null : JsonSerializer.SerializeToElement(c.Parameters, Json),
             c.Field, unit, c.Marks, c.FromStartField, c.FromStartMarks, c.Smooth, c.Trend, c.Combine,
-            Takes("dayOfWeek"), Takes("days"), LeaveOutTable.All(l => Takes(ParameterOf(l.Property))), c.SpanKind, scopes, holds(scopes));
+            Takes("dayOfWeek"), Takes("days"), LeaveOutTable.All(l => Takes(ParameterOf(l.Property))), c.SpanKind, scopes, holds(scopes),
+            dataset.MaxRange.TotalHours);
     }
 }

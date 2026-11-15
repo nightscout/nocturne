@@ -355,6 +355,7 @@ internal sealed class EventOutcomesDataset : EventListDataset
         {
             Color = parameters.Group is { } only ? EventResponseDataset.GroupHue(only) : null,
             Name = run.NameOf(parameters.Group),
+            Heading = run.WordsOf(parameters.Group)?.Heading,
         };
     }
 
@@ -497,7 +498,7 @@ internal sealed class EventOutcomeSpreadDataset : EventListDataset
         if (shown.Count == 1 && missing > 0)
             lines.Add($"{ReportFacts.Plural(missing, "event")} have no {outcome.Label.ToLowerInvariant()} and are not counted.");
 
-        return Output(run, rows, Summary(run, useMmol, lines), facts, sentence, Fields, events.Count) with { Name = run.NameOf(parameters.Group) };
+        return Output(run, rows, Summary(run, useMmol, lines), facts, sentence, Fields, events.Count) with { Name = run.NameOf(parameters.Group), Heading = run.WordsOf(parameters.Group)?.Heading };
     }
 
     /// <summary>The ranges, lowest first, every one between the lowest and highest value, so an empty range shows as one.</summary>
@@ -627,7 +628,7 @@ internal sealed class EventOccurrenceDataset : EventListDataset
         var sentence = string.Join(' ', sentences);
         lines.Add((byWeekday ? "By local weekday. " : "By local hour. ") + sentence);
 
-        return Output(run, rows, Summary(run, request.UseMmol, lines), facts, sentence, Fields, events.Count) with { Name = run.NameOf(parameters.Group) };
+        return Output(run, rows, Summary(run, request.UseMmol, lines), facts, sentence, Fields, events.Count) with { Name = run.NameOf(parameters.Group), Heading = run.WordsOf(parameters.Group)?.Heading };
     }
 
     private static int? HourOf(EventResponseEvent e) =>

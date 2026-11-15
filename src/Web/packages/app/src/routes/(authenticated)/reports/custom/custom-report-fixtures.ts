@@ -81,7 +81,52 @@ export function chartResult() {
   };
 }
 
-type SpecPanels = { panels?: { id: string; tracks?: { id: string; layers: { id: string }[] }[] }[] };
+/** A ready-made report as the API normalises it: one panel of figures over 14 days. */
+export const statisticsTemplate = {
+  id: "stats",
+  name: "Statistics",
+  description: "The key figures of the last 14 days.",
+  spec: {
+    version: 1,
+    title: "Two weeks",
+    range: { hours: 336 },
+    panels: [
+      {
+        id: "p1",
+        kind: "stat_tiles",
+        dataset: { name: "glucose_statistics" },
+        bindings: { columns: ["timeInRangePercent", "mean", "tdd"] },
+        range: { hours: 336 },
+      },
+    ],
+  },
+};
+
+/** A ready-made report as the API normalises it: a chart of glucose and IOB on two scales. */
+export const chartTemplate = {
+  id: "glucose",
+  name: "Glucose chart",
+  description: "Glucose and IOB.",
+  spec: {
+    version: 1,
+    title: "Glucose",
+    range: { hours: 6 },
+    panels: [
+      {
+        id: "glucose",
+        kind: "chart",
+        range: { hours: 6 },
+        grid: null,
+        tracks: [
+          { id: "glucose", title: null, height: 2, layers: [{ id: "glucose", dataset: { name: "glucose_series" }, mark: "line", bindings: { x: "time", y: ["glucose"], edges: null } }] },
+          { id: "onboard", height: 1, layers: [{ id: "iob", dataset: { name: "glucose_series" }, mark: "line", bindings: { x: "time", y: ["iob"] } }] },
+        ],
+      },
+    ],
+  },
+};
+
+type SpecPanels ={ panels?: { id: string; tracks?: { id: string; layers: { id: string }[] }[] }[] };
 
 /**
  * The API's run of any chart spec, as a stand-in: each chart panel's layers drawn as a glucose line

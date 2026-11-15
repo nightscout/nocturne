@@ -7,7 +7,13 @@ import {
   bandParts,
   bandSets,
   barRects,
+  groupAt,
+  groupSpan,
+  hasValues,
+  labelledGlyphs,
+  laneNames,
   legend,
+  nearestSlot,
   MINUTE_ORIGIN,
   paintOrder,
   placeGlyphs,
@@ -123,6 +129,23 @@ describe("a layered chart's layout", () => {
     expect(rowsAt(bands, 1, match).map((r) => r.series)).toEqual(["A", "B"]);
     expect(rowsAt(bands, 4, match).map((r) => r.p50)).toEqual([3]);
     expect(rowsAt(bands, 40, match)).toEqual([]);
+  });
+
+  it("draws a span of one instant as a tick, and finds it within a marker's tolerance", () => {
+    const events = layer({
+      mark: "spans",
+      bindings: { start: "start", end: "end", category: "kind" },
+      rows: [
+        { kind: "Site", start: 100, end: 100 },
+        { kind: "Mode", start: 0, end: 400 },
+      ],
+    });
+    const match = { tolerance: 5, markerTolerance: 10, gridded: false };
+
+    expect(spanRects(events, { top: 0, bottom: 20, height: 20 }, (x) => x).spans[0].width).toBe(2);
+    expect(rowsAt(events, 104, match).map((r) => r.kind)).toEqual(["Site", "Mode"]);
+    expect(rowsAt(events, 106, match).map((r) => r.kind)).toEqual(["Mode"]);
+    expect(rowsAt(events, 401, match)).toEqual([]);
   });
 
   it("gives a step line's tooltip the last row at or before the pointer, the value the step draws there", () => {
@@ -457,6 +480,98 @@ describe("the tooltip's entries", () => {
       ["Glucose · Glucose", "120 mg/dL", null, []],
       ["Glucose · IOB", "1.5 U", null, ["One."]],
     ]);
+  });
+});
+
+describe("what the chart names", () => {
+  const text = (value: unknown, field: { unit?: string | null }, unit: boolean) => `${value}${unit && field.unit ? ` ${field.unit}` : ""}`;
+
+  it("names each span in the tooltip by its lane, not by the layer", () => {
+    const spans = layer({
+      id: "modes",
+      title: "Modes and overrides",
+      mark: "spans",
+      bindings: { start: "start", end: "end", category: "kind" },
+      fields: [
+        { name: "kind", label: "Kind", kind: "category" },
+        { name: "label", label: "Name", kind: "category", colorField: "color" },
+      ],
+    });
+
+    const entries = tipEntries(spans, [{ kind: "Pump mode", label: "Automatic" }, { kind: "Profile", label: "Default" }], text);
+
+    expect(entries.map((e) => [e.label, e.value])).toEqual([
+      ["Pump mode", "Automatic"],
+      ["Profile", "Default"],
+    ]);
+  });
+
+  it("adds a series' name to a tooltip entry only where the layer draws more than one", () => {
+    const one = layer({ title: "Insulin on board", bindings: { x: "time", y: ["iob"], series: "series" }, fields: [time, iob], rows: [{ time: 0, iob: 1, series: "Lows" }] });
+    const two = { ...one, rows: [...one.rows, { time: 0, iob: 2, series: "Highs" }] };
+
+    expect(tipEntries(one, one.rows, text).map((e) => e.label)).toEqual(["Insulin on board"]);
+    expect(tipEntries(two, two.rows, text).map((e) => e.label)).toEqual(["Insulin on board · Lows", "Insulin on board · Highs"]);
+  });
+
+  it("gives a layer's group in the legend and the tooltip where the API names one", () => {
+    const grouped = layer({ title: "Glucose", group: "Days with a low", rows: [{ time: 0, glucose: 100 }] });
+    const panel = { tracks: [track([grouped])] };
+
+    expect(legend(panel)[0]).toEqual(expect.objectContaining({ title: "Glucose", unit: "mg/dL", group: "Days with a low" }));
+    expect(tipEntries(grouped, grouped.rows, text)[0].label).toBe("Glucose · Days with a low");
+  });
+
+  it("runs minutes from an event to the end of the last slot, so the window's last tick is drawn", () => {
+    const offset = layer({ xKind: "offset", bindings: { x: "minute", y: ["glucose"] }, rows: [-240, -235, 110, 115].map((minute) => ({ minute, glucose: 100 })) });
+
+    expect(xExtent({ tracks: [track([offset])], window: { from: 0, to: 1 }, xKind: "offset" })).toEqual([-240, 120]);
+  });
+
+  it("knows a chart whose rows hold no values, so it draws no empty axes", () => {
+    expect(hasValues({ tracks: [track([layer({ rows: [{ time: 0, glucose: null }] })])] })).toBe(false);
+    expect(hasValues({ tracks: [track([layer({ rows: [{ time: 0, glucose: 90 }] })])] })).toBe(true);
+  });
+
+  it("lists every spans lane's name, so the plot leaves room for the longest", () => {
+    const spans = layer({ mark: "spans", bindings: { start: "s", end: "e", category: "kind" }, rows: [{ kind: "Pump mode" }, { kind: "Override" }, { kind: "Pump mode" }] });
+
+    expect(laneNames({ tracks: [track([spans])] })).toEqual(["Pump mode", "Override"]);
+  });
+});
+
+describe("the pointer over tracks along different axes", () => {
+  const groups = [{ kind: "time" as const, first: 0, panel: {} as ReportPanel }, { kind: "value" as const, first: 2, panel: {} as ReportPanel }];
+  const bands = [
+    { top: 0, bottom: 100, height: 100 },
+    { top: 118, bottom: 150, height: 32 },
+    { top: 192, bottom: 300, height: 108 },
+  ];
+
+  it("spans a group's tracks and no other's", () => {
+    expect(groupSpan(groups, bands, 0)).toEqual({ top: 0, bottom: 150 });
+    expect(groupSpan(groups, bands, 1)).toEqual({ top: 192, bottom: 300 });
+  });
+
+  it("is over the group whose tracks or bottom axis it reaches", () => {
+    expect(groupAt(groups, bands, 60)).toBe(0);
+    expect(groupAt(groups, bands, 150 + AXIS_ROOM)).toBe(0);
+    expect(groupAt(groups, bands, 200)).toBe(1);
+  });
+
+  it("snaps to the nearest slot of a group", () => {
+    expect(nearestSlot([0, 60, 120], 70)).toBe(60);
+    expect(nearestSlot([], 70)).toBeNull();
+  });
+});
+
+describe("treatment amounts", () => {
+  it("writes an amount only where it is clear of the last one written of its kind", () => {
+    const glyph = (key: string, x: number, kind: "bolus" | "carbs" = "bolus") => ({ key, x, y: 0, kind, amount: 1, automatic: false });
+
+    const written = labelledGlyphs([glyph("a", 0), glyph("b", 10), glyph("c", 31), glyph("d", 12, "carbs")], 30);
+
+    expect([...written].sort()).toEqual(["a", "c", "d"]);
   });
 });
 

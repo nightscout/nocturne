@@ -41,6 +41,14 @@
   });
 
   let printedAt = $state(new Date());
+  /**
+   * The footer names the subject, which the server renders before its query resolves, so the rules are
+   * written only in the browser, where they are printed: written on the server they differ on hydration.
+   */
+  let hydrated = $state(false);
+  $effect(() => {
+    hydrated = true;
+  });
   $effect(() => {
     const stamp = () => (printedAt = new Date());
     window.addEventListener("beforeprint", stamp);
@@ -60,7 +68,7 @@
 
 <svelte:head>
   <!-- eslint-disable-next-line svelte/no-at-html-tags -- every interpolated value passes through cssString -->
-  {@html pageRules}
+  {#if hydrated}{@html pageRules}{/if}
 </svelte:head>
 
 {#snippet writeIn()}

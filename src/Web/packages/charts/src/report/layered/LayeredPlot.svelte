@@ -4,10 +4,12 @@
   of tracks along one axis (axisGroups) draws over its own horizontal scale and bottom axis; the first
   run's is the chart's own. It draws into whatever layer it sits in, the page's Svg or an image's
   Canvas, from the same geometry (layered-layout.ts); `paint` turns a colour expression into what
-  that layer paints with.
+  that layer paints with. On the page it gives the point under the pointer (`focus`): the run of
+  tracks it is over and that run's slot there, which the crosshair spans; `step` moves it from the
+  keyboard.
 -->
 <script lang="ts">
-  import { Axis, getChartContext, Group, Line, Rule, Text } from "layerchart";
+  import { Axis, getChartContext, Group, Line, Text } from "layerchart";
   import { scaleLinear, scaleTime } from "d3-scale";
   import type { ChartLabels } from "../../labels.js";
   import type { TextureKey } from "../../print/patterns.js";
@@ -17,13 +19,19 @@
   import {
     axisGroups,
     drawnLayers,
+    fromDomain,
+    groupAt,
+    groupSpan,
     isTimeAxis,
+    nearestSlot,
     paintOrder,
+    slots,
     sideScales,
     toDomain,
     trackBands,
     xExtent,
     xFieldOf,
+    type PlotFocus,
     type SharedSides,
     type SideScale,
     type TrackBand,
@@ -51,13 +59,28 @@
     formatTick: (value: unknown, kind: ReportXKind) => string;
     /** Draw a rule at the slot under the pointer, on the page. */
     hover?: boolean;
+    /** The run of tracks and its slot under the pointer, or null; set by the plot. */
+    focus?: PlotFocus | null;
     /** Values each track's sides cover beyond their own, by track id, so small multiples share one scale. */
     valueExtents?: Record<string, SharedSides>;
     /** The paint of a texture's ink laid over a mark's own fill; none where the layer cannot draw one (a canvas). */
     texture?: (key: TextureKey) => string | undefined;
   }
 
-  let { panel, labels, lineColorMode, paint, gradient, tickLabels, text, formatTick, hover = false, valueExtents, texture }: Props = $props();
+  let {
+    panel,
+    labels,
+    lineColorMode,
+    paint,
+    gradient,
+    tickLabels,
+    text,
+    formatTick,
+    hover = false,
+    valueExtents,
+    texture,
+    focus = $bindable(null),
+  }: Props = $props();
 
   const chart = getChartContext();
   const groups = $derived(axisGroups(panel));
@@ -84,6 +107,50 @@
     return (raw: number) => Number(scale(toDomain(kind, raw)));
   };
 
+  /** Each group's slots, the x values the pointer and the keyboard move between. */
+  const groupSlots = $derived(groups.map((group) => slots(group.panel)));
+  const pixelOf = (g: number, raw: number) => Number((xScales[g] as (value: Date | number) => unknown)(toDomain(groups[g].kind, raw)));
+
+  /** The run the pointer is over and its slot there: the first run's from the tooltip's data, another's from the pointer. */
+  const pointed = $derived.by((): PlotFocus | null => {
+    const data = chart.tooltip.data as { raw?: number } | null;
+    if (!hover || !data || groups.length === 0) return null;
+    const g = groupAt(groups, bands, chart.tooltip.y - chart.padding.top);
+    const raw =
+      g === 0
+        ? (data.raw ?? null)
+        : nearestSlot(groupSlots[g], fromDomain(groups[g].kind, (xScales[g] as { invert: (px: number) => Date | number }).invert(chart.tooltip.x - chart.padding.left)));
+    return raw === null ? null : { group: g, raw, x: pixelOf(g, raw) };
+  });
+  $effect(() => {
+    focus = pointed;
+  });
+
+  /**
+   * Moves the focus one slot along its run (`along`, -1 or 1), or to the next run up or down (`across`), and shows
+   * the tooltip there, as the pointer would.
+   */
+  export function step(along: number, across = 0) {
+    const from = pointed ?? { group: 0, raw: groupSlots[0]?.[0] ?? 0, x: 0 };
+    const g = Math.min(groups.length - 1, Math.max(0, from.group + across));
+    const xs = groupSlots[g];
+    if (xs.length === 0) return;
+    const at = g === from.group ? xs.indexOf(from.raw) : xs.indexOf(nearestSlot(xs, from.raw) ?? xs[0]);
+    const next = pointed === null ? 0 : Math.min(xs.length - 1, Math.max(0, (at < 0 ? 0 : at) + along));
+    const raw = xs[next];
+    const span = groupSpan(groups, bands, g);
+    const firstRaw = g === 0 ? raw : (nearestSlot(groupSlots[0], fromDomain(groups[0].kind, (chart.xScale as { invert: (px: number) => Date | number }).invert(pixelOf(g, raw)))) ?? raw);
+    chart.tooltip.show({
+      data: { raw: firstRaw, x: toDomain(groups[0].kind, firstRaw) },
+      point: { x: pixelOf(g, raw) + chart.padding.left, y: (span.top + span.bottom) / 2 + chart.padding.top },
+    });
+  }
+
+  /** Takes the tooltip away, as the pointer leaving the plot does. */
+  export function clear() {
+    chart.tooltip.hide();
+  }
+
   /** Where each group's bottom axis sits: under its last track, the last group's at the chart's foot. */
   function axisY(g: number): number {
     if (g === groups.length - 1) return chart.height;
@@ -92,9 +159,9 @@
   }
   const AXIS_GAP = 4;
 
-  /** The axis a scatter or a lag lies along, named beside it where the panel has more than one axis. */
+  /** The axis a scatter, a lag or minutes from an event lies along, named beside it where the panel has more than one axis. */
   function caption(g: number): string | null {
-    if (groups.length < 2 || (groups[g].kind !== "value" && groups[g].kind !== "lag")) return null;
+    if (groups.length < 2 || (groups[g].kind !== "value" && groups[g].kind !== "lag" && groups[g].kind !== "offset")) return null;
     const first = groups[g].panel.tracks.flatMap((t) => drawnLayers(t))[0];
     const field = first?.fields.find((f) => f.name === xFieldOf(first));
     return field ? `${field.label}${field.unit ? ` (${field.unit})` : ""}` : null;
@@ -128,7 +195,7 @@
   {@const sides = scales[t]}
   {@const x = xOf(t)}
   {#if track.title && !track.layers.every((l) => l.mark === "spans")}
-    <Text x={6} y={band.top + 12} value={track.title} fontSize={11} {...text.muted} />
+    <Text x={6} y={t === 0 ? band.top + 12 : band.top - 5} value={track.title} fontSize={11} {...text.muted} />
   {/if}
   {#if sides.left}
     <Axis placement="left" scale={axisScale(sides.left, band)} ticks={band.height < 80 ? 2 : 4} rule={false} tickLabelProps={tickLabels} />
@@ -169,7 +236,7 @@
       {:else if layer.mark === "band"}
         <MarkBand {layer} {x} y={side.toPixel} {paint} glucoseStops={glucoseStops(side)} {gradient} plotHeight={chart.height} {texture} />
       {:else if layer.mark === "bars"}
-        <MarkBars {layer} {x} y={side.toPixel} {paint} plotWidth={chart.width} {texture} />
+        <MarkBars {layer} {x} y={side.toPixel} {paint} plotWidth={chart.width} {texture} behind={drawnLayers(track).some((l) => l.mark === "line" || l.mark === "points" || l.mark === "band")} />
       {:else if layer.mark === "points"}
         <MarkPoints {layer} {x} y={side.toPixel} {paint} />
       {/if}
@@ -196,6 +263,7 @@
     {/if}
   {/each}
 {/if}
-{#if hover && chart.tooltip.data}
-  <Rule x={chart.tooltip.data.x} class="stroke-muted-foreground/50" />
+{#if hover && pointed}
+  {@const span = groupSpan(groups, bands, pointed.group)}
+  <Line x1={pointed.x} x2={pointed.x} y1={span.top} y2={span.bottom} class="stroke-muted-foreground/50" data-testid="report-crosshair" />
 {/if}

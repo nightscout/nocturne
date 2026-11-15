@@ -120,19 +120,24 @@ public class ReportWorkspaceTests
         specs.Should().HaveCount(Expected, "the guard counts every spec it builds; change this when the vocabulary changes");
     }
 
-    private const int Cells = 56;
-    private const int Expected = 1793;
+    private const int Cells = 91;
+    private const int Expected = 2454;
 
     [Fact]
     public void Every_cell_names_its_scopes_from_its_dataset_and_fields_and_a_signal_is_permitted_by_its_cells()
     {
         var full = Workspace(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead,
-            Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead);
+            Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead, Scope.AlertsRead);
         var glucoseOnly = Workspace(Scope.GlucoseRead);
 
         full.Cells.Should().OnlyContain(c => c.Permitted);
         full.Cells.Single(c => c.Lens == "timeline" && c.Signal == "iob").Scopes.Should().Equal(Scope.GlucoseRead, Scope.TreatmentsRead);
         full.Cells.Single(c => c.Lens == "daily" && c.Signal == "sleep").Scopes.Should().Equal(Scope.SleepRead);
+        full.Cells.Single(c => c.Lens == "daily" && c.Signal == "sleepHeartRate").Scopes.Should().Equal(Scope.SleepRead, Scope.HeartRateRead);
+        full.Cells.Single(c => c.Lens == "timeline" && c.Signal == "trackers").Scopes.Should().Equal(Scope.AlertsRead);
+        full.Cells.Single(c => c.Lens == "timeline" && c.Signal == "sensorChanges").Scopes.Should().Equal(Scope.DevicesRead);
+        glucoseOnly.Signals.Single(s => s.Id == "labHbA1c").Permitted.Should().BeTrue();
+        glucoseOnly.Signals.Single(s => s.Id == "alertPeriods").Permitted.Should().BeFalse();
         glucoseOnly.Cells.Single(c => c.Lens == "timeline" && c.Signal == "glucose").Permitted.Should().BeTrue();
         glucoseOnly.Cells.Single(c => c.Lens == "timeline" && c.Signal == "iob").Permitted.Should().BeFalse();
         glucoseOnly.Signals.Single(s => s.Id == "heartRate").Permitted.Should().BeFalse();
@@ -226,6 +231,51 @@ public class ReportWorkspaceTests
             catalogue.Datasets.Single(d => d.Name == "daily_profile").Parameters.GetProperty("properties").GetProperty(leaveOut.Parameter)
                 .GetProperty("default").ValueKind.Should().BeOneOf(JsonValueKind.True, JsonValueKind.False);
         workspace.RangePresets.Max(r => r.Hours).Should().BeLessThanOrEqualTo(catalogue.MaxRangeHours);
+    }
+
+    [Fact]
+    public void Every_signal_is_listed_in_a_section_and_group_the_catalogue_names_and_states_what_its_cells_say()
+    {
+        var workspace = Workspace();
+        var registry = ReportSpecValidatorTests.Registry;
+
+        workspace.Sections.Select(s => s.Id).Should().Equal(
+            "glucose", "insulin", "food", "loop", "pumpDevices", "sleep", "activityBody", "settings", "context", "alerts", "dataQuality");
+        foreach (var signal in workspace.Signals)
+        {
+            var cells = workspace.Cells.Where(c => c.Signal == signal.Id).ToList();
+            workspace.Sections.Single(s => s.Id == signal.Section).Groups.Should().Contain(signal.Group, signal.Id);
+            signal.Lenses.Should().Equal(workspace.Lenses.Where(l => cells.Any(c => c.Lens == l)), signal.Id);
+            signal.MaxRangeHours.Should().Be(cells.Max(c => c.MaxRangeHours), signal.Id);
+            signal.Unit.Should().Be(cells.Select(c => c.Unit).FirstOrDefault(u => u is not null), signal.Id);
+            signal.SearchKeys.Should().OnlyHaveUniqueItems(signal.Id);
+            foreach (var cell in cells)
+                cell.MaxRangeHours.Should().Be(registry.Find(cell.Dataset)!.MaxRange.TotalHours, $"{cell.Lens}/{cell.Signal}");
+        }
+        workspace.Signals.Single(s => s.Id == "timeInRange").Lenses.Should().Equal("daily");
+        workspace.Signals.Single(s => s.Id == "boluses").MaxRangeHours.Should().Be(336);
+    }
+
+    [Fact]
+    public void Every_signal_names_a_source_of_data_the_availability_check_can_read()
+    {
+        ReportWorkspace.SignalTable.Should().OnlyContain(s => s.Sources.Length > 0);
+        ReportWorkspace.SignalTable.SelectMany(s => s.Sources).Distinct()
+            .Should().OnlyContain(source => ReportDataSources.All.ContainsKey(source));
+        ReportWorkspace.SignalTable.Select(s => s.Id).Should().Equal(Workspace().Signals.Select(s => s.Id));
+    }
+
+    [Fact]
+    public async Task A_caller_who_may_read_no_signal_is_told_so_without_a_read_of_the_database()
+    {
+        var contexts = new Moq.Mock<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(Moq.MockBehavior.Strict);
+        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, contexts.Object, TimeProvider.System);
+
+        var result = await availability.ForRangeAsync(100_000, new HashSet<string>(), CancellationToken.None);
+
+        result.Hours.Should().Be(ReportSpec.MaxRangeHours);
+        result.Signals.Select(s => s.Signal).Should().Equal(ReportWorkspace.SignalTable.Select(s => s.Id));
+        result.Signals.Should().OnlyContain(s => s.State == ReportSignalAvailability.NoAccess);
     }
 
     [Fact]

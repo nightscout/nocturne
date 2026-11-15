@@ -25,6 +25,7 @@
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "#lib/hooks/date-params.svelte.js";
     import {createResourceContext} from "#lib/hooks/resource-context.svelte.js";
     import {createReportSlots} from "#lib/hooks/report-slots.svelte.js";
+    import { getCustomReports } from "#lib/api/generated/customReports.generated.remote.js";
 
     let {children} = $props();
 
@@ -96,12 +97,19 @@
     // The header's height before it is measured, so the first paint matches it: the h-14 bar and its
     // border, and a row of page tabs (its border, py-1.5, and a py-1 link of 20px text) where
     // ReportPageSwitcher draws one. Only a row that wraps on a narrow screen is corrected after.
+    // The custom report pages draw a single row of 36px and its border instead.
+    const customPages = $derived(page.url.pathname === "/reports/custom" || page.url.pathname.startsWith("/reports/custom/"));
     const tabbed = $derived(
-        page.url.pathname === "/reports/custom" ||
-            page.url.pathname.startsWith("/reports/custom/") ||
-            reportCategories().some((c) => c.pages && c.reports.some((r) => r.href === page.url.pathname))
+        reportCategories().some((c) => c.pages && c.reports.some((r) => r.href === page.url.pathname))
     );
-    const headerFallback = $derived(tabbed ? "3.5rem + 1px + 41px" : "3.5rem + 1px");
+    const headerFallback = $derived(customPages ? "3.5rem + 1px + 37px" : tabbed ? "3.5rem + 1px + 41px" : "3.5rem + 1px");
+
+    /** A saved custom report is headed by its own name. */
+    const savedReports = $derived(customPages ? getCustomReports() : null);
+    const savedName = $derived.by(() => {
+        const at = /^\/reports\/custom\/([^/]+)$/.exec(page.url.pathname)?.[1];
+        return at && at !== "new" ? (savedReports?.current ?? []).find((r) => r.id === at)?.name : undefined;
+    });
     $effect(() => installPrintFitFallback(() => reportRoot));
 
     const registryTitles = $derived(
@@ -110,6 +118,7 @@
 
     // Extract report name from the URL
     const reportName = $derived.by(() => {
+        if (savedName) return savedName;
         const declared = registryTitles.get(page.url.pathname) ?? reportSubRouteTitle(page.url.pathname);
         if (declared) return declared;
 

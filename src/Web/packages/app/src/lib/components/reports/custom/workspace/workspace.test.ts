@@ -434,21 +434,45 @@ describe("this round's engine features", () => {
 });
 
 describe("answers before the click", () => {
-  it("lists only the lens's signals, and the others under the lenses that draw them", () => {
+  it("lists every signal in the catalogue, with the other lenses that draw one the lens cannot", () => {
     const ws = from("last-24-hours");
     ws.setLens("typical_day");
+    const entry = (id: string) => ws.catalogueEntries.find((e) => e.id === id);
 
     expect(ws.signals.map((s) => s.id)).not.toContain("boluses");
-    expect(ws.elsewhere).toContainEqual({
-      id: "boluses",
-      lens: "timeline",
-      placed: true,
-      reason: null,
-    });
-    expect(ws.elsewhere.filter((e) => e.id === "readings").map((e) => e.lens)).toEqual([]);
-    expect(ws.signals.find((s) => s.id === "readings")).toMatchObject({
-      placed: false,
-    });
+    expect(ws.catalogueEntries.map((e) => e.id)).toEqual(ws.vocab.signals.map((s) => s.id));
+    expect(entry("boluses")).toMatchObject({ drawable: false, placed: true, otherLenses: ["timeline"], reason: null });
+    expect(entry("readings")).toMatchObject({ drawable: true, placed: false, otherLenses: ["daily"] });
+  });
+
+  it("says once which signals need a shorter range, with the preset that fits, and keeps the reason off the row", () => {
+    const ws = new Workspace(liveCatalogue);
+    ws.setRange(2160);
+    ws.toggleSignal("glucose");
+    const entry = (id: string) => ws.catalogueEntries.find((e) => e.id === id);
+
+    expect(entry("boluses")).toMatchObject({ needsShorter: true, upTo: 336, reason: null });
+    expect(entry("glucose")).toMatchObject({ needsShorter: false, upTo: null });
+    const need = ws.rangeNeeds.find((n) => n.hours === 336);
+    expect(need?.signals).toContain("boluses");
+    expect(need?.signals).toContain("carbs");
+    expect(need?.preset?.id).toBe("14d");
+
+    ws.setRange(need!.preset!.hours);
+    expect(ws.rangeNeeds).toEqual([]);
+    expect(entry("boluses")).toMatchObject({ needsShorter: false, reason: null });
+  });
+
+  it("switches to another view with the range its data covers", () => {
+    const ws = new Workspace(liveCatalogue);
+    ws.setLens("daily");
+    ws.setRange(2160);
+
+    expect(ws.placeInRange("boluses", "timeline")).toBe(336);
+    expect(ws.placeIn("boluses", "timeline")).toBeNull();
+    expect(ws.lens).toBe("timeline");
+    expect(ws.rangeHours).toBe(336);
+    expect(ws.shown).toEqual(["boluses"]);
   });
 
   it("disables a third signal under one against another, with the reason", () => {

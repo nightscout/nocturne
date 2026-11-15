@@ -137,7 +137,7 @@ internal sealed class DeviceStatusDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(pump, uploader, sensor, request.From, request.To,
-                sensorAsked: request.Kind == ReportPanelKind.StatTiles, clamped: request.HistoryClamped),
+                sensorAsked: request.Kind == ReportPanelKind.StatTiles, clamped: request.HistoryClamped, zone: request.Zone),
             Facts = FactsOf(pump, uploader, sensor),
             Sentence = pump.Count + uploader.Count == 0
                 ? "No pump or uploader reports in this period."
@@ -182,13 +182,14 @@ internal sealed class DeviceStatusDataset : IReportDataset
         DateTimeOffset from,
         DateTimeOffset to,
         bool sensorAsked = false,
-        bool clamped = false)
+        bool clamped = false,
+        TimeZoneInfo? zone = null)
     {
-        static string At(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        string At(long mills) => TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(mills), zone ?? TimeZoneInfo.Utc).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
         static string N(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
         var lines = new List<string>
         {
-            string.Create(CultureInfo.InvariantCulture, $"Device status from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC."),
+            string.Create(CultureInfo.InvariantCulture, $"Device status from {ReportFacts.Window(from, to, zone)}."),
         };
 
         var reservoir = pump.Where(p => p.Reservoir is not null).ToList();

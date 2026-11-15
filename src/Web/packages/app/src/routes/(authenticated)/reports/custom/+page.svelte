@@ -82,7 +82,7 @@
           <Table.Row>
             <Table.Head>Name</Table.Head>
             <Table.Head>Last changed</Table.Head>
-            <Table.Head>Panels</Table.Head>
+            <Table.Head>Blocks</Table.Head>
             <Table.Head><span class="sr-only">Actions</span></Table.Head>
           </Table.Row>
         </Table.Header>

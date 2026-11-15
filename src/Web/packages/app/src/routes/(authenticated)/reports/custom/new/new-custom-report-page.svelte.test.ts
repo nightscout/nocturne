@@ -1,13 +1,12 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
 import { BUILDER_KIND, BUILDER_VERSION } from "#lib/components/reports/custom/workspace/saved-state.js";
-import { runOf } from "../custom-report-fixtures.js";
+import { runOf, statisticsTemplate } from "../custom-report-fixtures.js";
 import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
-import { statisticsTemplate } from "#lib/components/reports/custom/builder/schema-form.fixtures.js";
 
 type Spec = { panels: { id: string; tracks?: { layers: { id: string }[] }[] }[]; builder?: { kind: string; version: number; state: unknown } };
 
@@ -18,6 +17,8 @@ let refusal: unknown = null;
 let runsFail = false;
 /** The catalogue the page reads. */
 let known: CustomReportCatalogue = liveCatalogue;
+/** Whether each signal has data in a range, as the catalogue reads it. */
+let availability: (arg: { hours: number }) => unknown = ({ hours }) => ({ hours, signals: [] });
 /** Adds to a run's result what a test needs the engine to say, such as day counts. */
 let decorate: (result: { panels: { tracks?: { layers: Record<string, unknown>[] }[] }[] }) => void = () => {};
 
@@ -30,6 +31,7 @@ vi.mock("#lib/api/generated/foods.generated.remote.js", () => ({
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   getCustomReportCatalogue: () => remoteQuery(() => known),
+  getCustomReportSignalAvailability: (arg: unknown) => remoteQuery(() => availability(arg as { hours: number })),
   getCustomReports: () => remoteQuery(() => []),
   getCustomReportTemplates: () => remoteQuery(() => [statisticsTemplate]),
   runCustomReport: remoteCommand((arg) => {
@@ -66,6 +68,13 @@ async function start(question: string) {
   await vi.waitFor(() => expect(calls.runs.length).toBeGreaterThan(0));
 }
 
+/** Opens the signal catalogue and finds a signal by search, leaving the catalogue open. */
+async function find(name: string) {
+  if (!document.querySelector("[data-testid='signal-catalogue']")) await page.getByTestId("add-signal").click();
+  await page.getByTestId("catalogue-search").fill(name);
+  return page.getByRole("dialog").getByRole("button", { name, exact: true });
+}
+
 async function save(name: string) {
   await page.getByTestId("save-trigger").click();
   await page.getByLabelText("Name", { exact: true }).fill(name);
@@ -81,6 +90,8 @@ describe("a new custom report", () => {
     runsFail = false;
     known = liveCatalogue;
     decorate = () => {};
+    availability = ({ hours }) => ({ hours, signals: [] });
+    localStorage.clear();
     pageState.data = {};
     await page.viewport(1280, 900);
   });
@@ -109,7 +120,7 @@ describe("a new custom report", () => {
     await start("Is there a dawn rise?");
     const before = calls.runs.length;
 
-    await page.getByTestId("signal-rail").getByRole("button", { name: "Target range" }).click();
+    await page.getByTestId("signal-rail").getByRole("button", { name: "Remove Target range" }).click();
 
     await vi.waitFor(() => expect(calls.runs.length).toBeGreaterThan(before), { timeout: 3000 });
     expect(layerIds(calls.runs.at(-1)!.spec)).toEqual(["glucoseWide", "glucose"]);
@@ -118,17 +129,13 @@ describe("a new custom report", () => {
   it("disables a control that cannot be used now, and says why beside it", async () => {
     await start("Is there a dawn rise?");
     await page.getByRole("radio", { name: "One against another" }).click();
-    const rail = page.getByTestId("signal-rail");
-    await rail.getByRole("button", { name: "Insulin", exact: true }).click();
-    await rail.getByRole("button", { name: "Insulin on board" }).click();
-    await rail.getByRole("button", { name: "Food", exact: true }).click();
+    await (await find("Insulin on board")).click();
 
+    const blocked = await find("Carbs on board");
     const reason = page.getByText("This view shows two signals. Remove one first.").first();
     await expect.element(reason).toBeVisible();
-    const id = reason.element().id;
-    const blocked = rail.getByRole("button", { name: "Carbs on board" });
     await expect.element(blocked).toBeDisabled();
-    expect(blocked.element().getAttribute("aria-describedby")).toBe(id);
+    expect(blocked.element().getAttribute("aria-describedby")?.split(" ")).toContain(reason.element().id);
   });
 
   it("saves the spec with the workspace's state, then opens the saved report", async () => {
@@ -151,25 +158,6 @@ describe("a new custom report", () => {
     await expect.element(page.getByRole("alert")).toHaveTextContent("The builder state is too large.");
     expect(calls.gotos).toEqual([]);
     await expect.element(page.getByTestId("report-workspace")).toBeVisible();
-  });
-
-  it("moves the report to the form after a confirm, and saves it from there without the state", async () => {
-    await start("Is there a dawn rise?");
-
-    await page.getByRole("button", { name: "All settings" }).click();
-    await expect.element(page.getByTestId("report-spec")).toHaveTextContent('"glucoseWide"');
-    await page.getByTestId("change-in-form").click();
-    await expect.element(page.getByRole("alertdialog")).toHaveTextContent("it cannot open in this builder again");
-    await page.getByRole("alertdialog").getByRole("button", { name: "Change in the form" }).click();
-
-    await expect.element(page.getByTestId("report-workspace")).not.toBeInTheDocument();
-    await expect.element(page.getByTestId("track-section").first()).toBeVisible();
-    await page.getByLabelText("Name", { exact: true }).fill("Dawn in the form");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-
-    await vi.waitFor(() => expect(calls.creates).toHaveLength(1));
-    expect(calls.creates[0].name).toBe("Dawn in the form");
-    expect(calls.creates[0].spec.builder).toBeUndefined();
   });
 
   it("goes back to the questions with Start again", async () => {
@@ -201,7 +189,7 @@ describe("a new custom report", () => {
   it("clears the spinner after a failed run and shows only the failure", async () => {
     await start("Is there a dawn rise?");
     runsFail = true;
-    await page.getByTestId("signal-rail").getByRole("button", { name: "Target range" }).click();
+    await page.getByTestId("signal-rail").getByRole("button", { name: "Remove Target range" }).click();
 
     await expect.element(page.getByText("The preview could not be made.")).toBeVisible();
     await vi.waitFor(() => expect(document.querySelectorAll("[data-testid='chart-preview'] [aria-busy='true']").length).toBe(0));
@@ -242,37 +230,115 @@ describe("a new custom report", () => {
     const limited: CustomReportCatalogue = structuredClone(liveCatalogue);
     for (const cell of limited.workspace.cells)
       if (cell.signal === "heartRate") Object.assign(cell, { permitted: false, scopes: ["heartrate.read"] });
+    for (const signal of limited.workspace.signals) if (signal.id === "heartRate") signal.permitted = false;
     known = limited;
     await start("The last 24 hours");
 
-    const rail = page.getByTestId("signal-rail");
-    await rail.getByTestId("rail-no-access").click();
-    await expect.element(page.getByTestId("rail-no-access")).toHaveTextContent("Not in your access (1)");
-    const item = rail.getByRole("button", { name: "Heart rate" });
+    await page.getByTestId("add-signal").click();
+    const group = page.getByTestId("catalogue-no-access");
+    await expect.element(group).toHaveTextContent("Not in your access (1)");
+    await group.click();
+    const item = page.getByRole("dialog").getByRole("button", { name: "Heart rate", exact: true });
     await expect.element(item).toBeDisabled();
-    const why = document.getElementById(item.element().getAttribute("aria-describedby") ?? "");
-    expect(why?.textContent?.trim()).toBe("Your access cannot read heart rate, which this needs.");
+    const why = (item.element().getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
+    expect(why).toContain("Your access cannot read heart rate, which this needs.");
   });
 
-  it("lists the API's ready-made reports last, and opens one in the form", async () => {
+  it("finds a signal another view draws, and switches to that view", async () => {
+    await start("The last 24 hours");
+
+    await find("time in range");
+    await expect.element(page.getByText(/^\d+ signals found\.$/)).toBeInTheDocument();
+    await expect.element(page.getByRole("dialog").getByRole("button", { name: "Time in range", exact: true })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Time in range", exact: true }).click();
+    await expect.element(page.getByText("Timeline cannot show this signal.")).toBeVisible();
+    await page.getByRole("button", { name: "Switch to Day by day" }).click();
+
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
+    await expect.element(page.getByRole("radio", { name: "Day by day" })).toHaveAttribute("data-state", "on");
+    await expect.element(page.getByTestId("signal-rail").getByRole("button", { name: "Remove Time in range" })).toBeVisible();
+  });
+
+  it("adds a signal another view draws as a new chart, and keeps this chart", async () => {
+    await start("The last 24 hours");
+
+    await find("time in range");
+    await page.getByRole("dialog").getByRole("button", { name: "Time in range", exact: true }).click();
+    await page.getByTestId("add-as-chart").click();
+
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
+    await vi.waitFor(() => expect(page.getByTestId("report-blocks").getByRole("listitem").elements().filter((e) => e.matches("li[data-block-kind]"))).toHaveLength(2));
+    await expect.element(page.getByTestId("signal-rail").getByRole("button", { name: "Remove Time in range" })).toBeVisible();
+    await vi.waitFor(() => expect(document.activeElement?.getAttribute("data-testid")).toBe("add-signal"));
+  });
+
+  it("stars a signal, and lists it under Starred the next time", async () => {
+    await start("The last 24 hours");
+
+    await page.getByTestId("add-signal").click();
+    await page.getByRole("button", { name: "Activity and body" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Star Heart rate" }).first().click();
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByTestId("add-signal")).toHaveFocus();
+
+    await page.getByTestId("add-signal").click();
+    const starred = page.getByRole("region", { name: "Starred" });
+    await expect.element(starred.getByRole("button", { name: "Heart rate", exact: true })).toBeVisible();
+    await expect.element(starred.getByRole("button", { name: "Star Heart rate" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("says once how many signals need a shorter range, and applies the range that fits", async () => {
+    render(NewCustomReportPage, {});
+    await page.getByText("Blank report", { exact: true }).click();
+    await page.getByRole("radio", { name: "90 days" }).first().click();
+    await page.getByTestId("add-signal").click();
+
+    const need = page.getByTestId("range-need").filter({ hasText: "14 days or less" });
+    await expect.element(need).toHaveTextContent(/^\d+ signals need 14 days or less\. Use 14 days$/);
+    expect(document.body.textContent).not.toContain("Choose a shorter range first.");
+    const boluses = await find("Boluses");
+    await expect.element(boluses).toBeDisabled();
+    await expect.element(page.getByRole("dialog").getByText("Up to 14 days").first()).toBeVisible();
+
+    await need.getByTestId("use-range").click();
+    await expect.element(boluses).toBeEnabled();
+    await boluses.click();
+    await expect.element(boluses).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("puts a signal with no data in the range in one closed group at the end", async () => {
+    availability = ({ hours }) => ({ hours, signals: [{ signal: "injections", state: "none" }] });
+    await start("The last 24 hours");
+
+    await page.getByTestId("add-signal").click();
+    const group = page.getByTestId("catalogue-no-data");
+    await expect.element(group).toHaveTextContent("No data in this range (1)");
+    await group.click();
+    await expect.element(page.getByRole("dialog").getByRole("button", { name: "Long-acting injections", exact: true })).toBeVisible();
+  });
+
+  it("lists the API's ready-made reports last, opens one in the workspace, and saves the spec it gave", async () => {
     render(NewCustomReportPage, {});
     const ready = page.getByTestId("ready-made-reports");
     await expect.element(ready.getByRole("heading", { name: "Ready-made reports" })).toBeVisible();
 
     await ready.getByText("Statistics", { exact: true }).click();
 
-    await expect.element(page.getByTestId("panel-card").first()).toBeVisible();
-    await expect.element(page.getByLabelText("Title", { exact: true })).toHaveValue("Two weeks");
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("Two weeks");
+    await expect.element(page.getByTestId("block-editor-figures")).toBeVisible();
+    await save("Fortnight");
+    await vi.waitFor(() => expect(calls.creates).toHaveLength(1));
+    expect(calls.creates[0].spec).toMatchObject({ title: "Two weeks", range: { hours: 336 }, panels: [{ id: "p1" }] });
   });
 
   it("disables a lens that cannot take the chart, with the reason beside the switch", async () => {
     await start("Is there a dawn rise?");
     await page.getByRole("radio", { name: "Weekdays and the weekend" }).or(page.getByRole("button", { name: "Weekdays and the weekend" })).first().click();
     await page.getByRole("radio", { name: "Timeline" }).click();
-    const rail = page.getByTestId("signal-rail");
-    for (const family of ["Insulin", "Food"]) await rail.getByRole("button", { name: family, exact: true }).click();
     for (const signal of ["Insulin on board", "Carbs on board", "Basal delivered", "Boluses", "Carbs"])
-      await rail.getByRole("button", { name: signal, exact: true }).click();
+      await (await find(signal)).click();
+    await userEvent.keyboard("{Escape}");
 
     const typical = page.getByRole("radio", { name: "Typical day" });
     await expect.element(typical).toBeDisabled();

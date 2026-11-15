@@ -13,7 +13,8 @@ internal sealed record ReportRunContext(
     IServiceProvider Services,
     ReportReadLog ReadLog,
     bool HistoryClamped = false,
-    TimeZoneInfo? Zone = null)
+    TimeZoneInfo? Zone = null,
+    bool? Hour12 = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
@@ -180,7 +181,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         {
             var output = await context.Cache.ReadAsync(key, ReportSpecValidator.CountKey(dataset, parameters, range, kind, x, shape), () => dataset.RunAsync(
                 new ReportDatasetRequest(parameters, kind, from, to, context.UseMmol, context.GrantedScopes, context.Services, context.ReadLog,
-                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, shape.Fields, shape.Whole),
+                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, shape.Fields, shape.Whole, context.Hour12),
                 run.Token));
             return new Read(output, ReportPanelStatus.Ok, null);
         }
@@ -202,13 +203,13 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         if (Clamp(panel.Range!, run) is not { } clamped)
         {
             var (f, _) = Resolve(panel.Range!, run.Now);
-            return EmptyPanel(panel, dataset.Name, f, f, ReportPanelStatus.NotPermitted, OutsideHistoryNote);
+            return EmptyPanel(panel, dataset, f, f, ReportPanelStatus.NotPermitted, OutsideHistoryNote);
         }
         var (from, to, limited) = clamped;
 
         var read = await ReadAsync(dataset, panel.Dataset, panel.Range!, from, to, panel.Kind, null, run);
         if (read.Output is not { } output)
-            return EmptyPanel(panel, dataset.Name, from, to, read.Status, read.Note!);
+            return EmptyPanel(panel, dataset, from, to, read.Status, read.Note!);
 
         var omitted = output.Omitted.Select(o => o.Field).ToHashSet(StringComparer.Ordinal);
         var catalogue = dataset.FieldsFor(panel.Kind);
@@ -227,7 +228,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         {
             Id = panel.Id!,
             Group = panel.Group,
-            Title = panel.Title ?? output.Name,
+            Title = panel.Title ?? output.Heading ?? output.Name ?? dataset.Label,
             Days = output.Days,
             Kind = panel.Kind,
             Dataset = dataset.Name,
@@ -287,23 +288,28 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             trackResults.Add(new ReportTrackResult(track.Id!, track.Title, track.Height ?? 1, ReportAxes.Of(track), Texture(Hue(results))));
         }
 
+        var severalGroups = trackResults.SelectMany(t => t.Layers).Select(l => l.Group).OfType<string>().Distinct(StringComparer.Ordinal).Skip(1).Any();
+        if (!severalGroups)
+            trackResults = [.. trackResults.Select(t => t with { Layers = [.. t.Layers.Select(l => l with { Group = null })] })];
+        if (trackResults.Count > 1)
+            trackResults = [.. trackResults.Select(t => t with { Title = t.Title ?? LaneTitle(t) })];
+
         var all = trackResults.SelectMany(t => t.Layers).ToList();
         var drawn = all.Where(l => l.Status == ReportPanelStatus.Ok).ToList();
         var notDrawn = all.Where(l => l.Status != ReportPanelStatus.Ok).ToList();
         var first = Lead(all);
         var leadOutput = first is null ? null : outputOf.GetValueOrDefault(first.Id);
         var sentence = first is { SettingsSentence: false } ? first.Sentence : null;
-        var cutNotes = drawn.Where(l => l.CutNote is not null && l != first).Select(l => $"{l.Title}: {l.CutNote}").ToList();
+        var cutNotes = drawn.Where(l => l.CutNote is not null && l != first).Select(l => $"{l.FullTitle}: {l.CutNote}").ToList();
         if (cutNotes.Count > 0)
             sentence = string.Join(' ', new[] { sentence }.OfType<string>().Concat(cutNotes));
         if (notDrawn.Count > 0)
             sentence = string.Join(' ', new[] { sentence }.OfType<string>().Append(
-                $"Not shown: {string.Join("; ", notDrawn.Select(l => $"{l.Title} ({NotDrawnWords(l.Status)})"))}."));
+                $"Not shown: {string.Join("; ", notDrawn.Select(l => $"{l.FullTitle} ({NotDrawnWords(l.Status)})"))}."));
         var summary = new StringBuilder();
         foreach (var layer in all)
-            summary.Append(CultureInfo.InvariantCulture, $"[{layer.Title}]").Append('\n').Append(layer.Summary).Append('\n');
+            summary.Append(CultureInfo.InvariantCulture, $"[{layer.FullTitle}]").Append('\n').Append(layer.Summary).Append('\n');
 
-        var severalGroups = NamesSeveralGroups(all);
         var result = new ReportPanelResult
         {
             Id = panel.Id!,
@@ -350,20 +356,27 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             .Any(n => layer.Fields.FirstOrDefault(f => f.Name == n) is { GlucoseScale: true });
 
     /// <summary>
-    /// An untitled chart panel's title: its lead layer's title, or the name its data gave it (one event group, the days
-    /// kept), else the name of that layer's dataset or op.
+    /// An untitled chart panel's title: its lead layer's title, or the words for the one group its data names (one event
+    /// group, the days kept), else the name of that layer's dataset or op. A chart of several groups
+    /// (<see cref="ReportLayerResult.Group"/>) has no title: the lead's group and range line ("Only days with a low: 4
+    /// of 29 days") would head all of them as if they were one, so the host's caption names the comparison.
     /// </summary>
-    /// <summary>
-    /// Whether two or more layers are named by their own data, as different groups ("Days with a low" and "All other
-    /// days"): then the lead's name and range line ("Only days with a low: 4 of 29 days") would head a chart of all of
-    /// them as if it were one, so an untitled chart has neither and the host's caption names the comparison.
-    /// </summary>
-    private static bool NamesSeveralGroups(IEnumerable<ReportLayerResult> layers) =>
-        layers.Where(l => l.Named).Select(l => l.Title).Distinct(StringComparer.Ordinal).Skip(1).Any();
-
     private string DefaultPanelTitle(ReportLayerSpec lead, ReportLayerResult leadResult) =>
-        lead.Title ?? (leadResult.Named ? leadResult.Title
+        lead.Title ?? (leadResult.Named ? leadResult.Heading!
             : lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : registry.Find(lead.Dataset!.DatasetName)!.Label);
+
+    /// <summary>
+    /// An untitled track's name on a chart of several tracks: what its layers with an axis draw, each signal with its
+    /// unit, "Insulin on board (U)"; null for a track of spans or markers only, whose lanes and glyphs name themselves.
+    /// </summary>
+    internal static string? LaneTitle(ReportTrackResult track)
+    {
+        var names = track.Layers
+            .Where(l => l.Status == ReportPanelStatus.Ok && l.Mark is not (ReportMark.Spans or ReportMark.Markers))
+            .Select(l => l.Unit is { } unit ? $"{l.Title} ({unit})" : l.Title)
+            .Distinct(StringComparer.Ordinal).ToList();
+        return names.Count == 0 ? null : string.Join("; ", names);
+    }
 
     /// <summary>
     /// The facts and the sentence of <paramref name="output"/> about fields <paramref name="drawn"/> names every one of
@@ -393,9 +406,18 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         : minutes % 60 == 0 ? ReportFacts.Plural(minutes / 60, "hour")
         : ReportFacts.Plural(minutes, "minute");
 
-    /// <summary>How each folded field went onto the grid: "Basal rate, last value per 1 day".</summary>
-    internal static string FoldWords(IEnumerable<ReportField> folded, int step) =>
-        string.Join("; ", folded.Select(f => $"{f.Label}, {AggregateWords(f.Aggregate!.Value)} per {StepWords(step)}"));
+    /// <summary>
+    /// How the folded fields went onto the grid: "mean per hour" where they all folded one way, which the legend writes
+    /// after the layer's name; else each field's way, "Bolus, total per 15 minutes; Peak, highest value per 15 minutes".
+    /// </summary>
+    internal static string FoldWords(IReadOnlyList<ReportField> folded, int step)
+    {
+        var per = step switch { 60 => "hour", 1440 => "day", _ => StepWords(step) };
+        var ways = folded.Select(f => f.Aggregate!.Value).Distinct().ToList();
+        return ways.Count == 1
+            ? $"{AggregateWords(ways[0])} per {per}"
+            : string.Join("; ", folded.Select(f => $"{f.Label}, {AggregateWords(f.Aggregate!.Value)} per {per}"));
+    }
 
     private static string NotDrawnWords(ReportPanelStatus status) => status switch
     {
@@ -603,8 +625,6 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         if (layer.Title is null && layer.Mark == ReportMark.Markers)
             title = MarkersTitle(dataset.Label, fields, bindings, markers);
         var named = layer.Title is null && output.Name is not null;
-        if (named)
-            title = output.Name!;
         var (facts, sentence, settingsSentence) = About(output, drawnNames);
         if (output.CutNote is { } cutNote)
             sentence = sentence is null ? cutNote : $"{sentence} {cutNote}";
@@ -637,6 +657,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Omitted = output.Omitted,
             Color = output.Color,
             Named = named,
+            Group = named ? output.Name : null,
+            Heading = named ? output.Heading ?? output.Name : null,
             Days = output.Days,
             Resolution = output.Resolution,
         }, output);
@@ -795,9 +817,10 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     }
 
     /// <summary>
-    /// A layer's name in the legend when it gives none, before its data is read: the dataset's and the fields' names, or
-    /// a derived layer's own (<see cref="DerivedTitle"/>). A dataset may name the layer from its data instead
-    /// (<see cref="ReportDatasetOutput.Name"/>).
+    /// A layer's name in the legend when it gives none: the signals its fields are of ("Glucose", "Insulin on board",
+    /// <see cref="ReportNames.Signal"/>), the dataset's name for spans or a layer that names no field, or a derived
+    /// layer's own (<see cref="DerivedTitle"/>). The group a dataset names its rows by is the layer's
+    /// <see cref="ReportLayerResult.Group"/>, not part of its name.
     /// </summary>
     private string DefaultTitle(ReportLayerSpec layer, bool useMmol)
     {
@@ -805,9 +828,10 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             return DerivedTitle(derived, new Dictionary<string, IReadOnlyList<ReportCohort>>());
         var dataset = registry.Find(layer.Dataset!.DatasetName)!;
         var fields = dataset.FieldsFor(ReportPanelKind.Chart);
-        var named = (layer.Bindings!.Y ?? []).Concat(layer.Mark == ReportMark.Band && layer.Bindings.Y is null ? layer.Bindings.Edges ?? [] : [])
-            .Select(n => fields.FirstOrDefault(f => f.Name == n)?.Label).OfType<string>().ToList();
-        return named.Count == 0 || layer.Mark == ReportMark.Spans ? dataset.Label : $"{dataset.Label} · {string.Join(", ", named)}";
+        var signals = (layer.Bindings!.Y ?? []).Concat(layer.Mark == ReportMark.Band && layer.Bindings.Y is null ? layer.Bindings.Edges ?? [] : [])
+            .Select(n => fields.FirstOrDefault(f => f.Name == n)?.Label).OfType<string>()
+            .Select(ReportNames.Signal).Distinct(StringComparer.Ordinal).ToList();
+        return signals.Count == 0 || layer.Mark == ReportMark.Spans ? dataset.Label : string.Join(", ", signals);
     }
 
     /// <summary>
@@ -853,7 +877,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
     private static ReportPanelResult EmptyPanel(
         ReportPanelSpec panel,
-        string? dataset,
+        IReportDataset? dataset,
         DateTimeOffset from,
         DateTimeOffset to,
         ReportPanelStatus status,
@@ -862,9 +886,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         {
             Id = panel.Id!,
             Group = panel.Group,
-            Title = panel.Title,
+            Title = panel.Title ?? dataset?.Label,
             Kind = panel.Kind,
-            Dataset = dataset,
+            Dataset = dataset?.Name,
             Bindings = panel.Bindings,
             Status = status,
             Window = new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),

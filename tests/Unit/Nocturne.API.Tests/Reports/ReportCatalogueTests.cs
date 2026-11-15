@@ -318,7 +318,8 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         Property("daily_profile", "dayOfWeek").GetProperty("maxItems").GetInt32().Should().Be(7);
         Property("glucose_distribution_by_hour", "dayOfWeek").GetProperty("items").GetProperty("enum").GetArrayLength().Should().Be(7);
         Property("state_spans", "kinds").GetProperty("items").GetProperty("x-enumLabels").EnumerateArray().Select(l => l.GetString())
-            .Should().Equal("Pump modes", "Profiles", "Overrides", "Activities", "Temp basals");
+            .Should().Equal("Pump modes", "Profiles", "Overrides", "Activities", "Temp basals",
+                "Temporary targets", "Pump connection", "Data left out", "Motion");
 
         Property("event_response", "minutesBefore").GetProperty("enum").EnumerateArray().Select(v => v.GetInt32())
             .Should().Equal(EventResponseDefinition.MinutesBeforeChoices);

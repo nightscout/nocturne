@@ -14,7 +14,8 @@ export const BUILDER_KIND = "workspace";
 
 /**
  * The version of the saved state's shape. Raise it on any change a state of the old shape would be
- * misread under; `parseSavedReport` refuses every other version, and such a report opens in the form.
+ * misread under; `parseSavedReport` refuses every other version, and such a report opens from its
+ * spec alone (`Report.fromSpec`).
  */
 export const BUILDER_VERSION = 1;
 
@@ -131,10 +132,12 @@ function hasDuplicates(values: readonly unknown[]): boolean {
 
 const blockRange = z.number().int().positive().nullable();
 const columns = z.array(z.string()).min(1);
+/** The id a panel of a spec opened in the workspace had, kept so the spec saves as it came. */
+const panelId = z.string().optional();
 
 const savedBlock = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("chart"), key, chart: workspaceState }),
-  z.strictObject({ kind: z.literal("figures"), key, range: blockRange, title: z.string(), source: z.string(), columns }),
+  z.strictObject({ kind: z.literal("figures"), key, range: blockRange, title: z.string(), source: z.string(), columns, panelId }),
   z.strictObject({
     kind: z.literal("table"),
     key,
@@ -144,6 +147,7 @@ const savedBlock = z.discriminatedUnion("kind", [
     columns,
     /** The groups of events of an "each event" table; absent for any other source. */
     events: workspaceState.optional(),
+    panelId,
   }),
   z.strictObject({
     kind: z.literal("comparison"),
@@ -153,13 +157,20 @@ const savedBlock = z.discriminatedUnion("kind", [
     preset: z.string().nullable(),
     a: span.nullable(),
     b: span.nullable(),
+    panelId,
   }),
+  /** A panel held as the spec gave it (see given.svelte.ts). */
+  z.strictObject({ kind: z.literal("given"), key, panel: z.record(z.string(), z.unknown()) }),
 ]);
+
+/** A report range a spec gave that is not the last N hours: none, or two dates and times. */
+const pinnedRange = z.union([z.literal("none"), z.strictObject({ from: z.string(), to: z.string() })]);
 
 const savedReport = z
   .strictObject({
     title: z.string(),
     rangeHours: z.number().int().positive(),
+    pinnedRange: pinnedRange.optional(),
     blocks: z.array(savedBlock).min(1),
   })
   .superRefine((report, ctx) => {
@@ -237,6 +248,17 @@ export function builderOf(spec: unknown): BuilderMember | null {
   const version: unknown = Reflect.get(member, "version");
   if (kind !== BUILDER_KIND || typeof version !== "number") return null;
   return { kind, version, state: Reflect.get(member, "state") };
+}
+
+/**
+ * A JSON value without its null members, which the engine reads as absent: the stored form of a spec
+ * writes every member it leaves out as null.
+ */
+export function withoutNulls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutNulls);
+  if (!value || typeof value !== "object") return value;
+  const entries = Object.keys(value).map((k): [string, unknown] => [k, Reflect.get(value, k)]);
+  return Object.fromEntries(entries.filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => [k, withoutNulls(v)]));
 }
 
 /**

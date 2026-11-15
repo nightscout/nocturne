@@ -84,7 +84,7 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(series, request.From, request.To, therapy, [.. omitted.Select(o => o.Field)]),
+            Summary = Summarise(series, request.From, request.To, therapy, [.. omitted.Select(o => o.Field)], request.Zone),
             Facts = FactsOf(series, therapy),
             Sentence = series.Count == 0 ? "No basal records in this period."
                 : "Changes by origin: " + string.Join(", ", series.GroupBy(p => p.Origin).OrderByDescending(g => g.Count())
@@ -129,12 +129,12 @@ internal sealed class BasalDeliveryDataset : IReportDataset
 
     /// <summary>The rates' extremes and the changes by origin: counts of rows, not a time-weighted total.</summary>
     internal static string Summarise(
-        IReadOnlyList<BasalPoint> series, DateTimeOffset from, DateTimeOffset to, bool therapy, IReadOnlyList<string> omitted)
+        IReadOnlyList<BasalPoint> series, DateTimeOffset from, DateTimeOffset to, bool therapy, IReadOnlyList<string> omitted, TimeZoneInfo? zone = null)
     {
         static string N(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
         var lines = new List<string>
         {
-            string.Create(CultureInfo.InvariantCulture, $"Basal delivery from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC."),
+            string.Create(CultureInfo.InvariantCulture, $"Basal delivery from {ReportFacts.Window(from, to, zone)}."),
         };
         if (series.Count == 0)
         {

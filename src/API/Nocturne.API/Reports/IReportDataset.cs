@@ -238,6 +238,7 @@ internal interface IReportDataset
 /// <param name="Kind">The kind of panel the rows are for; a chart's layers and sources read as <see cref="ReportPanelKind.Chart"/>.</param>
 /// <param name="Now">The instant the runner resolved <see cref="From"/> and <see cref="To"/> against; null outside a run.</param>
 /// <param name="X">The field a chart layer lays along, for a dataset whose rows take the shape they are drawn in.</param>
+/// <param name="Hour12">Whether the tenant reads a 12-hour clock, for times written in words; null when it chose none.</param>
 internal sealed record ReportDatasetRequest(
     ReportDatasetParameters Parameters,
     ReportPanelKind Kind,
@@ -253,7 +254,8 @@ internal sealed record ReportDatasetRequest(
     string? X = null,
     TimeZoneInfo? Zone = null,
     IReadOnlyList<string>? Fields = null,
-    bool Whole = false)
+    bool Whole = false,
+    bool? Hour12 = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
@@ -353,6 +355,12 @@ internal sealed record ReportDatasetOutput
     /// something: one event group's label, the days a day filter kept, the weekdays read. Null for the default name.
     /// </summary>
     public string? Name { get; init; }
+
+    /// <summary>
+    /// The words a panel of these rows is headed with where <see cref="Name"/> is a label rather than words: one event
+    /// group as "Lows that start from 12:00 AM to 6:00 AM". Null to head it with <see cref="Name"/>.
+    /// </summary>
+    public string? Heading { get; init; }
 
     /// <summary>How the days fell under a day filter, where one kept only some of them.</summary>
     public ReportDayCounts? Days { get; init; }

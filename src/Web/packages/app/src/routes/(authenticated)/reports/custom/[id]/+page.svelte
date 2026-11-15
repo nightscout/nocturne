@@ -1,6 +1,7 @@
 <!--
-  A saved custom report: its spec as the API read it back, run for the viewer. A spec that no longer
-  validates shows the API's reasons instead. Edit, rename, delete and copy the link from here.
+  A saved custom report, run for the viewer. The page header carries its name. One row holds the
+  range it runs over (as saved, or a preset the viewer picks, which changes nothing saved) and the
+  actions: Edit, and the rest in one menu. A spec that no longer validates shows the API's reasons.
 -->
 <script lang="ts">
   import { goto } from "$app/navigation";
@@ -10,18 +11,24 @@
   import {
     deleteCustomReport,
     getCustomReport,
+    getCustomReportCatalogue,
     updateCustomReport,
   } from "#lib/api/generated/customReports.generated.remote.js";
   import CustomReportRun from "#lib/components/reports/custom/CustomReportRun.svelte";
   import CustomReportQuery from "#lib/components/reports/custom/CustomReportQuery.svelte";
   import SpecErrorList from "#lib/components/reports/custom/SpecErrorList.svelte";
+  import RangeChoices from "#lib/components/reports/custom/workspace/RangeChoices.svelte";
+  import { viewerRange } from "#lib/components/reports/custom/workspace/viewer-range.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { copyToClipboard } from "#lib/utils/index.js";
+  import CopyPlus from "@lucide/svelte/icons/copy-plus";
+  import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Link from "@lucide/svelte/icons/link";
   import Pencil from "@lucide/svelte/icons/pencil";
   import SquarePen from "@lucide/svelte/icons/square-pen";
@@ -32,16 +39,24 @@
   const resource = contextResource(() => getCustomReport(id), {
     errorTitle: "Could not load the custom report",
   });
+  const catalogue = contextResource(() => getCustomReportCatalogue(), {
+    errorTitle: "Could not load what a report can show",
+  });
   const report = $derived(resource.current);
   const specErrors = $derived(report?.errors ?? []);
-  /** A member limited to the last 24 hours cannot change a report; the API refuses it. */
+  /** A member limited to the last 24 hours cannot change or copy a report; the API refuses both. */
   const clamped = $derived(page.data.limitTo24Hours === true);
+  const canEdit = $derived(report?.canEdit === true && !clamped);
 
   let renaming = $state(false);
   let name = $state("");
   let busy = $state(false);
   let actionError = $state<string | null>(null);
   let confirmingDelete = $state(false);
+  /** The range the viewer runs the report over, by preset id, or null for the range it was saved with. */
+  let rangeChoice = $state<string | null>(null);
+
+  const range = $derived(report && catalogue.current ? viewerRange(catalogue.current, report.spec, rangeChoice) : null);
 
   function startRename() {
     name = report?.name ?? "";
@@ -70,7 +85,7 @@
     try {
       await deleteCustomReport(id);
       confirmingDelete = false;
-      await goto(resolve("reports/custom"));
+      await goto(resolve("/(authenticated)/reports/custom"));
     } catch (err) {
       actionError = describeSubmitError(err, "Could not delete the report. Try again.");
     } finally {
@@ -84,57 +99,89 @@
   }
 </script>
 
-<div class="@container space-y-6">
+<div class="@container space-y-4">
   {#if report}
-    <div class="flex flex-col gap-3 @lg:flex-row @lg:items-start @lg:justify-between">
-      {#if renaming}
-        <form class="flex flex-1 flex-col gap-2 @lg:flex-row @lg:items-end" onsubmit={rename}>
-          <div class="flex flex-1 flex-col gap-1.5">
-            <Label for="custom-report-name">Name</Label>
-            <Input id="custom-report-name" bind:value={name} maxlength={120} required autocomplete="off" />
-          </div>
-          <div class="flex gap-2">
-            <Button type="submit" disabled={busy || name.trim() === ""}>Save</Button>
-            <Button type="button" variant="outline" onclick={() => (renaming = false)}>Cancel</Button>
-          </div>
-        </form>
-      {:else}
-        <h2 class="text-xl font-semibold break-words">{report.name}</h2>
-        <div class="flex shrink-0 flex-wrap gap-2">
-          <Button variant="outline" size="sm" onclick={copyLink}>
-            <Link class="size-4" aria-hidden="true" />
-            Copy link
-          </Button>
-          {#if report.canEdit && !clamped}
-            <Button variant="outline" size="sm" href={resolve("/(authenticated)/reports/custom/[id]/edit", { id })}>
-              <SquarePen class="size-4" aria-hidden="true" />
+    {#if renaming}
+      <form class="flex flex-col gap-2 @lg:flex-row @lg:items-end" onsubmit={rename}>
+        <div class="flex flex-1 flex-col gap-1.5">
+          <Label for="custom-report-name">Name</Label>
+          <Input id="custom-report-name" bind:value={name} maxlength={catalogue.current?.maxNameLength ?? 120} required autocomplete="off" />
+        </div>
+        <div class="flex gap-2">
+          <Button type="submit" disabled={busy || name.trim() === ""}>Save</Button>
+          <Button type="button" variant="outline" onclick={() => (renaming = false)}>Cancel</Button>
+        </div>
+      </form>
+    {:else}
+      <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2" data-testid="report-toolbar">
+        {#if range && specErrors.length === 0}
+          <RangeChoices
+            id="view-range"
+            label="Range to show"
+            options={range.options}
+            value={range.value}
+            onchange={(choice) => (rangeChoice = choice === range.saved ? null : choice)}
+          />
+        {:else}
+          <span></span>
+        {/if}
+        <div class="flex shrink-0 items-center gap-2">
+          {#if canEdit}
+            <Button size="sm" href={resolve("/(authenticated)/reports/custom/[id]/edit", { id })}>
+              <SquarePen aria-hidden="true" />
               Edit
             </Button>
-            <Button variant="outline" size="sm" onclick={startRename}>
-              <Pencil class="size-4" aria-hidden="true" />
-              Rename
+          {:else if !clamped}
+            <Button size="sm" variant="outline" href={resolve("/(authenticated)/reports/custom/[id]/edit", { id })}>
+              <CopyPlus aria-hidden="true" />
+              Edit a copy
             </Button>
           {/if}
-          {#if report.canEdit}
-            <Button variant="outline" size="sm" onclick={() => (confirmingDelete = true)}>
-              <Trash2 class="size-4" aria-hidden="true" />
-              Delete
-            </Button>
-          {/if}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props }: { props: Record<string, unknown> })}
+                <Button {...props} variant="outline" size="sm" aria-label="More actions" data-testid="report-actions">
+                  <Ellipsis aria-hidden="true" />
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              <DropdownMenu.Item onSelect={copyLink}>
+                <Link aria-hidden="true" />
+                Copy link
+              </DropdownMenu.Item>
+              {#if canEdit}
+                <DropdownMenu.Item onSelect={startRename}>
+                  <Pencil aria-hidden="true" />
+                  Rename
+                </DropdownMenu.Item>
+              {/if}
+              {#if report.canEdit}
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item variant="destructive" onSelect={() => (confirmingDelete = true)}>
+                  <Trash2 aria-hidden="true" />
+                  Delete
+                </DropdownMenu.Item>
+              {/if}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         </div>
-      {/if}
-    </div>
+      </div>
+    {/if}
     {#if actionError}
       <p class="text-sm text-destructive" role="alert">{actionError}</p>
+    {/if}
+    {#if range?.note}
+      <p class="text-xs text-muted-foreground" data-testid="range-note">{range.note}</p>
     {/if}
 
     {#if specErrors.length > 0}
       <SpecErrorList errors={specErrors} spec={report.spec} />
     {:else}
-      {#key id}
-        <CustomReportQuery request={{ spec: report.spec }}>
+      {#key `${id}|${rangeChoice ?? ""}`}
+        <CustomReportQuery request={{ spec: range?.spec ?? report.spec }}>
           {#snippet children(run)}
-            <CustomReportRun {run} />
+            <CustomReportRun {run} pageHeading={report.name} />
           {/snippet}
         </CustomReportQuery>
       {/key}

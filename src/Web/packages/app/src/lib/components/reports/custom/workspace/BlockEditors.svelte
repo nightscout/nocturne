@@ -1,6 +1,6 @@
 <!--
-  The open block of figures, a table or a comparison: its title and range, what it reads, and what
-  it shows, above its rendered result. A choice that cannot be made now is disabled, with its reason
+  The open block of figures, a table or a comparison, result first: its rendered result, and beside
+  it on a wide block (under it on a narrow one) its title and range, what it reads, and what it shows. A choice that cannot be made now is disabled, with its reason
   beside it.
 -->
 <script lang="ts">
@@ -13,7 +13,7 @@
   import * as Select from "#lib/components/ui/select/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import type { PreviewRunner } from "../builder/preview-runner.svelte.js";
+  import type { PreviewRunner } from "./preview-runner.svelte.js";
   import BlockPreview from "./BlockPreview.svelte";
   import DateSpanField from "./DateSpanField.svelte";
   import EventGroups from "./EventGroups.svelte";
@@ -43,7 +43,7 @@
 {#snippet columns(target: FiguresBlock | TableBlock, heading: string)}
   <fieldset class="space-y-2">
     <legend class="text-xs text-muted-foreground">{heading}</legend>
-    <ul class="grid gap-x-4 gap-y-1.5 @md:grid-cols-2 @3xl:grid-cols-3">
+    <ul class="grid gap-x-4 gap-y-1.5">
       {#each report.columns(target) as column (column.field)}
         <li class="flex items-start gap-2">
           <Checkbox
@@ -74,11 +74,20 @@
   </fieldset>
 {/snippet}
 
-<div class="space-y-5" data-testid="block-editor-{block.kind}">
+<div class="grid gap-x-6 gap-y-5 @4xl:grid-cols-[minmax(0,1fr)_20rem]" data-testid="block-editor-{block.kind}">
+  <div class="min-w-0">
+    <BlockPreview
+      spec={report.previewSpec(block)}
+      {runner}
+      kind={block.kind}
+      incomplete={report.incomplete(block)}
+      announce
+    />
+  </div>
+  <aside class="min-w-0 space-y-5">
   <div class="space-y-3">
     <Input
       variant="title"
-      size="heading"
       aria-label="Title"
       placeholder={PLACEHOLDERS[block.kind]}
       maxlength={report.catalogue.maxTitleLength}
@@ -152,7 +161,7 @@
           (v: string) => v && report.setSource(block, v)
         }
       >
-        <Select.Trigger id="table-source-{block.key}" size="sm" class="w-72">
+        <Select.Trigger id="table-source-{block.key}" size="sm" class="w-full">
           {report.sourceLabel(block)}
         </Select.Trigger>
         <Select.Content>
@@ -244,12 +253,5 @@
       </Collapsible.Content>
     </Collapsible.Root>
   {/if}
-
-  <BlockPreview
-    spec={report.previewSpec(block)}
-    {runner}
-    kind={block.kind}
-    incomplete={report.incomplete(block)}
-    announce
-  />
+  </aside>
 </div>

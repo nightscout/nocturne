@@ -11,6 +11,7 @@ import type {
   CustomReportWorkspaceAnchor,
   CustomReportWorkspaceCell,
   CustomReportWorkspaceMark,
+  CustomReportWorkspaceSection,
   CustomReportWorkspaceSignal,
 } from "#lib/api/generated/nocturne-api-client.js";
 
@@ -99,7 +100,12 @@ export class Vocabulary {
 
   /** The lenses that draw the signal, in lens order. */
   lensesOf(id: SignalId): LensId[] {
-    return this.ws.lenses.filter((l) => this.cellOf(l, id) !== undefined);
+    return this.signal(id)?.lenses ?? [];
+  }
+
+  /** The catalogue's sections and their groups, in the order it lists them. */
+  get sections(): CustomReportWorkspaceSection[] {
+    return this.ws.sections;
   }
 
   get families(): Family[] {

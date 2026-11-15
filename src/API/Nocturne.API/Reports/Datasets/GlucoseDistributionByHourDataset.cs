@@ -121,7 +121,7 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(hours, request.From, request.To, clock.Zone is null, useMmol),
+            Summary = Summarise(hours, request.From, request.To, clock.Zone is null, useMmol, clock.Zone),
             Facts = FactsOf(hours, useMmol),
             Sentence = SentenceOf(hours, clock.Zone is null),
             Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(hours.Sum(h => h.Count), "reading")}.",
@@ -174,10 +174,10 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
             + $"{hour.Count} {(hour.Count == 1 ? "reading" : "readings")} on {hour.DayCount} {(hour.DayCount == 1 ? "day" : "days")}.";
     }
 
-    internal static string Summarise(IReadOnlyList<AveragedStats> hours, DateTimeOffset from, DateTimeOffset to, bool utc, bool useMmol)
+    internal static string Summarise(IReadOnlyList<AveragedStats> hours, DateTimeOffset from, DateTimeOffset to, bool utc, bool useMmol, TimeZoneInfo? zone = null)
     {
         var head = string.Create(CultureInfo.InvariantCulture,
-            $"Glucose by hour of day from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC{(utc ? ", hours in UTC: the tenant has no time zone set." : ", hours in the tenant's time zone.")}");
+            $"Glucose by hour of day from {ReportFacts.Window(from, to, zone)}{(utc ? ", hours in UTC: the tenant has no time zone set." : ", hours in the tenant's time zone.")}");
         var withData = hours.Where(h => h.Count > 0).ToList();
         if (withData.Count == 0)
             return head + "\nNo glucose readings in this period.";

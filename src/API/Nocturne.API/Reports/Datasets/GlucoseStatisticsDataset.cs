@@ -110,7 +110,7 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = [row],
-            Summary = Summarise(row, request.From, request.To, useMmol, [.. omitted.Select(o => o.Field)]),
+            Summary = Summarise(row, request.From, request.To, useMmol, [.. omitted.Select(o => o.Field)], request.Zone),
             Facts = FactsOf(row, useMmol),
             Sentence = SentenceOf(row, useMmol, treatments),
             Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(count, "reading")}.",
@@ -185,7 +185,8 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
         DateTimeOffset from,
         DateTimeOffset to,
         bool useMmol,
-        IReadOnlyList<string>? omitted = null)
+        IReadOnlyList<string>? omitted = null,
+        TimeZoneInfo? zone = null)
     {
         var units = useMmol ? "mmol/L" : "mg/dL";
         string F(string key, string format) =>
@@ -194,7 +195,7 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
 
         var lines = new List<string>
         {
-            string.Create(CultureInfo.InvariantCulture, $"Glucose statistics from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC."),
+            string.Create(CultureInfo.InvariantCulture, $"Glucose statistics from {ReportFacts.Window(from, to, zone)}."),
         };
         if (row["readings"] is 0)
         {

@@ -827,6 +827,302 @@
  ],
  "datasets": [
   {
+   "name": "alert_excursions",
+   "label": "Alert periods",
+   "description": "",
+   "requiredScope": "alerts.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Start",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 168,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "alert_instances",
+   "label": "Alerts raised",
+   "description": "",
+   "requiredScope": "alerts.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 168,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
    "name": "basal_delivery",
    "label": "Basal delivery",
    "description": "",
@@ -883,7 +1179,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -895,10 +1193,444 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "area",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "delivered"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Areas",
+       "input": "fields",
+       "fields": [
+        "delivered",
+        "scheduled"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "delivered",
+       "scheduled"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "delivered",
+        "scheduled"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [
+        "origin"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 24,
    "maxRangeHours": 336,
    "rangeLimit": "This data covers at most 14 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "body_weight",
+   "label": "Body weight",
+   "description": "",
+   "requiredScope": "therapy.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "weight",
+     "label": "Weight",
+     "kind": "number",
+     "unit": "kg",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "bodyFat",
+     "label": "Body fat",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "leanMass",
+     "label": "Lean mass",
+     "kind": "number",
+     "unit": "kg",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "weight",
+      "bodyFat",
+      "leanMass"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "weight"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "weight",
+        "bodyFat",
+        "leanMass"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "weight"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "weight",
+        "bodyFat",
+        "leanMass"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "weight",
+        "bodyFat",
+        "leanMass"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 2160,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "compression_lows",
+   "label": "Compression lows",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Start",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
    "maxReadsPerReport": 16,
    "seriesField": null,
    "seriesParameter": null,
@@ -1093,7 +1825,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time_of_day"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -1115,7 +1849,218 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "minuteOfDay",
+      "y": [
+       "glucoseP50"
+      ],
+      "edges": [
+       "glucoseP10",
+       "glucoseP25",
+       "glucoseP75",
+       "glucoseP90"
+      ],
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "minuteOfDay"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "edges",
+       "label": "Band edges: low and high",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "readings",
+        "scheduledBasal",
+        "deliveredBasal",
+        "netLoopCorrection",
+        "iob",
+        "cob",
+        "targetLow",
+        "targetHigh"
+       ],
+       "counts": [
+        2,
+        4
+       ],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Middle line",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "readings",
+        "scheduledBasal",
+        "deliveredBasal",
+        "netLoopCorrection",
+        "iob",
+        "cob",
+        "targetLow",
+        "targetHigh"
+       ],
+       "counts": [
+        1
+       ],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One band for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "minuteOfDay",
+      "y": [
+       "glucoseP50"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "minuteOfDay"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "readings",
+        "scheduledBasal",
+        "deliveredBasal",
+        "netLoopCorrection",
+        "iob",
+        "cob",
+        "targetLow",
+        "targetHigh"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "area",
+     "defaultBindings": {
+      "x": "minuteOfDay",
+      "y": [
+       "glucoseP50"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "minuteOfDay"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Areas",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "readings",
+        "scheduledBasal",
+        "deliveredBasal",
+        "netLoopCorrection",
+        "iob",
+        "cob",
+        "targetLow",
+        "targetHigh"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 336,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
@@ -1277,7 +2222,10 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "category",
+    "day"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -1297,8 +2245,366 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "day",
+      "y": [
+       "timeBelow",
+       "timeInRange",
+       "timeAbove"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": true,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "date",
+        "day",
+        "partial"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "readings",
+        "timeInRange",
+        "timeBelow",
+        "timeAbove",
+        "mean",
+        "totalInsulin",
+        "totalBolus",
+        "totalBasal",
+        "totalCarbs"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "day",
+      "y": [
+       "timeInRange"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "day"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "readings",
+        "timeInRange",
+        "timeBelow",
+        "timeAbove",
+        "mean",
+        "totalInsulin",
+        "totalBolus",
+        "totalBasal",
+        "totalCarbs"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [
+        "date",
+        "partial"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "day",
+      "y": [
+       "timeInRange"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "day"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "readings",
+        "timeInRange",
+        "timeBelow",
+        "timeAbove",
+        "mean",
+        "totalInsulin",
+        "totalBolus",
+        "totalBasal",
+        "totalCarbs"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "readings",
+        "timeInRange",
+        "timeBelow",
+        "timeAbove",
+        "mean",
+        "totalInsulin",
+        "totalBolus",
+        "totalBasal",
+        "totalCarbs"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "device_events",
+   "label": "Device events",
+   "description": "",
+   "requiredScope": "devices.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 720,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
    "maxReadsPerReport": 16,
@@ -1375,7 +2681,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time"
+   ],
    "panelKinds": [
     {
      "name": "stat_tiles",
@@ -1387,10 +2695,269 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "pumpBattery",
+       "uploaderBattery"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "reservoir",
+        "pumpBattery",
+        "uploaderBattery"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "pumpBattery",
+       "uploaderBattery"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "reservoir",
+        "pumpBattery",
+        "uploaderBattery"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "reservoir",
+        "pumpBattery",
+        "uploaderBattery"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 24,
    "maxRangeHours": 720,
    "rangeLimit": "This data covers at most 30 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "dnd_windows",
+   "label": "Do not disturb",
+   "description": "",
+   "requiredScope": "alerts.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Start",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 168,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
    "maxReadsPerReport": 16,
    "seriesField": null,
    "seriesParameter": null,
@@ -1513,9 +3080,92 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "category",
+    "time_of_day"
+   ],
    "panelKinds": [],
-   "marks": [],
+   "marks": [
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "hour",
+      "y": [
+       "events1",
+       "events2",
+       "events3",
+       "events4",
+       "events5",
+       "events6"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": false,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "hour",
+        "weekday"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "events1",
+        "events2",
+        "events3",
+        "events4",
+        "events5",
+        "events6"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 720,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
@@ -1629,9 +3279,90 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "category"
+   ],
    "panelKinds": [],
-   "marks": [],
+   "marks": [
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "range",
+      "y": [
+       "events1",
+       "events2",
+       "events3",
+       "events4",
+       "events5",
+       "events6"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": false,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "range"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "events1",
+        "events2",
+        "events3",
+        "events4",
+        "events5",
+        "events6"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 720,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
@@ -1949,9 +3680,103 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time_of_day",
+    "value"
+   ],
    "panelKinds": [],
-   "marks": [],
+   "marks": [
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "startGlucose",
+      "y": [
+       "peakRise"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": "peakRiseFit",
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "startGlucose",
+        "grams",
+        "minutesSinceMeal",
+        "iobAtEvent",
+        "timeOfDay"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "peakRise",
+        "minutesToPeak",
+        "minutesBackToStart",
+        "drop",
+        "nadir",
+        "minutesToNadir",
+        "glucoseAt2Hours",
+        "netInsulin",
+        "gramsPerUnit",
+        "peakRiseFit",
+        "minutesToPeakFit",
+        "minutesBackToStartFit",
+        "dropFit",
+        "nadirFit",
+        "minutesToNadirFit",
+        "glucoseAt2HoursFit",
+        "netInsulinFit",
+        "gramsPerUnitFit"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "peakRise",
+        "minutesToPeak",
+        "minutesBackToStart",
+        "drop",
+        "nadir",
+        "minutesToNadir",
+        "glucoseAt2Hours",
+        "netInsulin",
+        "gramsPerUnit",
+        "peakRiseFit",
+        "minutesToPeakFit",
+        "minutesBackToStartFit",
+        "dropFit",
+        "nadirFit",
+        "minutesToNadirFit",
+        "glucoseAt2HoursFit",
+        "netInsulinFit",
+        "gramsPerUnitFit"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 720,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
@@ -2963,7 +4788,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "offset"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -2985,7 +4812,172 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "minute",
+      "y": [
+       "glucoseP50"
+      ],
+      "edges": [
+       "glucoseP10",
+       "glucoseP25",
+       "glucoseP75",
+       "glucoseP90"
+      ],
+      "series": "series",
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "minute"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "edges",
+       "label": "Band edges: low and high",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "deltaP10",
+        "deltaP25",
+        "deltaP50",
+        "deltaP75",
+        "deltaP90",
+        "iobP50",
+        "cobP50",
+        "netLoopCorrectionP50",
+        "events"
+       ],
+       "counts": [
+        2,
+        4
+       ],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Middle line",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "deltaP10",
+        "deltaP25",
+        "deltaP50",
+        "deltaP75",
+        "deltaP90",
+        "iobP50",
+        "cobP50",
+        "netLoopCorrectionP50",
+        "events"
+       ],
+       "counts": [
+        1
+       ],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One band for each",
+       "input": "field",
+       "fields": [
+        "series"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "minute",
+      "y": [
+       "glucoseP50"
+      ],
+      "edges": null,
+      "series": "series",
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "minute"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "deltaP10",
+        "deltaP25",
+        "deltaP50",
+        "deltaP75",
+        "deltaP90",
+        "iobP50",
+        "cobP50",
+        "netLoopCorrectionP50",
+        "events"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [
+        "series"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 720,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
@@ -3135,7 +5127,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "category"
+   ],
    "panelKinds": [
     {
      "name": "stat_tiles",
@@ -3148,7 +5142,85 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "band",
+      "y": [
+       "percent"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": false,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "band",
+        "range",
+        "color",
+        "period"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "percent",
+        "minutes",
+        "veryLow",
+        "low",
+        "inRange",
+        "high",
+        "veryHigh"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 336,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
@@ -3358,7 +5430,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time_of_day"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -3381,8 +5455,403 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "hour",
+      "y": [
+       "glucoseP50"
+      ],
+      "edges": [
+       "glucoseP10",
+       "glucoseP25",
+       "glucoseP75",
+       "glucoseP90"
+      ],
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "hour"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "edges",
+       "label": "Band edges: low and high",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "mean",
+        "readings",
+        "days",
+        "veryLow",
+        "low",
+        "tightRange",
+        "aboveTightRange",
+        "high",
+        "veryHigh"
+       ],
+       "counts": [
+        2,
+        4
+       ],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Middle line",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "mean",
+        "readings",
+        "days",
+        "veryLow",
+        "low",
+        "tightRange",
+        "aboveTightRange",
+        "high",
+        "veryHigh"
+       ],
+       "counts": [
+        1
+       ],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One band for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "hour",
+      "y": [
+       "glucoseP50"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "hour"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "mean",
+        "readings",
+        "days",
+        "veryLow",
+        "low",
+        "tightRange",
+        "aboveTightRange",
+        "high",
+        "veryHigh"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "hour",
+      "y": [
+       "veryLow",
+       "low",
+       "tightRange",
+       "aboveTightRange",
+       "high",
+       "veryHigh"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": true,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "hour"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "glucoseP10",
+        "glucoseP25",
+        "glucoseP50",
+        "glucoseP75",
+        "glucoseP90",
+        "mean",
+        "readings",
+        "days",
+        "veryLow",
+        "low",
+        "tightRange",
+        "aboveTightRange",
+        "high",
+        "veryHigh"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "glucose_episodes",
+   "label": "Lows and highs",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Start",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 168,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
    "maxReadsPerReport": 16,
@@ -3507,7 +5976,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -3524,7 +5995,258 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "glucose"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "glucose",
+        "glucoseMgdl",
+        "targetLow",
+        "targetHigh",
+        "iob",
+        "cob",
+        "basalRate"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [
+        "direction"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "glucose"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "glucose",
+        "glucoseMgdl",
+        "targetLow",
+        "targetHigh",
+        "iob",
+        "cob",
+        "basalRate"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "glucose",
+        "glucoseMgdl",
+        "targetLow",
+        "targetHigh",
+        "iob",
+        "cob",
+        "basalRate"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "area",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "glucose"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Areas",
+       "input": "fields",
+       "fields": [
+        "glucose",
+        "glucoseMgdl",
+        "targetLow",
+        "targetHigh",
+        "iob",
+        "cob",
+        "basalRate"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "time",
+      "y": null,
+      "edges": [
+       "targetLow",
+       "targetHigh"
+      ],
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "edges",
+       "label": "Band edges: low and high",
+       "input": "fields",
+       "fields": [
+        "glucose",
+        "glucoseMgdl",
+        "targetLow",
+        "targetHigh",
+        "iob",
+        "cob",
+        "basalRate"
+       ],
+       "counts": [
+        2,
+        4
+       ],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Middle line",
+       "input": "fields",
+       "fields": [
+        "glucose",
+        "glucoseMgdl",
+        "targetLow",
+        "targetHigh",
+        "iob",
+        "cob",
+        "basalRate"
+       ],
+       "counts": [
+        1
+       ],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One band for each",
+       "input": "field",
+       "fields": [
+        "direction"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 6,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
@@ -3803,7 +6525,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -3815,8 +6539,504 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "bpm"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "bpm",
+        "bpmMin",
+        "bpmMax"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "band",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "bpm"
+      ],
+      "edges": [
+       "bpmMin",
+       "bpmMax"
+      ],
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "edges",
+       "label": "Band edges: low and high",
+       "input": "fields",
+       "fields": [
+        "bpm",
+        "bpmMin",
+        "bpmMax"
+       ],
+       "counts": [
+        2,
+        4
+       ],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Middle line",
+       "input": "fields",
+       "fields": [
+        "bpm",
+        "bpmMin",
+        "bpmMax"
+       ],
+       "counts": [
+        1
+       ],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One band for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "bpm"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "bpm",
+        "bpmMin",
+        "bpmMax"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "bpm",
+        "bpmMin",
+        "bpmMax"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 24,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "lab_hba1c",
+   "label": "Lab HbA1c",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "day",
+     "label": "Day",
+     "kind": "day",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "hba1c",
+     "label": "Lab HbA1c",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "last",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "day"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "day",
+      "hba1c"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "day",
+      "y": [
+       "hba1c"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "day"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "hba1c"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "hba1c"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "day",
+      "y": [
+       "hba1c"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "day"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "hba1c"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 2160,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "meter_glucose",
+   "label": "Meter readings",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "meterGlucose",
+     "label": "Meter glucose",
+     "kind": "number",
+     "unit": "mg/dL",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "meterGlucose"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "meterGlucose"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "meterGlucose"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "meterGlucose"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "meterGlucose"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "meterGlucose"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 336,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
    "maxReadsPerReport": 16,
@@ -4080,6 +7300,248 @@
    "defaultSeriesCount": null
   },
   {
+   "name": "sensor_detail",
+   "label": "Sensor detail",
+   "description": "",
+   "requiredScope": "glucose.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "trendRate",
+     "label": "Glucose rate of change",
+     "kind": "number",
+     "unit": "mg/dL/min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "noise",
+     "label": "Sensor noise",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "max",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "trendRate",
+      "noise"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "trendRate"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "trendRate",
+        "noise"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "trendRate"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "trendRate",
+        "noise"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "trendRate",
+        "noise"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "trendRate"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": false,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "trendRate",
+        "noise"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 24,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
    "name": "settings_evidence",
    "label": "Settings evidence",
    "description": "",
@@ -4280,7 +7742,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time_of_day"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -4304,7 +7768,141 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "startMinute",
+      "y": [
+       "basalObserved",
+       "basalProfile"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "startMinute"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "basalObserved",
+        "basalProfile",
+        "isfObserved",
+        "isfProfile",
+        "carbRatioObserved",
+        "carbRatioProfile",
+        "episodes",
+        "rejected"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [
+        "setting",
+        "block",
+        "spread",
+        "confidence",
+        "confidenceReasons",
+        "noValueReason",
+        "rejections"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "startMinute",
+      "y": [
+       "basalObserved",
+       "basalProfile"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "startMinute"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "basalObserved",
+        "basalProfile",
+        "isfObserved",
+        "isfProfile",
+        "carbRatioObserved",
+        "carbRatioProfile",
+        "episodes",
+        "rejected"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "basalObserved",
+        "basalProfile",
+        "isfObserved",
+        "isfProfile",
+        "carbRatioObserved",
+        "carbRatioProfile",
+        "episodes",
+        "rejected"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 720,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
@@ -4442,7 +8040,11 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time",
+    "category",
+    "day"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -4460,10 +8062,854 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "night",
+      "y": [
+       "totalSleep"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": false,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "start",
+        "end",
+        "kind",
+        "night",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "totalSleep",
+        "deepSleep",
+        "lightSleep",
+        "remSleep",
+        "awake"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 336,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "sleep_biometrics",
+   "label": "Sleep body readings",
+   "description": "",
+   "requiredScope": "sleep.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "time",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "heartRate",
+     "label": "Heart rate in sleep",
+     "kind": "number",
+     "unit": "bpm",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "hrv",
+     "label": "HRV in sleep",
+     "kind": "number",
+     "unit": "ms",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "spo2",
+     "label": "Blood oxygen in sleep",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "breathingRate",
+     "label": "Breathing rate in sleep",
+     "kind": "number",
+     "unit": "breaths/min",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "time",
+      "heartRate",
+      "hrv",
+      "spo2",
+      "breathingRate"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "heartRate"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "heartRate",
+        "hrv",
+        "spo2",
+        "breathingRate"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "heartRate"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "heartRate",
+        "hrv",
+        "spo2",
+        "breathingRate"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "heartRate",
+        "hrv",
+        "spo2",
+        "breathingRate"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 24,
+   "maxRangeHours": 744,
+   "rangeLimit": "This data covers at most 31 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "sleep_nights",
+   "label": "Sleep figures",
+   "description": "",
+   "requiredScope": "sleep.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "night",
+     "label": "Night",
+     "kind": "day",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "score",
+     "label": "Sleep score",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "efficiency",
+     "label": "Sleep efficiency",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "latency",
+     "label": "Time to fall asleep",
+     "kind": "number",
+     "unit": "min",
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "restless",
+     "label": "Restless periods",
+     "kind": "number",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": "sum",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "avgHeartRate",
+     "label": "Heart rate in sleep",
+     "kind": "number",
+     "unit": "bpm",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "minHeartRate",
+     "label": "Lowest heart rate in sleep",
+     "kind": "number",
+     "unit": "bpm",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "min",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "hrv",
+     "label": "HRV in sleep",
+     "kind": "number",
+     "unit": "ms",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "spo2",
+     "label": "Blood oxygen in sleep",
+     "kind": "percent",
+     "unit": "%",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "breathingRate",
+     "label": "Breathing rate in sleep",
+     "kind": "number",
+     "unit": "breaths/min",
+     "description": "",
+     "scope": "heartrate.read",
+     "permitted": true,
+     "aggregate": "mean",
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "day"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "night",
+      "score",
+      "efficiency",
+      "latency",
+      "restless",
+      "avgHeartRate",
+      "minHeartRate",
+      "hrv",
+      "spo2",
+      "breathingRate"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "night",
+      "y": [
+       "score"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "night"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "score",
+        "efficiency",
+        "latency",
+        "restless",
+        "avgHeartRate",
+        "minHeartRate",
+        "hrv",
+        "spo2",
+        "breathingRate"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "score",
+        "efficiency",
+        "latency",
+        "restless",
+        "avgHeartRate",
+        "minHeartRate",
+        "hrv",
+        "spo2",
+        "breathingRate"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "night",
+      "y": [
+       "score"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "night"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "score",
+        "efficiency",
+        "latency",
+        "restless",
+        "avgHeartRate",
+        "minHeartRate",
+        "hrv",
+        "spo2",
+        "breathingRate"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "night",
+      "y": [
+       "score"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": false,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "night"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "score",
+        "efficiency",
+        "latency",
+        "restless",
+        "avgHeartRate",
+        "minHeartRate",
+        "hrv",
+        "spo2",
+        "breathingRate"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 720,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "sleep_stages",
+   "label": "Sleep stages",
+   "description": "",
+   "requiredScope": "sleep.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Start",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 72,
+   "maxRangeHours": 744,
+   "rangeLimit": "This data covers at most 31 days.",
    "maxReadsPerReport": 16,
    "seriesField": null,
    "seriesParameter": null,
@@ -4538,7 +8984,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -4551,7 +8999,62 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 24,
    "maxRangeHours": 336,
    "rangeLimit": "This data covers at most 14 days.",
@@ -4593,7 +9096,9 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -4603,8 +9108,423 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "steps"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": false,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "steps"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "line",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "steps"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Lines",
+       "input": "fields",
+       "fields": [
+        "steps"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "series",
+       "label": "One line for each",
+       "input": "field",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 168,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "system_events",
+   "label": "Device alarms",
+   "description": "",
+   "requiredScope": "devices.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Time",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 336,
+   "maxRangeHours": 2160,
+   "rangeLimit": "This data covers at most 90 days.",
+   "maxReadsPerReport": 16,
+   "seriesField": null,
+   "seriesParameter": null,
+   "defaultSeriesCount": null
+  },
+  {
+   "name": "trackers",
+   "label": "Trackers",
+   "description": "",
+   "requiredScope": "alerts.read",
+   "permitted": true,
+   "parameters": {},
+   "fields": [
+    {
+     "name": "kind",
+     "label": "Kind",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "label",
+     "label": "Name",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "start",
+     "label": "Start",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "end",
+     "label": "End",
+     "kind": "time",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    },
+    {
+     "name": "color",
+     "label": "Color",
+     "kind": "category",
+     "unit": null,
+     "description": "",
+     "scope": null,
+     "permitted": true,
+     "aggregate": null,
+     "marker": null,
+     "setting": false
+    }
+   ],
+   "xKinds": [
+    "time"
+   ],
+   "panelKinds": [
+    {
+     "name": "table",
+     "columns": [
+      "kind",
+      "label",
+      "start",
+      "end",
+      "color"
+     ]
+    }
+   ],
+   "marks": [
+    {
+     "name": "spans",
+     "defaultBindings": {
+      "x": null,
+      "y": null,
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": "start",
+      "end": "end",
+      "category": "kind"
+     },
+     "bindings": [
+      {
+       "key": "start",
+       "label": "Start",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "end",
+       "label": "End",
+       "input": "field",
+       "fields": [
+        "start",
+        "end"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "category",
+       "label": "Lane",
+       "input": "field",
+       "fields": [
+        "kind",
+        "label",
+        "color"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    }
+   ],
+   "defaultRangeHours": 720,
    "maxRangeHours": 2160,
    "rangeLimit": "This data covers at most 90 days.",
    "maxReadsPerReport": 16,
@@ -4741,7 +9661,10 @@
      "setting": false
     }
    ],
-   "xKinds": [],
+   "xKinds": [
+    "time",
+    "category"
+   ],
    "panelKinds": [
     {
      "name": "table",
@@ -4759,7 +9682,193 @@
      ]
     }
    ],
-   "marks": [],
+   "marks": [
+    {
+     "name": "markers",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "insulin",
+       "injectionUnits",
+       "carbs",
+       "bgCheck"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Markers",
+       "input": "fields",
+       "fields": [
+        "insulin",
+        "injectionUnits",
+        "carbs",
+        "bgCheck"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "insulin"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": null,
+      "orientation": null,
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Horizontal axis",
+       "input": "field",
+       "fields": [
+        "time"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Points",
+       "input": "fields",
+       "fields": [
+        "insulin",
+        "injectionUnits",
+        "carbs",
+        "bgCheck",
+        "rate",
+        "durationMinutes"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "fit",
+       "label": "Line through the points",
+       "input": "field",
+       "fields": [
+        "insulin",
+        "injectionUnits",
+        "carbs",
+        "bgCheck",
+        "rate",
+        "durationMinutes"
+       ],
+       "counts": [],
+       "required": false,
+       "choices": []
+      }
+     ]
+    },
+    {
+     "name": "bars",
+     "defaultBindings": {
+      "x": "time",
+      "y": [
+       "insulin"
+      ],
+      "edges": null,
+      "series": null,
+      "fit": null,
+      "stacked": false,
+      "orientation": "vertical",
+      "start": null,
+      "end": null,
+      "category": null
+     },
+     "bindings": [
+      {
+       "key": "x",
+       "label": "Categories or axis",
+       "input": "field",
+       "fields": [
+        "time",
+        "type",
+        "automatic",
+        "detail"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "y",
+       "label": "Bars",
+       "input": "fields",
+       "fields": [
+        "insulin",
+        "injectionUnits",
+        "carbs",
+        "bgCheck",
+        "rate",
+        "durationMinutes"
+       ],
+       "counts": [],
+       "required": true,
+       "choices": []
+      },
+      {
+       "key": "stacked",
+       "label": "Stack the bars",
+       "input": "boolean",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": []
+      },
+      {
+       "key": "orientation",
+       "label": "Bar direction",
+       "input": "choice",
+       "fields": [],
+       "counts": [],
+       "required": false,
+       "choices": [
+        {
+         "value": "vertical",
+         "label": "Vertical"
+        },
+        {
+         "value": "horizontal",
+         "label": "Horizontal"
+        }
+       ]
+      }
+     ]
+    }
+   ],
    "defaultRangeHours": 24,
    "maxRangeHours": 336,
    "rangeLimit": "This data covers at most 14 days.",
@@ -4807,251 +9916,1392 @@
     "laneHeight": 0.5
    }
   ],
+  "sections": [
+   {
+    "id": "glucose",
+    "groups": [
+     "sensor",
+     "meter",
+     "ranges",
+     "statistics",
+     "lab"
+    ]
+   },
+   {
+    "id": "insulin",
+    "groups": [
+     "onBoard",
+     "bolus",
+     "basal",
+     "totals"
+    ]
+   },
+   {
+    "id": "food",
+    "groups": [
+     "carbs"
+    ]
+   },
+   {
+    "id": "loop",
+    "groups": [
+     "corrections",
+     "modes"
+    ]
+   },
+   {
+    "id": "pumpDevices",
+    "groups": [
+     "pump",
+     "phone",
+     "sensor",
+     "consumables"
+    ]
+   },
+   {
+    "id": "sleep",
+    "groups": [
+     "sessions",
+     "nightly",
+     "body"
+    ]
+   },
+   {
+    "id": "activityBody",
+    "groups": [
+     "heart",
+     "movement",
+     "weight"
+    ]
+   },
+   {
+    "id": "settings",
+    "groups": [
+     "againstData",
+     "profiles"
+    ]
+   },
+   {
+    "id": "context",
+    "groups": [
+     "marked"
+    ]
+   },
+   {
+    "id": "alerts",
+    "groups": [
+     "alertRules",
+     "deviceAlarms",
+     "quiet"
+    ]
+   },
+   {
+    "id": "dataQuality",
+    "groups": [
+     "coverage"
+    ]
+   }
+  ],
   "signals": [
    {
     "id": "glucose",
     "family": "Glucose",
     "lane": null,
     "color": "glucose-in-range",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "sensor",
+    "unit": "glucose",
+    "lenses": [
+     "timeline",
+     "typical_day",
+     "event",
+     "against"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "bg",
+     "bloodSugar",
+     "sensor",
+     "cgm"
+    ]
    },
    {
     "id": "target",
     "family": "Glucose",
     "lane": null,
     "color": "glucose-tight-range",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "sensor",
+    "unit": "glucose",
+    "lenses": [
+     "timeline",
+     "typical_day"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "targetRange",
+     "bg"
+    ]
    },
    {
     "id": "glucoseWide",
     "family": "Glucose",
     "lane": null,
     "color": "glucose-in-range",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "sensor",
+    "unit": "glucose",
+    "lenses": [
+     "typical_day",
+     "event"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "percentile",
+     "bg",
+     "cgm"
+    ]
    },
    {
     "id": "mean",
     "family": "Glucose",
     "lane": null,
     "color": "glucose-in-range",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "statistics",
+    "unit": "glucose",
+    "lenses": [
+     "typical_day",
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "average",
+     "bg"
+    ]
    },
    {
     "id": "timeInRange",
     "family": "Glucose",
     "lane": null,
     "color": "glucose-in-range",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "ranges",
+    "unit": "%",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "tir",
+     "range"
+    ]
    },
    {
     "id": "timeBelow",
     "family": "Glucose",
     "lane": null,
     "color": "glucose-low",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "ranges",
+    "unit": "%",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "tbr",
+     "low",
+     "range"
+    ]
    },
    {
     "id": "timeAbove",
     "family": "Glucose",
     "lane": null,
     "color": "glucose-high",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "ranges",
+    "unit": "%",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "tar",
+     "high",
+     "range"
+    ]
    },
    {
     "id": "ranges",
     "family": "Glucose",
     "lane": null,
     "color": "glucose-in-range",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "ranges",
+    "unit": "%",
+    "lenses": [
+     "typical_day",
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "tir",
+     "range"
+    ]
    },
    {
     "id": "readings",
     "family": "Glucose",
     "lane": null,
     "color": "system-event-info",
-    "permitted": true
+    "permitted": true,
+    "section": "dataQuality",
+    "group": "coverage",
+    "unit": null,
+    "lenses": [
+     "typical_day",
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "sensor",
+     "cgm",
+     "gaps"
+    ]
    },
    {
     "id": "iob",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-bolus",
-    "permitted": true
+    "permitted": true,
+    "section": "insulin",
+    "group": "onBoard",
+    "unit": "U",
+    "lenses": [
+     "timeline",
+     "typical_day",
+     "event",
+     "against"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "iob",
+     "insulin"
+    ]
    },
    {
     "id": "basal",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-basal",
-    "permitted": true
+    "permitted": true,
+    "section": "insulin",
+    "group": "basal",
+    "unit": "U/h",
+    "lenses": [
+     "timeline",
+     "typical_day",
+     "against"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "rate",
+     "tempBasal",
+     "insulin"
+    ]
    },
    {
     "id": "basalScheduled",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-scheduled-basal",
-    "permitted": true
+    "permitted": true,
+    "section": "insulin",
+    "group": "basal",
+    "unit": "U/h",
+    "lenses": [
+     "timeline",
+     "typical_day"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "rate",
+     "profile",
+     "insulin"
+    ]
    },
    {
     "id": "boluses",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-bolus",
-    "permitted": true
+    "permitted": true,
+    "section": "insulin",
+    "group": "bolus",
+    "unit": "U",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "bolus",
+     "dose",
+     "insulin"
+    ]
    },
    {
     "id": "injections",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-basal",
-    "permitted": true
+    "permitted": true,
+    "section": "insulin",
+    "group": "basal",
+    "unit": "U",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "mdi",
+     "pen",
+     "dose",
+     "insulin"
+    ]
    },
    {
     "id": "netLoop",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-basal",
-    "permitted": true
+    "permitted": true,
+    "section": "loop",
+    "group": "corrections",
+    "unit": "U/h",
+    "lenses": [
+     "typical_day",
+     "event"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "loop",
+     "automation",
+     "insulin"
+    ]
    },
    {
     "id": "totalInsulin",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-bolus",
-    "permitted": true
+    "permitted": true,
+    "section": "insulin",
+    "group": "totals",
+    "unit": "U",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "tdd",
+     "dose",
+     "insulin"
+    ]
    },
    {
     "id": "totalBolus",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-bolus",
-    "permitted": true
+    "permitted": true,
+    "section": "insulin",
+    "group": "bolus",
+    "unit": "U",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "bolus",
+     "dose",
+     "insulin"
+    ]
    },
    {
     "id": "totalBasal",
     "family": "Insulin",
     "lane": null,
     "color": "insulin-basal",
-    "permitted": true
+    "permitted": true,
+    "section": "insulin",
+    "group": "basal",
+    "unit": "U",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "tdd",
+     "insulin"
+    ]
    },
    {
     "id": "cob",
     "family": "Food",
     "lane": null,
     "color": "carbs",
-    "permitted": true
+    "permitted": true,
+    "section": "food",
+    "group": "carbs",
+    "unit": "g",
+    "lenses": [
+     "timeline",
+     "typical_day",
+     "event",
+     "against"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "cob",
+     "meal",
+     "food"
+    ]
    },
    {
     "id": "carbs",
     "family": "Food",
     "lane": null,
     "color": "carbs",
-    "permitted": true
+    "permitted": true,
+    "section": "food",
+    "group": "carbs",
+    "unit": "g",
+    "lenses": [
+     "timeline",
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "meal",
+     "food"
+    ]
    },
    {
     "id": "reservoir",
     "family": "Devices",
     "lane": null,
     "color": "insulin-bolus",
-    "permitted": true
+    "permitted": true,
+    "section": "pumpDevices",
+    "group": "pump",
+    "unit": "U",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 720,
+    "searchKeys": [
+     "pump",
+     "pod",
+     "insulin"
+    ]
    },
    {
     "id": "pumpBattery",
     "family": "Devices",
     "lane": null,
     "color": "pump-mode-boost",
-    "permitted": true
+    "permitted": true,
+    "section": "pumpDevices",
+    "group": "pump",
+    "unit": "%",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 720,
+    "searchKeys": [
+     "pump",
+     "pod",
+     "battery"
+    ]
    },
    {
     "id": "uploaderBattery",
     "family": "Devices",
     "lane": null,
     "color": "pump-mode-sleep",
-    "permitted": true
+    "permitted": true,
+    "section": "pumpDevices",
+    "group": "phone",
+    "unit": "%",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 720,
+    "searchKeys": [
+     "phone",
+     "battery"
+    ]
    },
    {
     "id": "settingBasal",
     "family": "Settings",
     "lane": null,
     "color": "insulin-basal",
-    "permitted": true
+    "permitted": true,
+    "section": "settings",
+    "group": "againstData",
+    "unit": "U/h",
+    "lenses": [
+     "typical_day"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "profile",
+     "rate"
+    ]
    },
    {
     "id": "settingIsf",
     "family": "Settings",
     "lane": null,
     "color": "insulin-bolus",
-    "permitted": true
+    "permitted": true,
+    "section": "settings",
+    "group": "againstData",
+    "unit": "glucose/U",
+    "lenses": [
+     "typical_day"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "isf",
+     "sensitivity",
+     "profile"
+    ]
    },
    {
     "id": "settingCarbRatio",
     "family": "Settings",
     "lane": null,
     "color": "carbs",
-    "permitted": true
+    "permitted": true,
+    "section": "settings",
+    "group": "againstData",
+    "unit": "g/U",
+    "lenses": [
+     "typical_day"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "icr",
+     "profile"
+    ]
    },
    {
     "id": "heartRate",
     "family": "Body",
     "lane": null,
     "color": "heart-rate",
-    "permitted": true
+    "permitted": true,
+    "section": "activityBody",
+    "group": "heart",
+    "unit": "bpm",
+    "lenses": [
+     "timeline",
+     "against"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "hr",
+     "pulse",
+     "exercise"
+    ]
    },
    {
     "id": "steps",
     "family": "Body",
     "lane": null,
     "color": "steps",
-    "permitted": true
+    "permitted": true,
+    "section": "activityBody",
+    "group": "movement",
+    "unit": "steps",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "walking",
+     "exercise"
+    ]
    },
    {
     "id": "sleep",
     "family": "Body",
     "lane": "Context",
     "color": "activity-sleep",
-    "permitted": true
+    "permitted": true,
+    "section": "sleep",
+    "group": "sessions",
+    "unit": "h",
+    "lenses": [
+     "timeline",
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "night",
+     "bed"
+    ]
    },
    {
     "id": "pumpModes",
     "family": "Context",
     "lane": null,
     "color": "pump-mode-automatic",
-    "permitted": true
+    "permitted": true,
+    "section": "loop",
+    "group": "modes",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "loop",
+     "automation",
+     "pump"
+    ]
    },
    {
     "id": "profiles",
     "family": "Context",
     "lane": null,
     "color": "pump-mode-liberty",
-    "permitted": true
+    "permitted": true,
+    "section": "settings",
+    "group": "profiles",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "profile"
+    ]
    },
    {
     "id": "overrides",
     "family": "Context",
     "lane": null,
     "color": "pump-mode-boost",
-    "permitted": true
+    "permitted": true,
+    "section": "context",
+    "group": "marked",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "override",
+     "targetRange",
+     "loop"
+    ]
    },
    {
     "id": "activities",
     "family": "Context",
     "lane": null,
     "color": "pump-mode-exercise",
-    "permitted": true
+    "permitted": true,
+    "section": "context",
+    "group": "marked",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "exercise",
+     "illness"
+    ]
    },
    {
     "id": "tempBasals",
     "family": "Context",
     "lane": null,
     "color": "insulin-temp-basal",
-    "permitted": true
+    "permitted": true,
+    "section": "loop",
+    "group": "corrections",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "tempBasal",
+     "loop",
+     "rate"
+    ]
    },
    {
     "id": "bgChecks",
     "family": "Context",
     "lane": null,
     "color": "glucose-in-range",
-    "permitted": true
+    "permitted": true,
+    "section": "glucose",
+    "group": "meter",
+    "unit": "glucose",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "bg",
+     "meter",
+     "fingerstick"
+    ]
+   },
+   {
+    "id": "meterGlucose",
+    "family": "Glucose",
+    "lane": null,
+    "color": "glucose-in-range",
+    "permitted": true,
+    "section": "glucose",
+    "group": "meter",
+    "unit": "glucose",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "bg",
+     "meter",
+     "fingerstick",
+     "pump"
+    ]
+   },
+   {
+    "id": "trendRate",
+    "family": "Glucose",
+    "lane": null,
+    "color": "chart-4",
+    "permitted": true,
+    "section": "glucose",
+    "group": "sensor",
+    "unit": "glucose/min",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "roc",
+     "trend",
+     "cgm"
+    ]
+   },
+   {
+    "id": "glucoseEpisodes",
+    "family": "Context",
+    "lane": null,
+    "color": "glucose-low",
+    "permitted": true,
+    "section": "glucose",
+    "group": "ranges",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "low",
+     "high",
+     "episode"
+    ]
+   },
+   {
+    "id": "labHbA1c",
+    "family": "Body",
+    "lane": null,
+    "color": "glucose-in-range",
+    "permitted": true,
+    "section": "glucose",
+    "group": "lab",
+    "unit": "%",
+    "lenses": [
+     "timeline",
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "a1c",
+     "lab"
+    ]
+   },
+   {
+    "id": "sensorChanges",
+    "family": "Devices",
+    "lane": "Context",
+    "color": "tracker-sensor",
+    "permitted": true,
+    "section": "pumpDevices",
+    "group": "sensor",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "sensor",
+     "cgm",
+     "sage"
+    ]
+   },
+   {
+    "id": "siteChanges",
+    "family": "Devices",
+    "lane": "Context",
+    "color": "tracker-cannula",
+    "permitted": true,
+    "section": "pumpDevices",
+    "group": "pump",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "site",
+     "cannula",
+     "pod",
+     "cage",
+     "insulin"
+    ]
+   },
+   {
+    "id": "pumpEvents",
+    "family": "Devices",
+    "lane": "Context",
+    "color": "pump-mode-suspended",
+    "permitted": true,
+    "section": "pumpDevices",
+    "group": "pump",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "pump",
+     "suspend",
+     "battery"
+    ]
+   },
+   {
+    "id": "pumpConnection",
+    "family": "Context",
+    "lane": null,
+    "color": "pump-mode-automatic",
+    "permitted": true,
+    "section": "pumpDevices",
+    "group": "pump",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "pump",
+     "bluetooth"
+    ]
+   },
+   {
+    "id": "trackers",
+    "family": "Devices",
+    "lane": "Context",
+    "color": "tracker-consumable",
+    "permitted": true,
+    "section": "pumpDevices",
+    "group": "consumables",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "sage",
+     "cage",
+     "consumable",
+     "site",
+     "sensor"
+    ]
+   },
+   {
+    "id": "sleepStages",
+    "family": "Body",
+    "lane": "Context",
+    "color": "activity-sleep",
+    "permitted": true,
+    "section": "sleep",
+    "group": "sessions",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 744,
+    "searchKeys": [
+     "hypnogram",
+     "rem",
+     "night"
+    ]
+   },
+   {
+    "id": "sleepScore",
+    "family": "Body",
+    "lane": null,
+    "color": "activity-sleep",
+    "permitted": true,
+    "section": "sleep",
+    "group": "nightly",
+    "unit": null,
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "night",
+     "score"
+    ]
+   },
+   {
+    "id": "sleepEfficiency",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-4",
+    "permitted": true,
+    "section": "sleep",
+    "group": "nightly",
+    "unit": "%",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "night"
+    ]
+   },
+   {
+    "id": "sleepLatency",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-5",
+    "permitted": true,
+    "section": "sleep",
+    "group": "nightly",
+    "unit": "min",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "night",
+     "bed"
+    ]
+   },
+   {
+    "id": "restlessPeriods",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-3",
+    "permitted": true,
+    "section": "sleep",
+    "group": "nightly",
+    "unit": null,
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "night"
+    ]
+   },
+   {
+    "id": "sleepHeartRate",
+    "family": "Body",
+    "lane": null,
+    "color": "heart-rate",
+    "permitted": true,
+    "section": "sleep",
+    "group": "nightly",
+    "unit": "bpm",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "hr",
+     "pulse",
+     "night"
+    ]
+   },
+   {
+    "id": "sleepHrv",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-4",
+    "permitted": true,
+    "section": "sleep",
+    "group": "nightly",
+    "unit": "ms",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "hrv",
+     "night"
+    ]
+   },
+   {
+    "id": "sleepSpo2",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-3",
+    "permitted": true,
+    "section": "sleep",
+    "group": "nightly",
+    "unit": "%",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "spo2",
+     "night"
+    ]
+   },
+   {
+    "id": "sleepBreathing",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-5",
+    "permitted": true,
+    "section": "sleep",
+    "group": "nightly",
+    "unit": "breaths/min",
+    "lenses": [
+     "daily"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "breathing",
+     "night"
+    ]
+   },
+   {
+    "id": "heartRateInSleep",
+    "family": "Body",
+    "lane": null,
+    "color": "heart-rate",
+    "permitted": true,
+    "section": "sleep",
+    "group": "body",
+    "unit": "bpm",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 744,
+    "searchKeys": [
+     "hr",
+     "pulse",
+     "night"
+    ]
+   },
+   {
+    "id": "hrvInSleep",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-4",
+    "permitted": true,
+    "section": "sleep",
+    "group": "body",
+    "unit": "ms",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 744,
+    "searchKeys": [
+     "hrv",
+     "night"
+    ]
+   },
+   {
+    "id": "spo2InSleep",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-3",
+    "permitted": true,
+    "section": "sleep",
+    "group": "body",
+    "unit": "%",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 744,
+    "searchKeys": [
+     "spo2",
+     "night"
+    ]
+   },
+   {
+    "id": "breathingInSleep",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-5",
+    "permitted": true,
+    "section": "sleep",
+    "group": "body",
+    "unit": "breaths/min",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 744,
+    "searchKeys": [
+     "breathing",
+     "night"
+    ]
+   },
+   {
+    "id": "motion",
+    "family": "Context",
+    "lane": null,
+    "color": "steps",
+    "permitted": true,
+    "section": "activityBody",
+    "group": "movement",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "walking",
+     "exercise"
+    ]
+   },
+   {
+    "id": "weight",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-4",
+    "permitted": true,
+    "section": "activityBody",
+    "group": "weight",
+    "unit": "kg",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "weight"
+    ]
+   },
+   {
+    "id": "bodyFat",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-5",
+    "permitted": true,
+    "section": "activityBody",
+    "group": "weight",
+    "unit": "%",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "weight"
+    ]
+   },
+   {
+    "id": "leanMass",
+    "family": "Body",
+    "lane": null,
+    "color": "chart-3",
+    "permitted": true,
+    "section": "activityBody",
+    "group": "weight",
+    "unit": "kg",
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "weight"
+    ]
+   },
+   {
+    "id": "temporaryTargets",
+    "family": "Context",
+    "lane": null,
+    "color": "chart-3",
+    "permitted": true,
+    "section": "context",
+    "group": "marked",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "targetRange",
+     "loop"
+    ]
+   },
+   {
+    "id": "alertPeriods",
+    "family": "Context",
+    "lane": null,
+    "color": "system-event-alarm",
+    "permitted": true,
+    "section": "alerts",
+    "group": "alertRules",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "alert",
+     "alarm"
+    ]
+   },
+   {
+    "id": "alertsRaised",
+    "family": "Context",
+    "lane": null,
+    "color": "system-event-warning",
+    "permitted": true,
+    "section": "alerts",
+    "group": "alertRules",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "alert",
+     "alarm",
+     "snooze"
+    ]
+   },
+   {
+    "id": "doNotDisturb",
+    "family": "Context",
+    "lane": null,
+    "color": "pump-mode-sleep",
+    "permitted": true,
+    "section": "alerts",
+    "group": "quiet",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "dnd",
+     "alert"
+    ]
+   },
+   {
+    "id": "deviceAlarms",
+    "family": "Devices",
+    "lane": "Context",
+    "color": "system-event-alarm",
+    "permitted": true,
+    "section": "alerts",
+    "group": "deviceAlarms",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "alarm",
+     "pump",
+     "cgm"
+    ]
+   },
+   {
+    "id": "dataExclusions",
+    "family": "Context",
+    "lane": null,
+    "color": "muted-foreground",
+    "permitted": true,
+    "section": "dataQuality",
+    "group": "coverage",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 336,
+    "searchKeys": [
+     "gaps",
+     "compression"
+    ]
+   },
+   {
+    "id": "compressionLows",
+    "family": "Context",
+    "lane": null,
+    "color": "glucose-low",
+    "permitted": true,
+    "section": "dataQuality",
+    "group": "coverage",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "compression",
+     "low",
+     "night"
+    ]
+   },
+   {
+    "id": "sensorNoise",
+    "family": "Devices",
+    "lane": null,
+    "color": "muted-foreground",
+    "permitted": true,
+    "section": "dataQuality",
+    "group": "coverage",
+    "unit": null,
+    "lenses": [
+     "timeline"
+    ],
+    "maxRangeHours": 2160,
+    "searchKeys": [
+     "noise",
+     "sensor",
+     "cgm"
+    ]
    }
   ],
   "cells": [
@@ -5117,7 +11367,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "timeline",
@@ -5159,7 +11410,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "timeline",
@@ -5224,7 +11476,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "timeline",
@@ -5289,7 +11542,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "timeline",
@@ -5353,7 +11607,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -5413,7 +11668,8 @@
      "treatments.read",
      "therapy.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -5476,7 +11732,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -5539,7 +11796,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -5602,7 +11860,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -5666,7 +11925,8 @@
      "treatments.read",
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -5730,7 +11990,8 @@
     "scopes": [
      "devices.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 720
    },
    {
     "lens": "timeline",
@@ -5794,7 +12055,8 @@
     "scopes": [
      "devices.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 720
    },
    {
     "lens": "timeline",
@@ -5858,7 +12120,8 @@
     "scopes": [
      "devices.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 720
    },
    {
     "lens": "timeline",
@@ -5925,7 +12188,8 @@
     "scopes": [
      "heartrate.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "timeline",
@@ -5984,7 +12248,8 @@
     "scopes": [
      "stepcount.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "timeline",
@@ -6023,7 +12288,8 @@
     "scopes": [
      "sleep.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "timeline",
@@ -6066,7 +12332,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -6109,7 +12376,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -6152,7 +12420,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -6195,7 +12464,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "timeline",
@@ -6238,7 +12508,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "typical_day",
@@ -6304,7 +12575,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6347,7 +12619,8 @@
      "glucose.read",
      "therapy.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6389,7 +12662,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6448,7 +12722,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6494,7 +12769,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6553,7 +12829,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6617,7 +12894,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6681,7 +12959,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6745,7 +13024,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6805,7 +13085,8 @@
      "glucose.read",
      "therapy.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6865,7 +13146,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6928,7 +13210,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -6991,7 +13274,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "typical_day",
@@ -7054,7 +13338,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "event",
@@ -7156,7 +13441,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "event",
@@ -7218,7 +13504,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "event",
@@ -7260,7 +13547,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "event",
@@ -7302,7 +13590,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "event",
@@ -7344,7 +13633,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -7424,7 +13714,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -7504,7 +13795,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -7584,7 +13876,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -7627,7 +13920,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -7707,7 +14001,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -7784,7 +14079,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -7865,7 +14161,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -7946,7 +14243,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -8027,7 +14325,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -8108,7 +14407,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "daily",
@@ -8170,7 +14470,8 @@
     "scopes": [
      "sleep.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "against",
@@ -8192,7 +14493,8 @@
     "scopes": [
      "glucose.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "against",
@@ -8215,7 +14517,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "against",
@@ -8238,7 +14541,8 @@
      "glucose.read",
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
    },
    {
     "lens": "against",
@@ -8260,7 +14564,8 @@
     "scopes": [
      "treatments.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 336
    },
    {
     "lens": "against",
@@ -8282,7 +14587,1979 @@
     "scopes": [
      "heartrate.read"
     ],
-    "permitted": true
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "sensorChanges",
+    "dataset": "device_events",
+    "parameters": {
+     "groups": [
+      "sensor"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "siteChanges",
+    "dataset": "device_events",
+    "parameters": {
+     "groups": [
+      "site"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "pumpEvents",
+    "dataset": "device_events",
+    "parameters": {
+     "groups": [
+      "pump"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "deviceAlarms",
+    "dataset": "system_events",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "devices.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "trackers",
+    "dataset": "trackers",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "alerts.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "temporaryTargets",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "temporary_target"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "temporary_target",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 336
+   },
+   {
+    "lens": "timeline",
+    "signal": "pumpConnection",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "pump_connectivity"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "pump_connectivity",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 336
+   },
+   {
+    "lens": "timeline",
+    "signal": "dataExclusions",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "data_exclusion"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "data_exclusion",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 336
+   },
+   {
+    "lens": "timeline",
+    "signal": "motion",
+    "dataset": "state_spans",
+    "parameters": {
+     "kinds": [
+      "motion"
+     ]
+    },
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": "motion",
+    "scopes": [
+     "treatments.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 336
+   },
+   {
+    "lens": "timeline",
+    "signal": "sleepStages",
+    "dataset": "sleep_stages",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 744
+   },
+   {
+    "lens": "timeline",
+    "signal": "alertPeriods",
+    "dataset": "alert_excursions",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "alerts.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "alertsRaised",
+    "dataset": "alert_instances",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "alerts.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "doNotDisturb",
+    "dataset": "dnd_windows",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "alerts.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "compressionLows",
+    "dataset": "compression_lows",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "glucoseEpisodes",
+    "dataset": "glucose_episodes",
+    "parameters": null,
+    "field": null,
+    "unit": null,
+    "marks": [
+     {
+      "mark": "spans",
+      "word": "spans",
+      "bindings": {
+       "x": null,
+       "y": null,
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": "start",
+       "end": "end",
+       "category": "kind"
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "sleepScore",
+    "dataset": "sleep_nights",
+    "parameters": null,
+    "field": "score",
+    "unit": null,
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "score"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "score"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "score"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "sleepEfficiency",
+    "dataset": "sleep_nights",
+    "parameters": null,
+    "field": "efficiency",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "efficiency"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "efficiency"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "efficiency"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "sleepLatency",
+    "dataset": "sleep_nights",
+    "parameters": null,
+    "field": "latency",
+    "unit": "min",
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "latency"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "latency"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "latency"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "restlessPeriods",
+    "dataset": "sleep_nights",
+    "parameters": null,
+    "field": "restless",
+    "unit": null,
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "restless"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "restless"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "restless"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "sleepHeartRate",
+    "dataset": "sleep_nights",
+    "parameters": null,
+    "field": "avgHeartRate",
+    "unit": "bpm",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "lines",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "avgHeartRate",
+        "minHeartRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "avgHeartRate",
+        "minHeartRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read",
+     "heartrate.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "sleepHrv",
+    "dataset": "sleep_nights",
+    "parameters": null,
+    "field": "hrv",
+    "unit": "ms",
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "hrv"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "hrv"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "hrv"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read",
+     "heartrate.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "sleepSpo2",
+    "dataset": "sleep_nights",
+    "parameters": null,
+    "field": "spo2",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "spo2"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "spo2"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "spo2"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read",
+     "heartrate.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "sleepBreathing",
+    "dataset": "sleep_nights",
+    "parameters": null,
+    "field": "breathingRate",
+    "unit": "breaths/min",
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "breathingRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "breathingRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "night",
+       "y": [
+        "breathingRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read",
+     "heartrate.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "heartRateInSleep",
+    "dataset": "sleep_biometrics",
+    "parameters": null,
+    "field": "heartRate",
+    "unit": "bpm",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "heartRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "heartRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read",
+     "heartrate.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 744
+   },
+   {
+    "lens": "timeline",
+    "signal": "hrvInSleep",
+    "dataset": "sleep_biometrics",
+    "parameters": null,
+    "field": "hrv",
+    "unit": "ms",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "hrv"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "hrv"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read",
+     "heartrate.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 744
+   },
+   {
+    "lens": "timeline",
+    "signal": "spo2InSleep",
+    "dataset": "sleep_biometrics",
+    "parameters": null,
+    "field": "spo2",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "spo2"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "spo2"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read",
+     "heartrate.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 744
+   },
+   {
+    "lens": "timeline",
+    "signal": "breathingInSleep",
+    "dataset": "sleep_biometrics",
+    "parameters": null,
+    "field": "breathingRate",
+    "unit": "breaths/min",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "breathingRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "breathingRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "sleep.read",
+     "heartrate.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 744
+   },
+   {
+    "lens": "timeline",
+    "signal": "labHbA1c",
+    "dataset": "lab_hba1c",
+    "parameters": null,
+    "field": "hba1c",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "hba1c"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "hba1c"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "daily",
+    "signal": "labHbA1c",
+    "dataset": "lab_hba1c",
+    "parameters": null,
+    "field": "hba1c",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "hba1c"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "day",
+       "y": [
+        "hba1c"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "weight",
+    "dataset": "body_weight",
+    "parameters": null,
+    "field": "weight",
+    "unit": "kg",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "weight"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "weight"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "therapy.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "bodyFat",
+    "dataset": "body_weight",
+    "parameters": null,
+    "field": "bodyFat",
+    "unit": "%",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "bodyFat"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "bodyFat"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "therapy.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "leanMass",
+    "dataset": "body_weight",
+    "parameters": null,
+    "field": "leanMass",
+    "unit": "kg",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "leanMass"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "leanMass"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": true,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "therapy.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "trendRate",
+    "dataset": "sensor_detail",
+    "parameters": null,
+    "field": "trendRate",
+    "unit": "glucose/min",
+    "marks": [
+     {
+      "mark": "line",
+      "word": "line",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "trendRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "trendRate"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [
+     30,
+     60,
+     120,
+     240
+    ],
+    "trend": true,
+    "combine": true,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "sensorNoise",
+    "dataset": "sensor_detail",
+    "parameters": null,
+    "field": "noise",
+    "unit": null,
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "noise"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     },
+     {
+      "mark": "bars",
+      "word": "bars",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "noise"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
+   },
+   {
+    "lens": "timeline",
+    "signal": "meterGlucose",
+    "dataset": "meter_glucose",
+    "parameters": null,
+    "field": "meterGlucose",
+    "unit": "glucose",
+    "marks": [
+     {
+      "mark": "points",
+      "word": "points",
+      "bindings": {
+       "x": "time",
+       "y": [
+        "meterGlucose"
+       ],
+       "edges": null,
+       "series": null,
+       "fit": null,
+       "stacked": null,
+       "orientation": null,
+       "start": null,
+       "end": null,
+       "category": null
+      }
+     }
+    ],
+    "fromStartField": null,
+    "fromStartMarks": null,
+    "smooth": [],
+    "trend": false,
+    "combine": false,
+    "weekdays": false,
+    "happened": false,
+    "leaveOut": false,
+    "spanKind": null,
+    "scopes": [
+     "glucose.read"
+    ],
+    "permitted": true,
+    "maxRangeHours": 2160
    }
   ],
   "anchorGroups": [

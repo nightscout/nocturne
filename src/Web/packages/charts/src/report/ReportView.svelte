@@ -153,7 +153,7 @@
 
 {#snippet section(panel: ReportPanel, divided: boolean, small: boolean, sharedSentence: string | null, valueExtents: Record<string, SharedSides> | undefined)}
     {@const described = (panel.facts ?? []).length > 0 || !!panel.sentence}
-    {@const named = !!heading || !!(panel.title ?? panel.dataset)}
+    {@const named = !!heading || !!panel.title}
     <section
       aria-labelledby={named ? `panel-${panel.id}` : undefined}
       class={["flex min-w-0 flex-col gap-3", divided && "border-t border-border pt-6", small && "break-inside-avoid"]}
@@ -162,7 +162,7 @@
       <div class="flex flex-col gap-0.5">
         {#if named}
           <svelte:element this={panelHeading} id="panel-{panel.id}" class="text-sm leading-tight font-semibold">
-            {#if heading}{@render heading(panel)}{:else}{panel.title ?? panel.dataset}{/if}
+            {#if heading}{@render heading(panel)}{:else}{panel.title}{/if}
           </svelte:element>
         {/if}
         {#if panel.context}
@@ -172,7 +172,17 @@
       {#if panel.status !== "ok"}
         <!-- The sentence below says why. -->
       {:else if panel.kind === "chart"}
-        <LayeredChart {panel} format={zoned} trackHeight={trackHeight(small)} lineColorMode={colorMode} labels={labels.chart} {legend} {valueExtents} />
+        <LayeredChart
+          {panel}
+          format={zoned}
+          trackHeight={trackHeight(small)}
+          lineColorMode={colorMode}
+          labels={labels.chart}
+          {legend}
+          {valueExtents}
+          emptyText={labels.noData}
+          keysHint={labels.plotKeys}
+        />
       {:else if panel.kind === "comparison"}
         <ComparisonChart {panel} format={zoned} emptyText={labels.noData} />
       {:else if panel.kind === "stat_tiles"}

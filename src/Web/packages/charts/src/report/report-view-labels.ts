@@ -8,4 +8,6 @@ export interface ReportViewLabels {
   noData: string;
   /** Opens a panel's whole summary under its facts and sentence. */
   fullSummary: string;
+  /** How a keyboard reads a chart's values, said when the chart takes focus; the chart takes no focus without it. */
+  plotKeys?: string;
 }

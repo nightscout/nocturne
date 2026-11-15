@@ -35,7 +35,8 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 public class CustomReportsController(
     IReportSpecStore store,
     ICustomReportRunner runner,
-    ICustomReportCatalogue catalogue) : ControllerBase
+    ICustomReportCatalogue catalogue,
+    ICustomReportSignalAvailability availability) : ControllerBase
 {
     /// <summary>The largest request body: a spec and its builder state at their limits, a name and the JSON around them.</summary>
     private const long MaxBodyBytes = ReportSpec.MaxSpecBytes + ReportSpec.MaxBuilderBytes + 4 * 1024;
@@ -50,6 +51,17 @@ public class CustomReportsController(
     [ProducesResponseType(typeof(CustomReportCatalogue), StatusCodes.Status200OK)]
     public async Task<ActionResult<CustomReportCatalogue>> GetCustomReportCatalogue(CancellationToken cancellationToken) =>
         Ok(await catalogue.CatalogueAsync(cancellationToken));
+
+    /// <summary>
+    /// Whether each signal of the workspace has data in the last <paramref name="hours"/> hours (up to the longest
+    /// range a report covers): one existence read for each source of data the signals draw, not the data itself.
+    /// </summary>
+    [HttpGet("catalogue/availability")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(CustomReportSignalAvailability), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CustomReportSignalAvailability>> GetCustomReportSignalAvailability(
+        [FromQuery] int hours, CancellationToken cancellationToken) =>
+        Ok(await availability.ForRangeAsync(hours, HttpContext.GetGrantedScopes(), cancellationToken));
 
     /// <summary>The specs the report builder offers as a start, normalised.</summary>
     [HttpGet("templates")]

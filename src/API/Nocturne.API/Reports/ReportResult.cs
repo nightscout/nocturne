@@ -165,9 +165,24 @@ internal enum ReportAxisSide
 /// <summary>One layer of a chart, resolved: its rows, how they are drawn and on which axis.</summary>
 internal sealed record ReportLayerResult
 {
-    /// <summary>The layer's title came from its data (<see cref="ReportDatasetOutput.Name"/>), so an untitled panel it leads takes it.</summary>
+    /// <summary>The layer's rows are one group its data named (<see cref="ReportDatasetOutput.Name"/>), so an untitled panel it leads is headed by it.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public bool Named { get; init; }
+
+    /// <summary>
+    /// The group the layer's rows are, named by its data ("Days with a low"), where the chart draws more than one group;
+    /// null where it draws one, which heads the panel instead.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Group { get; init; }
+
+    /// <summary>The words an untitled panel the layer leads is headed with (<see cref="ReportDatasetOutput.Heading"/>), else its group.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? Heading { get; init; }
+
+    /// <summary>The layer's name with its group, for the sentences and the summary.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string FullTitle => Group is null ? Title : $"{Title}, {Group}";
 
     /// <summary>How the days fell under the layer's day filter; null without one.</summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]

@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
   import { getFood } from "#lib/api/generated/foods.generated.remote.js";
-  import FoodPicker from "../builder/FoodPicker.svelte";
+  import FoodPicker from "./FoodPicker.svelte";
   import type { FoodRef } from "./workspace.svelte.js";
 
   interface Props {

@@ -1,262 +1,72 @@
 <!--
-  The signals the lens can draw, in collapsible families. A signal that cannot be placed now is
-  disabled, with its reason written beside it (a reason shared by several is written once, above
-  them). Signals only other lenses draw sit last, under one closed disclosure; each one switches to
-  its lens and places the signal. A filter field appears once the lens offers more than 12 signals.
+  The signals on the chart, each with a remove button, and "Add a signal", which opens the catalogue of
+  every signal. Removing a signal moves the focus to the next one, else to "Add a signal".
 -->
 <script lang="ts">
-  import { signalLabel, lensLabel, familyLabel } from "./vocabulary-words.svelte.js";
-  import { SvelteSet } from "svelte/reactivity";
+  import { tick } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import Check from "@lucide/svelte/icons/check";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Plus from "@lucide/svelte/icons/plus";
+  import X from "@lucide/svelte/icons/x";
+  import type { SignalId } from "./catalogue-vocabulary.js";
+  import type { ChartBlock, Report } from "./report.svelte.js";
+  import SignalCatalogue from "./SignalCatalogue.svelte";
+  import { SignalPicks } from "./signal-picks.svelte.js";
   import Swatch from "./Swatch.svelte";
-  import type { Family, SignalId } from "./catalogue-vocabulary.js";
-  import type { Workspace } from "./workspace.svelte.js";
+  import { signalLabel } from "./vocabulary-words.svelte.js";
 
   interface Props {
-    ws: Workspace;
+    report: Report;
+    block: ChartBlock;
   }
 
-  let { ws }: Props = $props();
+  let { report, block }: Props = $props();
 
-  const FILTER_AFTER = 12;
+  const ws = $derived(block.ws);
+  const picks = new SignalPicks();
+  let open = $state(false);
+  let nav = $state<HTMLElement | null>(null);
 
-  let filter = $state("");
+  const onChart = $derived(ws.lens === "against" ? ws.againstPair : ws.shown);
 
-  const options = $derived(ws.signals);
-  const elsewhere = $derived(ws.elsewhere);
-  const query = $derived(filter.trim().toLowerCase());
-  const visible = $derived(
-    options.length > FILTER_AFTER && query
-      ? options.filter((o) =>
-          signalLabel(o.id).toLowerCase().includes(query)
-        )
-      : options
-  );
-
-  /** Reasons that disable two or more signals, written once above the list. */
-  const shared = $derived.by(() => {
-    const reasons = options.flatMap((o) => (o.reason ? [o.reason] : []));
-    return reasons.filter(
-      (r, i) => reasons.indexOf(r) === i && reasons.lastIndexOf(r) !== i
-    );
-  });
-
-  function sharedId(reason: string): string {
-    return `rail-shared-${shared.indexOf(reason)}`;
-  }
-
-  // svelte-ignore state_referenced_locally
-  const placedFamilies = options
-    .filter((o) => o.placed)
-    .map((o) => ws.vocab.signal(o.id)?.family ?? "");
-  // svelte-ignore state_referenced_locally
-  const openFamilies = new SvelteSet<Family>(
-    placedFamilies.length > 0
-      ? placedFamilies
-      : options.slice(0, 1).map((o) => ws.vocab.signal(o.id)?.family ?? "")
-  );
-
-  function swatch(id: SignalId) {
-    return { kind: "solid" as const, color: ws.vocab.signalColor(id) };
+  async function remove(id: SignalId) {
+    const at = onChart.indexOf(id);
+    if (ws.toggleSignal(id)) return;
+    await tick();
+    const next = nav?.querySelectorAll<HTMLElement>("[data-remove-signal]")[at] ?? null;
+    (next ?? nav?.querySelector<HTMLElement>("[data-testid='add-signal']"))?.focus();
   }
 </script>
 
-<nav aria-label="Signals" class="space-y-3" data-testid="signal-rail">
-  {#if options.length > FILTER_AFTER}
-    <Input
-      size="sm"
-      type="search"
-      placeholder="Find a signal"
-      aria-label="Find a signal"
-      bind:value={filter}
-    />
-  {/if}
-
-  {#each shared as reason (reason)}
-    <p id={sharedId(reason)} class="px-2 text-xs text-muted-foreground">
-      {reason}
-    </p>
-  {/each}
-
-  <div class="space-y-1">
-    {#each ws.vocab.families as family (family)}
-      {@const rows = visible.filter((o) => (ws.vocab.signal(o.id)?.family ?? "") === family)}
-      {#if rows.length > 0}
-        <Collapsible.Root
-          bind:open={
-            () => query !== "" || openFamilies.has(family),
-            (open: boolean) =>
-              open ? openFamilies.add(family) : openFamilies.delete(family)
-          }
-        >
-          <Collapsible.Trigger>
-            {#snippet child({ props }: { props: Record<string, unknown> })}
-              <Button
-                {...props}
-                variant="subtle"
-                size="xs"
-                class="group w-full justify-start"
-                data-family={family}
-              >
-                <ChevronRight
-                  class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
-                  aria-hidden="true"
-                />
-                {familyLabel(family)}
-                <span class="ml-auto tabular-nums">
-                  {rows.filter((r) => r.placed).length || ""}
-                </span>
-              </Button>
-            {/snippet}
-          </Collapsible.Trigger>
-          <Collapsible.Content>
-            <ul class="space-y-0.5 pb-1">
-              {#each rows as row (row.id)}
-                {@const own = row.reason && !shared.includes(row.reason)}
-                <li>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    class="w-full justify-start"
-                    aria-pressed={row.placed}
-                    disabled={!row.placed && row.reason !== null}
-                    aria-describedby={row.reason
-                      ? own
-                        ? `rail-reason-${row.id}`
-                        : sharedId(row.reason)
-                      : undefined}
-                    onclick={() => ws.toggleSignal(row.id)}
-                    data-signal={row.id}
-                  >
-                    <Swatch swatch={swatch(row.id)} />
-                    <span class="truncate">{signalLabel(row.id)}</span>
-                    {#if row.placed}
-                      <Check class="ml-auto" aria-hidden="true" />
-                    {/if}
-                  </Button>
-                  {#if own}
-                    <p
-                      id="rail-reason-{row.id}"
-                      class="px-2 pb-1 pl-8 text-xs text-muted-foreground"
-                    >
-                      {row.reason}
-                    </p>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          </Collapsible.Content>
-        </Collapsible.Root>
-      {/if}
-    {/each}
-    {#if query && visible.length === 0}
-      <p class="px-2 text-xs text-muted-foreground">
-        No signal in this view has that name.
-      </p>
-    {/if}
-  </div>
-
-  {#if ws.noAccess.length > 0}
-    <div class="border-t border-border pt-2">
-      <Collapsible.Root>
-        <Collapsible.Trigger>
-          {#snippet child({ props }: { props: Record<string, unknown> })}
-            <Button
-              {...props}
-              variant="subtle"
-              size="xs"
-              class="group w-full justify-start"
-              data-testid="rail-no-access"
-            >
-              <ChevronRight
-                class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
-                aria-hidden="true"
-              />
-              Not in your access ({ws.noAccess.length})
-            </Button>
-          {/snippet}
-        </Collapsible.Trigger>
-        <Collapsible.Content>
-          <ul class="space-y-0.5 pt-1">
-            {#each ws.noAccess as id (id)}
-              <li>
-                <Button variant="menu" size="menu" disabled aria-describedby="rail-no-access-{id}" data-no-access={id}>
-                  <Swatch swatch={swatch(id)} />
-                  <span class="truncate">{signalLabel(id)}</span>
-                </Button>
-                <p id="rail-no-access-{id}" class="px-2 pb-1 pl-8 text-xs text-muted-foreground">
-                  {ws.accessReasonOf(id)}
-                </p>
-              </li>
-            {/each}
-          </ul>
-        </Collapsible.Content>
-      </Collapsible.Root>
-    </div>
-  {/if}
-
-  {#if elsewhere.length > 0}
-    <div class="border-t border-border pt-2">
-    <Collapsible.Root>
-      <Collapsible.Trigger>
-        {#snippet child({ props }: { props: Record<string, unknown> })}
+<nav aria-labelledby="rail-heading-{block.key}" class="space-y-2" data-testid="signal-rail" bind:this={nav}>
+  <h3 id="rail-heading-{block.key}" class="px-2 text-xs font-medium text-muted-foreground">On this chart</h3>
+  {#if onChart.length === 0}
+    <p class="px-2 text-sm text-muted-foreground">No signals yet.</p>
+  {:else}
+    <ul class="space-y-0.5">
+      {#each onChart as id (id)}
+        <li class="flex min-h-11 items-center gap-2 rounded-md pl-2 hover:bg-accent/50 @4xl:min-h-9" data-rail-signal={id}>
+          <Swatch swatch={{ kind: "solid", color: ws.vocab.signalColor(id) }} />
+          <span class="min-w-0 flex-1 truncate text-sm">{signalLabel(id)}</span>
           <Button
-            {...props}
-            variant="subtle"
-            size="xs"
-            class="group w-full justify-start"
-            data-testid="rail-elsewhere"
+            variant="ghost"
+            size="icon-touch"
+            class="shrink-0"
+            aria-label={`Remove ${signalLabel(id)}`}
+            onclick={() => remove(id)}
+            data-remove-signal={id}
           >
-            <ChevronRight
-              class="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
-              aria-hidden="true"
-            />
-            In other views ({elsewhere.length})
+            <X aria-hidden="true" />
           </Button>
-        {/snippet}
-      </Collapsible.Trigger>
-      <Collapsible.Content>
-        <ul class="space-y-0.5 pt-1">
-          {#each elsewhere as row (`${row.id}:${row.lens}`)}
-            <li>
-              <Button
-                variant="menu"
-                size="menu"
-                disabled={row.reason !== null}
-                aria-describedby={row.reason
-                  ? `elsewhere-${row.id}-${row.lens}`
-                  : undefined}
-                onclick={() => ws.placeIn(row.id, row.lens)}
-                data-elsewhere={`${row.id}:${row.lens}`}
-              >
-                <Swatch swatch={swatch(row.id)} />
-                <span class="truncate">
-                  {signalLabel(row.id)}:
-                  <span class="text-muted-foreground">
-                    {lensLabel(row.lens)}
-                  </span>
-                </span>
-                {#if row.placed}
-                  <Check class="ml-auto shrink-0" aria-hidden="true" />
-                {/if}
-              </Button>
-              {#if row.reason}
-                <p
-                  id="elsewhere-{row.id}-{row.lens}"
-                  class="px-2 pb-1 pl-8 text-xs text-muted-foreground"
-                >
-                  {row.reason}
-                </p>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-      </Collapsible.Content>
-    </Collapsible.Root>
-    </div>
+        </li>
+      {/each}
+    </ul>
   {/if}
+  <SignalCatalogue {report} {block} {picks} bind:open>
+    {#snippet trigger(props)}
+      <Button {...props} variant="dashed" size="touch-sm" class="w-full justify-start" data-testid="add-signal">
+        <Plus aria-hidden="true" />
+        Add a signal
+      </Button>
+    {/snippet}
+  </SignalCatalogue>
 </nav>

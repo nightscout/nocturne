@@ -53,11 +53,269 @@ export function signalLabels(): Record<string, string> {
     activities: "Activities",
     tempBasals: "Temp basals",
     bgChecks: "BG checks",
+    meterGlucose: "Meter readings from the pump",
+    trendRate: "Glucose rate of change",
+    glucoseEpisodes: "Lows and highs",
+    labHbA1c: "Lab HbA1c",
+    sensorChanges: "Sensor changes",
+    siteChanges: "Site and insulin changes",
+    pumpEvents: "Pump events",
+    pumpConnection: "Pump connection",
+    trackers: "Trackers",
+    sleepStages: "Sleep stages",
+    sleepScore: "Sleep score",
+    sleepEfficiency: "Sleep efficiency",
+    sleepLatency: "Time to fall asleep",
+    restlessPeriods: "Restless periods",
+    sleepHeartRate: "Heart rate each night",
+    sleepHrv: "HRV each night",
+    sleepSpo2: "Blood oxygen each night",
+    sleepBreathing: "Breathing rate each night",
+    heartRateInSleep: "Heart rate in sleep",
+    hrvInSleep: "HRV in sleep",
+    spo2InSleep: "Blood oxygen in sleep",
+    breathingInSleep: "Breathing rate in sleep",
+    motion: "Motion",
+    weight: "Weight",
+    bodyFat: "Body fat",
+    leanMass: "Lean mass",
+    temporaryTargets: "Temporary targets",
+    alertPeriods: "Alert periods",
+    alertsRaised: "Alerts raised",
+    doNotDisturb: "Do not disturb",
+    deviceAlarms: "Device alarms",
+    dataExclusions: "Data left out",
+    compressionLows: "Compression lows",
+    sensorNoise: "Sensor noise",
   };
 }
 
 export function signalLabel(id: string): string {
   return wordOf(signalLabels(), id);
+}
+
+/** What each signal is, in one line, under its name in the signal catalogue. */
+export function signalDescriptions(): Record<string, string> {
+  return {
+    glucose: "Each sensor reading.",
+    target: "The low and high limits of your target range.",
+    glucoseWide: "The band that holds 80 percent of the readings.",
+    mean: "The mean of the readings.",
+    timeInRange: "The percent of readings in the target range.",
+    timeBelow: "The percent of readings below the target range.",
+    timeAbove: "The percent of readings above the target range.",
+    ranges: "The percent of readings in each glucose range.",
+    readings: "How many sensor readings there are. Gaps show missing data.",
+    iob: "The insulin that is still active.",
+    basal: "The basal insulin the pump gave.",
+    basalScheduled: "The basal rate of the profile.",
+    boluses: "Each bolus and its units.",
+    injections: "Each injection of long-acting insulin.",
+    netLoop: "The insulin the loop added to or removed from the scheduled basal.",
+    totalInsulin: "All insulin given in the day.",
+    totalBolus: "All bolus insulin given in the day.",
+    totalBasal: "All basal insulin given in the day.",
+    cob: "The carbs that are not yet absorbed.",
+    carbs: "Each entry of carbs and its grams.",
+    reservoir: "The units of insulin left in the pump.",
+    pumpBattery: "The charge of the pump battery.",
+    uploaderBattery: "The charge of the phone or device that uploads the data.",
+    settingBasal: "The basal rate the data shows, beside the rate of the profile.",
+    settingIsf: "The insulin sensitivity the data shows, beside the value of the profile.",
+    settingCarbRatio: "The carb ratio the data shows, beside the value of the profile.",
+    heartRate: "Beats each minute.",
+    steps: "The steps you took.",
+    sleep: "Each sleep session and its stages.",
+    pumpModes: "When the pump was in automatic, manual or other modes.",
+    profiles: "Which profile was active.",
+    overrides: "Each override.",
+    activities: "Exercise, illness and travel that you marked.",
+    tempBasals: "Each temp basal and its rate.",
+    bgChecks: "Each meter reading.",
+    meterGlucose: "Each meter reading that the pump or uploader sent.",
+    trendRate: "How fast glucose changed, as the sensor reported it.",
+    glucoseEpisodes: "Each low and high that lasted 15 minutes or more.",
+    labHbA1c: "Each HbA1c result from a lab.",
+    sensorChanges: "Each sensor start, change and stop.",
+    siteChanges: "Each site, pod, reservoir and insulin change.",
+    pumpEvents: "Each pump suspend, resume and battery change.",
+    pumpConnection: "When the pump was connected or disconnected.",
+    trackers: "Each tracked sensor, site or other item, and how many days it lasted.",
+    sleepStages: "The stages of sleep in each night: awake, REM, light and deep.",
+    sleepScore: "The score that the device gave each night.",
+    sleepEfficiency: "The percent of each night that you were asleep.",
+    sleepLatency: "The minutes from bed to sleep, each night.",
+    restlessPeriods: "How many restless periods each night had.",
+    sleepHeartRate: "The mean and lowest heart rate of each night.",
+    sleepHrv: "The mean heart rate variability of each night.",
+    sleepSpo2: "The mean blood oxygen of each night.",
+    sleepBreathing: "The mean breathing rate of each night.",
+    heartRateInSleep: "Heart rate that the wearable recorded during sleep.",
+    hrvInSleep: "Heart rate variability that the wearable recorded during sleep.",
+    spo2InSleep: "Blood oxygen that the wearable recorded during sleep.",
+    breathingInSleep: "Breathing rate that the wearable recorded during sleep.",
+    motion: "Walking, still or in a vehicle, as the phone found it.",
+    weight: "Each body weight record.",
+    bodyFat: "The percent of body weight that is fat.",
+    leanMass: "The body weight that is not fat.",
+    temporaryTargets: "Each temporary target.",
+    alertPeriods: "Each period when the condition of an alert was true.",
+    alertsRaised: "Each alert that Nocturne raised, and its snoozes.",
+    doNotDisturb: "Each do-not-disturb period.",
+    deviceAlarms: "Each alarm, warning and notice from the pump, sensor or uploader.",
+    dataExclusions: "The periods that you left out of the glucose data.",
+    compressionLows: "Each false low at night from pressure on the sensor.",
+    sensorNoise: "The noise level of each sensor reading, from 0 to 4.",
+  };
+}
+
+export function signalDescription(id: string): string {
+  return Object.hasOwn(signalDescriptions(), id) ? signalDescriptions()[id] : "";
+}
+
+/** The headings of the signal catalogue's sections. */
+export function sectionLabels(): Record<string, string> {
+  return {
+    glucose: "Glucose",
+    insulin: "Insulin",
+    food: "Food",
+    loop: "Loop and automation",
+    pumpDevices: "Pump and devices",
+    sleep: "Sleep",
+    activityBody: "Activity and body",
+    settings: "Settings",
+    context: "Context",
+    alerts: "Alerts",
+    dataQuality: "Data quality",
+  };
+}
+
+export function sectionLabel(id: string): string {
+  return wordOf(sectionLabels(), id);
+}
+
+/** The headings of the groups inside each section of the signal catalogue. */
+export function signalGroupLabels(): Record<string, string> {
+  return {
+    sensor: "Sensor",
+    meter: "Meter",
+    ranges: "Time in ranges",
+    statistics: "Statistics",
+    onBoard: "On board",
+    bolus: "Bolus",
+    basal: "Basal",
+    totals: "Totals",
+    carbs: "Carbs",
+    corrections: "Insulin changes",
+    modes: "Modes",
+    pump: "Pump",
+    phone: "Phone and uploader",
+    sessions: "Sessions",
+    heart: "Heart",
+    movement: "Movement",
+    againstData: "Settings against the data",
+    profiles: "Profiles",
+    marked: "Marked periods",
+    coverage: "Coverage",
+    lab: "Lab results",
+    consumables: "Consumables",
+    nightly: "Each night",
+    body: "Body during sleep",
+    weight: "Weight",
+    alertRules: "Your alerts",
+    deviceAlarms: "Device alarms",
+    quiet: "Do not disturb",
+  };
+}
+
+export function signalGroupLabel(id: string): string {
+  return wordOf(signalGroupLabels(), id);
+}
+
+/**
+ * The other words a search finds a signal by, keyed by the catalogue's search keys: abbreviations and the names
+ * people use.
+ */
+export function searchTermWords(): Record<string, string[]> {
+  return {
+    bg: ["BG"],
+    bloodSugar: ["blood sugar"],
+    sensor: ["sensor"],
+    cgm: ["CGM"],
+    targetRange: ["target"],
+    percentile: ["percentile"],
+    meter: ["meter"],
+    fingerstick: ["fingerstick"],
+    tir: ["TIR"],
+    tbr: ["TBR"],
+    tar: ["TAR"],
+    range: ["range"],
+    low: ["low", "hypo"],
+    high: ["high", "hyper"],
+    average: ["average"],
+    iob: ["IOB"],
+    insulin: ["insulin"],
+    bolus: ["bolus"],
+    dose: ["dose"],
+    rate: ["rate"],
+    tempBasal: ["temp basal"],
+    profile: ["profile"],
+    mdi: ["MDI"],
+    pen: ["pen"],
+    tdd: ["TDD"],
+    cob: ["COB"],
+    meal: ["meal"],
+    food: ["food"],
+    loop: ["loop"],
+    automation: ["automation", "closed loop"],
+    pump: ["pump"],
+    pod: ["pod"],
+    battery: ["battery"],
+    phone: ["phone", "uploader"],
+    night: ["night"],
+    bed: ["bed"],
+    hr: ["HR"],
+    pulse: ["pulse"],
+    exercise: ["exercise"],
+    walking: ["walking"],
+    isf: ["ISF"],
+    sensitivity: ["sensitivity"],
+    icr: ["ICR", "carb ratio"],
+    override: ["override"],
+    illness: ["illness"],
+    gaps: ["gaps", "missing data"],
+    sage: ["SAGE", "sensor age"],
+    site: ["site", "infusion set"],
+    cannula: ["cannula"],
+    cage: ["CAGE", "site age"],
+    suspend: ["suspend"],
+    alarm: ["alarm"],
+    bluetooth: ["Bluetooth", "disconnected"],
+    compression: ["compression"],
+    hypnogram: ["hypnogram", "stages"],
+    rem: ["REM", "deep sleep"],
+    a1c: ["A1c", "HbA1c"],
+    lab: ["lab"],
+    weight: ["weight", "body fat"],
+    alert: ["alert"],
+    snooze: ["snooze"],
+    dnd: ["DND", "do not disturb", "mute"],
+    roc: ["rate of change", "ROC"],
+    trend: ["trend", "arrow"],
+    noise: ["noise"],
+    consumable: ["consumable", "supplies"],
+    hrv: ["HRV", "heart rate variability"],
+    spo2: ["SpO2", "blood oxygen", "oxygen"],
+    breathing: ["breathing", "respiration"],
+    score: ["score"],
+    episode: ["episode", "hypo", "hyper"],
+  };
+}
+
+/** The words of a signal's search keys. */
+export function searchWords(keys: readonly string[]): string[] {
+  const words = searchTermWords();
+  return keys.flatMap((k) => (Object.hasOwn(words, k) ? words[k] : []));
 }
 
 /** Each lens's name. */
@@ -443,6 +701,7 @@ export function scopeWords(): Record<string, string> {
     "heartrate.read": "heart rate",
     "sleep.read": "sleep",
     "stepcount.read": "steps",
+    "alerts.read": "alerts",
   };
 }
 

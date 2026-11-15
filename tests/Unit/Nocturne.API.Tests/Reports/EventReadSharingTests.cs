@@ -146,7 +146,7 @@ public class EventReadSharingTests
     }
 
     [Fact]
-    public async Task A_layer_or_panel_of_one_event_group_is_named_by_the_groups_label()
+    public async Task A_panel_of_one_event_group_is_headed_by_the_group_in_words()
     {
         var (runner, context, _) = Harness().Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
 
@@ -159,11 +159,12 @@ public class EventReadSharingTests
               { "kind": "table", "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal", "minutesSinceMeal": { "min": 240 } } ] } } ] }
             """).Spec!, context, CancellationToken.None);
 
-        result.Panels[0].Title.Should().Be("Low start: all");
-        result.Panels[0].Tracks![0].Layers[0].Title.Should().Be("Low start: all");
-        result.Panels[1].Tracks![0].Layers.Select(l => l.Title).Should().Equal("Meal: all others", "Each event · Peak rise");
-        result.Panels[1].Title.Should().Be("Meal: all others");
-        result.Panels[2].Title.Should().Be("Meal: no carbs in the 4 hours before");
+        result.Panels[0].Title.Should().Be("Lows");
+        result.Panels[0].Tracks![0].Layers[0].Title.Should().Be("Glucose", "a layer is named by its signal, and its one group heads the panel");
+        result.Panels[0].Tracks![0].Layers[0].Group.Should().BeNull();
+        result.Panels[1].Tracks![0].Layers.Select(l => l.Title).Should().Equal("Peak rise", "Peak rise");
+        result.Panels[1].Title.Should().Be("All other meals");
+        result.Panels[2].Title.Should().Be("Meals with no carbs in the 4 hours before");
     }
 
     [Fact]

@@ -25,11 +25,18 @@
     facts?: boolean;
     /** The host's words for a panel's heading, in place of the engine's title. */
     heading?: Snippet<[ReportPanel]>;
+    /** The heading the page already shows; the report's own title is left out when it says the same. */
+    pageHeading?: string;
+    /** The level of the report's own title; its panels' headings are one below. */
+    headingLevel?: 1 | 2 | 3;
   }
 
-  let { run, legend = true, facts = true, heading }: Props = $props();
+  let { run, legend = true, facts = true, heading, pageHeading, headingLevel = 2 }: Props = $props();
 
-  const report = $derived(readReport(run.result));
+  const read = $derived(readReport(run.result));
+  const report = $derived(
+    read && pageHeading && read.spec.title?.trim() === pageHeading.trim() ? { ...read, spec: { ...read.spec, title: undefined } } : read
+  );
   const errors = $derived(run.errors ?? []);
 
   let drawing = $state<string | null>(null);
@@ -50,11 +57,11 @@
       case "rate_limited":
         return "You made many images in the last minute. Wait a minute and try again.";
       case "too_large":
-        return "This panel has too much data for an image. Choose a shorter range.";
+        return "This block has too much data for an image. Choose a shorter range.";
       case "busy":
         return "The image renderer is busy. Try again.";
       case "not_drawable":
-        return "This panel cannot be made into an image.";
+        return "This block cannot be made into an image.";
       default:
         return "The image could not be made.";
     }
@@ -124,7 +131,7 @@
 {#if errors.length > 0}
   <SpecErrorList {errors} spec={run.spec} />
 {:else if report}
-  <ReportView {report} format={chartFormat()} labels={customReportLabels()} headingLevel={2} controls={panelLink} {legend} {facts} {heading} />
+  <ReportView {report} format={chartFormat()} labels={customReportLabels()} {headingLevel} controls={panelLink} {legend} {facts} {heading} />
 {:else}
   <p class="text-sm text-muted-foreground" role="alert">The report data has a form that this page cannot show.</p>
 {/if}
