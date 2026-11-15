@@ -236,6 +236,39 @@ public class OuraExportArchiveTests
     }
 
     [Fact]
+    public void MoreDaysThanARingCouldRecord_AreRefused()
+    {
+        var rows = Enumerable.Range(0, OuraExportArchive.MaxDailyRows + 1)
+            .Select(i => $"a{i};{new DateOnly(1, 1, 1).AddDays(i):yyyy-MM-dd};80;9000;")
+            .ToArray();
+        using var export = Open(
+            ("dailyactivity.csv", Csv("id;day;score;steps;timestamp", rows)),
+            ("dailysleep.csv", Csv("id;day;score;steps;timestamp", rows)),
+            ("sleepmodel.csv", Csv(SleepHeader, LongSleep())));
+
+        var steps = () => export.ReadDailySteps();
+        var sleep = () => export.ReadSleepSessions().ToList();
+
+        steps.Should().Throw<OuraExportException>().Which.Code.Should().Be(OuraExportException.TooMuchData);
+        sleep.Should().Throw<OuraExportException>().Which.Code.Should().Be(OuraExportException.TooMuchData);
+    }
+
+    [Fact]
+    public void MoreStagesAndSamplesThanAnExportHolds_AreRefused()
+    {
+        var twoDays = string.Concat(Enumerable.Repeat("12", 2 * 24 * 60));
+        var perPeriod = twoDays.Length;
+        var rows = Enumerable.Range(0, OuraExportArchive.MaxSleepStagesAndSamples / perPeriod + 1)
+            .Select(i => LongSleep($"p{i}").Replace("2026-03-02T06:00:00+02:00", "2026-03-03T23:00:00+02:00") + ";" + twoDays)
+            .ToArray();
+        using var export = Open(("sleepmodel.csv", Csv(SleepHeader + ";sleep_phase_30_sec", rows)));
+
+        var read = () => export.ReadSleepSessions().Count();
+
+        read.Should().Throw<OuraExportException>().Which.Code.Should().Be(OuraExportException.TooMuchData);
+    }
+
+    [Fact]
     public void ARecordPastTheLargestAnExportHolds_IsRefused()
     {
         var huge = "61;" + new string('x', OuraCsv.MaxRecordChars) + ";2026-03-01T10:00:00+00:00";

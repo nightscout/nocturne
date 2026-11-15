@@ -18,3 +18,5 @@ src/Web/packages/app/src/locales/*.js
 # Non-English translations (managed by CI on main)
 locales/*.po
 !locales/en.po
+# Per-session cache the impeccable design hook writes
+.impeccable/hook.cache.json

@@ -75,11 +75,12 @@
           return;
         }
         isImporting = true;
+        const previous: unknown = importOuraExport.result;
         try {
           await submit();
           const result: unknown = importOuraExport.result;
-          // A redirect (an expired session) resolves submit() without a result.
-          if (isRecord(result)) {
+          // A redirect (an expired session) resolves submit() without a new result.
+          if (isRecord(result) && result !== previous) {
             imported = result;
             formElement?.reset();
             selectedSize = null;

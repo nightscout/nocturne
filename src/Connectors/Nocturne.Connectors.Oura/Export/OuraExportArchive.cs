@@ -32,7 +32,15 @@ public sealed class OuraExportArchive : IDisposable
     /// </summary>
     private const long MaxSummaryFileBytes = 64L * 1024 * 1024;
     private const long MaxHeartRateFileBytes = 128L * 1024 * 1024;
-    private const int MaxSleepPeriods = 50_000;
+
+    /// <summary>
+    /// Row and item budgets, each several times what a ring worn since Oura's first one could have
+    /// recorded. The byte caps bound what is read; these bound what is held and what is written,
+    /// which a file of short rows would otherwise set.
+    /// </summary>
+    internal const int MaxDailyRows = 50_000;
+    internal const int MaxHeartRateRows = 2_000_000;
+    internal const int MaxSleepStagesAndSamples = 2_000_000;
 
     /// <summary>Oura stores no heart rate outside this range; a value beyond it is a corrupt row.</summary>
     private const int MinBpm = 20, MaxBpm = 250;
@@ -100,7 +108,7 @@ public sealed class OuraExportArchive : IDisposable
         var rowIndex = 0;
         foreach (var row in Rows(SleepFile, MaxSummaryFileBytes))
         {
-            if (++rowIndex > MaxSleepPeriods) throw new OuraExportException(OuraExportException.TooMuchData);
+            if (++rowIndex > MaxDailyRows) throw new OuraExportException(OuraExportException.TooMuchData);
             if (SleepPeriod.From(row) is not { Kind: "long_sleep", Day: { } day } period) continue;
             if (!mainRowByDay.TryGetValue(day, out var main) || period.Session.TotalSleepMs > main.TotalSleepMs)
                 mainRowByDay[day] = (rowIndex, period.Session.TotalSleepMs);
@@ -110,12 +118,16 @@ public sealed class OuraExportArchive : IDisposable
         var spo2 = DailyValues(DailySpo2File, row => JsonNumber(row["spo2_percentage"], "average"));
 
         rowIndex = 0;
+        var stagesAndSamples = 0;
         foreach (var row in Rows(SleepFile, MaxSummaryFileBytes))
         {
             rowIndex++;
             if (SleepPeriod.From(row) is not { } period) continue;
 
             var session = period.Session;
+            stagesAndSamples += (session.Stages?.Count ?? 0) + (session.BiometricSamples?.Count ?? 0);
+            if (stagesAndSamples > MaxSleepStagesAndSamples)
+                throw new OuraExportException(OuraExportException.TooMuchData);
             var isMain = period.Day is not null && mainRowByDay.TryGetValue(period.Day, out var main) && main.Row == rowIndex;
             session.IsMainSleep = isMain;
             if (isMain)
@@ -137,8 +149,10 @@ public sealed class OuraExportArchive : IDisposable
     /// </summary>
     public IEnumerable<HeartRate> ReadHeartRates()
     {
+        var rows = 0;
         foreach (var row in Rows(HeartRateFile, MaxHeartRateFileBytes))
         {
+            if (++rows > MaxHeartRateRows) throw new OuraExportException(OuraExportException.TooMuchData);
             if (Timestamp(row["timestamp"]) is not { } at || Number(row["bpm"]) is not { } bpm) continue;
             if (bpm is < MinBpm or > MaxBpm) continue;
 
@@ -163,7 +177,7 @@ public sealed class OuraExportArchive : IDisposable
     public IReadOnlyList<StepCount> ReadDailySteps()
     {
         var days = new Dictionary<string, StepCount>(StringComparer.Ordinal);
-        foreach (var row in Rows(DailyActivityFile, MaxSummaryFileBytes))
+        foreach (var row in DailyRows(DailyActivityFile))
         {
             var at = Timestamp(row["timestamp"]);
             var day = Day(row["day"]) ?? at?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -217,10 +231,20 @@ public sealed class OuraExportArchive : IDisposable
     private Dictionary<string, double> DailyValues(string file, Func<OuraCsvRow, double?> value)
     {
         var values = new Dictionary<string, double>(StringComparer.Ordinal);
-        foreach (var row in Rows(file, MaxSummaryFileBytes))
+        foreach (var row in DailyRows(file))
             if (Day(row["day"]) is { } day && value(row) is { } number)
                 values[day] = number;
         return values;
+    }
+
+    private IEnumerable<OuraCsvRow> DailyRows(string file)
+    {
+        var rows = 0;
+        foreach (var row in Rows(file, MaxSummaryFileBytes))
+        {
+            if (++rows > MaxDailyRows) throw new OuraExportException(OuraExportException.TooMuchData);
+            yield return row;
+        }
     }
 
     private static int? OffsetMinutes(DateTimeOffset at) =>
