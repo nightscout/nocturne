@@ -26,8 +26,13 @@ public sealed class OuraExportArchive : IDisposable
     private const string HeartRateFile = "heartrate.csv";
     private const string DailyActivityFile = "dailyactivity.csv";
 
-    private const long MaxSummaryFileBytes = 256L * 1024 * 1024;
-    private const long MaxHeartRateFileBytes = 2L * 1024 * 1024 * 1024;
+    /// <summary>
+    /// A year of five-minute heart rate is about 4 MB, and a sleep period row a few kilobytes. A file
+    /// past these is not an export, and every heart rate row past the cap would still be a database write.
+    /// </summary>
+    private const long MaxSummaryFileBytes = 64L * 1024 * 1024;
+    private const long MaxHeartRateFileBytes = 128L * 1024 * 1024;
+    private const int MaxSleepPeriods = 50_000;
 
     /// <summary>Oura stores no heart rate outside this range; a value beyond it is a corrupt row.</summary>
     private const int MinBpm = 20, MaxBpm = 250;
@@ -57,44 +62,79 @@ public sealed class OuraExportArchive : IDisposable
         }
 
         var export = new OuraExportArchive(archive);
-        if (!export.files.ContainsKey(SleepFile) && !export.files.ContainsKey(HeartRateFile) &&
-            !export.files.ContainsKey(DailyActivityFile))
+        try
+        {
+            if (!export.files.ContainsKey(SleepFile) && !export.files.ContainsKey(HeartRateFile) &&
+                !export.files.ContainsKey(DailyActivityFile))
+                throw new OuraExportException(OuraExportException.NotAnOuraExport);
+
+            // Refused here, before a caller has written anything from an earlier file.
+            foreach (var (file, maxBytes) in FileLimits)
+                if (export.files.TryGetValue(file, out var entry) && entry.Length > maxBytes)
+                    throw new OuraExportException(OuraExportException.TooMuchData);
+        }
+        catch
         {
             export.Dispose();
-            throw new OuraExportException(OuraExportException.NotAnOuraExport);
+            throw;
         }
 
         return export;
     }
 
-    public IReadOnlyList<SleepSession> ReadSleepSessions()
+    private static readonly (string File, long MaxBytes)[] FileLimits =
+    [
+        (SleepFile, MaxSummaryFileBytes), (DailySleepFile, MaxSummaryFileBytes), (DailySpo2File, MaxSummaryFileBytes),
+        (DailyActivityFile, MaxSummaryFileBytes), (HeartRateFile, MaxHeartRateFileBytes),
+    ];
+
+    /// <summary>
+    /// Streams the sleep periods, one session in memory at a time: a period's stages and samples are
+    /// the bulk of an export, and the file is read twice so that none of them is held while the
+    /// day's main sleep is chosen.
+    /// </summary>
+    public IEnumerable<SleepSession> ReadSleepSessions()
     {
-        var periods = Rows(SleepFile, MaxSummaryFileBytes).Select(SleepPeriod.From).OfType<SleepPeriod>().ToList();
+        // Oura scores a day, not a period: the score and SpO2 belong to the day's longest long sleep.
+        var mainRowByDay = new Dictionary<string, (int Row, long TotalSleepMs)>(StringComparer.Ordinal);
+        var rowIndex = 0;
+        foreach (var row in Rows(SleepFile, MaxSummaryFileBytes))
+        {
+            if (++rowIndex > MaxSleepPeriods) throw new OuraExportException(OuraExportException.TooMuchData);
+            if (SleepPeriod.From(row) is not { Kind: "long_sleep", Day: { } day } period) continue;
+            if (!mainRowByDay.TryGetValue(day, out var main) || period.Session.TotalSleepMs > main.TotalSleepMs)
+                mainRowByDay[day] = (rowIndex, period.Session.TotalSleepMs);
+        }
 
         var scores = DailyValues(DailySleepFile, row => Number(row["score"]));
         var spo2 = DailyValues(DailySpo2File, row => JsonNumber(row["spo2_percentage"], "average"));
 
-        // Oura scores a day, not a period: the score and SpO2 belong to the day's longest long sleep.
-        var mainByDay = periods
-            .Where(period => period.Kind == "long_sleep" && period.Day is not null)
-            .GroupBy(period => period.Day!)
-            .ToDictionary(group => group.Key, group => group.MaxBy(period => period.Session.TotalSleepMs)!);
-
-        foreach (var period in periods)
+        rowIndex = 0;
+        foreach (var row in Rows(SleepFile, MaxSummaryFileBytes))
         {
-            var isMain = period.Day is not null && mainByDay.TryGetValue(period.Day, out var main) && main == period;
-            period.Session.IsMainSleep = isMain;
-            if (!isMain) continue;
-            if (scores.TryGetValue(period.Day!, out var score) && score is >= 0 and <= 100)
-                period.Session.SleepScore = (short)Math.Round(score);
-            if (spo2.TryGetValue(period.Day!, out var oxygen) && oxygen is > 0 and <= 100)
-                period.Session.AvgSpo2 = (float)oxygen;
-        }
+            rowIndex++;
+            if (SleepPeriod.From(row) is not { } period) continue;
 
-        return [.. periods.Select(period => period.Session)];
+            var session = period.Session;
+            var isMain = period.Day is not null && mainRowByDay.TryGetValue(period.Day, out var main) && main.Row == rowIndex;
+            session.IsMainSleep = isMain;
+            if (isMain)
+            {
+                if (scores.TryGetValue(period.Day!, out var score) && score is >= 0 and <= 100)
+                    session.SleepScore = (short)Math.Round(score);
+                if (spo2.TryGetValue(period.Day!, out var oxygen) && oxygen is > 0 and <= 100)
+                    session.AvgSpo2 = (float)oxygen;
+            }
+
+            yield return session;
+        }
     }
 
-    /// <summary>Streams the heart rate file; it holds a reading every five minutes for the ring's whole life.</summary>
+    /// <summary>
+    /// Streams the heart rate file; it holds a reading every five minutes for the ring's whole life.
+    /// A reading is keyed by its timestamp alone, so two rows for one instant are one reading and
+    /// the later row wins.
+    /// </summary>
     public IEnumerable<HeartRate> ReadHeartRates()
     {
         foreach (var row in Rows(HeartRateFile, MaxHeartRateFileBytes))
@@ -153,12 +193,25 @@ public sealed class OuraExportArchive : IDisposable
     private IEnumerable<OuraCsvRow> Rows(string file, long maxBytes)
     {
         if (!files.TryGetValue(file, out var entry)) yield break;
-        if (entry.Length > maxBytes) throw new OuraExportException(OuraExportException.TooLarge);
 
-        using var stream = new BoundedStream(entry.Open(), maxBytes);
+        using var stream = new BoundedStream(Unreadable(entry.Open), maxBytes);
         using var reader = new StreamReader(stream, Encoding.UTF8);
-        foreach (var row in OuraCsv.Read(reader))
-            yield return row;
+        using var rows = OuraCsv.Read(reader).GetEnumerator();
+        while (Unreadable(rows.MoveNext))
+            yield return rows.Current;
+    }
+
+    /// <summary>An entry that is encrypted, damaged or compressed by a method .NET cannot read fails only when it is read.</summary>
+    private static T Unreadable<T>(Func<T> read)
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception ex) when (ex is InvalidDataException or NotSupportedException)
+        {
+            throw new OuraExportException(OuraExportException.Unreadable, ex);
+        }
     }
 
     private Dictionary<string, double> DailyValues(string file, Func<OuraCsvRow, double?> value)
@@ -212,12 +265,20 @@ public sealed class OuraExportArchive : IDisposable
     {
         private const int MaxSeriesItems = 20_000;
 
+        /// <summary>
+        /// No sleep period is this long. With <see cref="MinEpoch"/> it bounds the stages and samples
+        /// one row can produce, whatever its hypnogram and series claim.
+        /// </summary>
+        private static readonly TimeSpan MaxPeriod = TimeSpan.FromHours(48);
+
+        private static readonly TimeSpan MinEpoch = TimeSpan.FromSeconds(30);
+
         public static SleepPeriod? From(OuraCsvRow row)
         {
             var kind = row["type"]?.ToLowerInvariant() ?? string.Empty;
             if (kind == "deleted") return null;
             if (Timestamp(row["bedtime_start"]) is not { } start || Timestamp(row["bedtime_end"]) is not { } end) return null;
-            if (end <= start) return null;
+            if (end <= start || end - start > MaxPeriod) return null;
 
             var startUtc = start.UtcDateTime;
             var endUtc = end.UtcDateTime;
@@ -260,7 +321,7 @@ public sealed class OuraExportArchive : IDisposable
                 SourceApp = SourceApp,
                 OriginalId = $"oura:{row["id"] ?? start.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture)}",
                 Stages = stages.Count > 0 ? stages : null,
-                BiometricSamples = Samples(row, endUtc),
+                BiometricSamples = Samples(row, startUtc, endUtc),
             };
 
             return new SleepPeriod(session, OuraExportArchive.Day(row["day"]), kind);
@@ -309,7 +370,7 @@ public sealed class OuraExportArchive : IDisposable
         /// The period's <c>heart_rate</c> and <c>hrv</c> columns are <c>{interval, items, timestamp}</c>
         /// series, in seconds, with a null item where the ring had no reading.
         /// </summary>
-        private static List<SleepBiometricSample>? Samples(OuraCsvRow row, DateTime end)
+        private static List<SleepBiometricSample>? Samples(OuraCsvRow row, DateTime periodStart, DateTime end)
         {
             var samples = new SortedDictionary<DateTime, SleepBiometricSample>();
             Merge(row["heart_rate"], (sample, value) => sample.HeartRate = value);
@@ -331,13 +392,14 @@ public sealed class OuraExportArchive : IDisposable
                         return;
 
                     var step = TimeSpan.FromSeconds(interval.GetDouble());
-                    if (step < TimeSpan.FromSeconds(1)) return;
+                    if (step < MinEpoch) return;
 
                     var index = 0;
                     foreach (var item in items.EnumerateArray().Take(MaxSeriesItems))
                     {
                         var at = start.UtcDateTime + step * index++;
                         if (at > end) break;
+                        if (at < periodStart) continue;
                         if (item.ValueKind != JsonValueKind.Number) continue;
                         var value = item.GetDouble();
                         if (value is <= 0 or >= 1000) continue;
@@ -367,7 +429,7 @@ public sealed class OuraExportArchive : IDisposable
         public override int Read(byte[] buffer, int offset, int count)
         {
             var bytes = inner.Read(buffer, offset, count);
-            if ((read += bytes) > maxBytes) throw new OuraExportException(OuraExportException.TooLarge);
+            if ((read += bytes) > maxBytes) throw new OuraExportException(OuraExportException.TooMuchData);
             return bytes;
         }
 

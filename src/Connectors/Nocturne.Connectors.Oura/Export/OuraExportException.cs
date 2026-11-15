@@ -5,7 +5,10 @@ public sealed class OuraExportException(string code, Exception? inner = null) : 
 {
     public const string NotAZip = "not_a_zip";
     public const string NotAnOuraExport = "not_an_oura_export";
-    public const string TooLarge = "export_too_large";
+    public const string Unreadable = "unreadable_export";
+
+    /// <summary>The archive unpacks to more than any real export holds.</summary>
+    public const string TooMuchData = "export_too_much_data";
 
     public string Code { get; } = code;
 }

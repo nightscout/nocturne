@@ -375,7 +375,7 @@
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        {#if canManage}
+        {#if canManage && showToggle}
           <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
             {isActive ? "Active" : "Inactive"}
           </Badge>
@@ -419,9 +419,7 @@
       {/if}
 
       <!-- Configuration Form -->
-      {#if !showConfiguration}
-        <!-- nothing to configure -->
-      {:else if !canManage}
+      {#if !canManage}
         <Card data-testid="connector-read-only">
           <CardContent class="flex items-center gap-3 py-4">
             <Lock class="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -431,7 +429,7 @@
             </p>
           </CardContent>
         </Card>
-      {:else if hasRuntimeConfig}
+      {:else if showConfiguration && hasRuntimeConfig}
         <ConnectorConfigForm
           {schema}
           bind:configuration
@@ -442,7 +440,7 @@
           {saveLabel}
           onSave={handleSave}
         />
-      {:else}
+      {:else if showConfiguration}
         <EmptyState
           art="plug"
           variant="card"

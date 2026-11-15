@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.Oura.Export;
 /// literal, which is how unquoted JSON columns arrive;</item>
 /// <item>a whole record wrapped in one pair of quotes is unwrapped and split again;</item>
 /// <item>a record shorter than the header lacks its leading <c>id</c> when the header starts with
-/// one, and its trailing columns otherwise.</item>
+/// one and the record does not (Oura's ids are UUIDs), and its trailing columns otherwise.</item>
 /// </list>
 /// </summary>
 internal static class OuraCsv
@@ -40,7 +40,8 @@ internal static class OuraCsv
             if (fields.Count < header.Count)
             {
                 var padding = Enumerable.Repeat(string.Empty, header.Count - fields.Count);
-                fields = string.Equals(header[0].Trim(), "id", StringComparison.OrdinalIgnoreCase)
+                fields = string.Equals(header[0].Trim(), "id", StringComparison.OrdinalIgnoreCase) &&
+                         !Guid.TryParse(fields[0], out _)
                     ? [.. padding, .. fields]
                     : [.. fields, .. padding];
             }
@@ -63,7 +64,7 @@ internal static class OuraCsv
         {
             var next = reader.Read();
             if (next < 0) break;
-            if (++total > MaxRecordChars) throw new OuraExportException(OuraExportException.TooLarge);
+            if (++total > MaxRecordChars) throw new OuraExportException(OuraExportException.TooMuchData);
             var c = (char)next;
 
             if (quoted)

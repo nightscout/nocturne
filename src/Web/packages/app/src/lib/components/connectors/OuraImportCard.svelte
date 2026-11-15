@@ -23,16 +23,13 @@
   const EXPORT_URL = "https://membership.ouraring.com/data-export";
   const MAX_SIZE_MB = 40;
 
+  let { imported = $bindable(null) }: { imported?: OuraImportResult | null } = $props();
+
   let formElement: HTMLFormElement | undefined;
-  let hasFile = $state(false);
+  let selectedSize = $state<number | null>(null);
   let isImporting = $state(false);
   let error = $state<string | null>(null);
-  // Read off the form remote, not held here: a completed submit refreshes the page's queries,
-  // which remounts this card and would drop its own state.
-  const imported = $derived.by((): OuraImportResult | null => {
-    const result: unknown = importOuraExport.result;
-    return !isImporting && isRecord(result) ? result : null;
-  });
+  const hasFile = $derived(selectedSize !== null);
 
   /** The codes are `OuraExportException`'s; the server sends the code and the sentence lives here. */
   function describeImportError(err: unknown): string {
@@ -41,8 +38,12 @@
         return "This file is not a ZIP file. Select the ZIP file that you downloaded from Oura.";
       case "not_an_oura_export":
         return "This ZIP file is not an Oura data export. Select the file that you downloaded from Oura.";
-      case "export_too_large":
-        return `The file is larger than ${MAX_SIZE_MB} MB.`;
+      case "unreadable_export":
+        return "Nocturne cannot read this ZIP file. Download the export from Oura again.";
+      case "export_too_much_data":
+        return "This export contains more data than Nocturne can import.";
+      case "history_clamped":
+        return "Your access shows only the last 24 hours. A member with full access must import the export.";
       default:
         return describeSubmitError(err, "The import did not complete. Try again.");
     }
@@ -57,7 +58,7 @@
     <CardDescription>
       Request your data export at
       <a class="underline" href={EXPORT_URL} target="_blank" rel="noreferrer">membership.ouraring.com/data-export</a>.
-      When Oura has prepared the export, download the ZIP file and select it here. To add newer
+      When the export is ready, download the ZIP file and select it here. To add newer
       data, import a new export.
     </CardDescription>
   </CardHeader>
@@ -67,12 +68,22 @@
       enctype="multipart/form-data"
       bind:this={formElement}
       {...importOuraExport.enhance(async ({ submit }) => {
-        isImporting = true;
         error = null;
+        imported = null;
+        if ((selectedSize ?? 0) > MAX_SIZE_MB * 1024 * 1024) {
+          error = `The file is larger than ${MAX_SIZE_MB} MB.`;
+          return;
+        }
+        isImporting = true;
         try {
           await submit();
-          formElement?.reset();
-          hasFile = false;
+          const result: unknown = importOuraExport.result;
+          // A redirect (an expired session) resolves submit() without a result.
+          if (isRecord(result)) {
+            imported = result;
+            formElement?.reset();
+            selectedSize = null;
+          }
         } catch (err) {
           error = describeImportError(err);
         } finally {
@@ -89,9 +100,10 @@
           accept=".zip,application/zip"
           disabled={isImporting}
           onchange={(event: Event) => {
-            hasFile =
-              event.target instanceof HTMLInputElement &&
-              (event.target.files?.length ?? 0) > 0;
+            selectedSize =
+              event.target instanceof HTMLInputElement
+                ? (event.target.files?.[0]?.size ?? null)
+                : null;
           }}
         />
       </div>

@@ -38,6 +38,8 @@ Nocturne shows how many sleep sessions, heart rate readings and days of steps it
 | Heart rate | Each heart rate reading, day and night |
 | Steps | The step total for each day |
 
+If the export has two heart rate readings for the same instant, Nocturne keeps one.
+
 Nocturne does not import the readiness score, the activity score, skin temperature, stress,
 workouts or tags.
 

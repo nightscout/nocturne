@@ -34,19 +34,24 @@ public class OuraImportServiceTests
     private readonly Mock<ISleepService> _sleep = new();
     private readonly Mock<ISleepSessionRepository> _sleepSessions = new();
 
+    public OuraImportServiceTests()
+    {
+        _heartRates.Setup(s => s.CreateHeartRatesAsync(It.IsAny<IEnumerable<HeartRate>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<HeartRate> batch, CancellationToken _) => batch);
+        _stepCounts.Setup(s => s.CreateStepCountsAsync(It.IsAny<IEnumerable<StepCount>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<StepCount> batch, CancellationToken _) => batch);
+    }
+
     private OuraImportService Service() => new(
         _heartRates.Object, _stepCounts.Object, _sleep.Object, _sleepSessions.Object,
         NullLogger<OuraImportService>.Instance);
 
     [Fact]
-    public async Task AnExport_IsWrittenThroughTheHealthServices_AndReportedByCountAndWindow()
+    public async Task AnExport_IsWrittenThroughTheHealthServices_AndReportedByCount()
     {
         var result = await Service().ImportAsync(Export(), CancellationToken.None);
 
-        result.Should().Be(new OuraImportResult(
-            SleepSessions: 2, HeartRates: 2, StepDays: 1,
-            From: new DateTime(2026, 3, 1, 4, 0, 0, DateTimeKind.Utc),
-            To: new DateTime(2026, 3, 4, 10, 5, 0, DateTimeKind.Utc)));
+        result.Should().Be(new OuraImportResult(SleepSessions: 2, HeartRates: 2, StepDays: 1));
         _sleep.Verify(s => s.UpsertSessionAsync(
             It.Is<SleepSession>(session => session.Source == SleepSource.Oura), It.IsAny<CancellationToken>()),
             Times.Exactly(2));
@@ -66,6 +71,17 @@ public class OuraImportServiceTests
         var result = await Service().ImportAsync(Export(), CancellationToken.None);
 
         result.SleepSessions.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TheCounts_AreOfTheRecordsStored_NotOfTheRowsRead()
+    {
+        _heartRates.Setup(s => s.CreateHeartRatesAsync(It.IsAny<IEnumerable<HeartRate>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<HeartRate> batch, CancellationToken _) => batch.Take(1));
+
+        var result = await Service().ImportAsync(Export(), CancellationToken.None);
+
+        result.HeartRates.Should().Be(1);
     }
 
     [Fact]

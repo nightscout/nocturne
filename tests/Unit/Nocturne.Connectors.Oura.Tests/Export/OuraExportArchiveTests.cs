@@ -187,6 +187,81 @@ public class OuraExportArchiveTests
     }
 
     [Fact]
+    public void ARecordThatKeepsItsIdAndLacksItsLastColumns_IsAlignedToTheStartOfTheHeader()
+    {
+        using var export = Open(("dailyactivity.csv", Csv("id;day;score;steps;timestamp",
+            "0b8f6c1e-3d2a-4c5b-9e7f-1a2b3c4d5e6f;2026-03-03;75;4000")));
+
+        var day = export.ReadDailySteps().Should().ContainSingle().Subject;
+
+        day.Metric.Should().Be(4000);
+        day.SyncIdentifier.Should().Be("oura:steps:2026-03-03");
+    }
+
+    [Fact]
+    public void APeriodLongerThanAnySleep_IsSkipped()
+    {
+        var month = LongSleep("month").Replace("2026-03-02T06:00:00+02:00", "2026-03-31T23:00:00+02:00");
+        using var export = Open(("sleepmodel.csv", Csv(SleepHeader, month, LongSleep())));
+
+        export.ReadSleepSessions().Select(session => session.OriginalId).Should().Equal("oura:night-1");
+    }
+
+    [Fact]
+    public void AHypnogramLongerThanItsPeriod_ProducesNoStagePastTheBedtimeEnd()
+    {
+        var alternating = string.Concat(Enumerable.Repeat("12", 10_000));
+        using var export = Open(("sleepmodel.csv", Csv(SleepHeader, LongSleep(phases: alternating))));
+
+        var stages = export.ReadSleepSessions().Single().Stages!;
+
+        stages.Should().HaveCount(7 * 12);
+        stages[^1].EndTime.Should().Be(Bedtime.AddHours(7));
+    }
+
+    [Fact]
+    public void SamplesOutsideThePeriodOrCloserThanAnEpoch_AreDropped()
+    {
+        var early = LongSleep().Replace(
+            "[55.0,null,51.0],\"\"timestamp\"\":\"\"2026-03-01T23:00:00.000+02:00",
+            "[55.0,null,51.0],\"\"timestamp\"\":\"\"2026-03-01T22:55:00.000+02:00");
+        var dense = LongSleep("dense").Replace("\"\"interval\"\":300.0", "\"\"interval\"\":0.001");
+        using var export = Open(("sleepmodel.csv", Csv(SleepHeader, early, dense)));
+
+        var sessions = export.ReadSleepSessions().ToList();
+
+        sessions[0].BiometricSamples!.Select(sample => (sample.Timestamp, sample.HeartRate)).Should().Equal(
+            (Bedtime.AddMinutes(5), 51f), (Bedtime.AddMinutes(10), (float?)null));
+        sessions[1].BiometricSamples.Should().BeNull();
+    }
+
+    [Fact]
+    public void ARecordPastTheLargestAnExportHolds_IsRefused()
+    {
+        var huge = "61;" + new string('x', OuraCsv.MaxRecordChars) + ";2026-03-01T10:00:00+00:00";
+        using var export = Open(("heartrate.csv", Csv("bpm;source;timestamp", huge)));
+
+        var read = () => export.ReadHeartRates().ToList();
+
+        read.Should().Throw<OuraExportException>().Which.Code.Should().Be(OuraExportException.TooMuchData);
+    }
+
+    [Fact]
+    public void AFileCompressedByAMethodThatCannotBeRead_IsRefusedAsUnreadable()
+    {
+        var stream = Zip(("heartrate.csv", Csv("bpm;source;timestamp", "61;awake;2026-03-01T10:00:00+00:00")));
+        var bytes = stream.GetBuffer().AsSpan(0, (int)stream.Length);
+        const byte unknownMethod = 99;
+        bytes[bytes.IndexOf("PK\u0003\u0004"u8) + 8] = unknownMethod;
+        bytes[bytes.IndexOf("PK\u0001\u0002"u8) + 10] = unknownMethod;
+        using var export = OuraExportArchive.Open(stream);
+
+        var read = () => export.ReadHeartRates().ToList();
+
+        read.Should().Throw<OuraExportException>().Which.Code.Should().Be(OuraExportException.Unreadable);
+    }
+
+    [Fact]
     public void FilesAreFoundInsideAFolderAndWhateverTheirCase()
     {
         using var export = Open(("oura_export_2026/HeartRate.csv",
@@ -217,7 +292,10 @@ public class OuraExportArchiveTests
 
     private static string Csv(string header, params string[] rows) => string.Join("\r\n", [header, .. rows]) + "\r\n";
 
-    private static OuraExportArchive Open(params (string Name, string Content)[] files)
+    private static OuraExportArchive Open(params (string Name, string Content)[] files) =>
+        OuraExportArchive.Open(Zip(files));
+
+    private static MemoryStream Zip(params (string Name, string Content)[] files)
     {
         var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
@@ -230,6 +308,6 @@ public class OuraExportArchiveTests
         }
 
         stream.Position = 0;
-        return OuraExportArchive.Open(stream);
+        return stream;
     }
 }

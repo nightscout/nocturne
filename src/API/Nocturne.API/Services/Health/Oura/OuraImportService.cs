@@ -12,8 +12,8 @@ using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Health.Oura;
 
-/// <summary>What one export added or updated. The window covers every record read, of any type.</summary>
-public sealed record OuraImportResult(int SleepSessions, int HeartRates, int StepDays, DateTime? From, DateTime? To);
+/// <summary>The records one export added or updated.</summary>
+public sealed record OuraImportResult(int SleepSessions, int HeartRates, int StepDays);
 
 /// <summary>
 /// Writes an uploaded Oura data export into the current tenant, and removes what it wrote.
@@ -31,7 +31,6 @@ public sealed class OuraImportService(
     public async Task<OuraImportResult> ImportAsync(Stream zip, CancellationToken ct)
     {
         using var export = OuraExportArchive.Open(zip);
-        DateTime? from = null, to = null;
 
         var sessions = 0;
         foreach (var session in export.ReadSleepSessions())
@@ -47,37 +46,20 @@ public sealed class OuraImportService(
             }
 
             sessions++;
-            Cover(session.StartTime);
-            Cover(session.EndTime);
         }
 
         var readings = 0;
         foreach (var batch in export.ReadHeartRates().Chunk(BatchSize))
-        {
-            await heartRates.CreateHeartRatesAsync(batch, ct);
-            readings += batch.Length;
-            Cover(batch[0].Timestamp);
-            Cover(batch[^1].Timestamp);
-        }
+            readings += (await heartRates.CreateHeartRatesAsync(batch, ct)).Count();
 
-        var days = export.ReadDailySteps();
-        foreach (var batch in days.Chunk(BatchSize))
-        {
-            await stepCounts.CreateStepCountsAsync(batch, ct);
-            Cover(batch.Min(day => day.Timestamp));
-            Cover(batch.Max(day => day.Timestamp));
-        }
+        var days = 0;
+        foreach (var batch in export.ReadDailySteps().Chunk(BatchSize))
+            days += (await stepCounts.CreateStepCountsAsync(batch, ct)).Count();
 
         logger.LogInformation(
             "Imported an Oura export: {SleepSessions} sleep sessions, {HeartRates} heart rate readings, {StepDays} days of steps",
-            sessions, readings, days.Count);
-        return new OuraImportResult(sessions, readings, days.Count, from, to);
-
-        void Cover(DateTime at)
-        {
-            if (from is null || at < from) from = at;
-            if (to is null || at > to) to = at;
-        }
+            sessions, readings, days);
+        return new OuraImportResult(sessions, readings, days);
     }
 
     public string ConnectorName => OuraConnectorConfiguration.Name;
