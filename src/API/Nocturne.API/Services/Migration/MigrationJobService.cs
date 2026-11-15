@@ -1416,6 +1416,13 @@ internal class MigrationJob
     private const int ApiPageSize = LegacyReadLimits.MaxMergedCount;
 
     /// <summary>
+    ///     Page size for the device status pull. A looping uploader's device status carries its
+    ///     predictions, around 13 KB a document, so <see cref="ApiPageSize"/> of them is a reply
+    ///     past 100 MB, which a hosted Nightscout answers with a 502 and restarts.
+    /// </summary>
+    internal const int DeviceStatusPageSize = 1_000;
+
+    /// <summary>
     ///     How a paged pull bounds and advances its time cursor: <paramref name="Filter"/> is the
     ///     query-string fragment restricting a page to records at or before the cursor,
     ///     <paramref name="Oldest"/> reads the page's oldest record, answering <c>null</c> when the
@@ -1497,14 +1504,16 @@ internal class MigrationJob
     ///     both the v1 route segment and the progress key; <paramref name="Label"/> names the
     ///     records in operation and log text; <paramref name="OneRecordPerDocument"/> is whether each
     ///     document becomes exactly one record; <paramref name="Decompose"/> resolves the
-    ///     collection's decomposer from the migration's tenant scope once per pull.
+    ///     collection's decomposer from the migration's tenant scope once per pull;
+    ///     <paramref name="PageSize"/> is the count every page is first asked for.
     /// </summary>
     private sealed record PagedCollection<T>(
         string Name,
         string Label,
         PageCursor Cursor,
         bool OneRecordPerDocument,
-        Func<IServiceProvider, Func<T[], CancellationToken, Task<DecompositionResult>>> Decompose
+        Func<IServiceProvider, Func<T[], CancellationToken, Task<DecompositionResult>>> Decompose,
+        int PageSize = ApiPageSize
     ) where T : ProcessableDocumentBase;
 
     private static readonly PagedCollection<Entry> s_entriesCollection = new(
@@ -1529,7 +1538,8 @@ internal class MigrationJob
         {
             var deviceStatuses = sp.GetRequiredService<IDeviceStatusService>();
             return (page, ct) => deviceStatuses.ImportDeviceStatusesAsync(page, source: null, ct);
-        });
+        },
+        DeviceStatusPageSize);
 
     private static readonly PagedCollection<Activity> s_activityCollection = new(
         "activity", "activities", s_createdAtCursor, OneRecordPerDocument: false,
@@ -1614,8 +1624,8 @@ internal class MigrationJob
         var pages = BackwardTimePager.PageAsync<T>(
             from: window.From - collection.Cursor.Envelope,
             to: window.To + collection.Cursor.Envelope,
-            ApiPageSize,
-            BackwardTimePager.WidestPageSize(ApiPageSize),
+            collection.PageSize,
+            BackwardTimePager.WidestPageSize(collection.PageSize),
             async (bound, count) =>
             {
                 ct.ThrowIfCancellationRequested();
