@@ -198,6 +198,7 @@ public class V4WriteScopeGatingTests
             ["ConfigurationController"] = NotDataCategory.TenantSettingsScope,
             ["MyFitnessPalSettingsController"] = NotDataCategory.TenantSettingsScope,
             ["WebhookSettingsController"] = NotDataCategory.TenantSettingsScope,
+            ["AppBuildsController"] = NotDataCategory.TenantSettingsScope,
 
             ["CareLinkConnectController"] = NotDataCategory.ConnectorHandlerGuard,
 
