@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Authorization;
@@ -68,8 +70,10 @@ public class ShareClockIntegrationTests(ApiIntegrationTestFixture fixture, ITest
             .Should().Be(new DateOnly(2026, 6, 11), "15:00 UTC is past midnight in Adelaide but not in Stockholm");
     }
 
-    [Fact]
-    public async Task AShare_GetsThePatientTimezone_TheReportWindowsAreCutOn()
+    [Theory]
+    [InlineData(Scope.GlucoseRead)]
+    [InlineData(Scope.HeartRateRead)]
+    public async Task AShare_GetsThePatientTimezone_TheReportWindowsAreCutOn(string granted)
     {
         static object[] Values(double value) => [new { time = "00:00", value }];
         var profile = new
@@ -89,12 +93,22 @@ public class ShareClockIntegrationTests(ApiIntegrationTestFixture fixture, ITest
         };
         (await AuthenticatedClient.PostAsJsonAsync("/api/v1/profile", profile)).EnsureSuccessStatusCode();
 
-        using var share = await CreateShareClientAsync([Scope.GlucoseRead]);
+        using var share = await CreateShareClientAsync([granted]);
         var response = await share.GetAsync("/api/v4/patient-record/timezone");
         var body = await response.Content.ReadAsStringAsync();
 
         response.IsSuccessStatusCode.Should().BeTrue(body);
         JsonDocument.Parse(body).RootElement.GetProperty("timezone").GetString().Should().Be("Australia/Adelaide");
+    }
+
+    [Fact]
+    public async Task AnAnonymousCallerOnTheTenantHost_IsRefusedThePatientTimezone()
+    {
+        using var anonymous = Fixture.CreateHttpClient(ServiceNames.NocturneApi);
+
+        var response = await anonymous.GetAsync("/api/v4/patient-record/timezone");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     private async Task<HttpClient> CreateShareClientAsync(string[] scopes)

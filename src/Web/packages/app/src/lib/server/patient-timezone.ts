@@ -3,7 +3,7 @@
  *
  * The API resolves it (`GET /patient-record/timezone`): the patient record's
  * zone, else the active therapy profile's. That endpoint answers any caller who
- * may read glucose, reports or therapy, a public share included, so a member
+ * may read any category a report shows, a public share included, so a member
  * who sees reports but not therapy settings, and a share, still get the
  * patient's calendar.
  *
@@ -19,9 +19,8 @@ import { errorStatus } from "#lib/forms/submit-error.js";
 /**
  * Read `fetch`, treating a refusal as "not named here" and nothing else.
  *
- * A caller with none of glucose, reports or therapy read access is refused
- * the zone (for example, a public share granted only heart rate), and its
- * reports must still render.
+ * A caller that may read no category a report shows is refused the zone,
+ * and its reports must still render.
  *
  * Every other failure rethrows. A report that silently cut its days on UTC
  * because this lookup timed out would show a clinician the wrong day with

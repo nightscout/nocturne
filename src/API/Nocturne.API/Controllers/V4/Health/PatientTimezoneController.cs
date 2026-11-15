@@ -14,8 +14,9 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// </summary>
 /// <remarks>
 /// Apart from <see cref="PatientRecordController"/>, whose <c>[Authorize]</c> refuses a public share:
-/// a share's report windows must be cut on the same days the API buckets on. A member who may read
-/// reports but not therapy data needs it too. The zone alone says nothing clinical.
+/// a share's report windows must be cut on the same days the API buckets on. Any read scope a report
+/// can be reached with admits it, so a member or share that may read only heart rate gets it too. The
+/// zone alone says nothing clinical.
 /// </remarks>
 [ApiController]
 [Tags("Health")]
@@ -26,7 +27,9 @@ public class PatientTimezoneController : ControllerBase
     /// <summary>The patient record's zone, else the active therapy profile's.</summary>
     /// <remarks>A share reads it through <see cref="IShareClockReader"/>.</remarks>
     [HttpGet]
-    [RequireScope(Scope.GlucoseRead, Scope.ReportsRead, Scope.TherapyRead)]
+    [RequireScope(
+        Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.HeartRateRead, Scope.StepCountRead,
+        Scope.SleepRead, Scope.FoodRead, Scope.ReportsRead, Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(PatientTimezoneResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientTimezoneResponse>> GetPatientTimezone(
