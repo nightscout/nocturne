@@ -24,6 +24,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     repository_full_name = table.Column<string>(type: "character varying(201)", maxLength: 201, nullable: true),
                     admin_repositories = table.Column<string[]>(type: "text[]", nullable: false),
                     linked_by_subject_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    linker_github_login = table.Column<string>(type: "character varying(39)", maxLength: 39, nullable: false),
+                    linker_github_id = table.Column<long>(type: "bigint", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },

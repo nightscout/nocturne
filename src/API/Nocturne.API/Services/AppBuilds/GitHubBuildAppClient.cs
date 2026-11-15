@@ -101,12 +101,19 @@ public partial class GitHubBuildAppClient(
             var repositories = await ReadPagesAsync<InstallationRepositoriesResponse, GitHubRepository>(client, null,
                 $"/user/installations/{installationId}/repositories", "user installation repositories",
                 AppBuildException.InstallationNotYours, page => page.Repositories, ct);
+
+            using var userResponse = await SendAsync(client, new HttpRequestMessage(HttpMethod.Get, "/user"), ct);
+            await EnsureSuccessAsync(userResponse, "user", AppBuildException.GitHubRefused, ct);
+            var user = await ReadAsync<GitHubUser>(userResponse, ct);
+
             return new GitHubUserInstallation(
                 match.Account.Login,
                 string.Equals(match.Account.Type, "Organization", StringComparison.Ordinal),
                 repositories.Where(r => r.Permissions?.Admin == true && IsRepositoryFullName(r.FullName))
                     .Select(r => r.FullName)
-                    .ToList());
+                    .ToList(),
+                user.Login,
+                user.Id);
         }
         finally
         {
@@ -147,6 +154,27 @@ public partial class GitHubBuildAppClient(
         SendAsync(installationId, HttpMethod.Post,
             $"/repos/{Escape(fullName)}/actions/workflows/{Uri.EscapeDataString(workflowFile)}/dispatches",
             new { @ref = gitRef, inputs }, "workflow dispatch", ct);
+
+    /// <summary>
+    /// Whether the GitHub user <paramref name="userId"/>, last known as <paramref name="userLogin"/>, has the
+    /// admin role on the repository now. Needs only the Metadata permission. A renamed or removed user
+    /// reads as false: the login no longer names the same id.
+    /// </summary>
+    public async Task<bool> IsAdministratorAsync(long installationId, string fullName, string userLogin, long userId, CancellationToken ct)
+    {
+        if (!LoginPattern().IsMatch(userLogin))
+            return false;
+
+        var path = $"/repos/{Escape(fullName)}/collaborators/{Uri.EscapeDataString(userLogin)}/permission";
+        using var client = GitHubApi.CreateClient(httpClientFactory, await GetInstallationTokenAsync(installationId, ct));
+        using var response = await SendAsync(client, new HttpRequestMessage(HttpMethod.Get, path), ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return false;
+        await EnsureInstallationSuccessAsync(response, installationId, "collaborator permission", AppBuildException.RepositoryNotFound, ct);
+
+        var permission = await ReadAsync<CollaboratorPermissionResponse>(response, ct);
+        return permission.User?.Id == userId && string.Equals(permission.Permission, "admin", StringComparison.Ordinal);
+    }
 
     public async Task<IReadOnlyList<GitHubWorkflowRun>> ListWorkflowRunsAsync(long installationId, string fullName,
         string workflowFile, int count, CancellationToken ct)
@@ -369,10 +397,17 @@ public partial class GitHubBuildAppClient(
 
     private sealed record InstallationAccount(string Login, string? Type);
 
+    private sealed record GitHubUser(string Login, long Id);
+
+    private sealed record CollaboratorPermissionResponse(string? Permission, GitHubUser? User);
+
     private sealed record InstallationRepositoriesResponse(List<GitHubRepository> Repositories);
 
     [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$")]
     private static partial Regex RepositoryFullNamePattern();
+
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$")]
+    private static partial Regex LoginPattern();
 
     private sealed record SecretsResponse(List<SecretName> Secrets);
 
@@ -381,7 +416,14 @@ public partial class GitHubBuildAppClient(
     private sealed record WorkflowRunsResponse(List<GitHubWorkflowRun> WorkflowRuns);
 }
 
-public sealed record GitHubUserInstallation(string Login, bool IsOrganization, IReadOnlyList<string> AdminRepositories);
+/// <param name="Login">The account the App is installed on.</param>
+/// <param name="UserLogin">The GitHub user who authorized the App.</param>
+public sealed record GitHubUserInstallation(
+    string Login,
+    bool IsOrganization,
+    IReadOnlyList<string> AdminRepositories,
+    string UserLogin,
+    long UserId);
 
 public sealed record GitHubRepository(
     string FullName,

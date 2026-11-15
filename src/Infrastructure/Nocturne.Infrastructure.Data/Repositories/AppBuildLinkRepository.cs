@@ -27,31 +27,38 @@ public sealed class AppBuildLinkRepository(INocturneDbContextFactory contexts) :
     /// <remarks>
     /// Two first links for one target can race to insert. The loser of
     /// <c>ux_app_build_links_tenant_target</c> replaces the winner's row instead, as a later link would.
+    /// The replace reads the winner's row in a fresh context, as <c>SettingsRepository</c> does.
     /// </remarks>
     public async Task SaveAsync(AppBuildLink link, CancellationToken ct)
     {
-        await using var db = await contexts.CreateAsync(ct);
-        var row = await db.AppBuildLinks.FirstOrDefaultAsync(row => row.TargetId == link.TargetId, ct);
-        if (row is not null)
-        {
-            AppBuildLinkMapper.Apply(link, row);
-            await db.SaveChangesAsync(ct);
+        if (await ReplaceAsync(link, ct))
             return;
-        }
 
-        var inserted = db.AppBuildLinks.Add(new AppBuildLinkEntity { Id = Guid.CreateVersion7() });
-        AppBuildLinkMapper.Apply(link, inserted.Entity);
         try
         {
+            await using var db = await contexts.CreateAsync(ct);
+            var row = new AppBuildLinkEntity { Id = Guid.CreateVersion7() };
+            AppBuildLinkMapper.Apply(link, row);
+            db.AppBuildLinks.Add(row);
             await db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation())
         {
-            inserted.State = EntityState.Detached;
-            var winner = await db.AppBuildLinks.FirstAsync(row => row.TargetId == link.TargetId, ct);
-            AppBuildLinkMapper.Apply(link, winner);
-            await db.SaveChangesAsync(ct);
+            if (!await ReplaceAsync(link, ct))
+                throw;
         }
+    }
+
+    private async Task<bool> ReplaceAsync(AppBuildLink link, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        var row = await db.AppBuildLinks.FirstOrDefaultAsync(row => row.TargetId == link.TargetId, ct);
+        if (row is null)
+            return false;
+
+        AppBuildLinkMapper.Apply(link, row);
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     public async Task<bool> SetRepositoryAsync(string targetId, string repositoryFullName, CancellationToken ct)

@@ -29,7 +29,7 @@ public class AppBuildLinkRepositoryTests : IDisposable
     }
 
     private static AppBuildLink Link(long installation = 42, string? repository = null) =>
-        new("aaps", installation, "alice", false, repository, ["alice/my-aaps"], Subject, default, default);
+        new("aaps", installation, "alice", false, repository, ["alice/my-aaps"], Subject, "alice", 1001, default, default);
 
     [Fact]
     public async Task A_saved_link_reads_back_with_its_tenant_and_timestamps()

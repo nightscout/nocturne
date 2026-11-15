@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261115220319_AddAppBuildLinks")]
+    [Migration("20261115223754_AddAppBuildLinks")]
     partial class AddAppBuildLinks
     {
         /// <inheritdoc />
@@ -737,6 +737,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<Guid>("LinkedBySubjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("linked_by_subject_id");
+
+                    b.Property<long>("LinkerGitHubId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("linker_github_id");
+
+                    b.Property<string>("LinkerGitHubLogin")
+                        .IsRequired()
+                        .HasMaxLength(39)
+                        .HasColumnType("character varying(39)")
+                        .HasColumnName("linker_github_login");
 
                     b.Property<string>("RepositoryFullName")
                         .HasMaxLength(201)

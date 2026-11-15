@@ -132,10 +132,13 @@ public class GitHubBuildAppClientTests
         installation.Login.Should().Be("alice");
         installation.IsOrganization.Should().BeFalse();
         installation.AdminRepositories.Should().Equal(FakeGitHub.Repository);
+        installation.UserLogin.Should().Be(FakeGitHub.LinkerLogin);
+        installation.UserId.Should().Be(FakeGitHub.LinkerId);
         var exchange = _github.Requests.Single(r => r.Uri.Host == "github.com");
         exchange.Body.Should().Contain("code=oauth-code").And.Contain("client_id=Iv23client");
         _github.Requests.Where(r => r.Path.StartsWith("/user/installations", StringComparison.Ordinal))
             .Should().HaveCount(2).And.OnlyContain(r => r.Authorization == "Bearer ghu_user");
+        _github.Requests.Single(r => r.Path == "/user").Authorization.Should().Be("Bearer ghu_user");
         var revoke = _github.Requests.Single(r => r.Method == HttpMethod.Delete);
         revoke.Authorization.Should().StartWith("Basic ");
         JsonDocument.Parse(revoke.Body!).RootElement.GetProperty("access_token").GetString().Should().Be("ghu_user");
@@ -193,6 +196,30 @@ public class GitHubBuildAppClientTests
 
         await FluentActions.Awaiting(() => client.ListInstallationRepositoriesAsync(FakeGitHub.InstallationId, default))
             .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.InstallationGone);
+    }
+
+    [Theory]
+    [InlineData("admin", FakeGitHub.LinkerId, true)]
+    [InlineData("write", FakeGitHub.LinkerId, false)]
+    [InlineData("admin", 7, false)]
+    public async Task The_linkers_role_is_read_from_the_collaborator_permission_endpoint(string permission, long userId, bool expected)
+    {
+        _github.OnLinkerPermission(permission, userId);
+
+        (await _github.CreateClient().IsAdministratorAsync(FakeGitHub.InstallationId, FakeGitHub.Repository,
+            FakeGitHub.LinkerLogin, FakeGitHub.LinkerId, default)).Should().Be(expected);
+        _github.Requests.Single(r => r.Path.EndsWith("/permission", StringComparison.Ordinal))
+            .Authorization.Should().Be("Bearer ghs_installation");
+    }
+
+    [Fact]
+    public async Task A_linker_GitHub_no_longer_knows_is_not_an_administrator()
+    {
+        _github.On(HttpMethod.Get, $"/repos/{FakeGitHub.Repository}/collaborators/{FakeGitHub.LinkerLogin}/permission",
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        (await _github.CreateClient().IsAdministratorAsync(FakeGitHub.InstallationId, FakeGitHub.Repository,
+            FakeGitHub.LinkerLogin, FakeGitHub.LinkerId, default)).Should().BeFalse();
     }
 
     [Fact]

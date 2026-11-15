@@ -16,6 +16,7 @@ public sealed class AppBuildException(string code) : Exception(code)
     public const string InstallationNotYours = "installation_not_yours";
     public const string NoAdminRepository = "no_admin_repository";
     public const string NotLinker = "not_linker";
+    public const string LinkerNotAdmin = "linker_not_admin";
     public const string SignedOut = "signed_out";
     public const string Forbidden = "forbidden";
     public const string InstallationGone = "installation_gone";
@@ -31,7 +32,7 @@ public sealed class AppBuildException(string code) : Exception(code)
     {
         NotConfigured or UnknownTarget or NotLinked => StatusCodes.Status404NotFound,
         RepositoryNotChosen or RepositoryInvalid or InstallationGone or RepositoryNotFound => StatusCodes.Status409Conflict,
-        InstallationNotYours or NoAdminRepository or NotLinker => StatusCodes.Status403Forbidden,
+        InstallationNotYours or NoAdminRepository or NotLinker or LinkerNotAdmin => StatusCodes.Status403Forbidden,
         GitHubRateLimited => StatusCodes.Status429TooManyRequests,
         GitHubRefused or GitHubUnavailable => StatusCodes.Status502BadGateway,
         _ => StatusCodes.Status400BadRequest,

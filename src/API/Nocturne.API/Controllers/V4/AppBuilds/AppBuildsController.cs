@@ -23,8 +23,7 @@ namespace Nocturne.API.Controllers.V4.AppBuilds;
 /// share, demo visitor or history-clamped caller).
 /// <para>
 /// Choosing the repository, writing a secret and starting a build are further limited to the person who
-/// linked the installation, since it acts in their GitHub account (<see cref="AppBuildService"/>). Any
-/// caller admitted here may read the status and runs, and may unlink.
+/// linked the installation (<see cref="AppBuildService"/>).
 /// </para>
 /// </remarks>
 [ApiController, Authorize]

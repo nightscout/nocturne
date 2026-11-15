@@ -18,6 +18,8 @@ internal sealed class FakeGitHub : HttpMessageHandler
 {
     public const long InstallationId = 4242;
     public const string Repository = "alice/my-aaps";
+    public const string LinkerLogin = "alice";
+    public const long LinkerId = 1001;
 
     private readonly List<(HttpMethod Method, string PathAndQuery, Func<HttpRequestMessage, HttpResponseMessage> Respond)> _routes = [];
 
@@ -67,6 +69,15 @@ internal sealed class FakeGitHub : HttpMessageHandler
             default_branch = "main",
             html_url = $"https://github.com/{Repository}",
             template_repository = template is null ? null : new { full_name = template },
+        })).OnLinkerPermission("admin");
+
+    /// <summary>The linker's role on <see cref="Repository"/>, as the collaborator permission endpoint reports it.</summary>
+    public FakeGitHub OnLinkerPermission(string permission, long userId = LinkerId) =>
+        On(HttpMethod.Get, $"/repos/{Repository}/collaborators/{LinkerLogin}/permission", _ => Json(HttpStatusCode.OK, new
+        {
+            permission,
+            role_name = permission,
+            user = new { login = LinkerLogin, id = userId, permissions = new { admin = permission == "admin" } },
         }));
 
     public FakeGitHub OnUserFlow(params long[] reachableInstallations) =>
@@ -77,6 +88,7 @@ internal sealed class FakeGitHub : HttpMessageHandler
                 installations = reachableInstallations.Select(id => new { id, account = new { login = "alice", type = "User" } }),
             }))
             .On(HttpMethod.Delete, "/applications/Iv23client/token", _ => new HttpResponseMessage(HttpStatusCode.NoContent))
+            .On(HttpMethod.Get, "/user", _ => Json(HttpStatusCode.OK, new { login = LinkerLogin, id = LinkerId }))
             .OnUserRepositories((Repository, true));
 
     /// <summary>The installation's repositories as the authorizing user sees them, with whether they administer each.</summary>
