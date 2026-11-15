@@ -81,10 +81,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken
     )
     {
-        var entity = await foods.FirstOrDefaultAsync(f => f.OriginalId == id, cancellationToken);
-
-        if (entity == null && Guid.TryParse(id, out var guid))
-            entity = await foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
+        var entity = await foods.FirstOrDefaultAsync(RecordIdKey.Matching<FoodEntity>(id), cancellationToken);
 
         if (entity != null || !MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
             return entity;
