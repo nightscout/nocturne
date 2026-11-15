@@ -142,7 +142,7 @@ describe("Nightscout connector write-back round trip", () => {
   const writeBack = (writeBackEnabled: boolean) =>
     tenant.api.ok("PUT", "/api/v4/connectors/config/nightscout", {
       url: `${env.mocksUrlFromApi}/nightscout-writeback`,
-      isActive: true,
+      enabled: true,
       writeBackEnabled,
     });
 
