@@ -14,15 +14,17 @@ using Xunit;
 namespace Nocturne.Connectors.Nightscout.Tests.Services.WriteBack;
 
 /// <summary>
-/// A written-back treatment must leave upstream exactly one document, carrying its carbs under the
-/// id the connector's pull matches back to the record, however Nightscout splits a document carrying
-/// a <c>preBolus</c> (<see cref="PreBolusSplittingNightscout"/>).
+/// A written-back meal with a <c>preBolus</c> must leave upstream its bolus at its own time and its
+/// carbs at <c>created_at + preBolus</c>, as a v1 POST stores it, each under the id the connector's
+/// pull matches back to the record, however Nightscout splits a document carrying a <c>preBolus</c>
+/// (<see cref="PreBolusSplittingNightscout"/>). Any other treatment leaves one document carrying its carbs.
 /// </summary>
 [Trait("Category", "Unit")]
 public class TreatmentPreBolusWriteBackTests
 {
     private const string BolusTime = "2026-09-30T10:00:00.000Z";
     private const string Key = "6a1f00000000000000000001";
+    private static readonly string CarbsKey = MongoObjectId.Coerce(PreBolusSplit.CarbsId(Key))!;
 
     private readonly NightscoutConnectorConfiguration _config = new()
     {
@@ -45,7 +47,8 @@ public class TreatmentPreBolusWriteBackTests
 
     private static Treatment MealBolus(double? carbs, double preBolus, string eventType = "Meal Bolus", string id = Key) => new()
     {
-        Id = id,
+        Id = Guid.NewGuid().ToString(),
+        LegacyId = id,
         EventType = eventType,
         CreatedAt = BolusTime,
         Mills = DateTimeOffset.Parse(BolusTime, CultureInfo.InvariantCulture).ToUnixTimeMilliseconds(),
@@ -65,6 +68,25 @@ public class TreatmentPreBolusWriteBackTests
 
     /// <summary>The copy the pull matches to the record: by _id up to 15.0.6, by identifier from 15.0.7.</summary>
     private static string? KeyOf(JsonObject document, bool v15_0_8) => Str(document, v15_0_8 ? "identifier" : "_id");
+
+    private static void ShouldHoldTheMealSplit(
+        PreBolusSplittingNightscout upstream, bool v15_0_8, double carbs, string carbsAt = "2026-09-30T10:15:00.000Z")
+    {
+        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, CarbsKey]);
+        var bolus = upstream.Documents.Single(d => KeyOf(d, v15_0_8) == Key);
+        Str(bolus, "created_at").Should().Be(BolusTime);
+        bolus["carbs"].Should().BeNull();
+        bolus["insulin"]!.GetValue<double>().Should().Be(2);
+        bolus["preBolus"].Should().BeNull();
+
+        var meal = upstream.Documents.Single(d => KeyOf(d, v15_0_8) == CarbsKey);
+        Str(meal, "identifier").Should().Be(CarbsKey);
+        Str(meal, "created_at").Should().Be(carbsAt);
+        Str(meal, "eventType").Should().Be("Meal Bolus");
+        meal["carbs"]!.GetValue<double>().Should().Be(carbs);
+        meal["insulin"].Should().BeNull();
+        Str(meal, "notes").Should().Be("lunch");
+    }
 
     [Theory]
     [InlineData(false)]
@@ -95,18 +117,47 @@ public class TreatmentPreBolusWriteBackTests
     [InlineData(false, -10)]
     [InlineData(true, 15)]
     [InlineData(true, -10)]
-    public async Task A_created_treatment_with_carbs_and_a_preBolus_leaves_one_document_carrying_its_carbs(
+    public async Task A_created_meal_with_a_preBolus_leaves_its_bolus_at_its_time_and_its_carbs_at_the_offset(
         bool v15_0_8, double preBolus)
     {
         var upstream = new PreBolusSplittingNightscout(v15_0_8);
 
         await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus)]);
 
+        ShouldHoldTheMealSplit(upstream, v15_0_8, carbs: 30, carbsAt: preBolus > 0 ? "2026-09-30T10:15:00.000Z" : "2026-09-30T09:50:00.000Z");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_created_treatment_with_carbs_and_a_preBolus_that_is_not_a_meal_leaves_one_document_carrying_its_carbs(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+
+        await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15, eventType: "Bolus Wizard")]);
+
         var copy = upstream.Documents.Should().ContainSingle().Subject;
         KeyOf(copy, v15_0_8).Should().Be(Key);
         Str(copy, "created_at").Should().Be(BolusTime);
         copy["carbs"]!.GetValue<double>().Should().Be(30);
-        copy["insulin"]!.GetValue<double>().Should().Be(2);
+    }
+
+    /// <summary>A v1 POST stores such a meal split already, and each half goes up as it is.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_halves_of_a_meal_a_v1_POST_split_go_up_unsplit(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var meal = MealBolus(carbs: 30, preBolus: 15);
+        meal.Id = Key;
+        var halves = PreBolusSplit.Split(meal, _ => { });
+        halves[1].LegacyId = halves[1].Id;
+
+        await Sink(upstream).OnCreatedAsync(halves);
+
+        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, CarbsKey]);
+        upstream.Documents.Single(d => d["carbs"] is not null)["created_at"]!.GetValue<string>().Should().Be("2026-09-30T10:15:00.000Z");
     }
 
     [Theory]
@@ -119,7 +170,7 @@ public class TreatmentPreBolusWriteBackTests
 
         await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15), plain]);
 
-        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, plain.Id]);
+        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, CarbsKey, plain.LegacyId]);
     }
 
     [Theory]
@@ -146,6 +197,31 @@ public class TreatmentPreBolusWriteBackTests
         upstream.Documents.Should().ContainSingle().Which["carbs"]!.GetValue<double>().Should().Be(45);
     }
 
+    /// <summary>
+    /// An edit lands each half on the copy upstream holds; a meal written back whole before it was
+    /// split loses its carbs to the new carbs document.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task An_edited_meal_with_a_preBolus_updates_both_documents(bool v15_0_8, bool writtenWhole)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        if (writtenWhole)
+            upstream.Post(JsonNode.Parse($$"""
+                [{"_id":"{{Key}}","identifier":"{{Key}}","eventType":"Meal Bolus","created_at":"{{BolusTime}}","carbs":30,"insulin":2,"notes":"lunch"}]
+                """)!.AsArray());
+        else
+            await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+
+        await sink.OnUpdatedAsync(MealBolus(carbs: 45, preBolus: 20));
+
+        ShouldHoldTheMealSplit(upstream, v15_0_8, carbs: 45, carbsAt: "2026-09-30T10:20:00.000Z");
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
@@ -163,10 +239,7 @@ public class TreatmentPreBolusWriteBackTests
         else
             await Sink(upstream).OnCreatedAsync([treatment]);
 
-        var copy = upstream.Documents.Should().ContainSingle().Subject;
-        KeyOf(copy, v15_0_8).Should().Be(Key);
-        copy["carbs"]!.GetValue<double>().Should().Be(35);
-        copy["preBolus"].Should().BeNull();
+        ShouldHoldTheMealSplit(upstream, v15_0_8, carbs: 35);
     }
 
     [Theory]
@@ -177,10 +250,10 @@ public class TreatmentPreBolusWriteBackTests
         var upstream = new PreBolusSplittingNightscout(v15_0_8);
         upstream.Post(JsonNode.Parse("""
             [{"eventType":"Carb Correction","created_at":"2026-09-30T10:15:00.000Z","carbs":10,"enteredBy":"careportal"},
-             {"identifier":"aaps-1","eventType":"Meal Bolus","created_at":"2026-09-30T10:15:00.000Z","carbs":12,"enteredBy":"aaps"}]
+             {"identifier":"aaps-1","eventType":"Bolus Wizard","created_at":"2026-09-30T10:15:00.000Z","carbs":12,"enteredBy":"aaps"}]
             """)!.AsArray());
 
-        await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15, eventType: "Bolus Wizard")]);
 
         upstream.Documents.Should().HaveCount(3);
     }
