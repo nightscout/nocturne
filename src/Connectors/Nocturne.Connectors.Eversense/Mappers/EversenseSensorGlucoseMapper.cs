@@ -33,13 +33,14 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
 
     /// <summary>
     /// The patient's latest reading, or null when there is none: a patient whose app has not
-    /// uploaded yet is listed with <c>CurrentGlucose</c> 0 and <c>CGTime</c> 0001-01-01.
+    /// uploaded yet is listed with <c>CurrentGlucose</c> 0 and <c>CGTime</c> 0001-01-01. The value is
+    /// in mg/dL whatever the patient's display unit.
     /// </summary>
     public SensorGlucose? Map(EversensePatientDatum patient, DateTime now)
     {
         try
         {
-            if (patient.CurrentGlucose <= 0)
+            if (!IsReading(patient.CurrentGlucose))
                 return null;
 
             if (!UploaderTimestamp.TryParse(patient.CgTime, out var timestamp))
@@ -48,12 +49,8 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
                 return null;
             }
 
-            var mgdl = patient.Units == 1
-                ? patient.CurrentGlucose * GlucoseConstants.MgdlPerMmol
-                : (double)patient.CurrentGlucose;
-
             var direction = TrendDirections.GetValueOrDefault(patient.GlucoseTrend, GlucoseDirection.None);
-            return Build(timestamp, mgdl, direction, now);
+            return Build(timestamp, patient.CurrentGlucose, direction, now);
         }
         catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
         {
@@ -71,7 +68,7 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
         var records = new List<SensorGlucose>();
         foreach (var e in events)
         {
-            if (e.EventTypeId != EversenseConstants.SensorGlucoseEventType || e.Value <= 0)
+            if (e.EventTypeId != EversenseConstants.SensorGlucoseEventType || !IsReading(e.Value))
                 continue;
 
             if (!UploaderTimestamp.TryParse(e.EventDate, out var timestamp))
@@ -85,6 +82,8 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
 
         return records;
     }
+
+    private static bool IsReading(double value) => value > 0 && value != EversenseConstants.NoGlucose;
 
     private static SensorGlucose Build(DateTimeOffset timestamp, double mgdl, GlucoseDirection? direction, DateTime now)
     {

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Connectors.Eversense.Configurations;
 using Nocturne.Connectors.Eversense.Mappers;
 using Nocturne.Connectors.Eversense.Models;
 using Nocturne.Core.Constants;
@@ -17,7 +18,7 @@ public class EversenseSensorGlucoseMapperTests
     [Fact]
     public void Map_WithValidMgdlReading_ReturnsSensorGlucose()
     {
-        var patient = CreatePatient(glucose: 120, trend: 3, units: 0, cgTime: "2026-04-24T12:00:00Z");
+        var patient = CreatePatient(glucose: 120, trend: 3, cgTime: "2026-04-24T12:00:00Z");
 
         var result = _mapper.Map(patient, Now);
 
@@ -28,14 +29,21 @@ public class EversenseSensorGlucoseMapperTests
     }
 
     [Fact]
-    public void Map_WithMmolReading_ConvertToMgdl()
+    public void Map_NoGlucoseValue_ReturnsNull()
     {
-        var patient = CreatePatient(glucose: 6, trend: 3, units: 1, cgTime: "2026-04-24T12:00:00Z");
+        var patient = CreatePatient(glucose: EversenseConstants.NoGlucose, trend: 0, cgTime: "2026-04-24T12:00:00Z");
 
-        var result = _mapper.Map(patient, Now);
+        _mapper.Map(patient, Now).Should().BeNull();
+    }
 
-        result.Should().NotBeNull();
-        result!.Mgdl.Should().BeApproximately(6 * 18.0182, 0.01);
+    [Theory]
+    [InlineData(39)]
+    [InlineData(401)]
+    public void Map_ValueOutsideTheDisplayRange_IsKept(int glucose)
+    {
+        var patient = CreatePatient(glucose: glucose, trend: 3, cgTime: "2026-04-24T12:00:00Z");
+
+        _mapper.Map(patient, Now)!.Mgdl.Should().Be(glucose);
     }
 
     [Theory]
@@ -109,6 +117,7 @@ public class EversenseSensorGlucoseMapperTests
             new() { EventTypeId = 2, Value = 140, EventDate = "2026-10-16T10:02:00" },
             new() { EventTypeId = 10, Value = 105, EventDate = "2026-10-16T10:03:00" },
             new() { EventTypeId = 1, Value = 0, EventDate = "2026-10-16T10:04:00" },
+            new() { EventTypeId = 1, Value = EversenseConstants.NoGlucose, EventDate = "2026-10-16T10:04:30" },
             new() { EventTypeId = 1, Value = 115, EventDate = "not-a-date" },
             new() { EventTypeId = 1, Value = 120, EventDate = "2026-10-16T10:05:00" },
         };
@@ -157,13 +166,12 @@ public class EversenseSensorGlucoseMapperTests
     }
 
     private static EversensePatientDatum CreatePatient(
-        int glucose = 100, int trend = 3, int units = 0, string cgTime = "2026-04-24T12:00:00Z")
+        int glucose = 100, int trend = 3, string cgTime = "2026-04-24T12:00:00Z")
     {
         return new EversensePatientDatum
         {
             CurrentGlucose = glucose,
             GlucoseTrend = trend,
-            Units = units,
             CgTime = cgTime,
             IsTransmitterConnected = true,
             UserName = "test@example.com"
