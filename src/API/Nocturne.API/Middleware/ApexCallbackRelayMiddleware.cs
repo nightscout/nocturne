@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.AppBuilds;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Core.Contracts.Auth;
@@ -16,7 +17,7 @@ namespace Nocturne.API.Middleware;
 /// <remarks>
 /// The slug is read out of the protected <c>state</c> query parameter by the flow that issued it
 /// (<see cref="IOidcAuthService.TryReadTenantSlug"/>,
-/// <see cref="GoogleHealthOAuthState.TryReadTenantSlug"/>), never from a caller-supplied
+/// <see cref="GoogleHealthOAuthState.TryReadTenantSlug"/>, <see cref="AppBuildInstallState.TryReadTenantSlug"/>), never from a caller-supplied
 /// parameter, so the redirect target is one this instance issued.
 /// </remarks>
 /// <seealso cref="Multitenancy.TenantResolutionMiddleware"/>
@@ -32,6 +33,8 @@ public partial class ApexCallbackRelayMiddleware(
         new("/api/auth/oidc/link/callback", ReadOidcSlug),
         new(GoogleHealthPlatformOptions.CallbackPath, (services, state) =>
             services.GetRequiredService<GoogleHealthOAuthState>().TryReadTenantSlug(state)),
+        new(Controllers.V4.AppBuilds.AppBuildsController.CallbackPath, (services, state) =>
+            services.GetRequiredService<AppBuildInstallState>().TryReadTenantSlug(state)),
     }.ToDictionary(r => r.Path, StringComparer.OrdinalIgnoreCase);
 
     private readonly string? _baseHost = config.Value.SplitHostPort().Host;
