@@ -54,6 +54,8 @@
     onCancel?: () => void;
     /** Show enable/disable toggle. Default: false for setup, true when connectorId set */
     showToggle?: boolean;
+    /** Show the configuration form. False for a connector that has nothing to configure. Default: true */
+    showConfiguration?: boolean;
     /** Show danger zone (delete config/data). Default: false */
     showDangerZone?: boolean;
     /** Show capabilities card. Default: false */
@@ -75,6 +77,7 @@
     onComplete,
     onCancel,
     showToggle = connectorId !== undefined,
+    showConfiguration = true,
     showDangerZone = false,
     showCapabilities = false,
     primaryAction = connectorId ? "save-only" : "save-and-finish",
@@ -416,7 +419,9 @@
       {/if}
 
       <!-- Configuration Form -->
-      {#if !canManage}
+      {#if !showConfiguration}
+        <!-- nothing to configure -->
+      {:else if !canManage}
         <Card data-testid="connector-read-only">
           <CardContent class="flex items-center gap-3 py-4">
             <Lock class="h-5 w-5 shrink-0 text-muted-foreground" />

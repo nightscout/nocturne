@@ -36,6 +36,7 @@ export const CONNECTORS: Connector[] = [
   { file: "omnipod.png", name: "Omnipod", kind: "Pump", aliases: ["Insulet", "DASH", "5"] },
   { file: "myfitnesspal.jpg", name: "MyFitnessPal", kind: "Food", aliases: ["MFP"] },
   { file: "home-assistant.png", name: "Home Assistant", kind: "Smart Home", aliases: ["HA"] },
+  { file: "oura.png", name: "Oura", kind: "Wearable", aliases: ["Oura Ring"] },
 
   // Uploaded by an app through the Nightscout-compatible API.
   { file: "loop.png", name: "Loop", kind: "Looping" },
@@ -58,7 +59,6 @@ export const CONNECTORS: Connector[] = [
   { file: "medtrum.jpg", name: "Medtrum", kind: "CGM", comingSoon: true, issue: 106 },
   { file: "n8n.png", name: "n8n", kind: "Cloud", comingSoon: true, issue: 112 },
   { file: "twilio.png", name: "Twilio / SMS", kind: "Notify", aliases: ["SMS"], comingSoon: true, issue: 137 },
-  { file: "oura.png", name: "Oura", kind: "App", aliases: ["Oura Ring"], comingSoon: true, issue: 151 },
   { file: "imessage.jpg", name: "iMessage", kind: "Notify", aliases: ["Apple Messages", "iOS"], comingSoon: true, issue: 178 },
   { file: "google-chat.png", name: "Google Chat", kind: "Notify", aliases: ["GChat"], comingSoon: true, issue: 179 },
   { file: "teams.png", name: "MS Teams", kind: "Notify", aliases: ["Microsoft Teams"], comingSoon: true, issue: 180 },
