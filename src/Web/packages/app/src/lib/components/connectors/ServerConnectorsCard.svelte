@@ -31,7 +31,6 @@
   import Database from "@lucide/svelte/icons/database";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import DataSourceRow from "#lib/components/settings/DataSourceRow.svelte";
   import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
   import AppLogo from "#lib/components/ui/AppLogo.svelte";
@@ -174,7 +173,7 @@
               class="group relative flex items-center gap-4 rounded-lg border bg-muted/30 p-4 transition-colors hover:border-primary/50 hover:bg-accent/50"
             >
               <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                <HeartPulse class="h-5 w-5 text-primary" />
+                <AppLogo icon={connector.icon} invertMode />
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">

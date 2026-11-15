@@ -9,7 +9,6 @@
     type DataSourceStatus,
   } from "#lib/components/settings/DataSourceRow.svelte";
   import { relativeAge } from "#lib/utils/formatting.js";
-  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 
   let { connection }: { connection: GoogleHealthStatus } = $props();
 
@@ -32,7 +31,7 @@
 
 <DataSourceRow
   name="Google Health"
-  icon={undefined}
+  icon="google-health"
   status={failed ? "error" : rowStatus[state]}
   statusMessage={failed
     ? "Google Health needs attention. Open the connector for details and recovery options."
@@ -41,7 +40,6 @@
   lastSuccessfulSync={connection.lastSync}
   onclick={() => void goto(resolve('settings/connectors/google-health'))}
 >
-  {#snippet logo()}<HeartPulse class="h-5 w-5" />{/snippet}
   {#snippet metrics()}
     <p class="text-sm text-muted-foreground">
       {#if state === GoogleHealthConnectionState.Unavailable}
