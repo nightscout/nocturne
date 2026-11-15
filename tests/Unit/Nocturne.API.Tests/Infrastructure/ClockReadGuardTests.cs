@@ -18,6 +18,7 @@ public class ClockReadGuardTests
     private static readonly string[] Folders =
     [
         "src/API/Nocturne.API/Services/Seeding",
+        "src/API/Nocturne.API/Services/AppBuilds",
         "src/API/Nocturne.API/Services/Demo",
         "src/API/Nocturne.API/Services/Sleep",
         "src/API/Nocturne.API/Services/Treatments",

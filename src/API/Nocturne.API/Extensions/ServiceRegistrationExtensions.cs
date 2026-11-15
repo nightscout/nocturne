@@ -12,6 +12,7 @@ using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.RateLimiting;
 using Nocturne.API.Services.AidDetection;
+using Nocturne.API.Services.AppBuilds;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Alerts.Webhooks;
@@ -419,6 +420,11 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<GitHubPrClient>();
         services.AddSingleton<ITranslationContributionService, GitHubTranslationService>();
         services.AddSingleton<IContentContributionService, GitHubContentService>();
+
+        services.Configure<GitHubBuildAppOptions>(configuration.GetSection(GitHubBuildAppOptions.SectionName));
+        services.AddSingleton<GitHubBuildAppClient>();
+        services.AddSingleton<AppBuildInstallState>();
+        services.AddScoped<AppBuildService>();
 
         services.AddSingleton<IOwnerNoticeLedger, OwnerNoticeLedger>();
 
