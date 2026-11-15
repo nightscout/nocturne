@@ -17,10 +17,8 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// never made.
 /// </summary>
 /// <remarks>
-/// The race is provoked, not forced. Each round starts its saves together on a tenant with no row, so
-/// their reads find nothing and their inserts collide. A round that happens to serialize still
-/// passes, so the rounds are repeated. The saves are attributed to a person: a system-attributed save
-/// writes no audit row at all, which would hide a stray one.
+/// The saves are attributed to a person: a system-attributed save writes no audit row at all, which
+/// would hide a stray one.
 /// </remarks>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -87,6 +85,11 @@ public class AppBuildLinkRepositoryConcurrencyTests(RlsCompletenessFixture fx) :
             .Should().Equal(["update"], "the failed insert wrote nothing, so it must not be audited");
     }
 
+    /// <remarks>
+    /// The race is provoked, not forced. Each round starts its saves together on a tenant with no row,
+    /// so their reads find nothing and their inserts collide. A round that happens to serialize still
+    /// passes, so the rounds are repeated.
+    /// </remarks>
     [Fact]
     public async Task Concurrent_first_links_leave_one_row_one_create_and_one_audit_row_per_write()
     {
