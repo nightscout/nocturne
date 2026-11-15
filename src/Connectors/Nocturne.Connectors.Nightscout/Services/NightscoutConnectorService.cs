@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
@@ -9,6 +10,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -653,6 +655,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             read.TryAdd(treatment.Id!, at);
             if (TreatmentClientId.Of(treatment) is { Length: > 0 } clientId)
                 read.TryAdd(clientId, at);
+            if (treatment.UpstreamIdentifier is { Length: > 0 } identifier)
+                read.TryAdd(identifier, at);
         }
 
         // Not a publish: the delete pass reads and removes stored rows, which no route covers.
@@ -670,7 +674,11 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     deletes nothing and leaves the sync's result alone, as does more missing than
     ///     <see cref="MaxLookupsPerSync"/> or <see cref="FewMissing"/> allow.
     /// </summary>
-    /// <param name="read">The ids and client ids the read returned, each with its created_at.</param>
+    /// <param name="read">
+    ///     The ids, client ids and identifiers the read returned, each with its created_at. The
+    ///     identifier is where write-back put a record's own key, so a treatment Nocturne wrote back
+    ///     and stores under that key is recognised although the source gave it an <c>_id</c> of its own.
+    /// </param>
     private async Task DeleteTreatmentsGoneUpstreamAsync(
         ITreatmentPublisher treatments,
         DateTime windowStart,
@@ -754,20 +762,28 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     moved it since (<see cref="ITreatmentPublisher.PublishTreatmentsAsync"/>). An id that is not
     ///     an ObjectId is therefore looked up by <c>id</c>. Asking for it by <c>_id</c> is an error on
     ///     Nightscout releases that cast the value to an ObjectId. An ObjectId-shaped id is looked up by
-    ///     <c>_id</c> and then by <c>id</c>. Neither field is indexed, so the lookup is bounded to the
+    ///     <c>_id</c> and then by <c>id</c>. Either is then looked up by <c>identifier</c>, where
+    ///     write-back put the key of a treatment Nocturne stores under it (see the <c>read</c> of
+    ///     <see cref="DeleteTreatmentsGoneUpstreamAsync"/>), in one query: as it is, and as
+    ///     <see cref="MongoObjectId.Coerce"/> of it, the uuid prefix or hash write-back has created under
+    ///     since. A row relabelled to the connector still holds the key it was stored under before. None
+    ///     of these fields is indexed, so the lookup is bounded to the
     ///     created_at range the treatment can sit in: <paramref name="at"/>, give or take
     ///     <see cref="BackwardTimePager.CreatedAtOffsetEnvelope"/> and <see cref="ReconcileReadMargin"/>.
     /// </summary>
     private async Task<bool> TreatmentExistsUpstreamAsync(string id, DateTime at, CancellationToken cancellationToken)
     {
         var reach = BackwardTimePager.CreatedAtOffsetEnvelope + ReconcileReadMargin;
-        return (IsObjectId(id) && await AnyAsync("_id")) || await AnyAsync("id");
+        string[] identifiers = [.. new[] { id, MongoObjectId.Coerce(id)! }.Distinct(StringComparer.Ordinal)];
+        return (IsObjectId(id) && await AnyAsync($"&find[_id]={Uri.EscapeDataString(id)}"))
+            || await AnyAsync($"&find[id]={Uri.EscapeDataString(id)}")
+            || await AnyAsync(string.Concat(identifiers.Select((value, i) =>
+                $"&find[identifier][$in][{i}]={Uri.EscapeDataString(value)}")));
 
-        async Task<bool> AnyAsync(string field)
+        async Task<bool> AnyAsync(string find)
         {
             const string operation = "LookUpTreatment";
-            var url = BuildCreatedAtUrl("treatments", at - reach, at + reach)
-                + $"&find[{field}]={Uri.EscapeDataString(id)}";
+            var url = BuildCreatedAtUrl("treatments", at - reach, at + reach) + find;
 
             var found = await FetchDataAsync<Treatment[]>(url, operation, cancellationToken) ?? throw FetchFailed(operation);
             return found.Length > 0;
@@ -839,7 +855,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         await response.EnsureSuccessWithBodyAsync(cancellationToken);
 
-        return await DeserializeResponseAsync<T>(response, cancellationToken);
+        return JsonSerializer.Deserialize<T>(await response.Content.ReadAsStringAsync(cancellationToken), UpstreamIdentityJson.ReadOptions);
     }
 
     private string BuildEntriesUrl(DateTime? from, DateTime? to, int count)

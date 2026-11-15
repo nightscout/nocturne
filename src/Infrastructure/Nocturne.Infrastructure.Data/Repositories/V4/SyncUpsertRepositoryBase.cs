@@ -74,6 +74,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// <inheritdoc cref="ISyncKeyedRepository{T}.UpsertAsync" />
     public virtual async Task<SyncUpsert<TModel>> UpsertAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
+        using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
         await using var ctx = await ContextFactory.CreateAsync(ct);
         // The domain models carry no sync-key contract, so the key is read off the mapped entity.
         var entity = ToEntity(model);
@@ -89,7 +90,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             if (existing != null)
             {
                 var before = ToDomain(existing);
-                ApplySyncUpsert(existing, model);
+                WriteSyncUpsert(existing, model);
                 await SaveWriteAsync(ctx, existing, before.Timestamp, ct);
                 var upserted = ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
@@ -107,6 +108,20 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// cannot express overrides this to keep it; the default is <see cref="V4RepositoryBase{TModel,TEntity}.ApplyUpdate"/>.
     /// </summary>
     protected virtual void ApplySyncUpsert(TEntity existing, TModel model) => ApplyUpdate(existing, model);
+
+    /// <summary>
+    /// <see cref="ApplySyncUpsert"/>, keeping the row's stored legacy id over the one the create
+    /// carries. That id is the key the row was first answered and written back under; a resend
+    /// that names the row only by its sync key, under another id, would otherwise move it, and
+    /// write-back would look for the row's copy upstream under a key that copy never had.
+    /// </summary>
+    private void WriteSyncUpsert(TEntity existing, TModel model)
+    {
+        var storedLegacyId = existing.LegacyId;
+        ApplySyncUpsert(existing, model);
+        if (!string.IsNullOrEmpty(storedLegacyId))
+            existing.LegacyId = storedLegacyId;
+    }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.ISyncKeyedRepository{T}.IsRecreationBlockedAsync" />
     public async Task<bool> IsRecreationBlockedAsync(
@@ -192,7 +207,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                 }
 
                 var before = ToDomain(existing);
-                ApplySyncUpsert(existing, ToDomain(entity));
+                WriteSyncUpsert(existing, ToDomain(entity));
                 split.Classify(ctx, existing, before);
             }
             else

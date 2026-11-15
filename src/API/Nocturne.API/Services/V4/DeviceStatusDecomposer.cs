@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.DeviceStatuses;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -411,12 +412,40 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         foreach (var ds in statuses)
             NormalizeMills(ds);
 
+        var echoes = await PointAtStoredStatusesAsync(statuses, source, ct);
+        if (echoes.Count > 0)
+            statuses = [.. statuses.Where(s => !echoes.Contains(s))];
+        if (statuses.Count == 0)
+            return into ?? new DeviceStatusDecomposition();
+
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses.Select(s => s.Id), SnapshotTables, ct);
         var batch = statuses
             .Select(ds => new BatchStatus(ds, ds.Id, CorrelationIdFor(ds.Id, correlationIds), ResolveTimestamp(ds)))
             .ToList();
         return await DecomposeAsync(batch, source, group: null, origin, into ?? new DeviceStatusDecomposition(), ct);
     }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the snapshot tables. A status
+    /// with no legacy id is named by its anchor snapshot's id, as <see cref="StoredKey"/> puts it on
+    /// the wire, and the anchor's siblings follow it through their shared correlation id.
+    /// </summary>
+    /// <remarks>
+    /// An override uploaded with such a status is stored under that same <see cref="StoredKey"/>, so
+    /// the adopted legacy id is the override's key too, and its upsert updates the span in place.
+    /// </remarks>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private Task<IReadOnlySet<DeviceStatus>> PointAtStoredStatusesAsync(
+        IEnumerable<DeviceStatus> statuses, string? source, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            statuses,
+            [
+                Table(_apsRepo, WireForms.UuidPrefix),
+                Table(_pumpRepo, WireForms.UuidPrefix),
+                Table(_uploaderRepo, WireForms.UuidPrefix),
+            ],
+            _ => source == DataSources.NightscoutConnector,
+            ct);
 
     /// <summary>
     /// The snapshot tables a status's stored correlation id is read from, in the APS, pump, uploader

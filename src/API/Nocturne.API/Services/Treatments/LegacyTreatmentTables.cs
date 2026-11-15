@@ -567,6 +567,8 @@ internal sealed class LegacyStateSpanTable(
 
         var treatment = project(span, metadata);
         treatment.Id = span.Id.ToString();
+        treatment.LegacyId = span.LegacyId;
+        treatment.RecordId = span.Id;
         treatment.Mills = span.StartTimestamp.ToMills();
         treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
         treatment.EnteredBy = metadata.TryReadString("enteredBy");
@@ -1042,6 +1044,8 @@ internal static class LegacyTreatmentTables
             treatment.AdditionalProperties = new Dictionary<string, object> { [ProfileSpanMetadata.AppKey] = app };
 
         treatment.Id = activation.Id.ToString();
+        treatment.LegacyId = activation.LegacyId;
+        treatment.RecordId = activation.Id;
         treatment.Mills = activation.Mills;
         treatment.DataSource = activation.DataSource;
         treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
@@ -1279,6 +1283,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bolus.Id.ToString(),
+            LegacyId = bolus.LegacyId,
+            RecordId = bolus.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bolus.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bolus.AdditionalProperties),
             EventType = TreatmentUploadedEventType.Of(bolus.AdditionalProperties)
@@ -1305,6 +1311,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bolus.Id.ToString(),
+            LegacyId = bolus.LegacyId,
+            RecordId = bolus.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bolus.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bolus.AdditionalProperties),
             EventType = TreatmentUploadedEventType.Of(bolus.AdditionalProperties) ?? TreatmentTypes.CorrectionBolus,
@@ -1327,6 +1335,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = carb.Id.ToString(),
+            LegacyId = carb.LegacyId,
+            RecordId = carb.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(carb.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(carb.AdditionalProperties),
             EventType = TreatmentUploadedEventType.Of(carb.AdditionalProperties) ?? TreatmentTypes.CarbCorrection,
@@ -1375,6 +1385,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bgCheck.Id.ToString(),
+            LegacyId = bgCheck.LegacyId,
+            RecordId = bgCheck.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bgCheck.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bgCheck.AdditionalProperties),
             EventType = TreatmentTypes.BgCheck,
@@ -1394,6 +1406,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = note.Id.ToString(),
+            LegacyId = note.LegacyId,
+            RecordId = note.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(note.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(note.AdditionalProperties),
             EventType = note.EventType ?? "Note",
@@ -1412,6 +1426,8 @@ internal static class LegacyTreatmentTables
         return new Treatment
         {
             Id = deviceEvent.Id.ToString(),
+            LegacyId = deviceEvent.LegacyId,
+            RecordId = deviceEvent.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(deviceEvent.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(deviceEvent.AdditionalProperties),
             EventType = eventTypeString ?? deviceEvent.EventType.ToString(),
@@ -1428,6 +1444,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bc.Id.ToString(),
+            LegacyId = bc.LegacyId,
+            RecordId = bc.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bc.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bc.AdditionalProperties),
             EventType = "Bolus Wizard",

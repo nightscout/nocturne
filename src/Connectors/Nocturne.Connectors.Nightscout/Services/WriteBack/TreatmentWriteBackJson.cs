@@ -1,11 +1,11 @@
-using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 
 /// <summary>
-/// Serializer options for a treatment written back to Nightscout, which leave out <c>preBolus</c>.
+/// The <see cref="UpstreamIdentityJson.Options"/> modifier that leaves <c>preBolus</c> out of a
+/// treatment written back to Nightscout.
 /// </summary>
 /// <remarks>
 /// Nightscout's v1 treatment writes (<c>lib/server/treatments.js</c>) never store <c>preBolus</c>
@@ -19,11 +19,6 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 internal static class TreatmentWriteBackJson
 {
     private const string PreBolusName = "preBolus";
-
-    public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
-    {
-        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { OmitPreBolus } },
-    };
 
     public static void OmitPreBolus(JsonTypeInfo info)
     {

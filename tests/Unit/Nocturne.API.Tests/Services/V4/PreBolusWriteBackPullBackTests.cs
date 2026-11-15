@@ -116,7 +116,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     }
 
     [Fact]
-    public async Task A_bolus_wizard_with_a_preBolus_comes_back_with_its_carbs_and_without_its_preBolus()
+    public async Task A_pulled_back_bolus_wizard_with_a_preBolus_is_an_echo_and_keeps_its_preBolus()
     {
         var decomposer = Treatments();
         var treatment = Treatment("Bolus Wizard", insulin: 3, carbs: 45, preBolus: 20);
@@ -128,8 +128,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
 
         var calculation = await _context.BolusCalculations.AsNoTracking().SingleAsync();
         calculation.CarbInput.Should().Be(45);
-        calculation.PreBolus.Should().BeNull(
-            "a pulled copy replaces the calculation, and the copy upstream cannot carry preBolus beside its carbs");
+        calculation.PreBolus.Should().Be(20, "the pulled copy is the calculation's write-back echo, which writes nothing");
         (await _context.CarbIntakes.AsNoTracking().SingleAsync()).Carbs.Should().Be(45);
         (await _context.Boluses.AsNoTracking().CountAsync()).Should().Be(1);
     }
