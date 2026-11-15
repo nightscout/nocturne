@@ -8,17 +8,16 @@ namespace Nocturne.API.Tests.Integration.Analytics;
 
 internal static class DataOverviewClock
 {
-    /// <summary>
-    /// A clock that always resolves <paramref name="timezone"/>. A real share never gets a zone,
-    /// because <see cref="TenantClockResolver"/> answers it without a lookup, so the share and
-    /// clamp rows that use this exercise row level security with a zone no share can have.
-    /// </summary>
+    /// <summary>A clock that always resolves <paramref name="timezone"/>, for a member and a share alike.</summary>
     internal static TenantClockResolver Resolving(string timezone)
     {
         var settings = new Mock<ITherapySettingsResolver>();
         settings
             .Setup(resolver => resolver.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(timezone);
-        return new TenantClockResolver(settings.Object, new CategoryReadContext(), NullLogger<TenantClockResolver>.Instance);
+        var share = new Mock<IShareClockReader>();
+        share.Setup(reader => reader.ReadTimezoneAsync(It.IsAny<CancellationToken>())).ReturnsAsync(timezone);
+        return new TenantClockResolver(
+            settings.Object, new CategoryReadContext(), share.Object, NullLogger<TenantClockResolver>.Instance);
     }
 }

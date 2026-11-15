@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
@@ -54,7 +55,7 @@ public class RangeAnalyticsReaderTests
             _carbs.Object,
             Mock.Of<IPatientDeviceRepository>(),
             statistics,
-            new TenantClockResolver(therapy.Object, new CategoryReadContext(), Mock.Of<ILogger<TenantClockResolver>>()),
+            new TenantClockResolver(therapy.Object, new CategoryReadContext(), new ShareClockDouble(therapy.Object), Mock.Of<ILogger<TenantClockResolver>>()),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             _insulinDelivery,

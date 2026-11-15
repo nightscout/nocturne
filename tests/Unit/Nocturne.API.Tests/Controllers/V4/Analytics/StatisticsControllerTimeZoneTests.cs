@@ -28,8 +28,8 @@ public partial class StatisticsControllerTests
         { null, false, TimeZoneUnavailableReason.NotConfigured },
         { "  ", false, TimeZoneUnavailableReason.NotConfigured },
         { "Not/AZone", false, TimeZoneUnavailableReason.Unrecognised },
-        { null, true, TimeZoneUnavailableReason.Share },
-        { "Not/AZone", true, TimeZoneUnavailableReason.Share },
+        { null, true, TimeZoneUnavailableReason.NotConfigured },
+        { "Not/AZone", true, TimeZoneUnavailableReason.Unrecognised },
     };
 
     private StatisticsController ControllerOnClock(string? timezoneId, bool share)

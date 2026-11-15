@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
@@ -11,7 +10,7 @@ namespace Nocturne.API.Tests.Services.Devices;
 public class DeviceDateClockResolverTests
 {
     [Fact]
-    public async Task AShare_ReadsNoTimeline_SoItsDeviceDatesAreUtcDays()
+    public async Task AShare_ReadsTheTimeline_SoItsDeviceDatesAreLocalDays()
     {
         var share = new CategoryReadContext();
         share.MarkShare();
@@ -22,7 +21,7 @@ public class DeviceDateClockResolverTests
 
         var clock = await resolver.ResolveAsync(CancellationToken.None);
 
-        clock.Reason.Should().Be(TimeZoneUnavailableReason.Share);
-        clock.LocalDate(new DateTime(2026, 6, 10, 15, 0, 0, DateTimeKind.Utc)).Should().Be(new DateOnly(2026, 6, 10));
+        clock.Reason.Should().BeNull();
+        clock.LocalDate(new DateTime(2026, 6, 10, 15, 0, 0, DateTimeKind.Utc)).Should().Be(new DateOnly(2026, 6, 11));
     }
 }

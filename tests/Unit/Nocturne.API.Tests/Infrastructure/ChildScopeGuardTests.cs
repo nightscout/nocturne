@@ -87,6 +87,11 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetHistoryAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetSourcesAsync",
 
+        // A share's zone and timezone timeline, which no category governs and every local-day report
+        // needs. Each returns only the zone id or the timeline's entries.
+        "src/API/Nocturne.API/Services/Analytics/ShareClockReader.cs: ShareClockReader.ReadTimelineAsync",
+        "src/API/Nocturne.API/Services/Analytics/ShareClockReader.cs: ShareClockReader.ReadTimezoneAsync",
+
         // Work a request starts that returns nothing it read. It writes as the system, and the caller
         // reads what it wrote back under the caller's own policies. Read as the caller, a sync or an
         // inference would take the rows the caller cannot see for missing ones.
