@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.Storage;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.AppBuilds;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
@@ -182,6 +183,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddTransient<IGoogleHealthGrantHolderRepository, GoogleHealthGrantHolderRepository>();
+        services.AddTransient<IAppBuildLinkRepository, AppBuildLinkRepository>();
         services.AddTransient<IConnectorResetJobRepository, ConnectorResetJobRepository>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
