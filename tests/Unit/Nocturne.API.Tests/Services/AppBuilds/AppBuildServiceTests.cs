@@ -344,6 +344,23 @@ public class AppBuildServiceTests
     }
 
     [Theory]
+    [InlineData(HttpStatusCode.BadGateway, AppBuildException.GitHubUnavailable)]
+    [InlineData(HttpStatusCode.TooManyRequests, AppBuildException.GitHubRateLimited)]
+    public async Task A_role_check_GitHub_cannot_answer_refuses_the_secret_write_and_the_dispatch(HttpStatusCode status, string expected)
+    {
+        Linked();
+        _github.OnRepository().On(HttpMethod.Get,
+            $"/repos/{FakeGitHub.Repository}/collaborators/{FakeGitHub.LinkerLogin}/permission", _ => new HttpResponseMessage(status));
+        var service = CreateService();
+
+        await FluentActions.Awaiting(() => service.PutSecretAsync("aaps", "KEYSTORE_SET", Sealed(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(expected);
+        await FluentActions.Awaiting(() => service.DispatchAsync("aaps", new DispatchAppBuildRequest(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(expected);
+        _github.Requests.Should().NotContain(r => r.Method == HttpMethod.Put || r.Path.EndsWith("/dispatches", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData("variant", "fullRelease; rm -rf /")]
     [InlineData("variant", "someVariant")]
     [InlineData("version", "../../etc")]
