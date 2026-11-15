@@ -24,9 +24,10 @@ namespace Nocturne.API.Helpers;
 /// <c>history/</c> routes.
 /// </para>
 /// <para>
-/// Only the upper bound lives here. Zero and negative counts stay with each route, because
-/// Nightscout's behaviour differs per route: entries, treatments, devicestatus and activity answer
-/// an empty array, while <c>times/</c> and <c>slice/</c> answer 400.
+/// Nightscout 16 reads the count as <c>Number(count) || default</c>, so a count of zero is a count
+/// that was not sent: <see cref="ZeroAsAbsent"/> maps it, and the route serves its default page.
+/// A negative count keeps each route's own answer: entries, treatments, devicestatus and activity
+/// answer an empty array, profiles answer one record, and <c>times/</c> and <c>slice/</c> answer 400.
 /// </para>
 /// <para>
 /// <c>MaxCount</c> shares a value with <c>EntryReadService.MaxFilterFetch</c> and
@@ -94,6 +95,11 @@ public static class LegacyReadLimits
     /// </returns>
     public static int ClampMergedPage(int count, int skip) =>
         Math.Min(count, MaxMergedCount - Math.Min(skip, MaxMergedCount));
+
+    /// <summary>
+    /// Treat a v1 <c>count</c> of zero as one that was not sent.
+    /// </summary>
+    public static int? ZeroAsAbsent(int? count) => count == 0 ? null : count;
 
     /// <summary>
     /// Clamp a caller-supplied v1 <c>count</c> to <see cref="MaxCount"/>.

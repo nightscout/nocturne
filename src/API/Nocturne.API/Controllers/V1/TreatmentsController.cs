@@ -86,9 +86,8 @@ public class TreatmentsController : ControllerBase
 
         try
         {
-            // Handle count parameter for Nightscout compatibility:
-            // - 0 or negative: return empty array (Nightscout behavior)
-            if (count <= 0)
+            count = LegacyReadLimits.ZeroAsAbsent(count);
+            if (count < 0)
             {
                 _logger.LogDebug("Returning empty array for count={Count}", count);
                 return Ok(Array.Empty<Treatment>());

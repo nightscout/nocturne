@@ -198,6 +198,14 @@ public class EntriesParityTests : ParityTestBase
     }
 
     [Fact]
+    public async Task GetEntries_ZeroCount_ReturnsSameShape()
+    {
+        await SeedEntrySequenceAsync(count: 12);
+
+        await AssertGetParityAsync("/api/v1/entries?count=0");
+    }
+
+    [Fact]
     public async Task GetEntries_UnknownFindType_ReturnsSameShape()
     {
         await SeedEntrySequenceAsync(count: 3);
