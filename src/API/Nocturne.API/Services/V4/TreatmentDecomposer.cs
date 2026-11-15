@@ -283,7 +283,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             produceDeviceEvent = true;
         }
-        else if (IsMealEventType(eventType))
+        else if (PreBolusSplit.IsMealEventType(eventType))
         {
             // AAPS uploads one meal as two of these, one carrying only the carbs and one only the
             // insulin (CarbsExtension.kt, BolusExtension.kt); each half decomposes into what it
@@ -408,7 +408,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private IReadOnlyList<KeyedTable> TreatmentTables =>
     [
         Table(_bolusRepository, TreatmentWireForms),
-        Table(_carbIntakeRepository, TreatmentWireForms),
+        Table(_carbIntakeRepository, TreatmentWireForms | WireForms.PreBolusCarbs),
         Table(_bgCheckRepository, TreatmentWireForms),
         Table(_noteRepository, TreatmentWireForms),
         Table(_deviceEventRepository, TreatmentWireForms),
@@ -992,11 +992,6 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return TempBasalEventTypes.Any(
             t => string.Equals(eventType, t, StringComparison.OrdinalIgnoreCase));
     }
-
-    internal static bool IsMealEventType(string? eventType) =>
-        string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Removes what an earlier upload of each treatment wrote under its id that its classification

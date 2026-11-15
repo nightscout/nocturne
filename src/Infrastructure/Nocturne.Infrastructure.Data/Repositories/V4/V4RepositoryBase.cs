@@ -799,8 +799,19 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolveHashedLegacyIdsAsync" />
-    public async Task<IEnumerable<WireLegacyId>> ResolveHashedLegacyIdsAsync(
-        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default)
+    public Task<IEnumerable<WireLegacyId>> ResolveHashedLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default) =>
+        ResolveWindowLegacyIdsAsync(ids, from, to,
+            legacyId => MongoObjectId.IsObjectId(legacyId) || Guid.TryParse(legacyId, out _) ? null : MongoObjectId.Coerce(legacyId), ct);
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolvePreBolusCarbsLegacyIdsAsync" />
+    public Task<IEnumerable<WireLegacyId>> ResolvePreBolusCarbsLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default) =>
+        ResolveWindowLegacyIdsAsync(ids, from, to, legacyId => MongoObjectId.Coerce(PreBolusSplit.CarbsId(legacyId)), ct);
+
+    /// <summary>The legacy ids timed within the window whose <paramref name="wireOf"/> is one of <paramref name="ids"/>.</summary>
+    private async Task<IEnumerable<WireLegacyId>> ResolveWindowLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, Func<string, string?> wireOf, CancellationToken ct)
     {
         var hashes = ids.Where(MongoObjectId.IsObjectId).ToHashSet(StringComparer.Ordinal);
         if (hashes.Count == 0)
@@ -814,9 +825,9 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             .ToListAsync(ct);
 
         return legacyIds
-            .Where(legacyId => !MongoObjectId.IsObjectId(legacyId) && !Guid.TryParse(legacyId, out _))
-            .Select(legacyId => new WireLegacyId(MongoObjectId.Coerce(legacyId)!, legacyId))
-            .Where(r => hashes.Contains(r.WireId))
+            .Select(legacyId => (Wire: wireOf(legacyId), LegacyId: legacyId))
+            .Where(r => r.Wire is not null && hashes.Contains(r.Wire))
+            .Select(r => new WireLegacyId(r.Wire!, r.LegacyId))
             .ToList();
     }
 

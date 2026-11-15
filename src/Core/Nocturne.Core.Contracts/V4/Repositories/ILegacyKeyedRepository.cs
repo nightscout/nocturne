@@ -269,6 +269,14 @@ public interface ILegacyKeyedRepository<TRecord>
         IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>
+    /// As <see cref="ResolveHashedLegacyIdsAsync"/>, for the carbs write-back splits off a meal stored
+    /// as one record (<see cref="PreBolusSplit.ForWriteBack"/>): the legacy ids, of any shape, whose
+    /// <see cref="PreBolusSplit.CarbsId"/> hashes to one of <paramref name="ids"/>.
+    /// </summary>
+    Task<IEnumerable<WireLegacyId>> ResolvePreBolusCarbsLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
     /// The stored legacy ids, live or deleted, of the records that carry one and whose own uuid, in
     /// canonical form or as its 24-hex prefix (<see cref="MongoObjectId.TryGetOwnIdRange"/>), is one
     /// of <paramref name="ids"/>, each paired with that id.

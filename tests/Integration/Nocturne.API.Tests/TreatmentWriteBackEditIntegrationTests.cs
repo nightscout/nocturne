@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -44,13 +45,15 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
 
     private static string At(DateTimeOffset slot) => slot.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
 
+    private AsyncServiceScope OpenTenantScope() => TenantJobScope.Open(
+        Fixture.Services,
+        new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false),
+        "test:treatment-write-back");
+
     /// <summary>Runs <paramref name="act"/> on the tenant's treatment service, writing back to <paramref name="upstream"/>.</summary>
-    private async Task WithWriteBackAsync(FakeNightscoutTreatments upstream, Func<ITreatmentService, Task> act)
+    private async Task WithWriteBackAsync(HttpMessageHandler upstream, Func<ITreatmentService, Task> act)
     {
-        await using var scope = TenantJobScope.Open(
-            Fixture.Services,
-            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false),
-            "test:treatment-write-back");
+        await using var scope = OpenTenantScope();
 
         var loader = new Mock<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
         loader.Setup(l => l.LoadForTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new NightscoutConnectorConfiguration
@@ -493,5 +496,73 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
 
         upstream.Writes.Should().BeEmpty();
         (await LiveBolusesAsync(slot)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A meal with a preBolus goes upstream as a v1 POST stores it, its bolus at its own time and its
+    /// carbs at <c>created_at + preBolus</c> (#2356), whether Nocturne holds it as one record or, posted
+    /// through v1, split. An edit moves both documents, and pulled back, each lands on its own record.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false, "objectid")]
+    [InlineData(false, false, "other")]
+    [InlineData(false, true, "objectid")]
+    [InlineData(true, false, "objectid")]
+    [InlineData(true, false, "other")]
+    [InlineData(true, true, "other")]
+    public async Task AMealWithAPreBolus_GoesUpstreamAsItsBolusAndItsCarbs_AndComesBackOntoItsRecords(
+        bool v15_0_8, bool storedSplit, string shape)
+    {
+        var slot = UniqueSlot();
+        var legacyId = NewKey(shape);
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        Treatment Meal(double carbs, double preBolus) => new()
+        {
+            Id = legacyId, EventType = "Meal Bolus", Insulin = 2, Carbs = carbs, PreBolus = preBolus, CreatedAt = At(slot),
+        };
+
+        await WithWriteBackAsync(upstream, service =>
+            storedSplit ? service.CreateV1TreatmentsAsync([Meal(30, 15)]) : service.CreateTreatmentsAsync([Meal(30, 15)]));
+        ShouldHoldTheMeal(upstream, slot, preBolus: 15, carbs: 30);
+
+        var carbs = (slot.AddMinutes(15), 30d);
+        if (!storedSplit)
+        {
+            var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+            await WithWriteBackAsync(upstream, service => service.UpdateTreatmentAsync(MongoObjectId.FromGuid(bolus), Meal(45, 20)));
+            ShouldHoldTheMeal(upstream, slot, preBolus: 20, carbs: 45);
+            carbs = (slot, 45d);
+        }
+
+        await PullBackAsync(upstream);
+
+        (await LiveBolusesAsync(slot)).Should().ContainSingle().Which.Insulin.Should().Be(2);
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        (await db.CarbIntakes.AsNoTracking()
+                .Where(c => c.Timestamp >= slot.UtcDateTime && c.Timestamp <= slot.AddMinutes(30).UtcDateTime)
+                .Select(c => new { c.Timestamp, c.Carbs })
+                .ToListAsync())
+            .Select(c => (new DateTimeOffset(c.Timestamp, TimeSpan.Zero), c.Carbs))
+            .Should().Equal(carbs);
+    }
+
+    private static void ShouldHoldTheMeal(PreBolusSplittingNightscout upstream, DateTimeOffset slot, int preBolus, double carbs) =>
+        upstream.Documents.Select(d => ((string?)d["created_at"], (double?)d["insulin"], (double?)d["carbs"]))
+            .Should().BeEquivalentTo(new (string?, double?, double?)[] { (At(slot), 2, null), (At(slot.AddMinutes(preBolus)), null, carbs) });
+
+    /// <summary>Publishes what <paramref name="upstream"/> serves as the Nightscout connector's pull does.</summary>
+    private async Task PullBackAsync(PreBolusSplittingNightscout upstream)
+    {
+        var pulled = JsonNode.Parse(upstream.Served())!.AsArray().Select(document =>
+        {
+            var treatment = JsonSerializer.Deserialize<Treatment>(document!.ToJsonString())!;
+            treatment.UpstreamIdentifier = (string?)document["identifier"];
+            treatment.DataSource = DataSources.NightscoutConnector;
+            return treatment;
+        }).ToList();
+
+        await using var scope = OpenTenantScope();
+        (await scope.ServiceProvider.GetRequiredService<IConnectorPublisher>().Treatments
+            .PublishTreatmentsAsync(pulled, DataSources.NightscoutConnector, WriteOrigin.Live)).Should().BeTrue();
     }
 }

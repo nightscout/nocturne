@@ -75,25 +75,60 @@ public class NightscoutTreatmentWriteBackSink(
     protected override bool ShouldSkip(Treatment item)
         => item.DataSource == DataSources.NightscoutConnector;
 
+    protected override async Task<IReadOnlyList<Treatment>> PrepareAsync(
+        NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> batch, CancellationToken ct)
+    {
+        var sent = new List<Treatment>(batch.Count);
+        foreach (var item in batch)
+            sent.AddRange(await SplitAsync(config, item, ct));
+        return sent;
+    }
+
     protected override async Task AfterWrittenAsync(
         NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> items, CancellationToken ct)
     {
-        foreach (var item in items)
-        {
-            if (PreBolusSplitCopy.CreatedAt(item) is not { } createdAt)
-                continue;
+        foreach (var item in items.Where(i => PreBolusSplit.ForWriteBack(i).Count == 1))
+            await RemoveSplitCopiesAsync(config, item, ct);
+    }
 
-            var found = await ExchangeAsync(config, HttpMethod.Get, PreBolusSplitCopy.Query(Endpoint, item, createdAt), ct);
-            if (found is null)
-                continue;
+    /// <summary>
+    /// <see cref="PreBolusSplit.ForWriteBack"/> of <paramref name="item"/>. The split-off carbs go to
+    /// the slot an earlier write-back's split copy (<see cref="PreBolusSplitCopy"/>) holds, and up to
+    /// 15.0.6 a POST there upserts onto that copy, refused for the <c>_id</c> it would change, so the
+    /// copy is removed first.
+    /// </summary>
+    private async Task<IReadOnlyList<Treatment>> SplitAsync(
+        NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
+    {
+        var halves = PreBolusSplit.ForWriteBack(item);
+        if (halves.Count == 2)
+            await RemoveSplitCopiesAsync(config, item, ct);
+        return halves;
+    }
 
-            foreach (var id in PreBolusSplitCopy.Ids(found, item, createdAt))
-                await ExchangeAsync(config, HttpMethod.Delete, $"{Endpoint}/{Uri.EscapeDataString(id)}", ct);
-        }
+    private async Task RemoveSplitCopiesAsync(NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
+    {
+        if (PreBolusSplitCopy.CreatedAt(item) is not { } createdAt)
+            return;
+
+        var found = await ExchangeAsync(config, HttpMethod.Get, PreBolusSplitCopy.Query(Endpoint, item, createdAt), ct);
+        if (found is null)
+            return;
+
+        foreach (var id in PreBolusSplitCopy.Ids(found, item, createdAt))
+            await ExchangeAsync(config, HttpMethod.Delete, $"{Endpoint}/{Uri.EscapeDataString(id)}", ct);
     }
 
     protected override async Task<bool> SendUpdatedAsync(
         NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
+    {
+        var written = true;
+        foreach (var half in await SplitAsync(config, item, ct))
+            written &= await SendEditAsync(config, half, ct);
+        return written;
+    }
+
+    private async Task<bool> SendEditAsync(NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
     {
         if (UpstreamIdentityJson.TreatmentWireKey(item) is not { } key)
             return await SendAsync(config, HttpMethod.Post, new[] { item }, SerializerOptions, ct);

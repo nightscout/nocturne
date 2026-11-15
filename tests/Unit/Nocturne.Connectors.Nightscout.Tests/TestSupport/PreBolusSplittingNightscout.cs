@@ -15,7 +15,8 @@ namespace Nocturne.Connectors.Nightscout.Tests.TestSupport;
 /// </summary>
 /// <remarks>
 /// <c>prepareData</c> moves the carbs of a document with a non-zero <c>preBolus</c> into
-/// <c>preBolusCarbs</c> and deletes them. A POST, an array one document at a time, then upserts a
+/// <c>preBolusCarbs</c> and deletes them. A 15.0.6 POST whose upsert would change a stored document's
+/// <c>_id</c> is refused, as MongoDB refuses it. A POST, an array one document at a time, then upserts a
 /// second document <c>{created_at: created_at + preBolus minutes, eventType, carbs: preBolusCarbs,
 /// notes}</c> by <c>created_at</c> and <c>eventType</c> under a minted <c>_id</c>, carbs or not. A PUT
 /// writes no second document. A read serves <c>carbs</c> and <c>insulin</c> through
@@ -48,7 +49,10 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
 
         var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
         if (request.Method == HttpMethod.Post)
-            Post(body is JsonArray array ? array : new JsonArray(body.DeepClone()));
+        {
+            if (!Post(body is JsonArray array ? array : new JsonArray(body.DeepClone())))
+                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        }
         else if (request.Method == HttpMethod.Put)
             Save(body.DeepClone().AsObject());
         else
@@ -57,15 +61,17 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
         return Json("[]");
     }
 
-    public void Post(JsonArray documents)
+    /// <returns>Whether every document was stored.</returns>
+    public bool Post(JsonArray documents)
     {
+        var stored = true;
         foreach (var node in documents)
         {
             var obj = node!.DeepClone().AsObject();
             NormalizeId(obj);
             var (createdAt, preBolusCarbs) = PrepareData(obj);
             var eventType = obj["eventType"]?.GetValue<string>();
-            Upsert(v15_0_8 ? null : (createdAt, eventType), obj, createdAt);
+            stored &= Upsert(v15_0_8 ? null : (createdAt, eventType), obj, createdAt);
 
             if (obj["preBolus"] is { } preBolus)
             {
@@ -82,6 +88,8 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
                 Upsert((pbCreatedAt, eventType), pbTreat, pbCreatedAt);
             }
         }
+
+        return stored;
     }
 
     private void Save(JsonObject obj)
@@ -103,7 +111,7 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
     }
 
     /// <param name="timeAndType">The key a 15.0.6 POST and every preBolus copy upsert by.</param>
-    private void Upsert((string CreatedAt, string? EventType)? timeAndType, JsonObject obj, string createdAt)
+    private bool Upsert((string CreatedAt, string? EventType)? timeAndType, JsonObject obj, string createdAt)
     {
         Predicate<JsonObject> match;
         if (timeAndType is { } key)
@@ -128,13 +136,16 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
         var stored = Documents.FindIndex(match);
         if (stored >= 0)
         {
+            if (timeAndType is not null && Id(obj) is { } sent && sent != Id(Documents[stored]))
+                return false;
             obj["_id"] = Documents[stored]["_id"]!.DeepClone();
             Documents[stored] = obj;
-            return;
+            return true;
         }
 
         obj["_id"] ??= Mint();
         Documents.Add(obj);
+        return true;
     }
 
     private void NormalizeId(JsonObject obj)

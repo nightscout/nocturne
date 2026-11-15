@@ -56,6 +56,7 @@ interface UpstreamDoc {
   eventType?: string;
   created_at?: string;
   insulin?: number;
+  carbs?: number;
   duration?: number;
   sgv?: number;
   date?: number;
@@ -80,6 +81,11 @@ function wireId(key: string): string {
   if (/^[0-9a-f]{24}$/.test(key)) return key;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) return uuidPrefix(key);
   return createHash("sha256").update(key, "utf8").digest("hex").slice(0, 24);
+}
+
+/** The id the carbs a meal's preBolus moves go upstream under (PreBolusSplit.CarbsId of its key). */
+function preBolusCarbsWireId(key: string): string {
+  return wireId(`prebolus-carbs-${createHash("sha256").update(key, "utf8").digest("hex").slice(0, 48)}`);
 }
 
 /** A fresh lowercase 24-hex ObjectId, as a Nightscout or an AAPS client mints one. */
@@ -258,6 +264,31 @@ describe("Nightscout connector write-back round trip", () => {
     const to = encodeURIComponent(new Date(Date.parse(at) + MINUTE).toISOString());
     return tenant.api.ok<Page<SourcedBolus>>("GET", `/api/v4/insulin/boluses?limit=50&from=${from}&to=${to}`);
   };
+
+  // A meal with a preBolus stored as one record (a v3 upload) goes upstream as a v1 POST stores it:
+  // its bolus at its own time and its carbs at created_at + preBolus, under the id the v1 split gives
+  // them, which the pull resolves back onto the meal rather than storing the carbs twice (#2356).
+  it("writes a meal with a preBolus back as its bolus and its carbs, and pulls both back onto the meal", async () => {
+    const identifier = objectId();
+    const date = Math.floor((Date.now() - 160 * MINUTE) / 1000) * 1000;
+    const at = new Date(date).toISOString();
+    const carbsAt = new Date(date + 15 * MINUTE).toISOString();
+    const created = await tenant.api.request("POST", "/api/v3/treatments", {
+      identifier, eventType: "Meal Bolus", insulin: 2, carbs: 30, preBolus: 15, date, app: "e2e", utcOffset: 0,
+    });
+    expect(created.status).toBe(201);
+
+    expect((await upstreamTreatmentsAt(at, "Meal Bolus")).map((t) => [t.identifier, t.insulin, t.carbs ?? null])).toEqual([[identifier, 2, null]]);
+    expect((await upstreamTreatmentsAt(carbsAt, "Meal Bolus")).map((t) => [t.identifier, t.insulin ?? null, t.carbs]))
+      .toEqual([[preBolusCarbsWireId(identifier), null, 30]]);
+
+    expect((await sync()).success).toBe(true);
+    const from = encodeURIComponent(new Date(date - MINUTE).toISOString());
+    const to = encodeURIComponent(new Date(date + 16 * MINUTE).toISOString());
+    const carbs = await tenant.api.ok<Page<{ carbs: number }>>("GET", `/api/v4/nutrition/carbs?limit=50&from=${from}&to=${to}`);
+    expect(carbs.data.map((c) => c.carbs)).toEqual([30]);
+    expect((await bolusesAround(at)).data.map((b) => b.insulin)).toEqual([2]);
+  });
 
   it("pulls a v4-native treatment written back under its uuid prefix onto that treatment", async () => {
     const { bolus, at } = await createBolusWrittenBack(40);

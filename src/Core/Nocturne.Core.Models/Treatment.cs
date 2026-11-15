@@ -58,6 +58,9 @@ public class Treatment : ProcessableDocumentBase
     [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Identifier => Id;
 
+    /// <summary>A copy whose reference members, such as <see cref="AdditionalProperties"/>, are shared.</summary>
+    internal Treatment ShallowCopy() => (Treatment)MemberwiseClone();
+
     /// <summary>
     /// Server-modified timestamp for V3 compatibility.
     /// Falls back to Mills, which already resolves every other timestamp this document
