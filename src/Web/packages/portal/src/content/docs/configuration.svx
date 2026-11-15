@@ -179,6 +179,9 @@ published with the report, so check the preview before you send it.
 
 </Callout>
 
+App builds use their own GitHub App, set with the `GitHub__BuildApp__*` variables. See
+[GitHub App for app builds](/docs/configuration/github-build-app).
+
 ## Beyond environment variables
 
 The rest of Nocturne's configuration lives in the running app, not the
