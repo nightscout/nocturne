@@ -271,7 +271,7 @@ public interface ILegacyKeyedRepository<TRecord>
     /// <summary>
     /// As <see cref="ResolveHashedLegacyIdsAsync"/>, for the carbs write-back splits off a meal stored
     /// as one record (<see cref="PreBolusSplit.ForWriteBack"/>): the legacy ids, of any shape, whose
-    /// <see cref="PreBolusSplit.CarbsId"/> hashes to one of <paramref name="ids"/>.
+    /// <see cref="PreBolusSplit.WriteBackCarbsId"/> hashes to one of <paramref name="ids"/>.
     /// </summary>
     Task<IEnumerable<WireLegacyId>> ResolvePreBolusCarbsLegacyIdsAsync(
         IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default);

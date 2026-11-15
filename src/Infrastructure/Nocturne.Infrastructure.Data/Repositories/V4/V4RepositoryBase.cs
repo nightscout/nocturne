@@ -807,7 +807,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolvePreBolusCarbsLegacyIdsAsync" />
     public Task<IEnumerable<WireLegacyId>> ResolvePreBolusCarbsLegacyIdsAsync(
         IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default) =>
-        ResolveWindowLegacyIdsAsync(ids, from, to, legacyId => MongoObjectId.Coerce(PreBolusSplit.CarbsId(legacyId)), ct);
+        ResolveWindowLegacyIdsAsync(ids, from, to, legacyId => MongoObjectId.Coerce(PreBolusSplit.WriteBackCarbsId(legacyId)), ct);
 
     /// <summary>The legacy ids timed within the window whose <paramref name="wireOf"/> is one of <paramref name="ids"/>.</summary>
     private async Task<IEnumerable<WireLegacyId>> ResolveWindowLegacyIdsAsync(

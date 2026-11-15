@@ -24,7 +24,8 @@ public class TreatmentPreBolusWriteBackTests
 {
     private const string BolusTime = "2026-09-30T10:00:00.000Z";
     private const string Key = "6a1f00000000000000000001";
-    private static readonly string CarbsKey = MongoObjectId.Coerce(PreBolusSplit.CarbsId(Key))!;
+    private static readonly string CarbsKey = MongoObjectId.Coerce(PreBolusSplit.WriteBackCarbsId(Key))!;
+    private static readonly string V1CarbsKey = MongoObjectId.Coerce(PreBolusSplit.CarbsId(Key))!;
 
     private readonly NightscoutConnectorConfiguration _config = new()
     {
@@ -153,14 +154,10 @@ public class TreatmentPreBolusWriteBackTests
     public async Task The_halves_of_a_meal_a_v1_POST_split_go_up_unsplit(bool v15_0_8)
     {
         var upstream = new PreBolusSplittingNightscout(v15_0_8);
-        var meal = MealBolus(carbs: 30, preBolus: 15);
-        meal.Id = Key;
-        var halves = PreBolusSplit.Split(meal, _ => { });
-        halves[1].LegacyId = halves[1].Id;
 
-        await Sink(upstream).OnCreatedAsync(halves);
+        await Sink(upstream).OnCreatedAsync(V1Split());
 
-        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, CarbsKey]);
+        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, V1CarbsKey]);
         upstream.Documents.Single(d => d["carbs"] is not null)["created_at"]!.GetValue<string>().Should().Be("2026-09-30T10:15:00.000Z");
     }
 
@@ -264,14 +261,14 @@ public class TreatmentPreBolusWriteBackTests
 
     /// <summary>
     /// An edit after which the meal no longer splits leaves upstream the one document the treatment
-    /// now is, without the carbs the earlier write split off.
+    /// now is, without the carbs the earlier write split off. Up to 15.0.6 an edit of the event type
+    /// is refused (<see cref="A_refused_bolus_edit_leaves_the_carbs_it_split_off"/>).
     /// </summary>
     [Theory]
     [InlineData(false, "preBolus removed")]
     [InlineData(true, "preBolus removed")]
     [InlineData(false, "insulin removed")]
     [InlineData(true, "insulin removed")]
-    [InlineData(false, "now a correction")]
     [InlineData(true, "now a correction")]
     public async Task An_edit_that_stops_a_meal_splitting_removes_the_carbs_it_split_off(bool v15_0_8, string edit)
     {
@@ -293,14 +290,20 @@ public class TreatmentPreBolusWriteBackTests
         copy["carbs"]?.GetValue<double>().Should().Be(edited.Carbs);
     }
 
-    /// <summary>
-    /// A meal whose carbs an edit emptied is shaped as the bolus of a meal a v1 POST split, whose carbs
-    /// are a record of their own, so the carbs document is kept.
-    /// </summary>
+    /// <summary>The bolus and the carbs record a v1 POST splits <see cref="MealBolus"/> into, as reads serve them.</summary>
+    private static IReadOnlyList<Treatment> V1Split()
+    {
+        var meal = MealBolus(carbs: 30, preBolus: 15);
+        meal.Id = Key;
+        var halves = PreBolusSplit.Split(meal, _ => { });
+        halves[1].LegacyId = halves[1].Id;
+        return halves;
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task An_edit_that_empties_a_meals_carbs_keeps_the_carbs_document_it_cannot_tell_from_a_split_meals(bool v15_0_8)
+    public async Task An_edit_that_empties_a_meals_carbs_removes_the_carbs_it_split_off(bool v15_0_8)
     {
         var upstream = new PreBolusSplittingNightscout(v15_0_8);
         var sink = Sink(upstream);
@@ -308,7 +311,79 @@ public class TreatmentPreBolusWriteBackTests
 
         await sink.OnUpdatedAsync(MealBolus(carbs: null, preBolus: 15));
 
-        ShouldHoldTheMealSplit(upstream, v15_0_8, carbs: 30);
+        var copy = upstream.Documents.Should().ContainSingle().Subject;
+        KeyOf(copy, v15_0_8).Should().Be(Key);
+        copy["carbs"].Should().BeNull();
+    }
+
+    /// <summary>The carbs of a meal a v1 POST split are a record of their own, which an edit of its bolus leaves.</summary>
+    [Theory]
+    [InlineData(false, "preBolus removed")]
+    [InlineData(true, "preBolus removed")]
+    [InlineData(false, "now a correction")]
+    [InlineData(true, "now a correction")]
+    public async Task An_edit_of_the_bolus_of_a_meal_a_v1_POST_split_keeps_its_carbs_upstream(bool v15_0_8, string edit)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync(V1Split());
+
+        await sink.OnUpdatedAsync(edit == "preBolus removed"
+            ? MealBolus(carbs: null, preBolus: 0)
+            : MealBolus(carbs: null, preBolus: 15, eventType: "Correction Bolus"));
+
+        upstream.Documents.Single(d => KeyOf(d, v15_0_8) == V1CarbsKey)["carbs"]!.GetValue<double>().Should().Be(30);
+        upstream.Documents.Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// A one-record meal posted again through v1 is stored split: its bolus edit removes the carbs
+    /// write-back split off, and the carbs record goes up as its own, one carbs document in all.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_one_record_meal_split_by_a_later_v1_POST_leaves_one_carbs_document(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        var halves = V1Split();
+
+        await sink.OnUpdatedAsync(halves[0]);
+        await sink.OnCreatedAsync([halves[1]]);
+
+        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, V1CarbsKey]);
+    }
+
+    [Fact]
+    public async Task An_edit_of_a_meal_that_still_splits_writes_its_carbs_in_place_from_15_0_7()
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8: true);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        var carbsId = Str(upstream.Documents.Single(d => KeyOf(d, true) == CarbsKey), "_id");
+
+        await sink.OnUpdatedAsync(MealBolus(carbs: 45, preBolus: 20));
+
+        ShouldHoldTheMealSplit(upstream, true, carbs: 45, carbsAt: "2026-09-30T10:20:00.000Z");
+        Str(upstream.Documents.Single(d => KeyOf(d, true) == CarbsKey), "_id").Should().Be(carbsId);
+    }
+
+    /// <summary>A bolus edit the upstream refuses leaves the carbs as they were.</summary>
+    [Fact]
+    public async Task A_refused_bolus_edit_leaves_the_carbs_it_split_off()
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8: false);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        var moved = MealBolus(carbs: 60, preBolus: 0);
+        moved.Mills += 60_000;
+        moved.CreatedAt = "2026-09-30T10:01:00.000Z";
+
+        await sink.OnUpdatedAsync(moved);
+
+        upstream.Documents.Single(d => KeyOf(d, false) == CarbsKey)["carbs"]!.GetValue<double>().Should().Be(30);
     }
 
     [Theory]

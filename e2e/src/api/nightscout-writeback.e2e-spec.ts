@@ -83,9 +83,9 @@ function wireId(key: string): string {
   return createHash("sha256").update(key, "utf8").digest("hex").slice(0, 24);
 }
 
-/** The id the carbs a meal's preBolus moves go upstream under (PreBolusSplit.CarbsId of its key). */
+/** The id write-back sends the carbs a meal's preBolus moves under (PreBolusSplit.WriteBackCarbsId of its key). */
 function preBolusCarbsWireId(key: string): string {
-  return wireId(`prebolus-carbs-${createHash("sha256").update(key, "utf8").digest("hex").slice(0, 48)}`);
+  return wireId(`prebolus-written-carbs-${createHash("sha256").update(key, "utf8").digest("hex").slice(0, 48)}`);
 }
 
 /** A fresh lowercase 24-hex ObjectId, as a Nightscout or an AAPS client mints one. */

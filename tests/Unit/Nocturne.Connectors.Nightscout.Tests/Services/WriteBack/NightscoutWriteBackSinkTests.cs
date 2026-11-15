@@ -679,7 +679,7 @@ public class NightscoutWriteBackSinkTests
         const string legacyId = "syn-3a7c0e9f1b2d4c6e";
         var wire = MongoObjectId.Coerce(legacyId)!;
         var prefix = MongoObjectId.FromGuid(Guid.Parse(RecordUuid));
-        var splitCarbs = PreBolusSplit.CarbsId(legacyId);
+        var splitCarbs = PreBolusSplit.WriteBackCarbsId(legacyId);
         var handler = Upstream("[]");
 
         await TreatmentSink(handler).OnUpdatedAsync(Edit(legacyId));

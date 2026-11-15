@@ -122,7 +122,7 @@ public abstract class DecomposerBase
 
         /// <summary>
         /// A meal's carbs as write-back splits them off a meal stored as one record, under the hash of
-        /// <see cref="PreBolusSplit.CarbsId"/> of the meal's legacy id.
+        /// <see cref="PreBolusSplit.WriteBackCarbsId"/> of the meal's legacy id.
         /// </summary>
         PreBolusCarbs = 8,
     }

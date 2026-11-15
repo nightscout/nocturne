@@ -29,6 +29,7 @@ namespace Nocturne.Core.Models;
 public static class PreBolusSplit
 {
     private const string CarbsIdPrefix = "prebolus-carbs-";
+    private const string WriteBackCarbsIdPrefix = "prebolus-written-carbs-";
     private const double MaxPreBolusMinutes = 24 * 60;
     private static readonly long MaxMills = DateTimeOffset.MaxValue.ToUnixTimeMilliseconds();
 
@@ -39,32 +40,22 @@ public static class PreBolusSplit
         Split(treatment, t =>
         {
             identify(t);
-            return t.Id;
+            return t.Id is { Length: > 0 } id ? CarbsId(id) : null;
         });
 
     /// <summary>
     /// What Nightscout write-back sends for a stored treatment: <see cref="Split"/> of a copy of it,
     /// keyed by its legacy id as a v1 POST keys the meal, so a meal stored as one record goes upstream
     /// as the two documents a v1 POST of it stores, and its carbs come back under an id the pull
-    /// resolves to it (<see cref="CarbsId"/> of that legacy id). Anything else goes as it is: a record
-    /// with no legacy id, since no id of its carbs would resolve, and a meal with no insulin, whose
-    /// carbs Nocturne holds at its own time and whose copy upstream is already there.
+    /// resolves to it (<see cref="WriteBackCarbsId"/> of that legacy id). Anything else goes as it
+    /// is: a record with no legacy id, since no id of its carbs would resolve, and a meal with no
+    /// insulin, whose carbs Nocturne holds at its own time and whose copy upstream is already there.
     /// </summary>
     public static IReadOnlyList<Treatment> ForWriteBack(Treatment treatment) =>
         treatment.LegacyId is { Length: > 0 } legacyId
-        && Split(treatment.ShallowCopy(), _ => legacyId) is [_, _] halves
+        && Split(treatment.ShallowCopy(), _ => WriteBackCarbsId(legacyId)) is [_, _] halves
             ? halves
             : [treatment];
-
-    /// <summary>
-    /// Whether <paramref name="treatment"/> has the shape <see cref="Split"/> leaves its bolus in: a
-    /// meal with insulin and a preBolus whose carbs are held apart, as a record of its own.
-    /// </summary>
-    public static bool IsSplitBolus(Treatment treatment) =>
-        IsMealEventType(treatment.EventType?.Trim())
-        && treatment.Insulin is > 0
-        && treatment.Carbs is not > 0
-        && treatment.PreBolus is { } preBolus && preBolus != 0;
 
     /// <summary>How far the carbs of a meal split on <paramref name="preBolus"/> minutes lie from its bolus.</summary>
     public static long OffsetMillis(double preBolus) => (long)Math.Round(preBolus * 60_000);
@@ -74,7 +65,7 @@ public static class PreBolusSplit
         || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
         || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
 
-    private static IReadOnlyList<Treatment> Split(Treatment treatment, Func<Treatment, string?> idOf)
+    private static IReadOnlyList<Treatment> Split(Treatment treatment, Func<Treatment, string?> carbsIdOf)
     {
         if (!IsMealEventType(treatment.EventType?.Trim())
             || treatment.Carbs is not > 0
@@ -84,7 +75,7 @@ public static class PreBolusSplit
             return [treatment];
 
         var carbsAt = treatment.Mills + OffsetMillis(preBolus);
-        if (carbsAt <= 0 || carbsAt > MaxMills || idOf(treatment) is not { Length: > 0 } id)
+        if (carbsAt <= 0 || carbsAt > MaxMills || carbsIdOf(treatment) is not { } carbsId)
             return [treatment];
 
         if (treatment.Insulin is not > 0)
@@ -103,7 +94,7 @@ public static class PreBolusSplit
 
         var carbs = new Treatment
         {
-            Id = CarbsId(id),
+            Id = carbsId,
             EventType = treatment.EventType,
             Mills = carbsAt,
             Carbs = treatment.Carbs,
@@ -127,6 +118,15 @@ public static class PreBolusSplit
     /// Hex after a prefix with non-hex letters, so it cannot be read as an ObjectId, a UUID or a
     /// content-derived id.
     /// </summary>
-    public static string CarbsId(string bolusId) =>
-        CarbsIdPrefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(bolusId)))[..48];
+    public static string CarbsId(string bolusId) => Derived(CarbsIdPrefix, bolusId);
+
+    /// <summary>
+    /// As <see cref="CarbsId"/>, for the carbs write-back splits off a meal stored as one record
+    /// (<see cref="ForWriteBack"/>). Apart from the id of a v1 POST's carbs record, so what write-back
+    /// removes when the meal stops splitting is only ever its own document.
+    /// </summary>
+    public static string WriteBackCarbsId(string legacyId) => Derived(WriteBackCarbsIdPrefix, legacyId);
+
+    private static string Derived(string prefix, string id) =>
+        prefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(id)))[..48];
 }
