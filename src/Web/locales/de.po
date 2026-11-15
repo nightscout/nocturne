@@ -26254,9 +26254,8 @@ msgstr ""
 msgid "This report needs a time zone"
 msgstr ""
 
-#: src/lib/components/reports/time-zone-reasons.svelte.ts
-msgid "A shared link does not show the time zone of this data."
-msgstr ""
+#~ msgid "A shared link does not show the time zone of this data."
+#~ msgstr ""
 
 #: src/lib/components/reports/time-zone-reasons.svelte.ts
 msgid "The time zone of this data did not load."

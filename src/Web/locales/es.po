@@ -26828,9 +26828,8 @@ msgstr "Este informe contabiliza el uso del dispositivo por días UTC."
 msgid "This report needs a time zone"
 msgstr "Este informe necesita una zona horaria"
 
-#: src/lib/components/reports/time-zone-reasons.svelte.ts
-msgid "A shared link does not show the time zone of this data."
-msgstr "Un enlace compartido no muestra la zona horaria de estos datos."
+#~ msgid "A shared link does not show the time zone of this data."
+#~ msgstr "Un enlace compartido no muestra la zona horaria de estos datos."
 
 #: src/lib/components/reports/time-zone-reasons.svelte.ts
 msgid "The time zone of this data did not load."

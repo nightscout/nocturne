@@ -26254,9 +26254,8 @@ msgstr "This report counts device use on UTC days."
 msgid "This report needs a time zone"
 msgstr "This report needs a time zone"
 
-#: src/lib/components/reports/time-zone-reasons.svelte.ts
-msgid "A shared link does not show the time zone of this data."
-msgstr "A shared link does not show the time zone of this data."
+#~ msgid "A shared link does not show the time zone of this data."
+#~ msgstr "A shared link does not show the time zone of this data."
 
 #: src/lib/components/reports/time-zone-reasons.svelte.ts
 msgid "The time zone of this data did not load."
