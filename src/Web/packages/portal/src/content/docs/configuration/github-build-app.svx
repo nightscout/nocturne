@@ -23,7 +23,7 @@ The App gets three repository permissions and no more:
 |------------|--------|-----|
 | **Secrets** | Read and write | Nocturne writes the signing-key secret. It sends only a value that the browser encrypted with the repository's public key. Nocturne cannot decrypt it. |
 | **Actions** | Read and write | Nocturne starts the build workflow and reads the status of each build. |
-| **Metadata** | Read-only | GitHub gives this permission to every App. |
+| **Metadata** | Read-only | Nocturne makes sure that the person who connected the repository is still an administrator of it. GitHub gives this permission to every App. |
 
 The App does not get **Contents** or **Administration**. Thus Nocturne cannot change the
 workflow file, read the code, or create a repository. The owner creates the repository from
@@ -117,8 +117,9 @@ Only a site owner, or a member who manages site settings, can use app builds. Th
 connects the repository does so with their own GitHub account. Only that person can choose the
 repository, save the signing key and start a build. That person must be an administrator of the
 repository on GitHub. Before each save of the key and each build, Nocturne asks GitHub again. If
-that person is no longer an administrator, Nocturne stops and asks for a new connection. Other site owners can see the status and the builds, and they can disconnect.
-To take over, another owner connects again with their own GitHub account.
+that person is no longer an administrator, Nocturne stops and asks for a new connection. Other
+site owners can see the status and the builds, and they can disconnect. To take over, another
+owner connects again with their own GitHub account.
 
 ## Remove the App
 
