@@ -137,7 +137,7 @@ public class LoopAnalysisLoopHealthIntegrationTests(ApiIntegrationTestFixture fi
     }
 
     [Fact]
-    public async Task A_share_gets_its_reason_and_no_days()
+    public async Task A_share_gets_its_days_on_the_tenants_clock()
     {
         await SeedProfileAsync("Australia/Sydney");
         await SeedWeekAsync(WeekStart, gap: false);
@@ -145,8 +145,8 @@ public class LoopAnalysisLoopHealthIntegrationTests(ApiIntegrationTestFixture fi
 
         var body = await GetOkAsync(share, Query(Week));
 
-        body.GetProperty("timeZoneUnavailableReason").GetString().Should().Be("Share");
-        body.GetProperty("primary").GetProperty("days").GetArrayLength().Should().Be(0);
+        Absent(body, "timeZoneUnavailableReason").Should().BeTrue();
+        body.GetProperty("primary").GetProperty("days").GetArrayLength().Should().Be(7);
     }
 
     [Fact]

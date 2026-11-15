@@ -31,7 +31,7 @@ public readonly record struct TenantClock(TimeZoneInfo? Zone, TimeZoneUnavailabl
 /// Resolves the tenant's timezone for the reports that place readings on its local clock: none is
 /// set, the stored one does not resolve, or the lookup threw.
 /// </summary>
-/// <remarks>A share reads the zone through <see cref="IShareClockReader"/>, which gives the reason.</remarks>
+/// <remarks>A share reads the zone id through <see cref="IShareClockReader"/>.</remarks>
 public sealed class TenantClockResolver(
     ITherapySettingsResolver therapySettingsResolver,
     ICategoryReadContext categoryReadContext,
