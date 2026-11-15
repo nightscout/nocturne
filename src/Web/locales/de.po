@@ -40184,3 +40184,66 @@ msgstr ""
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "On a Linux server with the bundled proxy and a Docker volume, the <0>install script</0> does every step on this page. Use this page to do the steps by hand, to use your own reverse proxy, or to keep the database in a host directory. A server that the install script made has its files in <1/>. Do not run the install script on a server that you installed from this page."
 msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "This file is not a ZIP file. Select the ZIP file that you downloaded from Oura."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "This ZIP file is not an Oura data export. Select the file that you downloaded from Oura."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Nocturne cannot read this ZIP file. Download the export from Oura again."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "This export contains more data than Nocturne can import."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Your access shows only the last 24 hours. A member with full access must import the export."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "The import did not complete. Try again."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Import an Oura data export"
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Request your data export at <0>membership.ouraring.com/data-export</0>. When the export is ready, download the ZIP file and select it here. To add newer data, import a new export."
+msgstr ""
+
+#. 0: MAX_SIZE_MB
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "The file is larger than {0} MB."
+msgstr ""
+
+#. 0: MAX_SIZE_MB
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Data export (ZIP file, up to {0} MB)"
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "<0/> Importing..."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "<0/> Import"
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "A large export can take some minutes. Keep this page open."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Import complete"
+msgstr ""
+
+#. 0: count(imported.sleepSessions); 1: count(imported.heartRates); 2: count(imported.stepDays)
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Sleep sessions: {0}. Heart rate readings: {1}. Days of steps: {2}."
+msgstr ""
