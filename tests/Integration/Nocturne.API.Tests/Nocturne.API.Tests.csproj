@@ -39,6 +39,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../../Unit/Nocturne.Connectors.Nightscout.Tests/TestSupport/FakeNightscoutTreatments.cs" Link="TestSupport/FakeNightscoutTreatments.cs" />
+    <Compile Include="../../Unit/Nocturne.Connectors.Nightscout.Tests/TestSupport/PreBolusSplittingNightscout.cs" Link="TestSupport/PreBolusSplittingNightscout.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Migration\Fixtures\*.json">

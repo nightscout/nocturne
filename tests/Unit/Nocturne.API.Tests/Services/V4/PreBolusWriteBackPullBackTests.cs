@@ -68,6 +68,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     private static Treatment Treatment(string eventType, double insulin, double carbs, double preBolus) => new()
     {
         Id = Key,
+        LegacyId = Key,
         EventType = eventType,
         CreatedAt = BolusTime,
         Mills = new DateTimeOffset(At).ToUnixTimeMilliseconds(),
@@ -87,6 +88,8 @@ public class PreBolusWriteBackPullBackTests : IDisposable
         await decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         await WriteBackAsync(treatment, edited);
+        _upstream.Documents.Select(d => (d["created_at"]!.GetValue<string>(), d["carbs"]?.GetValue<double>()))
+            .Should().BeEquivalentTo([(BolusTime, (double?)null), ("2026-09-30T10:15:00.000Z", 30d)]);
         await PullBackAsync(decomposer);
 
         var carbs = await _context.CarbIntakes.AsNoTracking().SingleAsync();

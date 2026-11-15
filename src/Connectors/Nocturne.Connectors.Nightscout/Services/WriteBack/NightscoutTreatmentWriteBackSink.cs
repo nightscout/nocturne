@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -75,34 +76,114 @@ public class NightscoutTreatmentWriteBackSink(
     protected override bool ShouldSkip(Treatment item)
         => item.DataSource == DataSources.NightscoutConnector;
 
+    protected override async Task<IReadOnlyList<Treatment>> PrepareAsync(
+        NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> batch, CancellationToken ct)
+    {
+        var sent = new List<Treatment>(batch.Count);
+        foreach (var item in batch)
+            sent.AddRange(await SplitAsync(config, item, ct));
+        return sent;
+    }
+
     protected override async Task AfterWrittenAsync(
         NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> items, CancellationToken ct)
     {
-        foreach (var item in items)
-        {
-            if (PreBolusSplitCopy.CreatedAt(item) is not { } createdAt)
-                continue;
-
-            var found = await ExchangeAsync(config, HttpMethod.Get, PreBolusSplitCopy.Query(Endpoint, item, createdAt), ct);
-            if (found is null)
-                continue;
-
-            foreach (var id in PreBolusSplitCopy.Ids(found, item, createdAt))
-                await ExchangeAsync(config, HttpMethod.Delete, $"{Endpoint}/{Uri.EscapeDataString(id)}", ct);
-        }
+        foreach (var item in items.Where(i => PreBolusSplit.ForWriteBack(i).Count == 1))
+            await RemoveSplitCopiesAsync(config, item, ct);
     }
 
+    /// <summary>
+    /// <see cref="PreBolusSplit.ForWriteBack"/> of <paramref name="item"/>. The split-off carbs go to
+    /// the slot an earlier write-back's split copy (<see cref="PreBolusSplitCopy"/>) holds, and up to
+    /// 15.0.6 a POST there upserts onto that copy, refused for the <c>_id</c> it would change, so the
+    /// copy is removed first. If the carbs then fail to go, upstream lacks them until the next edit.
+    /// </summary>
+    private async Task<IReadOnlyList<Treatment>> SplitAsync(
+        NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
+    {
+        var halves = PreBolusSplit.ForWriteBack(item);
+        if (halves.Count == 2)
+            await RemoveSplitCopiesAsync(config, item, ct);
+        return halves;
+    }
+
+    private async Task RemoveSplitCopiesAsync(NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
+    {
+        if (PreBolusSplitCopy.CreatedAt(item) is not { } createdAt)
+            return;
+
+        var found = await ExchangeAsync(config, HttpMethod.Get, PreBolusSplitCopy.Query(Endpoint, item, createdAt), ct);
+        if (found is null)
+            return;
+
+        foreach (var id in PreBolusSplitCopy.Ids(found, item, createdAt))
+            await ExchangeAsync(config, HttpMethod.Delete, $"{Endpoint}/{Uri.EscapeDataString(id)}", ct);
+    }
+
+    /// <remarks>
+    /// The identifier lookup also asks for the carbs an earlier write-back split off the meal
+    /// (<see cref="PreBolusSplit.WriteBackCarbsId"/> of its legacy id), which only write-back sends.
+    /// Once the bolus is accepted, an edit that stops the split removes them, and one that keeps it
+    /// writes them in place as any edit is. Up to 15.0.6 a copy held under its identifier as its
+    /// <c>_id</c> is written by a POST that upserts by time, which a moved time turns into a refused
+    /// insert, so such a copy is removed and its carbs created again.
+    /// <para>
+    /// Known gap (#3431): up to 15.0.6 a one-record meal written back and later posted again through v1
+    /// with a preBolus loses its upstream carbs until its carbs record is next edited. That record's
+    /// create upserts onto the split-off document and is refused, and the bolus update removes it.
+    /// </para>
+    /// </remarks>
     protected override async Task<bool> SendUpdatedAsync(
         NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
+    {
+        var halves = await SplitAsync(config, item, ct);
+        if (item.LegacyId is not { Length: > 0 } legacyId)
+            return await SendEditAsync(config, halves[0], null, ct);
+
+        var carbsForms = UpstreamIdentityJson.TreatmentWireForms(new Treatment { Id = PreBolusSplit.WriteBackCarbsId(legacyId) });
+        var forms = UpstreamIdentityJson.TreatmentWireForms(halves[0]);
+        if (await FindAsync(config, IdentifierQuery($"{Endpoint}.json", [.. forms, .. carbsForms]), ct) is not { } found
+            || !await SendEditAsync(config, halves[0], found, ct))
+            return false;
+
+        var carbsCopy = Preferred(found, carbsForms);
+        if (halves.Count == 1)
+            return carbsCopy is null || await RemoveAsync(config, carbsForms, ct);
+
+        if (carbsCopy is { } held && held.Id == held.Identifier && Mills(held.CreatedAt) != halves[1].Mills)
+        {
+            if (!await RemoveAsync(config, carbsForms, ct))
+                return false;
+            found = [];
+        }
+
+        return await SendEditAsync(config, halves[1], found, ct);
+    }
+
+    /// <summary>
+    /// Removes the copies held under any of <paramref name="identifiers"/>, by a query: up to 15.0.6
+    /// one may be held under a string <c>_id</c>, which <c>DELETE /treatments/:id</c> casts to an ObjectId.
+    /// </summary>
+    private async Task<bool> RemoveAsync(NightscoutConnectorConfiguration config, IReadOnlyList<string> identifiers, CancellationToken ct)
+        => await ExchangeAsync(config, HttpMethod.Delete, IdentifierQuery(Endpoint, identifiers), ct) is not null;
+
+    private static long? Mills(string? createdAt) =>
+        DateTimeOffset.TryParse(createdAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at)
+            ? at.ToUnixTimeMilliseconds()
+            : null;
+
+    /// <param name="byIdentifier">What a lookup under the item's identifier forms found, or null to look.</param>
+    private async Task<bool> SendEditAsync(
+        NightscoutConnectorConfiguration config, Treatment item, IReadOnlyList<UpstreamCopy>? byIdentifier, CancellationToken ct)
     {
         if (UpstreamIdentityJson.TreatmentWireKey(item) is not { } key)
             return await SendAsync(config, HttpMethod.Post, new[] { item }, SerializerOptions, ct);
 
         var forms = UpstreamIdentityJson.TreatmentWireForms(item);
-        if (await FindAsync(config, IdentifierQuery(forms), ct) is not { } byIdentifier)
+        if ((byIdentifier ?? await FindAsync(config, IdentifierQuery($"{Endpoint}.json", forms), ct)) is not { } copies)
             return false;
 
-        if (Preferred(byIdentifier, forms) is { } copy)
+        if (Preferred(copies, forms) is { } copy)
         {
             var identifier = copy.Identifier!;
             // A read serves an ObjectId as lowercase hex, so any other _id is a string.
@@ -156,9 +237,9 @@ public class NightscoutTreatmentWriteBackSink(
     /// <summary>At most this many copies are read back; more than one is already a duplicate.</summary>
     private const int LookupCount = 10;
 
-    private string IdentifierQuery(IReadOnlyList<string> forms)
+    private static string IdentifierQuery(string path, IReadOnlyList<string> forms)
     {
-        var query = new StringBuilder($"{Endpoint}.json?");
+        var query = new StringBuilder($"{path}?");
         for (var i = 0; i < forms.Count; i++)
             query.Append($"find[identifier][$in][{i}]={Uri.EscapeDataString(forms[i])}&");
         return query.Append($"find[created_at][$gte]={Uri.EscapeDataString(LookupCreatedAtFloor)}&count={LookupCount}").ToString();
@@ -172,8 +253,8 @@ public class NightscoutTreatmentWriteBackSink(
     private static UpstreamCopy? Preferred(IReadOnlyList<UpstreamCopy> copies, IReadOnlyList<string> forms) =>
         forms.Select(form => copies.FirstOrDefault(c => c.Identifier == form)).FirstOrDefault(c => c is not null);
 
-    /// <summary>A copy upstream: the <c>_id</c> the read serves it by, and its <c>identifier</c>.</summary>
-    private sealed record UpstreamCopy(string Id, string? Identifier);
+    /// <summary>A copy upstream: the <c>_id</c> the read serves it by, its <c>identifier</c> and <c>created_at</c>.</summary>
+    private sealed record UpstreamCopy(string Id, string? Identifier, string? CreatedAt);
 
     /// <returns>
     /// The copies <paramref name="pathAndQuery"/> reads, or null when the upstream could not say:
@@ -193,6 +274,9 @@ public class NightscoutTreatmentWriteBackSink(
         return null;
     }
 
+    private static string? StringOf(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
     private static List<UpstreamCopy>? ParseCopies(string body)
     {
         try
@@ -208,11 +292,7 @@ public class NightscoutTreatmentWriteBackSink(
                     || !element.TryGetProperty("_id", out var id) || id.ValueKind != JsonValueKind.String)
                     return null;
 
-                copies.Add(new UpstreamCopy(
-                    id.GetString()!,
-                    element.TryGetProperty("identifier", out var identifier) && identifier.ValueKind == JsonValueKind.String
-                        ? identifier.GetString()
-                        : null));
+                copies.Add(new UpstreamCopy(id.GetString()!, StringOf(element, "identifier"), StringOf(element, "created_at")));
             }
 
             return copies;

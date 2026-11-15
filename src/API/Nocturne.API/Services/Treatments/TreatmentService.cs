@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
+using Nocturne.API.Services.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Core.Clinical.Treatments;
@@ -318,7 +319,7 @@ internal class TreatmentService : ITreatmentService
     /// </summary>
     private async Task<List<Treatment>> SplitPreBolusAsync(List<Treatment> treatments, CancellationToken ct)
     {
-        var meals = treatments.Select(PreBolusSplit.Split).ToList();
+        var meals = treatments.Select(t => PreBolusSplit.Split(t, TreatmentDecomposer.NormalizeIdentity)).ToList();
         var split = meals.Where(halves => halves.Count == 2).Select(halves => halves[0].Id!).ToList();
         if (split.Count == 0)
             return [.. meals.SelectMany(halves => halves)];

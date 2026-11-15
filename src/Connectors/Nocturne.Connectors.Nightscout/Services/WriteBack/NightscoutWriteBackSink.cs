@@ -108,6 +108,14 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         => SendAsync(config, HttpMethod.Put, item, SerializerOptions, ct);
 
     /// <summary>
+    /// The documents a create of <paramref name="batch"/> sends, once what an earlier write left
+    /// upstream is tidied where it would refuse them; the batch itself unless a sink sends it otherwise.
+    /// </summary>
+    protected virtual Task<IReadOnlyList<T>> PrepareAsync(
+        NightscoutConnectorConfiguration config, IReadOnlyList<T> batch, CancellationToken ct)
+        => Task.FromResult(batch);
+
+    /// <summary>
     /// Runs once upstream has accepted <paramref name="items"/>, to tidy what an earlier write left there.
     /// </summary>
     protected virtual Task AfterWrittenAsync(
@@ -197,7 +205,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
 
     private async Task<bool> SendCreatedAsync(NightscoutConnectorConfiguration config, List<T> batch, CancellationToken ct)
     {
-        if (await TrySendAsync(config, HttpMethod.Post, batch, SerializerOptions, ct) is not { } outcome)
+        if (await TrySendAsync(config, HttpMethod.Post, await PrepareAsync(config, batch, ct), SerializerOptions, ct) is not { } outcome)
             return false;
         if (outcome.Refusal is not { } refusal)
             return true;

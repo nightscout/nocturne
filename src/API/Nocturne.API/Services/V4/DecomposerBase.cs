@@ -119,6 +119,12 @@ public abstract class DecomposerBase
 
         /// <summary>A record that carries a legacy id, under its own uuid or that uuid's 24-hex prefix.</summary>
         KeyedOwnId = 4,
+
+        /// <summary>
+        /// A meal's carbs as write-back splits them off a meal stored as one record, under the hash of
+        /// <see cref="PreBolusSplit.WriteBackCarbsId"/> of the meal's legacy id.
+        /// </summary>
+        PreBolusCarbs = 8,
     }
 
     /// <summary>One table a legacy record decomposes into, for <see cref="PointAtStoredRecordsAsync"/>.</summary>
@@ -159,6 +165,8 @@ public abstract class DecomposerBase
             resolvers.Add(new((ids, _, ct) => repository.ResolveUuidLegacyIdsAsync(ids, ct), PulledOnly: false));
         if (forms.HasFlag(WireForms.Hashed))
             resolvers.Add(new((ids, window, ct) => repository.ResolveHashedLegacyIdsAsync(ids, window.From, window.To, ct), PulledOnly: true));
+        if (forms.HasFlag(WireForms.PreBolusCarbs))
+            resolvers.Add(new((ids, window, ct) => repository.ResolvePreBolusCarbsLegacyIdsAsync(ids, window.From, window.To, ct), PulledOnly: true));
         if (forms.HasFlag(WireForms.KeyedOwnId))
             resolvers.Add(new((ids, _, ct) => repository.ResolveKeyedOwnIdsAsync(ids, ct), PulledOnly: false, TakesUuids: true));
 
