@@ -137,5 +137,8 @@ export function createServerApiClient(
   fetchFn: typeof fetch,
   options?: ServerHttpClientOptions
 ): ApiClient {
-  return new ApiClient(baseUrl, createServerHttpClient(fetchFn, options));
+  const http = createServerHttpClient(fetchFn, options);
+  // The generated file-upload remotes send their multipart body through `apiClient.http`, which
+  // the generated ApiClient hands to its sub-clients and does not keep.
+  return Object.assign(new ApiClient(baseUrl, http), { http });
 }

@@ -15,6 +15,7 @@ using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.API.Services.Health.Oura;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models.Authorization;
@@ -158,6 +159,8 @@ builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequired
 builder.Services.AddGoogleHealthPlatform();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
+builder.Services.AddScoped<OuraImportService>();
+builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<OuraImportService>());
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
 builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 

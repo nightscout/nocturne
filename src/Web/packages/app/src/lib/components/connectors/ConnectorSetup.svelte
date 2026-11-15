@@ -54,6 +54,8 @@
     onCancel?: () => void;
     /** Show enable/disable toggle. Default: false for setup, true when connectorId set */
     showToggle?: boolean;
+    /** Show the configuration form. False for a connector that has nothing to configure. Default: true */
+    showConfiguration?: boolean;
     /** Show danger zone (delete config/data). Default: false */
     showDangerZone?: boolean;
     /** Show capabilities card. Default: false */
@@ -75,6 +77,7 @@
     onComplete,
     onCancel,
     showToggle = connectorId !== undefined,
+    showConfiguration = true,
     showDangerZone = false,
     showCapabilities = false,
     primaryAction = connectorId ? "save-only" : "save-and-finish",
@@ -372,7 +375,7 @@
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        {#if canManage}
+        {#if canManage && showConfiguration}
           <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
             {isActive ? "Active" : "Inactive"}
           </Badge>
@@ -426,7 +429,7 @@
             </p>
           </CardContent>
         </Card>
-      {:else if hasRuntimeConfig}
+      {:else if showConfiguration && hasRuntimeConfig}
         <ConnectorConfigForm
           {schema}
           bind:configuration
@@ -437,7 +440,7 @@
           {saveLabel}
           onSave={handleSave}
         />
-      {:else}
+      {:else if showConfiguration}
         <EmptyState
           art="plug"
           variant="card"

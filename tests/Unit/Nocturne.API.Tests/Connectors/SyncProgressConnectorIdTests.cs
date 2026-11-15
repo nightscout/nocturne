@@ -26,7 +26,7 @@ namespace Nocturne.API.Tests.Connectors;
 /// </summary>
 public class SyncProgressConnectorIdTests
 {
-    private static readonly string[] ConnectorsWithNoSyncExecutor = ["homeassistant"];
+    private static readonly string[] ConnectorsWithNoSyncExecutor = ["homeassistant", "oura"];
 
     public static TheoryData<string> ConnectorIds() =>
         [.. SyncExecutors().Select(executor => executor.ConnectorId)];
