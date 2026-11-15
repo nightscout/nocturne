@@ -8,8 +8,6 @@ export interface TimeZoneReasonCopy {
 /** Built per call so wuchale reads them in the current locale. */
 export function timeZoneReasonCopy(reason: TimeZoneUnavailableReason): TimeZoneReasonCopy {
   switch (reason) {
-    case TimeZoneUnavailableReason.Share:
-      return { cause: "A shared link does not show the time zone of this data." };
     case TimeZoneUnavailableReason.LookupFailed:
       return {
         cause: "The time zone of this data did not load.",

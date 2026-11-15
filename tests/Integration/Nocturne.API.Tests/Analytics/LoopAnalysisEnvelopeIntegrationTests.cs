@@ -60,16 +60,16 @@ public class LoopAnalysisEnvelopeIntegrationTests(ApiIntegrationTestFixture fixt
     }
 
     [Fact]
-    public async Task A_share_gets_its_reason_no_ranges_and_no_profiles()
+    public async Task A_share_gets_its_ranges_but_no_profiles()
     {
         await SeedProfileAsync("Australia/Sydney");
         using var share = await CreateShareClientAsync();
 
         var body = await GetOkAsync(share, $"{Path}?{Week}&compare=previous");
 
-        body.GetProperty("timeZoneUnavailableReason").GetString().Should().Be("Share");
-        Absent(body, "primaryRange").Should().BeTrue();
-        Absent(body, "comparisonRange").Should().BeTrue();
+        Absent(body, "timeZoneUnavailableReason").Should().BeTrue();
+        Absent(body, "primaryRange").Should().BeFalse();
+        Absent(body, "comparisonRange").Should().BeFalse();
         body.GetProperty("profileNames").EnumerateArray().Should().BeEmpty();
         body.GetProperty("withheldSeries").EnumerateArray().Select(s => s.GetString()).Should().Contain("ProfileNames");
     }

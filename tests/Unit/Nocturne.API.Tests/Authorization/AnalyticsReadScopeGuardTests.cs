@@ -13,6 +13,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Entries;
@@ -1561,7 +1562,7 @@ public partial class AnalyticsReadScopeGuardTests
 
         var settings = new Mock<ITherapySettingsResolver>();
         settings.Setup(s => s.GetTimezoneAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync(timezone);
-        var clock = new TenantClockResolver(settings.Object, readContext, NullLogger<TenantClockResolver>.Instance);
+        var clock = new TenantClockResolver(settings.Object, readContext, new ShareClockDouble(settings.Object), NullLogger<TenantClockResolver>.Instance);
 
         var controller = new LoopAnalysisController(
             service.Object, clock, new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(LoopAnalysisNow)))

@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.Infrastructure;
-using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -20,6 +19,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Tests.TestDoubles;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -89,7 +89,7 @@ public class DataOverviewServiceTests : IDisposable
         mockStatisticsService.WithRealTimeInRange();
         _service = new DataOverviewService(
             _factory.Object,
-            new TenantClockResolver(_therapySettings.Object, _readContext, NullLogger<TenantClockResolver>.Instance),
+            new TenantClockResolver(_therapySettings.Object, _readContext, new ShareClockDouble(_therapySettings.Object), NullLogger<TenantClockResolver>.Instance),
             mockStatisticsService.Object,
             TestTenantCache.Create(distributed: _distributed.Object, tenantId: TenantId),
             TimeProvider.System, _logger
@@ -294,7 +294,7 @@ public class DataOverviewServiceTests : IDisposable
     {
         var service = new DataOverviewService(
             _factory.Object,
-            new TenantClockResolver(_therapySettings.Object, _readContext, NullLogger<TenantClockResolver>.Instance),
+            new TenantClockResolver(_therapySettings.Object, _readContext, new ShareClockDouble(_therapySettings.Object), NullLogger<TenantClockResolver>.Instance),
             Mock.Of<IStatisticsService>(),
             TestTenantCache.Create(tenantId: TenantId),
             TimeProvider.System, _logger

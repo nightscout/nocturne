@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -40,7 +41,7 @@ public class ActogramReportServiceTests
             _heartRates.Object,
             _therapy.Object,
             _targetRange.Object,
-            new TenantClockResolver(_therapy.Object, _readContext, NullLogger<TenantClockResolver>.Instance),
+            new TenantClockResolver(_therapy.Object, _readContext, new ShareClockDouble(_therapy.Object), NullLogger<TenantClockResolver>.Instance),
             NullLogger<ActogramReportService>.Instance
         );
 
@@ -263,19 +264,19 @@ public class ActogramReportServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_ForAShare_ServesUtcDaysAndSaysShare_EvenWhenAZoneIsCached()
+    public async Task GetAsync_ForAShare_ServesTheTenantsLocalDays()
     {
         SetupEmpty();
         SetupSteps((StartMills + 30 * 60_000, 300));
         _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        SetupZone("Australia/Brisbane");
+        SetupZone("Europe/Stockholm");
         _readContext.MarkShare();
 
         var result = await CreateService().GetAsync(StartMills, EndMills);
 
         result.Days[0].Date.Should().Be("2023-11-14");
-        result.Days[0].StartMills.Should().Be(1699920000000L);
-        result.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.Share);
+        result.Days[0].StartMills.Should().Be(1699916400000L);
+        result.TimeZoneUnavailableReason.Should().BeNull();
     }
 
     [Fact]
