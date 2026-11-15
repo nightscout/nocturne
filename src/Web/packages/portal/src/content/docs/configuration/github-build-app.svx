@@ -9,8 +9,8 @@ title: GitHub App for app builds
 # GitHub App for app builds
 
 With app builds, a site owner can set up, start and monitor their own AAPS build from
-Nocturne. The build runs in the owner's private GitHub repository. GitHub signs the app with
-the owner's own key. Nocturne connects to that repository through a GitHub App. Each
+Nocturne. The build runs in the owner's private GitHub repository. The owner's workflow signs
+the APK with the owner's own key. Nocturne connects to that repository through a GitHub App. Each
 instance registers its own GitHub App. This page tells you how to do that.
 
 If you do not register an App, app builds stay off. Nothing else in Nocturne changes.
@@ -79,9 +79,20 @@ Add these variables to the environment of the `nocturne-api` service:
 | `GitHub__BuildApp__Slug` | The App name from the public page URL. |
 | `GitHub__BuildApp__ClientId` | The Client ID. |
 | `GitHub__BuildApp__ClientSecret` | The client secret. |
-| `GitHub__BuildApp__PrivateKey` | All of the `.pem` file, with its `BEGIN` and `END` lines. |
+| `GitHub__BuildApp__PrivateKey` | The `.pem` file. See below. |
 
-Restart the API. App builds stay off until you set all four variables.
+The private key file has many lines. Many environment files accept only one line for each
+value, for example a Docker Compose `.env` file. For those, give the key as one line of base64:
+
+```bash
+base64 -w0 your-app.private-key.pem
+```
+
+Nocturne accepts the base64 text or the full `.pem` text with its `BEGIN` and `END` lines.
+
+Restart the API. App builds stay off until you set all four variables. If Nocturne cannot read the
+private key, app builds also stay off. The API log then shows a warning that names
+`GitHub:BuildApp:PrivateKey`. The warning does not show the key.
 
 <Callout type="warning" title="Keep the keys secret">
 
@@ -93,15 +104,20 @@ Restart the API. App builds stay off until you set all four variables.
 ## What Nocturne keeps
 
 For each site, Nocturne keeps the installation number, the GitHub account name, the
-repository name and who connected it. Nocturne does not keep a GitHub token. It gets a
+repository name and who connected it. It also keeps the names of the repositories in the
+installation that this person administers. Nocturne does not keep a GitHub token. It gets a
 short-lived installation token from GitHub when it needs one. Nocturne does not keep the
-token that GitHub gives during installation. It uses that token one time to make sure the
-user can get to the installation, then revokes it.
+token that GitHub gives during installation. It uses that token to find the installation and
+the repositories that the user administers, then revokes it.
 
 The built APK stays in the owner's repository. The owner downloads it from the build page on
 GitHub. Nocturne does not get or keep the APK.
 
-Only a site owner, or a member who manages site settings, can use app builds.
+Only a site owner, or a member who manages site settings, can use app builds. The person who
+connects the repository does so with their own GitHub account. Only that person can choose the
+repository, save the signing key and start a build. That person must be an administrator of the
+repository on GitHub. Other site owners can see the status and the builds, and they can disconnect.
+To take over, another owner connects again with their own GitHub account.
 
 ## Remove the App
 
