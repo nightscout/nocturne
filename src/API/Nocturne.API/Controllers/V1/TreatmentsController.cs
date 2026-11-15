@@ -476,13 +476,13 @@ public class TreatmentsController : ControllerBase
 
         foreach (var key in keys)
         {
-            if (await _treatmentService.UpdateTreatmentAsync(key, prepared, cancellationToken) is { } updated)
+            if (await _treatmentService.UpdateV1TreatmentAsync(key, prepared, cancellationToken) is { } updated)
                 return Ok(updated);
         }
 
         if (string.IsNullOrWhiteSpace(prepared.Id)
             && await _treatmentService.FindSameEventIdAsync(prepared, cancellationToken) is { } sameEventId
-            && await _treatmentService.UpdateTreatmentAsync(sameEventId, prepared, cancellationToken) is { } replaced)
+            && await _treatmentService.UpdateV1TreatmentAsync(sameEventId, prepared, cancellationToken) is { } replaced)
             return Ok(replaced);
 
         foreach (var key in keys)
@@ -491,7 +491,7 @@ public class TreatmentsController : ControllerBase
                 return NothingSaved(key);
         }
 
-        var created = await _treatmentService.CreateTreatmentsAsync([prepared], cancellationToken: cancellationToken);
+        var created = await _treatmentService.CreateV1TreatmentsAsync([prepared], cancellationToken: cancellationToken);
         if (created.SkippedDeleted > 0)
             return NothingSaved(prepared.Id);
 
@@ -539,7 +539,7 @@ public class TreatmentsController : ControllerBase
             await FlushAsync();
 
             if (await _treatmentService.FindSameEventIdAsync(treatment, cancellationToken) is { } sameEventId
-                && await _treatmentService.UpdateTreatmentAsync(sameEventId, treatment, cancellationToken) is { } replaced)
+                && await _treatmentService.UpdateV1TreatmentAsync(sameEventId, treatment, cancellationToken) is { } replaced)
             {
                 results.Add(replaced);
                 continue;

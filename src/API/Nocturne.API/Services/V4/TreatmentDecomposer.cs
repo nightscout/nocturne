@@ -1008,7 +1008,8 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// A treatment Nocturne does not store writes nothing and removes nothing, and a bolus or carbs
     /// under a temp basal's id leaves the temp basal (<see cref="Writing"/>).
     /// </remarks>
-    private async Task DropAbsentAsync(
+    /// <returns>The legacy ids that lost rows, whose treatments changed though the rows they keep may not have.</returns>
+    private async Task<HashSet<string>> DropAbsentAsync(
         IReadOnlyList<(Treatment Treatment, TreatmentClassification Classification)> written,
         IReadOnlyDictionary<string, HashSet<Type>> stored,
         IReadOnlyDictionary<string, HashSet<string>> storedSpans,
@@ -1041,7 +1042,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         }
 
         if (tableDrops.Count == 0 && spanDrops.Count == 0)
-            return;
+            return [];
 
         await using var db = await _contexts.CreateAsync(ct);
         List<Guid> deviceEventIds = [];
@@ -1091,6 +1092,27 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         if (origin == WriteOrigin.Live)
             await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
+
+        return [.. tableDrops.Values.SelectMany(ids => ids).Concat(spanDrops)];
+    }
+
+    /// <summary>
+    /// Reports a record whose row a write left as it was as updated when its treatment lost other
+    /// rows (<see cref="DropAbsentAsync"/>), so the treatment is announced as the edit it is.
+    /// </summary>
+    private static void ReportReclassifiedAsUpdated(V4Models.DecompositionResult result, HashSet<string> reclassified)
+    {
+        if (reclassified.Count == 0)
+            return;
+
+        var changed = result.UnchangedRecords
+            .Where(r => r is V4Models.IV4Record { LegacyId: { } id } && reclassified.Contains(id))
+            .ToList();
+        foreach (var record in changed)
+        {
+            result.UnchangedRecords.Remove(record);
+            result.UpdatedRecords.Add(record);
+        }
     }
 
     /// <summary>
@@ -1375,7 +1397,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         using (origin == WriteOrigin.Live ? null : SystemAttributedBatchWrites(_auditContext))
         {
-            await DropAbsentAsync(models.Classified, stored.Kinds(), stored.SpanKeys, origin, ct);
+            var reclassified = await DropAbsentAsync(models.Classified, stored.Kinds(), stored.SpanKeys, origin, ct);
             if (models.AbsentMealCarbs.Count > 0)
                 await DeleteByLegacyIdsAsync([.. models.AbsentMealCarbs.Distinct(StringComparer.Ordinal)], origin, ct);
             foreach (var meal in models.UnkeyedMealCarbs)
@@ -1399,6 +1421,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             await UpsertTableAsync(_deviceEventRepository, models.DeviceEvents, result, TreatmentOf, origin, ct);
             await UpsertTableAsync(_tempBasalRepository, models.TempBasals, result, TreatmentOf, origin, ct);
             await WriteFoodLinesAsync(carbs, models.FoodLines, result, TreatmentOf, ct);
+            ReportReclassifiedAsUpdated(result, reclassified);
 
             var sources = new Dictionary<StateSpan, BatchTreatment>(ReferenceEqualityComparer.Instance);
             FoldPumpSuspensions([.. models.Suspensions.Where(s => !result.Rejected.ContainsKey(s.Treatment.Index))], spans, sources);

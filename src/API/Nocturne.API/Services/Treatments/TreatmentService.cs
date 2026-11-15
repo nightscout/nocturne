@@ -374,6 +374,31 @@ internal class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A treatment <see cref="PreBolusSplit"/> leaves alone takes <see cref="UpdateTreatmentAsync"/>.
+    /// A meal it splits is written by <see cref="CreateV1TreatmentsAsync"/> under the stored
+    /// record's upsert key, whose bolus half drops any carbs the meal held under that key.
+    /// NIGHTSCOUT-COMPAT: Nightscout's PUT stores the document as sent; a v1 PUT is split as the POST
+    /// is, so a re-send cannot double the meal's carbs.
+    /// </remarks>
+    public async Task<Treatment?> UpdateV1TreatmentAsync(
+        string id, Treatment treatment, CancellationToken cancellationToken = default)
+    {
+        if (!PreBolusSplit.Applies(treatment))
+            return await UpdateTreatmentAsync(id, treatment, cancellationToken);
+
+        if (await _store.GetForUpdateAsync(id, cancellationToken) is not { Id: { } upsertKey } stored)
+            return null;
+
+        var meal = treatment.ShallowCopy();
+        meal.AdditionalProperties = treatment.AdditionalProperties is { } extra ? new(extra) : null;
+        TreatmentClientId.KeepStored(meal, stored);
+        meal.Id = upsertKey;
+        var written = await CreateV1TreatmentsAsync([meal], WriteOrigin.Live, cancellationToken);
+        return TreatmentEcho.InSubmittedOrder(written).FirstOrDefault();
+    }
+
+    /// <inheritdoc />
     /// <returns>The patched <see cref="Treatment"/>, or <see langword="null"/> if not found.</returns>
     public async Task<Treatment?> PatchTreatmentAsync(
         string id, JsonElement patchData, CancellationToken cancellationToken = default)
