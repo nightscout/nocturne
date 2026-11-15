@@ -88,7 +88,7 @@ internal sealed record ReportPanelResult
 
     public IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows { get; init; } = [];
 
-    /// <summary>A chart's horizontal axis, which every layer shares; null for another kind of panel.</summary>
+    /// <summary>A chart's first track's horizontal axis (<see cref="ReportTrackResult.XKind"/>); null for another kind of panel.</summary>
     public ReportXKind? XKind { get; init; }
 
     /// <summary>A chart's grid as asked for: minutes, 0 for every reading, null for each dataset's own spacing.</summary>
@@ -139,9 +139,13 @@ internal sealed record ReportPanelResult
     public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
 }
 
-/// <summary>One track of a chart: its layers over the chart's shared horizontal axis.</summary>
+/// <summary>One track of a chart: its layers over its horizontal axis.</summary>
 /// <param name="Height">The track's share of the chart's height.</param>
-internal sealed record ReportTrackResult(string Id, string? Title, double Height, IReadOnlyList<ReportLayerResult> Layers);
+/// <param name="XKind">
+/// The axis every layer of the track is drawn along (<see cref="ReportAxes"/>); a layer along days on a track along time
+/// covers each day from its midnight.
+/// </param>
+internal sealed record ReportTrackResult(string Id, string? Title, double Height, ReportXKind XKind, IReadOnlyList<ReportLayerResult> Layers);
 
 /// <summary>Which vertical axis a layer is drawn on.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ReportAxisSide>))]

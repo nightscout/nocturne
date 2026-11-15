@@ -109,6 +109,25 @@ public class ReportSpecRunnerTests
     }
 
     [Fact]
+    public async Task Each_track_carries_its_own_axis_and_the_panel_its_first_tracks()
+    {
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead);
+        var spec = Spec(Chart(
+            $$"""
+            { "layers": [ {{Layer("""{ "name": "glucose_series" }""", "line")}} ] },
+            { "layers": [ { "derived": { "op": "scatter", "a": { "dataset": { "name": "glucose_series" }, "field": "iob" },
+                                         "b": { "dataset": { "name": "glucose_series" }, "field": "glucose" } }, "mark": "points" } ] }
+            """,
+            ", \"grid\": 15", """, "range": { "hours": 6 }"""));
+
+        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
+
+        panel.Tracks.Select(t => t.XKind).Should().Equal(ReportXKind.Time, ReportXKind.Value);
+        panel.XKind.Should().Be(ReportXKind.Time);
+        panel.Tracks.Should().OnlyContain(t => t.Layers.All(l => l.Status == ReportPanelStatus.Ok));
+    }
+
+    [Fact]
     public async Task A_long_range_is_downsampled_within_the_point_budget()
     {
         var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead);

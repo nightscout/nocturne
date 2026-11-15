@@ -1,8 +1,9 @@
 <!--
-  A chart panel: its tracks one above another over one horizontal axis, each with up to two value
-  axes, every layer drawn as its mark (LayeredPlot), one tooltip that lists each layer's row at the
-  slot under the pointer, and a legend of the layers. Over categories each track's bars are drawn by
-  CategoryBars. Every value, word and colour is the API's.
+  A chart panel: its tracks one above another, each with up to two value axes, every layer drawn as
+  its mark (LayeredPlot), one tooltip that lists each layer's row under the pointer, and a legend of
+  the layers. Each run of tracks along one axis has its own horizontal axis; the tooltip reads each
+  run at the pointer's position on it, under that run's own heading. Over categories each track's
+  bars are drawn by CategoryBars. Every value, word and colour is the API's.
 -->
 <script lang="ts">
   import { Chart, Pattern, Svg, Tooltip } from "layerchart";
@@ -13,14 +14,19 @@
   import { inkPattern, inkPatternId, textureBackground, type InkPattern } from "../print/patterns.js";
   import CategoryBars from "./CategoryBars.svelte";
   import LayeredPlot from "./layered/LayeredPlot.svelte";
-  import { formatAxisValue } from "./layered/axis-format.js";
+  import { formatAxisValue, formatPointerValue } from "./layered/axis-format.js";
   import {
+    AXIS_ROOM,
+    axisGroups,
     drawnLayers,
     fieldColor,
     isTimeAxis,
     legend,
     panelTextures,
+    rawAcross,
     rowMatch,
+    tipEntries,
+    type TipEntry,
     rowsAt,
     type SharedSides,
     slots,
@@ -28,7 +34,7 @@
     valueFields,
     xExtent,
   } from "./layered/layered-layout.js";
-  import { formatReportValue, rowSentence, type ReportField, type ReportPanel, type ReportRow } from "./types.js";
+  import { formatReportValue, type ReportField, type ReportPanel, type ReportRow, type ReportXKind } from "./types.js";
 
   interface Props {
     panel: ReportPanel;
@@ -47,19 +53,24 @@
 
   let { panel, format, lineColorMode = "continuous", labels, trackHeight = 240, legend: showLegend = true, valueExtents }: Props = $props();
 
-  const kind = $derived(panel.xKind ?? "time");
+  const groups = $derived(axisGroups(panel));
+  const kind = $derived(groups[0]?.kind ?? panel.xKind ?? "time");
   const weight = $derived(panel.tracks.reduce((sum, t) => sum + t.height, 0));
-  const height = $derived(Math.round(Math.min(560, Math.max(trackHeight, trackHeight * 0.75 * weight + 40))));
+  const axes = $derived(AXIS_ROOM * Math.max(0, groups.length - 1));
+  const height = $derived(Math.round(Math.min(560, Math.max(trackHeight, trackHeight * 0.75 * weight + 40)) + axes));
   const hasRight = $derived(panel.tracks.some((t) => t.layers.some((l) => l.side === "right")));
-  const extent = $derived(xExtent(panel));
-  const points = $derived(slots(panel).map((raw) => ({ raw, x: toDomain(kind, raw) })));
-  /** How far the pointer's slot may be from a layer's row and still be that row's: the widest gap between slots. */
-  const tolerance = $derived.by(() => {
-    let gap = 0;
-    for (let i = 1; i < points.length; i++) gap = Math.max(gap, points[i].raw - points[i - 1].raw);
-    return gap || 1;
-  });
-  const match = $derived(rowMatch(panel, tolerance));
+  const extent = $derived(xExtent(groups[0]?.panel ?? panel));
+  const points = $derived(slots(groups[0]?.panel ?? panel).map((raw) => ({ raw, x: toDomain(kind, raw) })));
+  const anyRows = $derived(slots(panel).length > 0);
+  /** Each group's match under the pointer: a row is the slot's within the widest gap between the group's slots. */
+  const matches = $derived(
+    groups.map((group) => {
+      const xs = slots(group.panel);
+      let gap = 0;
+      for (let i = 1; i < xs.length; i++) gap = Math.max(gap, xs[i] - xs[i - 1]);
+      return rowMatch(group.panel, gap || 1);
+    }),
+  );
   /** The ink-only textures the panel's series are hatched with; drawn on screen and on paper alike. */
   const inks = $derived(panelTextures(panel).map(inkPattern).filter((p): p is InkPattern => p !== null));
   const entries = $derived(legend(panel));
@@ -68,45 +79,28 @@
     return first?.fields.find((f) => f.name === first.bindings.x);
   });
 
-  const tick = (value: unknown) => formatAxisValue(kind, value, format);
-  const withUnit = (value: ReportRow[string], field: ReportField) =>
-    `${formatReportValue(value, field, format)}${field.unit && value !== null && value !== undefined ? ` ${field.unit}` : ""}`;
+  const tick = (value: unknown, along: ReportXKind = kind) => formatAxisValue(along, value, format);
+  const pointer = (value: unknown, along: ReportXKind = kind) => formatPointerValue(along, value, format);
+  const valueText = (value: ReportRow[string], field: ReportField, unit: boolean) =>
+    `${formatReportValue(value, field, format)}${unit && field.unit && value !== null && value !== undefined ? ` ${field.unit}` : ""}`;
 
-  interface TipItem {
-    key: string;
-    label: string;
-    value: string;
-    color: string | null;
+  /** One axis group's part of the tooltip: its heading where the panel has more than one axis, and its entries. */
+  interface TipSection {
+    key: number;
+    heading: string | null;
+    entries: TipEntry[];
   }
 
-  /** What the tooltip lists for a slot: each drawn layer's fields at its row there, or its spans over it. */
-  function itemsAt(raw: number): TipItem[] {
-    return panel.tracks.flatMap((track) =>
-      drawnLayers(track).flatMap((layer): TipItem[] => {
-        const rows = rowsAt(layer, raw, match).slice(0, 4);
-        if (layer.mark === "spans") {
-          const name = layer.fields.find((f) => f.colorField)?.name ?? layer.bindings.category ?? "";
-          return rows.map((row, i) => ({ key: `${layer.id}-${i}`, label: layer.title, value: String(row[name] ?? ""), color: null }));
-        }
-        const fields = layer.mark === "markers" ? layer.fields.filter((f) => (layer.bindings.y ?? []).includes(f.name)) : valueFields(layer);
-        return rows.flatMap((row, i) =>
-          fields
-            .filter((f) => row[f.name] !== null && row[f.name] !== undefined)
-            .map((field) => ({
-              key: `${layer.id}-${i}-${field.name}`,
-              label: fields.length > 1 || layer.bindings.series ? `${layer.title} · ${layer.bindings.series ? `${row[layer.bindings.series] ?? ""} ` : ""}${field.label}` : layer.title,
-              value: withUnit(row[field.name], field),
-              color: fieldColor(layer, field),
-            })),
-        );
-      }),
-    );
-  }
-
-  function sentencesAt(raw: number): string[] {
-    return panel.tracks.flatMap((track) =>
-      drawnLayers(track).flatMap((layer) => rowsAt(layer, raw, match).map(rowSentence).filter((s): s is string => s !== null)),
-    );
+  /** What the tooltip lists at the pointer: in each group, each drawn layer's entries at its rows there. */
+  function sectionsAt(raw: number): TipSection[] {
+    const raws = rawAcross(groups, raw);
+    return groups.map((group, g) => ({
+      key: group.first,
+      heading: g > 0 ? pointer(toDomain(group.kind, raws[g]), group.kind) : null,
+      entries: group.panel.tracks
+        .flatMap((track) => drawnLayers(track))
+        .flatMap((layer) => tipEntries(layer, rowsAt(layer, raws[g], matches[g]).slice(0, 4), valueText)),
+    }));
   }
 </script>
 
@@ -122,22 +116,34 @@
         paint={(css) => css}
         tickLabels={{ class: "text-xs fill-muted-foreground", fontSize: 11 }}
         text={{ muted: { class: "fill-muted-foreground" }, strong: { class: "fill-foreground font-semibold" } }}
-        formatTick={tick}
+        formatTick={(value, along) => tick(value, along)}
         {valueExtents}
         texture={(key) => `url(#${inkPatternId(key)})`}
         hover
       />
     </Svg>
-    <Tooltip.Root class="z-50 max-w-80 rounded-lg border border-border text-xs shadow-xl">
+    <Tooltip.Root class="z-50 max-w-96 rounded-lg border border-border text-xs shadow-xl">
       {#snippet children({ data })}
-        <Tooltip.Header value={data?.x} format={tick} class="mb-1 border-b border-border pb-1 font-semibold" />
-        <Tooltip.List>
-          {#each itemsAt(data?.raw ?? 0) as item (item.key)}
-            <Tooltip.Item label={item.label} value={item.value} color={item.color ?? undefined} />
-          {/each}
-        </Tooltip.List>
-        {#each sentencesAt(data?.raw ?? 0) as sentence, i (i)}
-          <p class="mt-1 max-w-72 text-pretty text-muted-foreground">{sentence}</p>
+        <Tooltip.Header value={data?.x} format={(value) => pointer(value)} class="mb-1 border-b border-border pb-1 font-semibold" />
+        {#each sectionsAt(data?.raw ?? 0) as section (section.key)}
+          {#if section.heading}
+            <p class="mt-2 mb-1 border-b border-border pb-1 font-semibold" data-testid="report-tooltip-axis">{section.heading}</p>
+          {/if}
+          <div class="grid grid-cols-[auto_1fr_auto] items-baseline gap-x-2 gap-y-1" data-testid="report-tooltip-entries">
+            {#each section.entries as entry (entry.key)}
+              <span class="size-2 self-center rounded-full bg-(--swatch)" style:--swatch={entry.color ?? "transparent"}></span>
+              <span class="text-muted-foreground">{entry.label}</span>
+              <span class="text-right whitespace-nowrap tabular-nums" data-testid="report-tooltip-value">
+                <span class="font-medium text-foreground">{entry.value}</span>
+                {#if entry.range}
+                  <span class="ml-1 text-muted-foreground" data-testid="report-tooltip-range">{entry.range}</span>
+                {/if}
+              </span>
+              {#each entry.notes as note, i (i)}
+                <p class="col-span-2 col-start-2 text-pretty text-muted-foreground/80">{note}</p>
+              {/each}
+            {/each}
+          </div>
         {/each}
       {/snippet}
     </Tooltip.Root>
@@ -151,7 +157,7 @@
       {/each}
     {/each}
   </div>
-{:else if points.length === 0}
+{:else if !anyRows}
   <p class="flex h-[200px] items-center justify-center text-sm text-muted-foreground">No data in this range.</p>
 {:else}
   <div class="h-(--plot-height) w-full" style:--plot-height="{height}px" data-testid="report-layered-chart" data-tracks={panel.tracks.length}>
@@ -181,14 +187,16 @@
       </Chart>
     {/if}
   </div>
-  {#if (kind === "value" || kind === "lag") && xField}
+  {#if groups.length === 1 && (kind === "value" || kind === "lag") && xField}
     <p class="text-center text-xs text-muted-foreground" data-testid="report-x-caption">{xField.label}{xField.unit ? ` (${xField.unit})` : ""}</p>
   {/if}
   {#if showLegend && (entries.length > 1 || entries.some((e) => e.context))}
     <ul class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" data-testid="report-legend">
       {#each entries as entry (entry.id)}
-        <li class="flex items-center gap-1.5">
-          {#if entry.color && entry.texture}
+        <li class={["flex flex-wrap items-center gap-x-1.5 gap-y-0.5", entry.parts.length > 0 && "basis-full"]}>
+          {#if entry.parts.length > 0}
+            <!-- A band's parts carry its swatches. -->
+          {:else if entry.color && entry.texture}
             {@const hatch = textureBackground(entry.texture)}
             <span
               class="inline-block size-3 rounded-xs bg-(--swatch) bg-(image:--hatch) bg-size-(--hatch-size)"
@@ -204,6 +212,28 @@
           {#if entry.context}
             <span class="text-muted-foreground/80" data-testid="report-legend-context">· {entry.context}</span>
           {/if}
+          {#each entry.parts as part (part.key)}
+            <span class="ml-2 inline-flex items-center gap-1 text-muted-foreground/80" data-testid="report-legend-part" data-shape={part.shape}>
+              {#if part.shape === "fill"}
+                {@const hatch = entry.texture ? textureBackground(entry.texture) : null}
+                <span
+                  class="inline-block size-3 rounded-xs bg-(--swatch) bg-(image:--hatch) bg-size-(--hatch-size)"
+                  style:--swatch={part.color ?? "transparent"}
+                  style:--hatch={hatch?.image ?? "none"}
+                  style:--hatch-size={hatch?.size ?? "auto"}
+                ></span>
+              {:else if part.color}
+                <span class="inline-block h-0.5 w-3 bg-(--swatch)" style:--swatch={part.color}></span>
+              {:else}
+                <!-- A middle line coloured by glucose: its swatch runs through the glucose colours. -->
+                <span
+                  class="inline-block h-0.5 w-3 bg-linear-to-r from-glucose-low via-glucose-in-range to-glucose-high"
+                  data-testid="report-legend-glucose-swatch"
+                ></span>
+              {/if}
+              {part.label}
+            </span>
+          {/each}
         </li>
       {/each}
     </ul>

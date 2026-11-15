@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { catalogue, chartTemplate, statisticsTemplate } from "./schema-form.fixtures.js";
-import { SpecDraft } from "./spec-draft.svelte.js";
+import { sharesAxis, SpecDraft } from "./spec-draft.svelte.js";
 
 describe("the builder's draft of a spec", () => {
   it("lets a panel whose range is the report's take the report's, so a change to the report reaches it", () => {
@@ -86,16 +86,28 @@ describe("the builder's draft of a spec", () => {
     });
   });
 
-  it("tells the axis a chart lies along from its layers, and offers only the ops whose layer lies along it", () => {
+  it("tells the axis each track lies along from its layers, and offers only the ops whose layer may share it", () => {
     const draft = new SpecDraft(catalogue, chartTemplate.spec);
     const panel = draft.panels[0];
 
-    expect(draft.panelXKind(panel)).toBe("time");
+    expect(draft.trackXKind(panel.tracks[0])).toBe("time");
     expect(draft.opsAlong("time").map((o) => o.name)).toEqual(["rolling_mean"]);
     expect(draft.opsAlong(null).map((o) => o.name)).toEqual(["rolling_mean", "scatter"]);
     draft.setLayerOp(0, 1, 0, "scatter");
     expect(draft.layerXKind(panel.tracks[1].layers[0])).toBe("value");
-    expect(draft.panelXKind(panel, panel.tracks[0].layers[0])).toBe("value");
+    expect(draft.trackXKind(panel.tracks[1]), "a track along values beside one along time").toBe("value");
+    expect(draft.trackXKind(panel.tracks[0])).toBe("time");
+    expect(draft.trackXKind(panel.tracks[1], panel.tracks[1].layers[0])).toBeNull();
+  });
+
+  it("reads a track of layers along time and along days as along time, and offers ops along either there", () => {
+    expect(sharesAxis("day", "time")).toBe(true);
+    expect(sharesAxis("time_of_day", "time")).toBe(false);
+    const daily = { ...catalogue.ops[0], name: "daily_mean", outputXKinds: ["day"] };
+    const draft = new SpecDraft({ ...catalogue, ops: [...catalogue.ops, daily] }, chartTemplate.spec);
+
+    expect(draft.opsAlong("time").map((o) => o.name)).toContain("daily_mean");
+    expect(draft.opsAlong("day").map((o) => o.name)).toContain("rolling_mean");
   });
 
   it("asks which group a source reads of data that comes in groups, one for each group its settings list", () => {

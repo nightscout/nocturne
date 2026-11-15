@@ -158,4 +158,15 @@ public class Phase6ReviewTests
         ReportBandSpan.Of([F("deltaP25"), F("glucoseP25"), F("glucoseP75"), F("deltaP75")]).Select(s => s.Label)
             .Should().Equal("Glucose P25–P75", "Change P25–P75");
     }
+
+    [Fact]
+    public void A_band_span_shares_its_family_words_where_the_percentile_is_not_the_last_word()
+    {
+        static ReportField F(string name, string label) => new(name, label, ReportFieldKind.Number, "mg/dL", "");
+
+        ReportBandSpan.Of([F("a", "Glucose P25, days with a low"), F("b", "Glucose P75, days with a low")]).Single().Label
+            .Should().Be("Glucose P25–P75, days with a low");
+        ReportBandSpan.Of([F("a", "Glucose P25"), F("b", "Change P25")]).Single().Label
+            .Should().Be("Glucose P25 to Change P25", "two families keep both names");
+    }
 }

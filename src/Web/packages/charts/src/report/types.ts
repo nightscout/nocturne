@@ -147,12 +147,14 @@ export interface ReportLayer {
   resolution?: ReportResolution | null;
 }
 
-/** One track of a chart: its layers, over the chart's shared horizontal axis. */
+/** One track of a chart: its layers, over its horizontal axis. */
 export interface ReportTrack {
   id: string;
   title?: string | null;
   /** The track's share of the chart's height. */
   height: number;
+  /** The axis the track's layers are drawn along; the panel's when missing. A day on a time track covers the day from its midnight. */
+  xKind?: ReportXKind | null;
   layers: ReportLayer[];
 }
 
@@ -169,7 +171,7 @@ export interface ReportPanel {
   bindings?: ReportBindings | null;
   fields: ReportField[];
   rows: ReportRow[];
-  /** A chart's horizontal axis, which its layers share. */
+  /** A chart's first track's horizontal axis; each track carries its own. */
   xKind?: ReportXKind | null;
   /** A chart's grid in minutes: 0 for every reading, null for each dataset's own spacing. */
   grid?: number | null;

@@ -39,7 +39,7 @@
     layer: number;
     messages: LayerMessages | undefined;
     preview: LayerPreview | null;
-    /** The axis the chart lies along, as its layers or the last preview say: it decides whether a layer may have its own range. */
+    /** The axis the track lies along, as its layers or the last preview say: it decides whether a layer may have its own range. */
     xKind: string | null;
     maxTitleLength: number;
     disabled?: boolean;
@@ -60,9 +60,10 @@
   const others = $derived((panel?.tracks ?? []).flatMap((t) => t.layers).filter((l) => l.dataset && l.key !== item?.key));
   const opMessages = $derived((messages?.derived ?? []).filter((m) => !/^[ab](\.|$)/.test(m.path)));
   const ownRange = $derived(xKind === "time_of_day" || xKind === "offset" || xKind === "day");
-  /** The ops a layer along the axis the panel's other layers lie along may use, and this layer's own op. */
+  /** The ops a layer along the axis the track's other layers lie along may use, and this layer's own op. */
   const ops = $derived.by(() => {
-    const along = panel ? draft.opsAlong(draft.panelXKind(panel, item)) : draft.catalogue.ops;
+    const own = panel?.tracks[track];
+    const along = own ? draft.opsAlong(draft.trackXKind(own, item)) : draft.catalogue.ops;
     return op && !along.includes(op) ? [...along, op] : along;
   });
   const stray = $derived.by(() => {

@@ -363,41 +363,52 @@ internal sealed partial class ReportSpecValidator
 
         range ??= new ReportRange { Hours = (int)Math.Max(1, layers[0].Reads[0].Dataset.DefaultRange.TotalHours) };
 
-        var xKind = layers[0].Spec.XKind;
-        foreach (var layer in layers.Skip(1).Where(l => l.Spec.XKind != xKind))
-            Error($"{layer.At}.bindings.{(layer.Spec.Mark == ReportMark.Spans ? "start" : "x")}",
-                $"This layer lies along {ReportDerivedOps.Words(layer.Spec.XKind)}; the panel's first layer lies along {ReportDerivedOps.Words(xKind)}. "
-                + "Every layer of a chart shares its horizontal axis: put this one in another panel.");
+        var trackKinds = new List<ReportXKind>();
+        foreach (var (_, trackLayers, _) in tracks)
+        {
+            var lead = trackLayers.Count > 0 ? trackLayers[0].Spec.XKind : ReportXKind.Time;
+            foreach (var layer in trackLayers.Skip(1).Where(l => !ReportAxes.Share(l.Spec.XKind, lead)))
+                Error($"{layer.At}.bindings.{(layer.Spec.Mark == ReportMark.Spans ? "start" : "x")}",
+                    $"This layer lies along {ReportDerivedOps.Words(layer.Spec.XKind)}; the track's first layer lies along {ReportDerivedOps.Words(lead)}. "
+                    + "Every layer of a track shares its horizontal axis, and only time and days mix: put this one on another track.");
+            trackKinds.Add(ReportAxes.Of(trackLayers.Select(l => l.Spec.XKind)));
+        }
+        if (trackKinds.Contains(ReportXKind.Category) && trackKinds.Any(k => k != ReportXKind.Category))
+            Error($"{at}.tracks", "A chart over categories is drawn as a list of bars, with no axis to share. "
+                + "Put the tracks over categories in a panel of their own.");
 
-        if (grid is not null && xKind is ReportXKind.Day or ReportXKind.Category)
-            Error($"{at}.grid", xKind == ReportXKind.Day
+        if (grid is not null && trackKinds.All(k => k is ReportXKind.Day or ReportXKind.Category))
+            Error($"{at}.grid", trackKinds.Contains(ReportXKind.Day)
                 ? "A chart over days has one slot each day. Remove the grid."
                 : "A chart over categories has no grid. Remove the grid.");
         if (grid == 0 && layers.FirstOrDefault(l => l.Paired) is { } paired && PairedAt(paired.Spec.Derived!, $"{paired.At}.derived") is { } pairing)
             Error($"{at}.grid", $"A layer of two sources pairs them slot by slot, so every reading cannot be shown here: "
                 + $"{pairing.Label} at {pairing.Path} pairs two sources. Send a grid of 1 minute or more.");
-        if (grid is > 0 && ReportGrid.Applies(xKind))
-            foreach (var layer in layers)
+        if (grid is > 0)
+            foreach (var layer in layers.Where(l => ReportGrid.Applies(l.Spec.XKind)))
                 if (layer.Folded.FirstOrDefault(f => f.Aggregate is null) is { } loose)
                     Error($"{layer.At}.bindings", $"'{loose.Label}' cannot be folded onto the grid: its values have no way to combine. "
                         + "Remove it from this layer, or send no grid.");
 
-        foreach (var layer in layers)
+        foreach (var ((_, trackLayers, _), xKind) in tracks.Zip(trackKinds))
         {
-            if (layer.Spec.Range is not null && xKind is not (ReportXKind.TimeOfDay or ReportXKind.Offset or ReportXKind.Day))
-                Error($"{layer.At}.range", xKind is ReportXKind.Time
-                    ? "Every layer of a chart over time shares the panel's range. Remove this layer's range, or give the panel this range."
-                    : $"A layer has its own range only on a chart over time of day, minutes from an event or days; this one lies along {ReportDerivedOps.Words(xKind)}.");
-            var layerRange = layer.Spec.Range ?? range;
-            foreach (var read in layer.Reads)
+            foreach (var layer in trackLayers)
             {
-                CheckSpan(read.Dataset, layerRange, layer.Spec.Range is null ? $"{at}.range" : $"{layer.At}.range", Error);
-                reads.TryAdd(CountKey(read.Dataset, read.Parameters, layerRange, ReportPanelKind.Chart, read.X, read.Shape), read.Dataset);
-            }
-            if (layer.Spec.Derived is { } derived)
-            {
-                var (from, to) = ReportSpecRunner.Resolve(layerRange, now);
-                CheckWindows(derived, $"{layer.At}.derived", kind => ReportGrid.Step(kind, grid is > 0 ? grid.Value : ReportGrid.DefaultMinutes, from, to), Error);
+                if (layer.Spec.Range is not null && xKind is not (ReportXKind.TimeOfDay or ReportXKind.Offset or ReportXKind.Day))
+                    Error($"{layer.At}.range", xKind is ReportXKind.Time
+                        ? "Every layer of a track over time shares the panel's range. Remove this layer's range, or give the panel this range."
+                        : $"A layer has its own range only on a track over time of day, minutes from an event or days; this one lies along {ReportDerivedOps.Words(xKind)}.");
+                var layerRange = layer.Spec.Range ?? range;
+                foreach (var read in layer.Reads)
+                {
+                    CheckSpan(read.Dataset, layerRange, layer.Spec.Range is null ? $"{at}.range" : $"{layer.At}.range", Error);
+                    reads.TryAdd(CountKey(read.Dataset, read.Parameters, layerRange, ReportPanelKind.Chart, read.X, read.Shape), read.Dataset);
+                }
+                if (layer.Spec.Derived is { } derived)
+                {
+                    var (from, to) = ReportSpecRunner.Resolve(layerRange, now);
+                    CheckWindows(derived, $"{layer.At}.derived", kind => ReportGrid.Step(kind, grid is > 0 ? grid.Value : ReportGrid.DefaultMinutes, from, to), Error);
+                }
             }
         }
 

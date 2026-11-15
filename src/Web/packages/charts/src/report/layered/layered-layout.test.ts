@@ -2,17 +2,23 @@ import { describe, expect, it } from "vitest";
 import type { ReportLayer, ReportPanel, ReportTrack } from "../types.js";
 import {
   AXIS_CLEARANCE,
+  AXIS_ROOM,
+  axisGroups,
+  bandParts,
   bandSets,
   barRects,
   legend,
   MINUTE_ORIGIN,
+  paintOrder,
   placeGlyphs,
+  rawAcross,
   rowMatch,
   rowsAt,
   sharedValueExtents,
   sideScales,
   slots,
   spanRects,
+  tipEntries,
   toDomain,
   trackBands,
   xExtent,
@@ -292,6 +298,180 @@ describe("a layered chart's layout", () => {
       ["Modes", null],
     ]);
     expect(entries.map((e) => e.context)).toEqual([null, "Glucose, mean per 15 minutes", null]);
+  });
+});
+
+describe("tracks along different axes", () => {
+  const DAY = 86_400_000;
+  const dayLayer = (rows: { day: number; hours: number }[]) =>
+    layer({
+      id: "sleep",
+      mark: "bars",
+      xKind: "day",
+      bindings: { x: "day", y: ["hours"] },
+      fields: [{ name: "day", label: "Night", kind: "day" }, { name: "hours", label: "Sleep", kind: "number", unit: "h" }],
+      rows,
+    });
+  const panelOf = (tracks: ReportTrack[], xKind: ReportPanel["xKind"] = "time"): ReportPanel => ({
+    id: "p",
+    kind: "chart",
+    status: "ok",
+    window: { from: 0, to: 2 * DAY },
+    fields: [],
+    rows: [],
+    summary: "",
+    xKind,
+    tracks,
+  });
+
+  it("puts consecutive tracks along one axis in one group, and starts a group where the axis changes", () => {
+    const panel = panelOf([
+      { ...track([layer({})]), id: "a", xKind: "time" },
+      { ...track([dayLayer([])]), id: "b", xKind: "time" },
+      { ...track([layer({ xKind: "time_of_day" })]), id: "c", xKind: "time_of_day" },
+    ]);
+
+    const groups = axisGroups(panel);
+
+    expect(groups.map((g) => [g.kind, g.first, g.panel.tracks.map((t) => t.id)])).toEqual([
+      ["time", 0, ["a", "b"]],
+      ["time_of_day", 2, ["c"]],
+    ]);
+    expect(groups[1].panel.xKind).toBe("time_of_day");
+  });
+
+  it("draws a track along days beside tracks along time on their time axis, as one group", () => {
+    const panel = panelOf([
+      { ...track([layer({})]), id: "a", xKind: "time" },
+      { ...track([dayLayer([])]), id: "b", xKind: "day" },
+    ]);
+
+    expect(axisGroups(panel).map((g) => [g.kind, g.panel.xKind, g.panel.tracks.length])).toEqual([["time", "time", 2]]);
+  });
+
+  it("takes the panel's axis for a track that carries none, so an older result is one group", () => {
+    expect(axisGroups(panelOf([track([layer({})]), track([layer({})])])).length).toBe(1);
+  });
+
+  it("reads each group at the same horizontal position: the same fraction of its own extent", () => {
+    const panel = panelOf([
+      { ...track([layer({})]), id: "a", xKind: "time" },
+      { ...track([layer({ xKind: "time_of_day" })]), id: "b", xKind: "time_of_day" },
+    ]);
+
+    expect(rawAcross(axisGroups(panel), DAY)).toEqual([DAY, 720]);
+  });
+
+  it("finds a day's row anywhere in the day on a time track, and not past its end", () => {
+    const sleep = dayLayer([{ day: 0, hours: 7 }, { day: DAY, hours: 6 }]);
+    const match = rowMatch(panelOf([track([sleep])]), 5 * 60_000);
+
+    expect(rowsAt(sleep, 15 * 3_600_000, match)).toEqual([{ day: 0, hours: 7 }]);
+    expect(rowsAt(sleep, DAY + 1, match)).toEqual([{ day: DAY, hours: 6 }]);
+    expect(rowsAt(sleep, 3 * DAY, match)).toEqual([]);
+  });
+
+  it("cuts a day's bar to the plot where the window starts or ends inside the day", () => {
+    const sleep = dayLayer([{ day: 0, hours: 7 }]);
+    const x = (raw: number) => ((raw - DAY / 2) / DAY) * 100;
+
+    const [bar] = barRects(sleep, x, (v) => 100 - v, 100);
+
+    expect(bar.x).toBe(0);
+    expect(bar.width).toBeCloseTo(40);
+  });
+
+  it("leaves room for a bottom axis above each track that starts a new axis group", () => {
+    const plain = trackBands([{ height: 1 }, { height: 1 }], 300, 10);
+    const split = trackBands([{ height: 1 }, { height: 1 }], 300, 10, [true, true]);
+
+    expect(split[1].top - split[0].bottom).toBe(10 + AXIS_ROOM);
+    expect(split[1].bottom).toBeCloseTo(plain[1].bottom);
+  });
+});
+
+describe("a band's legend", () => {
+  const p25 = { name: "p25", label: "Glucose P25", kind: "number" as const, unit: "mg/dL" };
+  const p75 = { name: "p75", label: "Glucose P75", kind: "number" as const, unit: "mg/dL" };
+  const median = { name: "p50", label: "Glucose median", kind: "number" as const, unit: "mg/dL" };
+  const band = (over: Partial<ReportLayer>) =>
+    layer({
+      mark: "band",
+      color: "cat-1" as ReportLayer["color"],
+      bindings: { x: "time", y: ["p50"], edges: ["p25", "p75"] },
+      fields: [time, median, p25, p75],
+      spans: [{ label: "Glucose P25–P75", low: "p25", high: "p75" }],
+      ...over,
+    });
+
+  it("names the middle line and the shaded span, each in the colour it is drawn in", () => {
+    const [set] = bandSets(band({}));
+    const parts = bandParts(band({}));
+
+    expect(parts.map((p) => [p.label, p.shape, p.color])).toEqual([
+      ["Glucose median", "line", set.line],
+      ["Glucose P25–P75", "fill", set.inner],
+    ]);
+    expect(legend({ tracks: [track([band({})])] })[0].parts).toEqual(parts);
+  });
+
+  it("gives a middle line coloured by glucose no one colour, so its swatch shows the glucose colours", () => {
+    const coloured = band({ color: null, fields: [time, { ...median, glucoseScale: true }, p25, p75] });
+
+    expect(bandParts(coloured)[0]).toMatchObject({ shape: "line", color: null });
+  });
+
+  it("names nothing more for a mark that is not a band", () => {
+    expect(bandParts(layer({}))).toEqual([]);
+  });
+});
+
+describe("the tooltip's entries", () => {
+  const p25 = { name: "p25", label: "Glucose P25, days with exercise", kind: "number" as const, unit: "mg/dL" };
+  const p75 = { name: "p75", label: "Glucose P75, days with exercise", kind: "number" as const, unit: "mg/dL" };
+  const median = { name: "p50", label: "Glucose median, days with exercise", kind: "number" as const, unit: "mg/dL" };
+  const text = (value: unknown, field: { unit?: string | null }, unit: boolean) => `${value}${unit && field.unit ? ` ${field.unit}` : ""}`;
+  const band = layer({
+    id: "exercise",
+    title: "Days with exercise",
+    mark: "band",
+    color: "cat-1" as ReportLayer["color"],
+    bindings: { x: "time", y: ["p50"], edges: ["p25", "p75"] },
+    fields: [time, median, p25, p75],
+  });
+
+  it("gives a band one entry: its name, its middle value and its shaded span's ends, with its sentence under it", () => {
+    const entries = tipEntries(band, [{ time: 0, p50: 152, p25: 118, p75: 185, sentence: "At 07:05: 4 readings." }], text);
+
+    expect(entries).toEqual([
+      expect.objectContaining({ label: "Days with exercise", value: "152 mg/dL", range: "118–185", notes: ["At 07:05: 4 readings."] }),
+    ]);
+  });
+
+  it("lists each field of a line, and puts the sentences under the layer's last entry only", () => {
+    const line = layer({ bindings: { x: "time", y: ["glucose", "iob"] }, fields: [time, glucose, iob], title: "Glucose" });
+
+    const entries = tipEntries(line, [{ time: 0, glucose: 120, iob: 1.5, sentence: "One." }], text);
+
+    expect(entries.map((e) => [e.label, e.value, e.range, e.notes])).toEqual([
+      ["Glucose · Glucose", "120 mg/dL", null, []],
+      ["Glucose · IOB", "1.5 U", null, ["One."]],
+    ]);
+  });
+});
+
+describe("paint order", () => {
+  it("paints a track's fills under its lines and points, keeping the spec's order within each", () => {
+    const t = track([
+      layer({ id: "glucose", mark: "line" }),
+      layer({ id: "tir", mark: "bars" }),
+      layer({ id: "dots", mark: "points" }),
+      layer({ id: "band", mark: "band" }),
+      layer({ id: "iob", mark: "line" }),
+    ]);
+
+    expect(paintOrder(t).map((l) => l.id)).toEqual(["band", "tir", "glucose", "iob", "dots"]);
+    expect(legend({ tracks: [t] }).map((e) => e.id)).toEqual(["glucose", "tir", "dots", "band", "iob"]);
   });
 });
 

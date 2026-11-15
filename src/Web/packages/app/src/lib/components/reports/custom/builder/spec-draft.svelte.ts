@@ -67,6 +67,12 @@ export interface DraftPanel {
   columns?: string[];
 }
 
+/** Whether layers along `a` and `b` may share a track: one axis, or time and days, as the API's ReportAxes allows. */
+export function sharesAxis(a: string, b: string): boolean {
+  const calendar = (k: string) => k === "time" || k === "day";
+  return a === b || (calendar(a) && calendar(b));
+}
+
 /** The field kinds a chart's horizontal axis may be. */
 const AXIS_KINDS = new Set(["time", "offset", "time_of_day", "day", "category"]);
 
@@ -565,19 +571,19 @@ export class SpecDraft {
     return at < 0 || !op ? null : (op.outputXKinds[at] ?? null);
   }
 
-  /** The axis a panel's chart lies along as far as the builder can tell: its first layer's that says, leaving out `except`. */
-  panelXKind(panel: DraftPanel, except?: DraftLayer): string | null {
-    for (const layer of panel.tracks.flatMap((t) => t.layers)) {
-      if (layer === except) continue;
-      const kind = this.layerXKind(layer);
-      if (kind) return kind;
-    }
-    return null;
+  /**
+   * The axis a track lies along as far as the builder can tell, leaving out `except`: its layers' axis,
+   * or time where layers along time and along days share it, as the API's ReportAxes reads a track.
+   */
+  trackXKind(track: DraftTrack, except?: DraftLayer): string | null {
+    const kinds = new Set(track.layers.filter((l) => l !== except).map((l) => this.layerXKind(l)).filter((k): k is string => k !== null));
+    if (kinds.size === 0) return null;
+    return kinds.size === 1 ? [...kinds][0] : "time";
   }
 
-  /** The ops a layer of a chart along `xKind` may use: those whose layer lies along it; every op when the axis is not known. */
+  /** The ops a layer of a track along `xKind` may use: those whose layer may share it; every op when the axis is not known. */
   opsAlong(xKind: string | null): CustomReportOp[] {
-    return xKind === null ? this.catalogue.ops : this.catalogue.ops.filter((op) => op.outputXKinds.includes(xKind));
+    return xKind === null ? this.catalogue.ops : this.catalogue.ops.filter((op) => op.outputXKinds.some((k) => sharesAxis(k, xKind)));
   }
 
   setSource(index: number, track: number, layer: number, which: "a" | "b", source: DraftSource) {

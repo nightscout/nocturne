@@ -19,7 +19,7 @@
     kind: BlockKind;
     /** What the member does next before the block can run, or null. */
     incomplete?: string | null;
-    /** Draw each chart's legend; the workspace names the layers itself. */
+    /** Draw each chart's legend under its plot. */
     legend?: boolean;
     /** Draw each panel's figures; the workspace's group rows give an event chart's. */
     facts?: boolean;

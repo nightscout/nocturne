@@ -365,11 +365,13 @@ internal sealed record ReportDatasetOutput
 internal sealed record ReportSentence(string Text, IReadOnlyList<string> About);
 
 /// <summary>One shaded span of a band layer: its words ("Glucose P25–P75") and its low and high edge fields.</summary>
-internal sealed record ReportBandSpan(string Label, string Low, string High)
+internal sealed partial record ReportBandSpan(string Label, string Low, string High)
 {
     /// <summary>
     /// The spans of <paramref name="band"/> (two edges, or four: outer low, inner low, inner high, outer high), inner first.
-    /// Two edges of one family ("Glucose P25", "Glucose P75") share its name once; edges of two families keep both names.
+    /// Two edges of one family share its words once, wherever the percentile sits: "Glucose P25" and "Glucose P75" are
+    /// "Glucose P25–P75", and "Glucose P25, days with a low" and "Glucose P75, days with a low" are "Glucose P25–P75, days
+    /// with a low". Edges of two families keep both names.
     /// </summary>
     public static IReadOnlyList<ReportBandSpan> Of(IReadOnlyList<ReportField> band)
     {
@@ -377,10 +379,17 @@ internal sealed record ReportBandSpan(string Label, string Low, string High)
         {
             var a = low.Label.Split(' ');
             var b = high.Label.Split(' ');
-            var label = a.Length == b.Length && a.Length > 1 && a[..^1].SequenceEqual(b[..^1])
-                ? $"{string.Join(' ', a[..^1])} {a[^1]}–{b[^1]}"
-                : $"{low.Label} to {high.Label}";
-            return new ReportBandSpan(label, low.Name, high.Name);
+            var differ = a.Length == b.Length ? Enumerable.Range(0, a.Length).Where(i => a[i] != b[i]).ToList() : [];
+            string? label = null;
+            if (a.Length > 1 && differ.Count == 1 && Percentile().Match(a[differ[0]]) is { Success: true } x
+                && Percentile().Match(b[differ[0]]) is { Success: true } y && x.Groups[1].Value == y.Groups[1].Value
+                && x.Groups[3].Value == y.Groups[3].Value)
+            {
+                var words = (string[])a.Clone();
+                words[differ[0]] = $"{x.Groups[1].Value}{x.Groups[2].Value}–{y.Groups[1].Value}{y.Groups[2].Value}{x.Groups[3].Value}";
+                label = string.Join(' ', words);
+            }
+            return new ReportBandSpan(label ?? $"{low.Label} to {high.Label}", low.Name, high.Name);
         }
         return band.Count switch
         {
@@ -389,6 +398,10 @@ internal sealed record ReportBandSpan(string Label, string Low, string High)
             _ => [],
         };
     }
+
+    /// <summary>One word of an edge's label that names its percentile: letters, the number, and any punctuation after it ("P25,").</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"^([A-Za-z]+)(\d+)([^\w]*)$")]
+    private static partial System.Text.RegularExpressions.Regex Percentile();
 }
 
 /// <summary>An event cohort a panel asked for: its number (1 to 6, in the order sent) and the label that names its filter.</summary>

@@ -9,7 +9,7 @@ import { resolveChartColor } from "../../colors.js";
 import { isChartColor } from "../../enums.js";
 import { textureKey, type TextureKey } from "../../print/patterns.js";
 import { cohortBands, type BandColors } from "../percentile-bands.js";
-import { boundFields, type ReportField, type ReportLayer, type ReportPanel, type ReportRow, type ReportTrack, type ReportXKind } from "../types.js";
+import { boundFields, rowSentence, type ReportField, type ReportLayer, type ReportPanel, type ReportRow, type ReportTrack, type ReportXKind } from "../types.js";
 
 /** Minutes from an event or of the day lie on a time axis from this origin, so one time scale serves every axis. */
 export const MINUTE_ORIGIN = Date.UTC(2000, 0, 1);
@@ -46,6 +46,70 @@ export function num(row: ReportRow | undefined, name: string | null | undefined)
 /** The x field a layer's rows lie along: its x, or a span's start. */
 export function xFieldOf(layer: Pick<ReportLayer, "mark" | "bindings">): string {
   return (layer.mark === "spans" ? layer.bindings.start : layer.bindings.x) ?? "";
+}
+
+/** The axis a track's layers are drawn along: its own, else the panel's. */
+export function trackXKind(track: Pick<ReportTrack, "xKind">, panel: Pick<ReportPanel, "xKind">): ReportXKind {
+  return track.xKind ?? panel.xKind ?? "time";
+}
+
+/** A run of consecutive tracks along one axis, drawn over its own horizontal scale with its own bottom axis. */
+export interface AxisGroup {
+  kind: ReportXKind;
+  /** The index of the group's first track in the panel. */
+  first: number;
+  /** The panel cut to the group's tracks and axis, for the geometry that reads a whole panel. */
+  panel: ReportPanel;
+}
+
+/** Whether tracks along `a` and `b` share one horizontal axis: one kind, or time and days, which is drawn as time. */
+function sharesAxis(a: ReportXKind, b: ReportXKind): boolean {
+  const calendar = (k: ReportXKind) => k === "time" || k === "day";
+  return a === b || (calendar(a) && calendar(b));
+}
+
+/**
+ * The panel's tracks in runs along one axis, top to bottom; one group for a panel whose tracks share an
+ * axis. A track along days beside tracks along time joins them on the time axis, as a layer along days
+ * does on a track along time.
+ */
+export function axisGroups(panel: ReportPanel): AxisGroup[] {
+  const groups: AxisGroup[] = [];
+  panel.tracks.forEach((track, i) => {
+    const kind = trackXKind(track, panel);
+    const last = groups.at(-1);
+    if (last && sharesAxis(last.kind, kind)) {
+      last.panel.tracks.push(track);
+      if (last.kind !== kind) last.kind = last.panel.xKind = "time";
+    } else groups.push({ kind, first: i, panel: { ...panel, xKind: kind, tracks: [track] } });
+  });
+  return groups;
+}
+
+/**
+ * The raw x in each group at the horizontal position of `raw` in the first: every axis maps its raw
+ * values to pixels linearly, so a position is the same fraction of each group's extent.
+ */
+export function rawAcross(groups: readonly AxisGroup[], raw: number): number[] {
+  if (groups.length === 0) return [];
+  const [min, max] = xExtent(groups[0].panel);
+  const fraction = max === min ? 0 : (raw - min) / (max - min);
+  return groups.map((group, i) => {
+    if (i === 0) return raw;
+    const [from, to] = xExtent(group.panel);
+    return from + fraction * (to - from);
+  });
+}
+
+/** The order marks are painted in on a track: fills under strokes, so a later bar or area never hides a line or a point. */
+const PAINT_ORDER: Record<ReportLayer["mark"], number> = { spans: 0, area: 1, band: 1, bars: 2, line: 3, points: 4, markers: 5 };
+
+/** A track's drawn layers in paint order: fills first, then lines, points and markers; the spec's order within each. */
+export function paintOrder(track: ReportTrack): ReportLayer[] {
+  return drawnLayers(track)
+    .map((layer, i) => ({ layer, i }))
+    .sort((a, b) => PAINT_ORDER[a.layer.mark] - PAINT_ORDER[b.layer.mark] || a.i - b.i)
+    .map((x) => x.layer);
 }
 
 /** The layers of a chart that were read and can be drawn. */
@@ -102,13 +166,21 @@ export interface TrackBand {
  */
 export const AXIS_CLEARANCE = 8;
 
-/** Each track's band in a plot of `height` pixels, sized by its share, clear of the time axis. */
-export function trackBands(tracks: readonly Pick<ReportTrack, "height">[], height: number, gap = TRACK_GAP): TrackBand[] {
+/** The pixels a bottom axis takes between two axis groups: its tick labels and the clearance above them. */
+export const AXIS_ROOM = 24;
+
+/**
+ * Each track's band in a plot of `height` pixels, sized by its share, clear of the time axis. A track
+ * that starts a new axis group (`breaks[i]`) is set below room for the axis of the group above it.
+ */
+export function trackBands(tracks: readonly Pick<ReportTrack, "height">[], height: number, gap = TRACK_GAP, breaks: readonly boolean[] = []): TrackBand[] {
   const weights = tracks.map((t) => Math.max(0.1, t.height));
   const total = weights.reduce((a, b) => a + b, 0);
-  const room = Math.max(0, height - AXIS_CLEARANCE - gap * Math.max(0, tracks.length - 1));
+  const axes = tracks.reduce((n, _, i) => n + (i > 0 && breaks[i] ? 1 : 0), 0);
+  const room = Math.max(0, height - AXIS_CLEARANCE - gap * Math.max(0, tracks.length - 1) - AXIS_ROOM * axes);
   let top = 0;
-  return weights.map((w) => {
+  return weights.map((w, i) => {
+    if (i > 0 && breaks[i]) top += AXIS_ROOM;
     const h = (room * w) / total;
     const band = { top, bottom: top + h, height: h };
     top += h + gap;
@@ -381,7 +453,10 @@ export interface BarRect {
   texture: TextureKey | null;
 }
 
-/** A bars layer over a continuous axis: each row's fields side by side, or stacked, a slot wide. */
+/**
+ * A bars layer over a continuous axis: each row's fields side by side, or stacked, a slot wide, cut to
+ * the plot: a day on a time axis whose window starts or ends inside it is drawn only within the window.
+ */
 export function barRects(layer: ReportLayer, x: XPixel, y: YPixel, plotWidth: number): BarRect[] {
   const xName = layer.bindings.x ?? "";
   const fields = boundFields(layer, layer.bindings.y);
@@ -407,11 +482,14 @@ export function barRects(layer: ReportLayer, x: XPixel, y: YPixel, plotWidth: nu
       if (stacked) base = to;
       const top = y(Math.max(from, to));
       const bottom = stacked ? y(Math.min(from, to)) : zero;
+      const left = Math.max(0, centre(at) - width / 2 + (stacked ? 0 : i * each));
+      const right = Math.min(plotWidth, centre(at) - width / 2 + (stacked ? 0 : i * each) + each);
+      if (right <= left) return;
       rects.push({
         key: `${at}-${field.name}`,
-        x: centre(at) - width / 2 + (stacked ? 0 : i * each),
+        x: left,
         y: Math.min(top, bottom),
-        width: each,
+        width: right - left,
         height: Math.abs(bottom - top),
         color: fieldColor(layer, field),
         texture: fieldTexture(layer, field),
@@ -552,8 +630,9 @@ export function rowMatch(panel: Pick<ReportPanel, "tracks" | "window" | "xKind" 
 
 /**
  * A layer's rows under the pointer at `raw`: the spans that cover it; for a line or area of step fields
- * the last row of each series at or before it, which is the value the step draws there; on a gridded
- * panel the rows on that slot; else every series' row at the nearest x, within the match's tolerance.
+ * the last row of each series at or before it, which is the value the step draws there; for a layer
+ * along days the day that holds it, on a day or a time axis alike; on a gridded panel the rows on that
+ * slot; else every series' row at the nearest x, within the match's tolerance.
  */
 export function rowsAt(layer: ReportLayer, raw: number, match: RowMatch): ReportRow[] {
   if (layer.mark === "spans") {
@@ -570,11 +649,74 @@ export function rowsAt(layer: ReportLayer, raw: number, match: RowMatch): Report
     for (const row of sortedBy(placed, xName)) if (num(row, xName)! <= raw) last.set(series ? row[series] : null, row);
     return [...last.values()];
   }
+  if (layer.xKind === "day") return placed.filter((r) => num(r, xName)! <= raw && raw < num(r, xName)! + DAY);
   if (match.gridded) return placed.filter((r) => num(r, xName) === raw);
   const tolerance = layer.mark === "markers" ? match.markerTolerance : match.tolerance;
   const nearest = num(nearestBy(sortedBy(placed, xName), (r) => num(r, xName)!, raw), xName)!;
   if (Math.abs(nearest - raw) > tolerance) return [];
   return placed.filter((r) => num(r, xName) === nearest);
+}
+
+/** One row of the tooltip: a layer's value at the pointer, its range where it is a band, and the API's sentences about it. */
+export interface TipEntry {
+  key: string;
+  label: string;
+  value: string;
+  /** A band's middle half (or its one shaded span) at the pointer, "118–185"; null for every other mark. */
+  range: string | null;
+  color: string | null;
+  /** The API's sentences about the layer's rows here, under its last entry. */
+  notes: string[];
+}
+
+/** A value's words: with its unit, or the bare number for a range's ends. */
+export type TipValue = (value: ReportRow[string], field: ReportField, unit: boolean) => string;
+
+/**
+ * What the tooltip lists for a layer at its `rows` under the pointer. A band of one set is one entry: the
+ * layer's name, its middle line's value and its shaded span's ends, since its edges are parts of one band.
+ * Spans name their state; every other mark lists each drawn field. The rows' sentences sit under the
+ * layer's last entry, so each says which layer it is about.
+ */
+export function tipEntries(layer: ReportLayer, rows: readonly ReportRow[], text: TipValue): TipEntry[] {
+  const notes = rows.map(rowSentence).filter((s): s is string => s !== null);
+  const withNotes = (entries: TipEntry[]) => (entries.length > 0 ? entries.map((e, i) => (i === entries.length - 1 ? { ...e, notes } : e)) : entries);
+  if (layer.mark === "spans") {
+    const name = layer.fields.find((f) => f.colorField)?.name ?? layer.bindings.category ?? "";
+    return withNotes(rows.map((row, i) => ({ key: `${layer.id}-${i}`, label: layer.title, value: String(row[name] ?? ""), range: null, color: null, notes: [] })));
+  }
+  const edges = layer.bindings.edges ?? [];
+  const middle = boundFields(layer, layer.bindings.y)[0];
+  if (layer.mark === "band" && !layer.bindings.series && middle && (edges.length === 2 || edges.length === 4)) {
+    const [low, high] = boundFields(layer, edges.length === 4 ? [edges[1], edges[2]] : edges);
+    return withNotes(
+      rows
+        .filter((row) => row[middle.name] !== null && row[middle.name] !== undefined)
+        .map((row, i) => ({
+          key: `${layer.id}-${i}`,
+          label: layer.title,
+          value: text(row[middle.name], middle, true),
+          range: low && high && row[low.name] != null && row[high.name] != null ? `${text(row[low.name], low, false)}–${text(row[high.name], high, false)}` : null,
+          color: fieldColor(layer, middle),
+          notes: [],
+        })),
+    );
+  }
+  const fields = layer.mark === "markers" ? layer.fields.filter((f) => (layer.bindings.y ?? []).includes(f.name)) : valueFields(layer);
+  return withNotes(
+    rows.flatMap((row, i) =>
+      fields
+        .filter((f) => row[f.name] !== null && row[f.name] !== undefined)
+        .map((field) => ({
+          key: `${layer.id}-${i}-${field.name}`,
+          label: fields.length > 1 || layer.bindings.series ? `${layer.title} · ${layer.bindings.series ? `${row[layer.bindings.series] ?? ""} ` : ""}${field.label}` : layer.title,
+          value: text(row[field.name], field, true),
+          range: null,
+          color: fieldColor(layer, field),
+          notes: [],
+        })),
+    ),
+  );
 }
 
 /** The x values every drawn layer has a row at, in order: the slots the pointer moves between. */
@@ -591,6 +733,33 @@ export function slots(panel: Pick<ReportPanel, "tracks">): number[] {
   return [...xs].sort((a, b) => a - b);
 }
 
+/** One part of a band's legend entry: its middle line or one of its shaded spans, in the API's words. */
+export interface LegendPart {
+  key: string;
+  label: string;
+  shape: "line" | "fill";
+  /** Null for a middle line coloured by glucose, which has no one colour. */
+  color: string | null;
+}
+
+/**
+ * What a band of one set draws, part by part: its middle line, then each shaded span inner first, each
+ * in the colour it is drawn in. None for a band of several sets, whose sets the entry's title names.
+ */
+export function bandParts(layer: ReportLayer): LegendPart[] {
+  const sets = bandSets(layer);
+  if (layer.mark !== "band" || sets.length !== 1) return [];
+  const [set] = sets;
+  const middle = boundFields(layer, layer.bindings.y)[0];
+  const spans = layer.spans ?? [];
+  const parts: LegendPart[] = [];
+  if (middle) parts.push({ key: "middle", label: middle.label, shape: "line", color: glucoseColoured(layer, middle) ? null : set.line });
+  spans.forEach((span, i) =>
+    parts.push({ key: `span-${i}`, label: span.label, shape: "fill", color: i === 0 && (spans.length > 1 || middle) ? set.inner : set.outer }),
+  );
+  return parts;
+}
+
 /** A legend entry: the layer's words and colour; no colour for a line coloured by glucose, which has none. */
 export interface LegendEntry {
   id: string;
@@ -602,6 +771,8 @@ export interface LegendEntry {
   mark: ReportLayer["mark"];
   /** How the layer was folded onto the grid, or null. */
   context: string | null;
+  /** A band's middle line and shaded spans, each with its swatch; empty for every other mark. */
+  parts: LegendPart[];
 }
 
 export function legend(panel: Pick<ReportPanel, "tracks">): LegendEntry[] {
@@ -616,6 +787,7 @@ export function legend(panel: Pick<ReportPanel, "tracks">): LegendEntry[] {
         texture: fillTexture(layer),
         mark: layer.mark,
         context: layer.context ?? null,
+        parts: bandParts(layer),
       };
     }),
   );

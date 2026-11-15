@@ -1,18 +1,33 @@
 <!--
   A chart panel's tracks inside one layerchart chart: each track's band of the plot, its left and
-  right value axes, the glucose limits on a glucose side, and each drawn layer as its mark. It draws
-  into whatever layer it sits in, the page's Svg or an image's Canvas, from the same geometry
-  (layered-layout.ts); `paint` turns a colour expression into what that layer paints with.
+  right value axes, the glucose limits on a glucose side, and each drawn layer as its mark. Each run
+  of tracks along one axis (axisGroups) draws over its own horizontal scale and bottom axis; the first
+  run's is the chart's own. It draws into whatever layer it sits in, the page's Svg or an image's
+  Canvas, from the same geometry (layered-layout.ts); `paint` turns a colour expression into what
+  that layer paints with.
 -->
 <script lang="ts">
-  import { Axis, getChartContext, Line, Rule, Text } from "layerchart";
-  import { scaleLinear } from "d3-scale";
+  import { Axis, getChartContext, Group, Line, Rule, Text } from "layerchart";
+  import { scaleLinear, scaleTime } from "d3-scale";
   import type { ChartLabels } from "../../labels.js";
   import type { TextureKey } from "../../print/patterns.js";
   import type { GradientStop, LineColorMode } from "../../view/glucose-gradient-stops.js";
   import { reportGlucoseStops } from "../glucose-scale.js";
-  import type { ReportLayer, ReportPanel } from "../types.js";
-  import { drawnLayers, sideScales, toDomain, trackBands, type SharedSides, type SideScale, type TrackBand } from "./layered-layout.js";
+  import type { ReportLayer, ReportPanel, ReportXKind } from "../types.js";
+  import {
+    axisGroups,
+    drawnLayers,
+    isTimeAxis,
+    paintOrder,
+    sideScales,
+    toDomain,
+    trackBands,
+    xExtent,
+    xFieldOf,
+    type SharedSides,
+    type SideScale,
+    type TrackBand,
+  } from "./layered-layout.js";
   import MarkArea from "../marks/MarkArea.svelte";
   import MarkBand from "../marks/MarkBand.svelte";
   import MarkBars from "../marks/MarkBars.svelte";
@@ -32,7 +47,8 @@
     gradient?: (stops: GradientStop[], height: number) => string | undefined;
     tickLabels: Record<string, unknown>;
     text: MarkText;
-    formatTick: (value: unknown) => string;
+    /** A tick's words on an axis along `kind`. */
+    formatTick: (value: unknown, kind: ReportXKind) => string;
     /** Draw a rule at the slot under the pointer, on the page. */
     hover?: boolean;
     /** Values each track's sides cover beyond their own, by track id, so small multiples share one scale. */
@@ -44,12 +60,45 @@
   let { panel, labels, lineColorMode, paint, gradient, tickLabels, text, formatTick, hover = false, valueExtents, texture }: Props = $props();
 
   const chart = getChartContext();
-  const kind = $derived(panel.xKind ?? "time");
-  const bands = $derived(trackBands(panel.tracks, chart.height));
+  const groups = $derived(axisGroups(panel));
+  const bands = $derived(trackBands(panel.tracks, chart.height, undefined, panel.tracks.map((_, i) => groups.some((g) => g.first === i))));
   const high = $derived(panel.thresholds?.high ?? null);
   const scales = $derived(panel.tracks.map((track, i) => sideScales(track, bands[i], high, valueExtents?.[track.id])));
 
-  const x = (raw: number) => Number(chart.xScale(toDomain(kind, raw)));
+  /** Each group's horizontal scale over the plot's width: the chart's own for the first. */
+  const xScales = $derived(
+    groups.map((group, g) => {
+      if (g === 0) return chart.xScale;
+      const [from, to] = xExtent(group.panel);
+      return isTimeAxis(group.kind)
+        ? scaleTime().domain([new Date(Number(toDomain(group.kind, from))), new Date(Number(toDomain(group.kind, to)))]).range([0, chart.width])
+        : scaleLinear().domain([from, to]).range([0, chart.width]);
+    }),
+  );
+  /** Each track's group, by track index. */
+  const groupOf = $derived(panel.tracks.map((_, i) => groups.findLastIndex((g) => g.first <= i)));
+  const xOf = (t: number) => {
+    const g = groupOf[t];
+    const kind = groups[g].kind;
+    const scale = xScales[g] as (value: Date | number) => unknown;
+    return (raw: number) => Number(scale(toDomain(kind, raw)));
+  };
+
+  /** Where each group's bottom axis sits: under its last track, the last group's at the chart's foot. */
+  function axisY(g: number): number {
+    if (g === groups.length - 1) return chart.height;
+    const last = groups[g + 1].first - 1;
+    return bands[last].bottom + AXIS_GAP;
+  }
+  const AXIS_GAP = 4;
+
+  /** The axis a scatter or a lag lies along, named beside it where the panel has more than one axis. */
+  function caption(g: number): string | null {
+    if (groups.length < 2 || (groups[g].kind !== "value" && groups[g].kind !== "lag")) return null;
+    const first = groups[g].panel.tracks.flatMap((t) => drawnLayers(t))[0];
+    const field = first?.fields.find((f) => f.name === xFieldOf(first));
+    return field ? `${field.label}${field.unit ? ` (${field.unit})` : ""}` : null;
+  }
 
   function sideOf(t: number, layer: ReportLayer): SideScale | null {
     return layer.side === "right" ? scales[t].right : scales[t].left;
@@ -77,6 +126,7 @@
 {#each panel.tracks as track, t (track.id)}
   {@const band = bands[t]}
   {@const sides = scales[t]}
+  {@const x = xOf(t)}
   {#if track.title && !track.layers.every((l) => l.mark === "spans")}
     <Text x={6} y={band.top + 12} value={track.title} fontSize={11} {...text.muted} />
   {/if}
@@ -105,7 +155,7 @@
       {/if}
     {/each}
   {/if}
-  {#each drawnLayers(track) as layer (layer.id)}
+  {#each paintOrder(track) as layer (layer.id)}
     {@const side = sideOf(t, layer)}
     {#if layer.mark === "spans"}
       <MarkSpans {layer} {band} {x} {paint} {text} laneX={-chart.padding.left + 6} />
@@ -126,7 +176,26 @@
     {/if}
   {/each}
 {/each}
-<Axis placement="bottom" format={formatTick} tickOcclusion rule={false} tickLabelProps={tickLabels} />
+{#if groups.length === 1}
+  <Axis placement="bottom" format={(value) => formatTick(value, groups[0].kind)} tickOcclusion rule={false} tickLabelProps={tickLabels} />
+{:else}
+  {#each groups as group, g (group.first)}
+    {@const words = caption(g)}
+    <Group y={axisY(g) - chart.height}>
+      <Axis
+        placement="bottom"
+        scale={xScales[g]}
+        format={(value) => formatTick(value, group.kind)}
+        tickOcclusion
+        rule={false}
+        tickLabelProps={tickLabels}
+      />
+    </Group>
+    {#if words}
+      <Text x={chart.width} y={axisY(g) - 4} value={words} textAnchor="end" fontSize={11} {...text.muted} />
+    {/if}
+  {/each}
+{/if}
 {#if hover && chart.tooltip.data}
   <Rule x={chart.tooltip.data.x} class="stroke-muted-foreground/50" />
 {/if}

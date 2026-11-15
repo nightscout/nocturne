@@ -148,7 +148,9 @@ internal sealed record ReportPanelSpec
         + "field's own aggregate; 0 for every row, not folded. Optional; each dataset's own spacing when missing.")]
     public int? Grid { get; init; }
 
-    [Description("chart only: the tracks, top to bottom, sharing one horizontal axis. 1 to 4.")]
+    [Description(
+        "chart only: the tracks, top to bottom. 1 to 4. Each track lies along one horizontal axis; tracks along different "
+        + "axes may share a panel, and each run of consecutive tracks along one axis has its own.")]
     public IReadOnlyList<ReportTrackSpec>? Tracks { get; init; }
 
     [Description("stat_tiles, table and comparison only: the dataset to read, chosen by 'name', with that dataset's parameters.")]
@@ -177,7 +179,9 @@ internal enum ReportPanelKind
     Comparison,
 }
 
-[Description("One track of a chart panel: layers drawn over the panel's horizontal axis, with up to two vertical axes.")]
+[Description(
+    "One track of a chart panel: layers drawn over one horizontal axis, with up to two vertical axes. Layers along time and "
+    + "along days share a track (each day covers the day from its midnight); other axes take a track each.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportTrackSpec
 {
@@ -334,7 +338,7 @@ internal enum ReportMark
     Spans,
 }
 
-/// <summary>What a chart panel's horizontal axis holds; every layer on the panel shares it.</summary>
+/// <summary>What a chart track's horizontal axis holds; every layer on the track lies along it (<see cref="ReportAxes"/>).</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ReportXKind>))]
 internal enum ReportXKind
 {
@@ -364,6 +368,30 @@ internal enum ReportXKind
     /// <summary>Minutes one source is shifted against the other.</summary>
     [JsonStringEnumMemberName("lag")]
     Lag,
+}
+
+/// <summary>
+/// Which layers may share a track. Each track of a chart has one horizontal axis; the tracks of a panel may lie along
+/// different axes, and each run of consecutive tracks along one axis draws its own. A day is the local midnight that
+/// starts it, an instant on the time axis, so layers along days and along time share a track, and it lies along time:
+/// each day's row covers the day from that midnight. A chart over categories draws as a list of bars, not over an axis,
+/// so it takes a panel of its own.
+/// </summary>
+internal static class ReportAxes
+{
+    /// <summary>Whether layers along <paramref name="a"/> and <paramref name="b"/> may share a track.</summary>
+    public static bool Share(ReportXKind a, ReportXKind b) => a == b || (Calendar(a) && Calendar(b));
+
+    /// <summary>The axis a track of layers along <paramref name="kinds"/> lies along, each pair of which <see cref="Share"/>.</summary>
+    public static ReportXKind Of(IEnumerable<ReportXKind> kinds)
+    {
+        var distinct = kinds.Distinct().ToList();
+        return distinct.Count == 1 ? distinct[0] : ReportXKind.Time;
+    }
+
+    public static ReportXKind Of(ReportTrackSpec track) => Of(track.Layers.Select(l => l.XKind));
+
+    private static bool Calendar(ReportXKind kind) => kind is ReportXKind.Time or ReportXKind.Day;
 }
 
 /// <summary>Enum values as a spec writes them.</summary>

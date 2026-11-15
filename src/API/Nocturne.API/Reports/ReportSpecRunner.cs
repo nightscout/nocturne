@@ -258,8 +258,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     private async Task<ReportPanelResult> RunChartAsync(ReportPanelSpec panel, Run run)
     {
         var tracks = panel.Tracks!;
-        var layers = tracks.SelectMany(t => t.Layers).ToList();
-        var xKind = layers[0].XKind;
+        var xKind = ReportAxes.Of(tracks[0]);
         if (Clamp(panel.Range!, run) is not { } clamped)
         {
             var (f, _) = Resolve(panel.Range!, run.Now);
@@ -285,7 +284,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 var side = !layer.HasAxis ? ReportAxisSide.None : units.IndexOf(layer.Unit) == 0 ? ReportAxisSide.Left : ReportAxisSide.Right;
                 results.Add(layerResult with { Side = side });
             }
-            trackResults.Add(new ReportTrackResult(track.Id!, track.Title, track.Height ?? 1, Texture(Hue(results))));
+            trackResults.Add(new ReportTrackResult(track.Id!, track.Title, track.Height ?? 1, ReportAxes.Of(track), Texture(Hue(results))));
         }
 
         var all = trackResults.SelectMany(t => t.Layers).ToList();
@@ -304,11 +303,13 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         foreach (var layer in all)
             summary.Append(CultureInfo.InvariantCulture, $"[{layer.Title}]").Append('\n').Append(layer.Summary).Append('\n');
 
+        var severalGroups = NamesSeveralGroups(all);
         var result = new ReportPanelResult
         {
             Id = panel.Id!,
             Group = panel.Group,
-            Title = panel.Title ?? DefaultPanelTitle(tracks.SelectMany(t => t.Layers).Single(l => l.Id == (first ?? all[0]).Id), first ?? all[0]),
+            Title = panel.Title ?? (severalGroups ? null
+                : DefaultPanelTitle(tracks.SelectMany(t => t.Layers).Single(l => l.Id == (first ?? all[0]).Id), first ?? all[0])),
             Kind = ReportPanelKind.Chart,
             Status = drawn.Count > 0 ? ReportPanelStatus.Ok : all[0].Status,
             Window = new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),
@@ -320,7 +321,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Summary = summary.ToString().TrimEnd(),
             Facts = first?.Facts.Where(f => !f.ComparesSettings).ToList() ?? [],
             Sentence = sentence,
-            Context = leadOutput?.Context,
+            Context = severalGroups ? null : leadOutput?.Context,
             Omitted = [.. drawn.SelectMany(l => l.Omitted).DistinctBy(o => o.Field)],
             Cohorts = drawn.SelectMany(l => l.Cohorts).DistinctBy(c => c.Number).ToList(),
             LinkQuery = leadOutput?.LinkQuery,
@@ -352,6 +353,14 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     /// An untitled chart panel's title: its lead layer's title, or the name its data gave it (one event group, the days
     /// kept), else the name of that layer's dataset or op.
     /// </summary>
+    /// <summary>
+    /// Whether two or more layers are named by their own data, as different groups ("Days with a low" and "All other
+    /// days"): then the lead's name and range line ("Only days with a low: 4 of 29 days") would head a chart of all of
+    /// them as if it were one, so an untitled chart has neither and the host's caption names the comparison.
+    /// </summary>
+    private static bool NamesSeveralGroups(IEnumerable<ReportLayerResult> layers) =>
+        layers.Where(l => l.Named).Select(l => l.Title).Distinct(StringComparer.Ordinal).Skip(1).Any();
+
     private string DefaultPanelTitle(ReportLayerSpec lead, ReportLayerResult leadResult) =>
         lead.Title ?? (leadResult.Named ? leadResult.Title
             : lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : registry.Find(lead.Dataset!.DatasetName)!.Label);

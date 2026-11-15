@@ -101,8 +101,8 @@ describe("a new custom report", () => {
     expect(layerIds(calls.runs[0].spec)).toEqual(["glucoseWide", "glucose", "target"]);
     await expect.element(page.getByTestId("chart-caption")).toHaveTextContent("over a typical day");
     await expect.element(page.getByTestId("chart-preview").getByTestId("report-layered-chart")).toBeVisible();
-    // The chips name the layers, so the chart's own legend is left out.
-    expect(page.getByTestId("chart-preview").getByTestId("report-legend").elements()).toHaveLength(0);
+    // The legend sits under the plot, beside what it names.
+    await expect.element(page.getByTestId("chart-preview").getByTestId("report-legend")).toBeVisible();
   });
 
   it("runs the preview again when a signal is taken off the chart", async () => {

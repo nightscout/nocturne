@@ -300,22 +300,72 @@ public class ReportSpecValidatorTests
     }
 
     [Fact]
-    public void Every_layer_shares_the_first_layers_horizontal_axis()
+    public void Every_layer_of_a_track_shares_the_first_layers_horizontal_axis()
     {
         var error = SingleError(Layers(Layer(Glucose, "line") + "," + Layer("""{ "name": "daily_profile" }""", "line")));
 
         error.Path.Should().Be("panels[0].tracks[0].layers[1].bindings.x");
-        error.Message.Should().Contain("lies along time of day").And.Contain("first layer lies along time");
+        error.Message.Should().Contain("lies along time of day").And.Contain("track's first layer lies along time");
     }
 
     [Fact]
-    public void A_layer_on_a_later_track_is_checked_against_the_first()
+    public void Layers_along_days_and_along_time_share_a_track_which_lies_along_time()
+    {
+        var spec = Validate(Layers(string.Join(",",
+            Layer(Glucose, "line"),
+            Layer("""{ "name": "sleep" }""", "bars"),
+            Layer("""{ "name": "state_spans" }""", "spans"))));
+
+        spec.Errors.Should().BeEmpty();
+        ReportAxes.Of(spec.Spec!.Panels[0].Tracks![0]).Should().Be(ReportXKind.Time);
+    }
+
+    [Fact]
+    public void A_track_of_layers_along_days_alone_lies_along_days()
+    {
+        var spec = Validate(Layers(Layer("""{ "name": "daily_summary" }""", "line") + "," + Layer("""{ "name": "sleep" }""", "bars")));
+
+        spec.Errors.Should().BeEmpty();
+        ReportAxes.Of(spec.Spec!.Panels[0].Tracks![0]).Should().Be(ReportXKind.Day);
+    }
+
+    [Fact]
+    public void Tracks_of_one_panel_may_lie_along_different_axes()
+    {
+        var spec = Validate(Chart(
+            $$"""{ "layers": [ {{Layer(Glucose, "line")}} ] }, { "layers": [ {{Layer("""{ "name": "daily_profile" }""", "band")}} ] }"""));
+
+        spec.Errors.Should().BeEmpty();
+        spec.Spec!.Panels[0].Tracks!.Select(ReportAxes.Of).Should().Equal(ReportXKind.Time, ReportXKind.TimeOfDay);
+    }
+
+    [Fact]
+    public void A_track_over_categories_takes_a_panel_of_its_own()
     {
         var error = SingleError(Chart(
-            $$"""{ "layers": [ {{Layer(Glucose, "line")}} ] }, { "layers": [ {{Layer("""{ "name": "daily_summary" }""", "line")}} ] }"""));
+            $$"""{ "layers": [ {{Layer(Glucose, "line")}} ] }, { "layers": [ {{Layer("""{ "name": "glucose_distribution" }""", "bars")}} ] }"""));
 
-        error.Path.Should().Be("panels[0].tracks[1].layers[0].bindings.x");
-        error.Message.Should().Contain("lies along days");
+        error.Path.Should().Be("panels[0].tracks");
+        error.Message.Should().Contain("panel of their own");
+    }
+
+    [Fact]
+    public void A_layer_along_days_has_no_range_of_its_own_on_a_track_along_time()
+    {
+        var error = SingleError(Layers(string.Join(",",
+            Layer(Glucose, "line"),
+            """{ "dataset": { "name": "daily_summary" }, "mark": "line", "range": { "hours": 240 } }""")));
+
+        error.Path.Should().Be("panels[0].tracks[0].layers[1].range");
+        error.Message.Should().Contain("track over time shares the panel's range");
+    }
+
+    [Fact]
+    public void A_grid_folds_the_time_layers_of_a_chart_that_also_has_days()
+    {
+        var spec = Validate(Layers(Layer(Glucose, "line") + "," + Layer("""{ "name": "daily_summary" }""", "line"), ", \"grid\": 1440"));
+
+        spec.Errors.Should().BeEmpty();
     }
 
     [Fact]

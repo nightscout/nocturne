@@ -305,13 +305,12 @@
         {/if}
       {/if}
       <div data-testid="chart-preview" data-lens={ws.lens}>
-        <!-- The chips above name each layer, and around an event the group rows give each group's figures. -->
+        <!-- The legend sits under the plot it names; around an event the group rows give each group's figures. -->
         <BlockPreview
           spec={preview}
           {runner}
           kind="chart"
           incomplete={ws.incomplete}
-          legend={false}
           facts={ws.lens !== "event"}
           heading={ws.smallMultiples ? groupHeading : undefined}
         />

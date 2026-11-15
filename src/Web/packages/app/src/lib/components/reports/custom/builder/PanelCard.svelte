@@ -60,6 +60,7 @@
     xKind?: string | null;
     omitted?: { field?: string }[];
     tracks?: {
+      xKind?: string | null;
       layers?: {
         id?: string;
         status?: string;
@@ -96,11 +97,13 @@
     ),
   );
 
-  /** The axis the chart lies along: as the layers say before a preview, else as the last preview said. */
-  const xKind = $derived(panel && chart ? (draft.panelXKind(panel) ?? ownPanel?.xKind ?? null) : null);
-  /** A chart over days or categories has no grid; the picker stays while a grid is set, so it can be taken off. */
+  /** The axis each track lies along: as its layers say before a preview, else as the last preview said. */
+  const trackKinds = $derived(
+    panel && chart ? panel.tracks.map((t, i) => draft.trackXKind(t) ?? ownPanel?.tracks?.[i]?.xKind ?? ownPanel?.xKind ?? null) : [],
+  );
+  /** A chart whose tracks all lie along days or categories has no grid; the picker stays while a grid is set, so it can be taken off. */
   const showGrid = $derived(
-    !(xKind === "day" || xKind === "category") || (panel?.grid !== null && panel?.grid !== undefined) || (messages?.grid.length ?? 0) > 0,
+    !trackKinds.every((k) => k === "day" || k === "category") || trackKinds.length === 0 || (panel?.grid !== null && panel?.grid !== undefined) || (messages?.grid.length ?? 0) > 0,
   );
 
   const omitted = $derived.by(() => {
@@ -265,7 +268,7 @@
             track={t}
             messages={messages?.trackMessages.get(t)}
             {previews}
-            {xKind}
+            xKind={trackKinds[t] ?? null}
             {maxTitleLength}
             {disabled}
           />

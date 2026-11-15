@@ -71,6 +71,14 @@ describe("a report view", () => {
     expect(body).toContain('data-testid="report-facts"');
   });
 
+  it("draws no heading for an untitled chart, so its section is not labelled by an empty one", () => {
+    const body = html({ report: report([{ ...panel("a", [layer("low", [100, 110])]), title: null }]) });
+
+    expect(body).not.toContain('id="panel-a"');
+    expect(body).not.toContain('aria-labelledby="panel-a"');
+    expect(html({ report: two })).toContain('aria-labelledby="panel-a"');
+  });
+
   it("leaves out the legend and the facts when the host shows them itself", () => {
     const body = html({ report: two, legend: false, facts: false });
 
@@ -165,7 +173,7 @@ describe("a series the result textures", () => {
 
   it("hatches the later of two bars of one colour, and only that one", () => {
     const [plain, hatched] = insulin.panels[0].tracks[0].layers;
-    const rects = (l: ReportLayer) => barRects(l, (v) => v / 1e6, (v) => 100 - v, 300);
+    const rects = (l: ReportLayer) => barRects(l, (v) => (v - Date.UTC(2026, 0, 1)) / 1e6, (v) => 100 - v, 300);
 
     expect(rects(plain).map((r) => r.texture)).toEqual([null, null, null]);
     expect(rects(hatched).map((r) => r.texture)).toEqual(["cat-2", "cat-2", "cat-2"]);

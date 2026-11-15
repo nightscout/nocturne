@@ -66,7 +66,8 @@ public class ReportNamingTests
 
         var panel = result.Panels[0];
         var layers = panel.Tracks![0].Layers;
-        panel.Title.Should().Be("Days with a low", "an untitled panel takes the name its lead layer's data gave it");
+        panel.Title.Should().BeNull("the lead's name would head both groups as if it were one; the host's caption names the comparison");
+        panel.Context.Should().BeNull("the lead's range line counts only its own days");
         layers.Select(l => l.Title).Should().Equal("Days with a low", "All other days", "Glucose median, days with a low minus Glucose median, all other days");
         layers[0].Days.Should().Be(new ReportDayCounts(Kept: 4, Total: 29, Matching: 4, NotMatching: 23, Partial: 1, Undecided: 1));
         layers[1].Days!.Kept.Should().Be(23);

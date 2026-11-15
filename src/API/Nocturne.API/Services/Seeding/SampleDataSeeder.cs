@@ -97,7 +97,7 @@ public class SampleDataSeeder
     private readonly ILogger<SampleDataSeeder> _logger;
 
     private const int BatchSize = 500;
-    private const int MaxDays = 90;
+    private const int MaxDays = 365;
 
     /// <summary>A fixed seed, so seeding the same range again writes the same history.</summary>
     private const int RandomSeed = 1;
