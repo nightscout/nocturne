@@ -4,7 +4,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Marks the writes under way as live (<c>WriteOrigin.Live</c>), so every
 /// <see cref="IWriteBackTracked"/> row they insert or modify is saved with
 /// <see cref="IWriteBackTracked.WrittenLive"/> set. Ambient for the reason
-/// <see cref="UpstreamFingerprintScope"/> is: the origin is a repository parameter, and the rows are
+/// <see cref="Services.UpstreamFingerprintScope"/> is: the origin is a repository parameter, and the rows are
 /// saved by the context those repositories create.
 /// </summary>
 public static class LiveWriteScope

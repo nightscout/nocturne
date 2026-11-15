@@ -40,8 +40,11 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "duplicate_flag_backfill");
         _migrator = database.MigratorConnectionString;
 
+        await ExecuteAsync(string.Concat(LaterColumnTables.Select(t =>
+            $"ALTER TABLE {t} ADD COLUMN written_live boolean NOT NULL DEFAULT false;")));
         foreach (var tenant in new[] { TenantA, TenantB })
             Expected.AddRange(await SeedAsync(tenant));
+        await ExecuteAsync(string.Concat(LaterColumnTables.Select(t => $"ALTER TABLE {t} DROP COLUMN written_live;")));
 
         await MigrateToAsync(null);
         FlaggedAfterUp = await FlaggedAsync();
@@ -63,6 +66,12 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    /// <summary>
+    /// The seeded tables the model writes <c>written_live</c> to, a column a later migration adds. It
+    /// is there only while the model seeds them.
+    /// </summary>
+    private static readonly string[] LaterColumnTables = ["carb_intakes", "sensor_glucose"];
 
     /// <summary>
     /// For each of three record types: a group of a primary and one non-primary copy, and a record
