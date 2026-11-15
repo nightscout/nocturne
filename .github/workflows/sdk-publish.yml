@@ -412,6 +412,19 @@ jobs:
           name: openapi-v4-spec
           path: sdk/
 
+      # PEP 440 has no "-dev.<sha>" pre-release, so an untagged build is a dev release that carries
+      # its commit as the local label.
+      - name: Determine Python package version
+        id: pyversion
+        env:
+          SDK_VERSION: ${{ needs.generate-spec.outputs.sdk_version }}
+        run: |
+          if [[ "$SDK_VERSION" =~ ^(.+)-dev\.([0-9a-f]+)$ ]]; then
+            echo "version=${BASH_REMATCH[1]}.dev0+g${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$SDK_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate Python SDK
         uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:
@@ -420,7 +433,7 @@ jobs:
             -i sdk/openapi-v4.json
             -c sdk/python/config.yaml
             -o sdk/python/out
-            --additional-properties=packageVersion=${{ needs.generate-spec.outputs.sdk_version }}
+            --additional-properties=packageVersion=${{ steps.pyversion.outputs.version }}
 
       - name: Fix file permissions
         run: sudo chown -R "$USER:$USER" sdk/python/out
