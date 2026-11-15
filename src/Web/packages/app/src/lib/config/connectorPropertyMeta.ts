@@ -239,6 +239,19 @@ export const connectorPropertyMeta = {
     description: 'Maximum number of records to fetch per request',
     category: 'Advanced',
   },
+  HistoryDays: {
+    label: 'History to import',
+    description: 'How many days of history Nocturne imports from the source',
+    category: 'Sync',
+    optionLabels: {
+      30: 'Last 30 days',
+      90: 'Last 90 days',
+      365: 'Last year',
+      0: 'All history',
+    },
+    choiceDescription:
+      'How much history Nocturne imports from the source. A shorter range is imported sooner.',
+  },
 
   // Glooko-specific
   UseV3Api: {

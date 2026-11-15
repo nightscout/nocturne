@@ -11,10 +11,13 @@
     portalProps,
     children,
     showClose = true,
+    fullscreen = false,
     ...restProps
   }: WithoutChildrenOrChild<DialogPrimitive.ContentProps> & {
     portalProps?: DialogPrimitive.PortalProps;
     showClose?: boolean;
+    /** Covers the viewport and centres its content, for a notice that stands in for the page. */
+    fullscreen?: boolean;
     children: Snippet;
   } = $props();
 </script>
@@ -25,7 +28,10 @@
     bind:ref
     data-slot="dialog-content"
     class={cn(
-      "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-[50%] top-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+      "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed z-50 duration-200",
+      fullscreen
+        ? "inset-0 flex flex-col items-center justify-center gap-8 overflow-y-auto p-6 text-center"
+        : "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 left-[50%] top-[50%] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg sm:max-w-lg",
       className,
     )}
     {...restProps}

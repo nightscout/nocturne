@@ -33,6 +33,7 @@
   import ArrowRightLeft from "@lucide/svelte/icons/arrow-right-left";
   import { EmptyState } from "#lib/components/shared/index.js";
   import { databaseArtwork } from "#lib/watercolour-icons.js";
+  import { watchImport } from "#lib/migration/background-import.svelte.js";
   import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -546,6 +547,8 @@
                   const jobInfo = startMigrationForm.result;
                   if (jobInfo?.id) {
                     activeTab = "progress";
+                    // This page shows the run, so the app keeps only its banner for it.
+                    watchImport(jobInfo.id, { acknowledged: true });
                     void pollMigrationStatus(jobInfo.id);
                   } else {
                     error = "Failed to start migration";

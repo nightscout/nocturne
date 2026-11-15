@@ -57,6 +57,18 @@ public class NightscoutConnectorConfiguration : BaseConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.MaxCount, DefaultValue = "1000", MinValue = 100, MaxValue = MaxPageSize)]
     public int MaxCount { get; set; } = 1000;
 
+    /// <summary>The <see cref="HistoryDays"/> that sets no limit.</summary>
+    public const int WholeHistory = 0;
+
+    /// <summary>
+    ///     How many days of the source's history are imported, by the connector's own backfill and by
+    ///     the import started from it; <see cref="WholeHistory"/> for all of it. The default sets no
+    ///     limit: a configuration saved before the setting existed reads as the default, and it was
+    ///     importing everything.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.HistoryDays, DefaultValue = "0", AllowedNumbers = [30, 90, 365, WholeHistory])]
+    public int HistoryDays { get; set; } = WholeHistory;
+
     [ConnectorProperty(ConnectorPropertyKey.WriteBackEnabled, DefaultValue = "false")]
     public bool WriteBackEnabled { get; set; } = false;
 
