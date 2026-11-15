@@ -45,14 +45,15 @@ public class TreatmentPreBolusWriteBackTests
             NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
     }
 
-    private static Treatment MealBolus(double? carbs, double preBolus, string eventType = "Meal Bolus", string id = Key) => new()
+    private static Treatment MealBolus(
+        double? carbs, double preBolus, string eventType = "Meal Bolus", string id = Key, double? insulin = 2) => new()
     {
         Id = Guid.NewGuid().ToString(),
         LegacyId = id,
         EventType = eventType,
         CreatedAt = BolusTime,
         Mills = DateTimeOffset.Parse(BolusTime, CultureInfo.InvariantCulture).ToUnixTimeMilliseconds(),
-        Insulin = 2,
+        Insulin = insulin,
         Carbs = carbs,
         PreBolus = preBolus,
         Notes = "lunch",
@@ -60,9 +61,12 @@ public class TreatmentPreBolusWriteBackTests
     };
 
     /// <summary>What a write-back sent before preBolus was left out: the treatment as it stands.</summary>
-    private static JsonArray SentWithPreBolus(double carbs, double preBolus, string eventType = "Meal Bolus") => JsonNode.Parse($$"""
+    private static JsonArray SentWithPreBolus(string carbs, string preBolus, string eventType) => JsonNode.Parse($$"""
         [{"_id":"{{Key}}","identifier":"{{Key}}","eventType":"{{eventType}}","created_at":"{{BolusTime}}","carbs":{{carbs}},"insulin":2,"preBolus":{{preBolus}},"notes":"lunch"}]
         """)!.AsArray();
+
+    private static JsonArray SentWithPreBolus(double carbs, double preBolus, string eventType = "Meal Bolus") =>
+        SentWithPreBolus(carbs.ToString(CultureInfo.InvariantCulture), preBolus.ToString(CultureInfo.InvariantCulture), eventType);
 
     private static string? Str(JsonObject document, string name) => document[name]?.GetValue<string>();
 
@@ -256,5 +260,89 @@ public class TreatmentPreBolusWriteBackTests
         await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15, eventType: "Bolus Wizard")]);
 
         upstream.Documents.Should().HaveCount(3);
+    }
+
+    /// <summary>
+    /// An edit after which the meal no longer splits leaves upstream the one document the treatment
+    /// now is, without the carbs the earlier write split off.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "preBolus removed")]
+    [InlineData(true, "preBolus removed")]
+    [InlineData(false, "insulin removed")]
+    [InlineData(true, "insulin removed")]
+    [InlineData(false, "now a correction")]
+    [InlineData(true, "now a correction")]
+    public async Task An_edit_that_stops_a_meal_splitting_removes_the_carbs_it_split_off(bool v15_0_8, string edit)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        var edited = edit switch
+        {
+            "preBolus removed" => MealBolus(carbs: 60, preBolus: 0),
+            "insulin removed" => MealBolus(carbs: 60, preBolus: 15, insulin: null),
+            _ => MealBolus(carbs: null, preBolus: 15, eventType: "Correction Bolus"),
+        };
+
+        await sink.OnUpdatedAsync(edited);
+
+        var copy = upstream.Documents.Should().ContainSingle().Subject;
+        KeyOf(copy, v15_0_8).Should().Be(Key);
+        Str(copy, "created_at").Should().Be(BolusTime);
+        copy["carbs"]?.GetValue<double>().Should().Be(edited.Carbs);
+    }
+
+    /// <summary>
+    /// A meal whose carbs an edit emptied is shaped as the bolus of a meal a v1 POST split, whose carbs
+    /// are a record of their own, so the carbs document is kept.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_edit_that_empties_a_meals_carbs_keeps_the_carbs_document_it_cannot_tell_from_a_split_meals(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+
+        await sink.OnUpdatedAsync(MealBolus(carbs: null, preBolus: 15));
+
+        ShouldHoldTheMealSplit(upstream, v15_0_8, carbs: 30);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_fractional_preBolus_finds_the_copy_an_earlier_write_back_split_off(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        upstream.Post(SentWithPreBolus(carbs: 30, preBolus: 7.5));
+
+        await Sink(upstream).OnUpdatedAsync(MealBolus(carbs: 35, preBolus: 7.5));
+
+        ShouldHoldTheMealSplit(upstream, v15_0_8, carbs: 35, carbsAt: "2026-09-30T10:07:30.000Z");
+    }
+
+    /// <summary>
+    /// Up to 15.0.6 the carbs POST upserts by time and event type onto another uploader's meal at that
+    /// instant, and is refused for the <c>_id</c> it would change, as Nightscout's own split of the meal
+    /// would have overwritten it; from 15.0.7 both are kept.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Another_uploaders_meal_at_the_carbs_time_is_kept(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        upstream.Post(JsonNode.Parse("""
+            [{"identifier":"aaps-1","eventType":"Meal Bolus","created_at":"2026-09-30T10:15:00.000Z","carbs":12,"enteredBy":"aaps"}]
+            """)!.AsArray());
+
+        await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+
+        upstream.Documents.Should().ContainSingle(d => Str(d, "identifier") == "aaps-1")
+            .Which["carbs"]!.GetValue<double>().Should().Be(12);
+        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().Contain(v15_0_8 ? [Key, CarbsKey] : [Key]).And.HaveCount(v15_0_8 ? 3 : 2);
     }
 }

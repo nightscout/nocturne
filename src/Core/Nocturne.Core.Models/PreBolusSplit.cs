@@ -46,10 +46,28 @@ public static class PreBolusSplit
     /// What Nightscout write-back sends for a stored treatment: <see cref="Split"/> of a copy of it,
     /// keyed by its legacy id as a v1 POST keys the meal, so a meal stored as one record goes upstream
     /// as the two documents a v1 POST of it stores, and its carbs come back under an id the pull
-    /// resolves to it. A record with no legacy id goes as it is, since no id of its carbs would.
+    /// resolves to it (<see cref="CarbsId"/> of that legacy id). Anything else goes as it is: a record
+    /// with no legacy id, since no id of its carbs would resolve, and a meal with no insulin, whose
+    /// carbs Nocturne holds at its own time and whose copy upstream is already there.
     /// </summary>
     public static IReadOnlyList<Treatment> ForWriteBack(Treatment treatment) =>
-        treatment.LegacyId is { Length: > 0 } legacyId ? Split(treatment.ShallowCopy(), _ => legacyId) : [treatment];
+        treatment.LegacyId is { Length: > 0 } legacyId
+        && Split(treatment.ShallowCopy(), _ => legacyId) is [_, _] halves
+            ? halves
+            : [treatment];
+
+    /// <summary>
+    /// Whether <paramref name="treatment"/> has the shape <see cref="Split"/> leaves its bolus in: a
+    /// meal with insulin and a preBolus whose carbs are held apart, as a record of its own.
+    /// </summary>
+    public static bool IsSplitBolus(Treatment treatment) =>
+        IsMealEventType(treatment.EventType?.Trim())
+        && treatment.Insulin is > 0
+        && treatment.Carbs is not > 0
+        && treatment.PreBolus is { } preBolus && preBolus != 0;
+
+    /// <summary>How far the carbs of a meal split on <paramref name="preBolus"/> minutes lie from its bolus.</summary>
+    public static long OffsetMillis(double preBolus) => (long)Math.Round(preBolus * 60_000);
 
     public static bool IsMealEventType(string? eventType) =>
         string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
@@ -65,7 +83,7 @@ public static class PreBolusSplit
             || treatment.Mills <= 0)
             return [treatment];
 
-        var carbsAt = treatment.Mills + (long)Math.Round(preBolus * 60_000);
+        var carbsAt = treatment.Mills + OffsetMillis(preBolus);
         if (carbsAt <= 0 || carbsAt > MaxMills || idOf(treatment) is not { Length: > 0 } id)
             return [treatment];
 

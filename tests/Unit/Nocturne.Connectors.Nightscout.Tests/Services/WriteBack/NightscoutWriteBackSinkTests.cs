@@ -679,13 +679,15 @@ public class NightscoutWriteBackSinkTests
         const string legacyId = "syn-3a7c0e9f1b2d4c6e";
         var wire = MongoObjectId.Coerce(legacyId)!;
         var prefix = MongoObjectId.FromGuid(Guid.Parse(RecordUuid));
+        var splitCarbs = PreBolusSplit.CarbsId(legacyId);
         var handler = Upstream("[]");
 
         await TreatmentSink(handler).OnUpdatedAsync(Edit(legacyId));
 
         handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Get, HttpMethod.Get, HttpMethod.Post);
         handler.Uris[0].PathAndQuery.Should().Be(
-            $"/api/v1/treatments.json?find[identifier][$in][0]={wire}&find[identifier][$in][1]={prefix}&find[identifier][$in][2]={legacyId}&find[identifier][$in][3]={RecordUuid}&{CreatedAtFloor}&count=10");
+            $"/api/v1/treatments.json?find[identifier][$in][0]={wire}&find[identifier][$in][1]={prefix}&find[identifier][$in][2]={legacyId}&find[identifier][$in][3]={RecordUuid}"
+            + $"&find[identifier][$in][4]={MongoObjectId.Coerce(splitCarbs)}&find[identifier][$in][5]={splitCarbs}&{CreatedAtFloor}&count=10");
         handler.Uris[1].PathAndQuery.Should().Be($"/api/v1/treatments.json?find[_id]={wire}&count=1");
         handler.Uris[2].PathAndQuery.Should().Be($"/api/v1/treatments.json?find[_id][$in][0]={legacyId}&count=1");
         IdKeys(Sent(handler)).Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = wire, ["identifier"] = wire });

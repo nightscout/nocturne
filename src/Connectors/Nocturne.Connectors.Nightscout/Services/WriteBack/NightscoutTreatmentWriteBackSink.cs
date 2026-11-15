@@ -95,7 +95,7 @@ public class NightscoutTreatmentWriteBackSink(
     /// <see cref="PreBolusSplit.ForWriteBack"/> of <paramref name="item"/>. The split-off carbs go to
     /// the slot an earlier write-back's split copy (<see cref="PreBolusSplitCopy"/>) holds, and up to
     /// 15.0.6 a POST there upserts onto that copy, refused for the <c>_id</c> it would change, so the
-    /// copy is removed first.
+    /// copy is removed first. If the carbs then fail to go, upstream lacks them until the next edit.
     /// </summary>
     private async Task<IReadOnlyList<Treatment>> SplitAsync(
         NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
@@ -119,22 +119,46 @@ public class NightscoutTreatmentWriteBackSink(
             await ExchangeAsync(config, HttpMethod.Delete, $"{Endpoint}/{Uri.EscapeDataString(id)}", ct);
     }
 
+    /// <remarks>
+    /// The identifier lookup also asks for the carbs an earlier write of the meal split off
+    /// (<see cref="PreBolusSplit.CarbsId"/> of its legacy id), and any it finds are removed: an edit
+    /// that stops the split leaves them stale, and one that moves them is refused up to 15.0.6, which
+    /// holds them under a string <c>_id</c> a POST at the new time would insert again. Split again,
+    /// the carbs go as a create. A treatment shaped as the bolus of a meal a v1 POST split
+    /// (<see cref="PreBolusSplit.IsSplitBolus"/>) keeps them, since they may be that meal's carbs
+    /// record; an edit that empties a one-record meal's carbs looks the same, and leaves its carbs
+    /// upstream.
+    /// </remarks>
     protected override async Task<bool> SendUpdatedAsync(
         NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
     {
-        var written = true;
-        foreach (var half in await SplitAsync(config, item, ct))
-            written &= await SendEditAsync(config, half, ct);
-        return written;
+        var halves = await SplitAsync(config, item, ct);
+        IReadOnlyList<string> splitCarbs = item.LegacyId is { Length: > 0 } legacyId && !PreBolusSplit.IsSplitBolus(item)
+            ? UpstreamIdentityJson.TreatmentWireForms(new Treatment { Id = PreBolusSplit.CarbsId(legacyId) })
+            : [];
+        if (!await SendEditAsync(config, halves[0], splitCarbs, ct))
+            return false;
+        if (halves.Count == 1)
+            return true;
+
+        var key = UpstreamIdentityJson.TreatmentWireKey(halves[1])!;
+        return await PostAsync(config, halves[1], key, key, ct);
     }
 
-    private async Task<bool> SendEditAsync(NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
+    /// <param name="splitCarbs">Identifiers of split-off carbs to remove where the lookup finds them.</param>
+    private async Task<bool> SendEditAsync(
+        NightscoutConnectorConfiguration config, Treatment item, IReadOnlyList<string> splitCarbs, CancellationToken ct)
     {
         if (UpstreamIdentityJson.TreatmentWireKey(item) is not { } key)
             return await SendAsync(config, HttpMethod.Post, new[] { item }, SerializerOptions, ct);
 
         var forms = UpstreamIdentityJson.TreatmentWireForms(item);
-        if (await FindAsync(config, IdentifierQuery(forms), ct) is not { } byIdentifier)
+        if (await FindAsync(config, IdentifierQuery($"{Endpoint}.json", [.. forms, .. splitCarbs]), ct) is not { } byIdentifier)
+            return false;
+
+        // By query: up to 15.0.6 they are held under a string _id, which DELETE /treatments/:id casts to an ObjectId.
+        if (byIdentifier.Any(c => splitCarbs.Contains(c.Identifier))
+            && await ExchangeAsync(config, HttpMethod.Delete, IdentifierQuery(Endpoint, splitCarbs), ct) is null)
             return false;
 
         if (Preferred(byIdentifier, forms) is { } copy)
@@ -191,9 +215,9 @@ public class NightscoutTreatmentWriteBackSink(
     /// <summary>At most this many copies are read back; more than one is already a duplicate.</summary>
     private const int LookupCount = 10;
 
-    private string IdentifierQuery(IReadOnlyList<string> forms)
+    private static string IdentifierQuery(string path, IReadOnlyList<string> forms)
     {
-        var query = new StringBuilder($"{Endpoint}.json?");
+        var query = new StringBuilder($"{path}?");
         for (var i = 0; i < forms.Count; i++)
             query.Append($"find[identifier][$in][{i}]={Uri.EscapeDataString(forms[i])}&");
         return query.Append($"find[created_at][$gte]={Uri.EscapeDataString(LookupCreatedAtFloor)}&count={LookupCount}").ToString();

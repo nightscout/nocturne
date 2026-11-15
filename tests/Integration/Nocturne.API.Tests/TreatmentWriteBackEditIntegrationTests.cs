@@ -537,13 +537,19 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
         await PullBackAsync(upstream);
 
         (await LiveBolusesAsync(slot)).Should().ContainSingle().Which.Insulin.Should().Be(2);
+        (await CarbIntakesAsync(slot)).Should().Equal(carbs);
+    }
+
+    /// <summary>The live carb intakes from <paramref name="slot"/> to half an hour after it.</summary>
+    private async Task<List<(DateTimeOffset, double)>> CarbIntakesAsync(DateTimeOffset slot)
+    {
         await using var db = Fixture.CreateDbContext(Fixture.TenantId);
-        (await db.CarbIntakes.AsNoTracking()
+        return (await db.CarbIntakes.AsNoTracking()
                 .Where(c => c.Timestamp >= slot.UtcDateTime && c.Timestamp <= slot.AddMinutes(30).UtcDateTime)
                 .Select(c => new { c.Timestamp, c.Carbs })
                 .ToListAsync())
             .Select(c => (new DateTimeOffset(c.Timestamp, TimeSpan.Zero), c.Carbs))
-            .Should().Equal(carbs);
+            .ToList();
     }
 
     private static void ShouldHoldTheMeal(PreBolusSplittingNightscout upstream, DateTimeOffset slot, int preBolus, double carbs) =>
@@ -564,5 +570,32 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
         await using var scope = OpenTenantScope();
         (await scope.ServiceProvider.GetRequiredService<IConnectorPublisher>().Treatments
             .PublishTreatmentsAsync(pulled, DataSources.NightscoutConnector, WriteOrigin.Live)).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// An edit that removes a one-record meal's preBolus removes the carbs its earlier write-back split
+    /// off, and the treatment comes back as its one carb intake.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnEditRemovingAMealsPreBolus_LeavesItsOneDocumentUpstream(bool v15_0_8)
+    {
+        var slot = UniqueSlot();
+        var legacyId = MongoObjectId.NewObjectId();
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        Treatment Meal(double carbs, double preBolus) => new()
+        {
+            Id = legacyId, EventType = "Meal Bolus", Insulin = 2, Carbs = carbs, PreBolus = preBolus, CreatedAt = At(slot),
+        };
+        await WithWriteBackAsync(upstream, service => service.CreateTreatmentsAsync([Meal(30, 15)]));
+        var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+
+        await WithWriteBackAsync(upstream, service => service.UpdateTreatmentAsync(MongoObjectId.FromGuid(bolus), Meal(60, 0)));
+
+        upstream.Documents.Select(d => ((string?)d["created_at"], (double?)d["insulin"], (double?)d["carbs"]))
+            .Should().Equal((At(slot), 2d, 60d));
+        await PullBackAsync(upstream);
+        (await CarbIntakesAsync(slot)).Should().Equal((slot, 60d));
     }
 }
