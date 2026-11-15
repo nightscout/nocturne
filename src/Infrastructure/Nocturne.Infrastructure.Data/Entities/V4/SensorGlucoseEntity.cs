@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.SensorGlucose
 /// </summary>
 [Table("sensor_glucose")]
-public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IDuplicateFlagged
+public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IDuplicateFlagged, IWriteBackTracked
 {
     /// <inheritdoc />
     [AuditIgnored]
@@ -25,6 +25,11 @@ public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDevi
     [AuditIgnored]
     [Column("is_secondary_stream")]
     public bool IsSecondaryStream { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
 
     /// <summary>
     /// FK to the patient's registered device record (resolved at ingest time)
