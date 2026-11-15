@@ -85,7 +85,7 @@ The private key file has many lines. Many environment files accept only one line
 value, for example a Docker Compose `.env` file. For those, give the key as one line of base64:
 
 ```bash
-base64 -w0 your-app.private-key.pem
+openssl base64 -A -in your-app.private-key.pem
 ```
 
 Nocturne accepts the base64 text or the full `.pem` text with its `BEGIN` and `END` lines.
@@ -116,7 +116,8 @@ GitHub. Nocturne does not get or keep the APK.
 Only a site owner, or a member who manages site settings, can use app builds. The person who
 connects the repository does so with their own GitHub account. Only that person can choose the
 repository, save the signing key and start a build. That person must be an administrator of the
-repository on GitHub. Other site owners can see the status and the builds, and they can disconnect.
+repository on GitHub. Before each save of the key and each build, Nocturne asks GitHub again. If
+that person is no longer an administrator, Nocturne stops and asks for a new connection. Other site owners can see the status and the builds, and they can disconnect.
 To take over, another owner connects again with their own GitHub account.
 
 ## Remove the App
