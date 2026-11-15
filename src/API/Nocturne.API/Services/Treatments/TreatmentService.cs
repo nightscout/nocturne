@@ -218,6 +218,11 @@ internal class TreatmentService : ITreatmentService
         _decomposer.RekeyClientIdRecordsAsync(source, treatments, cancellationToken);
 
     /// <inheritdoc />
+    public Task<IReadOnlySet<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        _decomposer.ResolveStoredIdentitiesAsync(treatments, cancellationToken);
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
         _decomposer.SelectForRepublishAsync(source, treatments, cancellationToken);
