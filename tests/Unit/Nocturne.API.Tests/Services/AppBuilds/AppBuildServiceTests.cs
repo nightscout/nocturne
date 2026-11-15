@@ -42,7 +42,8 @@ public class AppBuildServiceTests
 
     private void Linked(string? repository = FakeGitHub.Repository, params string[] adminRepositories) =>
         _links.Rows["aaps"] = new AppBuildLink("aaps", FakeGitHub.InstallationId, "alice", false, repository,
-            adminRepositories.Length > 0 ? adminRepositories : [FakeGitHub.Repository], Subject, default, default);
+            adminRepositories.Length > 0 ? adminRepositories : [FakeGitHub.Repository], Subject,
+            FakeGitHub.LinkerLogin, FakeGitHub.LinkerId, default, default);
 
     [Fact]
     public async Task Without_configuration_the_feature_reports_unconfigured_and_every_action_refuses()
@@ -121,6 +122,8 @@ public class AppBuildServiceTests
         link.RepositoryFullName.Should().Be(FakeGitHub.Repository);
         link.AdminRepositories.Should().Equal(FakeGitHub.Repository);
         link.LinkedBySubjectId.Should().Be(Subject);
+        link.LinkerGitHubLogin.Should().Be(FakeGitHub.LinkerLogin);
+        link.LinkerGitHubId.Should().Be(FakeGitHub.LinkerId);
         _log.Messages.Should().NotContain(m => m.Contains("ghu_") || m.Contains("ghs_") || m.Contains("client-secret"));
         _github.Requests.Single(r => r.Path.StartsWith($"/user/installations/{FakeGitHub.InstallationId}/repositories", StringComparison.Ordinal))
             .Authorization.Should().Be("Bearer ghu_user", "admin rights are the authorizing user's, read with their own token");
@@ -203,6 +206,7 @@ public class AppBuildServiceTests
 
         link.State.Should().Be(AppBuildLinkState.Ready);
         link.LinkedByCaller.Should().BeTrue();
+        link.Validation!.LinkerIsAdmin.Should().BeTrue();
         link.Validation!.SecretsSet.Should().Equal("KEYSTORE_SET");
         link.Validation.MissingRequiredSecrets.Should().BeEmpty();
         (await service.StatusAsync(OtherOwner, default)).Links.Single().LinkedByCaller.Should().BeFalse();
@@ -315,6 +319,28 @@ public class AppBuildServiceTests
         (await service.StatusAsync(OtherOwner, default)).Links.Should().ContainSingle();
         (await service.UnlinkAsync("aaps", default)).UninstallUrl.Should().NotBeEmpty();
         _links.Rows.Should().BeEmpty("unlinking only forgets the link, so any owner may do it");
+    }
+
+    [Theory]
+    [InlineData("write", FakeGitHub.LinkerId)]
+    [InlineData("admin", 4242)]
+    public async Task A_linker_who_no_longer_administers_the_repository_gets_no_secret_and_no_dispatch(string permission, long userId)
+    {
+        Linked();
+        _github.OnRepository().OnSecrets("KEYSTORE_SET").OnLinkerPermission(permission, userId);
+        var service = CreateService();
+
+        var link = (await service.StatusAsync(Subject, default)).Links.Single();
+        link.State.Should().Be(AppBuildLinkState.LinkerNotAdmin);
+        link.Validation!.LinkerIsAdmin.Should().BeFalse();
+
+        await FluentActions.Awaiting(() => service.PutSecretAsync("aaps", "KEYSTORE_SET", Sealed(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.LinkerNotAdmin);
+        await FluentActions.Awaiting(() => service.DispatchAsync("aaps", new DispatchAppBuildRequest(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.LinkerNotAdmin);
+        _github.Requests.Should().NotContain(r => r.Method == HttpMethod.Put || r.Path.EndsWith("/dispatches", StringComparison.Ordinal));
+        _github.Requests.Where(r => r.Path.EndsWith("/permission", StringComparison.Ordinal))
+            .Should().OnlyContain(r => r.Authorization == "Bearer ghs_installation", "the role is read with the installation token");
     }
 
     [Theory]

@@ -46,6 +46,15 @@ public class AppBuildLinkEntity : ITenantScoped, IEntityTimestamped, IAuditable
     [Column("linked_by_subject_id")]
     public Guid LinkedBySubjectId { get; set; }
 
+    /// <summary>The linking person's GitHub login when they linked, used to ask GitHub for their role.</summary>
+    [Column("linker_github_login")]
+    [MaxLength(39)]
+    public string LinkerGitHubLogin { get; set; } = string.Empty;
+
+    /// <summary>The linking person's GitHub user id, which stays the same when the login changes.</summary>
+    [Column("linker_github_id")]
+    public long LinkerGitHubId { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
 

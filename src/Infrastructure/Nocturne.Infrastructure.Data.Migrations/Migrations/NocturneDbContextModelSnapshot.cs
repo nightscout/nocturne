@@ -855,6 +855,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("linked_by_subject_id");
 
+                    b.Property<long>("LinkerGitHubId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("linker_github_id");
+
+                    b.Property<string>("LinkerGitHubLogin")
+                        .IsRequired()
+                        .HasMaxLength(39)
+                        .HasColumnType("character varying(39)")
+                        .HasColumnName("linker_github_login");
+
                     b.Property<string>("RepositoryFullName")
                         .HasMaxLength(201)
                         .HasColumnType("character varying(201)")

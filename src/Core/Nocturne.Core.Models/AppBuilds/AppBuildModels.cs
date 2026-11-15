@@ -8,7 +8,8 @@ namespace Nocturne.Core.Models.AppBuilds;
 /// A tenant's link to the GitHub App installation that builds one <see cref="BuildTarget"/>.
 /// <see cref="RepositoryFullName"/> is null until the linking person picks one of
 /// <see cref="AdminRepositories"/>: the installation's repositories that person administered on GitHub
-/// when they linked it.
+/// when they linked it. <see cref="LinkerGitHubLogin"/> and <see cref="LinkerGitHubId"/> name that
+/// person on GitHub, so their role can be checked again before each write.
 /// </summary>
 public sealed record AppBuildLink(
     string TargetId,
@@ -18,6 +19,8 @@ public sealed record AppBuildLink(
     string? RepositoryFullName,
     IReadOnlyList<string> AdminRepositories,
     Guid LinkedBySubjectId,
+    string LinkerGitHubLogin,
+    long LinkerGitHubId,
     DateTime CreatedAt,
     DateTime UpdatedAt);
 
@@ -44,6 +47,10 @@ public enum AppBuildLinkState
     /// <summary>The repository fails a target check (<see cref="AppBuildRepositoryProblem"/>); nothing is written or dispatched.</summary>
     [EnumMember(Value = "invalid"), JsonStringEnumMemberName("invalid")]
     Invalid,
+
+    /// <summary>The person who linked no longer has the admin role on the repository; they relink, or another admin does.</summary>
+    [EnumMember(Value = "linker_not_admin"), JsonStringEnumMemberName("linker_not_admin")]
+    LinkerNotAdmin,
 
     [EnumMember(Value = "secrets_missing"), JsonStringEnumMemberName("secrets_missing")]
     SecretsMissing,
@@ -75,8 +82,8 @@ public sealed record AppBuildLinkStatus
     public DateTime LinkedAt { get; init; }
 
     /// <summary>
-    /// Whether the caller linked it. Only that person may choose the repository, write a secret or
-    /// start a build, since the installation acts in their GitHub account.
+    /// Whether the caller linked it. Only the linker may choose the repository, write a secret or start
+    /// a build; <c>AppBuildService</c> states why.
     /// </summary>
     public bool LinkedByCaller { get; init; }
 
@@ -96,6 +103,9 @@ public sealed class AppBuildRepositoryValidation
     public string? TemplateFullName { get; init; }
 
     public IReadOnlyList<AppBuildRepositoryProblem> Problems { get; init; } = [];
+
+    /// <summary>Whether the person who linked has the admin role on the repository now.</summary>
+    public bool LinkerIsAdmin { get; init; }
 
     /// <summary>The target's secrets the repository holds, by name. GitHub never returns a value.</summary>
     public IReadOnlyList<string> SecretsSet { get; init; } = [];

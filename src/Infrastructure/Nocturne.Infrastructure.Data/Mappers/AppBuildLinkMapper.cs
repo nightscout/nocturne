@@ -13,6 +13,8 @@ public static class AppBuildLinkMapper
         entity.RepositoryFullName,
         entity.AdminRepositories,
         entity.LinkedBySubjectId,
+        entity.LinkerGitHubLogin,
+        entity.LinkerGitHubId,
         entity.CreatedAt,
         entity.UpdatedAt);
 
@@ -26,5 +28,7 @@ public static class AppBuildLinkMapper
         entity.RepositoryFullName = link.RepositoryFullName;
         entity.AdminRepositories = [.. link.AdminRepositories];
         entity.LinkedBySubjectId = link.LinkedBySubjectId;
+        entity.LinkerGitHubLogin = link.LinkerGitHubLogin;
+        entity.LinkerGitHubId = link.LinkerGitHubId;
     }
 }

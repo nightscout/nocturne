@@ -14,10 +14,16 @@ namespace Nocturne.API.Services.AppBuilds;
 /// <see cref="PutSecretAsync"/> relays the ciphertext. Every write and dispatch first checks the
 /// repository against its <see cref="BuildTarget"/> (<see cref="Problems"/>).
 /// <para>
-/// The installation acts in the linking person's GitHub account, so only that person
-/// (<see cref="AppBuildLink.LinkedBySubjectId"/>) may choose its repository, write a secret or start a
-/// build. Any caller the controller admits may read the status and runs, or unlink, which only forgets
-/// the link in Nocturne. Another person takes over by linking with their own GitHub authorization.
+/// The installation acts for the person who linked it: their GitHub authorization proved they
+/// administer the repository. So only that person (<see cref="AppBuildLink.LinkedBySubjectId"/>) may
+/// choose its repository, write a secret or start a build. Any caller the controller admits may read
+/// the status and runs, or unlink, which only forgets the link in Nocturne. Another person takes over
+/// by linking with their own GitHub authorization.
+/// </para>
+/// <para>
+/// Before each secret write and dispatch, GitHub is asked again whether the linker still has the admin
+/// role on the repository (<see cref="GitHubBuildAppClient.IsAdministratorAsync"/>), so a later
+/// downgrade on an organization repository takes effect without a relink.
 /// </para>
 /// </remarks>
 public sealed class AppBuildService(
@@ -99,6 +105,8 @@ public sealed class AppBuildService(
             installation.AdminRepositories.Count == 1 ? installation.AdminRepositories[0] : null,
             installation.AdminRepositories,
             subjectId,
+            installation.UserLogin,
+            installation.UserId,
             default,
             default), ct);
 
@@ -147,6 +155,7 @@ public sealed class AppBuildService(
 
         var (link, target) = await RequireLinkerAsync(targetId, callerSubjectId, ct);
         var repository = await RequireValidRepositoryAsync(link, target, ct);
+        await RequireLinkerAdministersAsync(link, repository.FullName, ct);
         await github.PutSecretAsync(link.InstallationId, repository.FullName, name, secret.EncryptedValue, secret.KeyId, ct);
     }
 
@@ -156,6 +165,7 @@ public sealed class AppBuildService(
         var inputs = ResolveInputs(RequireTarget(targetId), request.Inputs);
         var (link, target) = await RequireLinkerAsync(targetId, callerSubjectId, ct);
         var repository = await RequireValidRepositoryAsync(link, target, ct);
+        await RequireLinkerAdministersAsync(link, repository.FullName, ct);
 
         await github.DispatchWorkflowAsync(link.InstallationId, repository.FullName, target.WorkflowFile,
             repository.DefaultBranch ?? "main", inputs, ct);
@@ -259,11 +269,14 @@ public sealed class AppBuildService(
                 .Where(name => target.FindSecret(name) is not null)
                 .ToList();
             var missing = target.Secrets.Where(secret => secret.Required && !secretsSet.Contains(secret.Name)).Select(secret => secret.Name).ToList();
+            var linkerIsAdmin = await github.IsAdministratorAsync(link.InstallationId, link.RepositoryFullName,
+                link.LinkerGitHubLogin, link.LinkerGitHubId, ct);
 
             return status with
             {
                 RepositoryUrl = repository.HtmlUrl,
                 State = problems.Count > 0 ? AppBuildLinkState.Invalid
+                    : !linkerIsAdmin ? AppBuildLinkState.LinkerNotAdmin
                     : missing.Count > 0 ? AppBuildLinkState.SecretsMissing
                     : AppBuildLinkState.Ready,
                 Validation = new AppBuildRepositoryValidation
@@ -272,6 +285,7 @@ public sealed class AppBuildService(
                     IsTemplate = repository.IsTemplate,
                     TemplateFullName = repository.TemplateRepository?.FullName,
                     Problems = problems,
+                    LinkerIsAdmin = linkerIsAdmin,
                     SecretsSet = secretsSet,
                     MissingRequiredSecrets = missing,
                 },
@@ -316,6 +330,12 @@ public sealed class AppBuildService(
         if (Problems(repository, target).Count > 0)
             throw new AppBuildException(AppBuildException.RepositoryInvalid);
         return repository with { FullName = fullName };
+    }
+
+    private async Task RequireLinkerAdministersAsync(AppBuildLink link, string repository, CancellationToken ct)
+    {
+        if (!await github.IsAdministratorAsync(link.InstallationId, repository, link.LinkerGitHubLogin, link.LinkerGitHubId, ct))
+            throw new AppBuildException(AppBuildException.LinkerNotAdmin);
     }
 
     private void RequireConfigured()
