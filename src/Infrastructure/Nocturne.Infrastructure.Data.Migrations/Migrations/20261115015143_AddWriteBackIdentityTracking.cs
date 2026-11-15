@@ -5,21 +5,10 @@
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     /// <summary>
-    /// What the Nightscout connector needs to recognise a record Nightscout write-back sent upstream
-    /// when a pull brings its copy back, in one transaction.
-    /// <list type="bullet">
-    /// <item><c>written_live</c> on every legacy-keyed table: whether a live write has touched the row
-    /// (<c>IWriteBackTracked</c>). Only such a row can have been written back, so only its copy is an
-    /// echo. Existing rows start false: their copies update them as any upstream record does. A
-    /// constant default makes each column a catalog-only change.</item>
-    /// <item><c>legacy_id_wire_hash</c>, the hash <c>MongoObjectId.Coerce</c> gives a non-ObjectId
-    /// legacy id, declared immutable so an index expression can use it in place of the stable
-    /// <c>convert_to</c>.</item>
-    /// </list>
-    /// The indexes over the hash are built in <see cref="AddWriteBackIdentityIndexes"/>: a
-    /// <c>CONCURRENTLY</c> build cannot run in a transaction, and these columns, added without
-    /// <c>IF NOT EXISTS</c>, would crash-loop a restart after an interrupted build if they shared its
-    /// non-transactional migration.
+    /// <c>written_live</c> on every legacy-keyed table: whether a live write has touched the row
+    /// (<c>IWriteBackTracked</c>). Only such a row can have been written back to Nightscout, so only
+    /// its pulled copy is an echo. Existing rows start false: their copies update them as any upstream
+    /// record does. A constant default makes each column a catalog-only change.
     /// </summary>
     public partial class AddWriteBackIdentityTracking : Migration
     {
@@ -123,19 +112,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 type: "boolean",
                 nullable: false,
                 defaultValue: false);
-
-            migrationBuilder.Sql("""
-                CREATE OR REPLACE FUNCTION public.legacy_id_wire_hash(legacy_id text) RETURNS text
-                LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-                AS $$ SELECT left(encode(sha256(convert_to(legacy_id, 'UTF8')), 'hex'), 24) $$;
-                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("DROP FUNCTION IF EXISTS public.legacy_id_wire_hash(text);");
-
             migrationBuilder.DropColumn(
                 name: "written_live",
                 table: "uploader_snapshots");

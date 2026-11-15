@@ -132,25 +132,35 @@ public abstract class DecomposerBase
 
     /// <summary>
     /// One <see cref="WireForms"/> lookup. <paramref name="PulledOnly"/> keeps it to the ids of
-    /// documents the Nightscout connector pulled, the only ones that carry that form;
-    /// <paramref name="TakesUuids"/> offers it a canonical uuid besides the ObjectIds every lookup
-    /// takes.
+    /// documents the Nightscout connector pulled, the only ones that carry that form, and gives it
+    /// the time those documents span (<see cref="PulledWindow"/>); <paramref name="TakesUuids"/>
+    /// offers it a canonical uuid besides the ObjectIds every lookup takes.
     /// </summary>
     protected readonly record struct WireIdResolver(
-        Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<WireLegacyId>>> Resolve,
+        Func<IReadOnlyCollection<string>, PulledWindow, CancellationToken, Task<IEnumerable<WireLegacyId>>> Resolve,
         bool PulledOnly,
         bool TakesUuids = false);
+
+    /// <summary>
+    /// The time the pulled documents of a batch span, widened by <see cref="PulledWindowMargin"/>. A
+    /// copy carries its record's time, so this bounds the records a hashed id can name, which can
+    /// only be found by hashing candidates (<see cref="ILegacyKeyedRepository{TRecord}.ResolveHashedLegacyIdsAsync"/>).
+    /// </summary>
+    protected readonly record struct PulledWindow(DateTime From, DateTime To);
+
+    /// <summary>How far a pulled copy's time may lie from its record's, such as after an edit moved it.</summary>
+    private static readonly TimeSpan PulledWindowMargin = TimeSpan.FromDays(1);
 
     protected static KeyedTable Table<TRecord>(ILegacyKeyedRepository<TRecord> repository, WireForms forms)
         where TRecord : class, IV4Record
     {
         var resolvers = new List<WireIdResolver>();
         if (forms.HasFlag(WireForms.UuidPrefix))
-            resolvers.Add(new(repository.ResolveUuidLegacyIdsAsync, PulledOnly: false));
+            resolvers.Add(new((ids, _, ct) => repository.ResolveUuidLegacyIdsAsync(ids, ct), PulledOnly: false));
         if (forms.HasFlag(WireForms.Hashed))
-            resolvers.Add(new(repository.ResolveHashedLegacyIdsAsync, PulledOnly: true));
+            resolvers.Add(new((ids, window, ct) => repository.ResolveHashedLegacyIdsAsync(ids, window.From, window.To, ct), PulledOnly: true));
         if (forms.HasFlag(WireForms.KeyedOwnId))
-            resolvers.Add(new(repository.ResolveKeyedOwnIdsAsync, PulledOnly: false, TakesUuids: true));
+            resolvers.Add(new((ids, _, ct) => repository.ResolveKeyedOwnIdsAsync(ids, ct), PulledOnly: false, TakesUuids: true));
 
         return new(
             repository.GetHeldLegacyIdsAsync,
@@ -256,10 +266,18 @@ public abstract class DecomposerBase
         var wireIds = unsettled
             .Where(n => MongoObjectId.IsObjectId(n) || MongoObjectId.TryGetOwnIdRange(n, out _, out _))
             .ToHashSet(StringComparer.Ordinal);
+        var pulledTimes = pulled.Where(d => d.Mills > 0).Select(d => d.Mills).ToList();
+        PulledWindow? window = pulledTimes.Count == 0
+            ? null
+            : new PulledWindow(
+                DateTimeOffset.FromUnixTimeMilliseconds(pulledTimes.Min()).UtcDateTime - PulledWindowMargin,
+                DateTimeOffset.FromUnixTimeMilliseconds(pulledTimes.Max()).UtcDateTime + PulledWindowMargin);
         foreach (var table in tables)
         {
             foreach (var (resolve, pulledOnly, takesUuids) in table.Resolvers)
             {
+                if (pulledOnly && window is null)
+                    continue;
                 var candidates = wireIds
                     .Where(n => !resolved.ContainsKey(n)
                                 && (!pulledOnly || pulledNames.Contains(n))
@@ -267,7 +285,7 @@ public abstract class DecomposerBase
                     .ToHashSet(StringComparer.Ordinal);
                 if (candidates.Count == 0)
                     continue;
-                foreach (var hit in await resolve(candidates, ct))
+                foreach (var hit in await resolve(candidates, window ?? default, ct))
                     resolved.TryAdd(hit.WireId, hit.LegacyId);
             }
         }

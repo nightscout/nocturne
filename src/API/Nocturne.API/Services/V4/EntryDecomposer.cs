@@ -75,14 +75,16 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
 
     /// <summary>
     /// Four phases with a fixed set of queries whatever the batch's size: the correlation ids its
-    /// legacy ids are stored under and the rows an edit's ids name are read, one query per table
-    /// each; every entry is mapped; the readings are attributed to devices in one stamp per reading
-    /// table; and each table is written in one bulk upsert.
+    /// legacy ids are stored under and the rows its served-shaped ids name are read, one query per
+    /// table each; every entry is mapped; the readings are attributed to devices in one stamp per
+    /// reading table; and each table is written in one bulk upsert.
     /// </summary>
     /// <remarks>
     /// <paramref name="edit"/> marks a user's edit of the readings its ids name, which may carry no
-    /// legacy id or another one. Otherwise each entry is first pointed at the reading it names
-    /// (<see cref="PointEntriesAtStoredRecordsAsync"/>), and a write-back echo is skipped.
+    /// legacy id or another one. Otherwise an upload's id that only names a reading with no legacy id
+    /// is that reading's echo and is skipped (<see cref="EntryTable{TRecord}.Echoes"/>), and each
+    /// other entry is pointed at the reading it names (<see cref="PointEntriesAtStoredRecordsAsync"/>),
+    /// where a write-back echo is skipped too.
     /// </remarks>
     private async Task<DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, bool edit, CancellationToken ct)
@@ -95,14 +97,23 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         var meter = new EntryTable<MeterGlucose>(_meterGlucoseRepository);
         var calibration = new EntryTable<Calibration>(_calibrationRepository);
 
-        var echoes = edit ? new HashSet<Entry>() : await PointEntriesAtStoredRecordsAsync(entries, ct);
-        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
-        if (edit)
+        await sensor.ReadServedAsync(ServedIds("sgv"), ct);
+        await meter.ReadServedAsync(ServedIds("mbg"), ct);
+        await calibration.ReadServedAsync(ServedIds("cal"), ct);
+        var echoes = new HashSet<Entry>(ReferenceEqualityComparer.Instance);
+        if (!edit)
         {
-            await sensor.ReadServedAsync(ServedIds("sgv"), ct);
-            await meter.ReadServedAsync(ServedIds("mbg"), ct);
-            await calibration.ReadServedAsync(ServedIds("cal"), ct);
+            echoes.UnionWith(entries.Where(e => !PulledFromNightscout(e) && (e.Type?.ToLowerInvariant() switch
+            {
+                "sgv" => sensor.Echoes(e.Id),
+                "mbg" => meter.Echoes(e.Id),
+                "cal" => calibration.Echoes(e.Id),
+                _ => false,
+            })));
+            echoes.UnionWith(await PointEntriesAtStoredRecordsAsync(entries.Where(e => !echoes.Contains(e)), ct));
         }
+
+        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
 
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in entries.Where(e => !echoes.Contains(e)))
@@ -145,9 +156,9 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         return result;
 
         IEnumerable<string> ServedIds(string type) => entries
-            .Where(e => string.Equals(e.Type, type, StringComparison.OrdinalIgnoreCase))
-            .Select(e => MongoObjectId.Coerce(e.Id))
-            .Where(MongoObjectId.IsObjectId)
+            .Where(e => string.Equals(e.Type, type, StringComparison.OrdinalIgnoreCase) && (edit || !PulledFromNightscout(e)))
+            .Select(e => edit ? MongoObjectId.Coerce(e.Id) : e.Id)
+            .Where(id => edit ? MongoObjectId.IsObjectId(id) : MongoObjectId.IsGuidPrefixShaped(id))
             .OfType<string>();
     }
 
@@ -221,8 +232,8 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
     }
 
     /// <summary>
-    /// One reading table's part of a batch: the rows an edit's ids name, and the models it writes by
-    /// legacy id or onto a stored row.
+    /// One reading table's part of a batch: the rows its served-shaped ids name, and the models it
+    /// writes by legacy id or onto a stored row.
     /// </summary>
     private sealed class EntryTable<TRecord>(ILegacyKeyedRepository<TRecord> repository)
         where TRecord : class, IV4Record
@@ -240,6 +251,16 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
             if (ids.Count > 0)
                 _served = await repository.GetByServedIdsAsync(ids, ct);
         }
+
+        /// <summary>
+        /// Whether <paramref name="id"/> is the 24-hex form <see cref="MongoObjectId.FromGuid"/> gave a
+        /// stored reading that has no legacy id, sent by an uploader other than the Nightscout
+        /// connector. Such a reading is often a connector's, keyed by its sync key alone: taking the
+        /// id onto it would rewrite its source and sync key, and the connector's next poll would store
+        /// it again. A pulled copy of it is pointed at it instead
+        /// (<see cref="PointEntriesAtStoredRecordsAsync"/>).
+        /// </summary>
+        public bool Echoes(string? id) => id is not null && ByPrefix(id) is { LegacyId: null };
 
         /// <summary>
         /// The stored reading an edit's <paramref name="id"/> names when no reading carries it as its

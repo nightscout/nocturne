@@ -76,6 +76,8 @@ public class OwnIdAdoptionTests : IDisposable
         repo.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<TRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback(() => _calls.Add($"{name}.upsert"))
             .ReturnsAsync((IEnumerable<TRecord> records, WriteOrigin _, CancellationToken _) => [.. records]);
+        repo.Setup(r => r.GetByServedIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         repo.Setup(r => r.GetCorrelationIdsByLegacyIdAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
             .Callback((IEnumerable<string> ids, CancellationToken _) => _calls.Add($"{name}.correlations({string.Join(",", ids.Order())})"))
             .ReturnsAsync([]);

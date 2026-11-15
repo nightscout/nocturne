@@ -345,9 +345,9 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
 
     /// <summary>
     /// Treatment write-back sends a legacy id that is neither an ObjectId nor a uuid as the hash
-    /// <see cref="MongoObjectId.Coerce"/> gives it. Postgres computes the same hash through the
-    /// migration's <c>legacy_id_wire_hash</c>, live rows and deleted alike, tenant-scoped, and a uuid
-    /// or an ObjectId never answers for one.
+    /// <see cref="MongoObjectId.Coerce"/> gives it. The legacy ids timed within the window resolve by
+    /// it, live rows and deleted alike, tenant-scoped; a uuid or an ObjectId never answers for one,
+    /// nor does a record outside the window.
     /// </summary>
     [Fact]
     public async Task HashedLegacyIds_ResolveToTheLegacyIdTheirHashNames()
@@ -363,12 +363,16 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
         foreach (var (legacyId, i) in legacyIds.Select((l, i) => (l, i)))
             await repo.CreateAsync(new Bolus { Timestamp = T0.AddMinutes(i * 10), Insulin = 1, LegacyId = legacyId }, WriteOrigin.Live, CancellationToken.None);
         var deleted = await repo.CreateAsync(new Bolus { Timestamp = T0.AddHours(2), Insulin = 1, LegacyId = "deleted-bolus" }, WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(new Bolus { Timestamp = T0.AddDays(3), Insulin = 1, LegacyId = "outside-the-window" }, WriteOrigin.Live, CancellationToken.None);
         await fx.QueryAsync(tenant, ctx => ctx.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE boluses SET deleted_at = now(), deleted_by_user = true WHERE id = {deleted.Id}"));
 
         var resolved = await repo.ResolveHashedLegacyIdsAsync(
-            [.. legacyIds.Select(l => MongoObjectId.Coerce(l)!), MongoObjectId.Coerce("deleted-bolus")!, MongoObjectId.Coerce("other-tenant-bolus")!],
-            CancellationToken.None);
+            [
+                .. legacyIds.Select(l => MongoObjectId.Coerce(l)!), MongoObjectId.Coerce("deleted-bolus")!,
+                MongoObjectId.Coerce("other-tenant-bolus")!, MongoObjectId.Coerce("outside-the-window")!,
+            ],
+            T0.AddHours(-1), T0.AddHours(3), CancellationToken.None);
 
         resolved.Should().BeEquivalentTo(new[]
         {

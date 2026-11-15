@@ -116,7 +116,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     }
 
     [Fact]
-    public async Task A_bolus_wizard_with_a_preBolus_comes_back_with_its_carbs_and_without_its_preBolus()
+    public async Task A_pulled_back_bolus_wizard_with_a_preBolus_is_an_echo_and_keeps_its_preBolus()
     {
         var decomposer = Treatments();
         var treatment = Treatment("Bolus Wizard", insulin: 3, carbs: 45, preBolus: 20);

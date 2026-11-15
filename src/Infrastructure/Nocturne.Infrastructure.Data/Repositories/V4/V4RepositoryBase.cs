@@ -525,6 +525,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdHashAsync" />
+    /// <remarks>
+    /// Mirrors <see cref="MongoObjectId.Coerce"/> in SQL: the first 12 bytes of the SHA-256 of the
+    /// UTF-8 legacy id, as lowercase hex.
+    /// </remarks>
     public async Task<TModel?> GetByLegacyIdHashAsync(string objectId, CancellationToken ct = default)
     {
         if (!MongoObjectId.IsObjectId(objectId))
@@ -538,10 +542,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>
-    /// The rows whose legacy id <see cref="MongoObjectId.Coerce"/> hashes into one of
-    /// <paramref name="objectIds"/> (<see cref="HashedLegacyId"/>), under the context's query filters.
+    /// The rows whose legacy id <see cref="MongoObjectId.Coerce"/> hashes into
+    /// <paramref name="objectId"/>, under the context's query filters.
     /// </summary>
-    private static IQueryable<TEntity> WhereLegacyIdHashesTo(NocturneDbContext ctx, params string[] objectIds)
+    private static IQueryable<TEntity> WhereLegacyIdHashesTo(NocturneDbContext ctx, string objectId)
     {
         var entityType = ctx.Model.FindEntityType(typeof(TEntity))!;
         var tableName = SqlIdentifier.Require(entityType.GetTableName()!, nameof(TEntity));
@@ -552,10 +556,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 .GetColumnName(StoreObjectIdentifier.Table(tableName, schema))!,
             nameof(ILegacyIdentified.LegacyId));
 
-        var sql = "SELECT * FROM " + table + " WHERE " + HashedLegacyId.Predicate(column)
-            + " AND " + HashedLegacyId.Key(column) + " = ANY({0})";
+        var sql = "SELECT * FROM " + table + " WHERE "
+            + "encode(substring(sha256(convert_to(" + column + ", 'UTF8')) FROM 1 FOR 12), 'hex') = {0}";
 
-        return ctx.Set<TEntity>().FromSqlRaw(sql, [objectIds]);
+        return ctx.Set<TEntity>().FromSqlRaw(sql, objectId);
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.IsDeletedByUserAsync" />
@@ -795,28 +799,24 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolveHashedLegacyIdsAsync" />
-    /// <remarks>PostgreSQL only: another provider resolves nothing.</remarks>
     public async Task<IEnumerable<WireLegacyId>> ResolveHashedLegacyIdsAsync(
-        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default)
     {
-        var hashes = ids.Where(MongoObjectId.IsObjectId).Distinct(StringComparer.Ordinal).ToArray();
-        if (hashes.Length == 0)
+        var hashes = ids.Where(MongoObjectId.IsObjectId).ToHashSet(StringComparer.Ordinal);
+        if (hashes.Count == 0)
             return [];
 
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        if (!ctx.Database.IsNpgsql())
-            return [];
-
-        var legacyIds = await WhereLegacyIdHashesTo(ctx, hashes)
-            .IncludingDeleted()
+        var legacyIds = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to && e.LegacyId != null)
             .Select(e => e.LegacyId!)
             .Distinct()
             .ToListAsync(ct);
 
         return legacyIds
-            .Select(legacyId => (Wire: MongoObjectId.Coerce(legacyId)!, LegacyId: legacyId))
-            .Where(r => r.Wire != r.LegacyId && hashes.Contains(r.Wire))
-            .Select(r => new WireLegacyId(r.Wire, r.LegacyId))
+            .Where(legacyId => !MongoObjectId.IsObjectId(legacyId) && !Guid.TryParse(legacyId, out _))
+            .Select(legacyId => new WireLegacyId(MongoObjectId.Coerce(legacyId)!, legacyId))
+            .Where(r => hashes.Contains(r.WireId))
             .ToList();
     }
 

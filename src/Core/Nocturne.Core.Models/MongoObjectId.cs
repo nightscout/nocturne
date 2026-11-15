@@ -69,8 +69,8 @@ public static class MongoObjectId
             return FromGuid(guid);
 
         // Any other id hashes to a stable 24-hex value so the wire is always AAPS-safe. The hash
-        // does not reverse; a stored record is found by it only by hashing every legacy id, see
-        // ILegacyKeyedRepository.GetByLegacyIdHashAsync.
+        // does not reverse; a stored record is found by it only by hashing candidate legacy ids, see
+        // ILegacyKeyedRepository.GetByLegacyIdHashAsync and ResolveHashedLegacyIdsAsync.
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(id));
         return Convert.ToHexStringLower(hash.AsSpan(0, 12));
     }

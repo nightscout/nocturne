@@ -275,6 +275,45 @@ public class EntryDecomposerBatchTests : IDisposable
     }
 
     /// <summary>
+    /// An uploader other than the Nightscout connector naming a stored reading that has no legacy id
+    /// by its uuid's 24-hex prefix is skipped as that reading's echo. Such a reading is often a
+    /// connector's, keyed by its sync key alone; taking the id onto it would rewrite its source and
+    /// sync key, and the connector's next poll would store it again.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_SkipsAnUploadNamingAReadingWithNoLegacyIdAndLeavesItsKeys()
+    {
+        var unkeyed = new SensorGlucose
+        {
+            Id = Guid.Parse("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f"), LegacyId = null,
+            DataSource = "dexcom-connector", SyncIdentifier = "dexcom-7f3c2a91",
+        };
+        var unkeyedWireId = MongoObjectId.FromGuid(unkeyed.Id);
+        _sgRepoMock
+            .Setup(x => x.GetByServedIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([unkeyed]);
+        _sgRepoMock
+            .Setup(x => x.FindUnkeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UnkeyedOwnId(unkeyedWireId, WriteBackMaySend: false)]);
+        List<SensorGlucose>? written = null;
+        _sgRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        await _decomposer.DecomposeBatchAsync(
+        [
+            new Entry { Id = unkeyedWireId, Type = "sgv", Mills = 1700000000000, Sgv = 120.0, DataSource = "xdrip" },
+            new Entry { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1700000001000, Sgv = 130.0 },
+        ], WriteOrigin.Live);
+
+        written!.Select(r => r.LegacyId).Should().Equal("dexcom_7f3c2a91");
+        _sgRepoMock.Verify(
+            x => x.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
     /// A Nightscout write-back round trip: the connector pulls back what write-back sent. A record
     /// without a legacy id comes back under its uuid's 24-hex prefix, which the stored record takes
     /// as its legacy id before the bulk upsert, so the copy updates it instead of landing beside it.
@@ -298,7 +337,7 @@ public class EntryDecomposerBatchTests : IDisposable
 
         var entries = new List<Entry>
         {
-            new() { Id = unkeyedWireId, Type = "sgv", Mills = 1700000000000, Sgv = 120.0 },
+            new() { Id = unkeyedWireId, Type = "sgv", Mills = 1700000000000, Sgv = 120.0, DataSource = DataSources.NightscoutConnector },
             new() { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1700000001000, Sgv = 130.0 },
         };
 

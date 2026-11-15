@@ -255,15 +255,18 @@ public interface ILegacyKeyedRepository<TRecord>
         IReadOnlyCollection<string> ids, CancellationToken ct = default);
 
     /// <summary>
-    /// The stored legacy ids, live or deleted, that are neither ObjectIds nor uuids and whose hash
+    /// The legacy ids, live or deleted, of the records timed within <paramref name="from"/> and
+    /// <paramref name="to"/> that are neither ObjectIds nor uuids and whose hash
     /// (<see cref="MongoObjectId.Coerce"/>) is one of <paramref name="ids"/>, each paired with it.
     /// </summary>
     /// <remarks>
     /// Treatment write-back sends such a legacy id upstream as that hash, as <c>_id</c> and
     /// <c>identifier</c> alike, so the copy a pull brings back names the record by the hash alone.
+    /// The hash does not reverse, so the candidates are the legacy ids of the window, hashed here;
+    /// a pulled copy carries its record's time, which bounds the window.
     /// </remarks>
     Task<IEnumerable<WireLegacyId>> ResolveHashedLegacyIdsAsync(
-        IReadOnlyCollection<string> ids, CancellationToken ct = default);
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>
     /// The stored legacy ids, live or deleted, of the records that carry one and whose own uuid, in

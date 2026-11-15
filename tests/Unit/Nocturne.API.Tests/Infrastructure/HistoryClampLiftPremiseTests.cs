@@ -62,21 +62,11 @@ public class HistoryClampLiftPremiseTests
             .Should().BeEmpty("a trigger runs with the inserting statement's clamp lifted");
     }
 
-    /// <summary>
-    /// Stored functions that read no table: an <c>IMMUTABLE</c> SQL body over its arguments alone,
-    /// which an index expression needs in place of a function that is only stable.
-    /// </summary>
-    private static readonly string[] RowlessFunctions =
-    [
-        // legacy_id_wire_hash wraps convert_to for the hashed legacy-id index.
-        "src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Migrations/20261115015143_AddWriteBackIdentityTracking.cs",
-    ];
-
     [Fact]
     public void OnlySessionTemporaryFunctions()
     {
         Matching(new Regex(@"\bCREATE\s+(OR\s+REPLACE\s+)?FUNCTION\s+(?!pg_temp\.)", RegexOptions.IgnoreCase))
-            .Should().BeEquivalentTo(RowlessFunctions, "a stored function could serve as a column default or a trigger body that reads other rows");
+            .Should().BeEmpty("a stored function could serve as a column default or a trigger body that reads other rows");
     }
 
     [Fact]

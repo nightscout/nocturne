@@ -84,7 +84,7 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
     /// The uuid is what older write-backs sent, so it comes back on a copy the connector pulls; the
     /// 24-hex prefix is what every v1/v3 read serves for the reading, and so what a client echoing a
     /// read uploads. A copy the connector pulls of a reading write-back may have sent is its echo and
-    /// changes nothing; an upload is an edit.
+    /// changes nothing; an upload under the prefix of a reading with no legacy id is skipped.
     /// </summary>
     public static TheoryData<string> WireForms => new() { "uuid", "prefix" };
 
@@ -104,8 +104,13 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
             .IsSuccessStatusCode.Should().BeTrue();
     }
 
+    /// <summary>
+    /// Another uploader echoing what a read served it, for a reading that has no legacy id, is
+    /// skipped: that reading is often a connector's, keyed by its sync key alone, and taking the id
+    /// onto it would rewrite its source and sync key.
+    /// </summary>
     [Fact]
-    public async Task AnUploadedReadingUnderTheServedPrefix_UpdatesTheReadingItCameFrom()
+    public async Task AnUploadedReadingUnderTheServedPrefix_IsSkippedAndLeavesTheReadingAsItWas()
     {
         var device = $"echo-{Guid.NewGuid():N}";
         var date = DateTimeOffset.UtcNow.AddMinutes(-30).ToUnixTimeMilliseconds();
@@ -114,7 +119,7 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
 
         await EchoReadingAsync(id, "prefix", device, PastTheV1DuplicateWindow(date), sgv: 112);
 
-        (await LiveSensorReadingsAsync(device)).Should().Equal((id, 112d));
+        (await LiveSensorReadingsAsync(device)).Should().Equal((id, 111d));
         (await V1Async("entries", device)).Select(r => r.Id).Should().Equal(servedAs);
     }
 

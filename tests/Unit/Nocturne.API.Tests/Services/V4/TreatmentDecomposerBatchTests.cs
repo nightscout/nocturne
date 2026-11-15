@@ -969,6 +969,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
         written!.Select(b => b.LegacyId).Should().Equal("66f0a1b2c3d4e0f6a7b8c9d1");
     }
 
+    private static readonly DateTime PulledAt = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime;
+
     private static Treatment PulledBolus(string id, string? identifier, double insulin = 2.5) => new()
     {
         Id = id, UpstreamIdentifier = identifier, EventType = "Correction Bolus",
@@ -987,9 +989,10 @@ public class TreatmentDecomposerBatchTests : IDisposable
         const string legacyId = "syn-3a7c0e9f1b2d4c6e";
         var hash = MongoObjectId.Coerce(legacyId)!;
         _bolusRepoMock
-            .Setup(x => x.ResolveHashedLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
-                ids.Where(i => i == hash).Select(i => new WireLegacyId(i, legacyId)));
+            .Setup(x => x.ResolveHashedLegacyIdsAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken _) =>
+                ids.Where(i => i == hash && from <= PulledAt && PulledAt <= to).Select(i => new WireLegacyId(i, legacyId)));
         List<V4Models.Bolus>? written = null;
         _bolusRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -1009,9 +1012,10 @@ public class TreatmentDecomposerBatchTests : IDisposable
         const string legacyId = "syn-3a7c0e9f1b2d4c6e";
         var hash = MongoObjectId.Coerce(legacyId)!;
         _bolusRepoMock
-            .Setup(x => x.ResolveHashedLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
-                ids.Where(i => i == hash).Select(i => new WireLegacyId(i, legacyId)));
+            .Setup(x => x.ResolveHashedLegacyIdsAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken _) =>
+                ids.Where(i => i == hash && from <= PulledAt && PulledAt <= to).Select(i => new WireLegacyId(i, legacyId)));
         _bolusRepoMock
             .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
