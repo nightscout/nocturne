@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.AppBuilds;
 using Nocturne.Core.Models.AppBuilds;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -23,18 +24,34 @@ public sealed class AppBuildLinkRepository(INocturneDbContextFactory contexts) :
         return row is null ? null : AppBuildLinkMapper.ToDomainModel(row);
     }
 
+    /// <remarks>
+    /// Two first links for one target can race to insert. The loser of
+    /// <c>ux_app_build_links_tenant_target</c> replaces the winner's row instead, as a later link would.
+    /// </remarks>
     public async Task SaveAsync(AppBuildLink link, CancellationToken ct)
     {
         await using var db = await contexts.CreateAsync(ct);
         var row = await db.AppBuildLinks.FirstOrDefaultAsync(row => row.TargetId == link.TargetId, ct);
-        if (row is null)
+        if (row is not null)
         {
-            row = new AppBuildLinkEntity { Id = Guid.CreateVersion7() };
-            db.AppBuildLinks.Add(row);
+            AppBuildLinkMapper.Apply(link, row);
+            await db.SaveChangesAsync(ct);
+            return;
         }
 
-        AppBuildLinkMapper.Apply(link, row);
-        await db.SaveChangesAsync(ct);
+        var inserted = db.AppBuildLinks.Add(new AppBuildLinkEntity { Id = Guid.CreateVersion7() });
+        AppBuildLinkMapper.Apply(link, inserted.Entity);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.IsUniqueViolation())
+        {
+            inserted.State = EntityState.Detached;
+            var winner = await db.AppBuildLinks.FirstAsync(row => row.TargetId == link.TargetId, ct);
+            AppBuildLinkMapper.Apply(link, winner);
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     public async Task<bool> SetRepositoryAsync(string targetId, string repositoryFullName, CancellationToken ct)

@@ -36,6 +36,13 @@ public class AppBuildLinkEntity : ITenantScoped, IEntityTimestamped, IAuditable
     [MaxLength(201)]
     public string? RepositoryFullName { get; set; }
 
+    /// <summary>
+    /// The installation's repositories the linking person administered on GitHub at link time, as
+    /// <c>owner/name</c>. <see cref="RepositoryFullName"/> is always one of them.
+    /// </summary>
+    [Column("admin_repositories")]
+    public string[] AdminRepositories { get; set; } = [];
+
     [Column("linked_by_subject_id")]
     public Guid LinkedBySubjectId { get; set; }
 

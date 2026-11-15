@@ -35,14 +35,13 @@ public class AppBuildsControllerAuthorizationTests
             .Should().BeOfType<ForbidResult>();
     }
 
-    [Fact]
-    public async Task A_public_share_is_refused()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_public_share_is_refused_as_unauthenticated(bool fullHistory)
     {
-        var share = new DefaultHttpContext { RequestServices = Services(share: true) };
-        share.Items["AuthContext"] = new AuthContext { IsAuthenticated = false };
-        share.Items["GrantedScopes"] = (IReadOnlySet<string>)Scope.PublicShareScopes.ToHashSet(StringComparer.Ordinal);
-
-        (await Authorize(share)).Should().NotBeNull();
+        (await Authorize(Share(fullHistory))).Should().BeOfType<UnauthorizedResult>(
+            "a share is not authenticated, and tenant.settings is not a read requirement");
     }
 
     [Fact]
@@ -68,17 +67,37 @@ public class AppBuildsControllerAuthorizationTests
     }
 
     [Fact]
-    public void No_action_opts_out_of_the_controller_filters()
+    public async Task A_signed_out_callback_returns_to_the_web_page_marked_signed_out()
     {
-        typeof(AppBuildsController).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Should().NotContain(method => method.GetCustomAttributes<AllowAnonymousAttribute>().Any(),
-                "the installation callback is authenticated by the session as well as the signed state");
+        var anonymous = new DefaultHttpContext { RequestServices = Services() };
+        anonymous.Items["AuthContext"] = new AuthContext { IsAuthenticated = false };
+
+        (await CallbackResult(anonymous)).Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Be("/settings/app-builds?error=signed_out");
+    }
+
+    [Fact]
+    public async Task A_forbidden_callback_returns_to_the_web_page_marked_forbidden()
+    {
+        (await CallbackResult(Caller(AuthType.SessionCookie, [Scope.GlucoseRead]))).Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Be("/settings/app-builds?error=forbidden");
+    }
+
+    [Fact]
+    public void Only_the_callback_skips_the_framework_challenge_and_it_turns_refusals_into_redirects()
+    {
+        var anonymous = typeof(AppBuildsController).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttributes<AllowAnonymousAttribute>().Any())
+            .ToList();
+
+        anonymous.Should().ContainSingle().Which.Name.Should().Be(nameof(AppBuildsController.CompleteAppBuildLink));
+        anonymous[0].GetCustomAttribute<RedirectRefusedCallbackAttribute>().Should().NotBeNull(
+            "the controller's own filters still require the session there; only their answer changes");
     }
 
     private static async Task<IActionResult?> Authorize(HttpContext httpContext)
     {
-        var filters = typeof(AppBuildsController).GetCustomAttributes(inherit: true).OfType<IFilterMetadata>().ToList();
-        filters.Should().NotBeEmpty();
+        var filters = ControllerFilters();
         var context = new AuthorizationFilterContext(
             new ActionContext(httpContext, new RouteData(), new ActionDescriptor()), filters);
 
@@ -90,6 +109,32 @@ public class AppBuildsControllerAuthorizationTests
         }
 
         return null;
+    }
+
+    private static async Task<IActionResult?> CallbackResult(HttpContext httpContext)
+    {
+        var refused = await Authorize(httpContext);
+        refused.Should().NotBeNull();
+
+        var context = new ResultExecutingContext(
+            new ActionContext(httpContext, new RouteData(), new ActionDescriptor()), [], refused!, controller: new object());
+        new RedirectRefusedCallbackAttribute().OnResultExecuting(context);
+        return context.Result;
+    }
+
+    private static List<IFilterMetadata> ControllerFilters()
+    {
+        var filters = typeof(AppBuildsController).GetCustomAttributes(inherit: true).OfType<IFilterMetadata>().ToList();
+        filters.Should().NotBeEmpty();
+        return filters;
+    }
+
+    private static HttpContext Share(bool fullHistory)
+    {
+        var share = new DefaultHttpContext { RequestServices = Services(share: true, fullHistory: fullHistory) };
+        share.Items["AuthContext"] = new AuthContext { IsAuthenticated = false };
+        share.Items["GrantedScopes"] = (IReadOnlySet<string>)Scope.PublicShareScopes.ToHashSet(StringComparer.Ordinal);
+        return share;
     }
 
     private static HttpContext Caller(AuthType authType, string[] scopes, bool clamped = false, Guid? subject = null)
@@ -105,10 +150,11 @@ public class AppBuildsControllerAuthorizationTests
         return httpContext;
     }
 
-    private static IServiceProvider Services(bool clamped = false, bool share = false)
+    private static IServiceProvider Services(bool clamped = false, bool share = false, bool fullHistory = false)
     {
         var readContext = new CategoryReadContext();
         if (share) readContext.MarkShare();
+        if (fullHistory) readContext.SetFullHistory(true);
         if (clamped) readContext.ClampMemberHistory();
 
         var subjects = new Mock<ISubjectRepository>();

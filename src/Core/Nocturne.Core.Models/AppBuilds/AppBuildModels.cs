@@ -6,8 +6,9 @@ namespace Nocturne.Core.Models.AppBuilds;
 
 /// <summary>
 /// A tenant's link to the GitHub App installation that builds one <see cref="BuildTarget"/>.
-/// <see cref="RepositoryFullName"/> is null until the owner picks a repository from an installation
-/// that exposes more than one.
+/// <see cref="RepositoryFullName"/> is null until the linking person picks one of
+/// <see cref="AdminRepositories"/>: the installation's repositories that person administered on GitHub
+/// when they linked it.
 /// </summary>
 public sealed record AppBuildLink(
     string TargetId,
@@ -15,6 +16,7 @@ public sealed record AppBuildLink(
     string AccountLogin,
     bool AccountIsOrganization,
     string? RepositoryFullName,
+    IReadOnlyList<string> AdminRepositories,
     Guid LinkedBySubjectId,
     DateTime CreatedAt,
     DateTime UpdatedAt);
@@ -63,7 +65,7 @@ public enum AppBuildRepositoryProblem
     WrongTemplate,
 }
 
-public sealed class AppBuildLinkStatus
+public sealed record AppBuildLinkStatus
 {
     public required string TargetId { get; init; }
     public required AppBuildLinkState State { get; init; }
@@ -71,6 +73,12 @@ public sealed class AppBuildLinkStatus
     public string? RepositoryFullName { get; init; }
     public string? RepositoryUrl { get; init; }
     public DateTime LinkedAt { get; init; }
+
+    /// <summary>
+    /// Whether the caller linked it. Only that person may choose the repository, write a secret or
+    /// start a build, since the installation acts in their GitHub account.
+    /// </summary>
+    public bool LinkedByCaller { get; init; }
 
     /// <summary>Null when no repository is chosen or GitHub could not be read.</summary>
     public AppBuildRepositoryValidation? Validation { get; init; }

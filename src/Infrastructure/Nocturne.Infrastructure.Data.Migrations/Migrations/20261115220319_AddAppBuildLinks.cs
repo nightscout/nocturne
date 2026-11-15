@@ -22,6 +22,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     account_login = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     account_is_organization = table.Column<bool>(type: "boolean", nullable: false),
                     repository_full_name = table.Column<string>(type: "character varying(201)", maxLength: 201, nullable: true),
+                    admin_repositories = table.Column<string[]>(type: "text[]", nullable: false),
                     linked_by_subject_id = table.Column<Guid>(type: "uuid", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")

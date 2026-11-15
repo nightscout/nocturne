@@ -21,11 +21,17 @@ namespace Nocturne.API.Controllers.V4.AppBuilds;
 /// holder's decision. So every action, the installation callback included, needs
 /// <see cref="Scope.TenantSettings"/> from the person's own signed-in session (no delegated credential,
 /// share, demo visitor or history-clamped caller).
+/// <para>
+/// Choosing the repository, writing a secret and starting a build are further limited to the person who
+/// linked the installation, since it acts in their GitHub account (<see cref="AppBuildService"/>). Any
+/// caller admitted here may read the status and runs, and may unlink.
+/// </para>
 /// </remarks>
 [ApiController, Authorize]
-[DenyDemoSubject, RequireInteractiveSession, RefuseHistoryClamped, RequireScope(Scope.TenantSettings)]
+[RequireScope(Scope.TenantSettings), DenyDemoSubject, RequireInteractiveSession, RefuseHistoryClamped]
 [Route("api/v4/app-builds")]
 [ProducesResponseType(typeof(ProblemDetails), 400)]
+[ProducesResponseType(typeof(ProblemDetails), 403)]
 [ProducesResponseType(typeof(ProblemDetails), 404)]
 [ProducesResponseType(typeof(ProblemDetails), 409)]
 [ProducesResponseType(typeof(ProblemDetails), 429)]
@@ -43,7 +49,7 @@ public class AppBuildsController(AppBuildService service, IOptions<BaseDomainOpt
     [HttpGet, RemoteQuery]
     [ProducesResponseType(typeof(AppBuildsStatus), 200)]
     public async Task<ActionResult<AppBuildsStatus>> GetAppBuildsStatus(CancellationToken ct) =>
-        Ok(await service.StatusAsync(ct));
+        Ok(await service.StatusAsync(Subject, ct));
 
     [HttpPost("{targetId}/link"), RemoteCommand]
     [ProducesResponseType(typeof(AppBuildLinkStart), 200)]
@@ -55,7 +61,12 @@ public class AppBuildsController(AppBuildService service, IOptions<BaseDomainOpt
     /// GitHub's redirect after the App is installed and the user authorized it. An apex hit is moved to
     /// its tenant host first (<see cref="Middleware.ApexCallbackRelayMiddleware"/>), where the session is.
     /// </summary>
-    [HttpGet("github/callback"), ApiExplorerSettings(IgnoreApi = true)]
+    /// <remarks>
+    /// <see cref="AllowAnonymousAttribute"/> only stops the framework's own 401 challenge, which would
+    /// leave the browser on a bare API response. The controller's filters still run and still require
+    /// the session; <see cref="RedirectRefusedCallbackAttribute"/> turns their refusal into a page.
+    /// </remarks>
+    [HttpGet("github/callback"), AllowAnonymous, RedirectRefusedCallback, ApiExplorerSettings(IgnoreApi = true)]
     public async Task<IActionResult> CompleteAppBuildLink(
         [FromQuery] string? code,
         [FromQuery(Name = "installation_id")] long? installationId,
@@ -71,9 +82,11 @@ public class AppBuildsController(AppBuildService service, IOptions<BaseDomainOpt
         }
         catch (AppBuildException ex)
         {
-            return Redirect($"{WebPath}?error={Uri.EscapeDataString(ex.Code)}");
+            return ErrorRedirect(ex.Code);
         }
     }
+
+    internal static RedirectResult ErrorRedirect(string code) => new($"{WebPath}?error={Uri.EscapeDataString(code)}");
 
     [HttpGet("{targetId}/repositories"), RemoteQuery]
     [ProducesResponseType(typeof(AppBuildRepositoryOption[]), 200)]
@@ -84,7 +97,7 @@ public class AppBuildsController(AppBuildService service, IOptions<BaseDomainOpt
     [ProducesResponseType(typeof(AppBuildsStatus), 200)]
     public Task<ActionResult<AppBuildsStatus>> ChooseAppBuildRepository(
         string targetId, ChooseAppBuildRepositoryRequest request, CancellationToken ct) =>
-        RunThenStatus(() => service.ChooseRepositoryAsync(targetId, request.FullName, ct), ct);
+        RunThenStatus(() => service.ChooseRepositoryAsync(targetId, request.FullName, Subject, ct), ct);
 
     [HttpGet("{targetId}/secrets/public-key"), RemoteQuery]
     [ProducesResponseType(typeof(AppBuildSecretKey), 200)]
@@ -96,13 +109,13 @@ public class AppBuildsController(AppBuildService service, IOptions<BaseDomainOpt
     [ProducesResponseType(typeof(AppBuildsStatus), 200)]
     public Task<ActionResult<AppBuildsStatus>> PutAppBuildSecret(
         string targetId, string name, SealedAppBuildSecret secret, CancellationToken ct) =>
-        RunThenStatus(() => service.PutSecretAsync(targetId, name, secret, ct), ct);
+        RunThenStatus(() => service.PutSecretAsync(targetId, name, secret, Subject, ct), ct);
 
     [HttpPost("{targetId}/builds"), RemoteCommand(Invalidates = [nameof(GetAppBuildRuns)])]
     [ProducesResponseType(typeof(AppBuildDispatchResult), 200)]
     public Task<ActionResult<AppBuildDispatchResult>> DispatchAppBuild(
         string targetId, DispatchAppBuildRequest request, CancellationToken ct) =>
-        Run(() => service.DispatchAsync(targetId, request, ct));
+        Run(() => service.DispatchAsync(targetId, request, Subject, ct));
 
     [HttpGet("{targetId}/builds"), RemoteQuery]
     [ProducesResponseType(typeof(AppBuildRun[]), 200)]
@@ -118,7 +131,7 @@ public class AppBuildsController(AppBuildService service, IOptions<BaseDomainOpt
         Run(async () =>
         {
             await action();
-            return await service.StatusAsync(ct);
+            return await service.StatusAsync(Subject, ct);
         });
 
     private async Task<ActionResult<T>> Run<T>(Func<Task<T>> action)

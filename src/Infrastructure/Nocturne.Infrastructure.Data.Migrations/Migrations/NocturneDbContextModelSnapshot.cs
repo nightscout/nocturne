@@ -836,6 +836,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("account_login");
 
+                    b.PrimitiveCollection<string[]>("AdminRepositories")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("admin_repositories");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")

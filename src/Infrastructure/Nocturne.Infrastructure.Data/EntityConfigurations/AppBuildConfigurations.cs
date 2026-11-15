@@ -12,5 +12,7 @@ internal sealed class AppBuildLinkEntityConfiguration : IEntityTypeConfiguration
             .HasIndex(e => new { e.TenantId, e.TargetId })
             .HasDatabaseName("ux_app_build_links_tenant_target")
             .IsUnique();
+
+        entity.Property(e => e.AdminRepositories).HasColumnType("text[]");
     }
 }

@@ -29,7 +29,7 @@ public class AppBuildLinkRepositoryTests : IDisposable
     }
 
     private static AppBuildLink Link(long installation = 42, string? repository = null) =>
-        new("aaps", installation, "alice", false, repository, Subject, default, default);
+        new("aaps", installation, "alice", false, repository, ["alice/my-aaps"], Subject, default, default);
 
     [Fact]
     public async Task A_saved_link_reads_back_with_its_tenant_and_timestamps()
@@ -40,6 +40,7 @@ public class AppBuildLinkRepositoryTests : IDisposable
         stored.InstallationId.Should().Be(42);
         stored.RepositoryFullName.Should().Be("alice/my-aaps");
         stored.LinkedBySubjectId.Should().Be(Subject);
+        stored.AdminRepositories.Should().Equal("alice/my-aaps");
         stored.CreatedAt.Should().NotBe(default);
         _context.AppBuildLinks.Single().TenantId.Should().Be(_context.TenantId);
     }
