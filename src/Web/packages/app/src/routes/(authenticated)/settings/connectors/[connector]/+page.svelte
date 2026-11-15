@@ -12,12 +12,30 @@
   } from "#lib/components/ui/card/index.js";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
+  import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import OuraImportCard from "#lib/components/connectors/OuraImportCard.svelte";
   import RepullHistoryCard from "./RepullHistoryCard.svelte";
-  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
+  import type {
+    AvailableConnector,
+    OuraImportResult,
+  } from "#lib/api/generated/nocturne-api-client.js";
 
   const connectorName = $derived(page.params.connector);
   const isHomeAssistant = $derived(
     connectorName?.toLowerCase() === "homeassistant"
+  );
+  // Oura has no sync to enable, configure or repeat: its data arrives as an uploaded export.
+  const isOura = $derived(connectorName?.toLowerCase() === "oura");
+  // Held here, not in the card: a completed import refreshes the page's queries, which remounts
+  // everything the connector setup renders.
+  let ouraImported = $state<OuraImportResult | null>(null);
+  const permissionsQuery = getMyPermissions();
+  const canManage = $derived(
+    canManageConnectors(
+      permissionsQuery.current?.scopes,
+      permissionsQuery.current?.refusedAsDemoSubject
+    )
   );
 </script>
 
@@ -40,15 +58,18 @@
 
   <ConnectorSetup
     connectorId={connectorName}
-    showToggle
+    showToggle={!isOura}
+    showConfiguration={!isOura}
     showDangerZone
-    showCapabilities
+    showCapabilities={!isOura}
     primaryAction="save-only"
     showEnvVarHints={page.data.isPlatformAdmin === true}
     onCancel={() => goto(resolve('settings/connectors'))}
   >
     {#snippet extras({ connector }: { connector: AvailableConnector })}
-      {#if connector.id}
+      {#if isOura && canManage}
+        <OuraImportCard bind:imported={ouraImported} />
+      {:else if connector.id && !isOura}
         <RepullHistoryCard connectorId={connector.id} />
       {/if}
 

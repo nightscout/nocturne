@@ -991,6 +991,7 @@ class Program
             builder.AddPortainerComposePublisher();
             builder.AddByoProxyComposePublisher();
             builder.AddPostgresDataComposePublisher();
+            builder.AddInstallScriptPublisher();
         }
 
         var app = builder.Build();

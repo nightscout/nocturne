@@ -16,6 +16,6 @@ internal static class TenantClockDoubles
             .Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ianaZone);
 
-        return new TenantClockResolver(therapy.Object, new CategoryReadContext(), NullLogger<TenantClockResolver>.Instance);
+        return new TenantClockResolver(therapy.Object, new CategoryReadContext(), new ShareClockDouble(therapy.Object), NullLogger<TenantClockResolver>.Instance);
     }
 }

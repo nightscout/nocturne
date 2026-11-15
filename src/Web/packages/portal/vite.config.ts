@@ -120,6 +120,14 @@ function releaseAssets(): Plugin {
         }
       }
 
+      const installer = resolve(deployRoot, 'install/install.sh');
+      if (existsSync(installer)) {
+        mkdirSync(resolve(dest, 'install'), { recursive: true });
+        cpSync(installer, resolve(dest, 'install/install.sh'));
+      } else {
+        this.warn(`release-assets: install.sh not found at ${installer}; skipping`);
+      }
+
       const oracleInstaller = resolve(deployRoot, 'oracle-cloud/oracle-cloud-install.sh');
       if (existsSync(oracleInstaller)) {
         mkdirSync(resolve(dest, 'oracle-cloud'), { recursive: true });

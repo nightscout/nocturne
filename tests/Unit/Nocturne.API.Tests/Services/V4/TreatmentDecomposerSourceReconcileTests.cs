@@ -48,9 +48,13 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
         _decomposer = new(
             _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(),
-            Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
-            Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),
+            EmptyLegacyKeyed.Of<IBolusRepository, Nocturne.Core.Models.V4.Bolus>(),
+            EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(),
+            EmptyLegacyKeyed.Of<ICarbIntakeRepository, Nocturne.Core.Models.V4.CarbIntake>(),
+            EmptyLegacyKeyed.Of<IBGCheckRepository, Nocturne.Core.Models.V4.BGCheck>(),
+            EmptyLegacyKeyed.Of<INoteRepository, Nocturne.Core.Models.V4.Note>(),
+            EmptyLegacyKeyed.Of<IDeviceEventRepository, Nocturne.Core.Models.V4.DeviceEvent>(),
+            EmptyLegacyKeyed.Of<IBolusCalculationRepository, Nocturne.Core.Models.V4.BolusCalculation>(),
             Mock.Of<IStateSpanService>(),
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),

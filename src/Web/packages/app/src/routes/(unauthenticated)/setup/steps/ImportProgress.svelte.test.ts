@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MigrationJobState, MigrationMode, PatientRelationship } from "#lib/api/index.js";
+import { MigrationJobState, MigrationMode, MigrationPhase, PatientRelationship } from "#lib/api/index.js";
 import type { MigrationJobInfo, MigrationJobStatus } from "#lib/api/index.js";
 
 let status: MigrationJobStatus;
@@ -85,6 +85,7 @@ describe("ImportProgress", () => {
       state: MigrationJobState.Completed,
       progressPercentage: 100,
       errorMessage: "1 of 2 collections imported, 1 failed. treatments: Nightscout answered with a server error (500). It may be down or restarting; try again shortly.",
+      hasFailures: true,
       collectionProgress: {
         treatments: {
           collectionName: "treatments",
@@ -192,17 +193,174 @@ describe("ImportProgress", () => {
     await expect.element(page.getByText("70%", { exact: true })).toBeVisible();
   });
 
+  // The server marks a failed or skipped collection complete, meaning nothing more will be tried.
+  it("shows a failed collection with its reason, not as complete", async () => {
+    status = {
+      state: MigrationJobState.Completed,
+      progressPercentage: 100,
+      hasFailures: true,
+      collectionProgress: {
+        entries: { collectionName: "entries", isComplete: true, totalDocuments: 3, documentsMigrated: 3 },
+        treatments: {
+          collectionName: "treatments",
+          isComplete: true,
+          failureReason: "Nightscout answered with a server error (500).",
+        },
+      },
+    };
+
+    render(ImportProgress, { voice, jobId: "job-7", onComplete: () => {} });
+
+    const failed = page.getByTestId("collection-lane-treatments");
+    await expect.element(failed.getByText("Nightscout answered with a server error (500).")).toBeVisible();
+    await expect.element(failed.getByLabelText("Failed")).toBeVisible();
+    await expect.element(failed.getByLabelText("Complete")).not.toBeInTheDocument();
+    await expect
+      .element(page.getByTestId("collection-lane-entries").getByLabelText("Complete"))
+      .toBeVisible();
+  });
+
+  it("shows a skipped collection as skipped, with its reason", async () => {
+    status = {
+      state: MigrationJobState.Completed,
+      progressPercentage: 100,
+      collectionProgress: {
+        subjects: {
+          collectionName: "subjects",
+          isComplete: true,
+          skippedReason: "Skipped: listing the people and devices that can sign in needs an admin API secret.",
+        },
+      },
+    };
+
+    render(ImportProgress, { voice, jobId: "job-8", onComplete: () => {} });
+
+    const lane = page.getByTestId("collection-lane-subjects");
+    await expect.element(lane.getByText("Access tokens")).toBeVisible();
+    await expect.element(lane.getByText("skipped", { exact: true })).toBeVisible();
+    await expect.element(lane.getByText(/needs an admin API secret/)).toBeVisible();
+    await expect.element(lane.getByLabelText("Complete")).not.toBeInTheDocument();
+  });
+
+  it("says how many records of a collection could not be imported", async () => {
+    status = {
+      state: MigrationJobState.Completed,
+      progressPercentage: 100,
+      collectionProgress: {
+        entries: { collectionName: "entries", isComplete: true, totalDocuments: 10, documentsMigrated: 8, documentsFailed: 2 },
+      },
+    };
+
+    render(ImportProgress, { voice, jobId: "job-9", onComplete: () => {} });
+
+    await expect.element(page.getByText("2 records could not be imported.")).toBeVisible();
+  });
+
+  // A source that gives no count has no total to measure against until the pull ends.
+  it("shows no percentage for a collection in flight that has no total", async () => {
+    status = {
+      state: MigrationJobState.Running,
+      progressPercentage: 0,
+      phase: MigrationPhase.Importing,
+      currentCollection: "entries",
+      collectionProgress: {
+        entries: { collectionName: "entries", isComplete: false, totalDocuments: 0, documentsMigrated: 12400, progressPercentage: 0 },
+      },
+    };
+
+    render(ImportProgress, { voice, jobId: "job-10", onComplete: () => {} });
+
+    const lane = page.getByTestId("collection-lane-entries");
+    await expect.element(lane.getByText("12,400 records")).toBeVisible();
+    await expect.element(lane.getByLabelText("In progress")).toBeVisible();
+    await expect.element(lane.getByText("0%")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["00:03:00", "About 3 min remaining"],
+    ["1.02:03:04", "About 26 h 3 min remaining"],
+    ["00:00:20.5000000", "Less than 1 minute remaining"],
+  ])("words the time remaining %s", async (estimatedTimeRemaining, expected) => {
+    status = {
+      state: MigrationJobState.Running,
+      progressPercentage: 40,
+      phase: MigrationPhase.Importing,
+      estimatedTimeRemaining,
+      collectionProgress: {},
+    };
+
+    render(ImportProgress, { voice, jobId: `job-eta-${estimatedTimeRemaining}`, onComplete: () => {} });
+
+    await expect.element(page.getByText(expected)).toBeVisible();
+  });
+
+  it("says what the run is doing before it has a collection to show", async () => {
+    status = {
+      state: MigrationJobState.Running,
+      progressPercentage: 0,
+      phase: MigrationPhase.Counting,
+      collectionProgress: {},
+    };
+
+    render(ImportProgress, { voice, jobId: "job-11", onComplete: () => {} });
+
+    await expect.element(page.getByText("Counting the records in Nightscout")).toBeVisible();
+  });
+
+  it.each([
+    [MigrationJobState.Cancelled, "The import was canceled."],
+    [MigrationJobState.Interrupted, /The import stopped because the server restarted/],
+  ] as const)("words a run that ended %s", async (state, expected) => {
+    status = {
+      state,
+      progressPercentage: 10,
+      collectionProgress: { entries: { collectionName: "entries", documentsMigrated: 5 } },
+    };
+
+    render(ImportProgress, { voice, jobId: `job-ended-${state}`, onComplete: () => {} });
+
+    await expect.element(page.getByText(expected)).toBeVisible();
+  });
+
+  // The summary of what failed has to stay up until it is read; Finish has no way back to it.
+  it("does not move on by itself from a run that completed with a failed collection", async () => {
+    status = { state: MigrationJobState.Running, progressPercentage: 99, collectionProgress: {} };
+    const onComplete = vi.fn();
+    const onSettled = vi.fn();
+
+    render(ImportProgress, { voice, jobId: "job-12", onSettled, onComplete });
+    await expect.poll(() => statusSpy.mock.calls.length).toBeGreaterThan(0);
+    status = {
+      state: MigrationJobState.Completed,
+      progressPercentage: 100,
+      hasFailures: true,
+      errorMessage: "1 of 2 collections imported, 1 failed.",
+      collectionProgress: {},
+    };
+
+    await expect.poll(() => onSettled.mock.calls.length, { timeout: 10000 }).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    expect(onComplete).not.toHaveBeenCalled();
+  }, 20000);
+
+  it("moves on by itself from a run that completed in full", async () => {
+    status = { state: MigrationJobState.Running, progressPercentage: 99, collectionProgress: {} };
+    const onComplete = vi.fn();
+
+    render(ImportProgress, { voice, jobId: "job-13", onComplete });
+    await expect.poll(() => statusSpy.mock.calls.length).toBeGreaterThan(0);
+    status = { state: MigrationJobState.Completed, progressPercentage: 100, collectionProgress: {} };
+
+    await expect.poll(() => onComplete.mock.calls.length, { timeout: 15000 }).toBe(1);
+  }, 20000);
+
   // Finish states what the import achieved, so the wizard has to learn how it ended.
   it.each([
-    ["complete", MigrationJobState.Completed, {}],
-    [
-      "partial",
-      MigrationJobState.Completed,
-      { treatments: { collectionName: "treatments", isComplete: true, failureReason: "Could not reach your Nightscout server." } },
-    ],
-    ["failed", MigrationJobState.Failed, {}],
-  ] as const)("reports a %s run and stops blocking", async (expected, state, collectionProgress) => {
-    status = { state, progressPercentage: 100, collectionProgress };
+    ["complete", MigrationJobState.Completed, false],
+    ["partial", MigrationJobState.Completed, true],
+    ["failed", MigrationJobState.Failed, true],
+  ] as const)("reports a %s run and stops blocking", async (expected, state, hasFailures) => {
+    status = { state, progressPercentage: 100, hasFailures, collectionProgress: {} };
     const onResult = vi.fn();
     const onSettled = vi.fn();
 
@@ -230,8 +388,8 @@ describe("ImportProgress", () => {
 
     await expect.poll(() => onSettled.mock.calls.length).toBe(1);
     await expect.element(page.getByText(/No import from Nightscout is running/)).toBeVisible();
-    await expect.element(page.getByText(/We're streaming/)).not.toBeInTheDocument();
-    await expect.element(page.getByText(/records migrated/)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/Nocturne is copying/)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/records imported/)).not.toBeInTheDocument();
   });
 
   it("says why no run could be started instead of showing an empty import", async () => {
@@ -241,7 +399,7 @@ describe("ImportProgress", () => {
       .element(page.getByText("We could not start the import from Nightscout. You can continue and run it later from Settings."))
       .toBeVisible();
     await expect.element(page.getByText("Your Nightscout site refused the request.", { exact: true })).toBeVisible();
-    await expect.element(page.getByText(/records migrated/)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/records imported/)).not.toBeInTheDocument();
   });
 
   it("stops blocking once status polling is lost, reporting the run as possibly still running", async () => {

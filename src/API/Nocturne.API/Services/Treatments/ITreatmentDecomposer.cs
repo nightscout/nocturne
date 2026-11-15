@@ -62,6 +62,10 @@ internal interface ITreatmentDecomposer
     Task<int> RekeyClientIdRecordsAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
 
+    /// <inheritdoc cref="ITreatmentService.ResolveStoredIdentitiesAsync"/>
+    Task<IReadOnlySet<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+
     /// <inheritdoc cref="ITreatmentService.SelectForRepublishAsync"/>
     Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);

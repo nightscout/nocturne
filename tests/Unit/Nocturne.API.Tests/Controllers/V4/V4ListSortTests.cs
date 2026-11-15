@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Services.Realtime;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Controllers.V4.Base;
@@ -68,7 +69,7 @@ public class V4ListSortTests
 
     private static async Task<IActionResult> Invoke(string list)
     {
-        var spans = new StateSpansController(Mock.Of<IStateSpanService>());
+        var spans = new StateSpansController(Mock.Of<IStateSpanService>(), Mock.Of<ISignalRBroadcastService>());
         var sleep = new SleepController(Mock.Of<ISleepService>());
         var nutrition = new NutritionController(
             Mock.Of<ICarbIntakeRepository>(),

@@ -3,8 +3,9 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Item } from "#lib/components/ui/item/index.js";
   import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
   import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
-  import { entrySummary } from "#lib/utils/entry-summary.js";
+  import { entrySummary } from "#lib/utils/entry-summary.svelte.js";
   import { formatDateTimeCompact, time } from "#lib/utils/formatting.js";
   import type { InspectionPickerOption } from "../engine/point-inspection.svelte";
   import Activity from "@lucide/svelte/icons/activity";
@@ -134,8 +135,8 @@
             {@render row(
               entryIcons[entry.kind],
               category.colorClass,
-              entrySummary(entry) || category.name,
-              [category.name, entry.data.mills ? time(entry.data.mills) : ""]
+              entrySummary(entry) || entryCategoryName(entry.kind),
+              [entryCategoryName(entry.kind), entry.data.mills ? time(entry.data.mills) : ""]
                 .filter(Boolean)
                 .join(" · "),
               () => onEdit(entry),

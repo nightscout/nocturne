@@ -409,6 +409,8 @@
     if (path !== "migration" || !nightscoutConnected) return;
     try {
       migrationStartError = undefined;
+      migrationJobId = undefined;
+      importResult = null;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
     } catch (err) {
       // Every 400 from start-from-connector means the saved connector is missing or has no URL.
@@ -416,6 +418,22 @@
         errorStatus(err) === 400
           ? "Your Nightscout connection is not saved yet."
           : describeSubmitError(err, "Could not start the import. Try again.");
+    }
+  }
+
+  // Counts the runs this visit to the step has watched, so a retry mounts a fresh ImportProgress.
+  let importAttempt = $state(0);
+  let retryingImport = $state(false);
+
+  async function retryImport() {
+    retryingImport = true;
+    try {
+      await startImport();
+      importSettled = false;
+      importProgress = 0;
+      importAttempt++;
+    } finally {
+      retryingImport = false;
     }
   }
 </script>
@@ -630,15 +648,17 @@
                 {/if}
               </div>
             {:else if activeStep?.id === "import"}
-              <ImportProgress
-                jobId={migrationJobId}
-                startError={migrationStartError}
-                voice={voice}
-                onProgressChange={(pct) => importProgress = pct}
-                onResult={(result) => importResult = result}
-                onSettled={() => importSettled = true}
-                onComplete={goToFinish}
-              />
+              {#key importAttempt}
+                <ImportProgress
+                  jobId={migrationJobId}
+                  startError={migrationStartError}
+                  voice={voice}
+                  onProgressChange={(pct) => importProgress = pct}
+                  onResult={(result) => importResult = result}
+                  onSettled={() => importSettled = true}
+                  onComplete={goToFinish}
+                />
+              {/key}
             {:else if activeStep?.id === "finish"}
               <Finish
                 path={path}
@@ -672,6 +692,11 @@
                   </Button>
                 {:else if currentStep?.id === "import"}
                   {#if importSettled}
+                    {#if importResult === "failed" || migrationStartError}
+                      <Button variant="outline" onclick={retryImport} disabled={retryingImport}>
+                        Try again
+                      </Button>
+                    {/if}
                     <Button onclick={handleNext}>
                       Continue
                       <ArrowRight class="h-4 w-4" />

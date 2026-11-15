@@ -75,7 +75,6 @@ msgid "Error"
 msgstr "Error"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
-#: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr "Error de conexión"
 
@@ -311,6 +310,7 @@ msgstr "No se pudieron cargar los datos históricos"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/components/treatments/edit-dialog/NoteFormFields.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 msgid "Announcement"
 msgstr "Aviso"
 
@@ -546,6 +546,7 @@ msgstr "Código de verificación"
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
@@ -2217,6 +2218,7 @@ msgid "Recent"
 msgstr "Recientes"
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 msgid "BG checks"
 msgstr "Mediciones de glucosa"
 
@@ -2905,6 +2907,7 @@ msgid "Completed"
 msgstr "Completado"
 
 #: src/lib/components/admin/JobsTabContent.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/(authenticated)/notifications/+page.svelte
@@ -2973,7 +2976,6 @@ msgid "Initializing"
 msgstr "Inicializando"
 
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/routes/(authenticated)/settings/migration/+page.svelte
 #: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Progress"
 msgstr "Progreso"
@@ -3400,6 +3402,7 @@ msgstr "Últimas 24 horas"
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
@@ -3416,6 +3419,8 @@ msgstr "Bolo"
 #: src/lib/components/reports/loop-analysis/EventList.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -3428,6 +3433,7 @@ msgstr "Carbohidratos"
 
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Note"
 msgstr "Nota"
@@ -3692,6 +3698,8 @@ msgstr "Vincula alimentos a esta ingesta de carbohidratos."
 #. 0: food.carbs
 #. 0: food.carbs
 #. 0: food.carbs
+#. 0: formatCarbDisplay(entry.data.carbs)
+#. 0: formatCarbDisplay(entry.data.carbs)
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/entries/CarbIntakeSection.svelte
@@ -3702,6 +3710,8 @@ msgstr "Vincula alimentos a esta ingesta de carbohidratos."
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
+#: src/lib/utils/entry-summary.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #, python-brace-format
 msgid "{0}g carbs"
 msgstr "{0} g de carbohidratos"
@@ -3765,6 +3775,7 @@ msgstr "{0} g sin especificar"
 #~ msgstr "Reanudación de la bomba"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Priming"
 msgstr "Cebado"
 
@@ -3775,6 +3786,7 @@ msgstr "Cebado"
 #~ msgstr "Cebado de la aguja"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Rewind"
 msgstr "Rebobinado"
 
@@ -3809,6 +3821,7 @@ msgstr "Rebobinado"
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/edit-dialog/BasalInjectionFormFields.svelte
 #: src/lib/components/treatments/edit-dialog/DeviceEventFormFields.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Notes"
 msgstr "Notas"
@@ -4458,6 +4471,7 @@ msgstr "Ninguna comida coincide con los filtros actuales."
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Insulin"
@@ -5196,9 +5210,9 @@ msgstr "Acceso completo"
 #~ msgid "Blood Glucose"
 #~ msgstr "Glucemia"
 
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Treatments"
 msgstr "Tratamientos"
 
@@ -5313,6 +5327,7 @@ msgid "Auto-bolus"
 msgstr "Bolo automático"
 
 #: ../portal/src/lib/components/docs/SystemRequirements.svelte
+#: ../portal/src/lib/components/docs/install/RouteChoice.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
 msgid "Recommended"
@@ -5434,7 +5449,11 @@ msgid "Average"
 msgstr "Media"
 
 #. 0: Math.round(currentGlucose)
+#. 0: entry.data.mgdl
+#. 0: entry.data.mgdl
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
+#: src/lib/utils/entry-summary.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #, python-brace-format
 msgid "{0} mg/dL"
 msgstr "{0} mg/dL"
@@ -5752,6 +5771,7 @@ msgstr "<0/> Intentar de nuevo"
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
+#: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
 msgid "Try again"
 msgstr "Intentar de nuevo"
@@ -6419,12 +6439,12 @@ msgstr "<0/> Desactualizado"
 msgid "<0/> Inactive"
 msgstr "<0/> Inactivo"
 
+#. 0: formatNumber(lane.migrated)
 #. 0: rejectedCount
 #. 0: formatNumber(allRows.length)
-#. 0: formatCount(col.migrated)
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 #, python-brace-format
 msgid "{0} records"
 msgstr "{0} registros"
@@ -6956,7 +6976,7 @@ msgstr "Capturas de pantalla ({0})"
 #~ msgid "Diagnostic Info"
 #~ msgstr "Información de diagnóstico"
 
-#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+#: ../portal/src/lib/components/docs/install/CopyKeysFile.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "<0/> Copied"
@@ -7500,7 +7520,7 @@ msgstr "IG"
 #~ msgid "No GI found."
 #~ msgstr "No se encontró IG."
 
-#. 0: activeCategory.name.toLowerCase()
+#. 0: entryCategoryName(activeRecord.kind).toLowerCase()
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #, python-brace-format
 msgid "Edit the details of this {0} record."
@@ -8445,6 +8465,7 @@ msgstr "Eliminando..."
 #~ msgstr "A1C estimada"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
+#: src/lib/utils/insight-messages.svelte.ts
 msgid "Variability"
 msgstr "Variabilidad"
 
@@ -12458,6 +12479,7 @@ msgstr "Bloqueos"
 #~ msgstr "MongoDB"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
+#: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Failed to load migration data"
 msgstr "No se pudieron cargar los datos de migración"
 
@@ -12512,9 +12534,8 @@ msgstr "<0/> API de Nightscout"
 #~ msgid "API Secret"
 #~ msgstr "Secreto de API"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Your API secret"
-msgstr "Tu secreto de API"
+#~ msgid "Your API secret"
+#~ msgstr "Tu secreto de API"
 
 #~ msgid "MongoDB Connection String"
 #~ msgstr "Cadena de conexión de MongoDB"
@@ -13428,67 +13449,61 @@ msgstr "Migrar mis datos de Nightscout"
 #~ msgid "<0/> Run side-by-side during the switchover"
 #~ msgstr "<0/> Ejecuta ambos en paralelo durante la transición"
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "Entries"
 msgstr "Entradas"
 
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Profiles"
 msgstr "Perfiles"
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "Device statuses"
 msgstr "Estados del dispositivo"
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "Food library"
 msgstr "Biblioteca de alimentos"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "Activities"
 msgstr "Actividades"
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "Failed to find active migration"
-msgstr "No se pudo encontrar una migración activa"
+#~ msgid "Failed to find active migration"
+#~ msgstr "No se pudo encontrar una migración activa"
 
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Bringing your <0>history</0> across."
 msgstr "Trasladando tu <0>historial</0>."
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "Finding active migration..."
-msgstr "Buscando una migración activa..."
+#~ msgid "Finding active migration..."
+#~ msgstr "Buscando una migración activa..."
 
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Overall progress"
 msgstr "Progreso general"
 
-#. 0: formatCount(totalMigrated)
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 #, python-brace-format
-msgid "About <0/> remaining · {0} records"
-msgstr "Quedan aproximadamente <0/> · {0} registros"
+#~ msgid "About <0/> remaining · {0} records"
+#~ msgstr "Quedan aproximadamente <0/> · {0} registros"
 
-#. 0: formatCount(totalMigrated)
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 #, python-brace-format
-msgid "{0} records migrated"
-msgstr "{0} registros migrados"
+#~ msgid "{0} records migrated"
+#~ msgstr "{0} registros migrados"
 
-#. 0: formatCount(col.migrated); 1: formatCount(col.total)
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#. 0: formatNumber(lane.migrated); 1: formatNumber(lane.total)
+#: src/lib/components/migration/CollectionLanes.svelte
 #, python-brace-format
 msgid "{0} / {1} records"
 msgstr "{0} / {1} registros"
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "no records"
 msgstr "sin registros"
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 msgid "pending"
 msgstr "pendiente"
 
@@ -14878,8 +14893,10 @@ msgstr "Conectores"
 msgid "Settings - Nocturne"
 msgstr "Ajustes - Nocturne"
 
-#~ msgid "{0}u insulin"
-#~ msgstr ""
+#. 0: formatInsulinDisplay(entry.data.insulin)
+#: src/lib/utils/entry-summary.svelte.ts
+msgid "{0}u insulin"
+msgstr ""
 
 #: src/lib/components/alerts/channelText.svelte.ts
 msgid "Email"
@@ -15161,10 +15178,8 @@ msgstr "No se pudo cargar la hoja de ruta"
 msgid "<0/> View on GitHub <1/>"
 msgstr "<0/> Ver en GitHub <1/>"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Prerequisites"
-msgstr "Requisitos previos"
+#~ msgid "Prerequisites"
+#~ msgstr "Requisitos previos"
 
 #~ msgid "Full Installation Guide <0/>"
 #~ msgstr "Guía completa de instalación <0/>"
@@ -15202,22 +15217,18 @@ msgstr "10 GB"
 msgid "20 GB+"
 msgstr "20 GB+"
 
-#: ../portal/src/lib/components/docs/SystemRequirements.svelte
-msgid "Docker"
-msgstr "Docker"
+#~ msgid "Docker"
+#~ msgstr "Docker"
 
-#: ../portal/src/lib/components/docs/SystemRequirements.svelte
-#: ../portal/src/lib/components/docs/SystemRequirements.svelte
-msgid "Latest"
-msgstr "Última versión"
+#~ msgid "Latest"
+#~ msgstr "Última versión"
 
-#: ../portal/src/lib/components/docs/SystemRequirements.svelte
 #: ../portal/src/routes/docs/installation/+page.svelte
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Docker Compose"
 msgstr "Docker Compose"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Verify the installation"
 msgstr "Verificar la instalación"
 
@@ -15284,10 +15295,8 @@ msgstr "Windows / macOS"
 msgid "A running Portainer instance (Community or Business Edition)"
 msgstr "Una instancia de Portainer en ejecución (Community o Business Edition)"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Updating"
-msgstr "Actualización"
+#~ msgid "Updating"
+#~ msgstr "Actualización"
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Navigate to your <0>nocturne</0> stack"
@@ -16012,10 +16021,14 @@ msgstr "Volver a sincronizar los datos de todos los conectores habilitados para 
 #~ msgid "{0} synced successfully."
 #~ msgstr ""
 
-#~ msgid "{0}u basal"
-#~ msgstr ""
+#. 0: formatInsulinDisplay(entry.data.units)
+#: src/lib/utils/entry-summary.svelte.ts
+msgid "{0}u basal"
+msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/constants/entry-category-labels.svelte.ts
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Long-acting injection"
 msgstr "Inyección de insulina de acción prolongada"
@@ -16772,7 +16785,7 @@ msgstr "{0} porción{1}"
 #~ msgid "Edit Record"
 #~ msgstr "Editar registro"
 
-#. 0: activeCategory.name.toLowerCase()
+#. 0: entryCategoryName(activeRecord.kind).toLowerCase()
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #, python-brace-format
 msgid "Log a new {0} record."
@@ -17292,9 +17305,8 @@ msgstr "Esto solo afecta a valores en los que estén presentes tanto las lectura
 #~ msgid "Your deployment is configured for migration. The form below has been pre-populated with your settings. Review and start the migration when ready."
 #~ msgstr "Tu despliegue está configurado para migración. El formulario de abajo se ha rellenado previamente con tus ajustes. Revísalos e inicia la migración cuando estés listo."
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Import entries and treatments from an existing Nightscout instance."
-msgstr "Importa entradas y tratamientos desde una instancia de Nightscout existente."
+#~ msgid "Import entries and treatments from an existing Nightscout instance."
+#~ msgstr "Importa entradas y tratamientos desde una instancia de Nightscout existente."
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Leave empty to import all data, or specify a range to import partial data."
@@ -17639,23 +17651,17 @@ msgstr "Configura la cuenta del propietario de tu instancia de Nocturne. Serás 
 msgid "Choose a slug and display name for your Nocturne instance. The slug is a short, URL-friendly identifier that cannot be changed later."
 msgstr "Elige un slug y un nombre visible para tu instancia de Nocturne. El slug es un identificador corto y apto para URL que no se puede cambiar después."
 
-#. 0: minutes; 1: seconds
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 #, python-brace-format
-msgid "{0} min {1} sec"
-msgstr "{0} min {1} s"
+#~ msgid "{0} min {1} sec"
+#~ msgstr "{0} min {1} s"
 
-#. 0: seconds
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 #, python-brace-format
-msgid "{0} sec"
-msgstr "{0} s"
+#~ msgid "{0} sec"
+#~ msgstr "{0} s"
 
-#. 0: String(status.state).toLowerCase()
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 #, python-brace-format
-msgid "Migration {0}"
-msgstr "Migración {0}"
+#~ msgid "Migration {0}"
+#~ msgstr "Migración {0}"
 
 #~ msgid "Lost connection to migration status"
 #~ msgstr "Se perdió la conexión con el estado de la migración"
@@ -18419,6 +18425,7 @@ msgstr "Carbohidratos 52 g · avena"
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor change"
 msgstr "Cambio de sensor"
 
@@ -18608,9 +18615,8 @@ msgstr "Participa"
 msgid "© {0} Nocturne. Open source under AGPL-3.0."
 msgstr "© {0} Nocturne. Código abierto bajo AGPL-3.0."
 
-#: ../portal/src/routes/docs/+page.svelte
-msgid "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more."
-msgstr "Guías paso a paso para desplegar Nocturne con Docker Compose, Portainer y más."
+#~ msgid "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more."
+#~ msgstr "Guías paso a paso para desplegar Nocturne con Docker Compose, Portainer y más."
 
 #: ../portal/src/routes/docs/+page.svelte
 msgid "Learn how to configure connectors, settings, and customize your instance."
@@ -19071,9 +19077,8 @@ msgstr "Comercial"
 msgid "The official managed Nocturne instance, run by the creator of the project. Automatic updates, daily backups, and zero maintenance. Just connect your CGM and go."
 msgstr "La instancia oficial gestionada de Nocturne, administrada por el creador del proyecto. Actualizaciones automáticas, copias de seguridad diarias y mantenimiento cero. Solo conecta tu CGM y empieza."
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose from the command line."
-msgstr "Despliega directamente en cualquier servidor Linux, VPS o Raspberry Pi usando Docker Compose desde la línea de comandos."
+#~ msgid "Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose from the command line."
+#~ msgstr "Despliega directamente en cualquier servidor Linux, VPS o Raspberry Pi usando Docker Compose desde la línea de comandos."
 
 #: ../portal/src/routes/docs/installation/+page.svelte
 msgid "Deploy using the Portainer web interface. Great for managing your stack visually without SSH access."
@@ -19116,9 +19121,8 @@ msgstr "Dirección de correo del mantenedor principal"
 msgid "Submit your request by opening an issue on the <0>Nocturne GitHub repository</0>."
 msgstr "Envía tu solicitud abriendo una incidencia en el <0>repositorio de Nocturne en GitHub</0>."
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "Choose a deployment method below to get Nocturne running on your infrastructure. All methods use the same Docker images and configuration."
-msgstr "Elige a continuación un método de despliegue para poner Nocturne en marcha en tu infraestructura. Todos usan las mismas imágenes Docker y configuración."
+#~ msgid "Choose a deployment method below to get Nocturne running on your infrastructure. All methods use the same Docker images and configuration."
+#~ msgstr "Elige a continuación un método de despliegue para poner Nocturne en marcha en tu infraestructura. Todos usan las mismas imágenes Docker y configuración."
 
 #~ msgid "Managed Instances"
 #~ msgstr "Instancias gestionadas"
@@ -19247,9 +19251,8 @@ msgstr "Para despliegues que usan un servicio PostgreSQL gestionado o un servido
 msgid "Docker Engine 24+ and Docker Compose 2.23.1+"
 msgstr "Docker Engine 24+ y Docker Compose 2.23.1+"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "A domain with a DNS <0>A</0> record pointing at your server (<1/>), plus a wildcard <2>A</2> record (<3/>) to run more than one tenant."
-msgstr "Un dominio con un registro DNS <0>A</0> apuntando a tu servidor (<1/>), más un registro comodín <2>A</2> (<3/>) para ejecutar más de un inquilino."
+#~ msgid "A domain with a DNS <0>A</0> record pointing at your server (<1/>), plus a wildcard <2>A</2> record (<3/>) to run more than one tenant."
+#~ msgstr "Un dominio con un registro DNS <0>A</0> apuntando a tu servidor (<1/>), más un registro comodín <2>A</2> (<3/>) para ejecutar más de un inquilino."
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Ports <0/> and <1/> open to the internet for automatic TLS certificates."
@@ -19274,9 +19277,8 @@ msgstr "Ve a <0>Plantillas de aplicaciones</0> en la barra lateral."
 #~ msgid "In Portainer, go to <0>Stacks → Add stack</0>. Name it <1/> and select <2>Web editor</2>."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Paste the contents of <0/> into the editor."
-msgstr "Pega el contenido de <0/> en el editor."
+#~ msgid "Paste the contents of <0/> into the editor."
+#~ msgstr "Pega el contenido de <0/> en el editor."
 
 #~ msgid "Scroll to <0>Environment variables</0>, click <1>Advanced mode</1>, and paste your values from <2/> in <3/> format."
 #~ msgstr "Desplázate hasta <0>Variables de entorno</0>, haz clic en <1>Modo avanzado</1> y pega tus valores de <2/> en formato <3/>."
@@ -19285,17 +19287,14 @@ msgstr "Pega el contenido de <0/> en el editor."
 msgid "Deploy Nocturne using the Portainer web interface. No command-line access required."
 msgstr "Despliega Nocturne mediante la interfaz web de Portainer. No hace falta acceso a la línea de comandos."
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Option 1: App Template (recommended)"
-msgstr "Opción 1: Plantilla de aplicación (recomendada)"
+#~ msgid "Option 1: App Template (recommended)"
+#~ msgstr "Opción 1: Plantilla de aplicación (recomendada)"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "The Nocturne app template lets you deploy directly from Portainer's template gallery with a guided form for all configuration values."
-msgstr "La plantilla de aplicación de Nocturne te permite desplegar directamente desde la galería de plantillas de Portainer con un formulario guiado para todos los valores de configuración."
+#~ msgid "The Nocturne app template lets you deploy directly from Portainer's template gallery with a guided form for all configuration values."
+#~ msgstr "La plantilla de aplicación de Nocturne te permite desplegar directamente desde la galería de plantillas de Portainer con un formulario guiado para todos los valores de configuración."
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Step 1: Add the template URL"
-msgstr "Paso 1: Añadir la URL de la plantilla"
+#~ msgid "Step 1: Add the template URL"
+#~ msgstr "Paso 1: Añadir la URL de la plantilla"
 
 #~ msgid "In Portainer, go to <0>Settings → App Templates</0> and set the URL to:"
 #~ msgstr ""
@@ -19303,17 +19302,14 @@ msgstr "Paso 1: Añadir la URL de la plantilla"
 #~ msgid "Click <0>Save settings</0>."
 #~ msgstr "Haz clic en <0>Guardar ajustes</0>."
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Step 2: Deploy from the template"
-msgstr "Paso 2: Desplegar desde la plantilla"
+#~ msgid "Step 2: Deploy from the template"
+#~ msgstr "Paso 2: Desplegar desde la plantilla"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Option 2: Manual deployment"
-msgstr "Opción 2: Despliegue manual"
+#~ msgid "Option 2: Manual deployment"
+#~ msgstr "Opción 2: Despliegue manual"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "If you prefer to configure the stack manually, download <0/> and <1/> from the <2>latest GitHub Release</2>, then:"
-msgstr "Si prefieres configurar el stack manualmente, descarga <0/> y <1/> de la <2>última versión de GitHub</2> y después:"
+#~ msgid "If you prefer to configure the stack manually, download <0/> and <1/> from the <2>latest GitHub Release</2>, then:"
+#~ msgstr "Si prefieres configurar el stack manualmente, descarga <0/> y <1/> de la <2>última versión de GitHub</2> y después:"
 
 #~ msgid "In Portainer, navigate to your <0>nocturne</0> stack. All containers should show as <1>Running</1>. Click any container to view its logs and check for errors."
 #~ msgstr "En Portainer, ve a tu stack <0>nocturne</0>. Todos los contenedores deberían aparecer como <1>En ejecución</1>. Haz clic en cualquier contenedor para ver sus registros y comprobar si hay errores."
@@ -19331,9 +19327,8 @@ msgstr "Si prefieres configurar el stack manualmente, descarga <0/> y <1/> de la
 msgid "Docker Engine 24+ and Docker Compose 2.23.1+ installed"
 msgstr "Docker Engine 24+ y Docker Compose 2.23.1+ instalados"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "A domain with a DNS <0>A</0> record pointing at your server (<1/>). To run more than one tenant, also add a wildcard <2>A</2> record (<3/>) so each tenant subdomain resolves."
-msgstr "Un dominio con un registro DNS <0>A</0> apuntando a tu servidor (<1/>). Para ejecutar más de un inquilino, añade también un registro comodín <2>A</2> (<3/>) para que se resuelva cada subdominio de inquilino."
+#~ msgid "A domain with a DNS <0>A</0> record pointing at your server (<1/>). To run more than one tenant, also add a wildcard <2>A</2> record (<3/>) so each tenant subdomain resolves."
+#~ msgstr "Un dominio con un registro DNS <0>A</0> apuntando a tu servidor (<1/>). Para ejecutar más de un inquilino, añade también un registro comodín <2>A</2> (<3/>) para que se resuelva cada subdominio de inquilino."
 
 #~ msgid "Ports <0/> and <1/> open to the internet — the bundled proxy uses them to obtain and serve TLS certificates."
 #~ msgstr ""
@@ -19349,9 +19344,8 @@ msgstr "Paso 1: Descargar el paquete de la versión"
 #~ msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained — just <2/> and <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Step 2: Configure environment variables"
-msgstr "Paso 2: Configurar variables de entorno"
+#~ msgid "Step 2: Configure environment variables"
+#~ msgstr "Paso 2: Configurar variables de entorno"
 
 #~ msgid "Edit <0/> and fill in your values. Required fields are left blank; optional bot integrations are commented out. Use the generator below for each password field and <1/>."
 #~ msgstr ""
@@ -19364,9 +19358,8 @@ msgstr "Paso 3: Iniciar los servicios"
 msgid "Docker will pull the images and start all services. First run takes a few minutes."
 msgstr "Docker descargará las imágenes e iniciará todos los servicios. El primer arranque tarda unos minutos."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "HTTPS is automatic"
-msgstr "HTTPS es automático"
+#~ msgid "HTTPS is automatic"
+#~ msgstr "HTTPS es automático"
 
 #~ msgid "The bundled Caddy reverse proxy obtains and renews Let's Encrypt TLS certificates automatically — no API keys or certificate files to manage. Set <0/>, point your DNS at the server, and open ports 80 and 443. The apex domain is issued a certificate on first start, and each tenant subdomain gets one on demand the first time it is visited."
 #~ msgstr ""
@@ -19589,9 +19582,8 @@ msgstr "Nocturne tiene doble licencia. Para particulares y autoalojamiento comun
 msgid "Yes. Nocturne runs on Raspberry Pi 4 and newer with 64-bit Raspberry Pi OS; the Docker images are published for ARM64 as well as x86_64."
 msgstr "Sí. Nocturne funciona en Raspberry Pi 4 y posteriores con Raspberry Pi OS de 64 bits; las imágenes Docker se publican para ARM64 además de x86_64."
 
-#: ../portal/src/routes/faq/+page.svelte
-msgid "Basic familiarity with Docker and the command line is helpful. Each release ships a ready-made compose file and an environment template; you fill in a domain name, an instance key, and four database passwords. Most people get running by following the installation guide."
-msgstr "Es útil tener conocimientos básicos de Docker y de línea de comandos. Cada versión incluye un archivo compose preparado y una plantilla de entorno; rellenas un nombre de dominio, una clave de instancia y cuatro contraseñas de base de datos. La mayoría lo pone en marcha siguiendo la guía de instalación."
+#~ msgid "Basic familiarity with Docker and the command line is helpful. Each release ships a ready-made compose file and an environment template; you fill in a domain name, an instance key, and four database passwords. Most people get running by following the installation guide."
+#~ msgstr "Es útil tener conocimientos básicos de Docker y de línea de comandos. Cada versión incluye un archivo compose preparado y una plantilla de entorno; rellenas un nombre de dominio, una clave de instancia y cuatro contraseñas de base de datos. La mayoría lo pone en marcha siguiendo la guía de instalación."
 
 #: ../portal/src/routes/faq/+page.svelte
 msgid "Yes. The bundle includes a PostgreSQL container, but you can point Nocturne at any PostgreSQL 17 database, including managed services such as RDS, Cloud SQL, Supabase, or Neon. The Bring Your Own PostgreSQL guide covers the one-time role setup."
@@ -19625,9 +19617,8 @@ msgstr "Sí. Nocturne implementa las API de Nightscout (v1, v2 y v3), además de
 msgid "Yes. Nocturne is open source and welcomes contributions, and not only code: translations, documentation, and helping other self-hosters in Discord all count. See the Get involved page for tasks you can pick up today."
 msgstr "Sí. Nocturne es de código abierto y agradece las contribuciones, no solo de código: también cuentan las traducciones, la documentación y ayudar a otros usuarios que se autoalojan en Discord. Consulta la página Participa para ver tareas que puedes asumir hoy."
 
-#: ../portal/src/routes/features/+page.svelte
-msgid "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
-msgstr "Autoalojado con Docker Compose, Portainer o Helm. Sin intermediario en la nube ni analítica de terceros. Tus datos de salud nunca salen de tu infraestructura."
+#~ msgid "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
+#~ msgstr "Autoalojado con Docker Compose, Portainer o Helm. Sin intermediario en la nube ni analítica de terceros. Tus datos de salud nunca salen de tu infraestructura."
 
 #~ msgid "Run a household, a clinic, or a community on a single deployment. Each tenant lives in its own database schema, behind its own subdomain."
 #~ msgstr ""
@@ -19704,9 +19695,8 @@ msgstr "{0} informes, con tu propio rango objetivo dibujado en ellos"
 #~ msgid "Ready to take a look?<0/> <1>Start with the demo.</1>"
 #~ msgstr ""
 
-#: ../portal/src/routes/features/+page.svelte
-msgid "Poke around the demo, then run your own copy with Docker Compose. No account, no credit card, no waitlist."
-msgstr "Explora la demostración y después ejecuta tu propia copia con Docker Compose. Sin cuenta, sin tarjeta de crédito y sin lista de espera."
+#~ msgid "Poke around the demo, then run your own copy with Docker Compose. No account, no credit card, no waitlist."
+#~ msgstr "Explora la demostración y después ejecuta tu propia copia con Docker Compose. Sin cuenta, sin tarjeta de crédito y sin lista de espera."
 
 #: ../portal/src/routes/scalar/+page.svelte
 msgid "Interactive Nocturne API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne."
@@ -19858,6 +19848,7 @@ msgstr "{0} · últimos 14 días"
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/utils/insight-messages.svelte.ts
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
@@ -19961,6 +19952,7 @@ msgstr "84% en rango durante la noche · sin bajadas"
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Site change"
 msgstr "Cambio de sitio"
 
@@ -21041,13 +21033,11 @@ msgstr "Puertos <0/> y <1/> abiertos a Internet. El proxy incluido los usa para 
 #~ msgid "Edit <0/> and fill in your values. The required fields come first and are left blank; optional bot integrations are commented out. Use the generator below for each password field and <1/>."
 #~ msgstr "Edita <0/> y rellena tus valores. Los campos obligatorios aparecen primero y se dejan en blanco; las integraciones opcionales con bots están comentadas. Usa el generador de abajo para cada campo de contraseña y <1/>."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "The bundled Caddy reverse proxy obtains and renews Let's Encrypt TLS certificates automatically, with no API keys or certificate files to manage. Set <0/>, point your DNS at the server, and open ports 80 and 443. The apex domain is issued a certificate on first start, and each tenant subdomain gets one on demand the first time it is visited."
-msgstr "El proxy inverso Caddy incluido obtiene y renueva automáticamente certificados TLS de Let's Encrypt, sin claves API ni archivos de certificados que gestionar. Configura <0/>, apunta tu DNS al servidor y abre los puertos 80 y 443. El dominio raíz obtiene un certificado en el primer arranque y cada subdominio de inquilino obtiene uno bajo demanda la primera vez que se visita."
+#~ msgid "The bundled Caddy reverse proxy obtains and renews Let's Encrypt TLS certificates automatically, with no API keys or certificate files to manage. Set <0/>, point your DNS at the server, and open ports 80 and 443. The apex domain is issued a certificate on first start, and each tenant subdomain gets one on demand the first time it is visited."
+#~ msgstr "El proxy inverso Caddy incluido obtiene y renueva automáticamente certificados TLS de Let's Encrypt, sin claves API ni archivos de certificados que gestionar. Configura <0/>, apunta tu DNS al servidor y abre los puertos 80 y 443. El dominio raíz obtiene un certificado en el primer arranque y cada subdominio de inquilino obtiene uno bajo demanda la primera vez que se visita."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Your proxy must forward the original <0/> along with <1/> and <2/>, or logins will fail with a 403. See <3>Bring your own reverse proxy</3> for worked nginx, Traefik, and Caddy configurations."
-msgstr "Tu proxy debe reenviar el <0/> original junto con <1/> y <2/>, o los inicios de sesión fallarán con un 403. Consulta <3>Usar tu propio proxy inverso</3> para ver ejemplos de configuración de nginx, Traefik y Caddy."
+#~ msgid "Your proxy must forward the original <0/> along with <1/> and <2/>, or logins will fail with a 403. See <3>Bring your own reverse proxy</3> for worked nginx, Traefik, and Caddy configurations."
+#~ msgstr "Tu proxy debe reenviar el <0/> original junto con <1/> y <2/>, o los inicios de sesión fallarán con un 403. Consulta <3>Usar tu propio proxy inverso</3> para ver ejemplos de configuración de nginx, Traefik y Caddy."
 
 #: ../portal/src/routes/docs/installation/byo-postgres/+page.svelte
 msgid "<0/>: owns the schema and runs migrations."
@@ -21622,9 +21612,8 @@ msgstr "Unidades, zona horaria, fuentes de CGM y nombres de conectores. Nunca co
 msgid "Oracle Cloud"
 msgstr "Oracle Cloud"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "One command in the browser sets up a free server, HTTPS and Nocturne. No SSH or Docker knowledge needed."
-msgstr "Un comando en el navegador configura un servidor gratuito, HTTPS y Nocturne. Sin necesidad de conocimientos de SSH ni Docker."
+#~ msgid "One command in the browser sets up a free server, HTTPS and Nocturne. No SSH or Docker knowledge needed."
+#~ msgstr "Un comando en el navegador configura un servidor gratuito, HTTPS y Nocturne. Sin necesidad de conocimientos de SSH ni Docker."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Non-diabetic range"
@@ -21957,9 +21946,8 @@ msgstr "Tema"
 #~ msgid "{0} default scale"
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)"
-msgstr "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)"
+#~ msgid "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)"
+#~ msgstr "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)"
 
 #~ msgid "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the processor and memory and a quarter of the storage, so nothing is charged. Oracle reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are out of date."
 #~ msgstr "Una <0>cuenta de Oracle Cloud</0>. El registro pide una tarjeta de pago para verificar tu identidad. Always Free te da 2 núcleos Ampere, 12 GB de memoria y 200 GB de almacenamiento; esta guía usa la mitad del procesador y la memoria y una cuarta parte del almacenamiento, por lo que no se cobra nada. Oracle redujo esa asignación en junio de 2026, así que las guías antiguas que hablan de 4 núcleos y 24 GB están desactualizadas."
@@ -21967,9 +21955,8 @@ msgstr "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/ni
 #~ msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from deSEC works well; see below."
 #~ msgstr "Un nombre de dominio. Nocturne da a cada sitio su propio subdominio, por lo que el proveedor DNS debe admitir registros comodín. Si no tienes dominio, uno gratuito de deSEC funciona bien; consulta abajo."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "A decision about how to keep the server from being reclaimed as idle. It changes the command you run, so make it before you start."
-msgstr "Una decisión sobre cómo evitar que el servidor sea reclamado por inactividad. Cambia el comando que debes ejecutar, así que decídelo antes de empezar."
+#~ msgid "A decision about how to keep the server from being reclaimed as idle. It changes the command you run, so make it before you start."
+#~ msgstr "Una decisión sobre cómo evitar que el servidor sea reclamado por inactividad. Cambia el comando que debes ejecutar, así que decídelo antes de empezar."
 
 #~ msgid "Create an account at desec.io and confirm your email address."
 #~ msgstr "Crea una cuenta en desec.io y confirma tu dirección de correo."
@@ -21983,9 +21970,8 @@ msgstr "Una decisión sobre cómo evitar que el servidor sea reclamado por inact
 #~ msgid "Which one should you pick?"
 #~ msgstr "¿Cuál deberías elegir?"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Option 1: upgrade the account to Pay As You Go (recommended)"
-msgstr "Opción 1: actualizar la cuenta a Pay As You Go (recomendada)"
+#~ msgid "Option 1: upgrade the account to Pay As You Go (recommended)"
+#~ msgstr "Opción 1: actualizar la cuenta a Pay As You Go (recomendada)"
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "In the Oracle console, open <0>Billing & Cost Management</0>, then <1>Upgrade and Manage Payment</1>, and choose Pay As You Go. Your card is already on file from sign-up. Always Free resources stay free after the upgrade, and Oracle's own terms exempt Pay As You Go accounts from idle reclamation. Everything this installer creates is within the free allowance, so the upgrade does not by itself cost anything."
@@ -22039,6 +22025,7 @@ msgstr "Inicia un servidor Ampere A1 con 1 núcleo y 6 GB de memoria, la mitad d
 #~ msgid "On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves, checking each of these again on every run"
 #~ msgstr "En el servidor: abre el cortafuegos, instala Docker, descarga el paquete de Nocturne, genera las contraseñas de la base de datos e inicia todo cuando el DNS se resuelve, comprobando cada uno de estos pasos en cada ejecución"
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "What the script does"
 msgstr "Qué hace el script"
@@ -22054,6 +22041,7 @@ msgstr "Si Oracle no tiene capacidad gratuita"
 msgid "To have it keep trying for longer instead of re-running by hand:"
 msgstr "Para que siga intentándolo durante más tiempo en vez de volver a ejecutarlo manualmente:"
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "If anything goes wrong, run it again"
 msgstr "Si algo sale mal, vuelve a ejecutarlo"
@@ -22120,6 +22108,7 @@ msgstr "Paso 1: Abrir Cloud Shell"
 #~ msgid "Sign in to the <0>Oracle Cloud console</0> and click the terminal icon in the top-right toolbar, labelled <1>Developer tools</1>, then <2>Cloud Shell</2>. A terminal opens at the bottom of the page. It is already signed in as you, so there is nothing to install or configure."
 #~ msgstr "Inicia sesión en la <0>consola de Oracle Cloud</0> y haz clic en el icono de terminal de la barra superior derecha, llamado <1>Herramientas para desarrolladores</1>, y después en <2>Cloud Shell</2>. Se abrirá una terminal en la parte inferior de la página. Ya está autenticada como tú, así que no hay nada que instalar ni configurar."
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Step 2: Run the installer"
 msgstr "Paso 2: Ejecutar el instalador"
@@ -22747,17 +22736,14 @@ msgstr "Inicia sesión en una cuenta de dispositivo y las lecturas llegan solas.
 msgid "Missing yours? <0>Ask for a connector</0>."
 msgstr "¿Falta el tuyo? <0>Pide un conector</0>."
 
-#: ../portal/src/routes/+page.svelte
-msgid "Two files and a domain name. That's the install."
-msgstr "Dos archivos y un nombre de dominio. Eso es toda la instalación."
+#~ msgid "Two files and a domain name. That's the install."
+#~ msgstr "Dos archivos y un nombre de dominio. Eso es toda la instalación."
 
-#: ../portal/src/routes/+page.svelte
-msgid "Download the compose file and its environment template, fill in your domain and passwords, and start it. Caddy fetches the certificate."
-msgstr "Descarga el archivo compose y su plantilla de entorno, rellena tu dominio y contraseñas e inícialo. Caddy obtiene el certificado."
+#~ msgid "Download the compose file and its environment template, fill in your domain and passwords, and start it. Caddy fetches the certificate."
+#~ msgstr "Descarga el archivo compose y su plantilla de entorno, rellena tu dominio y contraseñas e inícialo. Caddy obtiene el certificado."
 
-#: ../portal/src/routes/+page.svelte
-msgid "# BASE_DOMAIN, INSTANCE_KEY, four database passwords"
-msgstr "# BASE_DOMAIN, INSTANCE_KEY, cuatro contraseñas de base de datos"
+#~ msgid "# BASE_DOMAIN, INSTANCE_KEY, four database passwords"
+#~ msgstr "# BASE_DOMAIN, INSTANCE_KEY, cuatro contraseñas de base de datos"
 
 #: ../portal/src/routes/+page.svelte
 msgid ", and the latest release is <0/>"
@@ -22840,6 +22826,7 @@ msgid "Nocturne's development milestones, live from GitHub: what's being built n
 msgstr "Los hitos de desarrollo de Nocturne, en directo desde GitHub: lo que se está desarrollando ahora, lo siguiente y lo que ya se ha publicado."
 
 #: ../portal/src/routes/roadmap/+page.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 msgid "In progress"
 msgstr "En progreso"
@@ -22898,6 +22885,7 @@ msgstr "Objetivo de consenso: al menos un 70% de tiempo en rango."
 msgid "Coefficient of variation"
 msgstr "Coeficiente de variación"
 
+#: src/lib/utils/insight-messages.svelte.ts
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 msgid "Time below range"
@@ -23178,9 +23166,8 @@ msgstr "Apoya Nocturne"
 msgid "<0/> · By {0}"
 msgstr "<0/> · Por {0}"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Bot integrations are optional"
-msgstr "Las integraciones con bots son opcionales"
+#~ msgid "Bot integrations are optional"
+#~ msgstr "Las integraciones con bots son opcionales"
 
 #~ msgid "Leave Discord, Telegram, Slack, and WhatsApp fields blank if you don't need them. They can be configured later by updating the stack."
 #~ msgstr "Deja en blanco los campos de Discord, Telegram, Slack y WhatsApp si no los necesitas. Puedes configurarlos más adelante actualizando el stack."
@@ -24810,9 +24797,8 @@ msgstr "Crea y comprueba un archivo de copia de seguridad propiedad de root mien
 msgid "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
 msgstr "Crea el directorio del host y copia el directorio de datos detenido, conservando su contenido y propiedad: <0/>"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
-msgstr "Configura <0/> en <1/> e inicia con ambos archivos de Compose: <2/> Si también utilizas el override BYO-proxy, inclúyelo igualmente: <3/>"
+#~ msgid "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
+#~ msgstr "Configura <0/> en <1/> e inicia con ambos archivos de Compose: <2/> Si también utilizas el override BYO-proxy, inclúyelo igualmente: <3/>"
 
 #~ msgid "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes, then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when stopping and when returning to the named-volume configuration: <1/>"
 #~ msgstr "Comprueba los registros de PostgreSQL y los datos existentes de Nocturne antes de permitir escrituras. Conserva el volumen con nombre original y el archivo de copia de seguridad hasta completar la verificación. Para volver a la configuración anterior antes de que se produzcan nuevas escrituras, detén el stack con el override sin eliminar los volúmenes y vuelve a iniciar el archivo Compose original: <0/> Para un stack que también utilice BYO proxy, mantén ese override tanto al detenerlo como al volver a la configuración con volumen con nombre: <1/>"
@@ -24835,33 +24821,27 @@ msgstr "Ver docker-compose.bind-data.yaml"
 #~ msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
 #~ msgstr "Descarga el paquete <0/> desde la <1>última versión publicada en GitHub</1>. El paquete es autocontenido: solo incluye <2/> y la plantilla de entorno, que GitHub muestra como <3/>. El script de inicialización de la base de datos y la configuración del proxy TLS están integrados directamente en el archivo Compose, por lo que no es necesario mantener directorios adicionales junto a él. El paquete también incluye un override <4/> para quienes utilicen su propio proxy inverso (consulta más abajo). Un segundo override opcional permite que PostgreSQL almacene sus datos en un directorio del host Docker."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Optional: use a host directory for PostgreSQL"
-msgstr "Opcional: utilizar un directorio del host para PostgreSQL"
+#~ msgid "Optional: use a host directory for PostgreSQL"
+#~ msgstr "Opcional: utilizar un directorio del host para PostgreSQL"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
-msgstr "El volumen Docker con nombre predeterminado es el recomendado para la mayoría de las instalaciones y no necesita configuración adicional. Para almacenar los datos de PostgreSQL en un disco o directorio concreto del host, utiliza el override bind-data independiente. Este fija el tipo de montaje en <0/> y requiere una ruta, evitando que el tipo de montaje y el origen puedan configurarse de forma incompatible por error."
+#~ msgid "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
+#~ msgstr "El volumen Docker con nombre predeterminado es el recomendado para la mayoría de las instalaciones y no necesita configuración adicional. Para almacenar los datos de PostgreSQL en un disco o directorio concreto del host, utiliza el override bind-data independiente. Este fija el tipo de montaje en <0/> y requiere una ruta, evitando que el tipo de montaje y el origen puedan configurarse de forma incompatible por error."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
-msgstr "Mantén todos los overrides activos en la misma lista ordenada <0/> en cada comando de Compose para este stack. Incluye el archivo bind-data, el archivo BYO-proxy y cualquier archivo override local que utilices. Omitir un override activo puede restablecer el montaje mediante volumen con nombre o la configuración del proxy incluida en el paquete."
+#~ msgid "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
+#~ msgstr "Mantén todos los overrides activos en la misma lista ordenada <0/> en cada comando de Compose para este stack. Incluye el archivo bind-data, el archivo BYO-proxy y cualquier archivo override local que utilices. Omitir un override activo puede restablecer el montaje mediante volumen con nombre o la configuración del proxy incluida en el paquete."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "The override requires <0/> and refuses to create a missing host directory. If the variable is unset or the path does not exist, Compose reports an error instead of silently starting PostgreSQL in a newly created directory. A path that exists but contains no database is still a new database."
 msgstr "El override requiere <0/> y no crea un directorio del host si este no existe. Si la variable no está definida o la ruta no existe, Compose muestra un error en lugar de iniciar silenciosamente PostgreSQL en un directorio recién creado. Una ruta existente que no contenga una base de datos sigue considerándose una base de datos nueva."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "If you also use the bind-data override, include both overrides in the same command:"
-msgstr "Si también utilizas el override bind-data, incluye ambos overrides en el mismo comando:"
+#~ msgid "If you also use the bind-data override, include both overrides in the same command:"
+#~ msgstr "Si también utilizas el override bind-data, incluye ambos overrides en el mismo comando:"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Keep every active override in both the pull and update commands. For bind-data only:"
-msgstr "Mantén todos los overrides activos tanto en los comandos de descarga como en los de actualización. Solo para bind-data:"
+#~ msgid "Keep every active override in both the pull and update commands. For bind-data only:"
+#~ msgstr "Mantén todos los overrides activos tanto en los comandos de descarga como en los de actualización. Solo para bind-data:"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "For bind-data with the BYO-proxy override:"
-msgstr "Para bind-data junto con el override BYO-proxy:"
+#~ msgid "For bind-data with the BYO-proxy override:"
+#~ msgstr "Para bind-data junto con el override BYO-proxy:"
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
@@ -25166,27 +25146,25 @@ msgstr "Watchtower está incluido y comprueba diariamente si hay actualizaciones
 #~ msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well; <0>see below</0>."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/lib/components/docs/install/DuckDnsSteps.svelte
 msgid "Sign in at duckdns.org with one of the accounts it offers, such as GitHub or Google."
 msgstr "Inicia sesión en duckdns.org con una de las cuentas disponibles, como GitHub o Google."
 
 #~ msgid "Under <0>domains</0>, type a name and click <1>add domain</1>. Your domain is then <2/>."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/lib/components/docs/install/DuckDnsSteps.svelte
 msgid "Copy the <0>token</0> shown at the top of the page. It looks like <1/>. It controls every name on your account, so keep it to yourself."
 msgstr "Copia el <0>token</0> que aparece en la parte superior de la página. Tiene un aspecto similar a <1/>. Permite controlar todos los nombres de tu cuenta, así que mantenlo en secreto."
 
 #~ msgid "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. The installer also sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in <0>Step 2</0>."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Option 2: stay on an Always Free account and donate spare time to Folding@home"
-msgstr "Opción 2: mantener una cuenta Always Free y donar tiempo de procesamiento disponible a Folding@home"
+#~ msgid "Option 2: stay on an Always Free account and donate spare time to Folding@home"
+#~ msgstr "Opción 2: mantener una cuenta Always Free y donar tiempo de procesamiento disponible a Folding@home"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in <1>Step 2</1>:"
-msgstr "El cliente se ejecuta con la prioridad más baja del sistema, de modo que Nocturne y sus alarmas siempre tienen preferencia. Para elegir esta opción, añade <0/> al comando del <1>Paso 2</1>:"
+#~ msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in <1>Step 2</1>:"
+#~ msgstr "El cliente se ejecuta con la prioridad más baja del sistema, de modo que Nocturne y sus alarmas siempre tienen preferencia. Para elegir esta opción, añade <0/> al comando del <1>Paso 2</1>:"
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Always Free accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
@@ -25206,6 +25184,7 @@ msgstr "Para actualizar Caddy y Postgres, ejecuta <0/> en el servidor."
 #~ msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy, which would keep more than five and be charged."
 #~ msgstr ""
 
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "No domain yet? Get one from DuckDNS"
 msgstr "¿Todavía no tienes dominio? Consigue uno en DuckDNS"
@@ -25213,9 +25192,8 @@ msgstr "¿Todavía no tienes dominio? Consigue uno en DuckDNS"
 #~ msgid "<0>DuckDNS</0> is a free dynamic DNS service that gives out names under <1>duckdns.org</1>, each with a wildcard for the subdomains below it. The installer uses your DuckDNS token to point your name at your server, so there is nothing to set up by hand."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "For a domain you already own, you add two records by hand at your DNS provider in <0>Step 3</0>."
-msgstr "Si ya tienes un dominio propio, añade manualmente dos registros en tu proveedor de DNS en el <0>Paso 3</0>."
+#~ msgid "For a domain you already own, you add two records by hand at your DNS provider in <0>Step 3</0>."
+#~ msgstr "Si ya tienes un dominio propio, añade manualmente dos registros en tu proveedor de DNS en el <0>Paso 3</0>."
 
 #~ msgid "Oracle switches off servers on Always Free accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in <0>Step 2</0>, so pick now rather than later."
 #~ msgstr ""
@@ -26850,9 +26828,8 @@ msgstr "Este informe contabiliza el uso del dispositivo por días UTC."
 msgid "This report needs a time zone"
 msgstr "Este informe necesita una zona horaria"
 
-#: src/lib/components/reports/time-zone-reasons.svelte.ts
-msgid "A shared link does not show the time zone of this data."
-msgstr "Un enlace compartido no muestra la zona horaria de estos datos."
+#~ msgid "A shared link does not show the time zone of this data."
+#~ msgstr "Un enlace compartido no muestra la zona horaria de estos datos."
 
 #: src/lib/components/reports/time-zone-reasons.svelte.ts
 msgid "The time zone of this data did not load."
@@ -28717,6 +28694,7 @@ msgstr "Bolo corrector"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor start"
 msgstr "Inicio del sensor"
 
@@ -30133,9 +30111,8 @@ msgstr "¿No ves la sección Administración?"
 #~ msgid "Administration is only visible to a <0>platform admin</0>. That is a separate permission from a tenant's <1>owner</1> role, so being the owner of your instance is not enough on its own. Opening <2/> without it sends you back to <3>Settings</3>. On a new install the permission goes to the owner of the first tenant, granted when that owner finishes setting up their passkey or sign-in provider. <4/><5/> If you set your instance up on an earlier version, the grant only ran while the API was starting, so the owner never received it. Restart the Nocturne API container once and sign in again. That works as long as nobody currently holds the permission. If someone does, have them grant it to you from <6>Settings > Administration</6>."
 #~ msgstr ""
 
-#: ../portal/src/lib/components/docs/VerificationSteps.svelte
-msgid "Replace <0/> with your <1/>. The bundled Caddy proxy serves HTTPS on ports 80 and 443. The server returns a JSON response with its status. (With a bring-your-own reverse proxy, query the gateway on host port 8080 instead.)"
-msgstr "Sustituye <0/> por tu <1/>. El proxy Caddy incluido proporciona HTTPS en los puertos 80 y 443. El servidor devuelve una respuesta JSON con su estado. (Si utilizas tu propio proxy inverso, consulta la pasarela en el puerto 8080 del servidor)."
+#~ msgid "Replace <0/> with your <1/>. The bundled Caddy proxy serves HTTPS on ports 80 and 443. The server returns a JSON response with its status. (With a bring-your-own reverse proxy, query the gateway on host port 8080 instead.)"
+#~ msgstr "Sustituye <0/> por tu <1/>. El proxy Caddy incluido proporciona HTTPS en los puertos 80 y 443. El servidor devuelve una respuesta JSON con su estado. (Si utilizas tu propio proxy inverso, consulta la pasarela en el puerto 8080 del servidor)."
 
 #: ../portal/src/lib/components/docs/SystemRequirements.svelte
 msgid "<0>Memory.</0> Those six use roughly 1 to 1.5 GB between them at rest, most of it PostgreSQL and the API. 2 GB leaves little spare once the operating system is accounted for, which is why it is the floor rather than a comfortable target. The extra memory at 4 GB is used by PostgreSQL as disk cache and is the single cheapest thing you can give it."
@@ -30236,7 +30213,7 @@ msgstr "Las falsas hipoglucemias por compresión son lecturas del MCG artificial
 msgid "We could not start this sync. Try again."
 msgstr "No se ha podido iniciar esta sincronización. Inténtalo de nuevo."
 
-#. 0: result.entryCount ?? 0; 1: result.treatmentCount ?? 0
+#. 0: formatNumber(result.entryCount); 1: formatNumber(result.treatmentCount)
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 #, python-brace-format
 msgid "Connected. Found {0} entries and {1} treatments."
@@ -30451,9 +30428,8 @@ msgstr "<0/> o <1/>: antes del vencimiento o evento"
 msgid "Could not load the content"
 msgstr "No se ha podido cargar el contenido"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "If you do not need Discord, Telegram, Slack, or WhatsApp, leave their fields blank. You can configure them later by updating the stack."
-msgstr "Si no necesitas Discord, Telegram, Slack o WhatsApp, deja sus campos en blanco. Puedes configurarlos más adelante actualizando el conjunto de servicios."
+#~ msgid "If you do not need Discord, Telegram, Slack, or WhatsApp, leave their fields blank. You can configure them later by updating the stack."
+#~ msgstr "Si no necesitas Discord, Telegram, Slack o WhatsApp, deja sus campos en blanco. Puedes configurarlos más adelante actualizando el conjunto de servicios."
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Portainer's stack editor and app template use the default named Docker volume. Portainer does not apply Compose override files. To put PostgreSQL data in a host directory, deploy the Docker Compose bundle from the command line with both <0/> and <1/>. See the <2>Docker Compose guide</2> for setup and existing-database migration precautions."
@@ -30471,21 +30447,19 @@ msgstr "Los conectores de fuentes de datos (Dexcom, LibreLinkUp, Glooko y otros)
 msgid "An <0>Oracle Cloud account</0>. Sign-up requires a payment card to verify your identity. The region you pick at sign-up becomes your home region. The free server can only be created there, and the choice cannot be changed later, so pick the region closest to you. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage. Oracle halved the cores and memory in June 2026, so older guides that quote 4 cores and 24 GB are out of date. This guide uses half the cores and memory and a quarter of the storage, which stays well inside the free allowance."
 msgstr "Una <0>cuenta de Oracle Cloud</0>. Para registrarte necesitas una tarjeta de pago que permita verificar tu identidad. La región elegida durante el registro será tu región principal. El servidor gratuito solo se puede crear allí y no podrás cambiar esa elección después, así que elige la región más cercana. Always Free ofrece 2 núcleos Ampere, 12 GB de memoria y 200 GB de almacenamiento. Oracle redujo a la mitad los núcleos y la memoria en junio de 2026, por lo que las guías antiguas que mencionan 4 núcleos y 24 GB están desactualizadas. Esta guía utiliza la mitad de los núcleos y la memoria y una cuarta parte del almacenamiento, dentro de los límites gratuitos."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well: <0>see below</0>."
-msgstr "Un nombre de dominio. Nocturne asigna un subdominio a cada sitio, así que el proveedor de DNS debe admitir registros comodín. Si no tienes dominio, puedes utilizar uno gratuito de DuckDNS: <0>consulta las instrucciones siguientes</0>."
+#~ msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well: <0>see below</0>."
+#~ msgstr "Un nombre de dominio. Nocturne asigna un subdominio a cada sitio, así que el proveedor de DNS debe admitir registros comodín. Si no tienes dominio, puedes utilizar uno gratuito de DuckDNS: <0>consulta las instrucciones siguientes</0>."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Which option to choose"
 msgstr "Qué opción elegir"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 msgid "Points your DuckDNS name at that address when you give it the token. For any other domain, it prints the two records to create by hand"
 msgstr "Apunta tu nombre de DuckDNS a esa dirección cuando proporcionas el token. Para cualquier otro dominio, muestra los dos registros que debes crear manualmente"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Installs Folding@home on a nightly schedule if you chose it above"
-msgstr "Instala Folding@home con una programación nocturna si lo has elegido anteriormente"
+#~ msgid "Installs Folding@home on a nightly schedule if you chose it above"
+#~ msgstr "Instala Folding@home con una programación nocturna si lo has elegido anteriormente"
 
 #~ msgid "Ampere A1 servers are popular and regions often run out. The installer tries every availability domain in your region and keeps retrying for 30 minutes. It already requests the smallest size the installer offers, 1 core and 6 GB, so there is nothing smaller to fall back to. If it gives up, run the command again later: it remembers your domain, so the command no longer needs it, and everything already created is reused. Upgrading to Pay As You Go also tends to end these errors, since paying accounts are served first when servers are scarce."
 #~ msgstr ""
@@ -30498,9 +30472,8 @@ msgstr "Inicia sesión en la <0>consola de Oracle Cloud</0> y selecciona el icon
 msgid "The second one is a wildcard. It makes every site's subdomain resolve without a record each. If you use Cloudflare, leave the proxy off for both records, shown as a gray cloud. Cloudflare's proxy cannot carry the certificates Nocturne issues for its own subdomains."
 msgstr "El segundo es un registro comodín. Permite resolver todos los subdominios de los sitios sin crear un registro para cada uno. Si utilizas Cloudflare, desactiva el proxy en ambos registros (nube gris). El proxy de Cloudflare no puede gestionar los certificados que Nocturne emite para sus propios subdominios."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "This replaces the default <0/> command in Step 3 below. Do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
-msgstr "Esto sustituye al comando <0/> predeterminado del paso 3 siguiente. No ejecutes ambos comandos. Inicia la pila con los dos archivos. Conserva ambos argumentos <1/> en todos los comandos posteriores de Compose, incluidas las actualizaciones y el apagado: <2/>"
+#~ msgid "This replaces the default <0/> command in Step 3 below. Do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
+#~ msgstr "Esto sustituye al comando <0/> predeterminado del paso 3 siguiente. No ejecutes ambos comandos. Inicia la pila con los dos archivos. Conserva ambos argumentos <1/> en todos los comandos posteriores de Compose, incluidas las actualizaciones y el apagado: <2/>"
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume. Plan any rollback or restore before reopening the service to users."
@@ -31984,9 +31957,8 @@ msgstr "Transfiriendo el <0>historial</0> de {0}."
 msgid "Bringing the <0>history</0> across."
 msgstr "Transfiriendo el <0>historial</0>."
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "We are streaming entries, treatments, and profiles from Nightscout into Nocturne's store. This keeps running on the server even if you close this page."
-msgstr "Estamos transfiriendo registros, tratamientos y perfiles de Nightscout al almacenamiento de Nocturne. El proceso continúa en el servidor aunque cierres esta página."
+#~ msgid "We are streaming entries, treatments, and profiles from Nightscout into Nocturne's store. This keeps running on the server even if you close this page."
+#~ msgstr "Estamos transfiriendo registros, tratamientos y perfiles de Nightscout al almacenamiento de Nocturne. El proceso continúa en el servidor aunque cierres esta página."
 
 #: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
 msgid "Connect a CGM, pump, or phone app"
@@ -34118,30 +34090,36 @@ msgid "<0/> Carb intake"
 msgstr "<0/> Ingesta de hidratos de carbono"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Sensor stop"
 msgstr "Detención del sensor"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Insulin change"
 msgstr "Cambio de insulina"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump battery change"
 msgstr "Cambio de batería de la bomba"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod change"
 msgstr "Cambio de pod"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Reservoir change"
 msgstr "Cambio de reservorio"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Cannula change"
 msgstr "Cambio de cánula"
 
@@ -34150,42 +34128,52 @@ msgid "Transmitter/sensor insert"
 msgstr "Inserción del transmisor/sensor"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod activated"
 msgstr "Pod activado"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pod deactivated"
 msgstr "Pod desactivado"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump suspend"
 msgstr "Suspensión de la bomba"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Pump resume"
 msgstr "Reanudación de la bomba"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Tube priming"
 msgstr "Cebado del tubo"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Needle priming"
 msgstr "Cebado de la aguja"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Date changed"
 msgstr "Fecha modificada"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Time changed"
 msgstr "Hora modificada"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Bolus max changed"
 msgstr "Bolo máximo modificado"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Basal max changed"
 msgstr "Basal máxima modificada"
 
@@ -34193,6 +34181,7 @@ msgstr "Basal máxima modificada"
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 #: src/lib/components/therapy-timeline/VersionRibbon.svelte
+#: src/lib/constants/device-event-types.svelte.ts
 msgid "Profile switch"
 msgstr "Cambio de perfil"
 
@@ -35150,11 +35139,13 @@ msgid "Carb intake"
 msgstr "Ingesta de hidratos de carbono"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "BG check"
 msgstr "Comprobación de glucemia"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/utils/entry-summary.svelte.ts
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Device event"
 msgstr "Evento del dispositivo"
@@ -36206,13 +36197,11 @@ msgstr "<0/> Iniciar migración"
 msgid "Active migration <0/>"
 msgstr "Migración activa <0/>"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Current operation"
-msgstr "Operación actual"
+#~ msgid "Current operation"
+#~ msgstr "Operación actual"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Collection progress"
-msgstr "Progreso de las colecciones"
+#~ msgid "Collection progress"
+#~ msgstr "Progreso de las colecciones"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "<0/> Cancel migration"
@@ -36857,17 +36846,14 @@ msgstr "Crea el directorio en la máquina donde se ejecuta el demonio de Docker,
 msgid "A new or empty directory initializes a separate, empty PostgreSQL database. For an existing install, take and verify a backup, stop the stack, and migrate the existing PostgreSQL data before starting with the override. Preserve file ownership and use the same PostgreSQL major version. Keep the original named volume until the new location is verified. There is no automatic volume migration. Do not use <0/> while the original volume is your only copy."
 msgstr "Un directorio nuevo o vacío inicializa una base de datos PostgreSQL independiente y vacía. Si ya tienes una instalación, crea y verifica una copia de seguridad, detén los servicios y migra los datos existentes de PostgreSQL antes de arrancar con la configuración alternativa. Conserva la propiedad de los archivos y utiliza la misma versión principal de PostgreSQL. Mantén el volumen con nombre original hasta verificar la nueva ubicación. No hay migración automática del volumen. No utilices <0/> mientras el volumen original sea tu única copia."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes. Then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when you stop it. Keep it also when you return to the named-volume configuration: <1/>"
-msgstr "Comprueba los registros de PostgreSQL y tus datos existentes de Nocturne antes de permitir escrituras. Conserva el volumen con nombre original y el archivo de copia de seguridad hasta terminar la verificación. Para volver atrás antes de que haya nuevas escrituras, detén los servicios con la configuración alternativa sin eliminar volúmenes. Después, inicia de nuevo el archivo Compose original: <0/> Si también utilizas un proxy propio, conserva esa configuración alternativa al detener los servicios. Consérvala también al volver a la configuración con volumen con nombre: <1/>"
+#~ msgid "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes. Then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when you stop it. Keep it also when you return to the named-volume configuration: <1/>"
+#~ msgstr "Comprueba los registros de PostgreSQL y tus datos existentes de Nocturne antes de permitir escrituras. Conserva el volumen con nombre original y el archivo de copia de seguridad hasta terminar la verificación. Para volver atrás antes de que haya nuevas escrituras, detén los servicios con la configuración alternativa sin eliminar volúmenes. Después, inicia de nuevo el archivo Compose original: <0/> Si también utilizas un proxy propio, conserva esa configuración alternativa al detener los servicios. Consérvala también al volver a la configuración con volumen con nombre: <1/>"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file. There are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
-msgstr "Descarga el paquete <0/> de la <1>última versión publicada en GitHub</1>. El paquete es autónomo: solo contiene <2/> y la plantilla de variables de entorno, que GitHub muestra como <3/>. El script de inicialización de la base de datos y la configuración del proxy TLS están integrados directamente en el archivo Compose. No hay directorios adicionales que debas conservar junto a él. El paquete también incluye una configuración alternativa <4/> para quienes utilizan su propio proxy inverso (consulta más abajo). Otra configuración alternativa, opcional, permite guardar los datos de PostgreSQL en un directorio del servidor Docker."
+#~ msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file. There are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
+#~ msgstr "Descarga el paquete <0/> de la <1>última versión publicada en GitHub</1>. El paquete es autónomo: solo contiene <2/> y la plantilla de variables de entorno, que GitHub muestra como <3/>. El script de inicialización de la base de datos y la configuración del proxy TLS están integrados directamente en el archivo Compose. No hay directorios adicionales que debas conservar junto a él. El paquete también incluye una configuración alternativa <4/> para quienes utilizan su propio proxy inverso (consulta más abajo). Otra configuración alternativa, opcional, permite guardar los datos de PostgreSQL en un directorio del servidor Docker."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Already run your own reverse proxy (nginx, Traefik, Caddy)? Use the bring-your-own-proxy override. It disables the bundled Caddy and exposes the gateway on plain HTTP port 8080 for your proxy to forward to:"
-msgstr "¿Ya utilizas tu propio proxy inverso (nginx, Traefik o Caddy)? Usa la configuración alternativa para proxy propio. Desactiva el Caddy incluido y expone la pasarela mediante HTTP sin cifrar en el puerto 8080 para que tu proxy reenvíe las solicitudes:"
+#~ msgid "Already run your own reverse proxy (nginx, Traefik, Caddy)? Use the bring-your-own-proxy override. It disables the bundled Caddy and exposes the gateway on plain HTTP port 8080 for your proxy to forward to:"
+#~ msgstr "¿Ya utilizas tu propio proxy inverso (nginx, Traefik o Caddy)? Usa la configuración alternativa para proxy propio. Desactiva el Caddy incluido y expone la pasarela mediante HTTP sin cifrar en el puerto 8080 para que tu proxy reenvíe las solicitudes:"
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs. Your database data is kept. If you installed before Caddy was excluded from Watchtower, set <1/> to <2/> on the <3/> service. Or download the new bundle and run <4/> to recreate it."
@@ -36877,23 +36863,22 @@ msgstr "Watchtower actualiza las imágenes, no el archivo Compose. Si instalaste
 msgid "Every service sets <0/>, so Docker restarts it when it exits or when the Docker daemon restarts. Docker does not restart a service that you stopped. Docker's default policy is <1/> (<2>Docker docs</2>)."
 msgstr "Cada servicio establece <0/>, por lo que Docker lo reinicia si se cierra o si se reinicia el demonio de Docker. Docker no reinicia un servicio que hayas detenido. La política predeterminada de Docker es <1/> (<2>documentación de Docker</2>)."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Every service also logs to the <0/> driver, rotated at three files of 10 MB. Left to its defaults, that driver never rotates, because <1/> defaults to unlimited (<2>Docker docs</2>). A logging driver set on a container replaces the daemon's default (<3>Docker docs</3>), so the bundle overrides any <4/> in your <5/>. To keep yours, set <6/> on the services in a <7/>. Compose reads that file only when you pass no <8/> (<9>Docker docs</9>). With the bring-your-own-proxy command, also pass <10/>."
-msgstr "Cada servicio también utiliza el controlador de registros <0/>, con rotación de tres archivos de 10 MB. Con la configuración predeterminada, ese controlador nunca rota los registros, porque <1/> tiene por defecto un valor ilimitado (<2>documentación de Docker</2>). El controlador de registros definido en un contenedor sustituye al predeterminado del demonio (<3>documentación de Docker</3>), por lo que el paquete reemplaza cualquier <4/> de tu <5/>. Para conservar tu configuración, establece <6/> en los servicios dentro de un <7/>. Compose solo lee ese archivo cuando no se pasa ningún <8/> (<9>documentación de Docker</9>). Con el comando para utilizar tu propio proxy, pasa también <10/>."
+#~ msgid "Every service also logs to the <0/> driver, rotated at three files of 10 MB. Left to its defaults, that driver never rotates, because <1/> defaults to unlimited (<2>Docker docs</2>). A logging driver set on a container replaces the daemon's default (<3>Docker docs</3>), so the bundle overrides any <4/> in your <5/>. To keep yours, set <6/> on the services in a <7/>. Compose reads that file only when you pass no <8/> (<9>Docker docs</9>). With the bring-your-own-proxy command, also pass <10/>."
+#~ msgstr "Cada servicio también utiliza el controlador de registros <0/>, con rotación de tres archivos de 10 MB. Con la configuración predeterminada, ese controlador nunca rota los registros, porque <1/> tiene por defecto un valor ilimitado (<2>documentación de Docker</2>). El controlador de registros definido en un contenedor sustituye al predeterminado del demonio (<3>documentación de Docker</3>), por lo que el paquete reemplaza cualquier <4/> de tu <5/>. Para conservar tu configuración, establece <6/> en los servicios dentro de un <7/>. Compose solo lee ese archivo cuando no se pasa ningún <8/> (<9>documentación de Docker</9>). Con el comando para utilizar tu propio proxy, pasa también <10/>."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Next steps"
 msgstr "Siguientes pasos"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/lib/components/docs/install/DuckDnsSteps.svelte
 msgid "Under <0>domains</0>, type a name and select <1>add domain</1>. Your domain is then <2/>."
 msgstr "En <0>domains</0>, escribe un nombre y selecciona <1>add domain</1>. Tu dominio será entonces <2/>."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "The change is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends. It refuses a server size above the free allowance. It also writes an Oracle quota policy. The policy stops the account creating anything outside the Always Free compute shapes, whether or not you upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. The installer also sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in <0>Step 2</0>."
-msgstr "El cambio consiste en que ahora pueden cobrarte en la tarjeta si alguna vez se crea algún recurso fuera del nivel gratuito. El instalador impide que eso ocurra por dos vías. Rechaza cualquier tamaño de servidor superior al permitido gratuitamente. También crea una política de cuotas de Oracle que impide a la cuenta crear recursos de computación distintos de los tipos Always Free, tanto si has cambiado de plan como si no. Esa política es un límite real, no una advertencia: Oracle rechaza la solicitud en lugar de cobrarte. El instalador también configura una alerta de gasto que te envía un correo electrónico en cuanto se factura una unidad de tu moneda. No necesitas añadir nada al comando del <0>Paso 2</0>."
+#~ msgid "The change is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends. It refuses a server size above the free allowance. It also writes an Oracle quota policy. The policy stops the account creating anything outside the Always Free compute shapes, whether or not you upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. The installer also sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in <0>Step 2</0>."
+#~ msgstr "El cambio consiste en que ahora pueden cobrarte en la tarjeta si alguna vez se crea algún recurso fuera del nivel gratuito. El instalador impide que eso ocurra por dos vías. Rechaza cualquier tamaño de servidor superior al permitido gratuitamente. También crea una política de cuotas de Oracle que impide a la cuenta crear recursos de computación distintos de los tipos Always Free, tanto si has cambiado de plan como si no. Esa política es un límite real, no una advertencia: Oracle rechaza la solicitud en lugar de cobrarte. El instalador también configura una alerta de gasto que te envía un correo electrónico en cuanto se factura una unidad de tu moneda. No necesitas añadir nada al comando del <0>Paso 2</0>."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "<0>Folding@home</0> is a research project that simulates how proteins fold. It helps to understand diseases such as Alzheimer's, cancer and, yes, diabetes. With this option the installer adds its client to the server and runs it from 02:00 to 04:00 UTC each night. Two hours a day of real computation is well above Oracle's idle threshold. The server is then never a candidate for reclamation, and the time goes to something useful."
@@ -36903,9 +36888,8 @@ msgstr "<0>Folding@home</0> es un proyecto de investigación que simula cómo se
 msgid "Creates a spending alert that emails you if the account is ever charged. Also creates a quota policy that stops the account creating anything outside the Always Free compute shapes"
 msgstr "Configura una alerta de gastos que te envía un correo si alguna vez se realiza un cargo en la cuenta. También crea una política de cuotas que impide crear recursos fuera de las configuraciones de computación Always Free."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "On the server, the installer opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
-msgstr "En el servidor, el instalador abre el cortafuegos e instala Docker. Descarga el paquete de Nocturne y genera las contraseñas de la base de datos. Inicia todos los servicios cuando se resuelve el DNS. Vuelve a comprobar cada uno de estos pasos en cada ejecución."
+#~ msgid "On the server, the installer opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
+#~ msgstr "En el servidor, el instalador abre el cortafuegos e instala Docker. Descarga el paquete de Nocturne y genera las contraseñas de la base de datos. Inicia todos los servicios cuando se resuelve el DNS. Vuelve a comprobar cada uno de estos pasos en cada ejecución."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Ampere A1 servers are popular and regions often run out. The installer tries every availability domain in your region and keeps retrying for 30 minutes. It already requests the smallest size the installer offers, 1 core and 6 GB, so there is nothing smaller to fall back to. If it gives up, run the command again later. It remembers your domain, so the command no longer needs it. Everything already created is reused. Upgrading to Pay As You Go also tends to end these errors, since paying accounts are served first when servers are scarce."
@@ -36919,29 +36903,25 @@ msgstr "Volver a ejecutar el instalador soluciona casi cualquier fallo. Busca ca
 msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups. Take them by hand and delete old ones. Do not attach a scheduled policy, because it would keep more than five and be charged."
 msgstr "No se realizan copias de seguridad de tus datos automáticamente. En la consola de Oracle, dentro de Almacenamiento de bloques, puedes hacer una copia de seguridad del volumen de arranque del servidor en cualquier momento. El nivel gratuito incluye cinco copias de seguridad de volúmenes. Hazlas manualmente y elimina las antiguas. No asocies una política programada, porque conservaría más de cinco y generaría cargos."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/lib/components/docs/install/DuckDnsSteps.svelte
 msgid "<0>DuckDNS</0> is a free dynamic DNS service that gives out names under <1>duckdns.org</1>, each with a wildcard for the subdomains below it. The installer uses your DuckDNS token to point your name at your server, so there is nothing to configure by hand."
 msgstr "<0>DuckDNS</0> es un servicio gratuito de DNS dinámico que proporciona nombres bajo <1>duckdns.org</1>, cada uno con un comodín para sus subdominios. El instalador utiliza tu token de DuckDNS para dirigir tu nombre al servidor, así que no tienes que configurarlo manualmente."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Oracle switches off servers on Always Free accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick. Left alone, it is likely to be stopped after its first quiet week. There are two ways to prevent that. One of them changes the command in <0>Step 2</0>, so pick now rather than later."
-msgstr "Oracle apaga los servidores de las cuentas Always Free que considera inactivos durante siete días consecutivos. Para determinarlo, comprueba si el procesador, la red y la memoria se mantuvieron por debajo del 20 % de su capacidad durante casi toda esa semana. Según ese criterio, un servidor Nocturne para una sola persona realiza muy poco trabajo. Si se deja tal cual, es probable que se detenga después de su primera semana de poca actividad. Hay dos maneras de evitarlo. Una de ellas modifica el comando del <0>Paso 2</0>, así que elige ahora y no más tarde."
+#~ msgid "Oracle switches off servers on Always Free accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick. Left alone, it is likely to be stopped after its first quiet week. There are two ways to prevent that. One of them changes the command in <0>Step 2</0>, so pick now rather than later."
+#~ msgstr "Oracle apaga los servidores de las cuentas Always Free que considera inactivos durante siete días consecutivos. Para determinarlo, comprueba si el procesador, la red y la memoria se mantuvieron por debajo del 20 % de su capacidad durante casi toda esa semana. Según ese criterio, un servidor Nocturne para una sola persona realiza muy poco trabajo. Si se deja tal cual, es probable que se detenga después de su primera semana de poca actividad. Hay dos maneras de evitarlo. Una de ellas modifica el comando del <0>Paso 2</0>, así que elige ahora y no más tarde."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Pay As You Go suits most people. It is a single change in the Oracle console and adds nothing to the server. Paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you want an Always Free account that cannot be billed at all. This puts a second piece of software with network access on the server that holds your health data."
 msgstr "Pay As You Go es adecuado para la mayoría. Solo requiere un cambio en la consola de Oracle y no añade nada al servidor. Las cuentas de pago tienen prioridad cuando escasea la capacidad Ampere. La contrapartida es que se <0>pueden</0> realizar cargos en la tarjeta registrada si se crea algún recurso fuera de la asignación gratuita. Elige Folding@home si quieres una cuenta Always Free en la que no puedan cobrarte nada. Esto instala otro programa con acceso a la red en el servidor que contiene tus datos de salud."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Paste this into Cloud Shell, replacing <0/> with your domain, such as <1/>. Nocturne will answer on that name. Every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <2/> in front."
-msgstr "Pega esto en Cloud Shell y sustituye <0/> por tu dominio, por ejemplo <1/>. Nocturne responderá en ese nombre. Cada sitio que crees tendrá un subdominio bajo él, así que elige uno que quieras conservar. Si antes elegiste Folding@home, añade <2/> al principio."
+#~ msgid "Paste this into Cloud Shell, replacing <0/> with your domain, such as <1/>. Nocturne will answer on that name. Every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <2/> in front."
+#~ msgstr "Pega esto en Cloud Shell y sustituye <0/> por tu dominio, por ejemplo <1/>. Nocturne responderá en ese nombre. Cada sitio que crees tendrá un subdominio bajo él, así que elige uno que quieras conservar. Si antes elegiste Folding@home, añade <2/> al principio."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "If your domain is under duckdns.org, the installer asks early on for your DuckDNS token. <0>Nothing appears on screen as you paste it</0>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another. If you press Enter with nothing pasted, the installer tells you the address to set yourself in <1>Step 3</1> instead. For any other domain, it prints the two records to create by hand. Either way it keeps working while the server boots, and waits for DNS before it requests certificates."
-msgstr "Si tu dominio está bajo duckdns.org, el instalador te pedirá al principio el token de DuckDNS. <0>No aparecerá nada en pantalla mientras lo pegas</0>. El token permanece oculto. El instalador indica cuántos caracteres ha leído para que puedas comprobar que se ha pegado. Si DuckDNS no lo acepta, puedes pegar otro. Si pulsas Intro sin pegar nada, el instalador te indicará la dirección que debes configurar por tu cuenta en el <1>Paso 3</1>. Para cualquier otro dominio, mostrará los dos registros que debes crear manualmente. En ambos casos, seguirá trabajando mientras arranca el servidor y esperará a que funcione el DNS antes de solicitar los certificados."
+#~ msgid "If your domain is under duckdns.org, the installer asks early on for your DuckDNS token. <0>Nothing appears on screen as you paste it</0>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another. If you press Enter with nothing pasted, the installer tells you the address to set yourself in <1>Step 3</1> instead. For any other domain, it prints the two records to create by hand. Either way it keeps working while the server boots, and waits for DNS before it requests certificates."
+#~ msgstr "Si tu dominio está bajo duckdns.org, el instalador te pedirá al principio el token de DuckDNS. <0>No aparecerá nada en pantalla mientras lo pegas</0>. El token permanece oculto. El instalador indica cuántos caracteres ha leído para que puedas comprobar que se ha pegado. Si DuckDNS no lo acepta, puedes pegar otro. Si pulsas Intro sin pegar nada, el instalador te indicará la dirección que debes configurar por tu cuenta en el <1>Paso 3</1>. Para cualquier otro dominio, mostrará los dos registros que debes crear manualmente. En ambos casos, seguirá trabajando mientras arranca el servidor y esperará a que funcione el DNS antes de solicitar los certificados."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Skip this step if you gave the installer a DuckDNS token. For a DuckDNS name without one, sign in at duckdns.org. Put the IP address the script printed into the <0>current ip</0> box next to your name and select <1>update ip</1>. For any other domain, create two <2>A</2> records at your domain provider, pointing at that address:"
-msgstr "Omite este paso si facilitaste un token de DuckDNS al instalador. Si tienes un nombre de DuckDNS sin token, inicia sesión en duckdns.org. Introduce la dirección IP mostrada por el script en el campo <0>current ip</0> junto a tu nombre y selecciona <1>update ip</1>. Para cualquier otro dominio, crea dos registros <2>A</2> en tu proveedor de dominios que apunten a esa dirección:"
+#~ msgid "Skip this step if you gave the installer a DuckDNS token. For a DuckDNS name without one, sign in at duckdns.org. Put the IP address the script printed into the <0>current ip</0> box next to your name and select <1>update ip</1>. For any other domain, create two <2>A</2> records at your domain provider, pointing at that address:"
+#~ msgstr "Omite este paso si facilitaste un token de DuckDNS al instalador. Si tienes un nombre de DuckDNS sin token, inicia sesión en duckdns.org. Introduce la dirección IP mostrada por el script en el campo <0>current ip</0> junto a tu nombre y selecciona <1>update ip</1>. Para cualquier otro dominio, crea dos registros <2>A</2> en tu proveedor de dominios que apunten a esa dirección:"
 
 #: ../portal/src/routes/docs/installation/byo-postgres/+page.svelte
 msgid "On managed PostgreSQL services (RDS, Cloud SQL, Supabase, Neon), run the script as the database owner. Your provider gave you this user. Do not use the literal <0/> user."
@@ -36985,9 +36965,8 @@ msgstr "Selecciona <0>Actualizar</0>."
 msgid "Select <0>Save settings</0>."
 msgstr "Selecciona <0>Guardar ajustes</0>."
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Once running, the bundled Caddy proxy obtains Let's Encrypt TLS certificates automatically. It serves the stack at <0/> on ports 80 and 443, with no certificate files to manage. Each tenant subdomain gets its own certificate on demand the first time it is visited."
-msgstr "Una vez en funcionamiento, el proxy Caddy incluido obtiene automáticamente certificados TLS de Let's Encrypt. Sirve la pila en <0/> por los puertos 80 y 443, sin necesidad de gestionar archivos de certificados. Cada subdominio de usuario obtiene su propio certificado cuando se visita por primera vez."
+#~ msgid "Once running, the bundled Caddy proxy obtains Let's Encrypt TLS certificates automatically. It serves the stack at <0/> on ports 80 and 443, with no certificate files to manage. Each tenant subdomain gets its own certificate on demand the first time it is visited."
+#~ msgstr "Una vez en funcionamiento, el proxy Caddy incluido obtiene automáticamente certificados TLS de Let's Encrypt. Sirve la pila en <0/> por los puertos 80 y 443, sin necesidad de gestionar archivos de certificados. Cada subdominio de usuario obtiene su propio certificado cuando se visita por primera vez."
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "The stack uses the same restart policy and log rotation as the <0>Docker Compose bundle</0>. Portainer stacks do not read override files. To keep your own logging driver, edit the <1/> section of each service in the stack editor instead."
@@ -38719,17 +38698,15 @@ msgstr "ADVERTENCIA: Conserva <0/>. Nocturne lo utiliza para cifrar las contrase
 msgid "This page makes new values each time it loads. Do not make a new file for an installation that already runs. The database keeps the passwords from its first start."
 msgstr "Esta página genera valores nuevos cada vez que se carga. No crees un archivo nuevo para una instalación que ya está funcionando. La base de datos conserva las contraseñas de su primer inicio."
 
-#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+#: ../portal/src/lib/components/docs/install/InstallGuideBar.svelte
 msgid "Enter only the domain name, for example example.com, without https:// or a path."
 msgstr "Introduce solo el nombre de dominio, por ejemplo, example.com, sin https:// ni ninguna ruta."
 
-#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
-msgid "Tenants use subdomains of this domain, for example family.example.com."
-msgstr "Los usuarios utilizan subdominios de este dominio, por ejemplo, familia.example.com."
+#~ msgid "Tenants use subdomains of this domain, for example family.example.com."
+#~ msgstr "Los usuarios utilizan subdominios de este dominio, por ejemplo, familia.example.com."
 
-#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
-msgid "Your domain"
-msgstr "Tu dominio"
+#~ msgid "Your domain"
+#~ msgstr "Tu dominio"
 
 #: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
 msgid "Your browser makes the values when the page loads."
@@ -38739,19 +38716,17 @@ msgstr "El navegador genera los valores al cargar la página."
 msgid "I saved a copy of this file in a location that is not this server, for example a password manager."
 msgstr "He guardado una copia de este archivo fuera de este servidor, por ejemplo, en un gestor de contraseñas."
 
-#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+#: ../portal/src/lib/components/docs/install/CopyKeysFile.svelte
 msgid "<0/> Copy the file"
 msgstr "<0/> Copiar el archivo"
 
-#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
-msgid "Could not copy the file. Select the text above and copy it manually."
-msgstr "No se ha podido copiar el archivo. Selecciona el texto anterior y cópialo manualmente."
+#~ msgid "Could not copy the file. Select the text above and copy it manually."
+#~ msgstr "No se ha podido copiar el archivo. Selecciona el texto anterior y cópialo manualmente."
 
-#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
-msgid "Download the file first. Then you can copy it."
-msgstr "Primero descarga el archivo. Después podrás copiarlo."
+#~ msgid "Download the file first. Then you can copy it."
+#~ msgstr "Primero descarga el archivo. Después podrás copiarlo."
 
-#. 0: fileName
+#. 0: guide.fileName
 #: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
 #, python-brace-format
 msgid "<0/> Download {0}"
@@ -38781,9 +38756,8 @@ msgstr "Establece las nuevas contraseñas. Sustituye cada valor entre corchetes 
 msgid "Remove the line that you added in step 1, and start Nocturne with the new values: <0/>"
 msgstr "Elimina la línea que añadiste en el paso 1 e inicia Nocturne con los nuevos valores: <0/>"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "This page made the file below in your browser, with a new random value for each key and password. The values do not leave your browser. Enter your domain, then download a copy of the file. Then copy the file to <0/> in the <1/> folder:"
-msgstr "Esta página ha generado el archivo siguiente en tu navegador, con un valor aleatorio nuevo para cada clave y contraseña. Los valores no salen de tu navegador. Introduce tu dominio, descarga una copia del archivo y cópialo en <0/>, dentro de la carpeta <1/>:"
+#~ msgid "This page made the file below in your browser, with a new random value for each key and password. The values do not leave your browser. Enter your domain, then download a copy of the file. Then copy the file to <0/> in the <1/> folder:"
+#~ msgstr "Esta página ha generado el archivo siguiente en tu navegador, con un valor aleatorio nuevo para cada clave y contraseña. Los valores no salen de tu navegador. Introduce tu dominio, descarga una copia del archivo y cópialo en <0/>, dentro de la carpeta <1/>:"
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Optional bot integrations are commented out. To use one, remove the <0/> and add its value."
@@ -38833,21 +38807,19 @@ msgstr "Contraseña del rol de la aplicación"
 msgid "Web role password"
 msgstr "Contraseña del rol web"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Fill in the configuration form. Copy each value from the file that you made above into its field."
-msgstr "Rellena el formulario de configuración. Copia cada valor del archivo que has generado anteriormente en su campo correspondiente."
+#~ msgid "Fill in the configuration form. Copy each value from the file that you made above into its field."
+#~ msgstr "Rellena el formulario de configuración. Copia cada valor del archivo que has generado anteriormente en su campo correspondiente."
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Scroll to <0>Environment variables</0>. Select <1>Advanced mode</1>. Paste the file that you made above."
-msgstr "Desplázate hasta <0>Variables de entorno</0>. Selecciona <1>Modo avanzado</1>. Pega el archivo que has generado anteriormente."
+#~ msgid "Scroll to <0>Environment variables</0>. Select <1>Advanced mode</1>. Paste the file that you made above."
+#~ msgstr "Desplázate hasta <0>Variables de entorno</0>. Selecciona <1>Modo avanzado</1>. Pega el archivo que has generado anteriormente."
 
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Make your keys and passwords"
 msgstr "Genera tus claves y contraseñas"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "This page made the file below in your browser, with a new random value for each key and password. The values do not leave your browser. Enter your domain, then download a copy of the file. Both options below use these values."
-msgstr "Esta página ha generado el archivo siguiente en tu navegador, con un valor aleatorio nuevo para cada clave y contraseña. Los valores no salen de tu navegador. Introduce tu dominio y descarga una copia del archivo. Las dos opciones siguientes utilizan estos valores."
+#~ msgid "This page made the file below in your browser, with a new random value for each key and password. The values do not leave your browser. Enter your domain, then download a copy of the file. Both options below use these values."
+#~ msgstr "Esta página ha generado el archivo siguiente en tu navegador, con un valor aleatorio nuevo para cada clave y contraseña. Los valores no salen de tu navegador. Introduce tu dominio y descarga una copia del archivo. Las dos opciones siguientes utilizan estos valores."
 
 #~ msgid "<0/>Manage"
 #~ msgstr ""
@@ -40275,4 +40247,908 @@ msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
 msgid "Edit an entry"
+msgstr ""
+
+#: src/lib/constants/device-event-types.svelte.ts
+msgid "Transmitter / Sensor Insert"
+msgstr ""
+
+#: src/lib/constants/entry-category-labels.svelte.ts
+msgid "Device events"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range at or above target"
+msgstr ""
+
+#. 0: actual; 1: target
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range was {0}% (consensus target: at least {1}%)."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "No time very low"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "No readings in this period were very low."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Variability within target"
+msgstr ""
+
+#. 0: figure("cv")
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was {0}%, within its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "All consensus targets met"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Every figure in this period was within its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range below target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time in range was below its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Variability above target"
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was above its consensus target."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low"
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very low was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time below range was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high"
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Time very high was {0}% (consensus target: under {1}%)."
+msgstr ""
+
+#. 0: actual; 1: target
+#: src/lib/utils/insight-messages.svelte.ts
+msgid "Coefficient of variation was {0}% (consensus target: at most {1}%)."
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "Access tokens"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "not imported"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "starting"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "skipped"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "Complete"
+msgstr ""
+
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "1 record could not be imported."
+msgstr ""
+
+#. 0: formatNumber(lane.failed)
+#: src/lib/components/migration/CollectionLanes.svelte
+msgid "{0} records could not be imported."
+msgstr ""
+
+#: src/lib/components/migration/TimeRemaining.svelte
+msgid "Less than 1 minute remaining"
+msgstr ""
+
+#. 0: Math.round(minutes)
+#: src/lib/components/migration/TimeRemaining.svelte
+msgid "About {0} min remaining"
+msgstr ""
+
+#. 0: Math.floor(minutes / 60); 1: Math.round(minutes % 60)
+#: src/lib/components/migration/TimeRemaining.svelte
+msgid "About {0} h {1} min remaining"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Could not look for the import."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "The import was canceled."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "The import stopped because the server restarted. Start it again from Settings."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "The import stopped because of an error."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Nocturne is copying entries, treatments, and profiles from Nightscout. The import continues on the server if you close this page."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Looking for the import..."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Connecting to Nightscout"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "Counting the records in Nightscout"
+msgstr ""
+
+#. 0: formatNumber(totalMigrated)
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "<0/> · {0} records"
+msgstr ""
+
+#. 0: formatNumber(totalMigrated)
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
+msgid "{0} records imported"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Import the history of a Nightscout site: entries, treatments, device statuses, profiles, foods, and activities."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Leave blank if the site needs none"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "The end date is before the start date."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Connected."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Counting the records in the source"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Connecting to the source"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Last migration"
+msgstr ""
+
+#. 0: formatMediumDateTime(job.completedAt)
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Ended: {0}"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/NightscoutConnect.svelte
+msgid "Start import"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "The file contains your domain. Enter your domain in the bar at the top of the page first."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Enter your domain"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Show the file"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/VerificationSteps.svelte
+msgid "Replace <0/> with your <1/>."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/VerificationSteps.svelte
+msgid "If your proxy does not forward to Nocturne yet, query the gateway on host port 8080 instead."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/VerificationSteps.svelte
+msgid "<0/> The server returns a JSON response with its status. <1/>"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/VerificationSteps.svelte
+msgid "Open your site:"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/install/CopyKeysFile.svelte
+msgid "Could not copy the file. Open the file that you downloaded and copy its text."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/install/CopyKeysFile.svelte
+msgid "<0>Download and save the file</0> first. Then you can copy it."
+msgstr ""
+
+#. 0: field.label
+#: ../portal/src/lib/components/docs/install/KeyFields.svelte
+msgid "Copy {0}"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/install/KeyFields.svelte
+msgid "<0>Download and save the file</0> first. Then this list shows each value with a copy button."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/install/InstallGuideBar.svelte
+msgid "<0/> Your domain"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/install/InstallGuideBar.svelte
+msgid "Steps in this guide"
+msgstr ""
+
+#. 0: index + 1; 1: step.title
+#: ../portal/src/lib/components/docs/install/InstallGuideBar.svelte
+msgid "Step {0}: {1}"
+msgstr ""
+
+#. 0: steps.length
+#: ../portal/src/lib/components/docs/install/InstallGuideBar.svelte
+msgid "{0} steps"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/install/InstallGuideBar.svelte
+msgid "This page shows your domain in its addresses and commands."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/install/InstallGuideBar.svelte
+msgid "Enter your domain. This page then shows your addresses and commands."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Download the release bundle"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Start the services"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The bundled proxy"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Caddy gets and renews the TLS certificates. Ports 80 and 443 must be open."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "My own reverse proxy"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "A Docker volume"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Docker manages the storage. There is nothing to configure."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "A host directory"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "PostgreSQL keeps its data in a directory that you select on the Docker host."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "A domain with a DNS <0>A</0> record for <1/> that points at your server. To run more than one tenant, add a wildcard <2>A</2> record for <3/> also, so each tenant subdomain resolves."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "What serves HTTPS?"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Where does PostgreSQL keep its data?"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Set <0/> in <1/> and start with the override: <2/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes. Then start the original configuration again: <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Set the PostgreSQL data directory"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep every <0/> argument, in this order, on every later Compose command for this stack. The commands on this page include them. If you use a local override file, add its <1/> argument also. If you omit one, Compose can restore the named-volume mount or the bundled proxy configuration."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The bring-your-own-proxy override disables the bundled Caddy and exposes the gateway on plain HTTP port 8080 for your proxy to forward to. Your proxy must forward the original <0/> along with <1/> and <2/>, or logins will fail with a 403. See <3>Bring your own reverse proxy</3> for worked nginx, Traefik, and Caddy configurations."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "HTTPS is automatic. The bundled Caddy reverse proxy obtains and renews Let's Encrypt TLS certificates, with no API keys or certificate files to manage. The certificate for <0/> is issued on first start, and each tenant subdomain gets one on demand the first time it is visited."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Update Nocturne"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Your commands pass <0/>, so also pass <1/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Every service also logs to the <0/> driver, rotated at three files of 10 MB. Left to its defaults, that driver never rotates, because <1/> defaults to unlimited (<2>Docker docs</2>). A logging driver set on a container replaces the daemon's default (<3>Docker docs</3>), so the bundle overrides any <4/> in your <5/>. To keep yours, set <6/> on the services in a <7/>. Compose reads that file only when you pass no <8/> (<9>Docker docs</9>). <10/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "This command does not delete the database in your host directory. A stack that you start again uses that database and its passwords."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Before you start"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Your setup"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The recommended answers are selected. Change an answer only if it does not fit your server. This page then shows only the commands and steps for your answers."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Run these commands on your server. They download your setup from the <0>latest GitHub Release</0>. The database init script and the TLS proxy config are embedded directly in <1/>. There are no extra directories to keep alongside it."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Step 2: Make your keys and passwords"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "This page made a file in your browser, with a new random value for each key and password. The values do not leave your browser. Download the file and keep a copy."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Then copy the file to <0/> in the <1/> folder on your server:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "After the installation"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Deploy in Portainer"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Open your site"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "App template"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Portainer shows a form. You paste one value into each field."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Stack editor"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "You paste the stack file and the keys file into Portainer."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "A domain with a DNS <0>A</0> record for <1/> that points at your server. To run more than one tenant, add a wildcard <2>A</2> record for <3/> also."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "How to deploy in Portainer"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Fill in the configuration form. Copy each value below into the field with the same name. <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Leave the other fields as they are. If you do not need Discord, Telegram, Slack, or WhatsApp, leave their fields blank. You can configure them later."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Add the template URL"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Deploy from the template"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Paste the contents of <0/> into the editor. The file is below. It is also in the <1>latest GitHub Release</1>. <2><0>Show docker-compose.yaml</0> <1/></2>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Scroll to <0>Environment variables</0>. Select <1>Advanced mode</1>. Paste the file that you made in Step 1. <2/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Step 1: Make your keys and passwords"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "This page made a file in your browser, with a new random value for each key and password. The values do not leave your browser. Download the file and keep a copy. Step 2 uses these values."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Step 2: Deploy in Portainer"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "There are two procedures. Select one. This page then shows only that procedure."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Step 3: Open your site"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Then open <0/>. The bundled Caddy proxy obtains Let's Encrypt TLS certificates automatically, with no certificate files to manage. Each tenant subdomain gets its own certificate on demand the first time it is visited."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Open Cloud Shell"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Run the installer"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Add the DNS records"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Create your first site"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Upgrade to Pay As You Go"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "One change in the Oracle console. The card on file can be charged for resources outside the free allowance."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Donate spare time to Folding@home"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The account stays Always Free and cannot be billed. A research client runs on the server for two hours each night."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Your DuckDNS token"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The installer uses the token in <0>Step 2</0>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Then enter your domain in the bar at the top of the page. If you already own a domain, enter that domain instead and ignore this section."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "How to keep the server"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "How the installer keeps the account free"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The change is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends. It refuses a server size above the free allowance. It also writes an Oracle quota policy. The policy stops the account creating anything outside the Always Free compute shapes, whether or not you upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. The installer also sets a spending alert that emails you the moment the account is billed one unit of your currency."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. The command in <0>Step 2</0> now starts with <1/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Paste this into Cloud Shell. The command contains your domain and your selection above. Nocturne will answer on <0/>. Every site you create gets a subdomain under it, so pick something you are happy to keep."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Enter your domain in the bar at the top of the page, such as <0/>. The command below then contains it. Nocturne will answer on that name. Every site you create gets a subdomain under it, so pick something you are happy to keep. Then paste the command into Cloud Shell."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "A domain under duckdns.org:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "<0/> The installer asks early on for your DuckDNS token. <1>Nothing appears on screen as you paste it</1>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another. If you press Enter with nothing pasted, the installer tells you the address to set yourself in <2>Step 3</2> instead."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Any other domain:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "<0/> The installer prints the two records to create by hand in <1>Step 3</1>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Points your DuckDNS name at that address when you give it the token"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Prints the two DNS records to create by hand"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Installs Folding@home on a nightly schedule"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "<0/> Skip this step if you gave the installer a DuckDNS token. If you did not, sign in at duckdns.org. Put the IP address the script printed into the <1>current ip</1> box next to your name and select <2>update ip</2>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "<0/> Create two <1>A</1> records at your domain provider, pointing at the IP address the script printed:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Oracle switches off servers on Always Free accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick. Left alone, it is likely to be stopped after its first quiet week. There are two ways to prevent that. Select one. This page then shows only that option, and the command in <0>Step 2</0> matches it."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The installer keeps working while the server boots, and waits for DNS before it requests certificates."
+msgstr ""
+
+#: ../portal/src/routes/+page.svelte
+msgid "One script and a domain name. That's the install."
+msgstr ""
+
+#: ../portal/src/routes/+page.svelte
+msgid "Run the install script on a Linux server. It installs Docker, makes the keys and passwords, and starts Nocturne. Caddy fetches the certificate."
+msgstr ""
+
+#: ../portal/src/routes/+page.svelte
+msgid "# Docker, keys, passwords, certificates: the script does them"
+msgstr ""
+
+#: ../portal/src/routes/faq/+page.svelte
+msgid "You need a Linux server, a domain name, and the ability to paste two commands into a terminal. The install script installs Docker, generates the keys and passwords, and starts Nocturne. If you have no server, the Oracle Cloud guide creates a free one from the browser. Docker Compose and Portainer guides are there for people who prefer to manage the stack themselves."
+msgstr ""
+
+#: ../portal/src/routes/docs/+page.svelte
+msgid "Step-by-step guides for deploying Nocturne with the install script, Docker Compose, Portainer, and more."
+msgstr ""
+
+#: ../portal/src/routes/features/+page.svelte
+msgid "Self-hosted with one install script, or with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure."
+msgstr ""
+
+#: ../portal/src/routes/features/+page.svelte
+msgid "Poke around the demo, then run your own copy with one install script. No account, no credit card, no waitlist."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Install script"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "Recommended. One script installs Docker and Nocturne on a Linux server, VPS, or Raspberry Pi. You do not need to know Docker."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "Do the same steps by hand with Docker Compose. Use this guide for your own reverse proxy or a host directory for the database."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "No server yet? One command in the browser makes a free one and runs the install script on it. No SSH or Docker knowledge needed."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "If you have a Linux server, use the install script. The other guides are for a server that you do not have yet, or for a setup that you manage yourself. All methods use the same Docker images and configuration."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Point your domain at the server"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "A Linux server where you can run commands as root. A VPS, a home server, or a Raspberry Pi 4 or newer with a 64-bit system is sufficient. Ubuntu and Debian are the usual selection. The server must use systemd."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "A domain name. Nocturne gives each site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS is sufficient."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Ports <0/> and <1/> open from the internet to the server. On a home network, forward the two ports on your router to the server."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "<0/> Do nothing here. The installer sets the record when you give it your DuckDNS token in <1>Step 2</1>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "<0/> Create two <1>A</1> records at your domain provider. Your server provider shows the public IP address of the server."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The second one is a wildcard. It makes every site's subdomain resolve without a record each. If you use Cloudflare, leave the proxy off for both records, shown as a gray cloud. Cloudflare's proxy cannot carry the certificates Nocturne issues for its own subdomains. You can also do this step later: the installer shows the two records with the address that it found, and waits for them."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Connect to your server and run these two commands. They contain your domain. Nocturne will answer on <0/>. Every site you create gets a subdomain under it."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Enter your domain in the bar at the top of the page. The commands below then contain it. Then connect to your server and run the two commands."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "<0/> The installer asks early on for your DuckDNS token. <1>Nothing appears on screen as you paste it</1>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Finds the public IP address of the server"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Opens ports 80 and 443 in a ufw firewall on the server"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Installs Docker on a server that does not have it"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Downloads the Nocturne release bundle to <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Makes the keys and the database passwords, and writes them to <0/>. It does not change a value that exists"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Starts Nocturne when DNS resolves"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Stops, and changes nothing, if Docker already holds Nocturne data from an installation that it did not make"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Keeps itself on the server as <0/>, with a systemd unit that starts Nocturne after a restart"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Running the installer a second time is the fix for almost any failure. Each step checks before it acts, and it does not change keys or passwords that exist. It remembers your domain. The installer is also on the server as a command:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Watchtower is included and checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Watchtower updates images, not the compose file. To get the compose file of the latest release, run <0/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Files, logs and restarts"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Everything is in <0/>. The keys and passwords are in <1/> there. Keep a copy of that file in a location that is not this server. Nocturne starts again by itself when the server restarts. To see the logs:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The <0>Docker Compose guide</0> has the procedures for a lost <1/> file and for troubleshooting. Run its commands in <2/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "You operate your own reverse proxy, or you want the PostgreSQL data in a host directory: use the <0>Docker Compose guide</0>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "You manage your server with Portainer: use the <0>Portainer guide</0>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "You do not have a server: the <0>Oracle Cloud guide</0> makes a free one and runs this same installer on it."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "When to use a different guide"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "One script installs Nocturne on a Linux server. It installs Docker, makes the keys and passwords, gets the HTTPS certificates and starts Nocturne. You do not need to know Docker."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Step 1: Point your domain at the server"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The installer waits ten minutes for the DNS records. If they are not ready then, the installer stops waiting, and the server continues to wait by itself. Nocturne starts when the records resolve."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The installer ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "Step 3: Create your first site"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "When the script prints <0>Done</0>, open <1/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "On the server, it runs the install script. That script opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "On the server, it runs the same <0>install script</0> as any other Linux server. If you have a server, use that guide."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The install script does these steps for you"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On a Linux server with the bundled proxy and a Docker volume, the <0>install script</0> does every step on this page. Use this page to do the steps by hand, to use your own reverse proxy, or to keep the database in a host directory. A server that the install script made has its files in <1/>. Do not run the install script on a server that you installed from this page."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "This file is not a ZIP file. Select the ZIP file that you downloaded from Oura."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "This ZIP file is not an Oura data export. Select the file that you downloaded from Oura."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Nocturne cannot read this ZIP file. Download the export from Oura again."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "This export contains more data than Nocturne can import."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Your access shows only the last 24 hours. A member with full access must import the export."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "The import did not complete. Try again."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Import an Oura data export"
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Request your data export at <0>membership.ouraring.com/data-export</0>. When the export is ready, download the ZIP file and select it here. To add newer data, import a new export."
+msgstr ""
+
+#. 0: MAX_SIZE_MB
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "The file is larger than {0} MB."
+msgstr ""
+
+#. 0: MAX_SIZE_MB
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Data export (ZIP file, up to {0} MB)"
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "<0/> Importing..."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "<0/> Import"
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "A large export can take some minutes. Keep this page open."
+msgstr ""
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Import complete"
+msgstr ""
+
+#. 0: count(imported.sleepSessions); 1: count(imported.heartRates); 2: count(imported.stepDays)
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Sleep sessions: {0}. Heart rate readings: {1}. Days of steps: {2}."
 msgstr ""

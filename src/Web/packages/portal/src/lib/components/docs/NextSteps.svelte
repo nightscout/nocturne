@@ -2,13 +2,13 @@
     import { resolve } from "$app/paths";
     import { Button } from "@nocturne/ui/ui/button";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
+    import SiteLink from "./install/SiteLink.svelte";
 </script>
 
 <div class="mb-8">
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-6">
         <li>
-            Open <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">https://your-domain</code>
-            and complete first-run setup, which creates the owner account with a
+            Open <SiteLink /> and complete first-run setup, which creates the owner account with a
             <a href={resolve("docs/authentication/passkeys")} class="text-primary hover:underline">passkey</a>
             or a sign-in provider.
         </li>

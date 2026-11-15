@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
+using Nocturne.API.Services.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Core.Clinical.Treatments;
@@ -218,6 +219,11 @@ internal class TreatmentService : ITreatmentService
         _decomposer.RekeyClientIdRecordsAsync(source, treatments, cancellationToken);
 
     /// <inheritdoc />
+    public Task<IReadOnlySet<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        _decomposer.ResolveStoredIdentitiesAsync(treatments, cancellationToken);
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
         _decomposer.SelectForRepublishAsync(source, treatments, cancellationToken);
@@ -256,7 +262,10 @@ internal class TreatmentService : ITreatmentService
     /// <summary>
     /// Announces stored treatments as reads serve them, for the reason <see cref="PatchTreatmentAsync"/>
     /// reads its record back: a create returns the id of the record it wrote, and a carb intake paired
-    /// into a meal is served under its bolus's. Treatments served as one are announced once.
+    /// into a meal is served under its bolus's. Treatments served as one are announced once. One that
+    /// updated a stored record (<see cref="StoredTreatment.Updated"/>) is announced as the update it
+    /// is, so write-back looks for the copy upstream holds before writing, as for any edit: sent as a
+    /// create, unlooked-for, it would store a second copy beside one held under another form.
     /// </summary>
     private async Task AnnounceCreatedAsync(IReadOnlyList<StoredTreatment> stored)
     {
@@ -265,6 +274,7 @@ internal class TreatmentService : ITreatmentService
 
         var readBack = await ReadBackAsync(stored);
         var served = new List<Treatment>(stored.Count);
+        var updated = new HashSet<Treatment>(ReferenceEqualityComparer.Instance);
         for (var i = 0; i < stored.Count; i++)
         {
             var created = stored[i].Created;
@@ -275,9 +285,16 @@ internal class TreatmentService : ITreatmentService
             // A state span keeps no data source, and the write-back sink tells a connector's own treatments by it.
             announced.DataSource ??= created.DataSource;
             served.Add(announced);
+            if (stored[i].Updated)
+                updated.Add(announced);
         }
 
-        await _events.OnCreatedAsync([.. served.DistinctBy(t => t.Id)], CancellationToken.None);
+        var distinct = served.DistinctBy(t => t.Id).ToList();
+        List<Treatment> inserted = [.. distinct.Where(t => !updated.Contains(t))];
+        if (inserted.Count > 0)
+            await _events.OnCreatedAsync(inserted, CancellationToken.None);
+        foreach (var reupload in distinct.Where(updated.Contains))
+            await _events.OnUpdatedAsync(reupload, CancellationToken.None);
     }
 
     /// <returns><c>null</c> when the read failed.</returns>
@@ -302,7 +319,7 @@ internal class TreatmentService : ITreatmentService
     /// </summary>
     private async Task<List<Treatment>> SplitPreBolusAsync(List<Treatment> treatments, CancellationToken ct)
     {
-        var meals = treatments.Select(PreBolusSplit.Split).ToList();
+        var meals = treatments.Select(t => PreBolusSplit.Split(t, TreatmentDecomposer.NormalizeIdentity)).ToList();
         var split = meals.Where(halves => halves.Count == 2).Select(halves => halves[0].Id!).ToList();
         if (split.Count == 0)
             return [.. meals.SelectMany(halves => halves)];

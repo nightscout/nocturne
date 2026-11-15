@@ -23,4 +23,5 @@ public enum ConnectSource
     CareLink,
     Tandem,
     GoogleHealth,
+    Oura,
 }

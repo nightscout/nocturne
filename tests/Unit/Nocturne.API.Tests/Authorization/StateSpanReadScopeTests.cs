@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Services.Realtime;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
@@ -108,7 +109,7 @@ public class StateSpanReadScopeTests
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(scopes);
-        return new StateSpansController(service.Object)
+        return new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>())
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

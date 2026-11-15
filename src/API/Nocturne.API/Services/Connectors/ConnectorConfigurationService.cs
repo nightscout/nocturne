@@ -734,6 +734,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             schema["enum"] = connectorAttr.AllowedValues;
         }
 
+        if (connectorAttr.AllowedNumbers is { Length: > 0 })
+        {
+            schema["enum"] = connectorAttr.AllowedNumbers;
+        }
+
         if (!string.IsNullOrEmpty(connectorAttr.Format))
         {
             schema["format"] = connectorAttr.Format;

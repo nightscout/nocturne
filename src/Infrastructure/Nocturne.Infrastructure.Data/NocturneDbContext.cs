@@ -911,6 +911,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             EnforceTenantOwnership(entry, isAdded);
             StripNulCharacters(entry, isAdded, isRelational, ReportTruncation);
             ApplyUpstreamFingerprint(entry);
+            ApplyWrittenLive(entry);
 
             // Update timestamps are stamped on insert and on real modifications only. An
             // unchanged tracked row is left alone rather than rewritten on every save, and a row
@@ -964,6 +965,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         entry.Property(nameof(IUpstreamFingerprinted.UpstreamFingerprint)).CurrentValue = fingerprint;
     }
 
+    /// <summary>Marks a row a live write inserts or modifies, per <see cref="LiveWriteScope"/>.</summary>
+    private static void ApplyWrittenLive(EntityEntry entry)
+    {
+        if (entry.State is EntityState.Added or EntityState.Modified
+            && entry.Entity is IWriteBackTracked { WrittenLive: false }
+            && LiveWriteScope.IsOpen)
+            entry.Property(nameof(IWriteBackTracked.WrittenLive)).CurrentValue = true;
+    }
+
     /// <summary>
     /// Writes a timestamp through the change tracker, which is how a modified row's stamp reaches
     /// the UPDATE now that <see cref="DetectChangesOnceForSave"/> has turned auto-detection off.
@@ -999,6 +1009,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             p.IsModified
             && p.Metadata.Name != nameof(ISystemTimestamped.SysUpdatedAt)
             && p.Metadata.Name != nameof(IEntityTimestamped.UpdatedAt)
+            && p.Metadata.Name != nameof(IWriteBackTracked.WrittenLive)
             && (countFingerprint || p.Metadata.Name != nameof(IUpstreamFingerprinted.UpstreamFingerprint)));
 
     /// <summary>

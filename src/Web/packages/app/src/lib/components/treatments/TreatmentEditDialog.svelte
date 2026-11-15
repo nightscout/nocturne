@@ -12,8 +12,8 @@
   } from "#lib/api/index.js";
   import { InsulinCategory as InsulinCategoryEnum, InsulinRole } from "#lib/api/index.js";
   import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
   import {
-    ENTRY_CATEGORIES,
     getEntryStyle,
   } from "#lib/constants/entry-categories.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
@@ -333,9 +333,6 @@
     basalInjection: Syringe,
   };
 
-  let activeCategory = $derived(
-    activeRecord ? ENTRY_CATEGORIES[activeRecord.kind] : null
-  );
   let activeStyle = $derived(
     activeRecord ? getEntryStyle(activeRecord.kind) : null
   );
@@ -463,19 +460,19 @@
 {/if}
 
 {#snippet dialogBody()}
-    {#if activeRecord && activeCategory && activeStyle && ActiveKindIcon}
+    {#if activeRecord && activeStyle && ActiveKindIcon}
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
           <Badge variant={activeStyle.badge}>
             <ActiveKindIcon class="mr-1 h-3.5 w-3.5" />
-            {activeCategory.name}
+            {entryCategoryName(activeRecord.kind)}
           </Badge>
           {isCreate ? "Add record" : "Edit record"}
         </Dialog.Title>
         <Dialog.Description>
           {isCreate
-            ? `Log a new ${activeCategory.name.toLowerCase()} record.`
-            : `Edit the details of this ${activeCategory.name.toLowerCase()} record.`}
+            ? `Log a new ${entryCategoryName(activeRecord.kind).toLowerCase()} record.`
+            : `Edit the details of this ${entryCategoryName(activeRecord.kind).toLowerCase()} record.`}
         </Dialog.Description>
       </Dialog.Header>
 

@@ -102,7 +102,7 @@ class SignalRClient {
       logger.info("SignalR DataHub connection established");
 
       await this.authenticateWithDataHub();
-      await this.subscribeToStorageCollections();
+      this.messageHandler.handleRelayState(await this.subscribeToStorageCollections());
 
       if (this.alarmHubUrl) {
         this.alarmConnection = this.buildConnection(this.alarmHubUrl);
@@ -204,11 +204,13 @@ class SignalRClient {
 
     this.dataConnection.onclose(() => {
       logger.warn("SignalR DataHub connection closed");
+      this.messageHandler.handleRelayState(false);
       void this.handleHubClosed();
     });
 
     this.dataConnection.onreconnecting(() => {
       logger.info("SignalR DataHub connection lost, attempting to reconnect...");
+      this.messageHandler.handleRelayState(false);
     });
 
     this.dataConnection.onreconnected(async () => {
@@ -216,7 +218,7 @@ class SignalRClient {
       this.reconnectAttempts = 0;
 
       await this.authenticateWithDataHub();
-      await this.subscribeToStorageCollections();
+      this.messageHandler.handleRelayState(await this.subscribeToStorageCollections());
     });
 
     this.dataConnection.on("dataUpdate", (data: unknown) => {
@@ -413,8 +415,9 @@ class SignalRClient {
     }
   }
 
-  private async subscribeToStorageCollections(): Promise<void> {
-    if (!this.dataConnection) return;
+  /** Resolves true once the hub has subscribed this connection to the tenant's storage events. */
+  private async subscribeToStorageCollections(): Promise<boolean> {
+    if (!this.dataConnection) return false;
 
     try {
       // No list asks the hub for every category it lets this connection read.
@@ -426,6 +429,7 @@ class SignalRClient {
           "Successfully subscribed to storage collections:",
           subscribeResult.collections,
         );
+        return true;
       } else {
         logger.warn(
           "Failed to subscribe to some storage collections:",
@@ -436,6 +440,7 @@ class SignalRClient {
       logger.error("Error subscribing to storage collections:", error);
       SignalRClient.rethrowIfClosed(this.dataConnection, error);
     }
+    return false;
   }
 
   private async subscribeToAlarmHub(): Promise<void> {

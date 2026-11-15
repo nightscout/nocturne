@@ -245,6 +245,20 @@ public class ConfigurationController : ControllerBase
             title: "Bad Request");
 
     /// <summary>
+    /// Whether <paramref name="value"/> is what the connector already stores under
+    /// <paramref name="field"/>. A number stored before its property became a choice saves back
+    /// unchanged, so the rest of the document stays editable.
+    /// </summary>
+    private async Task<bool> IsStoredNumberAsync(string connectorName, string field, double value, CancellationToken ct)
+    {
+        var stored = await _configService.GetConfigurationAsync(connectorName, ct);
+        return stored?.Configuration is { RootElement: { ValueKind: JsonValueKind.Object } root }
+            && root.TryGetProperty(field, out var current)
+            && current.ValueKind == JsonValueKind.Number
+            && current.GetDouble() == value;
+    }
+
+    /// <summary>
     /// Validates the configuration against the connector's schema.
     /// </summary>
     private async Task<List<string>> ValidateConfigurationAsync(
@@ -338,10 +352,27 @@ public class ConfigurationController : ControllerBase
             if (propSchema.TryGetProperty("enum", out var enumProp) && configProp.Value.ValueKind == JsonValueKind.String)
             {
                 var actualValue = configProp.Value.GetString();
-                var validValues = enumProp.EnumerateArray().Select(v => v.GetString()).ToHashSet();
-                if (!validValues.Contains(actualValue))
+                var validValues = enumProp.EnumerateArray()
+                    .Where(v => v.ValueKind == JsonValueKind.String)
+                    .Select(v => v.GetString())
+                    .ToHashSet();
+                if (validValues.Count > 0 && !validValues.Contains(actualValue))
                 {
                     errors.Add($"Field '{configProp.Name}' value '{actualValue}' is not one of: {string.Join(", ", validValues)}");
+                }
+            }
+
+            if (propSchema.TryGetProperty("enum", out var numbersProp) && configProp.Value.ValueKind == JsonValueKind.Number)
+            {
+                var actualValue = configProp.Value.GetDouble();
+                var validValues = numbersProp.EnumerateArray()
+                    .Where(v => v.ValueKind == JsonValueKind.Number)
+                    .Select(v => v.GetDouble())
+                    .ToList();
+                if (validValues.Count > 0 && !validValues.Contains(actualValue)
+                    && !await IsStoredNumberAsync(connectorName, configProp.Name, actualValue, ct))
+                {
+                    errors.Add($"Field '{configProp.Name}' value {actualValue} is not one of: {string.Join(", ", validValues)}");
                 }
             }
 

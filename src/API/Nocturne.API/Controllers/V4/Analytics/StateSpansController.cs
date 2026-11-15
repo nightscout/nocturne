@@ -5,6 +5,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -49,10 +50,12 @@ public class StateSpansController : ControllerBase
     // such as a guest-link session, which is what this closes.
 
     private readonly IStateSpanService _stateSpanService;
+    private readonly ISignalRBroadcastService _broadcast;
 
-    public StateSpansController(IStateSpanService stateSpanService)
+    public StateSpansController(IStateSpanService stateSpanService, ISignalRBroadcastService broadcast)
     {
         _stateSpanService = stateSpanService;
+        _broadcast = broadcast;
     }
 
     /// <summary>
@@ -356,6 +359,7 @@ public class StateSpansController : ControllerBase
         };
 
         var created = await _stateSpanService.UpsertStateSpanAsync(stateSpan, cancellationToken);
+        await _broadcast.StateSpanCreatedAsync(created);
         return CreatedAtAction(nameof(GetStateSpan), new { id = created.Id }, created);
     }
 
@@ -406,6 +410,8 @@ public class StateSpansController : ControllerBase
         };
 
         var result = await _stateSpanService.UpdateStateSpanAsync(id, updated, cancellationToken);
+        if (result is not null)
+            await _broadcast.StateSpanUpdatedAsync(existing, result);
         return Ok(result);
     }
 
@@ -434,6 +440,7 @@ public class StateSpansController : ControllerBase
         var deleted = await _stateSpanService.DeleteStateSpanAsync(id, cancellationToken);
         if (!deleted)
             return NotFound();
+        await _broadcast.StateSpanDeletedAsync(existing);
         return NoContent();
     }
 
@@ -469,7 +476,9 @@ public class StateSpansController : ControllerBase
 
         try
         {
-            return Ok(await _stateSpanService.RestoreStateSpanAsync(rowId, cancellationToken));
+            var restored = await _stateSpanService.RestoreStateSpanAsync(rowId, cancellationToken);
+            await _broadcast.StateSpanCreatedAsync(restored);
+            return Ok(restored);
         }
         catch (KeyNotFoundException)
         {
@@ -506,6 +515,8 @@ public class StateSpansController : ControllerBase
             return this.ForbiddenForScope(missingScope);
 
         var result = await _stateSpanService.BulkRestoreStateSpansAsync(deleted.Keys, cancellationToken);
+        foreach (var restored in result.Restored)
+            await _broadcast.StateSpanCreatedAsync(restored);
         return Ok(new StateSpanBulkRestoreResult
         {
             Restored = result.Restored,

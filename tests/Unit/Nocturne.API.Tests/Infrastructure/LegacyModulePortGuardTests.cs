@@ -116,6 +116,9 @@ public class LegacyModulePortGuardTests
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/BatchResendMatchesSingleTests.cs", "TreatmentDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/BatchResendMatchesSingleTests.cs", "DeviceStatusDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/ResendKeepsCorrelationIdTests.cs", "EntryDecomposer", BuildsDecomposer),
+        InTest("tests/Unit/Nocturne.API.Tests/Services/V4/OwnIdAdoptionTests.cs", "EntryDecomposer", BuildsDecomposer),
+        InTest("tests/Unit/Nocturne.API.Tests/Services/V4/OwnIdAdoptionTests.cs", "DeviceStatusDecomposer", BuildsDecomposer),
+        InTest("tests/Integration/Nocturne.API.Tests/TreatmentWriteBackEditIntegrationTests.cs", "TreatmentService", "builds the service over the Nightscout write-back sink as its event sink"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/ResendKeepsCorrelationIdTests.cs", "TreatmentDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/PreBolusWriteBackPullBackTests.cs", "TreatmentDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/TreatmentRequiredColumnsTests.cs", "TreatmentDecomposer", CallsStaticMapper),
@@ -247,7 +250,7 @@ public class LegacyModulePortGuardTests
     [Fact]
     public void DerivesItsNamesFromTheTypesTheModuleFoldersDeclare()
     {
-        ModuleOfName.Keys.Should().Contain(["PreBolusSplit", "CarbFoodIndex", "StoredEntryMatch", "TreatmentDecomposer", "EntryService", "DeviceStatusService"]);
+        ModuleOfName.Keys.Should().Contain(["TreatmentService", "CarbFoodIndex", "StoredEntryMatch", "TreatmentDecomposer", "EntryService", "DeviceStatusService"]);
         ModuleOfName.Keys.Should().NotContain(["LegacyId", "IobCobReader", "BolusWizardService"], "a nested type is named through its declaring type, and these are not a module's");
     }
 
@@ -271,7 +274,7 @@ public class LegacyModulePortGuardTests
     [Theory]
     [InlineData("src/API/Nocturne.API/Helpers/X.cs", "partial class LegacyTreatmentTables { }", "src/API/Nocturne.API/Helpers/X.cs: LegacyTreatmentTables")]
     [InlineData("src/API/Nocturne.API/Helpers/X.cs", "namespace N { class EntryService { } }", "src/API/Nocturne.API/Helpers/X.cs: EntryService")]
-    [InlineData("tests/Unit/Nocturne.API.Tests/Helpers/X.cs", "enum PreBolusSplit { }", "tests/Unit/Nocturne.API.Tests/Helpers/X.cs: PreBolusSplit")]
+    [InlineData("tests/Unit/Nocturne.API.Tests/Helpers/X.cs", "enum CarbFoodIndex { }", "tests/Unit/Nocturne.API.Tests/Helpers/X.cs: CarbFoodIndex")]
     [InlineData("src/API/Nocturne.API/Services/Treatments/X.cs", "partial class LegacyTreatmentTables { }", "")]
     [InlineData("src/API/Nocturne.API/Services/Entries/X.cs", "partial class LegacyTreatmentTables { }", "src/API/Nocturne.API/Services/Entries/X.cs: LegacyTreatmentTables")]
     [InlineData("src/API/Nocturne.API/Helpers/X.cs", "class Unrelated { class EntryService { } }", "")]
