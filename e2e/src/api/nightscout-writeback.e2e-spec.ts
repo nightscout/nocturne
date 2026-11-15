@@ -48,6 +48,7 @@ interface V1DeviceStatus {
 
 interface SourcedBolus extends Bolus {
   dataSource?: string | null;
+  legacyId?: string | null;
 }
 
 interface UpstreamDoc {
@@ -266,21 +267,24 @@ describe("Nightscout connector write-back round trip", () => {
   };
 
   // A meal with a preBolus stored as one record (a v3 upload) goes upstream as a v1 POST stores it:
-  // its bolus at its own time and its carbs at created_at + preBolus, under the id the v1 split gives
-  // them, which the pull resolves back onto the meal rather than storing the carbs twice (#2356).
+  // its bolus at its own time and its carbs at created_at + preBolus, under ids derived from the
+  // meal's legacy id, which the pull resolves back onto the meal rather than storing the carbs twice
+  // (#2356). A v3 POST keys the meal by a content-derived id, not by a client `identifier`, so the
+  // ids are read off the stored bolus.
   it("writes a meal with a preBolus back as its bolus and its carbs, and pulls both back onto the meal", async () => {
-    const identifier = objectId();
     const date = Math.floor((Date.now() - 160 * MINUTE) / 1000) * 1000;
     const at = new Date(date).toISOString();
     const carbsAt = new Date(date + 15 * MINUTE).toISOString();
     const created = await tenant.api.request("POST", "/api/v3/treatments", {
-      identifier, eventType: "Meal Bolus", insulin: 2, carbs: 30, preBolus: 15, date, app: "e2e", utcOffset: 0,
+      eventType: "Meal Bolus", insulin: 2, carbs: 30, preBolus: 15, date, app: "e2e", utcOffset: 0,
     });
     expect(created.status).toBe(201);
+    const [bolus] = (await bolusesAround(at)).data;
+    const key = bolus!.legacyId!;
 
-    expect((await upstreamTreatmentsAt(at, "Meal Bolus")).map((t) => [t.identifier, t.insulin, t.carbs ?? null])).toEqual([[identifier, 2, null]]);
+    expect((await upstreamTreatmentsAt(at, "Meal Bolus")).map((t) => [t.identifier, t.insulin, t.carbs ?? null])).toEqual([[wireId(key), 2, null]]);
     expect((await upstreamTreatmentsAt(carbsAt, "Meal Bolus")).map((t) => [t.identifier, t.insulin ?? null, t.carbs]))
-      .toEqual([[preBolusCarbsWireId(identifier), null, 30]]);
+      .toEqual([[preBolusCarbsWireId(key), null, 30]]);
 
     expect((await sync()).success).toBe(true);
     const from = encodeURIComponent(new Date(date - MINUTE).toISOString());
