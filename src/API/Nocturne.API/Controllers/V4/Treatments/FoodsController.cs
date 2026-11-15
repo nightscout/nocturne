@@ -10,6 +10,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
@@ -374,26 +375,13 @@ public class FoodsController : ControllerBase, IWriteScopedController
         return NoContent();
     }
 
-    private async Task<FoodEntity?> ResolveFoodEntityAsync(
+    private static Task<FoodEntity?> ResolveFoodEntityAsync(
         NocturneDbContext db,
         string id,
         CancellationToken cancellationToken
-    )
-    {
-        var entity = await db
-            .Foods.AsNoTracking()
-            .FirstOrDefaultAsync(f => f.OriginalId == id, cancellationToken);
-
-        if (entity != null)
-        {
-            return entity;
-        }
-
-        return Guid.TryParse(id, out var guid)
-            ? await db.Foods.AsNoTracking().FirstOrDefaultAsync(
-                f => f.Id == guid,
-                cancellationToken
-            )
-            : null;
-    }
+    ) =>
+        db.Foods.AsNoTracking().FirstOrDefaultAsync(
+            RecordIdKey.Matching<FoodEntity>(id),
+            cancellationToken
+        );
 }
