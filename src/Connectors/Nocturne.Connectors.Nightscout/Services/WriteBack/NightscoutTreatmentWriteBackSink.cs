@@ -127,6 +127,11 @@ public class NightscoutTreatmentWriteBackSink(
     /// writes them in place as any edit is. Up to 15.0.6 a copy held under its identifier as its
     /// <c>_id</c> is written by a POST that upserts by time, which a moved time turns into a refused
     /// insert, so such a copy is removed and its carbs created again.
+    /// <para>
+    /// Known gap (#3431): up to 15.0.6 a one-record meal written back and later posted again through v1
+    /// with a preBolus loses its upstream carbs until its carbs record is next edited. That record's
+    /// create upserts onto the split-off document and is refused, and the bolus update removes it.
+    /// </para>
     /// </remarks>
     protected override async Task<bool> SendUpdatedAsync(
         NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)

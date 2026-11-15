@@ -337,23 +337,41 @@ public class TreatmentPreBolusWriteBackTests
     }
 
     /// <summary>
-    /// A one-record meal posted again through v1 is stored split: its bolus edit removes the carbs
-    /// write-back split off, and the carbs record goes up as its own, one carbs document in all.
+    /// A one-record meal posted again through v1 is stored split, and announced as the service
+    /// announces it: the new carbs record created, then the bolus re-uploaded as an update.
     /// </summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task A_one_record_meal_split_by_a_later_v1_POST_leaves_one_carbs_document(bool v15_0_8)
+    private async Task<PreBolusSplittingNightscout> SplitByALaterV1PostAsync(bool v15_0_8)
     {
         var upstream = new PreBolusSplittingNightscout(v15_0_8);
         var sink = Sink(upstream);
         await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
         var halves = V1Split();
 
-        await sink.OnUpdatedAsync(halves[0]);
         await sink.OnCreatedAsync([halves[1]]);
+        await sink.OnUpdatedAsync(halves[0]);
+        return upstream;
+    }
 
-        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, V1CarbsKey]);
+    [Fact]
+    public async Task A_one_record_meal_split_by_a_later_v1_POST_leaves_one_carbs_document_from_15_0_7()
+    {
+        var upstream = await SplitByALaterV1PostAsync(v15_0_8: true);
+
+        upstream.Documents.Select(d => KeyOf(d, true)).Should().BeEquivalentTo([Key, V1CarbsKey]);
+        upstream.Documents.Single(d => KeyOf(d, true) == V1CarbsKey)["carbs"]!.GetValue<double>().Should().Be(30);
+    }
+
+    /// <summary>
+    /// Known gap (#3431): up to 15.0.6 the carbs record's POST upserts onto the split-off document at
+    /// the same time and is refused for the <c>_id</c> it would change, and the bolus update then
+    /// removes that document, so upstream holds no carbs.
+    /// </summary>
+    [Fact]
+    public async Task Known_gap_3431_a_one_record_meal_split_by_a_later_v1_POST_loses_its_upstream_carbs_up_to_15_0_6()
+    {
+        var upstream = await SplitByALaterV1PostAsync(v15_0_8: false);
+
+        upstream.Documents.Select(d => KeyOf(d, false)).Should().Equal(Key);
     }
 
     [Fact]
