@@ -122,18 +122,20 @@ public class GitHubBuildAppClientTests
     }
 
     [Fact]
-    public async Task The_user_token_is_used_to_find_the_installation_and_then_revoked()
+    public async Task The_user_token_finds_the_installation_and_the_repositories_the_user_administers_and_is_then_revoked()
     {
         var client = _github.CreateClient();
-        _github.OnUserFlow(FakeGitHub.InstallationId);
+        _github.OnUserFlow(FakeGitHub.InstallationId).OnUserRepositories((FakeGitHub.Repository, true), ("bob/shared", false));
 
-        var account = await client.FindUserInstallationAsync("oauth-code", FakeGitHub.InstallationId, default);
+        var installation = (await client.AuthorizeUserInstallationAsync("oauth-code", FakeGitHub.InstallationId, default))!;
 
-        account.Should().Be(new GitHubInstallationAccount("alice", false));
+        installation.Login.Should().Be("alice");
+        installation.IsOrganization.Should().BeFalse();
+        installation.AdminRepositories.Should().Equal(FakeGitHub.Repository);
         var exchange = _github.Requests.Single(r => r.Uri.Host == "github.com");
         exchange.Body.Should().Contain("code=oauth-code").And.Contain("client_id=Iv23client");
-        _github.Requests.Single(r => r.Path.StartsWith("/user/installations", StringComparison.Ordinal))
-            .Authorization.Should().Be("Bearer ghu_user");
+        _github.Requests.Where(r => r.Path.StartsWith("/user/installations", StringComparison.Ordinal))
+            .Should().HaveCount(2).And.OnlyContain(r => r.Authorization == "Bearer ghu_user");
         var revoke = _github.Requests.Single(r => r.Method == HttpMethod.Delete);
         revoke.Authorization.Should().StartWith("Basic ");
         JsonDocument.Parse(revoke.Body!).RootElement.GetProperty("access_token").GetString().Should().Be("ghu_user");
@@ -145,7 +147,7 @@ public class GitHubBuildAppClientTests
         var client = _github.CreateClient();
         _github.OnUserFlow(1, 2);
 
-        (await client.FindUserInstallationAsync("oauth-code", FakeGitHub.InstallationId, default)).Should().BeNull();
+        (await client.AuthorizeUserInstallationAsync("oauth-code", FakeGitHub.InstallationId, default)).Should().BeNull();
         _github.Requests.Should().Contain(r => r.Method == HttpMethod.Delete);
     }
 
@@ -156,7 +158,7 @@ public class GitHubBuildAppClientTests
         _github.On(HttpMethod.Post, "https://github.com/login/oauth/access_token",
             _ => FakeGitHub.Json(HttpStatusCode.OK, new { error = "bad_verification_code" }));
 
-        await FluentActions.Awaiting(() => client.FindUserInstallationAsync("spent", FakeGitHub.InstallationId, default))
+        await FluentActions.Awaiting(() => client.AuthorizeUserInstallationAsync("spent", FakeGitHub.InstallationId, default))
             .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.AuthorizationDenied);
     }
 
@@ -191,6 +193,72 @@ public class GitHubBuildAppClientTests
 
         await FluentActions.Awaiting(() => client.ListInstallationRepositoriesAsync(FakeGitHub.InstallationId, default))
             .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.InstallationGone);
+    }
+
+    [Fact]
+    public async Task Installation_repositories_are_read_page_by_page()
+    {
+        var client = _github.CreateClient();
+        var firstPage = Enumerable.Range(0, 100).Select(i => $"alice/repo-{i}").ToArray();
+        _github.OnInstallationRepositories(firstPage)
+            .On(HttpMethod.Get, "/installation/repositories?per_page=100&page=2", _ => FakeGitHub.Json(HttpStatusCode.OK, new
+            {
+                total_count = 101,
+                repositories = new[] { new { full_name = FakeGitHub.Repository, @private = true, is_template = false, html_url = "x" } },
+            }));
+
+        var repositories = await client.ListInstallationRepositoriesAsync(FakeGitHub.InstallationId, default);
+
+        repositories.Should().HaveCount(101);
+        repositories[^1].FullName.Should().Be(FakeGitHub.Repository);
+        _github.Requests.Should().NotContain(r => r.Path.Contains("page=3"), "a short page is the last one");
+    }
+
+    [Theory]
+    [InlineData("alice/../app")]
+    [InlineData("alice/..")]
+    [InlineData("alice")]
+    [InlineData("alice/my aaps")]
+    [InlineData("-alice/my-aaps")]
+    public async Task A_name_that_is_not_an_owner_and_name_never_reaches_a_path(string fullName)
+    {
+        GitHubBuildAppClient.IsRepositoryFullName(fullName).Should().BeFalse();
+
+        await FluentActions.Awaiting(() => _github.CreateClient().GetRepositoryAsync(FakeGitHub.InstallationId, fullName, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.RepositoryNotFound);
+        _github.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_private_key_given_as_the_base64_of_the_pem_file_is_accepted()
+    {
+        var options = new GitHubBuildAppOptions
+        {
+            Slug = _github.Options.Slug,
+            ClientId = _github.Options.ClientId,
+            ClientSecret = _github.Options.ClientSecret,
+            PrivateKey = Convert.ToBase64String(Encoding.UTF8.GetBytes(_github.Options.PrivateKey!)),
+        };
+        var client = _github.CreateClient(options: options);
+
+        client.IsConfigured.Should().BeTrue();
+        var parts = client.CreateAppJwt().Split('.');
+        _github.Key.VerifyData(Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"), FromBase64Url(parts[2]),
+            HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("not a key")]
+    [InlineData("bm90IGEga2V5")]
+    [InlineData("-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----")]
+    public void A_private_key_that_does_not_parse_leaves_the_client_unconfigured(string privateKey)
+    {
+        var options = new GitHubBuildAppOptions
+        {
+            Slug = "s", ClientId = "c", ClientSecret = "x", PrivateKey = privateKey,
+        };
+
+        _github.CreateClient(options: options).IsConfigured.Should().BeFalse();
     }
 
     private static byte[] FromBase64Url(string value)

@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
 namespace Nocturne.API.Services.AppBuilds;
@@ -14,10 +15,10 @@ namespace Nocturne.API.Services.AppBuilds;
 /// needs more. Tokens are held in memory only and never logged.
 /// </summary>
 /// <remarks>
-/// Failures surface as <see cref="AppBuildException"/>. <c>owner/name</c> arguments are checked by
-/// <see cref="AppBuildService.IsRepositoryFullName"/> before they reach a path.
+/// Failures surface as <see cref="AppBuildException"/>. An <c>owner/name</c> that
+/// <see cref="IsRepositoryFullName"/> rejects never reaches a path.
 /// </remarks>
-public class GitHubBuildAppClient(
+public partial class GitHubBuildAppClient(
     IHttpClientFactory httpClientFactory,
     IOptions<GitHubBuildAppOptions> options,
     TimeProvider time,
@@ -26,7 +27,8 @@ public class GitHubBuildAppClient(
     /// <summary>A cached installation token is replaced this long before GitHub expires it.</summary>
     internal static readonly TimeSpan TokenRefreshMargin = TimeSpan.FromMinutes(5);
 
-    private const int MaxUserInstallationPages = 10;
+    private const int PageSize = 100;
+    private const int MaxPages = 10;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -35,7 +37,15 @@ public class GitHubBuildAppClient(
 
     private readonly ConcurrentDictionary<long, InstallationToken> _tokens = new();
 
+    private readonly Lazy<string?> _privateKeyPem = new(() => ReadPrivateKey(options.Value, logger));
+
     private GitHubBuildAppOptions Options => options.Value;
+
+    /// <summary>
+    /// Whether every <c>GitHub:BuildApp</c> key is set and the private key parses. A key that does not
+    /// parse is logged once, without its contents, and leaves app builds off.
+    /// </summary>
+    public bool IsConfigured => Options.IsConfigured && _privateKeyPem.Value is not null;
 
     /// <summary>
     /// An App JWT (RS256). <c>iat</c> is backdated a minute for clock drift, and <c>exp</c> stays under
@@ -49,7 +59,7 @@ public class GitHubBuildAppClient(
         var signingInput = $"{header}.{payload}";
 
         using var rsa = RSA.Create();
-        rsa.ImportFromPem(Options.PrivateKey);
+        rsa.ImportFromPem(_privateKeyPem.Value ?? throw new AppBuildException(AppBuildException.NotConfigured));
         var signature = rsa.SignData(Encoding.ASCII.GetBytes(signingInput), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         return $"{signingInput}.{Base64Url(signature)}";
     }
@@ -70,32 +80,33 @@ public class GitHubBuildAppClient(
     }
 
     /// <summary>
-    /// Exchanges the user's OAuth <paramref name="code"/> and looks for <paramref name="installationId"/>
-    /// among the installations that user can reach. The user token is used for these two calls only:
-    /// it is revoked before this returns and never leaves this method.
+    /// Exchanges the user's OAuth <paramref name="code"/>, finds <paramref name="installationId"/> among
+    /// the installations that user can reach, and lists the installation's repositories the user
+    /// administers. Seeing an installation proves no control over its repositories: a read-only
+    /// collaborator sees it too. The user token is used for these calls only. It is revoked before this
+    /// returns and never leaves this method.
     /// </summary>
     /// <returns>The installation, or null when the user cannot reach it.</returns>
-    public async Task<GitHubInstallationAccount?> FindUserInstallationAsync(string code, long installationId, CancellationToken ct)
+    public async Task<GitHubUserInstallation?> AuthorizeUserInstallationAsync(string code, long installationId, CancellationToken ct)
     {
         var userToken = await ExchangeCodeAsync(code, ct);
         try
         {
             using var client = GitHubApi.CreateClient(httpClientFactory, userToken);
-            for (var page = 1; page <= MaxUserInstallationPages; page++)
-            {
-                using var response = await SendAsync(client, new HttpRequestMessage(HttpMethod.Get,
-                    $"/user/installations?per_page=100&page={page}"), ct);
-                await EnsureSuccessAsync(response, "user installations", AppBuildException.GitHubRefused, ct);
+            var installations = await ReadPagesAsync<UserInstallationsResponse, UserInstallation>(client, null,
+                "/user/installations", "user installations", AppBuildException.GitHubRefused, page => page.Installations, ct);
+            if (installations.FirstOrDefault(i => i.Id == installationId) is not { } match)
+                return null;
 
-                var listing = await ReadAsync<UserInstallationsResponse>(response, ct);
-                if (listing.Installations.FirstOrDefault(i => i.Id == installationId) is { } match)
-                    return new GitHubInstallationAccount(match.Account.Login,
-                        string.Equals(match.Account.Type, "Organization", StringComparison.Ordinal));
-                if (listing.Installations.Count < 100)
-                    return null;
-            }
-
-            return null;
+            var repositories = await ReadPagesAsync<InstallationRepositoriesResponse, GitHubRepository>(client, null,
+                $"/user/installations/{installationId}/repositories", "user installation repositories",
+                AppBuildException.InstallationNotYours, page => page.Repositories, ct);
+            return new GitHubUserInstallation(
+                match.Account.Login,
+                string.Equals(match.Account.Type, "Organization", StringComparison.Ordinal),
+                repositories.Where(r => r.Permissions?.Admin == true && IsRepositoryFullName(r.FullName))
+                    .Select(r => r.FullName)
+                    .ToList());
         }
         finally
         {
@@ -105,9 +116,10 @@ public class GitHubBuildAppClient(
 
     public async Task<IReadOnlyList<GitHubRepository>> ListInstallationRepositoriesAsync(long installationId, CancellationToken ct)
     {
-        var listing = await GetAsync<InstallationRepositoriesResponse>(installationId,
-            "/installation/repositories?per_page=100", "installation repositories", AppBuildException.InstallationGone, ct);
-        return listing.Repositories;
+        using var client = GitHubApi.CreateClient(httpClientFactory, await GetInstallationTokenAsync(installationId, ct));
+        return await ReadPagesAsync<InstallationRepositoriesResponse, GitHubRepository>(client, installationId,
+            "/installation/repositories", "installation repositories", AppBuildException.InstallationGone,
+            page => page.Repositories, ct);
     }
 
     public Task<GitHubRepository> GetRepositoryAsync(long installationId, string fullName, CancellationToken ct) =>
@@ -161,6 +173,29 @@ public class GitHubBuildAppClient(
             Content = JsonContent.Create(body),
         }, ct);
         await EnsureInstallationSuccessAsync(response, installationId, what, AppBuildException.RepositoryNotFound, ct);
+    }
+
+    /// <summary>Reads up to <see cref="MaxPages"/> pages of a GitHub list.</summary>
+    private async Task<List<T>> ReadPagesAsync<TPage, T>(HttpClient client, long? installationId, string path, string what,
+        string notFoundCode, Func<TPage, List<T>> items, CancellationToken ct)
+    {
+        var all = new List<T>();
+        for (var page = 1; page <= MaxPages; page++)
+        {
+            using var response = await SendAsync(client, new HttpRequestMessage(HttpMethod.Get,
+                $"{path}?per_page={PageSize}&page={page}"), ct);
+            if (installationId is { } id)
+                await EnsureInstallationSuccessAsync(response, id, what, notFoundCode, ct);
+            else
+                await EnsureSuccessAsync(response, what, notFoundCode, ct);
+
+            var batch = items(await ReadAsync<TPage>(response, ct));
+            all.AddRange(batch);
+            if (batch.Count < PageSize)
+                break;
+        }
+
+        return all;
     }
 
     private async Task<string> ExchangeCodeAsync(string code, CancellationToken ct)
@@ -269,8 +304,52 @@ public class GitHubBuildAppClient(
         }
     }
 
+    /// <summary>Whether <paramref name="value"/> is a GitHub <c>owner/name</c> safe to put in a path.</summary>
+    public static bool IsRepositoryFullName(string? value) =>
+        value is not null && RepositoryFullNamePattern().IsMatch(value)
+        && !value.EndsWith("/.", StringComparison.Ordinal) && !value.EndsWith("/..", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The key as PEM, or null when it is missing or does not parse. An environment variable rarely holds
+    /// several lines, so the base64 of the PEM file is accepted too.
+    /// </summary>
+    internal static string? ReadPrivateKey(GitHubBuildAppOptions options, ILogger logger)
+    {
+        if (!options.IsConfigured)
+            return null;
+
+        var pem = options.PrivateKey!.Trim();
+        if (!pem.StartsWith("-----BEGIN", StringComparison.Ordinal))
+        {
+            try
+            {
+                pem = Encoding.UTF8.GetString(Convert.FromBase64String(pem)).Trim();
+            }
+            catch (FormatException)
+            {
+                // Not base64 either: the PEM import below refuses it.
+            }
+        }
+
+        try
+        {
+            using var rsa = RSA.Create();
+            rsa.ImportFromPem(pem);
+            return pem;
+        }
+        catch (Exception ex) when (ex is ArgumentException or CryptographicException)
+        {
+            logger.LogWarning(
+                "App builds are off: {Setting} is neither an RSA private key in PEM form nor the base64 of one",
+                "GitHub:BuildApp:PrivateKey");
+            return null;
+        }
+    }
+
     private static string Escape(string fullName)
     {
+        if (!IsRepositoryFullName(fullName))
+            throw new AppBuildException(AppBuildException.RepositoryNotFound);
         var slash = fullName.IndexOf('/');
         return $"{Uri.EscapeDataString(fullName[..slash])}/{Uri.EscapeDataString(fullName[(slash + 1)..])}";
     }
@@ -292,6 +371,9 @@ public class GitHubBuildAppClient(
 
     private sealed record InstallationRepositoriesResponse(List<GitHubRepository> Repositories);
 
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$")]
+    private static partial Regex RepositoryFullNamePattern();
+
     private sealed record SecretsResponse(List<SecretName> Secrets);
 
     private sealed record SecretName(string Name);
@@ -299,7 +381,7 @@ public class GitHubBuildAppClient(
     private sealed record WorkflowRunsResponse(List<GitHubWorkflowRun> WorkflowRuns);
 }
 
-public sealed record GitHubInstallationAccount(string Login, bool IsOrganization);
+public sealed record GitHubUserInstallation(string Login, bool IsOrganization, IReadOnlyList<string> AdminRepositories);
 
 public sealed record GitHubRepository(
     string FullName,
@@ -307,7 +389,11 @@ public sealed record GitHubRepository(
     bool IsTemplate,
     string? DefaultBranch,
     string HtmlUrl,
-    GitHubTemplateRepository? TemplateRepository);
+    GitHubTemplateRepository? TemplateRepository,
+    GitHubRepositoryPermissions? Permissions = null);
+
+/// <summary>The caller's access to a repository, as a user-token listing reports it.</summary>
+public sealed record GitHubRepositoryPermissions(bool Admin);
 
 public sealed record GitHubTemplateRepository(string FullName);
 

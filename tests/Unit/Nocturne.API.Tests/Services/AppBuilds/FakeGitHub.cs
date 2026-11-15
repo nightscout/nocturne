@@ -42,11 +42,11 @@ internal sealed class FakeGitHub : HttpMessageHandler
             _ => Json(HttpStatusCode.Created, new { token = "ghs_installation", expires_at = Time.GetUtcNow().AddHours(1) }));
     }
 
-    public GitHubBuildAppClient CreateClient(Microsoft.Extensions.Logging.ILogger<GitHubBuildAppClient>? logger = null)
+    public GitHubBuildAppClient CreateClient(Microsoft.Extensions.Logging.ILogger<GitHubBuildAppClient>? logger = null, GitHubBuildAppOptions? options = null)
     {
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(() => new HttpClient(this, disposeHandler: false));
-        return new GitHubBuildAppClient(factory.Object, Microsoft.Extensions.Options.Options.Create(Options), Time,
+        return new GitHubBuildAppClient(factory.Object, Microsoft.Extensions.Options.Options.Create(options ?? Options), Time,
             logger ?? NullLogger<GitHubBuildAppClient>.Instance);
     }
 
@@ -76,10 +76,26 @@ internal sealed class FakeGitHub : HttpMessageHandler
                 total_count = reachableInstallations.Length,
                 installations = reachableInstallations.Select(id => new { id, account = new { login = "alice", type = "User" } }),
             }))
-            .On(HttpMethod.Delete, "/applications/Iv23client/token", _ => new HttpResponseMessage(HttpStatusCode.NoContent));
+            .On(HttpMethod.Delete, "/applications/Iv23client/token", _ => new HttpResponseMessage(HttpStatusCode.NoContent))
+            .OnUserRepositories((Repository, true));
+
+    /// <summary>The installation's repositories as the authorizing user sees them, with whether they administer each.</summary>
+    public FakeGitHub OnUserRepositories(params (string FullName, bool Admin)[] repositories) =>
+        On(HttpMethod.Get, $"/user/installations/{InstallationId}/repositories?per_page=100&page=1", _ => Json(HttpStatusCode.OK, new
+        {
+            total_count = repositories.Length,
+            repositories = repositories.Select(r => new
+            {
+                full_name = r.FullName,
+                @private = true,
+                is_template = false,
+                html_url = $"https://github.com/{r.FullName}",
+                permissions = new { admin = r.Admin, push = true, pull = true },
+            }),
+        }));
 
     public FakeGitHub OnInstallationRepositories(params string[] fullNames) =>
-        On(HttpMethod.Get, "/installation/repositories?per_page=100", _ => Json(HttpStatusCode.OK, new
+        On(HttpMethod.Get, "/installation/repositories?per_page=100&page=1", _ => Json(HttpStatusCode.OK, new
         {
             total_count = fullNames.Length,
             repositories = fullNames.Select(name => new { full_name = name, @private = true, is_template = false, html_url = $"https://github.com/{name}" }),

@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261115204257_AddAppBuildLinks")]
+    [Migration("20261115220319_AddAppBuildLinks")]
     partial class AddAppBuildLinks
     {
         /// <inheritdoc />
@@ -718,6 +718,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("account_login");
+
+                    b.PrimitiveCollection<string[]>("AdminRepositories")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("admin_repositories");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()

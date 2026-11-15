@@ -11,6 +11,7 @@ public static class AppBuildLinkMapper
         entity.AccountLogin,
         entity.AccountIsOrganization,
         entity.RepositoryFullName,
+        entity.AdminRepositories,
         entity.LinkedBySubjectId,
         entity.CreatedAt,
         entity.UpdatedAt);
@@ -23,6 +24,7 @@ public static class AppBuildLinkMapper
         entity.AccountLogin = link.AccountLogin;
         entity.AccountIsOrganization = link.AccountIsOrganization;
         entity.RepositoryFullName = link.RepositoryFullName;
+        entity.AdminRepositories = [.. link.AdminRepositories];
         entity.LinkedBySubjectId = link.LinkedBySubjectId;
     }
 }

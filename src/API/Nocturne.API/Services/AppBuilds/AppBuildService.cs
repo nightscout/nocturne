@@ -1,8 +1,7 @@
-using System.Text.RegularExpressions;
-using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts.AppBuilds;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.AppBuilds;
+using Microsoft.Extensions.Options;
 
 namespace Nocturne.API.Services.AppBuilds;
 
@@ -14,8 +13,14 @@ namespace Nocturne.API.Services.AppBuilds;
 /// Nocturne never holds a plaintext secret: the browser seals it with the repository's public key and
 /// <see cref="PutSecretAsync"/> relays the ciphertext. Every write and dispatch first checks the
 /// repository against its <see cref="BuildTarget"/> (<see cref="Problems"/>).
+/// <para>
+/// The installation acts in the linking person's GitHub account, so only that person
+/// (<see cref="AppBuildLink.LinkedBySubjectId"/>) may choose its repository, write a secret or start a
+/// build. Any caller the controller admits may read the status and runs, or unlink, which only forgets
+/// the link in Nocturne. Another person takes over by linking with their own GitHub authorization.
+/// </para>
 /// </remarks>
-public sealed partial class AppBuildService(
+public sealed class AppBuildService(
     IAppBuildLinkRepository links,
     GitHubBuildAppClient github,
     AppBuildInstallState installState,
@@ -25,9 +30,9 @@ public sealed partial class AppBuildService(
 {
     private const int RunCount = 10;
 
-    public bool Configured => options.Value.IsConfigured;
+    public bool Configured => github.IsConfigured;
 
-    public async Task<AppBuildsStatus> StatusAsync(CancellationToken ct)
+    public async Task<AppBuildsStatus> StatusAsync(Guid callerSubjectId, CancellationToken ct)
     {
         if (!Configured)
             return new AppBuildsStatus { Configured = false, Targets = BuildTargets.All };
@@ -36,7 +41,7 @@ public sealed partial class AppBuildService(
         foreach (var link in await links.GetAllAsync(ct))
         {
             if (BuildTargets.Find(link.TargetId) is { } target)
-                statuses.Add(await LinkStatusAsync(link, target, ct));
+                statuses.Add(await LinkStatusAsync(link, target, callerSubjectId, ct));
         }
 
         return new AppBuildsStatus { Configured = true, Targets = BuildTargets.All, Links = statuses };
@@ -64,7 +69,7 @@ public sealed partial class AppBuildService(
     /// <summary>
     /// Completes the installation callback. <paramref name="installationId"/> comes from the browser, so
     /// the signed state must name this tenant and the signed-in subject. The GitHub user who authorized
-    /// the App must also reach that installation.
+    /// the App must also reach that installation and administer at least one of its repositories.
     /// </summary>
     /// <returns>The linked target's id.</returns>
     public async Task<string> CompleteLinkAsync(string? code, long? installationId, string? state, Guid subjectId, CancellationToken ct)
@@ -81,16 +86,18 @@ public sealed partial class AppBuildService(
         if (!installState.TryConsume(payload))
             throw new AppBuildException(AppBuildException.InvalidState);
 
-        var account = await github.FindUserInstallationAsync(code, installationId.Value, ct)
+        var installation = await github.AuthorizeUserInstallationAsync(code, installationId.Value, ct)
             ?? throw new AppBuildException(AppBuildException.InstallationNotYours);
+        if (installation.AdminRepositories.Count == 0)
+            throw new AppBuildException(AppBuildException.NoAdminRepository);
 
-        var repositories = await github.ListInstallationRepositoriesAsync(installationId.Value, ct);
         await links.SaveAsync(new AppBuildLink(
             target.Id,
             installationId.Value,
-            account.Login,
-            account.IsOrganization,
-            repositories.Count == 1 ? repositories[0].FullName : null,
+            installation.Login,
+            installation.IsOrganization,
+            installation.AdminRepositories.Count == 1 ? installation.AdminRepositories[0] : null,
+            installation.AdminRepositories,
             subjectId,
             default,
             default), ct);
@@ -99,21 +106,20 @@ public sealed partial class AppBuildService(
         return target.Id;
     }
 
+    /// <summary>The installation's repositories the linking person may choose: those they administer.</summary>
     public async Task<IReadOnlyList<AppBuildRepositoryOption>> ListRepositoriesAsync(string targetId, CancellationToken ct)
     {
         var (link, _) = await RequireLinkAsync(targetId, ct);
-        var repositories = await github.ListInstallationRepositoriesAsync(link.InstallationId, ct);
-        return repositories
+        return (await ChoosableRepositoriesAsync(link, ct))
             .Select(repository => new AppBuildRepositoryOption { FullName = repository.FullName, IsPrivate = repository.Private })
             .ToList();
     }
 
-    public async Task ChooseRepositoryAsync(string targetId, string fullName, CancellationToken ct)
+    public async Task ChooseRepositoryAsync(string targetId, string fullName, Guid callerSubjectId, CancellationToken ct)
     {
-        var (link, _) = await RequireLinkAsync(targetId, ct);
-        var repositories = await github.ListInstallationRepositoriesAsync(link.InstallationId, ct);
-        var chosen = repositories.FirstOrDefault(repository =>
-            string.Equals(repository.FullName, fullName, StringComparison.OrdinalIgnoreCase))
+        var (link, _) = await RequireLinkerAsync(targetId, callerSubjectId, ct);
+        var chosen = (await ChoosableRepositoriesAsync(link, ct)).FirstOrDefault(repository =>
+                string.Equals(repository.FullName, fullName, StringComparison.OrdinalIgnoreCase))
             ?? throw new AppBuildException(AppBuildException.RepositoryNotInInstallation);
 
         await links.SetRepositoryAsync(targetId, chosen.FullName, ct);
@@ -121,12 +127,17 @@ public sealed partial class AppBuildService(
 
     public async Task<AppBuildSecretKey> GetSecretKeyAsync(string targetId, CancellationToken ct)
     {
-        var (link, repository, _) = await RequireValidRepositoryAsync(targetId, ct);
+        var (link, target) = await RequireLinkAsync(targetId, ct);
+        var repository = await RequireValidRepositoryAsync(link, target, ct);
         var key = await github.GetSecretPublicKeyAsync(link.InstallationId, repository.FullName, ct);
         return new AppBuildSecretKey { KeyId = key.KeyId, Key = key.Key };
     }
 
-    public async Task PutSecretAsync(string targetId, string name, SealedAppBuildSecret secret, CancellationToken ct)
+    /// <summary>
+    /// Relays a sealed secret. The base64 check only refuses a malformed request; whether the value is
+    /// sealed is the browser's part (<see cref="SealedAppBuildSecret"/>).
+    /// </summary>
+    public async Task PutSecretAsync(string targetId, string name, SealedAppBuildSecret secret, Guid callerSubjectId, CancellationToken ct)
     {
         RequireConfigured();
         if (RequireTarget(targetId).FindSecret(name) is null)
@@ -134,15 +145,17 @@ public sealed partial class AppBuildService(
         if (!IsBase64(secret.EncryptedValue) || string.IsNullOrWhiteSpace(secret.KeyId))
             throw new AppBuildException(AppBuildException.InputInvalid);
 
-        var (link, repository, _) = await RequireValidRepositoryAsync(targetId, ct);
+        var (link, target) = await RequireLinkerAsync(targetId, callerSubjectId, ct);
+        var repository = await RequireValidRepositoryAsync(link, target, ct);
         await github.PutSecretAsync(link.InstallationId, repository.FullName, name, secret.EncryptedValue, secret.KeyId, ct);
     }
 
-    public async Task<AppBuildDispatchResult> DispatchAsync(string targetId, DispatchAppBuildRequest request, CancellationToken ct)
+    public async Task<AppBuildDispatchResult> DispatchAsync(string targetId, DispatchAppBuildRequest request, Guid callerSubjectId, CancellationToken ct)
     {
         RequireConfigured();
         var inputs = ResolveInputs(RequireTarget(targetId), request.Inputs);
-        var (link, repository, target) = await RequireValidRepositoryAsync(targetId, ct);
+        var (link, target) = await RequireLinkerAsync(targetId, callerSubjectId, ct);
+        var repository = await RequireValidRepositoryAsync(link, target, ct);
 
         await github.DispatchWorkflowAsync(link.InstallationId, repository.FullName, target.WorkflowFile,
             repository.DefaultBranch ?? "main", inputs, ct);
@@ -152,9 +165,8 @@ public sealed partial class AppBuildService(
     public async Task<IReadOnlyList<AppBuildRun>> ListRunsAsync(string targetId, CancellationToken ct)
     {
         var (link, target) = await RequireLinkAsync(targetId, ct);
-        if (!IsRepositoryFullName(link.RepositoryFullName))
-            throw new AppBuildException(AppBuildException.RepositoryNotChosen);
-        var runs = await github.ListWorkflowRunsAsync(link.InstallationId, link.RepositoryFullName!, target.WorkflowFile, RunCount, ct);
+        var repository = link.RepositoryFullName ?? throw new AppBuildException(AppBuildException.RepositoryNotChosen);
+        var runs = await github.ListWorkflowRunsAsync(link.InstallationId, repository, target.WorkflowFile, RunCount, ct);
         return runs.Select(run => new AppBuildRun
         {
             Id = run.Id,
@@ -224,11 +236,7 @@ public sealed partial class AppBuildService(
         _ => AppBuildRunState.Queued,
     };
 
-    internal static bool IsRepositoryFullName(string? value) =>
-        value is not null && RepositoryFullNamePattern().IsMatch(value) && !value.EndsWith("/.", StringComparison.Ordinal)
-        && !value.EndsWith("/..", StringComparison.Ordinal);
-
-    private async Task<AppBuildLinkStatus> LinkStatusAsync(AppBuildLink link, BuildTarget target, CancellationToken ct)
+    private async Task<AppBuildLinkStatus> LinkStatusAsync(AppBuildLink link, BuildTarget target, Guid callerSubjectId, CancellationToken ct)
     {
         var status = new AppBuildLinkStatus
         {
@@ -237,6 +245,7 @@ public sealed partial class AppBuildService(
             RepositoryFullName = link.RepositoryFullName,
             RepositoryUrl = link.RepositoryFullName is null ? null : $"https://github.com/{link.RepositoryFullName}",
             LinkedAt = link.CreatedAt,
+            LinkedByCaller = link.LinkedBySubjectId == callerSubjectId,
             State = AppBuildLinkState.RepositoryNotChosen,
         };
         if (link.RepositoryFullName is null)
@@ -251,13 +260,9 @@ public sealed partial class AppBuildService(
                 .ToList();
             var missing = target.Secrets.Where(secret => secret.Required && !secretsSet.Contains(secret.Name)).Select(secret => secret.Name).ToList();
 
-            return new AppBuildLinkStatus
+            return status with
             {
-                TargetId = status.TargetId,
-                AccountLogin = status.AccountLogin,
-                RepositoryFullName = status.RepositoryFullName,
                 RepositoryUrl = repository.HtmlUrl,
-                LinkedAt = status.LinkedAt,
                 State = problems.Count > 0 ? AppBuildLinkState.Invalid
                     : missing.Count > 0 ? AppBuildLinkState.SecretsMissing
                     : AppBuildLinkState.Ready,
@@ -274,18 +279,14 @@ public sealed partial class AppBuildService(
         }
         catch (AppBuildException ex)
         {
-            return new AppBuildLinkStatus
-            {
-                TargetId = status.TargetId,
-                AccountLogin = status.AccountLogin,
-                RepositoryFullName = status.RepositoryFullName,
-                RepositoryUrl = status.RepositoryUrl,
-                LinkedAt = status.LinkedAt,
-                State = AppBuildLinkState.Unreachable,
-                Error = ex.Code,
-            };
+            return status with { State = AppBuildLinkState.Unreachable, Error = ex.Code };
         }
     }
+
+    private async Task<IReadOnlyList<GitHubRepository>> ChoosableRepositoriesAsync(AppBuildLink link, CancellationToken ct) =>
+        (await github.ListInstallationRepositoriesAsync(link.InstallationId, ct))
+            .Where(repository => link.AdminRepositories.Contains(repository.FullName, StringComparer.OrdinalIgnoreCase))
+            .ToList();
 
     private async Task<(AppBuildLink Link, BuildTarget Target)> RequireLinkAsync(string targetId, CancellationToken ct)
     {
@@ -295,17 +296,26 @@ public sealed partial class AppBuildService(
         return (link, target);
     }
 
-    /// <remarks>The repository is read again on every call, so a repository made public since it was linked is refused.</remarks>
-    private async Task<(AppBuildLink Link, GitHubRepository Repository, BuildTarget Target)> RequireValidRepositoryAsync(string targetId, CancellationToken ct)
+    private async Task<(AppBuildLink Link, BuildTarget Target)> RequireLinkerAsync(string targetId, Guid callerSubjectId, CancellationToken ct)
     {
         var (link, target) = await RequireLinkAsync(targetId, ct);
-        if (!IsRepositoryFullName(link.RepositoryFullName))
-            throw new AppBuildException(AppBuildException.RepositoryNotChosen);
+        if (link.LinkedBySubjectId != callerSubjectId)
+            throw new AppBuildException(AppBuildException.NotLinker);
+        return (link, target);
+    }
 
-        var repository = await github.GetRepositoryAsync(link.InstallationId, link.RepositoryFullName!, ct);
+    /// <remarks>The repository is read again on every call, so a repository made public since it was linked is refused.</remarks>
+    private async Task<GitHubRepository> RequireValidRepositoryAsync(AppBuildLink link, BuildTarget target, CancellationToken ct)
+    {
+        if (link.RepositoryFullName is not { } fullName)
+            throw new AppBuildException(AppBuildException.RepositoryNotChosen);
+        if (!link.AdminRepositories.Contains(fullName, StringComparer.OrdinalIgnoreCase))
+            throw new AppBuildException(AppBuildException.RepositoryNotInInstallation);
+
+        var repository = await github.GetRepositoryAsync(link.InstallationId, fullName, ct);
         if (Problems(repository, target).Count > 0)
             throw new AppBuildException(AppBuildException.RepositoryInvalid);
-        return (link, repository with { FullName = link.RepositoryFullName! }, target);
+        return repository with { FullName = fullName };
     }
 
     private void RequireConfigured()
@@ -330,7 +340,4 @@ public sealed partial class AppBuildService(
         Span<byte> buffer = new byte[value.Length];
         return value.Length > 0 && Convert.TryFromBase64String(value, buffer, out _);
     }
-
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$")]
-    private static partial Regex RepositoryFullNamePattern();
 }

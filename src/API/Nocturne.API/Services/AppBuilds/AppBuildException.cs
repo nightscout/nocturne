@@ -14,6 +14,10 @@ public sealed class AppBuildException(string code) : Exception(code)
     public const string InputInvalid = "input_invalid";
     public const string InvalidState = "invalid_state";
     public const string InstallationNotYours = "installation_not_yours";
+    public const string NoAdminRepository = "no_admin_repository";
+    public const string NotLinker = "not_linker";
+    public const string SignedOut = "signed_out";
+    public const string Forbidden = "forbidden";
     public const string InstallationGone = "installation_gone";
     public const string AuthorizationDenied = "authorization_denied";
     public const string GitHubRefused = "github_refused";
@@ -27,7 +31,7 @@ public sealed class AppBuildException(string code) : Exception(code)
     {
         NotConfigured or UnknownTarget or NotLinked => StatusCodes.Status404NotFound,
         RepositoryNotChosen or RepositoryInvalid or InstallationGone or RepositoryNotFound => StatusCodes.Status409Conflict,
-        InstallationNotYours => StatusCodes.Status403Forbidden,
+        InstallationNotYours or NoAdminRepository or NotLinker => StatusCodes.Status403Forbidden,
         GitHubRateLimited => StatusCodes.Status429TooManyRequests,
         GitHubRefused or GitHubUnavailable => StatusCodes.Status502BadGateway,
         _ => StatusCodes.Status400BadRequest,
