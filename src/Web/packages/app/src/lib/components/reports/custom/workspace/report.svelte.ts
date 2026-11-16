@@ -18,6 +18,7 @@ import {
   removeLayer,
   removeLayerReason,
   renameLayer,
+  withTrimmedTitle,
   setLayerMark,
   setLayerRange,
   setOwnScale,
@@ -36,7 +37,7 @@ export type BlockKind = "chart" | "figures" | "table" | "comparison";
 export interface Source {
   dataset: string;
 }
-import { accessReason, rangeLabel, signalLabel, sourceLabel, starterWords } from "./vocabulary-words.svelte.js";
+import { accessReason, daysText, rangeLabel, signalLabel, sourceLabel, starterWords } from "./vocabulary-words.svelte.js";
 import { parseSavedReport, withoutNulls, type SavedBlock, type SavedReport } from "./saved-state.js";
 import {
   Workspace,
@@ -109,7 +110,7 @@ export type Block = ChartBlock | FiguresBlock | TableBlock | ComparisonBlock | G
 /** A report range that is not the last N hours: none (each panel's own or its dataset's default), or two instants. */
 export type PinnedRange = "none" | { from: string; to: string };
 
-export interface ReportState {
+interface ReportState {
   title: string;
   rangeHours: number;
   /** The range a spec gave that the presets cannot state; null once the member picks a preset. */
@@ -296,7 +297,7 @@ export class Report {
             panelId: block.panelId,
           };
         case "given":
-          return { kind: "given", key: block.key, panel: copyJson(block.panel) };
+          return { kind: "given", key: block.key, panel: withTrimmedTitle(block.panel) };
       }
     });
     const pinned = this.state.pinned === null ? undefined : $state.snapshot(this.state.pinned);
@@ -623,8 +624,8 @@ export class Report {
 
   /** The line saying a block reading `source` shows `hours` because its data covers no more. */
   #shorterText(source: string, hours: number): string {
-    const days = Math.floor((this.#dataset(source)?.maxRangeHours ?? hours) / 24);
-    return `${upperFirst(sourceLabel(source))} covers at most ${days} days, so this block shows ${rangeText(hours, this.#vocab.rangePresets).replace(/^over /, "")}.`;
+    const days = daysText(this.#dataset(source)?.maxRangeHours ?? hours);
+    return `${upperFirst(sourceLabel(source))} covers at most ${days}, so this block shows ${rangeText(hours, this.#vocab.rangePresets).replace(/^over /, "")}.`;
   }
 
   #newBlock(kind: BlockKind): Block {
@@ -757,7 +758,7 @@ export class Report {
       own !== null
         ? {
             key: block.key,
-            text: `${upperFirst(signalLabel(id))} covers at most ${Math.floor(limit / 24)} days, so this chart shows ${rangeText(own, this.#vocab.rangePresets).replace(/^over /, "")}.`,
+            text: `${upperFirst(signalLabel(id))} covers at most ${daysText(limit)}, so this chart shows ${rangeText(own, this.#vocab.rangePresets).replace(/^over /, "")}.`,
           }
         : null;
     return null;
@@ -809,11 +810,11 @@ export class Report {
     if (block.kind === "given") {
       if (block.panel.kind === "comparison") return null;
       const max = givenMaxHours(this.#catalogue, block.panel);
-      return hours > max ? `${upperFirst(this.blockTitle(block).trim() || this.caption(block))} shows at most ${Math.floor(max / 24)} days. Choose a shorter range first.` : null;
+      return hours > max ? `${upperFirst(this.blockTitle(block).trim() || this.caption(block))} shows at most ${daysText(max)}. Choose a shorter range first.` : null;
     }
     const dataset = this.#dataset(block.source);
     if (dataset && hours > dataset.maxRangeHours)
-      return `${this.sourceLabel(block)} shows at most ${Math.floor(dataset.maxRangeHours / 24)} days. Choose a shorter range first.`;
+      return `${this.sourceLabel(block)} shows at most ${daysText(dataset.maxRangeHours)}. Choose a shorter range first.`;
     return null;
   }
 
@@ -1124,7 +1125,7 @@ export class Report {
   spec(): Record<string, unknown> {
     const panels = this.state.blocks.flatMap((block) => {
       if (block.kind === "given") {
-        const panel = copyJson(block.panel);
+        const panel = withTrimmedTitle(block.panel);
         return [{ ...panel, id: typeof panel.id === "string" ? panel.id : `b${block.key}-panel` }];
       }
       const own = block.kind === "chart" ? block.ws.ownRange : block.range;
@@ -1277,9 +1278,10 @@ export class Report {
 
   /**
    * Replaces a chart of signals with the panels it makes, each held as given, so each of its signals
-   * can be changed on its own. Its view and groups are then fixed as they are.
+   * can be changed on its own. Its view and groups are then fixed as they are. Returns why it cannot,
+   * or the undo: it puts the chart back in place of those blocks while each is as it was made.
    */
-  changeSignalBySignal(block: ChartBlock): Reason {
+  changeSignalBySignal(block: ChartBlock): string | (() => Reason) {
     const at = this.state.blocks.findIndex((b) => b.key === block.key);
     if (at < 0 || block.ws.built.panels.length === 0) return "Add a signal first.";
     const own = block.ws.ownRange;
@@ -1293,7 +1295,22 @@ export class Report {
     const blocks: GivenBlock[] = panels.map((panel) => ({ kind: "given", key: freshKey(), range: null, panel }));
     this.state.blocks.splice(at, 1, ...blocks);
     this.state.open = blocks[0].key;
-    return null;
+    const made: Record<number, string> = Object.fromEntries(blocks.map((b) => [b.key, JSON.stringify(b.panel)]));
+    return () => {
+      if (this.state.blocks.some((b) => b.key === block.key)) return null;
+      const isMade = (b: Block) => Object.hasOwn(made, b.key);
+      const current = this.state.blocks.filter(isMade);
+      const unchanged =
+        current.length === blocks.length &&
+        current.every((b) => b.kind === "given" && b.range === null && JSON.stringify(b.panel) === made[b.key]);
+      if (!unchanged) return "Could not undo. You changed or removed its blocks after the change.";
+      const first = this.state.blocks.findIndex(isMade);
+      const rest = this.state.blocks.filter((b) => !isMade(b));
+      rest.splice(first, 0, block);
+      this.state.blocks = rest;
+      this.state.open = block.key;
+      return null;
+    };
   }
 
   /** Why the report cannot be saved now, or null. */

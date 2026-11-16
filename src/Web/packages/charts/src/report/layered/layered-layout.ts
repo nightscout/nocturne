@@ -49,7 +49,7 @@ export function xFieldOf(layer: Pick<ReportLayer, "mark" | "bindings">): string 
 }
 
 /** The axis a track's layers are drawn along: its own, else the panel's. */
-export function trackXKind(track: Pick<ReportTrack, "xKind">, panel: Pick<ReportPanel, "xKind">): ReportXKind {
+function trackXKind(track: Pick<ReportTrack, "xKind">, panel: Pick<ReportPanel, "xKind">): ReportXKind {
   return track.xKind ?? panel.xKind ?? "time";
 }
 

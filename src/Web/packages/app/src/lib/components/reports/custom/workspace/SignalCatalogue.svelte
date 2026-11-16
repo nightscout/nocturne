@@ -30,6 +30,7 @@
   import type { SignalPicks } from "./signal-picks.svelte.js";
   import Swatch from "./Swatch.svelte";
   import {
+    daysText,
     lensLabel,
     rangeLabel,
     searchWords,
@@ -133,10 +134,6 @@
 
   const needs = $derived(open ? source.rangeNeeds : []);
 
-  function daysText(hours: number): string {
-    const days = Math.floor(hours / 24);
-    return days === 1 ? "1 day" : `${days} days`;
-  }
 
   function needId(hours: number): string {
     return `catalogue-range-${hours}`;

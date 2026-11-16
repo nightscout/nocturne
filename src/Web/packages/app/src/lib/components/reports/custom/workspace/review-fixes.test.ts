@@ -19,7 +19,7 @@ describe("the lens switch", () => {
     for (const id of ["target", "iob", "cob", "basal", "carbs", "boluses"] as const) ws.toggleSignal(id);
 
     const reason = ws.lensReason("typical_day");
-    expect(reason).toMatch(/at most/);
+    expect(reason).toMatch(/too many signals and options/);
     expect(ws.setLens("typical_day")).toBe(reason);
     expect(ws.lens).toBe("timeline");
     expect(ws.lensReason("timeline")).toBeNull();

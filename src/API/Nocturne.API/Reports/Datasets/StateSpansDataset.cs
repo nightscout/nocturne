@@ -56,8 +56,11 @@ internal sealed class StateSpansDataset : IReportDataset
             yield return ("kinds", "A kind is named twice.");
     }
 
-    /// <summary>The kinds read when none are named: the ones the dashboard chart draws, as before the stored kinds were added.</summary>
+    /// <summary>The kinds read when none are named: the ones the dashboard chart draws.</summary>
     internal static readonly IReadOnlyList<ReportSpanKind> ChartKinds = [.. Enum.GetValues<ReportSpanKind>().Where(k => CategoryOf(k) is null)];
+
+    public string? LayerTitle(ReportDatasetParameters parameters) =>
+        string.Join(", ", (((StateSpansParameters)parameters).Kinds is { Count: > 0 } asked ? asked : ChartKinds).Select(Words));
 
     /// <summary>The scope each kind needs, as the chart's endpoint redacts it; an activity of sleep needs sleep.read in place of treatments.read.</summary>
     internal static string ScopeOf(ReportSpanKind kind) => kind switch
@@ -158,7 +161,7 @@ internal sealed class StateSpansDataset : IReportDataset
             .ToList();
         var lines = new List<string>
         {
-            string.Create(CultureInfo.InvariantCulture, $"State spans from {ReportFacts.Window(request.From, request.To, request.Zone)}."),
+            string.Create(CultureInfo.InvariantCulture, $"State spans from {ReportFacts.Window(request.From, request.To, request.Clock)}."),
         };
         lines.AddRange(counts.Select(c => $"{Words(c.Kind)}: {ReportFacts.Plural(c.Count, "span")}."));
         if (withheld.Count > 0)
@@ -172,7 +175,7 @@ internal sealed class StateSpansDataset : IReportDataset
             Summary = string.Join('\n', lines),
             Facts = [.. counts.Select(c => ReportFacts.Count(Words(c.Kind), c.Count, "spans").Of("start", "end"))],
             Sentence = spans.Count == 0 ? "No state spans in this period." : $"{ReportFacts.Plural(spans.Count, "span")} in this period.",
-            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(spans.Count, "span")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(spans.Count, "span")}.",
             Resolution = new ReportResolution(0, 0, spans.Count, kept.Count, kept.Count < spans.Count),
         };
     }

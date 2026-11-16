@@ -11,7 +11,7 @@ export interface SignalWords {
   other: readonly string[];
 }
 
-export function fold(text: string): string {
+function fold(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 }
 

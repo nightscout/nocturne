@@ -9,6 +9,7 @@
     getCustomReports,
   } from "#lib/api/generated/customReports.generated.remote.js";
   import type { CustomReportSummary } from "#lib/api/generated/nocturne-api-client.js";
+  import { clearDraft, draftOwner } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
@@ -34,6 +35,7 @@
     deleteError = null;
     try {
       await deleteCustomReport(pendingDelete.id);
+      clearDraft(draftOwner(page.data), pendingDelete.id);
       pendingDelete = null;
       toast.success("Nocturne deleted the report.");
     } catch (err) {
@@ -50,8 +52,7 @@
       <LayoutDashboard class="h-5 w-5 text-primary" aria-hidden="true" />
     </div>
     <div class="space-y-1">
-      <h2 class="text-xl font-semibold">Saved custom reports</h2>
-      <p class="text-sm text-muted-foreground">
+      <h2 class="text-xl font-semibold">Saved custom reports</h2>      <p class="text-sm text-muted-foreground">
         A custom report shows the charts and figures of your data that you select. Each member of this
         account sees the same list.
       </p>

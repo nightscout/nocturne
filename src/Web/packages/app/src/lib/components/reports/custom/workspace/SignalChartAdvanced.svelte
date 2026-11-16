@@ -10,6 +10,7 @@
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import { describe } from "./describe.js";
   import type { ChartBlock, Report } from "./report.svelte.js";
+  import { offerUndo } from "./undo.svelte.js";
 
   interface Props {
     report: Report;
@@ -20,6 +21,13 @@
 
   let confirming = $state(false);
   const reason = $derived(block.ws.empty ? "Add a signal first." : null);
+
+  function change() {
+    confirming = false;
+    const undo = report.changeSignalBySignal(block);
+    if (typeof undo === "string") return;
+    offerUndo("Nocturne changed the chart signal by signal.", undo);
+  }
 </script>
 
 <Collapsible.Root>
@@ -48,7 +56,7 @@
       data-testid="signal-by-signal"
     >
       <SlidersHorizontal aria-hidden="true" />
-      Change each signal on its own
+      Change signal by signal
     </Button>
     {#if reason}
       <p class="text-xs text-muted-foreground">{reason}</p>
@@ -61,12 +69,10 @@
   onOpenChange={(open) => (confirming = open)}
   title="Change this chart signal by signal?"
   confirmLabel="Change signal by signal"
-  onConfirm={() => {
-    confirming = false;
-    report.changeSignalBySignal(block);
-  }}
+  onConfirm={change}
 >
   {#snippet description()}
-    The chart keeps everything that it shows. After this, you cannot change its view or its groups.
+    The chart keeps everything that it shows. After this, you cannot change its view or its groups. To go
+    back, select Undo on the message that follows.
   {/snippet}
 </ConfirmDialog>

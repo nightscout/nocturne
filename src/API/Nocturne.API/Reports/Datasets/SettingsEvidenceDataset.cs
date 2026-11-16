@@ -106,7 +106,7 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
                 ? null
                 : ["basalObserved|isfObserved|carbRatioObserved", "basalProfile|isfProfile|carbRatioProfile"],
             SentenceComparesSettings = report.WithheldReason is null && report.TimeZoneUnavailableReason is null,
-            Context = ContextLine(report, ReportFacts.Plural(rows.Count, "figure")),
+            Context = ContextLine(report, ReportFacts.Plural(rows.Count, "figure"), request.Clock),
             Omitted = report.Primary is null && report.WithheldReason == SettingsEvidenceWithheldReason.ReadScopes
                 ? [.. Fields.Select(f => new ReportOmittedField(f.Name, ScopeOf(LoopAnalysisSeries.SettingsEvidence)))]
                 : [],

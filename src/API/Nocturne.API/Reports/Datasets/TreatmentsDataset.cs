@@ -136,14 +136,14 @@ internal sealed class TreatmentsDataset : IReportDataset
 
         var latest = request.Whole ? kept.OrderBy(r => r.Time).ToList() : kept.OrderByDescending(r => r.Time).Take(Budget).OrderBy(r => r.Time).ToList();
         var summary = Summarise(kept, request.From, request.To, read,
-            request.Services.GetRequiredService<IStatisticsService>(), latest.Count, limited, request.Zone);
+            request.Services.GetRequiredService<IStatisticsService>(), latest.Count, limited, request.Clock);
         var budgetCut = latest.Count < kept.Count;
         var limitCut = records.Where(r => limited.Contains(r.Type)).Select(r => (long?)r.Time).Min();
         long? completeFrom = budgetCut ? Math.Max(latest[0].Time, limitCut ?? long.MinValue) : limitCut;
         string? cutNote = completeFrom is { } cutAt
             ? budgetCut
-                ? $"Only the latest {latest.Count} of {kept.Count} records are shown, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(cutAt), request.Zone)}."
-                : $"The read stopped at {RecordLimit} records of a kind, so the records start at {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(cutAt), request.Zone)}."
+                ? $"Only the latest {latest.Count} of {kept.Count} records are shown, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(cutAt), request.Clock)}."
+                : $"The read stopped at {RecordLimit} records of a kind, so the records start at {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(cutAt), request.Clock)}."
             : null;
 
         return new ReportDatasetOutput
@@ -160,7 +160,7 @@ internal sealed class TreatmentsDataset : IReportDataset
             SentenceAbout = kept.Count == 0 ? null : [],
             CompleteFrom = completeFrom,
             CutNote = cutNote,
-            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(kept.Count, "record")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(kept.Count, "record")}.",
             Resolution = new ReportResolution(0, 0, kept.Count, latest.Count, latest.Count < kept.Count),
         };
     }
@@ -277,13 +277,13 @@ internal sealed class TreatmentsDataset : IReportDataset
         IStatisticsService statistics,
         int rowsServed,
         IReadOnlySet<ReportTreatmentType>? limited = null,
-        TimeZoneInfo? zone = null)
+        ReportClock? clock = null)
     {
-        string At(long mills) => TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(mills), zone ?? TimeZoneInfo.Utc).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        string At(long mills) => (clock ?? ReportClock.Utc).DateTime(DateTimeOffset.FromUnixTimeMilliseconds(mills));
         static string N(double value, string format = "0.##") => value.ToString(format, CultureInfo.InvariantCulture);
 
         var text = new StringBuilder();
-        text.Append(CultureInfo.InvariantCulture, $"Treatments from {ReportFacts.Window(from, to, zone)}.").Append('\n');
+        text.Append(CultureInfo.InvariantCulture, $"Treatments from {ReportFacts.Window(from, to, clock)}.").Append('\n');
         if (records.Count == 0)
             return text.Append("No treatment records of these kinds in this period.").ToString();
 

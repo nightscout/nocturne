@@ -19,7 +19,7 @@
   import SaveControl from "#lib/components/reports/custom/workspace/SaveControl.svelte";
   import StarterList from "#lib/components/reports/custom/workspace/StarterList.svelte";
   import DraftNotice from "#lib/components/reports/custom/workspace/DraftNotice.svelte";
-  import { NEW_REPORT, ReportDraft } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
+  import { NEW_REPORT, ReportDraft, draftOwner } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
   import UnsavedGuard from "#lib/components/reports/custom/workspace/UnsavedGuard.svelte";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { tick, untrack } from "svelte";
@@ -35,7 +35,7 @@
 
   /** The report being made, or null while the member chooses a start. */
   let report = $state<Report | null>(null);
-  const draft = new ReportDraft(NEW_REPORT);
+  const draft = new ReportDraft(NEW_REPORT, draftOwner(page.data));
   /** Whether the draft this browser keeps was looked for, which is done once the catalogue is known. */
   let looked = false;
 
@@ -44,7 +44,7 @@
     if (!known || looked) return;
     looked = true;
     const restored = untrack(() =>
-      draft.open(null, (d) => Report.fromState(known, d.version, d.state, minuteLabel, spanLabel))
+      draft.open(null, null, (d) => Report.fromState(known, d.version, d.state, minuteLabel, spanLabel))
     );
     if (restored) report = restored;
   });
@@ -103,4 +103,4 @@
   {/if}
 </div>
 
-<UnsavedGuard dirty={draft.dirty} />
+<UnsavedGuard dirty={draft.dirty} kept={draft.kept} />

@@ -11,7 +11,15 @@ import { Report } from "#lib/components/reports/custom/workspace/report.svelte.j
 import { BUILDER_KIND, withBuilder } from "#lib/components/reports/custom/workspace/saved-state.js";
 import { starter } from "#lib/components/reports/custom/workspace/starters.js";
 
-const calls = vi.hoisted(() => ({ runs: [] as unknown[], validations: [] as unknown[], updates: [] as unknown[], creates: [] as unknown[], gotos: [] as string[] }));
+const calls = vi.hoisted(() => ({
+  runs: [] as unknown[],
+  validations: [] as unknown[],
+  updates: [] as unknown[],
+  creates: [] as unknown[],
+  gotos: [] as string[],
+  /** The leave guards the page registered, newest last. */
+  guards: [] as ((navigation: { type: string; to: { url: URL } | null; cancel: () => void }) => void)[],
+}));
 /** How the validator answers: as the engine does, or by failing to answer, as a network error does. */
 let validatorDown = false;
 let saved: CustomReport;
@@ -49,10 +57,16 @@ vi.mock("$app/navigation", () => ({
     calls.gotos.push(url);
     return Promise.resolve();
   },
-  beforeNavigate: () => {},
+  beforeNavigate: (guard: (typeof calls.guards)[number]) => calls.guards.push(guard),
 }));
 
 import EditCustomReportPage from "./+page.svelte";
+
+/** A saved report as the API returns one the workspace made: the spec it stored, and the state with it. */
+function madeInWorkspace(change: (spec: Record<string, unknown>) => Record<string, unknown> = (spec) => spec): CustomReport {
+  const report = new Report(liveCatalogue, starter("dawn-rise")!, minuteLabel);
+  return { id: "r1", name: "Dawn", spec: withBuilder(change(report.spec()), report.toState()), errors: [], canEdit: true };
+}
 
 async function saveAs(name: string) {
   await page.getByTestId("save-trigger").click();
@@ -66,6 +80,7 @@ beforeEach(async () => {
   calls.updates.length = 0;
   calls.creates.length = 0;
   calls.gotos.length = 0;
+  calls.guards.length = 0;
   validatorDown = false;
   localStorage.clear();
   pageState.params = { id: "r1" };
@@ -177,11 +192,6 @@ describe("editing a report saved without the workspace's state", () => {
 });
 
 describe("editing a report made in the workspace", () => {
-  /** A saved report as the API returns one the workspace made: the spec it stored, and the state with it. */
-  function madeInWorkspace(change: (spec: Record<string, unknown>) => Record<string, unknown> = (spec) => spec): CustomReport {
-    const report = new Report(liveCatalogue, starter("dawn-rise")!, minuteLabel);
-    return { id: "r1", name: "Dawn", spec: withBuilder(change(report.spec()), report.toState()), errors: [], canEdit: true };
-  }
 
   it("reopens it from its state, and saves a change with the state", async () => {
     saved = madeInWorkspace();
@@ -292,5 +302,75 @@ describe("the unsaved changes to a saved report", () => {
     await expect.element(page.getByLabelText("Report title")).toHaveValue(before);
     await expect.element(page.getByText("Restored your unsaved changes.")).not.toBeInTheDocument();
     expect(localStorage.length).toBe(0);
+  });
+
+  /** Asks the page's newest leave guard about closing the tab (no dialog), and says whether it held the page. */
+  function guardHolds(): boolean {
+    let held = false;
+    calls.guards.at(-1)?.({ type: "leave", to: null, cancel: () => (held = true) });
+    return held;
+  }
+
+  it("asks before it opens changes kept for a report that changed elsewhere since, and keeps them on request", async () => {
+    saved = { ...madeInWorkspace(), updatedAt: "2026-11-16T01:00:00Z" };
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByLabelText("Report title").fill("My unsaved title");
+    await vi.waitFor(() => expect(localStorage.length).toBe(1));
+
+    // Another member saves the report: its version on the server moves on.
+    saved = { ...madeInWorkspace((spec) => ({ ...spec, title: "Their title" })), updatedAt: "2026-11-16T02:00:00Z" };
+    document.body.innerHTML = "";
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("draft-conflict")).toHaveTextContent("changed somewhere else");
+    expect(page.getByTestId("report-workspace").elements()).toHaveLength(0);
+    expect(page.getByText("Restored your unsaved changes.").elements()).toHaveLength(0);
+
+    await page.getByRole("button", { name: "Keep my changes" }).click();
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("My unsaved title");
+    await expect.element(page.getByText("Restored your unsaved changes.")).toBeVisible();
+  });
+
+  it("opens the report as it is now, and drops the old changes, on Discard my changes", async () => {
+    saved = { ...madeInWorkspace(), updatedAt: "2026-11-16T01:00:00Z" };
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByLabelText("Report title").fill("My unsaved title");
+    await vi.waitFor(() => expect(localStorage.length).toBe(1));
+
+    saved = { ...madeInWorkspace((spec) => ({ ...spec, title: "Their title" })), updatedAt: "2026-11-16T02:00:00Z" };
+    document.body.innerHTML = "";
+    render(EditCustomReportPage, {});
+    await page.getByRole("button", { name: "Discard my changes" }).click();
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("Their title");
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("discards the changes on Cancel after a confirm, so leaving asks nothing and nothing is kept", async () => {
+    saved = madeInWorkspace();
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByLabelText("Report title").fill("Unsaved");
+    await vi.waitFor(() => expect(localStorage.length).toBe(1));
+    expect(guardHolds()).toBe(true);
+
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Discard your changes?");
+    expect(calls.gotos).toEqual([]);
+    await dialog.getByRole("button", { name: "Discard changes" }).click();
+
+    await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/r1"]));
+    expect(localStorage.length).toBe(0);
+    expect(guardHolds()).toBe(false);
+  });
+
+  it("leaves on Cancel at once when nothing changed", async () => {
+    saved = madeInWorkspace();
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/r1"]));
+    expect(page.getByRole("alertdialog").elements()).toHaveLength(0);
   });
 });

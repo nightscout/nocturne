@@ -62,7 +62,7 @@
       ? [{ id: "against", label: "Signals", signals: ws.againstPair }]
       : ws.lanes.map((l) => ({
           id: l.id,
-          label: l.own ? "Own lane" : familyLabel(l.family),
+          label: l.own ? "Own row" : familyLabel(l.family),
           signals: l.signals,
         }))
   );
@@ -449,7 +449,7 @@
                     disabled={ownLaneReason !== null}
                     onCheckedChange={(on: boolean) => ws.setOwnLane(id, on)}
                   />
-                  <Label for="own-{id}" variant="option">Own lane</Label>
+                  <Label for="own-{id}" variant="option">Own row</Label>
                 </div>
                 {@render reasonLine(`why-own-${id}`, once("own"))}
               </div>
@@ -498,7 +498,7 @@
         size="sm"
         onclick={() =>
           removeChip(`[data-signal-chip="${id}"]`, () =>
-            removeWithUndo(ws, `Nocturne removed ${signalLabel(id)} from the chart.`, () => ws.toggleSignal(id), () => ws.toggleSignal(id))
+            removeWithUndo(ws, `Nocturne removed ${signalLabel(id)} from the chart.`, () => ws.toggleSignal(id), () => ws.placeSignal(id))
           )}
       >
         Remove from chart

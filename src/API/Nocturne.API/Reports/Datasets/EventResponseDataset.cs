@@ -241,6 +241,9 @@ internal sealed class EventResponseDataset : IReportDataset
             : group is { } n && n >= 1 && n <= words.Count ? words[n - 1]
             : words.Count == 1 ? words[0]
             : null;
+
+        /// <summary>How the dates of the read are written.</summary>
+        public ReportClock Clock { get; init; } = ReportClock.Utc;
     }
 
     /// <summary>
@@ -349,7 +352,7 @@ internal sealed class EventResponseDataset : IReportDataset
                 : new(ReportCohortOmission.SiblingReason, Group: asked.Select((c, j) => (c, j)).FirstOrDefault(x => x.c.Anchor == k.Cohort.Anchor && !x.c.Others).j + 1));
         IReadOnlyList<ReportCohort> cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label, omitted.GetValueOrDefault(i + 1)))];
         var askedWords = askedDefinition.Cohorts.Select(c => Words(c, foodNames, foodRead, useMmol, request.Hour12 ?? true)).ToList();
-        return new EventRun(report, labels, number, notes, askedLabels, cohorts, askedWords);
+        return new EventRun(report, labels, number, notes, askedLabels, cohorts, askedWords) { Clock = request.Clock };
     }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
@@ -385,7 +388,9 @@ internal sealed class EventResponseDataset : IReportDataset
             : report.Primary.Events.Count;
         var sentence = NoTimeZone(report, "Meals & events")
             ?? (counted == 0 && report.Definition.Cohorts.Count > 0 && !report.RangeOutsideHistory
-                ? NoneSentence(run.WordsOf(null), RangeWords(request))
+                ? run.Cohorts!.Any(c => c.Omitted is not null)
+                    ? LeftOutSentence(run.Cohorts!, RangeWords(request))
+                    : NoneSentence(run.WordsOf(null), RangeWords(request))
                 : WindowSentence(report.Definition));
         var anchors = report.Definition.Cohorts.Select(c => c.Anchor).Distinct().ToList();
 
@@ -395,7 +400,7 @@ internal sealed class EventResponseDataset : IReportDataset
             Summary = Summarise(report, labels, number, notes, useMmol),
             Facts = FactsOf(report, labels, useMmol),
             Sentence = sentence,
-            Context = ContextLine(report, ReportFacts.Plural(counted, "event")),
+            Context = ContextLine(report, ReportFacts.Plural(counted, "event"), request.Clock),
             Omitted = Omitted(report, fieldSeries),
             Window = Window(report),
             Cohorts = run.Cohorts!,
@@ -412,13 +417,40 @@ internal sealed class EventResponseDataset : IReportDataset
     internal static string NoneSentence(CohortWords? words, string range) =>
         words is null ? $"No group had an event {range}." : $"{words.None} {range}.";
 
+    /// <summary>
+    /// The sentence for groups read that had no event when some asked groups were not read: what was read had none, and
+    /// what was not read and why. "No group had an event" would also speak for the groups that were not read.
+    /// </summary>
+    internal static string LeftOutSentence(IReadOnlyList<ReportCohort> cohorts, string range)
+    {
+        var left = cohorts.Where(c => c.Omitted is not null).ToList();
+        var head = cohorts.Count - left.Count == 1 ? $"The group read had no event {range}." : $"No group read had an event {range}.";
+        return $"{head} Not read: {string.Join("; ", left.Select(c => $"{c.Label} ({OmissionWords(c.Omitted!)})"))}.";
+    }
+
+    private static string OmissionWords(ReportCohortOmission omission) =>
+        omission.Reason == ReportCohortOmission.ScopeReason && omission.Scope is { } scope
+            ? $"it needs the {ScopeNoun(scope)} permission"
+            : omission.Group is { } group ? $"group {group} is not read" : "not read";
+
+    private static string ScopeNoun(string scope) => scope switch
+    {
+        Scope.GlucoseRead => "glucose",
+        Scope.HeartRateRead => "heart rate",
+        Scope.StepCountRead => "step count",
+        Scope.SleepRead => "sleep",
+        Scope.AlertsRead => "alerts",
+        Scope.TreatmentsRead or Scope.DevicesRead or Scope.TherapyRead or Scope.FoodRead => ReportNeedsScopeAttribute.Noun(scope),
+        _ => scope,
+    };
+
     /// <summary>The range as words: "in the last 90 days" for a range that ends now, else its local dates.</summary>
     internal static string RangeWords(ReportDatasetRequest request)
     {
         if (request.Now is { } now && (now - request.To).Duration() < TimeSpan.FromMinutes(2))
             return $"in the last {ReportSpecValidator.Describe(request.To - request.From)}";
         var zone = request.Zone ?? TimeZoneInfo.Utc;
-        string Day(DateTimeOffset at) => TimeZoneInfo.ConvertTime(at, zone).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        string Day(DateTimeOffset at) => request.Clock.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone).DateTime));
         return $"from {Day(request.From)} to {Day(request.To)}";
     }
 

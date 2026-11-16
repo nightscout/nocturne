@@ -426,6 +426,12 @@ export function rangeLabel(id: string): string {
   return wordOf(rangeLabels(), id);
 }
 
+/** The whole days in `hours`: "1 day", or "N days". */
+export function daysText(hours: number): string {
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
 /** Each preset of groups of days. */
 export function dayGroupPresetLabels(): Record<string, string> {
   return {
@@ -705,7 +711,7 @@ export function scopeWords(): Record<string, string> {
   };
 }
 
-export function scopeWord(scope: string): string {
+function scopeWord(scope: string): string {
   return wordOf(scopeWords(), scope);
 }
 
@@ -771,8 +777,4 @@ export function dayKindLabels(): Record<string, string> {
     lowOvernight: "Days with a low overnight",
     carbs: "Days by total carbs",
   };
-}
-
-export function dayKindLabel(id: string): string {
-  return wordOf(dayKindLabels(), id);
 }

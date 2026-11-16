@@ -294,7 +294,8 @@ public static class DatabaseInitializationExtensions
                         parent,
                         parent is null ? null : ShareDataCategories.RecencyColumnFor(parent.Table),
                         parent is null ? null : ShareDataCategories.SpanEndColumnFor(parent.Table),
-                        ShareDataCategories.OpenSpanBoundFor(table));
+                        ShareDataCategories.OpenSpanBoundFor(table),
+                        ShareDataCategories.SpanEarlyEndColumnFor(table));
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
                 await transaction.CommitAsync(cancellationToken);

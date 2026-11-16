@@ -84,7 +84,7 @@ internal sealed class PeriodComparisonDataset : IReportDataset
     {
         public int Days => To.DayNumber - From.DayNumber + 1;
 
-        public string Describe() => string.Create(CultureInfo.InvariantCulture, $"{Label}, {From:yyyy-MM-dd} to {To:yyyy-MM-dd}");
+        public string Describe(ReportClock? clock = null) => $"{Label}, {(clock ?? ReportClock.Utc).Date(From)} to {(clock ?? ReportClock.Utc).Date(To)}";
     }
 
     /// <summary>The two periods the parameters name on the calendar whose today is <paramref name="today"/>, as the web report resolves its presets.</summary>
@@ -190,8 +190,8 @@ internal sealed class PeriodComparisonDataset : IReportDataset
         var (a, b) = Periods(parameters, today);
         var window = WindowOf(a, b, zone);
         var labels = new Dictionary<string, string> { ["a"] = a.Label, ["b"] = b.Label };
-        var context = string.Create(CultureInfo.InvariantCulture,
-            $"{a.Label}: {a.From:yyyy-MM-dd} to {a.To:yyyy-MM-dd}. {b.Label}: {b.From:yyyy-MM-dd} to {b.To:yyyy-MM-dd}. Local days.");
+        var dates = request.Clock;
+        var context = $"{a.Label}: {dates.Date(a.From)} to {dates.Date(a.To)}. {b.Label}: {dates.Date(b.From)} to {dates.Date(b.To)}. Local days.";
 
         if (request.HistoryClamped)
             return new ReportDatasetOutput
@@ -213,7 +213,7 @@ internal sealed class PeriodComparisonDataset : IReportDataset
             Rows = rows,
             Summary = Summarise(a, b, rows, sideA.HasReadings, sideB.HasReadings, treatments, clock.Zone is null),
             Facts = FactsOf(rows),
-            Sentence = $"A is {a.Describe()}; B is {b.Describe()}."
+            Sentence = $"A is {a.Describe(dates)}; B is {b.Describe(dates)}."
                 + (treatments ? "" : " Insulin and carb figures need the treatments.read scope, which this token does not hold."),
             Context = context,
             Window = window,

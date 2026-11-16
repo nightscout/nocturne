@@ -16,9 +16,10 @@
   } from "#lib/api/generated/customReports.generated.remote.js";
   import SpecErrorList from "#lib/components/reports/custom/SpecErrorList.svelte";
   import { minuteLabel, spanLabel } from "#lib/components/reports/custom/workspace/clock.js";
+  import DraftConflict from "#lib/components/reports/custom/workspace/DraftConflict.svelte";
   import DraftNotice from "#lib/components/reports/custom/workspace/DraftNotice.svelte";
   import { Report } from "#lib/components/reports/custom/workspace/report.svelte.js";
-  import { ReportDraft } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
+  import { ReportDraft, draftOwner } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
   import UnsavedGuard from "#lib/components/reports/custom/workspace/UnsavedGuard.svelte";
   import ReportWorkspace from "#lib/components/reports/custom/workspace/ReportWorkspace.svelte";
   import { normaliseWith, openSaved, specToSave } from "#lib/components/reports/custom/workspace/saved-report.js";
@@ -26,6 +27,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Undo2 from "@lucide/svelte/icons/undo-2";
@@ -59,7 +61,11 @@
   let attempt = $state(0);
 
   /** The unsaved changes to the report of `id` this browser keeps. */
-  const draft = $derived(new ReportDraft(id));
+  const owner = $derived(draftOwner(page.data));
+  const tenant = $derived(owner.tenant);
+  const subject = $derived(owner.subject);
+  /** Made again only when the report or its owner changes, not each time the page's data reloads. */
+  const draft = $derived(new ReportDraft(id, { tenant, subject }));
 
   $effect(() => {
     const saved = report.current;
@@ -78,7 +84,7 @@
           opening = { id: forId, state: "unreadable" };
           return;
         }
-        const shown = untrack(() => draft).open(made, (d) => Report.fromState(known, d.version, d.state, minuteLabel, spanLabel));
+        const shown = untrack(() => draft).open(made, saved.updatedAt ?? null, (d) => Report.fromState(known, d.version, d.state, minuteLabel, spanLabel));
         opening = { id: forId, state: "open", report: shown ?? made, saved: made };
       },
       () => {
@@ -102,6 +108,27 @@
 
   function opened() {
     return goto(resolve("/(authenticated)/reports/custom/[id]", { id }));
+  }
+
+  /** Opens the changes this browser kept although the report was saved again since. */
+  function keepStale() {
+    const kept = draft.keepStale();
+    if (kept && opening?.state === "open") opening = { ...opening, report: kept };
+  }
+
+  /** Whether the dialog that discards the unsaved changes on Cancel is open. */
+  let confirmingCancel = $state(false);
+
+  /** Cancel discards the unsaved changes, after the member confirms it, and opens the report as saved. */
+  function cancel() {
+    if (draft.dirty) confirmingCancel = true;
+    else void opened();
+  }
+
+  function discardAndClose() {
+    confirmingCancel = false;
+    draft.clear();
+    return opened();
   }
 
   async function saveWorkspace(workspace: Report, newName: string) {
@@ -148,6 +175,9 @@
       </div>
     {:else if opening.state === "open"}
       {@const workspace = opening.report}
+      {#if draft.stale}
+        <DraftConflict onkeep={keepStale} ondiscard={() => draft.discardStale()} />
+      {:else}
       {#if draft.restored}
         <DraftNotice ondiscard={discard} />
       {/if}
@@ -168,13 +198,14 @@
                 onsave={(n) => copyWorkspace(workspace, n)}
               />
             {/if}
-            <Button variant="ghost" size="sm" onclick={opened} disabled={busy}>
+            <Button variant="ghost" size="sm" onclick={cancel} disabled={busy}>
               <Undo2 aria-hidden="true" />
               Cancel
             </Button>
           {/snippet}
         </ReportWorkspace>
       {/key}
+      {/if}
     {:else if opening.state === "failed"}
       <div class="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4" role="alert" data-testid="opening-failed">
         <p class="text-sm">Could not check how this report opens. Your report is not changed.</p>
@@ -189,4 +220,20 @@
   {/if}
 </div>
 
-<UnsavedGuard dirty={draft.dirty} />
+<UnsavedGuard dirty={draft.dirty} kept={draft.kept} />
+
+<ConfirmDialog
+  open={confirmingCancel}
+  onOpenChange={(open) => {
+    if (!open) confirmingCancel = false;
+  }}
+  title="Discard your changes?"
+  confirmLabel="Discard changes"
+  cancelLabel="Stay"
+  destructive
+  onConfirm={discardAndClose}
+>
+  {#snippet description()}
+    Nocturne discards the changes that are not saved, also in this browser. The report opens as it was saved.
+  {/snippet}
+</ConfirmDialog>

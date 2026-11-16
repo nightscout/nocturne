@@ -27,7 +27,7 @@
   import BlockEditors from "./BlockEditors.svelte";
   import BlockPreview from "./BlockPreview.svelte";
   import { describe } from "./describe.js";
-  import { offerUndo } from "./undo.svelte.js";
+  import { dismissUndos, offerUndo } from "./undo.svelte.js";
   import GivenBlockView from "./GivenBlockView.svelte";
   import RangeChoices from "./RangeChoices.svelte";
   import { AS_SAVED, shownKind, type Block, type BlockKind, type Report } from "./report.svelte.js";
@@ -58,6 +58,7 @@
   }
   onDestroy(() => {
     for (const r of Object.values(runners)) r.dispose();
+    dismissUndos();
   });
 
   /** Why the report cannot be saved as its previews stand: a block whose current settings the engine refused, named by its title. */

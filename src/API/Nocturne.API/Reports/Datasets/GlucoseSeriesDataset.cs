@@ -97,11 +97,11 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
 
         var statistics = request.Services.GetRequiredService<IStatisticsService>();
         var thresholds = GlucoseSummary.Thresholds(data.Thresholds);
-        var (facts, sentence, context) = GlucoseSummary.Facts(data, statistics, request.UseMmol, request.From, request.To, request.Zone);
+        var (facts, sentence, context) = GlucoseSummary.Facts(data, statistics, request.UseMmol, request.From, request.To, request.Clock);
         return new ReportDatasetOutput
         {
             Rows = Rows(sampled, data, thresholds, request.UseMmol),
-            Summary = GlucoseSummary.Build(data, statistics, request.UseMmol, request.From, request.To, [.. omitted.Select(o => o.Field)], request.Zone),
+            Summary = GlucoseSummary.Build(data, statistics, request.UseMmol, request.From, request.To, [.. omitted.Select(o => o.Field)], request.Clock),
             Facts = [.. facts.Select(f => f.Of(GlucoseFields))],
             Sentence = sentence,
             SentenceAbout = GlucoseFields,

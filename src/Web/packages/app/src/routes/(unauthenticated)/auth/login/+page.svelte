@@ -8,6 +8,8 @@
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "#lib/api/generated/index.js";
   import { page } from "$app/state";
+  import { onMount } from "svelte";
+  import { clearMemberStorage } from "#lib/stores/member-storage.js";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
   import { resolve } from "$app/paths";
@@ -20,6 +22,8 @@
   } from "#lib/components/auth/guest-code-dismissal.js";
 
   let { data } = $props();
+
+  onMount(clearMemberStorage);
 
   // Check auth state and redirect if already logged in
   const authStateQuery = getAuthState();

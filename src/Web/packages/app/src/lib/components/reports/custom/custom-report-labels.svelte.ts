@@ -7,6 +7,7 @@ export function customReportLabels(): ReportViewLabels {
     chart: glucoseChartLabels(),
     noData: "No data in this range.",
     fullSummary: "Full summary",
-    plotKeys: "Use the left and right arrow keys to read the values. Use the up and down arrow keys to go to a different axis.",
+    plotKeys:
+      "Use the left and right arrow keys to read the values. Use the up and down arrow keys to go to a different axis. Press Escape to stop.",
   };
 }

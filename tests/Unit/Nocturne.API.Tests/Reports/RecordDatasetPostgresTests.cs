@@ -10,6 +10,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -139,8 +140,8 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
                 });
 
             db.LabHbA1cResults.AddRange(
-                new LabHbA1cResultEntity { Id = Guid.CreateVersion7(), MeasuredAt = now.AddHours(-1), ValuePercent = 6.5, CreatedAt = now },
-                new LabHbA1cResultEntity { Id = Guid.CreateVersion7(), MeasuredAt = now.AddDays(-3), ValuePercent = 7.1, CreatedAt = now });
+                new LabHbA1cResultEntity { Id = Guid.CreateVersion7(), MeasuredAt = now.Date, ValuePercent = 6.5, CreatedAt = now },
+                new LabHbA1cResultEntity { Id = Guid.CreateVersion7(), MeasuredAt = now.Date.AddDays(-3), ValuePercent = 7.1, CreatedAt = now });
 
             db.BodyWeights.AddRange(
                 new BodyWeightEntity { Id = Guid.CreateVersion7(), Mills = Mills(now.AddHours(-1)), WeightKg = 70 },
@@ -172,7 +173,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         { TrackersParameters.Name, 3, 2, 0 },
         { AlertExcursionsParameters.Name, 3, 2, 3 },
         { AlertInstancesParameters.Name, 3, 2, 3 },
-        { DndWindowsParameters.Name, 2, 2, 0 },
+        { DndWindowsParameters.Name, 2, 1, 0 },
         { CompressionLowsParameters.Name, 2, 1, 0 },
         { LabHbA1cParameters.Name, 2, 1, 0 },
         { BodyWeightParameters.Name, 2, 1, 0 },
@@ -183,6 +184,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
     [
         TrackersParameters.Name, AlertExcursionsParameters.Name, AlertInstancesParameters.Name, DndWindowsParameters.Name,
         CompressionLowsParameters.Name, LabHbA1cParameters.Name, BodyWeightParameters.Name, SleepBiometricsParameters.Name,
+        SystemEventsParameters.Name,
     ];
 
     private static IReportDataset Dataset(string name) => name switch
@@ -195,6 +197,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         LabHbA1cParameters.Name => new LabHbA1cDataset(),
         BodyWeightParameters.Name => new BodyWeightDataset(),
         SleepBiometricsParameters.Name => new SleepBiometricsDataset(),
+        SystemEventsParameters.Name => new SystemEventsDataset(),
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
     };
 
@@ -208,21 +211,152 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         LabHbA1cParameters.Name => new LabHbA1cParameters(),
         BodyWeightParameters.Name => new BodyWeightParameters(),
         SleepBiometricsParameters.Name => new SleepBiometricsParameters(),
+        SystemEventsParameters.Name => new SystemEventsParameters(),
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
     };
 
     /// <summary>The dataset's rows over the last week for <paramref name="tenant"/>, read as <paramref name="reader"/>.</summary>
-    private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> RowsAsync(string name, Guid tenant, ICategoryReadContext? reader)
+    private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> RowsAsync(string name, Guid tenant, ICategoryReadContext? reader) =>
+        (await RunAsync(Dataset(name), Parameters(name), tenant, reader, database.Now.AddMinutes(1).AddDays(-7), database.Now.AddMinutes(1))).Rows;
+
+    /// <summary>One read of <paramref name="dataset"/> over [<paramref name="from"/>, <paramref name="to"/>) for <paramref name="tenant"/>, as <paramref name="reader"/>.</summary>
+    private async Task<ReportDatasetOutput> RunAsync(
+        IReportDataset dataset, ReportDatasetParameters parameters, Guid tenant, ICategoryReadContext? reader, DateTimeOffset from, DateTimeOffset to,
+        TimeZoneInfo? zone = null, bool whole = false)
     {
         var seed = new NocturneDbContext(database.Options) { TenantId = tenant }.ReadingFrom(reader: reader);
-        await using var services = new ServiceCollection().AddSingleton(seed.AsFactory()).BuildServiceProvider();
-        var to = database.Now.AddMinutes(1);
-        var output = await Dataset(name).RunAsync(
-            new ReportDatasetRequest(Parameters(name), ReportPanelKind.Chart, to.AddDays(-7), to, false, new HashSet<string>(Scopes),
-                services, new ReportReadLog(), HistoryClamped: reader?.IsHistoryClamped == true, Now: to, Zone: TimeZoneInfo.Utc),
+        var factory = seed.AsFactory();
+        await using var services = new ServiceCollection().AddSingleton(factory)
+            .AddSingleton<Nocturne.Core.Contracts.Repositories.ISystemEventRepository>(new SystemEventRepository(factory))
+            .BuildServiceProvider();
+        var output = await dataset.RunAsync(
+            new ReportDatasetRequest(parameters, ReportPanelKind.Chart, from, to, false, new HashSet<string>([.. Scopes, Scope.DevicesRead]),
+                services, new ReportReadLog(), HistoryClamped: reader?.IsHistoryClamped == true, Now: to, Zone: zone ?? TimeZoneInfo.Utc, Whole: whole),
             CancellationToken.None);
         await seed.DisposeAsync();
-        return output.Rows;
+        return output;
+    }
+
+    /// <summary>A tenant with no rows, seeded by <paramref name="seed"/>.</summary>
+    private async Task<Guid> TenantAsync(Func<NocturneDbContext, Task>? seed = null)
+    {
+        var tenant = Guid.NewGuid();
+        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
+                VALUES (@id, @slug, 'report-records-more', true, now(), now())
+                """;
+            cmd.Parameters.AddWithValue("id", tenant);
+            cmd.Parameters.AddWithValue("slug", $"report-records-{tenant:N}");
+            await cmd.ExecuteNonQueryAsync();
+        }
+        if (seed is not null)
+        {
+            await using var db = new NocturneDbContext(database.Options) { TenantId = tenant };
+            await seed(db);
+            await db.SaveChangesAsync();
+        }
+        return tenant;
+    }
+
+    private static long Mills(DateTimeOffset at) => at.ToUnixTimeMilliseconds();
+
+    [Fact]
+    public async Task Device_alarms_past_the_budget_keep_the_oldest_and_say_where_they_stop()
+    {
+        var start = database.Now.AddDays(-5);
+        var tenant = await TenantAsync(db =>
+        {
+            db.SystemEvents.AddRange(Enumerable.Range(0, 2_100).Select(i => new SystemEventEntity
+            {
+                Id = Guid.CreateVersion7(), EventType = nameof(SystemEventType.Alarm), Category = nameof(SystemEventCategory.Pump),
+                Code = $"E{i}", Mills = Mills(start.AddMinutes(i)),
+            }));
+            return Task.CompletedTask;
+        });
+
+        var output = await RunAsync(new SystemEventsDataset(), new SystemEventsParameters(), tenant, null, start.AddMinutes(-1), database.Now);
+
+        output.Rows.Should().HaveCount(2_000);
+        output.Rows[0]["start"].Should().Be(Mills(start), "the read keeps the start of the range");
+        output.Rows[^1]["start"].Should().Be(Mills(start.AddMinutes(1_999)));
+        output.CutNote.Should().Be($"Only the first 2000 alarms are shown, to {ReportFacts.Instant(start.AddMinutes(1_999), TimeZoneInfo.Utc)}.");
+    }
+
+    [Fact]
+    public async Task A_lab_result_is_read_on_the_local_days_of_the_range_and_not_on_the_day_the_range_ends_at()
+    {
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        static DateTime Day(int month, int day) => new(2026, month, day, 0, 0, 0, DateTimeKind.Utc);
+        var tenant = await TenantAsync(db =>
+        {
+            db.LabHbA1cResults.AddRange(
+                new LabHbA1cResultEntity { Id = Guid.CreateVersion7(), MeasuredAt = Day(10, 24), ValuePercent = 7.4, CreatedAt = DateTime.UtcNow },
+                new LabHbA1cResultEntity { Id = Guid.CreateVersion7(), MeasuredAt = Day(10, 25), ValuePercent = 7.2, CreatedAt = DateTime.UtcNow },
+                new LabHbA1cResultEntity { Id = Guid.CreateVersion7(), MeasuredAt = Day(10, 31), ValuePercent = 6.9, CreatedAt = DateTime.UtcNow },
+                new LabHbA1cResultEntity { Id = Guid.CreateVersion7(), MeasuredAt = Day(11, 1), ValuePercent = 6.6, CreatedAt = DateTime.UtcNow });
+            return Task.CompletedTask;
+        });
+        var from = new DateTimeOffset(2026, 10, 25, 0, 0, 0, TimeSpan.FromHours(11));
+        var to = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.FromHours(11));
+
+        var output = await RunAsync(new LabHbA1cDataset(), new LabHbA1cParameters(), tenant, null, from, to, sydney);
+
+        output.Rows.Select(r => r["hba1c"]).Should().Equal(7.2, 6.9);
+        output.Rows[0]["day"].Should().Be(Mills(from), "a result is drawn at the local midnight of its day");
+    }
+
+    [Fact]
+    public async Task Body_weight_past_the_budget_keeps_the_latest_records_so_the_latest_and_the_change_are_of_them()
+    {
+        var start = database.Now.AddDays(-20);
+        var tenant = await TenantAsync(db =>
+        {
+            db.BodyWeights.AddRange(Enumerable.Range(0, 1_001).Select(i => new BodyWeightEntity
+            {
+                Id = Guid.CreateVersion7(), Mills = Mills(start.AddMinutes(10 * i)), WeightKg = i == 1_000 ? 75 : i == 1 ? 70 : 72,
+            }));
+            return Task.CompletedTask;
+        });
+
+        var output = await RunAsync(new BodyWeightDataset(), new BodyWeightParameters(), tenant, null, start.AddMinutes(-1), database.Now);
+
+        output.Rows.Should().HaveCount(1_000);
+        output.Rows[^1]["weight"].Should().Be(75.0, "the latest record is the last row");
+        output.Facts.Single(f => f.Label == "Latest").Value.Should().Be("75");
+        output.Facts.Single(f => f.Label == "Change").Value.Should().Be("+5", "from the first record kept, 70 kg, to the latest");
+        output.CompleteFrom.Should().Be(Mills(start.AddMinutes(10)));
+        output.CutNote.Should().StartWith("Only the latest 1000 records are shown, from ");
+    }
+
+    [Fact]
+    public async Task Sleep_body_readings_keep_every_minute_for_a_whole_read_and_one_slot_each_otherwise()
+    {
+        var start = database.Now.AddHours(-12);
+        var tenant = await TenantAsync(db =>
+        {
+            var session = new SleepSessionEntity
+            {
+                Id = Guid.CreateVersion7(), StartTime = start.UtcDateTime, EndTime = start.AddHours(3).UtcDateTime,
+                Type = "Overnight", DetectionMethod = "Auto", Source = "Fitbit",
+            };
+            db.SleepSessions.Add(session);
+            db.SleepBiometricSamples.AddRange(Enumerable.Range(0, 180).Select(i => new SleepBiometricSampleEntity
+            {
+                Id = Guid.CreateVersion7(), SleepSessionId = session.Id, Timestamp = start.AddMinutes(i).UtcDateTime, HeartRate = 55 + i % 2,
+            }));
+            return Task.CompletedTask;
+        });
+
+        var sampled = await RunAsync(new SleepBiometricsDataset(), new SleepBiometricsParameters(), tenant, null, database.Now.AddDays(-31), database.Now);
+        var whole = await RunAsync(new SleepBiometricsDataset(), new SleepBiometricsParameters(), tenant, null, database.Now.AddDays(-31), database.Now, whole: true);
+
+        sampled.Rows.Should().HaveCountLessThan(10);
+        whole.Rows.Should().HaveCount(180);
+        whole.CutNote.Should().BeNull();
     }
 
     private static CategoryReadContext Clamped()

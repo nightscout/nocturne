@@ -104,10 +104,13 @@ internal sealed class SleepNightsDataset : IReportDataset
         var body = request.HasScope(Scope.HeartRateRead);
         IReadOnlyList<ReportOmittedField> omitted = body ? [] : [.. BodyFields.Select(f => new ReportOmittedField(f, Scope.HeartRateRead))];
         var sessions = (await request.Services.GetRequiredService<ISleepSessionRepository>().GetSessionsAsync(
-            request.From.UtcDateTime, request.To.UtcDateTime, limit: MaxSessions, descending: false, cancellationToken: cancellationToken)).ToList();
+            request.From.UtcDateTime, request.To.UtcDateTime, limit: MaxSessions + 1, descending: false, cancellationToken: cancellationToken)).ToList();
+        var cut = sessions.Count > MaxSessions;
+        if (cut)
+            sessions = sessions[..MaxSessions];
         if (sessions.Count > 0)
             request.ReadLog.Record("sleep_sessions", sessions.Count);
-        var context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(sessions.Count, "sleep session")}.";
+        var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(sessions.Count, "sleep session")}.";
         if (sessions.Count == 0)
             return SeriesRows.Empty("No sleep sessions in this period.", context, omitted);
 
@@ -131,13 +134,20 @@ internal sealed class SleepNightsDataset : IReportDataset
                 ("breathingRate", "Breathing rate in sleep", Of(s => s.AvgBreathRate), "breaths/min", "0.#"),
             ]);
         var (sentence, about, others) = SeriesRows.Sentences(figures);
-        var lines = new List<string> { $"Sleep figures from {ReportFacts.Window(request.From, request.To, request.Zone)}: {ReportFacts.Plural(sessions.Count, "session")}." };
+        var lines = new List<string> { $"Sleep figures from {ReportFacts.Window(request.From, request.To, request.Clock)}: {ReportFacts.Plural(sessions.Count, "session")}." };
         lines.AddRange(new[] { sentence }.OfType<string>().Concat(others.Select(o => o.Text)));
         if (!body)
             lines.Add("Heart rate, HRV, blood oxygen and breathing rate are not shown, because the token does not hold the heart rate scope.");
+        string? cutNote = cut
+            ? $"Only the first {MaxSessions} sessions are shown, to the night of {request.Clock.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(sessions[^1].EndTime, DateTimeKind.Utc), zone)))}."
+            : null;
+        if (cutNote is not null)
+            lines.Add(cutNote);
         return new ReportDatasetOutput
         {
             Rows = rows,
+            CutNote = cutNote,
+            Resolution = new ReportResolution(0, 0, cut ? MaxSessions + 1 : sessions.Count, rows.Count, cut),
             Summary = string.Join('\n', lines),
             Facts =
             [
@@ -217,11 +227,15 @@ internal sealed class SleepBiometricsDataset : IReportDataset
 
     public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
 
+    public string? ReadVariant(ReportReadShape shape) => shape.Whole ? "whole" : null;
+
+    public bool FoldsWhole => true;
+
     internal sealed record Sample(long Mills, float? HeartRate, float? Hrv, float? Spo2, float? RespirationRate);
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
-        var context = ReportFacts.Window(request.From, request.To, request.Zone);
+        var context = ReportFacts.Window(request.From, request.To, request.Clock);
         if (!request.HasScope(Scope.HeartRateRead))
             return SeriesRows.Empty("Not shown, because the token does not hold the heart rate scope.", $"{context}.",
                 [.. Fields.Where(f => f.Scope is not null).Select(f => new ReportOmittedField(f.Name, Scope.HeartRateRead))]);
@@ -230,16 +244,17 @@ internal sealed class SleepBiometricsDataset : IReportDataset
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var read = await db.SleepBiometricSamples.AsNoTracking()
             .Where(s => s.Timestamp >= start && s.Timestamp < end)
-            .OrderBy(s => s.Timestamp).Take(MaxSamples)
+            .OrderBy(s => s.Timestamp).Take(MaxSamples + 1)
             .Select(s => new { s.Timestamp, s.HeartRate, s.Hrv, s.Spo2, s.RespirationRate })
             .ToListAsync(cancellationToken);
-        var samples = read.Select(s => new Sample(SeriesRows.Mills(s.Timestamp), s.HeartRate, s.Hrv, s.Spo2, s.RespirationRate)).ToList();
+        var cut = read.Count > MaxSamples;
+        var samples = read.Take(MaxSamples).Select(s => new Sample(SeriesRows.Mills(s.Timestamp), s.HeartRate, s.Hrv, s.Spo2, s.RespirationRate)).ToList();
         if (samples.Count > 0)
             request.ReadLog.Record("sleep_biometric_samples", samples.Count);
         if (samples.Count == 0)
             return SeriesRows.Empty("No body readings during sleep in this period.", $"{context}. No samples.");
 
-        var interval = GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
+        var interval = request.Whole ? 1 : GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
         var rows = Rows(samples, request.From.ToUnixTimeMilliseconds(), interval);
         List<double> Of(Func<Sample, float?> value) => [.. samples.Select(value).Where(v => v is > 0).Select(v => (double)v!.Value)];
         var figures = new List<(string Field, string Words, IReadOnlyList<double> Values, string Unit, string Format)>
@@ -255,8 +270,11 @@ internal sealed class SleepBiometricsDataset : IReportDataset
         var facts = figures.Where(f => f.Values.Count > 0)
             .Select(f => new ReportFact($"Lowest {f.Words[..1].ToLowerInvariant()}{f.Words[1..]}", ReportFacts.Number(f.Values.Min(), f.Format), f.Unit, About: [f.Field]))
             .ToList();
-        if (samples.Count == MaxSamples)
-            lines.Add($"Only the first {MaxSamples} samples are read.");
+        string? cutNote = cut
+            ? $"Only the first {MaxSamples} samples are shown, to {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(samples[^1].Mills), request.Clock)}."
+            : null;
+        if (cutNote is not null)
+            lines.Add(cutNote);
         return new ReportDatasetOutput
         {
             Rows = rows,
@@ -265,8 +283,9 @@ internal sealed class SleepBiometricsDataset : IReportDataset
             Sentence = sentence ?? lines[0],
             SentenceAbout = about,
             OtherSentences = others,
+            CutNote = cutNote,
             Context = $"{context}. {ReportFacts.Plural(samples.Count, "sample")}.",
-            Resolution = new ReportResolution(1, interval, samples.Count, rows.Count, interval > 1),
+            Resolution = new ReportResolution(1, interval, cut ? MaxSamples + 1 : samples.Count, rows.Count, interval > 1 || cut),
         };
     }
 
@@ -334,9 +353,7 @@ internal sealed class LabHbA1cDataset : IReportDataset
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var zone = await SeriesRows.ZoneAsync(request, cancellationToken);
-        var first = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(request.From, zone).DateTime);
-        var last = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(request.To, zone).DateTime);
-        var (start, end) = (first.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), last.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var (start, end) = StoredDays(request.From, request.To, zone);
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var results = await db.LabHbA1cResults.AsNoTracking()
             .Where(r => r.MeasuredAt >= start && r.MeasuredAt < end)
@@ -345,7 +362,7 @@ internal sealed class LabHbA1cDataset : IReportDataset
             .ToListAsync(cancellationToken);
         if (results.Count > 0)
             request.ReadLog.Record("lab_hba1c_results", results.Count);
-        var context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(results.Count, "lab result")}.";
+        var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(results.Count, "lab result")}.";
         if (results.Count == 0)
             return SeriesRows.Empty("No lab HbA1c results in this period.", context);
 
@@ -353,7 +370,7 @@ internal sealed class LabHbA1cDataset : IReportDataset
             ("day", Midnight(DateOnly.FromDateTime(r.MeasuredAt), zone)),
             ("hba1c", ScaledRounding.Round(r.ValuePercent, 1)))).ToList();
         var latest = results[^1];
-        var sentence = $"Latest lab HbA1c: {ReportFacts.Number(latest.ValuePercent)}% on {DateOnly.FromDateTime(latest.MeasuredAt):yyyy-MM-dd}, "
+        var sentence = $"Latest lab HbA1c: {ReportFacts.Number(latest.ValuePercent)}% on {request.Clock.Date(DateOnly.FromDateTime(latest.MeasuredAt))}, "
             + $"of {ReportFacts.Plural(results.Count, "result")} in this period.";
         return new ReportDatasetOutput
         {
@@ -363,13 +380,25 @@ internal sealed class LabHbA1cDataset : IReportDataset
                 : ""),
             Facts =
             [
-                new ReportFact("Latest", ReportFacts.Number(latest.ValuePercent), "%", $"{DateOnly.FromDateTime(latest.MeasuredAt):yyyy-MM-dd}", ["hba1c"]),
+                new ReportFact("Latest", ReportFacts.Number(latest.ValuePercent), "%", request.Clock.Date(DateOnly.FromDateTime(latest.MeasuredAt)), ["hba1c"]),
                 ReportFacts.Count("Results", results.Count).Of("hba1c"),
             ],
             Sentence = sentence,
             SentenceAbout = ["hba1c"],
             Context = context,
         };
+    }
+
+    /// <summary>
+    /// The stored <c>measured_at</c> bounds of the local days [<paramref name="from"/>, <paramref name="to"/>) touches: a
+    /// result is a date, stored as that date's UTC midnight, so a range ending at a local midnight holds no result of the
+    /// day that starts there.
+    /// </summary>
+    internal static (DateTime Start, DateTime End) StoredDays(DateTimeOffset from, DateTimeOffset to, TimeZoneInfo zone)
+    {
+        var first = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(from, zone).DateTime);
+        var last = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(to.AddTicks(-1), zone).DateTime);
+        return (first.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), last.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
     internal static long Midnight(DateOnly day, TimeZoneInfo zone)
@@ -424,14 +453,16 @@ internal sealed class BodyWeightDataset : IReportDataset
     {
         var (from, to) = (request.From.ToUnixTimeMilliseconds(), request.To.ToUnixTimeMilliseconds());
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
-        var records = await db.BodyWeights.AsNoTracking()
+        var latest = await db.BodyWeights.AsNoTracking()
             .Where(w => w.Mills >= from && w.Mills < to)
-            .OrderBy(w => w.Mills).Take(Budget)
+            .OrderByDescending(w => w.Mills).Take(Budget + 1)
             .Select(w => new { w.Mills, w.WeightKg, w.BodyFatPercent, w.LeanMassKg })
             .ToListAsync(cancellationToken);
+        var cut = latest.Count > Budget;
+        var records = latest.Take(Budget).Reverse().ToList();
         if (records.Count > 0)
             request.ReadLog.Record("body_weights", records.Count);
-        var context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(records.Count, "record")}.";
+        var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(records.Count, "record")}.";
         if (records.Count == 0)
             return SeriesRows.Empty("No body weight records in this period.", context);
 
@@ -442,18 +473,26 @@ internal sealed class BodyWeightDataset : IReportDataset
             ("leanMass", w.LeanMassKg is { } lean ? ScaledRounding.Round((double)lean, 1) : null))).ToList();
         var weights = records.Select(w => (double)w.WeightKg).ToList();
         var change = weights[^1] - weights[0];
+        var since = cut ? $"since {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(records[0].Mills), request.Clock)}" : "in this period";
         var sentence = $"Weight: {ReportFacts.Number(weights[^1])} kg on "
-            + $"{ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(records[^1].Mills), request.Zone)}, "
-            + $"{(change >= 0 ? "+" : "")}{ReportFacts.Number(change)} kg in this period.";
+            + $"{ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(records[^1].Mills), request.Clock)}, "
+            + $"{(change >= 0 ? "+" : "")}{ReportFacts.Number(change)} kg {since}.";
+        string? cutNote = cut
+            ? $"Only the latest {Budget} records are shown, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(records[0].Mills), request.Clock)}."
+            : null;
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = $"{sentence}\nFrom {ReportFacts.Number(weights.Min())} kg to {ReportFacts.Number(weights.Max())} kg over {ReportFacts.Plural(records.Count, "record")}.",
+            Summary = $"{sentence}\nFrom {ReportFacts.Number(weights.Min())} kg to {ReportFacts.Number(weights.Max())} kg over {ReportFacts.Plural(records.Count, "record")}."
+                + (cutNote is null ? "" : $"\n{cutNote}"),
             Facts =
             [
                 new ReportFact("Latest", ReportFacts.Number(weights[^1]), "kg", About: ["weight"]),
-                new ReportFact("Change", $"{(change >= 0 ? "+" : "")}{ReportFacts.Number(change)}", "kg", "in this period", ["weight"]),
+                new ReportFact("Change", $"{(change >= 0 ? "+" : "")}{ReportFacts.Number(change)}", "kg", since, ["weight"]),
             ],
+            CompleteFrom = cut ? records[0].Mills : null,
+            CutNote = cutNote,
+            Resolution = new ReportResolution(0, 0, latest.Count, rows.Count, cut),
             Sentence = sentence,
             SentenceAbout = ["weight"],
             OtherSentences = SeriesRows.Sentences(
@@ -468,11 +507,16 @@ internal sealed class BodyWeightDataset : IReportDataset
 
 /// <summary>
 /// What each sensor reading carries beside its glucose: the rate of change the sensor reported and its noise level,
-/// from the run's shared readings (<see cref="ReportRunCache.GlucoseAsync"/>), the first reading of each slot.
+/// from the run's shared readings (<see cref="ReportRunCache.GlucoseAsync"/>), the first reading of each slot, or every
+/// reading for a whole read.
 /// </summary>
 internal sealed class SensorDetailDataset : IReportDataset
 {
     private const int Budget = 2000;
+
+    public string? ReadVariant(ReportReadShape shape) => shape.Whole ? "whole" : null;
+
+    public bool FoldsWhole => true;
 
     public string Name => SensorDetailParameters.Name;
 
@@ -513,18 +557,18 @@ internal sealed class SensorDetailDataset : IReportDataset
     {
         var readings = (await request.Cache.GlucoseAsync(request, cancellationToken))
             .Where(r => r.TrendRate is not null || r.Noise is not null).OrderBy(r => r.Mills).ToList();
-        var context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(readings.Count, "reading")} with a rate or noise.";
+        var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(readings.Count, "reading")} with a rate or noise.";
         if (readings.Count == 0)
             return SeriesRows.Empty("No sensor readings with a rate of change or noise in this period.", context);
 
-        var interval = GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
+        var interval = request.Whole ? 1 : GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
         var rows = DeviceStatusDataset.Thin(readings, r => r.Mills, request.From.ToUnixTimeMilliseconds(), interval)
             .Select(r => SeriesRows.Row(("time", r.Mills), ("trendRate", Rate(r.TrendRate, request.UseMmol)), ("noise", r.Noise is { } n ? (double)n : null)))
             .ToList();
         var rates = readings.Where(r => r.TrendRate is not null).Select(r => r.TrendRate!.Value).ToList();
         var noisy = readings.Count(r => r.Noise is >= 3);
         var unit = $"{ReportFacts.GlucoseUnit(request.UseMmol)}/min";
-        var lines = new List<string> { $"Sensor detail from {ReportFacts.Window(request.From, request.To, request.Zone)}." };
+        var lines = new List<string> { $"Sensor detail from {ReportFacts.Window(request.From, request.To, request.Clock)}." };
         var facts = new List<ReportFact>();
         var sentences = new List<ReportSentence>();
         if (rates.Count > 0)
@@ -610,7 +654,7 @@ internal sealed class MeterGlucoseDataset : IReportDataset
             readings = readings[1..];
         if (readings.Count > 0)
             request.ReadLog.Record("meter_glucose", readings.Count);
-        var context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(readings.Count, "meter reading")}.";
+        var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(readings.Count, "meter reading")}.";
         if (readings.Count == 0)
             return SeriesRows.Empty("No meter readings in this period.", context);
 
@@ -620,7 +664,7 @@ internal sealed class MeterGlucoseDataset : IReportDataset
         var unit = ReportFacts.GlucoseUnit(useMmol);
         var sentence = $"Meter readings: {readings.Count}, mean {G(values.Average())} {unit}, from {G(values.Min())} to {G(values.Max())} {unit}.";
         string? cutNote = cut
-            ? $"Only the latest {Budget} readings are shown, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(readings[0].Mills), request.Zone)}."
+            ? $"Only the latest {Budget} readings are shown, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(readings[0].Mills), request.Clock)}."
             : null;
         return new ReportDatasetOutput
         {

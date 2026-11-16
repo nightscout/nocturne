@@ -158,8 +158,8 @@ internal sealed class DailySummaryDataset : IReportDataset
             Sentence = rows.Any(r => r["readings"] is int n && n > 0)
                 ? "One row per local day; no figure is averaged across days."
                 : "No glucose readings in this period.",
-            Context = (dayFilter is null ? "" : dayFilter.Summary(selection) + " ") + string.Create(CultureInfo.InvariantCulture,
-                $"Local days {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}. {rows.Count(r => r["readings"] is int n && n > 0)} of {rows.Count} days with readings."),
+            Context = (dayFilter is null ? "" : dayFilter.Summary(selection) + " ")
+                + $"Local days {request.Clock.Date(startDate)} to {request.Clock.Date(endDate)}. {rows.Count(r => r["readings"] is int n && n > 0)} of {rows.Count} days with readings.",
             FieldLabels = DailyProfileDataset.DayFieldLabels(Fields, dayFilter),
             Name = ReportNames.Of(request.Parameters),
             Days = selection is null ? null : ReportDayCounts.Of(selection),

@@ -61,7 +61,7 @@ public class CustomReportsController(
     [ProducesResponseType(typeof(CustomReportSignalAvailability), StatusCodes.Status200OK)]
     public async Task<ActionResult<CustomReportSignalAvailability>> GetCustomReportSignalAvailability(
         [FromQuery] int hours, CancellationToken cancellationToken) =>
-        Ok(await availability.ForRangeAsync(hours, HttpContext.GetGrantedScopes(), cancellationToken));
+        Ok(await availability.ForRangeAsync(hours, HttpContext.GetGrantedScopes(), HttpContext.IsCallerHistoryClamped(), cancellationToken));
 
     /// <summary>The specs the report builder offers as a start, normalised.</summary>
     [HttpGet("templates")]

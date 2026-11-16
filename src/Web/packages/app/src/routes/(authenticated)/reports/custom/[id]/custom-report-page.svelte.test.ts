@@ -124,13 +124,16 @@ describe("saved custom report page", () => {
   });
 
   it("runs the report over another range without changing what is saved", async () => {
+    // As the API stores a report of 14 days: the report's range, and each panel's written out.
+    const spec = { ...normalisedSpec, range: { hours: 336 } };
+    saved = { ...saved, spec };
     render(CustomReportPage, {});
     await vi.waitFor(() => expect(calls.runs).toHaveLength(1));
 
     await page.getByRole("radio", { name: "7 days" }).click();
 
     await vi.waitFor(() => expect(calls.runs).toHaveLength(2));
-    expect(calls.runs[1]).toEqual({ spec: { ...normalisedSpec, range: { hours: 168 }, panels: [{ ...normalisedSpec.panels[0], range: { hours: 168 } }] } });
+    expect(calls.runs[1]).toEqual({ spec: { ...spec, range: { hours: 168 }, panels: [{ ...spec.panels[0], range: { hours: 168 } }] } });
     await expect.element(page.getByTestId("range-note")).toHaveTextContent("Nothing in the saved report changes.");
     expect(calls.updates).toEqual([]);
   });

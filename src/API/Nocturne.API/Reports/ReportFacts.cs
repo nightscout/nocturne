@@ -53,27 +53,75 @@ internal static class ReportFacts
 
     /// <summary>
     /// "2026-10-15 19:39 to 2026-10-29 19:39 Australia/Sydney" in the tenant's zone, the zone the
-    /// charts' time axes are drawn in; "... UTC" when the tenant has none.
+    /// charts' time axes are drawn in, written as <paramref name="clock"/> writes dates and times;
+    /// "... UTC" when the tenant has none.
     /// </summary>
-    public static string Window(DateTimeOffset from, DateTimeOffset to, TimeZoneInfo? zone = null)
+    public static string Window(DateTimeOffset from, DateTimeOffset to, ReportClock? clock = null)
     {
-        if (zone is null)
-            return string.Create(CultureInfo.InvariantCulture, $"{from.UtcDateTime:yyyy-MM-dd HH:mm} to {to.UtcDateTime:yyyy-MM-dd HH:mm} UTC");
-        var name = TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var iana) ? iana : zone.Id;
-        return string.Create(CultureInfo.InvariantCulture,
-            $"{TimeZoneInfo.ConvertTime(from, zone):yyyy-MM-dd HH:mm} to {TimeZoneInfo.ConvertTime(to, zone):yyyy-MM-dd HH:mm} {name}");
+        clock ??= ReportClock.Utc;
+        return $"{clock.DateTime(from)} to {clock.DateTime(to)} {clock.ZoneName}";
     }
 
     /// <summary>"2026-10-26 14:05 Australia/Sydney": one instant in the tenant's zone, "... UTC" when it has none.</summary>
-    public static string Instant(DateTimeOffset at, TimeZoneInfo? zone = null)
+    public static string Instant(DateTimeOffset at, ReportClock? clock = null)
     {
-        if (zone is null)
-            return string.Create(CultureInfo.InvariantCulture, $"{at.UtcDateTime:yyyy-MM-dd HH:mm} UTC");
-        var name = TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var iana) ? iana : zone.Id;
-        return string.Create(CultureInfo.InvariantCulture, $"{TimeZoneInfo.ConvertTime(at, zone):yyyy-MM-dd HH:mm} {name}");
+        clock ??= ReportClock.Utc;
+        return $"{clock.DateTime(at)} {clock.ZoneName}";
     }
 
     /// <summary>"1 reading" or "4025 readings".</summary>
     public static string Plural(int count, string noun) =>
         string.Create(CultureInfo.InvariantCulture, $"{count} {(count == 1 ? noun : noun + "s")}");
+}
+
+/// <summary>
+/// How a report writes the dates and times in its sentences, facts and subtitles: in the tenant's zone, in the order
+/// the reader's region writes a date (with English month names, as the sentences are English) and with the reader's
+/// clock. A reader with no region gets ISO dates, and one with no clock a 24-hour clock.
+/// </summary>
+/// <param name="Region">A region format tag, as the display preferences hold it (<c>en-US</c>, <c>de-DE</c>).</param>
+internal sealed record ReportClock(TimeZoneInfo? Zone = null, bool? Hour12 = null, string? Region = null)
+{
+    public static readonly ReportClock Utc = new();
+
+    public static implicit operator ReportClock(TimeZoneInfo? zone) => new(zone);
+
+    /// <summary>The zone's IANA name, or UTC.</summary>
+    public string ZoneName => Zone is null ? "UTC"
+        : TimeZoneInfo.TryConvertWindowsIdToIanaId(Zone.Id, out var iana) ? iana : Zone.Id;
+
+    private string DatePattern => Order(Region) switch
+    {
+        'd' => "d MMM yyyy",
+        'M' => "MMM d, yyyy",
+        _ => "yyyy-MM-dd",
+    };
+
+    private string TimePattern => Hour12 == true ? "h:mm tt" : "HH:mm";
+
+    /// <summary>"2 Nov 2026", "Nov 2, 2026" or "2026-11-02".</summary>
+    public string Date(DateOnly day) => day.ToString(DatePattern, CultureInfo.InvariantCulture);
+
+    /// <summary>The date and time of <paramref name="at"/> in the zone: "2 Nov 2026 11:48", "Nov 2, 2026 11:48 AM".</summary>
+    public string DateTime(DateTimeOffset at)
+    {
+        var local = Zone is null ? at.UtcDateTime : TimeZoneInfo.ConvertTime(at, Zone).DateTime;
+        return $"{Date(DateOnly.FromDateTime(local))} {local.ToString(TimePattern, CultureInfo.InvariantCulture)}";
+    }
+
+    /// <summary>Which of day, month or year the region writes first; null for no region, or one .NET does not know.</summary>
+    private static char? Order(string? region)
+    {
+        if (string.IsNullOrWhiteSpace(region))
+            return null;
+        try
+        {
+            var pattern = CultureInfo.GetCultureInfo(region, predefinedOnly: true).DateTimeFormat.ShortDatePattern;
+            return pattern.FirstOrDefault(c => c is 'd' or 'M' or 'y') is var first and not '\0' ? first : null;
+        }
+        catch (CultureNotFoundException)
+        {
+            return null;
+        }
+    }
 }

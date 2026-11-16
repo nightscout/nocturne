@@ -116,6 +116,10 @@
     const moves: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     const move = moves[event.key];
     if (event.key === "Escape") {
+      if (!keyed) return;
+      // Escape ends the reading only: in a dialog it does not also close the dialog.
+      event.stopPropagation();
+      event.preventDefault();
       plot?.clear();
       keyed = false;
       return;
@@ -223,7 +227,11 @@
     <p class="text-sm text-muted-foreground" data-testid="report-chart-empty">{emptyText}</p>
   {/if}
 {:else}
-  <!-- The arrow keys move the crosshair, so the plot takes focus. -->
+  <!--
+    The arrow keys move the crosshair, so the plot takes focus. As an application, a screen reader
+    passes it the arrow keys instead of reading the page with them; the panel's full summary is the
+    same values as text.
+  -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
     class="h-(--plot-height) w-full rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -231,7 +239,7 @@
     data-testid="report-layered-chart"
     data-tracks={panel.tracks.length}
     tabindex={keysHint ? 0 : undefined}
-    role={keysHint ? "group" : undefined}
+    role={keysHint ? "application" : undefined}
     aria-label={keysHint ? description : undefined}
     aria-describedby={keysHint ? `${uid}-keys` : undefined}
     onkeydown={keysHint ? onkeydown : undefined}

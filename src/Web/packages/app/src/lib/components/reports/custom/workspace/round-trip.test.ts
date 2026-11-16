@@ -10,6 +10,8 @@ import { vocabularyOf } from "./workspace.svelte.js";
 /**
  * Every ready-made report and every report saved on a dev instance before the workspace was the only
  * builder, as the API returns them (normalised). Each opens in the workspace and saves the same spec.
+ * What the workspace produces is compared here without the engine's normalisation, which only the API
+ * has; round-trip.live.test.ts sends it through that normalisation on a running API.
  */
 const SPECS: [string, Record<string, unknown>][] = Object.entries(specs);
 

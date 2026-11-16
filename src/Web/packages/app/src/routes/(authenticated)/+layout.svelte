@@ -280,8 +280,15 @@
 >
   <CoachParamHandler />
   <ChartPrintPatterns />
+  <!-- Focuses the main element without adding #main-content to the URL, which a copied link would carry. -->
   <a
     href="#main-content"
+    onclick={(event) => {
+      const main = document.getElementById("main-content");
+      if (!main) return;
+      event.preventDefault();
+      main.focus();
+    }}
     class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-100 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-sm focus:ring-2 focus:ring-ring focus:outline-none print:hidden"
   >
     Skip to main content

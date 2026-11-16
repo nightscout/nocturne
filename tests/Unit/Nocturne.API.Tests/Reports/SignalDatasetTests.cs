@@ -15,7 +15,7 @@ using Xunit;
 namespace Nocturne.API.Tests.Reports;
 
 /// <summary>
-/// The signals added to the workspace's catalogue: device and system events, trackers, the stored state span kinds,
+/// The signal datasets of the workspace's catalogue: device and system events, trackers, the stored state span kinds,
 /// sleep detail, lab HbA1c and body weight, alerts, sensor detail, meter readings, compression lows and glucose episodes.
 /// </summary>
 public class SignalDatasetTests
@@ -91,13 +91,16 @@ public class SignalDatasetTests
     public async Task Device_events_are_ticks_in_the_lanes_asked_for_and_say_when_nocturne_found_them()
     {
         var events = new Mock<IDeviceEventRepository>();
-        events.Setup(e => e.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), 0, false, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([
-                new DeviceEvent { Timestamp = To.AddDays(-2).UtcDateTime, EventType = DeviceEventType.SiteChange },
-                new DeviceEvent { Timestamp = To.AddDays(-1).UtcDateTime, EventType = DeviceEventType.SensorStart, DataSource = DataSources.SensorSessionInference },
-                new DeviceEvent { Timestamp = To.AddHours(-5).UtcDateTime, EventType = DeviceEventType.PumpSuspend },
-                new DeviceEvent { Timestamp = To.AddHours(-4).UtcDateTime, EventType = DeviceEventType.ProfileSwitch },
-            ]);
+        DeviceEvent[] stored =
+        [
+            new DeviceEvent { Timestamp = To.AddDays(-2).UtcDateTime, EventType = DeviceEventType.SiteChange },
+            new DeviceEvent { Timestamp = To.AddDays(-1).UtcDateTime, EventType = DeviceEventType.SensorStart, DataSource = DataSources.SensorSessionInference },
+            new DeviceEvent { Timestamp = To.AddHours(-5).UtcDateTime, EventType = DeviceEventType.PumpSuspend },
+            new DeviceEvent { Timestamp = To.AddHours(-4).UtcDateTime, EventType = DeviceEventType.ProfileSwitch },
+        ];
+        events.Setup(e => e.GetOfTypesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<IReadOnlyCollection<DeviceEventType>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime _, DateTime _, IReadOnlyCollection<DeviceEventType> types, int limit, CancellationToken _) =>
+                stored.Where(e => types.Contains(e.EventType)).Take(limit).ToList());
         var services = new ServiceCollection().AddSingleton(events.Object).BuildServiceProvider();
         var log = new ReportReadLog();
 
@@ -122,7 +125,7 @@ public class SignalDatasetTests
     public async Task An_empty_range_of_device_alarms_says_so()
     {
         var system = new Mock<ISystemEventRepository>();
-        system.Setup(s => s.GetSystemEventsAsync(null, null, It.IsAny<long?>(), It.IsAny<long?>(), null, It.IsAny<int>(), 0, It.IsAny<CancellationToken>()))
+        system.Setup(s => s.GetInRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         var log = new ReportReadLog();
 

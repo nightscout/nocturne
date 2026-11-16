@@ -435,8 +435,9 @@ public class ReportSpecRunnerTests
     {
         var bindings = new ReportLayerBindings { X = "time", Y = ["insulin", "carbs", "bgCheck"] };
 
-        ReportSpecRunner.MarkersTitle("Treatments", new TreatmentsDataset().Fields, bindings, [new ReportMarker(1, ReportMarkerKind.BgCheck, 120)])
-            .Should().Be("Treatments · BG check");
+        var fields = new TreatmentsDataset().Fields.Select(f => f.ResolveUnit(false)).ToList();
+        ReportSpecRunner.MarkersTitle("Treatments", fields, bindings, [new ReportMarker(1, ReportMarkerKind.BgCheck, 120)])
+            .Should().Be("BG check (mg/dL)");
         ReportSpecRunner.MarkersTitle("Treatments", new TreatmentsDataset().Fields, bindings, []).Should().Be("Treatments");
     }
 

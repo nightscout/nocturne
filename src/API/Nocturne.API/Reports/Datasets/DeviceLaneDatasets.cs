@@ -48,18 +48,16 @@ internal sealed class DeviceEventsDataset : LaneDataset
             yield return ("groups", "A lane is named twice.");
     }
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
         var asked = ((DeviceEventsParameters)request.Parameters).Groups is { Count: > 0 } groups
             ? groups.ToHashSet()
             : Enum.GetValues<ReportDeviceEventGroup>().ToHashSet();
-        var events = await request.Services.GetRequiredService<IDeviceEventRepository>().GetAsync(
-            Utc(from), Utc(to), null, null, V4ReadLimits.MaxAnalyticsSpanDays * 50, 0, descending: false, ct: cancellationToken);
-        return [.. events
-            .Where(e => GroupOf(e.EventType) is { } g && asked.Contains(g))
-            .Take(limit)
-            .Select(e => new Span(GroupWords(GroupOf(e.EventType)!.Value), e.IsInferred ? $"{Words(e.EventType)} (found from a gap)" : Words(e.EventType),
-                e.Mills, e.Mills, ChartColorMapper.FromDeviceEvent(e.EventType)))];
+        var types = Enum.GetValues<DeviceEventType>().Where(t => GroupOf(t) is { } g && asked.Contains(g)).ToList();
+        var events = await request.Services.GetRequiredService<IDeviceEventRepository>().GetOfTypesAsync(
+            Utc(from), Utc(to), types, limit, cancellationToken);
+        return new([.. events.Select(e => new Span(GroupWords(GroupOf(e.EventType)!.Value),
+            e.IsInferred ? $"{Words(e.EventType)} (found from a gap)" : Words(e.EventType), e.Mills, e.Mills, ChartColorMapper.FromDeviceEvent(e.EventType)))]);
     }
 
     /// <summary>The lane an event is drawn in, or null for one no lane draws.</summary>
@@ -143,11 +141,10 @@ internal sealed class SystemEventsDataset : LaneDataset
 
     public override TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
-        var events = await request.Services.GetRequiredService<ISystemEventRepository>().GetSystemEventsAsync(
-            from: from, to: to, count: limit, cancellationToken: cancellationToken);
-        return [.. events.Select(e => new Span(CategoryWords(e.Category), LabelOf(e), e.Mills, e.Mills, ChartColorMapper.FromSystemEvent(e.EventType)))];
+        var events = await request.Services.GetRequiredService<ISystemEventRepository>().GetInRangeAsync(from, to, limit, cancellationToken);
+        return new([.. events.Select(e => new Span(CategoryWords(e.Category), LabelOf(e), e.Mills, e.Mills, ChartColorMapper.FromSystemEvent(e.EventType)))]);
     }
 
     internal static string LabelOf(SystemEvent e)
@@ -205,7 +202,7 @@ internal sealed class TrackersDataset : LaneDataset
 
     public override TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
         var (start, end) = (Utc(from), Utc(to));
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
@@ -215,7 +212,7 @@ internal sealed class TrackersDataset : LaneDataset
             .Select(i => new { i.StartedAt, i.CompletedAt, i.Definition.Name, i.Definition.Category })
             .ToListAsync(cancellationToken);
         var now = (request.Now ?? request.To).ToUnixTimeMilliseconds();
-        return [.. instances.Select(i =>
+        return new([.. instances.Select(i =>
         {
             var started = Mills(i.StartedAt);
             var ended = i.CompletedAt is { } c ? Mills(c) : (long?)null;
@@ -224,7 +221,7 @@ internal sealed class TrackersDataset : LaneDataset
                 ? $"{i.Name}, {ReportFacts.Number(days)} days so far"
                 : $"{i.Name}, {ReportFacts.Number(days)} days";
             return new Span(CategoryWords(i.Category), label, started, ended ?? to, ChartColorMapper.FromTracker(i.Category));
-        })];
+        })]);
     }
 
     internal static string CategoryWords(TrackerCategory category) => category switch

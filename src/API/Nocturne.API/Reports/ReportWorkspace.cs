@@ -56,7 +56,7 @@ public sealed record CustomReportWorkspaceFamily([property: Required] string Id,
 
 /// <summary>
 /// A section of the signal catalogue and its groups, in the order the catalogue lists them. A section may have no
-/// signals yet; the catalogue shows only the ones that do.
+/// signals; the catalogue shows only the ones that do.
 /// </summary>
 public sealed record CustomReportWorkspaceSection([property: Required] string Id, [property: Required] IReadOnlyList<string> Groups);
 
@@ -275,7 +275,7 @@ internal static class ReportWorkspace
 
     private static CellSpec AgainstCell(string signal, string dataset, string field) => new(Against, signal, dataset, null, field, [], [], false);
 
-    /// <summary>The signal x lens table, as the web's workspace drew it. A signal missing from a lens is not drawn under it.</summary>
+    /// <summary>The signal x lens table. A signal missing from a lens is not drawn under it.</summary>
     internal static readonly IReadOnlyList<CellSpec> Table =
     [
         Series("glucose", "glucose") with { Marks = [Line("time", "glucose"), Points("time", "glucose")] },

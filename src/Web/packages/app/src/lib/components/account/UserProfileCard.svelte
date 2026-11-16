@@ -18,6 +18,7 @@
   import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import { upload as uploadAvatar, remove as deleteAvatar } from "#lib/api/generated/avatars.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { clearMemberStorage } from "#lib/stores/member-storage.js";
 
   interface User {
     name: string;
@@ -254,7 +255,7 @@
       <Settings class="mr-2 h-4 w-4" />
       Back to settings
     </Button>
-    <form method="POST" action="/auth/logout" class="w-full @sm:w-auto">
+    <form method="POST" action="/auth/logout" class="w-full @sm:w-auto" onsubmit={clearMemberStorage}>
       <Button variant="destructive" type="submit" class="w-full">
         <LogOut class="mr-2 h-4 w-4" />
         Sign out

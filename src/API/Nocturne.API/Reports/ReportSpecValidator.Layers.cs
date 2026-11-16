@@ -402,7 +402,11 @@ internal sealed partial class ReportSpecValidator
                 foreach (var read in layer.Reads)
                 {
                     CheckSpan(read.Dataset, layerRange, layer.Spec.Range is null ? $"{at}.range" : $"{layer.At}.range", Error);
-                    reads.TryAdd(CountKey(read.Dataset, read.Parameters, layerRange, ReportPanelKind.Chart, read.X, read.Shape), read.Dataset);
+                    var shape = layer.Spec.Derived is null && layer.Spec.Mark is { } mark && ReportSpecRunner.Folds(grid, layer.Spec.XKind, mark)
+                        && read.Dataset.FoldsWhole
+                        ? read.Shape with { Whole = true }
+                        : read.Shape;
+                    reads.TryAdd(CountKey(read.Dataset, read.Parameters, layerRange, ReportPanelKind.Chart, read.X, shape), read.Dataset);
                 }
                 if (layer.Spec.Derived is { } derived)
                 {

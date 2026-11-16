@@ -226,7 +226,7 @@ internal abstract class EventListDataset : IReportDataset
         Summary = summary,
         Facts = facts,
         Sentence = NoTimeZone(run.Report, "Meals & events") ?? sentence,
-        Context = ContextLine(run.Report, ReportFacts.Plural(counted, "event")),
+        Context = ContextLine(run.Report, ReportFacts.Plural(counted, "event"), run.Clock),
         Omitted = run.Report.WithheldSeries.Contains(LoopAnalysisSeries.EventList)
             ? [.. fields.Where(f => f.Scope == Scope.TreatmentsRead).Select(f => new ReportOmittedField(f.Name, Scope.TreatmentsRead))]
             : [],

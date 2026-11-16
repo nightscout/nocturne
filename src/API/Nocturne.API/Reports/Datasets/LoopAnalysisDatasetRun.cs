@@ -85,14 +85,13 @@ internal static class LoopAnalysisDatasetRun
             : null;
 
     /// <summary>How the request was read: the local days, the comparison, the history clamp and what the token could not use.</summary>
-    public static IEnumerable<string> Context(LoopAnalysisResponse response, string what)
+    public static IEnumerable<string> Context(LoopAnalysisResponse response, string what, ReportClock? clock = null)
     {
+        clock ??= ReportClock.Utc;
         if (response.PrimaryRange is { } primary && !response.RangeOutsideHistory)
-            yield return string.Create(CultureInfo.InvariantCulture,
-                $"{what} over local days {primary.StartDate:yyyy-MM-dd} to {primary.EndDate:yyyy-MM-dd}{(primary.Shortened ? " (only the latest 90 days)." : ".")}");
+            yield return $"{what} over local days {clock.Date(primary.StartDate)} to {clock.Date(primary.EndDate)}{(primary.Shortened ? " (only the latest 90 days)." : ".")}";
         if (response.ComparisonRange is { } comparison)
-            yield return string.Create(CultureInfo.InvariantCulture,
-                $"Comparison range: local days {comparison.StartDate:yyyy-MM-dd} to {comparison.EndDate:yyyy-MM-dd}.");
+            yield return $"Comparison range: local days {clock.Date(comparison.StartDate)} to {clock.Date(comparison.EndDate)}.";
         if (response.HistoryClamped)
             yield return HistoryClampNote(response);
         if (response.IgnoredFilters.Count > 0)
@@ -103,12 +102,12 @@ internal static class LoopAnalysisDatasetRun
     }
 
     /// <summary>The panel's range line: its local days, and what was counted in them.</summary>
-    public static string? ContextLine(LoopAnalysisResponse response, string counted)
+    public static string? ContextLine(LoopAnalysisResponse response, string counted, ReportClock? clock = null)
     {
         if (response.TimeZoneUnavailableReason is not null || response.PrimaryRange is not { } primary || response.RangeOutsideHistory)
             return null;
-        return string.Create(CultureInfo.InvariantCulture,
-            $"Local days {primary.StartDate:yyyy-MM-dd} to {primary.EndDate:yyyy-MM-dd}. {counted}.");
+        clock ??= ReportClock.Utc;
+        return $"Local days {clock.Date(primary.StartDate)} to {clock.Date(primary.EndDate)}. {counted}.";
     }
 
     /// <summary>What the history clamp did to the range: the window served, or that the range is older than the window.</summary>

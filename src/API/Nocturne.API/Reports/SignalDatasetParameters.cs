@@ -21,7 +21,7 @@ internal enum ReportDeviceEventGroup
     Pump,
 }
 
-[Description("device_events: each device event, as a tick in a lane: sensor changes, site and insulin changes, and pump events.")]
+[Description("device_events: each device event, as a tick in a lane: sensor changes, site and insulin changes, and pump events. Needs the devices permission.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record DeviceEventsParameters : ReportDatasetParameters
 {
@@ -36,7 +36,7 @@ internal sealed record DeviceEventsParameters : ReportDatasetParameters
     public IReadOnlyList<ReportDeviceEventGroup>? Groups { get; init; }
 }
 
-[Description("system_events: each alarm, hazard, warning and notice a pump, CGM or uploader reported, as a tick in a lane.")]
+[Description("system_events: each alarm, hazard, warning and notice a pump, CGM or uploader reported, as a tick in a lane. Needs the devices permission.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record SystemEventsParameters : ReportDatasetParameters
 {

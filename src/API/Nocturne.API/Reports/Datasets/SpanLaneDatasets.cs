@@ -47,15 +47,16 @@ internal sealed class SleepStagesDataset : LaneDataset
 
     protected override int LaneRank(string lane) => Array.IndexOf(Order, lane) is var i and >= 0 ? i : Order.Length;
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
-        var sessions = await request.Services.GetRequiredService<ISleepSessionRepository>().GetSessionsAsync(
-            Utc(from), Utc(to), limit: MaxSessions, descending: false, includeStages: true, cancellationToken: cancellationToken);
-        return [.. sessions.SelectMany(s => s.Stages ?? [])
+        var sessions = (await request.Services.GetRequiredService<ISleepSessionRepository>().GetSessionsAsync(
+            Utc(from), Utc(to), limit: MaxSessions + 1, descending: false, includeStages: true, cancellationToken: cancellationToken)).ToList();
+        return new([.. sessions.Take(MaxSessions).SelectMany(s => s.Stages ?? [])
             .Where(st => LaneOf(st.Stage) is not null)
             .OrderBy(st => st.StartTime)
             .Take(limit)
-            .Select(st => new Span(LaneOf(st.Stage)!, LaneOf(st.Stage)!, Mills(st.StartTime), Mills(st.EndTime), ColorOf(st.Stage)))];
+            .Select(st => new Span(LaneOf(st.Stage)!, LaneOf(st.Stage)!, Mills(st.StartTime), Mills(st.EndTime), ColorOf(st.Stage)))],
+            Cut: sessions.Count > MaxSessions);
     }
 
     internal static string? LaneOf(SleepStageType stage) => stage switch
@@ -111,7 +112,7 @@ internal sealed class AlertExcursionsDataset : LaneDataset
 
     public override TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
         var (start, end) = (Utc(from), Utc(to));
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
@@ -120,14 +121,14 @@ internal sealed class AlertExcursionsDataset : LaneDataset
             .OrderBy(e => e.StartedAt).Take(limit)
             .Select(e => new { e.StartedAt, e.EndedAt, e.AcknowledgedAt, Rule = e.AlertRule!.Name, Severity = (AlertRuleSeverity?)e.AlertRule.Severity })
             .ToListAsync(cancellationToken);
-        return [.. rows.Select(e =>
+        return new([.. rows.Select(e =>
         {
             var name = string.IsNullOrWhiteSpace(e.Rule) ? "Alert" : e.Rule.Trim();
             var label = e.AcknowledgedAt is { } ack
                 ? $"{name}, acknowledged after {ReportFacts.Number(Math.Max(0, (ack - e.StartedAt).TotalMinutes), "0")} min"
                 : $"{name}, not acknowledged";
             return new Span(name, label, Mills(e.StartedAt), e.EndedAt is { } ended ? Mills(ended) : to, SeverityColor(e.Severity));
-        })];
+        })]);
     }
 
     internal static ChartColor SeverityColor(AlertRuleSeverity? severity) => severity switch
@@ -169,7 +170,7 @@ internal sealed class AlertInstancesDataset : LaneDataset
 
     public override TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
         var (start, end) = (Utc(from), Utc(to));
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
@@ -182,7 +183,7 @@ internal sealed class AlertInstancesDataset : LaneDataset
                 Severity = (AlertRuleSeverity?)i.AlertExcursion.AlertRule.Severity,
             })
             .ToListAsync(cancellationToken);
-        return [.. rows.Select(i =>
+        return new([.. rows.Select(i =>
         {
             var name = string.IsNullOrWhiteSpace(i.Rule) ? "Alert" : i.Rule.Trim();
             var label = i.SnoozeCount switch
@@ -193,14 +194,15 @@ internal sealed class AlertInstancesDataset : LaneDataset
             };
             var at = Mills(i.TriggeredAt);
             return new Span(name, label, at, at, AlertExcursionsDataset.SeverityColor(i.Severity));
-        })];
+        })]);
     }
 }
 
 /// <summary>
 /// Each do-not-disturb period, from its start to when it ended or was cleared, a lane for the alerts it held back.
-/// <c>dnd_windows</c> is hidden from shares; its endpoints serve accounts holding <c>alerts.read</c>, as report runs
-/// are.
+/// Read in the request's own context: <c>dnd_windows</c> is hidden from shares and clamped for a member by overlap,
+/// ending at the earlier of its expiry and its clearing (<see cref="ShareDataCategories.HiddenSpanEarlyEndColumns"/>); its
+/// endpoints serve accounts holding <c>alerts.read</c>, as report runs are.
 /// </summary>
 internal sealed class DndWindowsDataset : LaneDataset
 {
@@ -226,7 +228,7 @@ internal sealed class DndWindowsDataset : LaneDataset
 
     public override TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
         var (start, end) = (Utc(from), Utc(to));
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
@@ -235,13 +237,13 @@ internal sealed class DndWindowsDataset : LaneDataset
             .OrderBy(w => w.StartedAt).Take(limit)
             .Select(w => new { w.StartedAt, w.EndsAt, w.ClearedAt, w.Scope })
             .ToListAsync(cancellationToken);
-        return [.. rows.Select(w =>
+        return new([.. rows.Select(w =>
         {
             var cleared = w.ClearedAt is { } c && (w.EndsAt is null || c < w.EndsAt);
             var ended = cleared ? w.ClearedAt : w.EndsAt;
             var lane = ScopeWords(w.Scope);
             return new Span(lane, cleared ? $"{lane}, stopped early" : lane, Mills(w.StartedAt), ended is { } e ? Mills(e) : to, ChartColor.PumpModeSleep);
-        })];
+        })]);
     }
 
     internal static string ScopeWords(DndScope scope) => scope switch
@@ -282,7 +284,7 @@ internal sealed class CompressionLowsDataset : LaneDataset
 
     public override TimeSpan MaxRange => TimeSpan.FromDays(V4ReadLimits.MaxAnalyticsSpanDays);
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var rows = await db.CompressionLowSuggestions.AsNoTracking()
@@ -290,7 +292,7 @@ internal sealed class CompressionLowsDataset : LaneDataset
             .OrderBy(s => s.StartMills).Take(limit)
             .Select(s => new { s.StartMills, s.EndMills, s.Status, s.LowestGlucose })
             .ToListAsync(cancellationToken);
-        return [.. rows.Select(s =>
+        return new([.. rows.Select(s =>
         {
             var lane = s.Status switch
             {
@@ -302,7 +304,7 @@ internal sealed class CompressionLowsDataset : LaneDataset
                 ? $"Lowest {GlucoseSummary.Format(mgdl, request.UseMmol)} {ReportFacts.GlucoseUnit(request.UseMmol)}"
                 : "Compression low";
             return new Span(lane, label, s.StartMills, s.EndMills, lane == "Dismissed" ? ChartColor.MutedForeground : ChartColor.GlucoseLow);
-        })];
+        })]);
     }
 }
 
@@ -336,13 +338,13 @@ internal sealed class GlucoseEpisodesDataset : LaneDataset
 
     protected override int LaneRank(string lane) => lane == "Lows" ? 0 : 1;
 
-    protected override async Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
+    protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
         var readings = await request.Cache.GlucoseAsync(request, cancellationToken);
-        return [.. Spans(GlucoseEpisodes.Find(readings, new GlycemicThresholds()), request.UseMmol).Take(limit)];
+        return new([.. Spans(GlucoseEpisodes.Find(readings, new GlycemicThresholds()), request.UseMmol).Take(limit)]);
     }
 
-    internal static IEnumerable<Span> Spans(IEnumerable<GlucoseEpisodeSpan> episodes, bool useMmol) =>
+    internal static IEnumerable<Span> Spans(IEnumerable<GlucoseEpisode> episodes, bool useMmol) =>
         episodes.Select(e =>
         {
             var (kind, color) = (e.BelowRange, e.Severe) switch
@@ -352,7 +354,7 @@ internal sealed class GlucoseEpisodesDataset : LaneDataset
                 (false, true) => ("Very high", ChartColor.GlucoseVeryHigh),
                 (false, false) => ("High", ChartColor.GlucoseHigh),
             };
-            var extreme = $"{(e.BelowRange ? "lowest" : "highest")} {GlucoseSummary.Format(e.ExtremeMgdl, useMmol)} {ReportFacts.GlucoseUnit(useMmol)}";
+            var extreme = $"{(e.BelowRange ? "lowest" : "highest")} {GlucoseSummary.Format(e.Extreme.Mgdl, useMmol)} {ReportFacts.GlucoseUnit(useMmol)}";
             return new Span(e.BelowRange ? "Lows" : "Highs", $"{kind}, {extreme}", Mills(e.StartAt), Mills(e.EndAt), color);
         });
 }

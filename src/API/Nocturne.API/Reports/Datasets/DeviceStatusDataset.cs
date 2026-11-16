@@ -69,6 +69,10 @@ internal sealed class DeviceStatusDataset : IReportDataset
 
     public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
 
+    public string? ReadVariant(ReportReadShape shape) => shape.Whole ? "whole" : null;
+
+    public bool FoldsWhole => true;
+
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var services = request.Services;
@@ -111,7 +115,7 @@ internal sealed class DeviceStatusDataset : IReportDataset
         }
         else
         {
-            interval = GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget / 2);
+            interval = request.Whole ? 1 : GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget / 2);
             var fromMills = request.From.ToUnixTimeMilliseconds();
             var pumpRows = Thin(pump.Where(p => p.Reservoir is not null || p.BatteryPercent is not null).ToList(), p => p.Mills, fromMills, interval)
                 .Select(p => (p.Mills, Row: (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -137,12 +141,12 @@ internal sealed class DeviceStatusDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(pump, uploader, sensor, request.From, request.To,
-                sensorAsked: request.Kind == ReportPanelKind.StatTiles, clamped: request.HistoryClamped, zone: request.Zone),
+                sensorAsked: request.Kind == ReportPanelKind.StatTiles, clamped: request.HistoryClamped, clock: request.Clock),
             Facts = FactsOf(pump, uploader, sensor),
             Sentence = pump.Count + uploader.Count == 0
                 ? "No pump or uploader reports in this period."
                 : "The latest report of each, and the lowest in the period as its note.",
-            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(pump.Count + uploader.Count, "report")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(pump.Count + uploader.Count, "report")}.",
             Resolution = new ReportResolution(1, interval, sourceRows, rows.Count, rows.Count < sourceRows),
         };
     }
@@ -183,13 +187,13 @@ internal sealed class DeviceStatusDataset : IReportDataset
         DateTimeOffset to,
         bool sensorAsked = false,
         bool clamped = false,
-        TimeZoneInfo? zone = null)
+        ReportClock? clock = null)
     {
-        string At(long mills) => TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(mills), zone ?? TimeZoneInfo.Utc).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        string At(long mills) => (clock ?? ReportClock.Utc).DateTime(DateTimeOffset.FromUnixTimeMilliseconds(mills));
         static string N(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
         var lines = new List<string>
         {
-            string.Create(CultureInfo.InvariantCulture, $"Device status from {ReportFacts.Window(from, to, zone)}."),
+            string.Create(CultureInfo.InvariantCulture, $"Device status from {ReportFacts.Window(from, to, clock)}."),
         };
 
         var reservoir = pump.Where(p => p.Reservoir is not null).ToList();

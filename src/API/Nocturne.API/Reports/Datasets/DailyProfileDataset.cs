@@ -159,8 +159,8 @@ internal sealed class DailyProfileDataset : IReportDataset
             SentenceComparesSettings = NoTimeZone(report, "Daily profile") is null && report.Primary.Summary.DeliveredToScheduledRatio is not null
                 && report.Primary.Slots.Any(s => s.Glucose is not null),
             Context = dayFilter is null
-                ? ContextLine(report, ReportFacts.Plural(readings, "reading"))
-                : $"{dayFilter.Summary(report.Primary.DaySelection)} {ContextLine(report, ReportFacts.Plural(readings, "reading"))}",
+                ? ContextLine(report, ReportFacts.Plural(readings, "reading"), request.Clock)
+                : $"{dayFilter.Summary(report.Primary.DaySelection)} {ContextLine(report, ReportFacts.Plural(readings, "reading"), request.Clock)}",
             Omitted = Omitted(report, FieldSeries),
             Window = Window(report),
             FieldLabels = DayFieldLabels(Fields, dayFilter),

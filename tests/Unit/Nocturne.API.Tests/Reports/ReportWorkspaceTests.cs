@@ -116,12 +116,18 @@ public class ReportWorkspaceTests
             .ToList();
 
         refused.Should().BeEmpty(string.Join(Environment.NewLine, refused));
-        Workspace().Cells.Should().HaveCount(Cells);
-        specs.Should().HaveCount(Expected, "the guard counts every spec it builds; change this when the vocabulary changes");
+        var workspace = catalogue.Workspace;
+        workspace.Cells.Should().HaveCount(ReportWorkspace.Table.Count, "every cell of the table is in the vocabulary");
+        var shortest = workspace.RangePresets.MinBy(r => r.Hours)!;
+        var built = specs.Select(s => s.What).ToHashSet();
+        var unbuilt = workspace.Cells.Where(c => c.Lens != "against")
+            .SelectMany(c => c.Marks.Concat(c.FromStartMarks ?? []).Select(m => $"{shortest.Id} {c.Lens}/{c.Signal} as {m.Word}"))
+            .Where(what => !built.Contains(what))
+            .ToList();
+        unbuilt.Should().BeEmpty("the guard builds every mark of every cell, so none goes unchecked");
+        workspace.Cells.Where(c => c.Lens == "against").Should().OnlyContain(c => specs.Any(s => s.What.Contains($" x {c.Signal}")),
+            "every source of the against lens is paired with another");
     }
-
-    private const int Cells = 91;
-    private const int Expected = 2454;
 
     [Fact]
     public void Every_cell_names_its_scopes_from_its_dataset_and_fields_and_a_signal_is_permitted_by_its_cells()
@@ -261,7 +267,8 @@ public class ReportWorkspaceTests
     {
         ReportWorkspace.SignalTable.Should().OnlyContain(s => s.Sources.Length > 0);
         ReportWorkspace.SignalTable.SelectMany(s => s.Sources).Distinct()
-            .Should().OnlyContain(source => ReportDataSources.All.ContainsKey(source));
+            .Should().OnlyContain(source => ReportDataSources.All.ContainsKey(source) && ReportDataSources.Scopes[source].Count > 0);
+        ReportDataSources.Scopes.Keys.Should().BeEquivalentTo(ReportDataSources.All.Keys);
         ReportWorkspace.SignalTable.Select(s => s.Id).Should().Equal(Workspace().Signals.Select(s => s.Id));
     }
 
@@ -269,9 +276,10 @@ public class ReportWorkspaceTests
     public async Task A_caller_who_may_read_no_signal_is_told_so_without_a_read_of_the_database()
     {
         var contexts = new Moq.Mock<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(Moq.MockBehavior.Strict);
-        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, contexts.Object, TimeProvider.System);
+        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, contexts.Object, TimeProvider.System,
+            ReportSignalAvailabilityPostgresTests.Clock(TimeZoneInfo.Utc));
 
-        var result = await availability.ForRangeAsync(100_000, new HashSet<string>(), CancellationToken.None);
+        var result = await availability.ForRangeAsync(100_000, new HashSet<string>(), historyClamped: false, CancellationToken.None);
 
         result.Hours.Should().Be(ReportSpec.MaxRangeHours);
         result.Signals.Select(s => s.Signal).Should().Equal(ReportWorkspace.SignalTable.Select(s => s.Id));

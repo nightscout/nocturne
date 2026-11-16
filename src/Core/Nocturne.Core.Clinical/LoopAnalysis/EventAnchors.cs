@@ -61,17 +61,14 @@ public static class EventAnchors
     /// <param name="readings">Readings in time order; implausible ones are left out, as the statistics leave them.</param>
     public static (List<EventAnchor> Lows, List<EventAnchor> Highs) Excursions(IEnumerable<GlucoseSample> readings)
     {
-        var plausible = readings
-            .Where(r => GlucoseStatistics.IsPlausibleReading(r.Mgdl))
-            .Select(r => new SensorGlucose
-            {
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.Mills).UtcDateTime,
-                Mgdl = r.Mgdl,
-            })
-            .ToList();
+        var sensor = readings.Select(r => new SensorGlucose
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.Mills).UtcDateTime,
+            Mgdl = r.Mgdl,
+        });
         var lows = new List<EventAnchor>();
         var highs = new List<EventAnchor>();
-        foreach (var episode in GlucoseEpisodeDetector.Detect(plausible, new GlycemicThresholds()))
+        foreach (var episode in GlucoseEpisodes.Find(sensor, new GlycemicThresholds()))
         {
             var mills = new DateTimeOffset(episode.StartAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
             if (episode.BelowRange)

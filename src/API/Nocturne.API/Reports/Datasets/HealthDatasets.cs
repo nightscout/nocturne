@@ -58,6 +58,10 @@ internal sealed class HeartRateDataset : IReportDataset
 
     public int PointBudget => Budget;
 
+    public string? ReadVariant(ReportReadShape shape) => shape.Whole ? "whole" : null;
+
+    public bool FoldsWhole => true;
+
     public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
@@ -67,7 +71,7 @@ internal sealed class HeartRateDataset : IReportDataset
         if (minutes.Count > 0)
             request.ReadLog.Record("heart_rates", minutes.Count);
 
-        var interval = GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
+        var interval = request.Whole ? 1 : GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
         var rows = Slots(minutes.Select(h => (Mills: new DateTimeOffset(DateTime.SpecifyKind(h.Timestamp, DateTimeKind.Utc)).ToUnixTimeMilliseconds(), Value: (double)h.Bpm)),
                 request.From.ToUnixTimeMilliseconds(), interval)
             .Select(s => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -78,7 +82,7 @@ internal sealed class HeartRateDataset : IReportDataset
                 ["bpmMax"] = s.Values.Max(),
             }).ToList();
 
-        var context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(minutes.Count, "minute")} with a heart rate.";
+        var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(minutes.Count, "minute")} with a heart rate.";
         if (minutes.Count == 0)
             return new ReportDatasetOutput { Rows = [], Summary = "No heart rate in this period.", Sentence = "No heart rate in this period.", Context = context };
 
@@ -164,6 +168,10 @@ internal sealed class StepsDataset : IReportDataset
 
     public int PointBudget => Budget;
 
+    public string? ReadVariant(ReportReadShape shape) => shape.Whole ? "whole" : null;
+
+    public bool FoldsWhole => true;
+
     public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
@@ -174,7 +182,7 @@ internal sealed class StepsDataset : IReportDataset
         if (records.Count > 0)
             request.ReadLog.Record("step_counts", records.Count);
 
-        var needed = GlucoseSeriesDataset.IntervalFor(request.From, request.To, MinimumMinutes, Budget);
+        var needed = request.Whole ? MinimumMinutes : GlucoseSeriesDataset.IntervalFor(request.From, request.To, MinimumMinutes, Budget);
         var interval = SlotMinutes.First(m => m >= needed || m == SlotMinutes[^1]);
         var slots = HeartRateDataset.Slots(
             records.Select(s => (new DateTimeOffset(DateTime.SpecifyKind(s.Timestamp, DateTimeKind.Utc)).ToUnixTimeMilliseconds(), (double)s.Metric)),
@@ -186,14 +194,14 @@ internal sealed class StepsDataset : IReportDataset
         }).ToList();
 
         var total = records.Sum(r => r.Metric);
-        var context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(records.Count, "step record")}.";
+        var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(records.Count, "step record")}.";
         if (records.Count == 0)
             return new ReportDatasetOutput { Rows = [], Summary = "No steps in this period.", Sentence = "No steps in this period.", Context = context };
 
         var most = slots.MaxBy(s => s.Values.Sum());
         var slotWords = interval % 60 == 0 ? ReportFacts.Plural(interval / 60, "hour") : $"{interval} minutes";
         var sentence = $"Steps: {total.ToString("N0", CultureInfo.InvariantCulture)} in the period; the most in one slot of {slotWords}, "
-            + $"{most.Values.Sum().ToString("N0", CultureInfo.InvariantCulture)}, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(most.Start), request.Zone)}.";
+            + $"{most.Values.Sum().ToString("N0", CultureInfo.InvariantCulture)}, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(most.Start), request.Clock)}.";
         return new ReportDatasetOutput
         {
             Rows = rows,
@@ -202,7 +210,7 @@ internal sealed class StepsDataset : IReportDataset
             [
                 ReportFacts.Count("Total", total, "steps").Of("steps"),
                 new ReportFact("Most in a slot", most.Values.Sum().ToString("0", CultureInfo.InvariantCulture), "steps",
-                    $"{slotWords}, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(most.Start), request.Zone)}", ["steps"]),
+                    $"{slotWords}, from {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(most.Start), request.Clock)}", ["steps"]),
             ],
             Sentence = sentence,
             SentenceAbout = ["steps"],
@@ -296,7 +304,7 @@ internal sealed class SleepDataset : IReportDataset
             ["awake"] = Hours(s.TotalAwakeMs),
         }).ToList();
 
-        var context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(sessions.Count, "sleep session")}.";
+        var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(sessions.Count, "sleep session")}.";
         if (sessions.Count == 0)
             return new ReportDatasetOutput { Rows = [], Summary = "No sleep sessions in this period.", Sentence = "No sleep sessions in this period.", Context = context };
 
@@ -316,12 +324,17 @@ internal sealed class SleepDataset : IReportDataset
         }
         if (zone is null)
             lines.Add("The nights are not placed: no time zone is set in the profile.");
-        if (cut)
-            lines.Add($"Only the first {MaxSessions} sessions are shown.");
+        string? cutNote = cut
+            ? $"Only the first {MaxSessions} sessions are shown, to {ReportFacts.Instant(new DateTimeOffset(DateTime.SpecifyKind(sessions[^1].StartTime, DateTimeKind.Utc)), request.Clock)}."
+            : null;
+        if (cutNote is not null)
+            lines.Add(cutNote);
 
         return new ReportDatasetOutput
         {
             Rows = rows,
+            CutNote = cutNote,
+            Resolution = new ReportResolution(0, 0, cut ? MaxSessions + 1 : sessions.Count, rows.Count, cut),
             Summary = string.Join('\n', lines),
             Facts = facts,
             Sentence = sentence ?? lines[0],

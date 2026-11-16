@@ -14,7 +14,8 @@ internal sealed record ReportRunContext(
     ReportReadLog ReadLog,
     bool HistoryClamped = false,
     TimeZoneInfo? Zone = null,
-    bool? Hour12 = null)
+    bool? Hour12 = null,
+    string? Region = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
@@ -181,7 +182,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         {
             var output = await context.Cache.ReadAsync(key, ReportSpecValidator.CountKey(dataset, parameters, range, kind, x, shape), () => dataset.RunAsync(
                 new ReportDatasetRequest(parameters, kind, from, to, context.UseMmol, context.GrantedScopes, context.Services, context.ReadLog,
-                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, shape.Fields, shape.Whole, context.Hour12),
+                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, shape.Fields, shape.Whole, context.Hour12, context.Region),
                 run.Token));
             return new Read(output, ReportPanelStatus.Ok, null);
         }
@@ -357,13 +358,21 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
     /// <summary>
     /// An untitled chart panel's title: its lead layer's title, or the words for the one group its data names (one event
-    /// group, the days kept), else the name of that layer's dataset or op. A chart of several groups
-    /// (<see cref="ReportLayerResult.Group"/>) has no title: the lead's group and range line ("Only days with a low: 4
-    /// of 29 days") would head all of them as if they were one, so the host's caption names the comparison.
+    /// group, the days kept), else what that layer's dataset draws (<see cref="DatasetWords"/>) or its op's name. A chart
+    /// of several groups (<see cref="ReportLayerResult.Group"/>) has no title: the lead's group and range line ("Only
+    /// days with a low: 4 of 29 days") would head all of them as if they were one, so the host's caption names the
+    /// comparison.
     /// </summary>
     private string DefaultPanelTitle(ReportLayerSpec lead, ReportLayerResult leadResult) =>
         lead.Title ?? (leadResult.Named ? leadResult.Heading!
-            : lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : registry.Find(lead.Dataset!.DatasetName)!.Label);
+            : lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : DatasetWords(lead.Dataset!));
+
+    /// <summary>A dataset read in words, where no field names it: what it draws (<see cref="IReportDataset.LayerTitle"/>), else its label.</summary>
+    private string DatasetWords(ReportDatasetParameters parameters)
+    {
+        var dataset = registry.Find(parameters.DatasetName)!;
+        return dataset.LayerTitle(parameters) ?? dataset.Label;
+    }
 
     /// <summary>
     /// An untitled track's name on a chart of several tracks: what its layers with an axis draw, each signal with its
@@ -576,9 +585,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var dataset = registry.Find(layer.Dataset!.DatasetName)!;
         var bindings = layer.Bindings!;
         var valueNames = ValueNames(bindings);
-        var folded = panel.Grid is > 0 && ReportGrid.Applies(layer.XKind) && layer.Mark != ReportMark.Spans;
+        var folded = Folds(panel.Grid, layer.XKind, layer.Mark!.Value);
         var read = await ReadAsync(dataset, layer.Dataset, range, from, to, ReportPanelKind.Chart, bindings.X, run,
-            folded && dataset.FoldsWhole ? LayerShape(bindings) with { Whole = true } : LayerShape(bindings));
+            LayerShape(dataset, bindings, folded));
         if (read.Output is not { } output)
             return (Empty(read.Status, read.Note!, from, to), null);
 
@@ -627,7 +636,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             ? Markers(folded ? rows : output.Rows, bindings, fields)
             : [];
         if (layer.Title is null && layer.Mark == ReportMark.Markers)
-            title = MarkersTitle(dataset.Label, fields, bindings, markers);
+            title = MarkersTitle(DatasetWords(layer.Dataset), fields, bindings, markers);
         var named = layer.Title is null && output.Name is not null;
         var (facts, sentence, settingsSentence) = About(output, drawnNames);
         if (output.CutNote is { } cutNote)
@@ -675,6 +684,17 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         return new ReportReadShape(values.Count > 0 ? values : null);
     }
 
+    /// <summary>Whether a layer drawn as <paramref name="mark"/> along <paramref name="xKind"/> is folded onto a panel's grid of <paramref name="grid"/> minutes.</summary>
+    internal static bool Folds(int? grid, ReportXKind xKind, ReportMark mark) =>
+        grid is > 0 && ReportGrid.Applies(xKind) && mark != ReportMark.Spans;
+
+    /// <summary>
+    /// How a layer reads its dataset: the value fields it draws, and every row where it is folded and the dataset
+    /// samples otherwise (<see cref="IReportDataset.FoldsWhole"/>). The validator counts the read the runner makes.
+    /// </summary>
+    internal static ReportReadShape LayerShape(IReportDataset dataset, ReportLayerBindings bindings, bool folded) =>
+        folded && dataset.FoldsWhole ? LayerShape(bindings) with { Whole = true } : LayerShape(bindings);
+
     /// <summary>How a derived source reads its dataset: its one field, every row of the range.</summary>
     internal static ReportReadShape SourceShape(ReportSourceSpec source) => new([source.Field], Whole: true);
 
@@ -682,12 +702,17 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     internal static IReadOnlyList<string> ValueNames(ReportLayerBindings bindings) =>
         [.. (bindings.Y ?? []).Concat(bindings.Edges ?? []).Concat(new[] { bindings.Fit }.OfType<string>())];
 
-    /// <summary>An untitled markers layer's name in the legend: the dataset's, and the fields it drew a marker of, if any.</summary>
+    /// <summary>
+    /// An untitled markers layer's name in the legend: each signal it drew a marker of with its unit, "Bolus (U), Carbs
+    /// (g)", as a lane names the signals on its axis (<see cref="LaneTitle"/>); the dataset's words when it drew none.
+    /// A markers layer has no axis, so its unit is in its name.
+    /// </summary>
     internal static string MarkersTitle(string datasetLabel, IReadOnlyList<ReportField> fields, ReportLayerBindings bindings, IReadOnlyList<ReportMarker> markers)
     {
         var kinds = markers.Select(m => m.Kind).ToHashSet();
-        var shown = fields.Where(f => (bindings.Y ?? []).Contains(f.Name) && f.Marker is { } k && kinds.Contains(k)).Select(f => f.Label).ToList();
-        return shown.Count == 0 ? datasetLabel : $"{datasetLabel} · {string.Join(", ", shown)}";
+        var shown = fields.Where(f => (bindings.Y ?? []).Contains(f.Name) && f.Marker is { } k && kinds.Contains(k))
+            .Select(f => f.Unit is { } unit ? $"{ReportNames.Signal(f.Label)} ({unit})" : ReportNames.Signal(f.Label)).ToList();
+        return shown.Count == 0 ? datasetLabel : string.Join(", ", shown);
     }
 
     /// <summary>The field names a layer's bindings draw, in drawing order.</summary>
@@ -822,7 +847,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
     /// <summary>
     /// A layer's name in the legend when it gives none: the signals its fields are of ("Glucose", "Insulin on board",
-    /// <see cref="ReportNames.Signal"/>), the dataset's name for spans or a layer that names no field, or a derived
+    /// <see cref="ReportNames.Signal"/>), what the dataset draws for spans or a layer that names no field (<see cref="DatasetWords"/>), or a derived
     /// layer's own (<see cref="DerivedTitle"/>). The group a dataset names its rows by is the layer's
     /// <see cref="ReportLayerResult.Group"/>, not part of its name.
     /// </summary>
@@ -839,7 +864,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var signals = (layer.Bindings!.Y ?? []).Concat(layer.Mark == ReportMark.Band && layer.Bindings.Y is null ? layer.Bindings.Edges ?? [] : [])
             .Select(n => fields.FirstOrDefault(f => f.Name == n)?.Label).OfType<string>()
             .Select(ReportNames.Signal).Distinct(StringComparer.Ordinal).ToList();
-        return signals.Count == 0 || layer.Mark == ReportMark.Spans ? dataset.Label : string.Join(", ", signals);
+        return signals.Count == 0 || layer.Mark == ReportMark.Spans ? DatasetWords(layer.Dataset) : string.Join(", ", signals);
     }
 
     /// <summary>

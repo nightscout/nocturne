@@ -46,13 +46,13 @@ internal static class GlucoseSummary
         DateTimeOffset from,
         DateTimeOffset to,
         IReadOnlyList<string>? omittedFields = null,
-        TimeZoneInfo? zone = null)
+        ReportClock? clock = null)
     {
         var text = new StringBuilder();
         var units = useMmol ? "mmol/L" : "mg/dL";
 
         text.Append(CultureInfo.InvariantCulture,
-            $"Glucose from {ReportFacts.Window(from, to, zone)}");
+            $"Glucose from {ReportFacts.Window(from, to, clock)}");
         text.Append(".").Append('\n');
 
         var basic = statistics.CalculateBasicStats(data.GlucoseData.Select(r => r.Sgv));
@@ -91,10 +91,10 @@ internal static class GlucoseSummary
     /// </summary>
     public static (IReadOnlyList<Reports.ReportFact> Facts, string Sentence, string Context) Facts(
         DashboardChartData data, IStatisticsService statistics, bool useMmol, DateTimeOffset from, DateTimeOffset to,
-        TimeZoneInfo? zone = null)
+        ReportClock? clock = null)
     {
         var basic = statistics.CalculateBasicStats(data.GlucoseData.Select(r => r.Sgv));
-        var context = $"{Reports.ReportFacts.Window(from, to, zone)}. {Reports.ReportFacts.Plural(basic.Count, "reading")}.";
+        var context = $"{Reports.ReportFacts.Window(from, to, clock)}. {Reports.ReportFacts.Plural(basic.Count, "reading")}.";
         if (basic.Count == 0)
             return ([], "No glucose readings in this period.", context);
 

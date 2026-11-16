@@ -98,13 +98,13 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(bands, count, request.From, request.To, useMmol, request.Zone),
+            Summary = Summarise(bands, count, request.From, request.To, useMmol, request.Clock),
             Facts = count == 0 ? [] : [.. bands.Select(b => ReportFacts.Percent(b.Label, Math.Round(b.Percent, 1), Limits(b, useMmol)).Of("percent|minutes"))],
             Sentence = count == 0
                 ? "No glucose readings in this period."
                 : $"Below range, total: {ReportFacts.Number(bands[0].Percent + bands[1].Percent)}%. "
                     + $"Above range, total: {ReportFacts.Number(bands[3].Percent + bands[4].Percent)}%.",
-            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(count, "reading")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(count, "reading")}.",
         };
     }
 
@@ -137,10 +137,10 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
         };
     }
 
-    internal static string Summarise(IReadOnlyList<Band> bands, int readings, DateTimeOffset from, DateTimeOffset to, bool useMmol, TimeZoneInfo? zone = null)
+    internal static string Summarise(IReadOnlyList<Band> bands, int readings, DateTimeOffset from, DateTimeOffset to, bool useMmol, ReportClock? clock = null)
     {
         var head = string.Create(CultureInfo.InvariantCulture,
-            $"Glucose distribution from {ReportFacts.Window(from, to, zone)}.");
+            $"Glucose distribution from {ReportFacts.Window(from, to, clock)}.");
         if (readings == 0)
             return head + "\nNo glucose readings in this period.";
 

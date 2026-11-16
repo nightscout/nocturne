@@ -222,6 +222,12 @@ internal interface IReportDataset
     /// </summary>
     IReadOnlyList<string>? RowSentenceAbout => null;
 
+    /// <summary>
+    /// What a layer of <paramref name="parameters"/> draws, in words, where that is narrower than <see cref="Label"/>: the
+    /// kinds of span asked for. A layer or panel the spec gives no title is named by it. Null for the label.
+    /// </summary>
+    string? LayerTitle(ReportDatasetParameters parameters) => null;
+
     /// <summary>The rows of group <paramref name="series"/>, from 1, that a derived source reads.</summary>
     IEnumerable<IReadOnlyDictionary<string, object?>> SeriesRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, int series) => rows;
 
@@ -245,6 +251,7 @@ internal interface IReportDataset
 /// <param name="Now">The instant the runner resolved <see cref="From"/> and <see cref="To"/> against; null outside a run.</param>
 /// <param name="X">The field a chart layer lays along, for a dataset whose rows take the shape they are drawn in.</param>
 /// <param name="Hour12">Whether the tenant reads a 12-hour clock, for times written in words; null when it chose none.</param>
+/// <param name="Region">The reader's region format, for the order dates are written in (<see cref="ReportClock"/>); null for none.</param>
 internal sealed record ReportDatasetRequest(
     ReportDatasetParameters Parameters,
     ReportPanelKind Kind,
@@ -261,9 +268,13 @@ internal sealed record ReportDatasetRequest(
     TimeZoneInfo? Zone = null,
     IReadOnlyList<string>? Fields = null,
     bool Whole = false,
-    bool? Hour12 = null)
+    bool? Hour12 = null,
+    string? Region = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
+
+    /// <summary>How the dates and times this read writes in words are written.</summary>
+    public ReportClock Clock => new(Zone, Hour12, Region);
 
     /// <summary>The run's shared reads; a request made outside a run gets its own.</summary>
     public Datasets.ReportRunCache Cache { get; } = RunCache ?? new Datasets.ReportRunCache();

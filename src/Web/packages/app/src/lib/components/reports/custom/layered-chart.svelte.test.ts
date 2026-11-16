@@ -52,4 +52,30 @@ describe("a layered chart on the page", () => {
     await expect.element(page.getByTestId("report-x-caption")).toHaveTextContent("IOB (U)");
     await expect.poll(() => page.getByTestId("report-layered-chart").element().querySelectorAll('[data-testid="report-layer-point"]').length).toBe(60);
   });
+
+  it("takes the arrow keys as an application, and ends the reading on Escape without closing what holds it", async () => {
+    const keysHint = "Use the left and right arrow keys to read the values.";
+    render(LayeredChart, { panel: panelOf(glucoseChartPanel), format, keysHint });
+    const chart = page.getByRole("application");
+    await expect.element(chart).toHaveAccessibleDescription(keysHint);
+
+    let escapesOutside = 0;
+    const count = (event: KeyboardEvent) => {
+      if (event.key === "Escape") escapesOutside++;
+    };
+    document.addEventListener("keydown", count);
+    try {
+      (chart.element() as HTMLElement).focus();
+      await userEvent.keyboard("{ArrowRight}");
+      await expect.poll(() => document.querySelector('[aria-live="polite"]')?.textContent ?? "").not.toBe("");
+      await userEvent.keyboard("{Escape}");
+      expect(escapesOutside).toBe(0);
+      await expect.poll(() => document.querySelector('[aria-live="polite"]')?.textContent ?? "").toBe("");
+      // Not reading, Escape is the page's again: a dialog round the chart closes on it.
+      await userEvent.keyboard("{Escape}");
+      expect(escapesOutside).toBe(1);
+    } finally {
+      document.removeEventListener("keydown", count);
+    }
+  });
 });

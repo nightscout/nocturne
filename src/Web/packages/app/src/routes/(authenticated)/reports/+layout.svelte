@@ -39,7 +39,8 @@
     // window (e.g. readings=7, insulin-delivery=30) adjust via
     // requireDateParamsContext(N); the headline 14-day reports then need no
     // adjustment, so they no longer depend on the adjust-up path resolving.
-    const params = useDateParams(14);
+    // A custom report runs over its own saved range, so its URL is left without the shared one.
+    const params = useDateParams(14, () => !page.route.id?.startsWith("/(authenticated)/reports/custom"));
     setDateParamsContext(params);
 
     // Reports declare whether they read the shared range; those that carry their

@@ -18,6 +18,7 @@
   import CustomReportQuery from "#lib/components/reports/custom/CustomReportQuery.svelte";
   import SpecErrorList from "#lib/components/reports/custom/SpecErrorList.svelte";
   import DateSpanField from "#lib/components/reports/custom/workspace/DateSpanField.svelte";
+  import { clearDraft, draftOwner } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
   import RangeChoices from "#lib/components/reports/custom/workspace/RangeChoices.svelte";
   import { CUSTOM_RANGE, viewerRange } from "#lib/components/reports/custom/workspace/viewer-range.svelte.js";
   import type { DateSpan } from "#lib/components/reports/custom/workspace/workspace.svelte.js";
@@ -27,6 +28,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { getPatientTimezone } from "#lib/api/generated/patientRecords.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { copyToClipboard } from "#lib/utils/index.js";
   import CopyPlus from "@lucide/svelte/icons/copy-plus";
@@ -62,7 +64,13 @@
   let span = $state<DateSpan | null>(null);
   let nameField = $state<HTMLInputElement | null>(null);
 
-  const range = $derived(report && catalogue.current ? viewerRange(catalogue.current, report.spec, rangeChoice, span) : null);
+  /** The patient's zone, which the two dates a viewer picks are read in; null while unknown or unset. */
+  const timeZone = getPatientTimezone();
+  const range = $derived(
+    report && catalogue.current
+      ? viewerRange(catalogue.current, report.spec, rangeChoice, span, timeZone.current?.timezone ?? null)
+      : null
+  );
 
   async function startRename() {
     name = report?.name ?? "";
@@ -94,6 +102,7 @@
     actionError = null;
     try {
       await deleteCustomReport(id);
+      clearDraft(draftOwner(page.data), id);
       confirmingDelete = false;
       toast.success("Nocturne deleted the report.");
       await goto(resolve("/(authenticated)/reports/custom"));

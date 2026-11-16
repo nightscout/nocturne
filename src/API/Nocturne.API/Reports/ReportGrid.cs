@@ -69,10 +69,11 @@ internal static class ReportGrid
 
     /// <summary>
     /// A value of <paramref name="field"/> a fold or a derived op computed, to the decimals the app writes it with: a
-    /// glucose in its display unit as a reading is written (whole mg/dL, one decimal of mmol/L), anything else to four.
+    /// glucose in its display unit as a reading is written (whole mg/dL, one decimal of mmol/L), a percent to one decimal
+    /// as the time-in-range figures are written, anything else to four.
     /// </summary>
     public static double Rounded(double value, ReportField field) =>
-        ScaledRounding.Round(value, field.Unit switch { "mg/dL" => 0, "mmol/L" => 1, _ => 4 }, MidpointRounding.AwayFromZero);
+        ScaledRounding.Round(value, field.Unit switch { "mg/dL" => 0, "mmol/L" or "%" => 1, _ => 4 }, MidpointRounding.AwayFromZero);
 
     private static double? Number(object? value) => value switch
     {

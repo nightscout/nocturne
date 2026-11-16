@@ -26,7 +26,7 @@ import {
   type Weekday,
   type WhenAxis,
 } from "./catalogue-vocabulary.js";
-import { accessReason, whenAxisLabel, whenPhrase, alongLabel, anchorPhrase, leaveOutLabel, lensLabel, markLabel, outcomeLabel, rangeLabel, signalLabel, weekdayName } from "./vocabulary-words.svelte.js";
+import { accessReason, daysText, whenAxisLabel, whenPhrase, alongLabel, anchorPhrase, leaveOutLabel, lensLabel, markLabel, outcomeLabel, rangeLabel, signalLabel, weekdayName } from "./vocabulary-words.svelte.js";
 
 export interface Relate {
   /** Rolling-mean window in minutes, or null for none. */
@@ -141,13 +141,13 @@ export const GROUP_LETTERS = ["A", "B", "C", "D", "E", "F"];
  * apart however distinct their colours, so from one more the chart is a grid of small charts, one for
  * each group. A rule of reading, not of colour: the engine has more group hues than this.
  */
-export const MAX_OVERLAID_GROUPS = 3;
+const MAX_OVERLAID_GROUPS = 3;
 
 /**
  * The `group` the panels of one chart's small multiples carry, so every page that draws the report
  * lays them out as one grid with one scale. A report of more than one chart gives each its own.
  */
-export const SMALL_MULTIPLES_GROUP = "groups";
+const SMALL_MULTIPLES_GROUP = "groups";
 
 export interface EventOptions {
   before: number;
@@ -298,7 +298,7 @@ export interface WorkspaceHost {
  * The most groups of days a typical day compares. More bands over one day cannot be told apart; a
  * rule of reading the web keeps, not a limit of the engine.
  */
-export const MAX_DAY_GROUPS = 3;
+const MAX_DAY_GROUPS = 3;
 const OVERFLOW_HEIGHT = 0.75;
 
 const NO_RELATE: Relate = {
@@ -330,7 +330,7 @@ export function leaveOutDefaults(vocab: Vocabulary): Record<LeaveOutId, boolean>
 }
 
 /** The catalogue's `x-eventFigures.figures`: each figure with the anchors it applies to. */
-export function eventFiguresOf(vocab: Vocabulary): EventFigures {
+function eventFiguresOf(vocab: Vocabulary): EventFigures {
   const params: unknown = vocab.catalogue.datasets.find((d) => d.name === vocab.eventDataset)?.parameters;
   const figures = objectAt(objectAt(params, "x-eventFigures"), "figures") ?? {};
   const out: EventFigures = {};
@@ -340,7 +340,7 @@ export function eventFiguresOf(vocab: Vocabulary): EventFigures {
   return out;
 }
 
-export function emptyState(vocab: Vocabulary, defaults: Record<LeaveOutId, boolean>): WorkspaceState {
+function emptyState(vocab: Vocabulary, defaults: Record<LeaveOutId, boolean>): WorkspaceState {
   const windows = vocab.windows;
   return {
     title: "",
@@ -418,7 +418,7 @@ function againstFull(): string {
  * The signals drawn under the state's lens, in placement order: under
  * `against`, the first two.
  */
-export function shownSignals(state: WorkspaceState, vocab: Vocabulary): SignalId[] {
+function shownSignals(state: WorkspaceState, vocab: Vocabulary): SignalId[] {
   const available = state.placed
     .map((p) => p.id)
     .filter((id) => vocab.cellOf(state.lens, id));
@@ -426,7 +426,7 @@ export function shownSignals(state: WorkspaceState, vocab: Vocabulary): SignalId
 }
 
 /** The combinations drawn: those of the lens whose two sources are drawn. */
-export function shownCombos(state: WorkspaceState, vocab: Vocabulary): Combo[] {
+function shownCombos(state: WorkspaceState, vocab: Vocabulary): Combo[] {
   if (state.lens === "against") return [];
   const shown = shownSignals(state, vocab);
   return state.combos.filter(
@@ -496,7 +496,7 @@ function bounds(b: Bounds | undefined): Bounds | undefined {
 }
 
 /** Whether a moment narrows its events at all: a filter or a condition. */
-export function isNarrowed(moment: Moment, vocab: Vocabulary): boolean {
+function isNarrowed(moment: Moment, vocab: Vocabulary): boolean {
   return !moment.everythingElse && Object.keys(cohortJson(moment, vocab)).length > 1;
 }
 
@@ -538,7 +538,7 @@ function appliesToAll(figures: EventFigures, id: string, moments: Moment[]): boo
 }
 
 /** The figures that apply to every group, by the catalogue's `x-eventFigures`. */
-export function outcomesFor(
+function outcomesFor(
   vocab: Vocabulary,
   moments: Moment[],
   forSpread: boolean,
@@ -550,7 +550,7 @@ export function outcomesFor(
 }
 
 /** What each event can lie along, for these groups. */
-export function alongsFor(vocab: Vocabulary, moments: Moment[], figures: EventFigures): Along[] {
+function alongsFor(vocab: Vocabulary, moments: Moment[], figures: EventFigures): Along[] {
   return vocab.alongs.filter((a) => appliesToAll(figures, a, moments));
 }
 
@@ -572,7 +572,7 @@ function pickAlong(vocab: Vocabulary, moments: Moment[], chosen: Along, figures:
 }
 
 /** The cohorts of the moments, one for each, in order. */
-export function eventCohorts(moments: Moment[], vocab: Vocabulary): {
+function eventCohorts(moments: Moment[], vocab: Vocabulary): {
   cohorts: Record<string, unknown>[];
   numbers: number[];
 } {
@@ -654,7 +654,7 @@ export function dayFilterText(
  * The spec of a chart, and which layers each primitive became. Pure, so a
  * change can be tried before it is kept.
  */
-export function build(state: WorkspaceState, ctx: BuildContext): Built {
+function build(state: WorkspaceState, ctx: BuildContext): Built {
   const vocab = ctx.vocab;
   const signalLayers: Partial<Record<SignalId, string[]>> = {};
   const comboLayers: Record<number, string[]> = {};
@@ -1086,7 +1086,7 @@ export function weekdaysText(days: Weekday[], weekdays: readonly Weekday[]): str
 }
 
 /** A minute of the day, 0 to 1440, as 24-hour clock time; 1440 is "24:00". */
-export function clockText(minute: number): string {
+function clockText(minute: number): string {
   return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 }
 
@@ -1232,11 +1232,6 @@ export function rangeText(hours: number, presets: readonly { id: string; hours: 
   return hours % 24 === 0
     ? `over the last ${hours / 24} days`
     : `over the last ${hours} hours`;
-}
-
-function daysText(hours: number): string {
-  const days = Math.floor(hours / 24);
-  return days === 1 ? "1 day" : `${days} days`;
 }
 
 /**
@@ -1738,7 +1733,7 @@ export class Workspace {
       let reason: Reason = null;
       if (kept && !placed) reason = againstFull();
       else if (!placed && drawable && !needsShorter) reason = this.#reason((d) => this.#place(d, s.id));
-      else if (!placed && !drawable && otherLenses.length > 0) reason = this.placeInReason(s.id, otherLenses[0]);
+      else if (!placed && !drawable && otherLenses.length > 0) reason = this.#placeInReason(s.id, otherLenses[0]);
       return {
         id: s.id,
         placed,
@@ -1781,7 +1776,7 @@ export class Workspace {
   }
 
   /** Why switching to `lens` and placing the signal there cannot be done now, or null. */
-  placeInReason(id: SignalId, lens: LensId): Reason {
+  #placeInReason(id: SignalId, lens: LensId): Reason {
     return this.#reason((d) => this.#placeIn(d, id, lens));
   }
 
@@ -1838,9 +1833,9 @@ export class Workspace {
     const range = this.#rangeReason(state, this.#hoursOf(state));
     if (range) return range;
     if (built.tracks > c.maxTracks)
-      return `A chart has at most ${c.maxTracks} lanes. Remove a signal first.`;
+      return `A chart has at most ${c.maxTracks} rows. Remove a signal first.`;
     if (built.layers > c.maxLayers)
-      return `A chart draws at most ${c.maxLayers} layers. Remove a signal or an option first.`;
+      return "The chart has too many signals and options to draw. Remove a signal or an option first.";
     if (built.reads.length > c.maxReads)
       return `A report reads at most ${c.maxReads} sets of data.`;
     if (state.moments.length > this.maxMoments)
@@ -1932,6 +1927,11 @@ export class Workspace {
       d.lanes = d.lanes.filter((l) => l.signals.length > 0);
       d.combos = d.combos.filter((c) => c.a !== id && c.b !== id);
     });
+  }
+
+  /** Places the signal in its family's lane; nothing changes when it is on the chart already. */
+  placeSignal(id: SignalId): Reason {
+    return this.#commit((d) => this.#place(d, id));
   }
 
   /** Switches to `lens` and places the signal there. */

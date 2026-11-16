@@ -24,6 +24,7 @@ import {
 import { remoteErrorMessage } from "#lib/api/remote-error.js";
 import { whenIdle } from "#lib/utils/when-idle.js";
 import { fresh } from "#lib/api/fresh-query.js";
+import { clearMemberStorage } from "#lib/stores/member-storage.js";
 
 const AUTH_STORE_KEY = "nocturne:app:auth-store";
 
@@ -183,6 +184,7 @@ export class AuthStore {
         this._expiresAt = toDate(session.expiresAt);
         this._state = "authenticated";
       } else {
+        if (this._user) clearMemberStorage();
         this._user = null;
         this._expiresAt = null;
         this._state = "unauthenticated";
@@ -204,6 +206,7 @@ export class AuthStore {
     if (!browser) return;
 
     this._state = "loading";
+    clearMemberStorage();
 
     try {
       const result = await logoutSessionRemote(providerId);
@@ -251,6 +254,7 @@ export class AuthStore {
         return true;
       } else {
         // Refresh failed, user needs to re-login
+        clearMemberStorage();
         this._user = null;
         this._expiresAt = null;
         this._state = "unauthenticated";

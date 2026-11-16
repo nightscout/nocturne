@@ -258,7 +258,7 @@
 
     {#if !ws.empty}
       <!-- prettier-ignore -->
-      <p class="text-sm text-foreground" data-testid="chart-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<Button variant="prose" size="inline" onclick={() => focusOwner(part.kind)}>{part.text}</Button>{/each}</p>
+      <p class="text-sm text-foreground" data-testid="chart-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<Button variant="prose" size="inline" data-touch-hit onclick={() => focusOwner(part.kind)}>{part.text}</Button>{/each}</p>
     {/if}
     <div data-testid="chart-preview" data-lens={ws.lens}>
       <!-- The legend sits under the plot it names; around an event the group rows give each group's figures. -->

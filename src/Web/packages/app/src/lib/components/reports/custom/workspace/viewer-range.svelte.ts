@@ -1,13 +1,14 @@
 /**
  * The range a viewer runs a saved report over without changing it: the range it was saved with, a
- * preset, or two dates. A preset or two dates take the place of the report's range and of each block's range that is the
- * same as the report's (the stored spec writes every block's range out); a block with a range of its
- * own keeps it.
+ * preset, or two dates. A preset or two dates take the place of the report's range and of the range
+ * of each block that follows the report's; a block with a range of its own keeps it. The stored spec
+ * writes every block's range out, so which blocks follow is read from the workspace's state saved
+ * with the spec (`followsReport`).
  */
 import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
 import { asObject, givenMaxHours, type Json } from "./given.svelte.js";
-import { withoutBuilder } from "./saved-state.js";
-import { rangeLabel } from "./vocabulary-words.svelte.js";
+import { BUILDER_VERSION, builderOf, withoutBuilder } from "./saved-state.js";
+import { daysText, rangeLabel } from "./vocabulary-words.svelte.js";
 import { spanRange } from "./date-span.js";
 import type { DateSpan } from "./workspace.svelte.js";
 
@@ -29,30 +30,66 @@ export interface ViewerRange {
   spanReason: string | null;
 }
 
-function daysText(hours: number): string {
-  const days = Math.floor(hours / 24);
-  return days === 1 ? "1 day" : `${days} days`;
-}
-
-function hoursOf(range: unknown): number | null {
+/** A range in one form for comparison: its hours, or its two instants; null for none. */
+function rangeKey(range: unknown): string | null {
   const r = asObject(range);
-  return r && typeof r.hours === "number" ? r.hours : null;
+  if (!r) return null;
+  if (typeof r.hours === "number") return `h${r.hours}`;
+  if (typeof r.from === "string" && typeof r.to === "string") return `${Date.parse(r.from)}-${Date.parse(r.to)}`;
+  return null;
 }
 
+/**
+ * Whether a panel of `spec` follows the report's range. A panel the workspace's saved state names
+ * follows when its block has no range of its own (a block held as given, when its range is none or the
+ * report's). A panel with no saved state to read follows when it has no range, or the report's.
+ */
+function followsReport(saved: unknown, spec: Json): (panel: Json) => boolean {
+  const reportRange = rangeKey(spec.range);
+  const sameAsReport = (range: unknown) => range === null || range === undefined || rangeKey(range) === reportRange;
+  const builder = builderOf(saved);
+  const blocks = builder?.version === BUILDER_VERSION ? asObject(builder.state)?.blocks : null;
+  /** Whether a block follows, by the exact id of its one panel, or by the prefix of its panels' ids. */
+  const byId: Record<string, boolean> = {};
+  const byPrefix: [string, boolean][] = [];
+  for (const raw of Array.isArray(blocks) ? blocks : []) {
+    const block = asObject(raw);
+    if (!block || typeof block.key !== "number") continue;
+    const prefix = `b${block.key}-`;
+    if (block.kind === "given") {
+      const panel = asObject(block.panel) ?? {};
+      byId[typeof panel.id === "string" ? panel.id : `${prefix}panel`] = sameAsReport(panel.range);
+    } else if (block.kind === "chart") {
+      byPrefix.push([prefix, (asObject(block.chart)?.range ?? null) === null]);
+    } else {
+      const follows = (block.range ?? null) === null;
+      if (typeof block.panelId === "string") byId[block.panelId] = follows;
+      else byPrefix.push([prefix, follows]);
+    }
+  }
+  return (panel) => {
+    if (panel.kind === "comparison") return false;
+    const id = typeof panel.id === "string" ? panel.id : "";
+    const known = (Object.hasOwn(byId, id) ? byId[id] : undefined) ?? byPrefix.find(([prefix]) => id.startsWith(prefix))?.[1];
+    return known ?? sameAsReport(panel.range);
+  };
+}
+
+/**
+ * The range to run `saved` over for the viewer's `choice`. Two dates are read as days in `timeZone`,
+ * the patient's zone the report's days are cut in.
+ */
 export function viewerRange(
   catalogue: CustomReportCatalogue,
   saved: unknown,
   choice: string | null,
   span: DateSpan | null = null,
+  timeZone: string | null = null,
   now: number = Date.now()
 ): ViewerRange {
   const spec = withoutBuilder(saved);
-  const reportHours = hoursOf(spec.range);
   const panels = (Array.isArray(spec.panels) ? spec.panels : []).map((p) => asObject(p) ?? {});
-  /** A block follows the report when it or the report has no range, or it has the report's. */
-  const follows = (panel: Json) =>
-    panel.kind !== "comparison" &&
-    (panel.range === null || panel.range === undefined || reportHours === null || hoursOf(panel.range) === reportHours);
+  const follows = followsReport(saved, spec);
   const following = panels.filter(follows);
   const max = following.length === 0 ? catalogue.maxRangeHours : Math.min(...following.map((p) => givenMaxHours(catalogue, p)));
   const presets = catalogue.workspace.rangePresets;
@@ -73,7 +110,7 @@ export function viewerRange(
     panels: panels.map((p) => (follows(p) ? { ...p, range } : p)),
   });
   if (choice === CUSTOM_RANGE && span) {
-    const range = spanRange(span);
+    const range = spanRange(span, timeZone);
     const hours = (Date.parse(range.to) - Date.parse(range.from)) / 3_600_000;
     const reason =
       Date.parse(range.from) > now

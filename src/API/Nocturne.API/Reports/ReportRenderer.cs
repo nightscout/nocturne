@@ -37,7 +37,8 @@ internal sealed class ReportRenderer(
 
         var report = await runner.RunAsync(
             spec,
-            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, http.IsCallerHistoryClamped(), tenantZone, hour12),
+            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, http.IsCallerHistoryClamped(), tenantZone, hour12,
+                string.IsNullOrWhiteSpace(regionFormat) ? null : regionFormat),
             cancellationToken);
 
         var origin = $"{http.Request.PublicScheme()}://{http.Request.Host}";

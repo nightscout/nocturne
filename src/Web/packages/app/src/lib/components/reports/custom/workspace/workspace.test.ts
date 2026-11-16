@@ -511,7 +511,7 @@ describe("answers before the click", () => {
     const ws = from("last-24-hours");
 
     expect(ws.relateReason("iob", { trend: true })).toBe(
-      "A chart draws at most 8 layers. Remove a signal or an option first."
+      "The chart has too many signals and options to draw. Remove a signal or an option first."
     );
     expect(ws.setRelate("iob", { trend: true })).not.toBeNull();
     expect(ws.relate("iob").trend).toBe(false);
@@ -521,7 +521,7 @@ describe("answers before the click", () => {
     const ws = from("last-24-hours");
 
     expect(ws.ownLaneReason("iob", true)).toBe(
-      "A chart has at most 4 lanes. Remove a signal first."
+      "A chart has at most 4 rows. Remove a signal first."
     );
     expect(ws.canOwnLane("pumpModes")).toBe(false);
   });

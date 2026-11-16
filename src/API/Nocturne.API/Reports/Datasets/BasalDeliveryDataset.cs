@@ -84,13 +84,13 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(series, request.From, request.To, therapy, [.. omitted.Select(o => o.Field)], request.Zone),
+            Summary = Summarise(series, request.From, request.To, therapy, [.. omitted.Select(o => o.Field)], request.Clock),
             Facts = FactsOf(series, therapy),
             Sentence = series.Count == 0 ? "No basal records in this period."
                 : "Changes by origin: " + string.Join(", ", series.GroupBy(p => p.Origin).OrderByDescending(g => g.Count())
                     .Select(g => $"{g.Key} {g.Count()}")) + ".",
             SentenceAbout = series.Count == 0 ? null : ["delivered"],
-            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(series.Count, "rate change")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(series.Count, "rate change")}.",
             Omitted = omitted,
             Resolution = new ReportResolution(1, interval, series.Count, rows.Count, rows.Count < series.Count),
         };
@@ -129,12 +129,12 @@ internal sealed class BasalDeliveryDataset : IReportDataset
 
     /// <summary>The rates' extremes and the changes by origin: counts of rows, not a time-weighted total.</summary>
     internal static string Summarise(
-        IReadOnlyList<BasalPoint> series, DateTimeOffset from, DateTimeOffset to, bool therapy, IReadOnlyList<string> omitted, TimeZoneInfo? zone = null)
+        IReadOnlyList<BasalPoint> series, DateTimeOffset from, DateTimeOffset to, bool therapy, IReadOnlyList<string> omitted, ReportClock? clock = null)
     {
         static string N(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
         var lines = new List<string>
         {
-            string.Create(CultureInfo.InvariantCulture, $"Basal delivery from {ReportFacts.Window(from, to, zone)}."),
+            string.Create(CultureInfo.InvariantCulture, $"Basal delivery from {ReportFacts.Window(from, to, clock)}."),
         };
         if (series.Count == 0)
         {

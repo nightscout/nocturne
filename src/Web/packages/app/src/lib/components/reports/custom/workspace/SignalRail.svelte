@@ -37,7 +37,7 @@
       ws,
       `Nocturne removed ${signalLabel(id)} from the chart.`,
       () => ws.toggleSignal(id),
-      () => ws.toggleSignal(id)
+      () => ws.placeSignal(id)
     );
     if (!removed) return;
     await tick();

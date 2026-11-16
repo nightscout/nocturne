@@ -183,9 +183,9 @@ function derivedName(catalogue: CustomReportCatalogue, derived: Json): string {
   return opPhrase(String(derived.op), a, b, typeof derived.minutes === "number" ? derived.minutes : null);
 }
 
-/** What a calculated signal shows, from the names of its sources. */
+/** What a calculated signal shows, from the names of its sources: each one whole message to translate. */
 function opPhrase(op: string, a: string, b: string, minutes: number | null): string {
-  const window = minutes === null ? "" : ` over ${windowWords(minutes)}`;
+  const window = minutes === null ? null : windowWords(minutes);
   switch (op) {
     case "difference":
       return `${a} minus ${b}`;
@@ -196,11 +196,11 @@ function opPhrase(op: string, a: string, b: string, minutes: number | null): str
     case "lag_correlation":
       return `How ${a} and ${b} move together when one is shifted`;
     case "rolling_mean":
-      return `Rolling average of ${a}${window}`;
+      return window === null ? `Rolling average of ${a}` : `Rolling average of ${a} over ${window}`;
     case "trend":
       return `Trend of ${a}`;
     case "band_sd":
-      return `Average and spread of ${a}${window}`;
+      return window === null ? `Average and spread of ${a}` : `Average and spread of ${a} over ${window}`;
     default:
       return op;
   }
@@ -224,6 +224,18 @@ export function opLabel(op: CalculatedOp): string {
     case "lag_correlation":
       return "How two signals move together when one is shifted";
   }
+}
+
+/**
+ * A copy of a panel held as given with its title trimmed, or without a title when none is left: the
+ * title field stores what the member types, spaces and all, and the spec saves it trimmed.
+ */
+export function withTrimmedTitle(panel: Json): Json {
+  const copy = copyJson(panel);
+  const title = typeof copy.title === "string" ? copy.title.trim() : null;
+  if (title) copy.title = title;
+  else delete copy.title;
+  return copy;
 }
 
 export function windowWords(minutes: number): string {
@@ -318,7 +330,7 @@ export function renameLayer(panel: Json, t: number, l: number, title: string): J
   return edit(panel, (tracks) => {
     const layer = layersOf(tracks[t])[l];
     const trimmed = title.trim();
-    if (trimmed) layer.title = title;
+    if (trimmed) layer.title = trimmed;
     else delete layer.title;
     tracks[t].layers = layersOf(tracks[t]).map((x, i) => (i === l ? layer : x));
   });

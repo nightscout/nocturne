@@ -92,13 +92,10 @@ public static class DayConditions
     /// <summary>The low episodes in <paramref name="readings"/>, as spans.</summary>
     internal static List<MillsInterval> Lows(IReadOnlyList<GlucoseSample> readings)
     {
-        var plausible = readings
-            .Where(r => GlucoseStatistics.IsPlausibleReading(r.Mgdl))
-            .Select(r => new SensorGlucose { Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.Mills).UtcDateTime, Mgdl = r.Mgdl })
-            .ToList();
+        var sensor = readings.Select(r => new SensorGlucose { Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.Mills).UtcDateTime, Mgdl = r.Mgdl });
         return
         [
-            .. GlucoseEpisodeDetector.Detect(plausible, new GlycemicThresholds())
+            .. GlucoseEpisodes.Find(sensor, new GlycemicThresholds())
                 .Where(e => e.BelowRange)
                 .Select(e => new MillsInterval(
                     new DateTimeOffset(e.StartAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),

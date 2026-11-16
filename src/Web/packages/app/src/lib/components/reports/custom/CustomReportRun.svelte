@@ -107,7 +107,7 @@
     <div class="mt-1 flex flex-wrap items-center gap-3">
       {#if path}
         <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a path the API built from the report registry's own routes -->
-        <a href={path} class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <a href={path} class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" data-touch-hit>
           <ExternalLink class="size-3.5" aria-hidden="true" />
           Open the matching report
         </a>

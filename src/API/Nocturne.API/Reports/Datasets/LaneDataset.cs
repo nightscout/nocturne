@@ -13,6 +13,12 @@ internal abstract class LaneDataset : IReportDataset
     /// <summary>One span before it is a row: <paramref name="Lane"/> is the lane it is drawn in.</summary>
     internal sealed record Span(string Lane, string Label, long Start, long End, ChartColor Color);
 
+    /// <summary>
+    /// What a read found: its spans in start order, and whether the read stopped at a limit of its own before the end
+    /// of the range (a number of sessions, say), so the spans hold only the first part of it.
+    /// </summary>
+    internal sealed record LaneRead(IReadOnlyList<Span> Spans, bool Cut = false);
+
     public abstract string Name { get; }
 
     public abstract string Label { get; }
@@ -73,17 +79,17 @@ internal abstract class LaneDataset : IReportDataset
 
     public virtual IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
 
-    /// <summary>The spans in [<paramref name="from"/>, <paramref name="to"/>), at most <paramref name="limit"/> of them.</summary>
-    protected abstract Task<IReadOnlyList<Span>> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken);
+    /// <summary>The first spans in [<paramref name="from"/>, <paramref name="to"/>), at most <paramref name="limit"/> of them.</summary>
+    protected abstract Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken);
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var from = request.From.ToUnixTimeMilliseconds();
         var to = request.To.ToUnixTimeMilliseconds();
         var read = await ReadAsync(request, from, to, PointBudget + 1, cancellationToken);
-        if (read.Count > 0 && ReadName is { } source)
-            request.ReadLog.Record(source, read.Count);
-        return Output(Clip(read, from, to, Instants), request, PointBudget);
+        if (read.Spans.Count > 0 && ReadName is { } source)
+            request.ReadLog.Record(source, read.Spans.Count);
+        return Output(Clip(read.Spans, from, to, Instants), request, PointBudget, read.Cut);
     }
 
     /// <summary>Each span cut to the range, in start order; an instant is kept where it falls in it.</summary>
@@ -95,23 +101,27 @@ internal abstract class LaneDataset : IReportDataset
             .OrderBy(s => s.Start),
     ];
 
-    internal ReportDatasetOutput Output(IReadOnlyList<Span> spans, ReportDatasetRequest request, int budget)
+    /// <summary>
+    /// The first <paramref name="budget"/> spans as rows, cut where there are more, or where the read stopped at a limit
+    /// of its own (<see cref="LaneRead.Cut"/>, <paramref name="readCut"/>).
+    /// </summary>
+    internal ReportDatasetOutput Output(IReadOnlyList<Span> spans, ReportDatasetRequest request, int budget, bool readCut = false)
     {
         var kept = spans.Take(budget).ToList();
-        var cut = kept.Count < spans.Count;
-        var window = ReportFacts.Window(request.From, request.To, request.Zone);
+        var cut = kept.Count < spans.Count || (readCut && kept.Count > 0);
+        var window = ReportFacts.Window(request.From, request.To, request.Clock);
         var lanes = kept.GroupBy(s => s.Lane).Select(g => (Lane: g.Key, Count: g.Count())).ToList();
         var lines = new List<string> { string.Create(CultureInfo.InvariantCulture, $"{Label} from {window}.") };
         lines.AddRange(lanes.Select(l => $"{l.Lane}: {ReportFacts.Plural(l.Count, Noun)}."));
         if (kept.Count > 0)
         {
             var latest = kept[^1];
-            lines.Add($"Latest: {latest.Label} at {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(latest.Start), request.Zone)}.");
+            lines.Add($"Latest: {latest.Label} at {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(latest.Start), request.Clock)}.");
         }
         string? cutNote = null;
         if (cut)
         {
-            cutNote = $"Only the first {kept.Count} {Noun}s are shown, to {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(kept[^1].Start), request.Zone)}.";
+            cutNote = $"Only the first {kept.Count} {Noun}s are shown, to {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(kept[^1].Start), request.Clock)}.";
             lines.Add(cutNote);
         }
 
