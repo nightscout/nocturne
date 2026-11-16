@@ -101,6 +101,9 @@ export default defineConfig(({ mode }) => {
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
     }),
+      // A .po write is source-triggered (no full reload) only while it lands within this many ms
+      // of the extraction that caused it; extraction across every locale takes longer than the
+      // 1000 ms default, so each later write reloaded the whole app.
       wuchale(),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {
@@ -185,7 +188,16 @@ export default defineConfig(({ mode }) => {
         ],
       },
       watch: {
-        ignored: ["**/node_modules/**", "**/.git/**"],
+        // Wuchale rewrites its proxies and loaders, unchanged, on every extraction; seen by the
+        // watcher, each rewrite is another SSR page reload. The compiled catalogues stay watched:
+        // a new string reaches the page only through their change events.
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/locales/.wuchale/*.proxy*.js",
+          "**/locales/data.js",
+          "**/locales/*.loader*.js",
+        ],
         usePolling: false,
       },
       fs: {
