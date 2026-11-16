@@ -9,6 +9,7 @@ import Building from "@lucide/svelte/icons/building";
 import Building2 from "@lucide/svelte/icons/building-2";
 import MailPlus from "@lucide/svelte/icons/mail-plus";
 import FileSearch from "@lucide/svelte/icons/file-search";
+import Hammer from "@lucide/svelte/icons/hammer";
 import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
 import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 import LifeBuoy from "@lucide/svelte/icons/life-buoy";
@@ -130,6 +131,13 @@ function settingsGroups(): SettingsGroup[] {
           description: "Data sources, your connected apps and API keys, and the move from Nightscout.",
           href: "/settings/connectors",
           icon: Plug,
+        },
+        {
+          title: "App builds",
+          description: "Build the AAPS app in your own GitHub repository.",
+          href: "/settings/app-builds",
+          icon: Hammer,
+          anyScope: ["tenant.settings"],
         },
         {
           title: "Sharing & privacy",
