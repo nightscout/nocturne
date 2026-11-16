@@ -381,6 +381,51 @@ describe("ImportProgress", () => {
     expect(onSettled).not.toHaveBeenCalled();
   });
 
+  // The older history can take hours. Once the recent data is in, the step stops watching and
+  // hands the run to the app.
+  it("hands a live run over once its recent data is in", async () => {
+    status = {
+      state: MigrationJobState.Running,
+      progressPercentage: 12,
+      recentDataReady: true,
+      collectionProgress: {},
+    };
+    const onResult = vi.fn();
+    const onSettled = vi.fn();
+    const onRecentReady = vi.fn();
+
+    render(ImportProgress, {
+      voice,
+      jobId: "job-recent",
+      onResult,
+      onSettled,
+      onRecentReady,
+      onComplete: () => {},
+    });
+
+    await expect.poll(() => onRecentReady.mock.calls).toEqual([["job-recent"]]);
+    expect(onResult.mock.calls).toEqual([["running"], ["background"]]);
+    expect(onSettled).toHaveBeenCalledTimes(1);
+    expect(statusSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps watching a live run whose recent data is not in yet", async () => {
+    status = {
+      state: MigrationJobState.Running,
+      progressPercentage: 3,
+      recentDataReady: false,
+      collectionProgress: {},
+    };
+    const onRecentReady = vi.fn();
+    const onSettled = vi.fn();
+
+    render(ImportProgress, { voice, jobId: "job-early", onSettled, onRecentReady, onComplete: () => {} });
+
+    await expect.poll(() => statusSpy.mock.calls.length).toBeGreaterThan(0);
+    expect(onRecentReady).not.toHaveBeenCalled();
+    expect(onSettled).not.toHaveBeenCalled();
+  });
+
   it("stops blocking when there is no run to follow", async () => {
     const onSettled = vi.fn();
 
