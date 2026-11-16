@@ -8,7 +8,7 @@ namespace Nocturne.Core.Models.AppBuilds;
 /// An app a tenant owner builds in their own GitHub repository. It names the template that repository
 /// is generated from and the <c>workflow_dispatch</c> workflow that builds it. Its inputs and secrets
 /// are the only ones Nocturne may send to it. The web app keys its display strings on <see cref="Id"/>,
-/// each input's <see cref="BuildTargetInput.Name"/> and each secret's <see cref="BuildTargetSecret.Name"/>.
+/// each input's <see cref="BuildInput.Name"/> and each secret's <see cref="BuildTargetSecret.Name"/>.
 /// </summary>
 public sealed class BuildTarget
 {
@@ -22,7 +22,7 @@ public sealed class BuildTarget
     /// <summary>The workflow file name under <c>.github/workflows</c>.</summary>
     public required string WorkflowFile { get; init; }
 
-    public required IReadOnlyList<BuildTargetInput> Inputs { get; init; }
+    public required IReadOnlyList<BuildInput> Inputs { get; init; }
     public required IReadOnlyList<BuildTargetSecret> Secrets { get; init; }
 
     [JsonIgnore]
@@ -32,8 +32,8 @@ public sealed class BuildTarget
         Secrets.FirstOrDefault(secret => string.Equals(secret.Name, name, StringComparison.Ordinal));
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter<BuildTargetInputKind>))]
-public enum BuildTargetInputKind
+[JsonConverter(typeof(JsonStringEnumConverter<BuildInputKind>))]
+public enum BuildInputKind
 {
     [EnumMember(Value = "text"), JsonStringEnumMemberName("text")]
     Text,
@@ -42,21 +42,21 @@ public enum BuildTargetInputKind
     Choice,
 }
 
-public sealed class BuildTargetInput
+public sealed class BuildInput
 {
     public required string Name { get; init; }
-    public required BuildTargetInputKind Kind { get; init; }
+    public required BuildInputKind Kind { get; init; }
     public required string Default { get; init; }
 
-    /// <summary>The allowed values of a <see cref="BuildTargetInputKind.Choice"/> input; empty for text.</summary>
+    /// <summary>The allowed values of a <see cref="BuildInputKind.Choice"/> input; empty for text.</summary>
     public IReadOnlyList<string> Options { get; init; } = [];
 
-    /// <summary>The whole-value pattern a <see cref="BuildTargetInputKind.Text"/> input must match.</summary>
+    /// <summary>The whole-value pattern a <see cref="BuildInputKind.Text"/> input must match.</summary>
     public string? Pattern { get; init; }
 
     public bool Accepts(string value) => Kind switch
     {
-        BuildTargetInputKind.Choice => Options.Contains(value, StringComparer.Ordinal),
+        BuildInputKind.Choice => Options.Contains(value, StringComparer.Ordinal),
         _ => Pattern is not null && Regex.IsMatch(value, Pattern, RegexOptions.None, TimeSpan.FromMilliseconds(100)),
     };
 }
@@ -84,18 +84,18 @@ public static class BuildTargets
         WorkflowFile = "build.yml",
         Inputs =
         [
-            new BuildTargetInput
+            new BuildInput
             {
                 Name = "version",
-                Kind = BuildTargetInputKind.Text,
+                Kind = BuildInputKind.Text,
                 Default = "latest",
                 // "latest" or a git tag of nightscout/AndroidAPS; the workflow checks that the tag exists.
                 Pattern = @"^(latest|[0-9][0-9A-Za-z._-]{0,63})$",
             },
-            new BuildTargetInput
+            new BuildInput
             {
                 Name = "variant",
-                Kind = BuildTargetInputKind.Choice,
+                Kind = BuildInputKind.Choice,
                 Default = "fullRelease",
                 Options =
                 [
