@@ -38,8 +38,9 @@ function setShallowState(url: string | URL, state: App.PageState) {
   page.state = state;
 }
 
-export function replaceState(url: string | URL, state: App.PageState) {
+export function replaceState(url: string | URL, state: App.PageState): Promise<void> {
   setShallowState(url, state);
+  return Promise.resolve();
 }
 
 export function pushState(url: string | URL, state: App.PageState) {

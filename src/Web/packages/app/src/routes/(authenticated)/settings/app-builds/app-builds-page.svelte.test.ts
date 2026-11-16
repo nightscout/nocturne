@@ -455,7 +455,7 @@ describe("App builds page", () => {
     await expect
       .element(
         browserPage.getByText(
-          "You must have permission to change the site settings."
+          "Your Nocturne account cannot use app builds now. Sign in again. If the problem continues, ask a site owner."
         )
       )
       .toBeVisible();

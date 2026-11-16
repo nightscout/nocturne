@@ -55,7 +55,7 @@
     for (const name of ["linked", "error", "target"])
       url.searchParams.delete(name);
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus its query, already resolved
-    void replaceState(url, page.state)?.catch(() => {});
+    void replaceState(url, page.state).catch(() => {});
   });
 </script>
 
