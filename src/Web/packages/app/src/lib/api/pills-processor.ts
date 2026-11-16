@@ -127,6 +127,12 @@ export interface PillsProcessorConfig extends StatusPillsConfig {
 	now?: number;
 	/** BG units ('mg/dL' or 'mmol/L') */
 	units?: string;
+	/**
+	 * IOB the server calculated from treatments (the widget summary's `iob`). Shown only when no
+	 * APS snapshot or device status reported IOB within the recency threshold, as for a pump whose
+	 * history reaches the server through a cloud connector.
+	 */
+	calculatedIob?: number | null;
 }
 
 /**
@@ -441,19 +447,28 @@ export function processIOB(
 		)
 		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))[0];
 
-	if (iobFromDevice) {
-		if (lastBolus) {
-			iobFromDevice.lastBolus = {
-				mills: lastBolus.mills ?? 0,
-				insulin: lastBolus.insulin ?? 0,
-			};
-		}
-		return iobFromDevice;
-	}
+	const calculated = config.calculatedIob;
+	const iobData: IOBPillData | null =
+		iobFromDevice ??
+		(typeof calculated === 'number'
+			? {
+					iob: calculated,
+					source: 'Calculated',
+					display: `${calculated.toFixed(2)}U`,
+					label: 'IOB',
+					info: [],
+					level: 'none',
+					lastUpdated: now
+				}
+			: null);
 
-	// If no device status, we could calculate IOB from boluses
-	// For now, return null if no device data
-	return null;
+	if (iobData && lastBolus) {
+		iobData.lastBolus = {
+			mills: lastBolus.mills ?? 0,
+			insulin: lastBolus.insulin ?? 0,
+		};
+	}
+	return iobData;
 }
 
 /**

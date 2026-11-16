@@ -2,6 +2,7 @@
   import { Key } from "@nocturne/ui/keys";
   import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
+    calculatedIob,
     displayedGlucose,
     refreshSummaryOnNewReading,
   } from "#lib/stores/current-glucose-status.svelte.js";
@@ -84,6 +85,13 @@
     () => realtimeStore.currentEntry?.mills,
     () => data.canViewRealtimeData
   );
+  $effect(() => {
+    realtimeStore.calculatedIob =
+      data.canViewRealtimeData &&
+      satisfiesScope(data.effectivePermissions ?? [], "treatments.read")
+        ? calculatedIob()
+        : undefined;
+  });
   const authStore = createAuthStore(); // Initialize auth store in context
   refreshOnVisible(
     createShellRevalidator(

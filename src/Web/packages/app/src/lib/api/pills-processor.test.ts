@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { AidAlgorithm, type ApsSnapshot } from "#lib/api/generated/nocturne-api-client.js";
 import type { DeviceStatus } from "#lib/api/pills-processor.js";
+import type { Bolus } from "#lib/api/index.js";
 
 // The module graph for #lib/api transitively imports several $app/* modules
 // and @sveltejs/kit.  Mock them all before loading the module under test.
@@ -367,6 +368,59 @@ describe("processPillsData – legacy DeviceStatus fallback when no snapshots", 
 		expect(result.iob).not.toBeNull();
 		expect(result.iob!.basalIob).toBeUndefined();
 		expect(result.iob!.activity).toBeUndefined();
+	});
+
+	it("shows the calculated IOB when no device reported IOB", () => {
+		const bolus = { mills: NOW - 40 * MIN, insulin: 3 } as Bolus;
+		const result = processPillsData(EMPTY, EMPTY, [bolus], EMPTY, null, {
+			now: NOW,
+			calculatedIob: 1.234,
+		});
+		expect(result.iob).not.toBeNull();
+		expect(result.iob!.iob).toBe(1.234);
+		expect(result.iob!.display).toBe("1.23U");
+		expect(result.iob!.source).toBe("Calculated");
+		expect(result.iob!.lastBolus).toEqual({ mills: NOW - 40 * MIN, insulin: 3 });
+	});
+
+	it("shows the calculated IOB when the only device status is older than the threshold", () => {
+		const staleStatus: DeviceStatus[] = [{
+			mills: NOW - 90 * MIN,
+			pump: { iob: { iob: 4 } }
+		}];
+		const result = processPillsData(staleStatus, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: 0.5,
+		});
+		expect(result.iob!.iob).toBe(0.5);
+		expect(result.iob!.source).toBe("Calculated");
+	});
+
+	it("prefers a recent device IOB over the calculated IOB", () => {
+		const legacyStatus: DeviceStatus[] = [{
+			mills: NOW - 3 * MIN,
+			openaps: { iob: { iob: 1.5 } }
+		}];
+		const result = processPillsData(legacyStatus, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: 0.5,
+		});
+		expect(result.iob!.iob).toBe(1.5);
+		expect(result.iob!.source).toBe("OpenAPS");
+	});
+
+	it("prefers a recent APS snapshot over the calculated IOB", () => {
+		const snap = makeSnapshot({ iob: 2.72 }, NOW, 3);
+		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: 0.5,
+		});
+		expect(result.iob!.iob).toBe(2.72);
+	});
+
+	it("returns null IOB when no device reported IOB and there is no calculated IOB", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
+		expect(result.iob).toBeNull();
 	});
 
 	it("drops a null legacy Loop iob and cob rather than carrying them into pill data", () => {
