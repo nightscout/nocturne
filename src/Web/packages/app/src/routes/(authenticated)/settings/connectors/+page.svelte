@@ -629,9 +629,13 @@
             </Collapsible.Trigger>
             <Collapsible.Content>
               <ul class="mt-3 divide-y border-y">
-                {#each otherSources as stream (`${stream.dataSource ?? ""}|${stream.device ?? ""}`)}
+                {#each otherSources as stream (`${stream.key}|${stream.dataSource ?? ""}|${stream.device ?? ""}`)}
+                  {@const canDelete = canManage && stream.canDelete === true}
                   <li>
-                    <Item variant="row" onclick={() => openStream(stream)}>
+                    <Item
+                      variant="row"
+                      onclick={canDelete ? () => openStream(stream) : undefined}
+                    >
                       <span
                         class="flex size-8 shrink-0 items-center justify-center"
                         aria-hidden="true"
@@ -657,11 +661,18 @@
                             at={stream.lastRecordAt}
                           />
                         </span>
+                        {#if !stream.canDelete}
+                          <span class="block text-sm text-muted-foreground">
+                            A connection also sends records under this name.
+                          </span>
+                        {/if}
                       </span>
-                      <ChevronRight
-                        class="size-4 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
+                      {#if canDelete}
+                        <ChevronRight
+                          class="size-4 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      {/if}
                     </Item>
                   </li>
                 {/each}

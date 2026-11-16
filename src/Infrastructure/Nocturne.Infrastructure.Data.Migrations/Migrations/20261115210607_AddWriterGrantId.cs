@@ -7,8 +7,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
 {
     /// <remarks>
     /// The backfill reads each row's writer from the mutation audit log, which records the grant of
-    /// every insert a credential made. A token id that is no grant (a session cookie's JWT id) is
-    /// skipped, and so is a row older than the log, which stays without a writer.
+    /// an insert a credential made unless the save was system-attributed: an uploader's entry and
+    /// device-status batches are, so those rows stay without a writer, as does a row older than the
+    /// log. A token id that is no grant (a session cookie's JWT id) is skipped.
     /// </remarks>
     public partial class AddWriterGrantId : Migration
     {

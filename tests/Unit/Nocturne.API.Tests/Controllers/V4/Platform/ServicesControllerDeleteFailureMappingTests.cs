@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -127,5 +128,13 @@ public class ServicesControllerDeleteFailureMappingTests
         var conflict = response.Result.Should().BeOfType<ObjectResult>().Subject;
         conflict.StatusCode.Should().Be(409);
         conflict.Value.Should().BeOfType<ProblemDetails>();
+    }
+
+    [Fact]
+    public void ListingConnectionsIsRefusedToADelegatedCredential()
+    {
+        typeof(ServicesController).GetMethod(nameof(ServicesController.GetConnections))!
+            .GetCustomAttributes(typeof(RequireInteractiveSessionAttribute), inherit: false)
+            .Should().ContainSingle();
     }
 }

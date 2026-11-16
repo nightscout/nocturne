@@ -169,7 +169,7 @@
 
       <Dialog.Footer>
         <Button variant="outline" onclick={cancel}>Cancel</Button>
-        {#if canManage}
+        {#if canManage && source.canDelete}
           <Button variant="outline-destructive" onclick={startDelete}>
             <Trash2 class="h-4 w-4" />
             Delete data...

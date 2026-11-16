@@ -16,8 +16,9 @@ namespace Nocturne.API.Services.Connectors;
 /// <remarks>
 /// A record belongs to the credential that inserted it (<c>writer_grant_id</c>), not to whatever its
 /// uploader called itself, so one app is one connection however many device strings its record
-/// types carry. An app's grants are one connection: its publisher's software id names every install,
-/// and a client registered without one is its own connection.
+/// types carry. A verified app's grants are one connection: its publisher's software id names
+/// every install. Any other client is its own connection, since a client asserts its own software
+/// id at registration and could name another app's.
 /// </remarks>
 public class ConnectionService(
     ISourceOwnedDataReader sourceData,
@@ -71,10 +72,11 @@ public class ConnectionService(
 
         foreach (var status in await connectorHealth.GetConnectorStatusesAsync(ct))
         {
-            if (!status.IsEnabled && !status.HasDatabaseConfig)
+            var owned = connectorBuckets.GetValueOrDefault(status.Id) ?? [];
+            if (!status.IsEnabled && !status.HasDatabaseConfig && owned.Count == 0)
                 continue;
 
-            connections.Add(FromConnector(status, connectorBuckets.GetValueOrDefault(status.Id) ?? []));
+            connections.Add(FromConnector(status, owned));
         }
 
         return new ConnectionsOverview
@@ -87,7 +89,7 @@ public class ConnectionService(
                     .ThenByDescending(c => c.LastRecordAt ?? c.LastSyncAt ?? c.LastUsedAt)
                     .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
             ],
-            OtherSources = StreamsOf(otherBuckets),
+            OtherSources = OtherSourcesOf(otherBuckets, [.. writtenBuckets.Values.SelectMany(b => b)]),
             WindowDays = DataSourceService.DiscoveryWindowDays,
         };
     }
@@ -101,7 +103,8 @@ public class ConnectionService(
 
     private static string KeyOf(OAuthGrantRecord grant) =>
         grant.GrantType == OAuthGrantTypes.App
-            ? $"app:{grant.Client?.SoftwareId ?? grant.ClientEntityId?.ToString() ?? grant.Id.ToString()}"
+            ? $"app:{(grant.ClientIdentity == OAuthClientIdentity.Verified ? grant.Client?.SoftwareId : null)
+                ?? grant.ClientEntityId?.ToString() ?? grant.Id.ToString()}"
             : $"token:{grant.Id}";
 
     private static Connection FromGrants(
@@ -114,32 +117,44 @@ public class ConnectionService(
     {
         var newest = credentials[0];
         var isApp = newest.GrantType == OAuthGrantTypes.App;
-        var lastUsed = credentials.Max(g => g.LastUsedAt);
+        var lastUsed = credentials.Where(g => g.SubjectId == viewerSubjectId).Max(g => g.LastUsedAt);
         var connection = new Connection
         {
             Id = id,
             Kind = isApp ? ConnectionKind.App : ConnectionKind.Token,
             Direction = buckets.Count > 0 ? ConnectionDirection.Sends : ConnectionDirection.NoRecords,
             Name = isApp ? newest.Client?.DisplayName ?? newest.Client?.ClientId : newest.Label,
-            LogoUri = newest.Client?.LogoUri,
+            // A self-registered client names its own logo, and loading it tells that host who opened
+            // the page; only the member who authorized the app has already accepted that.
+            LogoUri = newest.ClientIdentity == OAuthClientIdentity.Verified || newest.SubjectId == viewerSubjectId
+                ? newest.Client?.LogoUri
+                : null,
             ClientUri = newest.Client?.ClientUri,
             Identity = isApp ? newest.ClientIdentity : null,
             LastUsedAt = lastUsed is { } used ? new DateTimeOffset(used, TimeSpan.Zero) : null,
             Credentials =
             [
-                .. credentials.Select(g => new ConnectionCredential
-                {
-                    GrantId = g.Id,
-                    Label = g.Label,
-                    Scopes = g.SubjectId == viewerSubjectId ? Scope.ForDisplay(g.Scopes, g.GrantType) : [],
-                    CreatedAt = g.CreatedAt,
-                    LastUsedAt = g.LastUsedAt,
-                    IsRevoked = g.IsRevoked,
-                    LimitTo24Hours = g.LimitTo24Hours,
-                    IsMigrated = g.IsMigrated,
-                    DeviceCount = deviceCounts.GetValueOrDefault(g.Id),
-                    IsOwn = g.SubjectId == viewerSubjectId,
-                }),
+                .. credentials.Select(g => g.SubjectId == viewerSubjectId
+                    ? new ConnectionCredential
+                    {
+                        GrantId = g.Id,
+                        Label = g.Label,
+                        Scopes = Scope.ForDisplay(g.Scopes, g.GrantType),
+                        CreatedAt = g.CreatedAt,
+                        LastUsedAt = g.LastUsedAt,
+                        IsRevoked = g.IsRevoked,
+                        LimitTo24Hours = g.LimitTo24Hours,
+                        IsMigrated = g.IsMigrated,
+                        DeviceCount = deviceCounts.GetValueOrDefault(g.Id),
+                        IsOwn = true,
+                    }
+                    : new ConnectionCredential
+                    {
+                        GrantId = g.Id,
+                        Label = g.Label,
+                        CreatedAt = g.CreatedAt,
+                        IsRevoked = g.IsRevoked,
+                    }),
             ],
         };
         ApplyRecords(connection, buckets);
@@ -195,7 +210,26 @@ public class ConnectionService(
             connection.ErrorMessage = status.StateMessage;
 
         ApplyRecords(connection, buckets);
+        foreach (var stream in connection.Streams)
+            stream.CanDelete = true;
         return connection;
+    }
+
+    /// <summary>
+    /// The sources no connection wrote. One that shares an origin handle with a credential's records
+    /// cannot be deleted by that handle without taking the credential's records with it.
+    /// </summary>
+    private static List<ConnectionStream> OtherSourcesOf(List<WriterBucket> unwritten, List<WriterBucket> written)
+    {
+        var writtenHandles = written
+            .SelectMany(b => new[] { b.DataSource, b.Device })
+            .Where(handle => !string.IsNullOrEmpty(handle))
+            .ToHashSet();
+
+        var sources = StreamsOf(unwritten);
+        foreach (var source in sources)
+            source.CanDelete = !writtenHandles.Contains(source.Key);
+        return sources;
     }
 
     private static void ApplyRecords(Connection connection, List<WriterBucket> buckets)

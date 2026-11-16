@@ -84,6 +84,14 @@ public class ConnectionStream
     [JsonPropertyName("icon")]
     public string Icon { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Whether a delete by <see cref="Key"/> removes only this stream's records. False for a
+    /// credential's stream, and for a source that shares an origin handle with one: the delete
+    /// matches rows by handle, whoever wrote them.
+    /// </summary>
+    [JsonPropertyName("canDelete")]
+    public bool CanDelete { get; set; }
+
     /// <summary>Records inside the window by data type.</summary>
     [JsonPropertyName("recordCounts")]
     public Dictionary<string, long> RecordCounts { get; set; } = new();
@@ -110,7 +118,10 @@ public class ConnectionCredential
     [JsonPropertyName("label")]
     public string? Label { get; set; }
 
-    /// <summary>The scopes the grant authorizes, as a listing shows them. Empty for another member's grant.</summary>
+    /// <summary>
+    /// The scopes the grant authorizes, as a listing shows them. Another member's grant is listed
+    /// with its label alone: no scopes, no use time and no device count.
+    /// </summary>
     [JsonPropertyName("scopes")]
     public List<string> Scopes { get; set; } = [];
 

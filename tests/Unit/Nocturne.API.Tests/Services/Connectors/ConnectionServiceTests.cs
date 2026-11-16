@@ -53,9 +53,10 @@ public class ConnectionServiceTests
         Guid? clientEntityId = null,
         Guid? subject = null,
         DateTime? revokedAt = null,
-        DateTime? lastUsedAt = null) =>
+        DateTime? lastUsedAt = null,
+        OAuthClientIdentity identity = OAuthClientIdentity.Verified) =>
         new(
-            Guid.NewGuid(), Guid.NewGuid(), clientEntityId, client, OAuthClientIdentity.SelfRegistered,
+            Guid.NewGuid(), Guid.NewGuid(), clientEntityId, client, identity,
             subject ?? Viewer, null, type, ["*"], label, Now.UtcDateTime.AddDays(-10), lastUsedAt, null, null,
             revokedAt, null, null, null, null, null, false, false);
 
@@ -133,6 +134,56 @@ public class ConnectionServiceTests
         connection.Credentials.Should().HaveCount(2);
         connection.Status.Should().Be(ConnectionStatus.Active);
         connection.Streams.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task AnUnverifiedClientIsNotFoldedIntoTheAppWhoseSoftwareIdItClaims()
+    {
+        _grantRecords.AddRange(
+        [
+            Grant(OAuthGrantTypes.App, client: new OAuthGrantClient("real", "AndroidAPS", null, null, "info.aaps"),
+                clientEntityId: Guid.NewGuid()),
+            Grant(OAuthGrantTypes.App, client: new OAuthGrantClient("fake", "AndroidAPS", null, null, "info.aaps"),
+                clientEntityId: Guid.NewGuid(), identity: OAuthClientIdentity.SelfRegistered),
+        ]);
+
+        var overview = await ListAsync();
+
+        overview.Connections.Should().HaveCount(2);
+        overview.Connections.Should().OnlyContain(c => c.Credentials.Count == 1);
+    }
+
+    [Fact]
+    public async Task ASourceThatSharesAHandleWithACredentialCannotBeDeletedByIt()
+    {
+        var token = Grant(OAuthGrantTypes.Direct, "xDrip");
+        _grantRecords.Add(token);
+        _buckets.AddRange(
+        [
+            Bucket(SourceDataTypes.Glucose, token.Id, null, "xDrip-DexcomG6", 30),
+            Bucket(SourceDataTypes.Glucose, null, null, "xDrip-DexcomG6", 400),
+            Bucket(SourceDataTypes.Glucose, null, null, "Spike", 20),
+        ]);
+
+        var overview = await ListAsync();
+
+        overview.OtherSources.Single(s => s.Key == "xDrip-DexcomG6").CanDelete.Should().BeFalse();
+        overview.OtherSources.Single(s => s.Key == "Spike").CanDelete.Should().BeTrue();
+        overview.Connections.Single().Streams.Should().OnlyContain(s => !s.CanDelete);
+    }
+
+    [Fact]
+    public async Task AConnectorThatIsNoLongerConfiguredIsListedWhileItsRecordsRemain()
+    {
+        _statuses.Add(new ConnectorStatusDto { Id = "glooko", Name = "glooko", Status = "Not Configured", State = "Not Configured" });
+        _buckets.Add(Bucket(SourceDataTypes.Glucose, null, "glooko-connector", "glooko-connector", 70, minutesAgo: 600));
+
+        var overview = await ListAsync();
+
+        var connector = overview.Connections.Should().ContainSingle().Subject;
+        connector.Status.Should().Be(ConnectionStatus.Disabled);
+        connector.Streams.Should().ContainSingle().Which.CanDelete.Should().BeTrue();
+        overview.OtherSources.Should().BeEmpty();
     }
 
     [Fact]
@@ -224,7 +275,8 @@ public class ConnectionServiceTests
     [Fact]
     public async Task AnotherMembersCredentialIsNotTheViewersToRevoke()
     {
-        var theirs = Grant(OAuthGrantTypes.Direct, "Theirs", subject: Guid.NewGuid());
+        var theirs = Grant(
+            OAuthGrantTypes.Direct, "Theirs", subject: Guid.NewGuid(), lastUsedAt: Now.UtcDateTime.AddMinutes(-3));
         _grantRecords.Add(theirs);
         _buckets.Add(Bucket(SourceDataTypes.Glucose, theirs.Id, null, "xDrip", 12));
 
@@ -233,6 +285,8 @@ public class ConnectionServiceTests
         var credential = overview.Connections.Single().Credentials.Single();
         credential.IsOwn.Should().BeFalse();
         credential.Scopes.Should().BeEmpty();
+        credential.LastUsedAt.Should().BeNull();
+        overview.Connections.Single().LastUsedAt.Should().BeNull();
     }
 
     [Fact]

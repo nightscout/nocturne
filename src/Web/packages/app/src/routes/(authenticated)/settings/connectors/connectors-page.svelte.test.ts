@@ -85,6 +85,7 @@ const xdrip: Connection = {
       recordCounts: { Glucose: 8600, Boluses: 40 },
       totalRecords: 8640,
       lastRecordAt: minutesAgo(3),
+      canDelete: false,
     },
   ],
   credentials: [
@@ -116,7 +117,17 @@ const dexcom: Connection = {
   connectorId: "dexcom",
   errorMessage: "The Dexcom password was refused.",
   lastSyncAt: minutesAgo(90),
-  streams: [],
+  recordCounts: { Glucose: 12 },
+  streams: [
+    {
+      key: "dexcom-connector",
+      dataSource: "dexcom-connector",
+      name: "Dexcom",
+      recordCounts: { Glucose: 12 },
+      totalRecords: 12,
+      canDelete: true,
+    },
+  ],
   credentials: [],
 };
 
@@ -324,7 +335,18 @@ describe("connections list", () => {
     loaded({
       connections: [xdrip],
       otherSources: [
-        { key: "mystery", name: "Mystery uploader", totalRecords: 12 },
+        {
+          key: "mystery",
+          name: "Mystery uploader",
+          totalRecords: 12,
+          canDelete: true,
+        },
+        {
+          key: "shared",
+          name: "Shared name",
+          totalRecords: 7,
+          canDelete: false,
+        },
       ],
     });
     render(ConnectorsPage);
@@ -332,7 +354,7 @@ describe("connections list", () => {
     await expect
       .element(browserPage.getByRole("heading", { name: "Other sources", level: 2 }))
       .toBeVisible();
-    const disclosure = browserPage.getByRole("button", { name: "1 source" });
+    const disclosure = browserPage.getByRole("button", { name: "2 sources" });
     await expect.element(disclosure).toBeVisible();
     await expect
       .element(
@@ -346,6 +368,13 @@ describe("connections list", () => {
       .not.toBeInTheDocument();
 
     await disclosure.click();
+    await expect
+      .element(
+        browserPage.getByText("A connection also sends records under this name.")
+      )
+      .toBeVisible();
+    await expect.element(browserPage.getByText("Shared name")).toBeVisible();
+    expect(browserPage.getByRole("button", { name: /Shared name/ }).elements()).toHaveLength(0);
     await browserPage.getByRole("button", { name: /Mystery uploader/ }).click();
     await expect
       .element(browserPage.getByRole("button", { name: "Delete data..." }))
@@ -433,15 +462,55 @@ describe("connection detail", () => {
     expect(mocks.revokeApp).not.toHaveBeenCalled();
   });
 
-  it("returns to the connection when the reader cancels a delete", async () => {
+  it("offers no delete on the stream of an app, whoever manages the site", async () => {
     render(ConnectorsPage);
     await browserPage.getByRole("button", { name: /xDrip\+/ }).click();
+
+    const dialog = browserPage.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Records by device name" }).click();
+    await expect.element(dialog.getByText("xDrip-DexcomG7")).toBeVisible();
+    expect(dialog.getByRole("button", { name: /Delete data/ }).elements()).toHaveLength(0);
+  });
+
+  it("offers no delete on the stream of a token", async () => {
+    loaded({
+      connections: [
+        {
+          ...newToken,
+          direction: ConnectionDirection.Sends,
+          status: ConnectionStatus.Active,
+          recordCounts: { Glucose: 3 },
+          streams: [
+            {
+              key: "ha",
+              device: "home-assistant",
+              name: "Home Assistant",
+              recordCounts: { Glucose: 3 },
+              totalRecords: 3,
+              canDelete: false,
+            },
+          ],
+        },
+      ],
+    });
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: /Home Assistant/ }).click();
+
+    const dialog = browserPage.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Records by device name" }).click();
+    await expect.element(dialog.getByText("home-assistant")).toBeVisible();
+    expect(dialog.getByRole("button", { name: /Delete data/ }).elements()).toHaveLength(0);
+  });
+
+  it("offers delete on a connector stream, and returns to the connection on cancel", async () => {
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: /Dexcom/ }).click();
     await browserPage
       .getByRole("dialog")
       .getByRole("button", { name: "Records by device name" })
       .click();
     await browserPage
-      .getByRole("button", { name: "Delete data from xDrip-DexcomG7" })
+      .getByRole("button", { name: "Delete data from Dexcom" })
       .click();
     await expect
       .element(browserPage.getByRole("button", { name: "Delete data..." }))
@@ -450,10 +519,44 @@ describe("connection detail", () => {
     await browserPage.getByRole("button", { name: "Cancel" }).click();
 
     await expect
-      .element(
-        browserPage.getByRole("dialog").getByRole("heading", { name: "Access" })
-      )
+      .element(browserPage.getByRole("dialog").getByText("Nocturne fetches"))
       .toBeVisible();
+  });
+
+  it("shows only the label and the owner note for another member's credential", async () => {
+    loaded({
+      connections: [
+        {
+          ...xdrip,
+          lastRecordAt: undefined,
+          credentials: [
+            {
+              grantId: "grant-other",
+              label: "Partner phone",
+              scopes: [],
+              createdAt: "2026-01-03T00:00:00Z",
+              isOwn: false,
+            },
+          ],
+        },
+      ],
+    });
+    render(ConnectorsPage);
+
+    const row = browserPage.getByRole("button", { name: /xDrip\+/ });
+    await expect.element(row).toBeVisible();
+    await expect.element(row).not.toHaveTextContent("Last used");
+    await row.click();
+
+    const dialog = browserPage.getByRole("dialog");
+    await expect.element(dialog.getByText("Partner phone")).toBeVisible();
+    await expect
+      .element(dialog.getByText("Belongs to another member"))
+      .toBeVisible();
+    await expect.element(dialog).not.toHaveTextContent("Last used");
+    await expect.element(dialog).not.toHaveTextContent("Never");
+    expect(dialog.getByRole("button", { name: /permission/ }).elements()).toHaveLength(0);
+    expect(dialog.getByRole("button", { name: "Revoke" }).elements()).toHaveLength(0);
   });
 
   it("offers a connector its configuration page and its sync", async () => {

@@ -935,6 +935,20 @@ public class DataSourceService : IDataSourceService
     }
 
     /// <summary>
+    /// Whether a credential wrote records under the origin handle <paramref name="key"/> inside the
+    /// discovery window. A delete by handle matches rows whoever wrote them, so it would take those
+    /// records with the source's own.
+    /// </summary>
+    private async Task<bool> IsWrittenByCredentialAsync(string key, CancellationToken ct)
+    {
+        var now = _time.GetUtcNow();
+        var buckets = await _sourceData.WriterBucketsAsync(
+            now.AddDays(-DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
+
+        return buckets.Any(b => b.WriterGrantId is not null && (b.DataSource == key || b.Device == key));
+    }
+
+    /// <summary>
     /// The source <paramref name="key"/> names among the records no credential is recorded as the
     /// writer of, which the connections list shows under either origin handle.
     /// </summary>
@@ -1004,6 +1018,14 @@ public class DataSourceService : IDataSourceService
             var connector = ConnectorMetadataService.GetByDataSourceId(deviceId);
             if (connector is not null)
                 return await PurgeConnectorDataAsync(connector, connector.ConnectorName, allowReimport, cancellationToken);
+
+            if (await IsWrittenByCredentialAsync(deviceId, cancellationToken))
+            {
+                return DataSourceDeleteResult.Failed(
+                    dataSourceId,
+                    DataSourceDeleteError.SharedWithConnection,
+                    $"A connection also writes records as {deviceId}");
+            }
 
             var deletedCounts = await DeleteAllSourceDataAsync(deviceId, allowReimport, cancellationToken);
 

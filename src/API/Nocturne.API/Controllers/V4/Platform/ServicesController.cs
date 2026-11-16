@@ -108,7 +108,12 @@ public class ServicesController : ControllerBase
     /// the records each wrote in the last 30 days, and the records none of them wrote.
     /// </summary>
     /// <inheritdoc cref="IConnectionService.GetConnectionsAsync"/>
+    /// <remarks>
+    /// It lists the caller's credentials, which is the account holder's to read, so a delegated
+    /// credential is refused (<see cref="RequireInteractiveSessionAttribute"/>).
+    /// </remarks>
     [HttpGet("connections")]
+    [RequireInteractiveSession]
     [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectionsOverview), 200)]
@@ -360,6 +365,14 @@ public class ServicesController : ControllerBase
             var result = await _dataSourceService.DeleteDataSourceDataAsync(id, allowReimport, cancellationToken);
             if (!result.Success)
             {
+                if (result.ErrorCode == DataSourceDeleteError.SharedWithConnection)
+                {
+                    return Problem(
+                        detail: "A connection also writes records under this name.",
+                        statusCode: 409,
+                        title: "Conflict");
+                }
+
                 if (result.ErrorCode == DataSourceDeleteError.NotFound)
                 {
                     return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");

@@ -74,6 +74,9 @@
   const streams = $derived(connection?.streams ?? []);
   const credentials = $derived(connection?.credentials ?? []);
   const recordCounts = $derived(Object.entries(connection?.recordCounts ?? {}));
+  // The API withholds when another member's credential was last used, so "Never" is a claim only
+  // about the viewer's own.
+  const hasOwnCredential = $derived(credentials.some((c) => c.isOwn === true));
 
   function canRevoke(credential: ConnectionCredential): boolean {
     return (
@@ -205,7 +208,7 @@
             <ConnectionTime
               label="Last used"
               at={connection.lastUsedAt}
-              fallback="Never"
+              fallback={hasOwnCredential ? "Never" : undefined}
             />
           {/if}
           {#if isConnector}
@@ -290,23 +293,23 @@
                         </Badge>
                       {/if}
                     </p>
-                    <p
-                      class="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground"
-                    >
-                      <ConnectionTime label="Created" at={credential.createdAt} />
-                      <ConnectionTime
-                        label="Last used"
-                        at={credential.lastUsedAt}
-                        fallback="Never"
-                      />
-                      {#if credential.limitTo24Hours}
-                        <span class="flex items-center gap-1 text-warning">
-                          <Clock class="h-3 w-3" aria-hidden="true" />
-                          24-hour limit
-                        </span>
-                      {/if}
-                    </p>
                     {#if credential.isOwn}
+                      <p
+                        class="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground"
+                      >
+                        <ConnectionTime label="Created" at={credential.createdAt} />
+                        <ConnectionTime
+                          label="Last used"
+                          at={credential.lastUsedAt}
+                          fallback="Never"
+                        />
+                        {#if credential.limitTo24Hours}
+                          <span class="flex items-center gap-1 text-warning">
+                            <Clock class="h-3 w-3" aria-hidden="true" />
+                            24-hour limit
+                          </span>
+                        {/if}
+                      </p>
                       {@render permissions(credential.scopes ?? [])}
                     {:else}
                       <p class="text-sm text-muted-foreground">
@@ -391,7 +394,7 @@
                 </Collapsible.Trigger>
                 <Collapsible.Content>
                   <ul class="mt-2 divide-y border-y">
-                    {#each streams as stream (`${stream.dataSource ?? ""}|${stream.device ?? ""}`)}
+                    {#each streams as stream (`${stream.key}|${stream.dataSource ?? ""}|${stream.device ?? ""}`)}
                       {@const streamName = stream.device ?? stream.name ?? stream.key}
                       <li class="flex items-start gap-3 py-3">
                         <div class="min-w-0 flex-1 space-y-0.5">
@@ -408,7 +411,7 @@
                             />
                           </p>
                         </div>
-                        {#if canManage && stream.key}
+                        {#if canManage && stream.canDelete}
                           <Button
                             variant="ghost-destructive"
                             size="icon"

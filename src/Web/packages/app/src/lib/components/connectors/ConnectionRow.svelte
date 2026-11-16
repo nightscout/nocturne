@@ -32,6 +32,11 @@
   } = $props();
 
   const isConnector = $derived(connection.kind === ConnectionKind.Connector);
+  // The API withholds when another member's credential was last used, so "Never" is a claim only
+  // about the viewer's own.
+  const hasOwnCredential = $derived(
+    (connection.credentials ?? []).some((c) => c.isOwn === true)
+  );
 </script>
 
 <li>
@@ -77,7 +82,7 @@
           <ConnectionTime
             label="Last used"
             at={connection.lastUsedAt}
-            fallback="Never"
+            fallback={hasOwnCredential ? "Never" : undefined}
           />
         {/if}
         {#if isConnector}
