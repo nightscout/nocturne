@@ -205,6 +205,12 @@ internal interface IReportDataset
     string? ReadVariant(ReportReadShape shape) => null;
 
     /// <summary>
+    /// A chart layer of it that a grid folds reads every row (<see cref="ReportDatasetRequest.Whole"/>): its point
+    /// budget keeps one sampled row of each interval, and a slot's mean of the sampled rows would be of one of them.
+    /// </summary>
+    bool FoldsWhole => false;
+
+    /// <summary>
     /// The key of a costly read several datasets share, or null: reads with one shared key over one range
     /// compute once, and the read cap counts them once (<see cref="Datasets.EventResponseDataset.SharedReadKey"/>).
     /// </summary>
@@ -379,7 +385,8 @@ internal sealed partial record ReportBandSpan(string Label, string Low, string H
     /// The spans of <paramref name="band"/> (two edges, or four: outer low, inner low, inner high, outer high), inner first.
     /// Two edges of one family share its words once, wherever the percentile sits: "Glucose P25" and "Glucose P75" are
     /// "Glucose P25–P75", and "Glucose P25, days with a low" and "Glucose P75, days with a low" are "Glucose P25–P75, days
-    /// with a low". Edges of two families keep both names.
+    /// with a low". Two edges that are one range's low and high name the range: "Target low" and "Target high" are
+    /// "Target range", as are "Target range low" and "Target range high". Edges of two families keep both names.
     /// </summary>
     public static IReadOnlyList<ReportBandSpan> Of(IReadOnlyList<ReportField> band)
     {
@@ -396,6 +403,12 @@ internal sealed partial record ReportBandSpan(string Label, string Low, string H
                 var words = (string[])a.Clone();
                 words[differ[0]] = $"{x.Groups[1].Value}{x.Groups[2].Value}–{y.Groups[1].Value}{y.Groups[2].Value}{x.Groups[3].Value}";
                 label = string.Join(' ', words);
+            }
+            if (label is null && a.Length > 1 && a.Length == b.Length && differ.Count == 1 && differ[0] == a.Length - 1
+                && a[^1] == "low" && b[^1] == "high")
+            {
+                var range = string.Join(' ', a[..^1]);
+                label = range.EndsWith(" range", StringComparison.Ordinal) ? range : $"{range} range";
             }
             return new ReportBandSpan(label ?? $"{low.Label} to {high.Label}", low.Name, high.Name);
         }

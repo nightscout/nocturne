@@ -16,7 +16,10 @@
   } from "#lib/api/generated/customReports.generated.remote.js";
   import SpecErrorList from "#lib/components/reports/custom/SpecErrorList.svelte";
   import { minuteLabel, spanLabel } from "#lib/components/reports/custom/workspace/clock.js";
-  import type { Report } from "#lib/components/reports/custom/workspace/report.svelte.js";
+  import DraftNotice from "#lib/components/reports/custom/workspace/DraftNotice.svelte";
+  import { Report } from "#lib/components/reports/custom/workspace/report.svelte.js";
+  import { ReportDraft } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
+  import UnsavedGuard from "#lib/components/reports/custom/workspace/UnsavedGuard.svelte";
   import ReportWorkspace from "#lib/components/reports/custom/workspace/ReportWorkspace.svelte";
   import { normaliseWith, openSaved, specToSave } from "#lib/components/reports/custom/workspace/saved-report.js";
   import SaveControl from "#lib/components/reports/custom/workspace/SaveControl.svelte";
@@ -26,6 +29,7 @@
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Undo2 from "@lucide/svelte/icons/undo-2";
+  import { toast } from "svelte-sonner";
 
   const id = $derived(page.params.id ?? "");
 
@@ -46,13 +50,16 @@
    * not be checked, `unreadable` when its spec has no panels to open.
    */
   let opening = $state<
-    | { id: string; state: "open"; report: Report }
+    | { id: string; state: "open"; report: Report; saved: Report }
     | { id: string; state: "failed" }
     | { id: string; state: "unreadable" }
     | null
   >(null);
   /** Bumped by "Try again", so the check runs once more. */
   let attempt = $state(0);
+
+  /** The unsaved changes to the report of `id` this browser keeps. */
+  const draft = $derived(new ReportDraft(id));
 
   $effect(() => {
     const saved = report.current;
@@ -66,7 +73,13 @@
     // The restored report's state is made and read here; the effect depends on none of it.
     untrack(() => openSaved(known, saved.spec, (spec) => normaliseWith(validateCustomReport, spec), minuteLabel, spanLabel)).then(
       (made) => {
-        if (current) opening = made ? { id: forId, state: "open", report: made } : { id: forId, state: "unreadable" };
+        if (!current) return;
+        if (!made) {
+          opening = { id: forId, state: "unreadable" };
+          return;
+        }
+        const shown = untrack(() => draft).open(made, (d) => Report.fromState(known, d.version, d.state, minuteLabel, spanLabel));
+        opening = { id: forId, state: "open", report: shown ?? made, saved: made };
       },
       () => {
         if (current) opening = { id: forId, state: "failed" };
@@ -77,6 +90,16 @@
     };
   });
 
+  $effect(() => {
+    if (opening?.state === "open" && opening.id === id) untrack(() => draft).keep(opening.report);
+  });
+
+  /** Puts the report back as it was saved. */
+  function discard() {
+    draft.clear();
+    if (opening?.state === "open") opening = { ...opening, report: opening.saved };
+  }
+
   function opened() {
     return goto(resolve("/(authenticated)/reports/custom/[id]", { id }));
   }
@@ -85,6 +108,8 @@
     busy = true;
     try {
       await updateCustomReport({ id, request: { name: newName, spec: specToSave(workspace) } });
+      draft.clear();
+      toast.success("Nocturne saved the report.");
       await opened();
     } finally {
       busy = false;
@@ -95,6 +120,8 @@
     busy = true;
     try {
       const saved = await createCustomReport({ name: copy, spec: specToSave(workspace) });
+      draft.clear();
+      toast.success("Nocturne saved a copy of the report.");
       await goto(resolve("/(authenticated)/reports/custom/[id]", { id: saved.id ?? "" }));
     } finally {
       busy = false;
@@ -121,6 +148,9 @@
       </div>
     {:else if opening.state === "open"}
       {@const workspace = opening.report}
+      {#if draft.restored}
+        <DraftNotice ondiscard={discard} />
+      {/if}
       {#key workspace}
         <ReportWorkspace report={workspace}>
           {#snippet actions(problem: string | null)}
@@ -158,3 +188,5 @@
     {/if}
   {/if}
 </div>
+
+<UnsavedGuard dirty={draft.dirty} />

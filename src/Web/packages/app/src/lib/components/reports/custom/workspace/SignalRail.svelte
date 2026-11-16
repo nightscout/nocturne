@@ -8,10 +8,12 @@
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
   import type { SignalId } from "./catalogue-vocabulary.js";
+  import { chartSource } from "./catalogue-source.js";
   import type { ChartBlock, Report } from "./report.svelte.js";
   import SignalCatalogue from "./SignalCatalogue.svelte";
   import { SignalPicks } from "./signal-picks.svelte.js";
   import Swatch from "./Swatch.svelte";
+  import { removeWithUndo } from "./undo.svelte.js";
   import { signalLabel } from "./vocabulary-words.svelte.js";
 
   interface Props {
@@ -22,6 +24,7 @@
   let { report, block }: Props = $props();
 
   const ws = $derived(block.ws);
+  const source = $derived(chartSource(report, block));
   const picks = new SignalPicks();
   let open = $state(false);
   let nav = $state<HTMLElement | null>(null);
@@ -30,7 +33,13 @@
 
   async function remove(id: SignalId) {
     const at = onChart.indexOf(id);
-    if (ws.toggleSignal(id)) return;
+    const removed = removeWithUndo(
+      ws,
+      `Nocturne removed ${signalLabel(id)} from the chart.`,
+      () => ws.toggleSignal(id),
+      () => ws.toggleSignal(id)
+    );
+    if (!removed) return;
     await tick();
     const next = nav?.querySelectorAll<HTMLElement>("[data-remove-signal]")[at] ?? null;
     (next ?? nav?.querySelector<HTMLElement>("[data-testid='add-signal']"))?.focus();
@@ -46,7 +55,7 @@
       {#each onChart as id (id)}
         <li class="flex min-h-11 items-center gap-2 rounded-md pl-2 hover:bg-accent/50 @4xl:min-h-9" data-rail-signal={id}>
           <Swatch swatch={{ kind: "solid", color: ws.vocab.signalColor(id) }} />
-          <span class="min-w-0 flex-1 truncate text-sm">{signalLabel(id)}</span>
+          <span class="min-w-0 flex-1 py-1 text-sm leading-snug text-pretty wrap-break-word">{signalLabel(id)}</span>
           <Button
             variant="ghost"
             size="icon-touch"
@@ -61,7 +70,7 @@
       {/each}
     </ul>
   {/if}
-  <SignalCatalogue {report} {block} {picks} bind:open>
+  <SignalCatalogue {report} {source} {picks} bind:open>
     {#snippet trigger(props)}
       <Button {...props} variant="dashed" size="touch-sm" class="w-full justify-start" data-testid="add-signal">
         <Plus aria-hidden="true" />

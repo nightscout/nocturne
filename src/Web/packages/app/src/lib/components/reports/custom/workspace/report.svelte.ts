@@ -36,7 +36,7 @@ export type BlockKind = "chart" | "figures" | "table" | "comparison";
 export interface Source {
   dataset: string;
 }
-import { accessReason, rangeLabel, sourceLabel, starterWords } from "./vocabulary-words.svelte.js";
+import { accessReason, rangeLabel, signalLabel, sourceLabel, starterWords } from "./vocabulary-words.svelte.js";
 import { parseSavedReport, withoutNulls, type SavedBlock, type SavedReport } from "./saved-state.js";
 import {
   Workspace,
@@ -172,6 +172,12 @@ export class Report {
     blocks: [],
     open: null,
   });
+
+  /**
+   * The line a block shows when it took a shorter range than the report's because its data covers no more;
+   * cleared by the next block added. Not saved.
+   */
+  notice = $state<{ key: number; text: string } | null>(null);
 
   readonly #catalogue: CustomReportCatalogue;
   readonly #vocab: Vocabulary;
@@ -605,6 +611,22 @@ export class Report {
 
   // Blocks
 
+  /**
+   * The range a block reading `source` takes for `range` (null for the report's): the same, or the longest
+   * preset the dataset covers when the asked range is longer.
+   */
+  #fittedRange(source: string, range: number | null): number | null {
+    const max = this.#dataset(source)?.maxRangeHours;
+    if (max === undefined || (range ?? this.state.rangeHours) <= max) return range;
+    return this.#vocab.rangePresets.filter((p) => p.hours <= max).at(-1)?.hours ?? range;
+  }
+
+  /** The line saying a block reading `source` shows `hours` because its data covers no more. */
+  #shorterText(source: string, hours: number): string {
+    const days = Math.floor((this.#dataset(source)?.maxRangeHours ?? hours) / 24);
+    return `${upperFirst(sourceLabel(source))} covers at most ${days} days, so this block shows ${rangeText(hours, this.#vocab.rangePresets).replace(/^over /, "")}.`;
+  }
+
   #newBlock(kind: BlockKind): Block {
     const key = freshKey();
     switch (kind) {
@@ -615,7 +637,7 @@ export class Report {
         return {
           kind,
           key,
-          range: null,
+          range: this.#fittedRange(source, null),
           title: "",
           source,
           columns: this.#defaultColumns(source, "stat_tiles"),
@@ -626,7 +648,7 @@ export class Report {
         return {
           kind,
           key,
-          range: null,
+          range: this.#fittedRange(source, null),
           title: "",
           source,
           columns: this.#defaultColumns(source, "table"),
@@ -653,25 +675,26 @@ export class Report {
   /** What a new block of `kind` would take, without making one. */
   #newFootprint(kind: BlockKind): Footprint {
     const hours = this.state.rangeHours;
+    const fitted = (source: string | undefined) => (source ? (this.#fittedRange(source, null) ?? hours) : hours);
     switch (kind) {
       case "chart":
         return { panels: 1, reads: [], comparison: false };
-      case "figures":
+      case "figures": {
+        const source = this.figureSources[0]?.dataset;
         return {
           panels: 1,
-          reads: [
-            `stat_tiles|${hours}|${JSON.stringify({ name: this.figureSources[0]?.dataset })}`,
-          ],
+          reads: [`stat_tiles|${fitted(source)}|${JSON.stringify({ name: source })}`],
           comparison: false,
         };
-      case "table":
+      }
+      case "table": {
+        const source = this.tableSources[0]?.dataset;
         return {
           panels: 1,
-          reads: [
-            `table|${hours}|${JSON.stringify({ name: this.tableSources[0]?.dataset })}`,
-          ],
+          reads: [`table|${fitted(source)}|${JSON.stringify({ name: source })}`],
           comparison: false,
         };
+      }
       case "comparison":
         return {
           panels: 1,
@@ -702,6 +725,10 @@ export class Report {
     const block = this.#newBlock(kind);
     this.state.blocks.push(block);
     this.state.open = block.key;
+    this.notice =
+      (block.kind === "figures" || block.kind === "table") && block.range !== null
+        ? { key: block.key, text: this.#shorterText(block.source, block.range) }
+        : null;
     return null;
   }
 
@@ -725,6 +752,14 @@ export class Report {
       return placed;
     }
     this.state.open = block.key;
+    const own = block.ws.ownRange;
+    this.notice =
+      own !== null
+        ? {
+            key: block.key,
+            text: `${upperFirst(signalLabel(id))} covers at most ${Math.floor(limit / 24)} days, so this chart shows ${rangeText(own, this.#vocab.rangePresets).replace(/^over /, "")}.`,
+          }
+        : null;
     return null;
   }
 
@@ -736,6 +771,21 @@ export class Report {
       this.state.open =
         this.state.blocks[Math.min(at, this.state.blocks.length - 1)]?.key ??
         null;
+  }
+
+  /**
+   * Puts a removed block back at `at` and opens it, unless the report has no room for it now or its
+   * range no longer fits the report's.
+   */
+  restoreBlock(block: Block, at: number): Reason {
+    if (this.state.blocks.some((b) => b.key === block.key)) return null;
+    const reason =
+      (block.kind === "chart" ? null : this.#blockRangeReason(block, this.hoursOf(block))) ??
+      this.#limit([...this.#footprints(), this.#footprint(block)]);
+    if (reason) return reason;
+    this.state.blocks.splice(Math.min(at, this.state.blocks.length), 0, block);
+    this.state.open = block.key;
+    return null;
   }
 
   /** Moves a block one place up (-1) or down (1). */
@@ -864,6 +914,7 @@ export class Report {
   }
 
   setBlockRange(block: Block, hours: number | null): Reason {
+    if (this.notice?.key === block.key) this.notice = null;
     if (block.kind === "chart") return block.ws.setRange(hours);
     if (block.kind === "given") {
       const panel = { ...copyJson(block.panel), range: hours === null ? null : { hours } };
@@ -930,19 +981,26 @@ export class Report {
   }
 
   /** Why the block cannot read `source` now, or null. */
-  sourceReason(block: FiguresBlock | TableBlock, source: string): Reason {
+  /** The block reading `source`: its default columns, and a range its data covers (see `#fittedRange`). */
+  #withSource(block: FiguresBlock | TableBlock, source: string): Partial<Block> & { range: number | null } {
     const kind = block.kind === "figures" ? "stat_tiles" : "table";
-    return this.#withBlock(block, {
-      source,
-      columns: this.#defaultColumns(source, kind),
-    });
+    return { source, columns: this.#defaultColumns(source, kind), range: this.#fittedRange(source, block.range) };
   }
 
+  /** Why the block cannot read `source` now, or null. */
+  sourceReason(block: FiguresBlock | TableBlock, source: string): Reason {
+    return this.#withBlock(block, this.#withSource(block, source));
+  }
+
+  /** Reads `source`, taking a shorter range when its data cannot cover the block's, and says so. */
   setSource(block: FiguresBlock | TableBlock, source: string): Reason {
     const reason = this.sourceReason(block, source);
     if (reason) return reason;
-    const kind = block.kind === "figures" ? "stat_tiles" : "table";
-    this.#update(block, { source, columns: this.#defaultColumns(source, kind) });
+    const patch = this.#withSource(block, source);
+    const shortened = patch.range !== null && patch.range !== block.range ? patch.range : null;
+    this.#update(block, patch);
+    if (shortened !== null) this.notice = { key: block.key, text: this.#shorterText(source, shortened) };
+    else if (this.notice?.key === block.key) this.notice = null;
     return null;
   }
 

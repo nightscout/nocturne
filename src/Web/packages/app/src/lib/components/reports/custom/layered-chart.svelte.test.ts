@@ -40,8 +40,10 @@ describe("a layered chart on the page", () => {
     await expect.element(tooltip).toBeVisible();
     const box2 = tooltip.element().closest(".shadow-xl");
     expect(box2, "the tooltip's box").not.toBeNull();
-    for (const label of ["Glucose", "Target range", "COB", "Basal", "Modes and overrides", "Automatic", "mg/dL", " g"])
+    for (const label of ["Glucose", "Target range", "COB", "Basal", "Pump mode", "Automatic", "mg/dL", " g"])
       expect(box2?.textContent, label).toContain(label);
+    // A span's row names its own lane, not the layer that holds every lane.
+    expect(box2?.textContent).not.toContain("Modes and overrides");
   });
 
   it("names the axis of a scatter under it", async () => {

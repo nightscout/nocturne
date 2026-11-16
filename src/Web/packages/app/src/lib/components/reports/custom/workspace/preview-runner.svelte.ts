@@ -23,6 +23,12 @@ export class PreviewRunner {
     this.#delay = delay;
   }
 
+  /** The errors the engine gave for `spec` when the result on screen is that spec's; none while a newer one is on its way. */
+  refusalOf(spec: unknown): string[] {
+    if (this.running || this.ran !== JSON.stringify(spec)) return [];
+    return (this.run?.errors ?? []).map((e) => e.message ?? "").filter((m) => m !== "");
+  }
+
   /** Runs `spec` after the delay, unless another change comes first. */
   schedule(spec: unknown) {
     const text = JSON.stringify(spec);

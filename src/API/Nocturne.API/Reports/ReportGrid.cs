@@ -1,3 +1,5 @@
+using Nocturne.Core.Models;
+
 namespace Nocturne.API.Reports;
 
 /// <summary>
@@ -65,6 +67,13 @@ internal static class ReportGrid
         return new DateTimeOffset(local, offset).ToUnixTimeMilliseconds();
     }
 
+    /// <summary>
+    /// A value of <paramref name="field"/> a fold or a derived op computed, to the decimals the app writes it with: a
+    /// glucose in its display unit as a reading is written (whole mg/dL, one decimal of mmol/L), anything else to four.
+    /// </summary>
+    public static double Rounded(double value, ReportField field) =>
+        ScaledRounding.Round(value, field.Unit switch { "mg/dL" => 0, "mmol/L" => 1, _ => 4 }, MidpointRounding.AwayFromZero);
+
     private static double? Number(object? value) => value switch
     {
         double d when double.IsFinite(d) => d,
@@ -122,7 +131,7 @@ internal static class ReportGrid
             var row = new Dictionary<string, object?> { [xName] = slot };
             foreach (var field in fields)
                 row[field.Name] = Fold(field.Aggregate!.Value,
-                    [.. members.Select(m => Number(m.GetValueOrDefault(field.Name))).OfType<double>()]) is { } v ? Math.Round(v, 4) : null;
+                    [.. members.Select(m => Number(m.GetValueOrDefault(field.Name))).OfType<double>()]) is { } v ? Rounded(v, field) : null;
             foreach (var name in carried.Append(series).OfType<string>())
                 row[name] = members[0].GetValueOrDefault(name);
             folded.Add(row);

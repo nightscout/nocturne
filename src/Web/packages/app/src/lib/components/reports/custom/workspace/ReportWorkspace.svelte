@@ -27,6 +27,7 @@
   import BlockEditors from "./BlockEditors.svelte";
   import BlockPreview from "./BlockPreview.svelte";
   import { describe } from "./describe.js";
+  import { offerUndo } from "./undo.svelte.js";
   import GivenBlockView from "./GivenBlockView.svelte";
   import RangeChoices from "./RangeChoices.svelte";
   import { AS_SAVED, shownKind, type Block, type BlockKind, type Report } from "./report.svelte.js";
@@ -59,16 +60,27 @@
     for (const r of Object.values(runners)) r.dispose();
   });
 
-  /** Why the report cannot be saved as its previews stand: a block whose settings the engine refused. */
+  /** Why the report cannot be saved as its previews stand: a block whose current settings the engine refused, named by its title. */
   function refused(): string | null {
-    const at = report.blocks.findIndex((b) => (runners[b.key]?.run?.errors ?? []).length > 0);
-    return at < 0 ? null : `Change block ${at + 1} first. The report engine refuses one of its settings.`;
+    const block = report.blocks.find((b) => (runners[b.key]?.refusalOf(report.previewSpec(b)) ?? []).length > 0);
+    if (!block) return null;
+    const name = report.blockTitle(block).trim() || KIND_NAMES[shownKind(block)].toLowerCase();
+    return `Change "${name}" first. The report engine cannot run its settings.`;
   }
 
+  /** Removes a block, with a toast that can put it back where it was. */
   function remove(key: number) {
+    const at = report.blocks.findIndex((b) => b.key === key);
+    const block = report.blocks[at];
+    if (!block) return;
+    const name = report.blockTitle(block).trim();
     runners[key]?.dispose();
     delete runners[key];
     report.remove(key);
+    offerUndo(
+      name ? `Nocturne removed "${name}".` : `Nocturne removed the ${KIND_NAMES[shownKind(block)].toLowerCase()}.`,
+      () => report.restoreBlock(block, at)
+    );
   }
 
   const KIND_ICONS: Record<BlockKind, typeof ChartLine> = {
@@ -206,6 +218,9 @@
         <Card.Root size="sm" class="min-w-0">
           <Card.Content class="space-y-3 px-0">
             {@render header(block, index, open)}
+            {#if open && report.notice?.key === block.key}
+              <p class="text-xs text-muted-foreground" role="status" data-testid="block-notice">{report.notice.text}</p>
+            {/if}
             {#if open}
               {#if block.kind === "chart"}
                 <WorkspaceView {report} {block} runner={runnerOf(block.key)} />

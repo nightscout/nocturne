@@ -471,6 +471,16 @@ describe("the tooltip's entries", () => {
     ]);
   });
 
+  it("gives a band of edges only one entry: its name and its two values, not each edge's field name", () => {
+    const low = { name: "targetLow", label: "Target range low", kind: "number" as const, unit: "mg/dL" };
+    const high = { name: "targetHigh", label: "Target range high", kind: "number" as const, unit: "mg/dL" };
+    const target = layer({ id: "target", title: "Target range", mark: "band", bindings: { x: "time", edges: ["targetLow", "targetHigh"] }, fields: [time, low, high] });
+
+    const entries = tipEntries(target, [{ time: 0, targetLow: 70, targetHigh: 180 }], text);
+
+    expect(entries.map((e) => [e.label, e.value, e.range])).toEqual([["Target range", "70–180 mg/dL", null]]);
+  });
+
   it("lists each field of a line, and puts the sentences under the layer's last entry only", () => {
     const line = layer({ bindings: { x: "time", y: ["glucose", "iob"] }, fields: [time, glucose, iob], title: "Glucose" });
 

@@ -25,6 +25,11 @@ namespace Nocturne.API.Reports;
 /// (<paramref name="MaxTimeSlots"/>), with each smoothing window rounded up to a whole number of its slots.
 /// </param>
 /// <param name="MaxTimeSlots">The most slots a time axis holds; a longer range coarsens its grid to fit.</param>
+/// <param name="TimelineRawHours">
+/// The longest timeline drawn reading by reading. A longer one is drawn on its timeline grid (<paramref name="TimelineGrids"/>),
+/// each slot holding its readings' mean, sum or last value, which the layer says ("mean per 30 minutes"): drawn raw, the
+/// series would keep one reading of each slot its point budget allows, and a range of weeks would show a field of spikes.
+/// </param>
 public sealed record CustomReportWorkspace(
     [property: Required] IReadOnlyList<string> Lenses,
     [property: Required] IReadOnlyList<CustomReportWorkspaceFamily> Families,
@@ -42,6 +47,7 @@ public sealed record CustomReportWorkspace(
     [property: Required] int AgainstGridMinutes,
     [property: Required] IReadOnlyList<int> TimelineGrids,
     [property: Required] int MaxTimeSlots,
+    [property: Required] int TimelineRawHours,
     [property: Required] CustomReportWorkspaceEvents Events,
     [property: Required] CustomReportWorkspaceSources Sources);
 
@@ -195,6 +201,7 @@ internal static class ReportWorkspace
     public const int AgainstGridMinutes = 15;
     public const int DefaultReportHours = 336;
     public static readonly int[] TimelineGrids = [5, 10, 15, 20, 30, 60, 120, 240];
+    public const int TimelineRawHours = 336;
 
     /// <summary>One cell as the table writes it, before the registry resolves its scopes and unit.</summary>
     internal sealed record CellSpec(
@@ -209,7 +216,8 @@ internal static class ReportWorkspace
         bool Combine = false,
         string? SpanKind = null,
         string? FromStartField = null,
-        IReadOnlyList<CustomReportWorkspaceMark>? FromStartMarks = null);
+        IReadOnlyList<CustomReportWorkspaceMark>? FromStartMarks = null,
+        IReadOnlyList<string>? Scopes = null);
 
     private static CustomReportLayerBindings Bind(
         string? x = null, IReadOnlyList<string>? y = null, IReadOnlyList<string>? edges = null, string? series = null,
@@ -246,7 +254,7 @@ internal static class ReportWorkspace
 
     private static CellSpec Span(string signal, ReportSpanKind kind) =>
         new(Timeline, signal, StateSpansParameters.Name, new Dictionary<string, object> { ["kinds"] = new[] { ReportWire.Name(kind) } }, null,
-            [Spans], [], false, SpanKind: ReportWire.Name(kind));
+            [Spans], [], false, SpanKind: ReportWire.Name(kind), Scopes: [StateSpansDataset.ScopeOf(kind)]);
 
     private static CellSpec Profile(string signal, string? field, params CustomReportWorkspaceMark[] marks) =>
         new(TypicalDay, signal, DailyProfileParameters.Name, null, field,
@@ -595,6 +603,7 @@ internal static class ReportWorkspace
             AgainstGridMinutes,
             TimelineGrids,
             ReportGrid.MaxSlots,
+            TimelineRawHours,
             new CustomReportWorkspaceEvents(
                 [
                     new("curve", EventResponseParameters.Name), new("each", EventOutcomesParameters.Name),
@@ -628,14 +637,17 @@ internal static class ReportWorkspace
             ? registry.Find(c.Dataset)!.FieldsFor(ReportPanelKind.Chart).FirstOrDefault(f => f.Name == field)?.Color
             : null;
 
-    /// <summary>A cell with what the registry says of it: the scopes of its dataset and the fields it draws, and its lead field's unit.</summary>
+    /// <summary>
+    /// A cell with what the registry says of it: the scopes of its dataset, the fields it draws and the records it
+    /// reads (<see cref="CellSpec.Scopes"/>: a kind of state span is withheld without its own), and its lead field's unit.
+    /// </summary>
     private static CustomReportWorkspaceCell Resolve(CellSpec c, IReportDatasetRegistry registry, Func<IEnumerable<string>, bool> holds)
     {
         var dataset = registry.Find(c.Dataset) ?? throw new InvalidOperationException($"The workspace names no dataset '{c.Dataset}'.");
         var fields = dataset.FieldsFor(ReportPanelKind.Chart);
         var named = Named(c);
         var scopes = named.Select(n => fields.FirstOrDefault(f => f.Name == n)?.Scope).OfType<string>()
-            .Prepend(dataset.RequiredScope).Distinct().ToList();
+            .Prepend(dataset.RequiredScope).Concat(c.Scopes ?? []).Distinct().ToList();
         var lead = c.Field ?? named.FirstOrDefault();
         var schema = ReportParametersSchema.For(dataset.ParametersType);
         bool Takes(string parameter) => schema.TryGetProperty("properties", out var taken) && taken.TryGetProperty(parameter, out _);

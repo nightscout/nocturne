@@ -7,7 +7,7 @@
   import type { Snippet } from "svelte";
   import { ReportView } from "@nocturne/charts";
   import { isHttpError } from "@sveltejs/kit";
-  import { readReport, staticPanel, type ReportPanel } from "@nocturne/charts/core";
+  import { readReport, staticPanel, staticPanelHasData, type ReportPanel } from "@nocturne/charts/core";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -37,6 +37,8 @@
   const report = $derived(
     read && pageHeading && read.spec.title?.trim() === pageHeading.trim() ? { ...read, spec: { ...read.spec, title: undefined } } : read
   );
+  /** The level `ReportView` heads the report with: one up when the report draws no title, so its panels sit one level below the page's heading. */
+  const level = $derived<1 | 2 | 3>(report?.spec.title?.trim() ? headingLevel : headingLevel === 3 ? 2 : 1);
   const errors = $derived(run.errors ?? []);
 
   let drawing = $state<string | null>(null);
@@ -100,7 +102,8 @@
 
 {#snippet panelLink(panel: ReportPanel)}
   {@const path = panel.link ? localPath(panel.link) : null}
-  {#if path || (report && panel.status === "ok" && staticPanel(panel))}
+  {@const drawable = !!report && panel.status === "ok" && staticPanel(panel) && staticPanelHasData(panel)}
+  {#if path || drawable}
     <div class="mt-1 flex flex-wrap items-center gap-3">
       {#if path}
         <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a path the API built from the report registry's own routes -->
@@ -109,7 +112,7 @@
           Open the matching report
         </a>
       {/if}
-      {#if report && panel.status === "ok" && staticPanel(panel)}
+      {#if drawable}
         <Button
           variant="ghost-muted"
           size="xs"
@@ -131,7 +134,7 @@
 {#if errors.length > 0}
   <SpecErrorList {errors} spec={run.spec} />
 {:else if report}
-  <ReportView {report} format={chartFormat()} labels={customReportLabels()} {headingLevel} controls={panelLink} {legend} {facts} {heading} />
+  <ReportView {report} format={chartFormat()} labels={customReportLabels()} headingLevel={level} controls={panelLink} {legend} {facts} {heading} />
 {:else}
   <p class="text-sm text-muted-foreground" role="alert">The report data has a form that this page cannot show.</p>
 {/if}

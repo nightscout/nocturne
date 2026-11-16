@@ -18,8 +18,12 @@
   import { specToSave } from "#lib/components/reports/custom/workspace/saved-report.js";
   import SaveControl from "#lib/components/reports/custom/workspace/SaveControl.svelte";
   import StarterList from "#lib/components/reports/custom/workspace/StarterList.svelte";
+  import DraftNotice from "#lib/components/reports/custom/workspace/DraftNotice.svelte";
+  import { NEW_REPORT, ReportDraft } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
+  import UnsavedGuard from "#lib/components/reports/custom/workspace/UnsavedGuard.svelte";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
+  import { toast } from "svelte-sonner";
 
   const catalogue = contextResource(() => getCustomReportCatalogue(), {
     errorTitle: "Could not load what a report can show",
@@ -31,16 +35,41 @@
 
   /** The report being made, or null while the member chooses a start. */
   let report = $state<Report | null>(null);
+  const draft = new ReportDraft(NEW_REPORT);
+  /** Whether the draft this browser keeps was looked for, which is done once the catalogue is known. */
+  let looked = false;
+
+  $effect(() => {
+    const known = catalogue.current;
+    if (!known || looked) return;
+    looked = true;
+    const restored = untrack(() =>
+      draft.open(null, (d) => Report.fromState(known, d.version, d.state, minuteLabel, spanLabel))
+    );
+    if (restored) report = restored;
+  });
+
+  $effect(() => {
+    if (report) draft.keep(report);
+  });
 
   /** Opens the workspace on `made` at the top of the page: a start chosen low in the list leaves the page scrolled. */
   async function begin(made: Report | null) {
+    if (made) draft.begin(made);
     report = made;
     await tick();
     for (const scroller of [document.querySelector("main"), document.scrollingElement]) scroller?.scrollTo({ top: 0 });
   }
 
+  function discard() {
+    draft.clear();
+    report = null;
+  }
+
   async function save(made: Report, name: string) {
     const saved = await createCustomReport({ name, spec: specToSave(made) });
+    draft.clear();
+    toast.success("Nocturne saved the report.");
     await goto(resolve("/(authenticated)/reports/custom/[id]", { id: saved.id ?? "" }));
   }
 </script>
@@ -60,8 +89,11 @@
       />
     {:else}
       {@const made = report}
+      {#if draft.restored}
+        <DraftNotice ondiscard={discard} discardLabel="Discard and start again" />
+      {/if}
       {#key made}
-        <ReportWorkspace report={made} onrestart={() => (report = null)}>
+        <ReportWorkspace report={made} onrestart={discard}>
           {#snippet actions(problem: string | null)}
             <SaveControl report={made} reason={problem} onsave={(name) => save(made, name)} />
           {/snippet}
@@ -70,3 +102,5 @@
     {/if}
   {/if}
 </div>
+
+<UnsavedGuard dirty={draft.dirty} />

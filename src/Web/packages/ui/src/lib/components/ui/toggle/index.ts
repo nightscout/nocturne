@@ -20,6 +20,8 @@ export const toggleVariants = tv({
       lg: "h-10 min-w-10 px-2.5",
       // Matches Button's icon-xs.
       "icon-xs": "size-7 [&_svg:not([class*='size-'])]:size-3",
+      // A 44px touch target on a phone, sm from the md breakpoint up, for chips in a popover, which has no container to query.
+      "touch-sm": "h-11 min-w-11 px-2 md:h-8 md:min-w-8 md:px-1.5",
     },
   },
   defaultVariants: {

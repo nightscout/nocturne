@@ -368,9 +368,13 @@ describe("this round's engine features", () => {
     expect(ws.captionText()).toBe(
       "Glucose over a typical day over the last 28 days, days with a low against all other days, without illness and manual mode"
     );
+    // Daily cannot draw glucose itself, so the switch places its nearest equivalent, the daily mean.
     ws.setLens("daily");
+    expect(ws.incomplete).toBeNull();
     ws.toggleSignal("timeInRange");
     expect(spec(ws).panels[0].tracks[0].layers.map((l) => l.id)).toEqual([
+      "mean-1",
+      "mean-2",
       "timeInRange-1",
       "timeInRange-2",
     ]);
@@ -532,6 +536,18 @@ describe("answers before the click", () => {
 });
 
 describe("relate", () => {
+  it("draws a timeline longer than the API draws raw on its grid, and a shorter one raw", () => {
+    const ws = new Workspace(liveCatalogue);
+    ws.toggleSignal("glucose");
+
+    ws.setRange(336);
+    expect(spec(ws).panels[0].grid).toBeUndefined();
+    ws.setRange(672);
+    expect(spec(ws).panels[0].grid).toBe(30);
+    ws.setRange(2160);
+    expect(spec(ws).panels[0].grid).toBe(120);
+  });
+
   it("smooths a timeline signal on a grid the window fits at any range", () => {
     const ws = new Workspace(liveCatalogue);
     ws.toggleSignal("glucose");

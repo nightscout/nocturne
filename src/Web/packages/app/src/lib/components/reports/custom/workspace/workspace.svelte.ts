@@ -409,6 +409,11 @@ function markOf(
   return choices.find((m) => m.mark === placed.marks[lens]) ?? choices[0];
 }
 
+/** Why a third signal cannot go on a chart of one signal against another. */
+function againstFull(): string {
+  return "This view shows two signals. Remove one first.";
+}
+
 /**
  * The signals drawn under the state's lens, in placement order: under
  * `against`, the first two.
@@ -876,6 +881,7 @@ export function build(state: WorkspaceState, ctx: BuildContext): Built {
   const useGrid = () => {
     if (state.lens === "timeline") grid = vocab.timelineGrid(ctx.rangeHours);
   };
+  if (state.lens === "timeline" && vocab.timelineGridded(ctx.rangeHours)) useGrid();
   const windowOf = (minutes: number) =>
     state.lens === "timeline" ? roundWindow(minutes, grid!) : minutes;
 
@@ -1719,15 +1725,19 @@ export class Workspace {
     const lens = this.state.lens;
     const hours = this.rangeHours;
     const most = this.#catalogue.maxRangeHours;
+    const shown = shownSignals(this.state, this.#vocab);
     return this.#vocab.signals.map((s) => {
       const cell = this.#vocab.cellOf(lens, s.id);
-      const placed = this.state.placed.some((p) => p.id === s.id);
+      const kept = this.state.placed.some((p) => p.id === s.id);
+      // Under `against` a placed signal past the first two is kept for other views but not drawn, so it is not ticked.
+      const placed = kept && (lens !== "against" || shown.includes(s.id));
       const drawable = cell !== undefined && cell.permitted;
       const otherLenses = s.lenses.filter((l) => l !== lens && this.#vocab.cellOf(l, s.id)?.permitted === true);
       const limit = drawable ? cell.maxRangeHours : s.maxRangeHours;
       const needsShorter = drawable && cell.maxRangeHours < hours;
       let reason: Reason = null;
-      if (!placed && drawable && !needsShorter) reason = this.#reason((d) => this.#place(d, s.id));
+      if (kept && !placed) reason = againstFull();
+      else if (!placed && drawable && !needsShorter) reason = this.#reason((d) => this.#place(d, s.id));
       else if (!placed && !drawable && otherLenses.length > 0) reason = this.placeInReason(s.id, otherLenses[0]);
       return {
         id: s.id,
@@ -1905,7 +1915,7 @@ export class Workspace {
     if (!this.#vocab.cellOf(d.lens, id))
       return `${lensLabel(d.lens)} cannot show this signal.`;
     if (d.lens === "against" && shownSignals(d, this.#vocab).length >= 2)
-      return "This view shows two signals. Remove one first.";
+      return againstFull();
     d.placed.push({ id, marks: {}, relate: {} });
     placeInFamilyLane(d, this.#vocab, id);
     return null;
@@ -1941,7 +1951,7 @@ export class Workspace {
 
   #placeIn(d: WorkspaceState, id: SignalId, lens: LensId): Reason {
     const range = this.placeInRange(id, lens);
-    this.#toLens(d, lens);
+    this.#toLens(d, lens, false);
     if (range !== null) d.range = range;
     return this.#place(d, id);
   }
@@ -2177,12 +2187,28 @@ export class Workspace {
     return this.#reason((d) => this.#toLens(d, id));
   }
 
-  #toLens(d: WorkspaceState, id: LensId) {
+  /**
+   * Switches the draft to `id`. When the lens can draw none of the placed signals, it places the nearest
+   * equivalents, the first signal of each one's family that the lens draws; with none, the switch is refused,
+   * so a chart never turns empty under a question it still names.
+   */
+  #toLens(d: WorkspaceState, id: LensId, fill = true): Reason {
+    const hadShown = shownSignals(d, this.#vocab).length > 0;
     this.#switchLens(d, id);
+    if (fill && hadShown && shownSignals(d, this.#vocab).length === 0) {
+      const families = d.placed.map((p) => this.#vocab.signal(p.id)?.family);
+      for (const family of families.filter((f, i) => families.indexOf(f) === i)) {
+        const equivalent = this.#vocab.signals.find((s) => s.family === family && this.#vocab.cellOf(id, s.id)?.permitted);
+        if (equivalent && (d.lens !== "against" || shownSignals(d, this.#vocab).length < 2)) this.#place(d, equivalent.id);
+      }
+      if (shownSignals(d, this.#vocab).length === 0)
+        return `${lensLabel(id)} cannot show any signal on this chart. Add a new chart for it.`;
+    }
     if (d.range === null && this.#rangeReason(d, this.#hoursOf(d))) {
       const fits = this.#vocab.rangePresets.filter((p) => !this.#rangeReason(d, p.hours));
       d.range = fits[fits.length - 1]?.hours ?? this.#vocab.rangePresets[0].hours;
     }
+    return null;
   }
 
   get addMomentReason(): Reason {

@@ -1,5 +1,5 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
@@ -49,6 +49,7 @@ vi.mock("$app/navigation", () => ({
     calls.gotos.push(url);
     return Promise.resolve();
   },
+  beforeNavigate: () => {},
 }));
 
 import EditCustomReportPage from "./+page.svelte";
@@ -66,6 +67,7 @@ beforeEach(async () => {
   calls.creates.length = 0;
   calls.gotos.length = 0;
   validatorDown = false;
+  localStorage.clear();
   pageState.params = { id: "r1" };
   pageState.data = {};
   await page.viewport(1280, 900);
@@ -125,6 +127,24 @@ describe("editing a report saved without the workspace's state", () => {
         { id: "glucose", height: 2, layers: [{ id: "glucose", dataset: { name: "glucose_series" }, mark: "line" }, { id: "iob", title: "Insulin on board" }] },
       ],
     });
+  });
+
+  it("adds a signal to a chart from the catalogue, which lists only the signals along its axis", async () => {
+    saved = { id: "r1", name: "Glucose", spec: chartTemplate.spec, errors: [], canEdit: true };
+    render(EditCustomReportPage, {});
+
+    await page.getByTestId("signal-rail").getByTestId("add-signal").click();
+    const dialog = page.getByRole("dialog");
+    await expect.element(dialog.getByText("Search the signals this chart can show.")).toBeVisible();
+    await dialog.getByTestId("catalogue-search").fill("Carbs on board");
+    await dialog.getByRole("button", { name: "Carbs on board", exact: true }).click();
+    // Time in range is a figure per day, not a value along time, so the timeline's catalogue does not offer it.
+    await dialog.getByTestId("catalogue-search").fill("Time in range");
+    await expect.element(dialog.getByTestId("signal-catalogue")).toBeVisible();
+    expect(dialog.getByRole("button", { name: "Time in range", exact: true }).elements()).toHaveLength(0);
+    await userEvent.keyboard("{Escape}");
+
+    await expect.element(page.getByTestId("signal-rail").getByText("COB", { exact: true })).toBeVisible();
   });
 
   it("keeps a member limited to the last 24 hours from changing or copying it", async () => {
@@ -246,5 +266,31 @@ describe("editing a report made in the workspace", () => {
     await expect.element(page.getByTestId("report-workspace")).toBeVisible();
     expect(calls.validations).toHaveLength(1);
     expect((calls.validations[0] as { spec: Record<string, unknown> }).spec).not.toHaveProperty("builder");
+  });
+});
+
+describe("the unsaved changes to a saved report", () => {
+  beforeEach(() => {
+    saved = { id: "r1", name: "Fortnight", spec: statisticsTemplate.spec, errors: [], canEdit: true };
+  });
+
+  it("opens with the changes this browser kept, and puts the saved report back on Discard", async () => {
+    render(EditCustomReportPage, {});
+    const title = page.getByLabelText("Report title");
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    const input = title.element();
+    const before = input instanceof HTMLInputElement ? input.value : "";
+    await title.fill("Fortnight, unsaved");
+    await vi.waitFor(() => expect(localStorage.length).toBe(1));
+
+    document.body.innerHTML = "";
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByText("Restored your unsaved changes.")).toBeVisible();
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("Fortnight, unsaved");
+
+    await page.getByRole("button", { name: "Discard changes" }).click();
+    await expect.element(page.getByLabelText("Report title")).toHaveValue(before);
+    await expect.element(page.getByText("Restored your unsaved changes.")).not.toBeInTheDocument();
+    expect(localStorage.length).toBe(0);
   });
 });

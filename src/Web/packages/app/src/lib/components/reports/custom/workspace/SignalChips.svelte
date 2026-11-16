@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
   import { before, removeThenFocus } from "./refocus.js";
+  import { removeWithUndo } from "./undo.svelte.js";
   import { signalLabel, familyLabel, markLabel } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -190,7 +191,15 @@
               <Button
                 variant="ghost-destructive"
                 size="sm"
-                onclick={() => removeChip(`[data-combo-chip="${combo.key}"]`, () => ws.removeCombo(combo.key))}
+                onclick={() =>
+                  removeChip(`[data-combo-chip="${combo.key}"]`, () =>
+                    removeWithUndo(
+                      ws,
+                      "Nocturne removed the line from the chart.",
+                      () => ws.removeCombo(combo.key),
+                      () => "Could not put the line back. The chart changed after you removed it. Add the line again."
+                    )
+                  )}
               >
                 Remove from chart
               </Button>
@@ -487,7 +496,10 @@
       <Button
         variant="ghost-destructive"
         size="sm"
-        onclick={() => removeChip(`[data-signal-chip="${id}"]`, () => ws.toggleSignal(id))}
+        onclick={() =>
+          removeChip(`[data-signal-chip="${id}"]`, () =>
+            removeWithUndo(ws, `Nocturne removed ${signalLabel(id)} from the chart.`, () => ws.toggleSignal(id), () => ws.toggleSignal(id))
+          )}
       >
         Remove from chart
       </Button>

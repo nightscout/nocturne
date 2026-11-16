@@ -280,6 +280,12 @@
 >
   <CoachParamHandler />
   <ChartPrintPatterns />
+  <a
+    href="#main-content"
+    class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-100 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-sm focus:ring-2 focus:ring-ring focus:outline-none print:hidden"
+  >
+    Skip to main content
+  </a>
   <Sidebar.Provider>
     <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} tenantTargets={data.tenantTargets} />
     <!-- --app-sticky-top is the top of the usable viewport below the app chrome (the visible
@@ -313,7 +319,7 @@
           <AlertSurfaces />
         {/if}
       {/if}
-      <main class="@container/main flex-1 overflow-x-clip">
+      <main id="main-content" tabindex="-1" class="@container/main flex-1 overflow-x-clip focus:outline-none">
         {#if joinWelcome.component}
           <joinWelcome.component />
         {/if}

@@ -298,9 +298,21 @@ public class ReportSpecRunnerTests
 
         layer.Rows.Should().HaveCount(3);
         layer.Rows[0]["time"].Should().Be(Now.AddHours(-3).ToUnixTimeMilliseconds());
-        layer.Rows[0]["glucose"].Should().Be(105.5, "the mean of the twelve readings 100 to 111 in the first hour");
+        layer.Rows[0]["glucose"].Should().Be(106.0, "the mean of the twelve readings 100 to 111 in the first hour, 105.5, in whole mg/dL as a reading is written");
         layer.Summary.Should().EndWith("Folded onto a grid of 60 minutes.");
         layer.Context.Should().Be("mean per hour", "the legend writes it after the layer's name, which names the signal");
+    }
+
+    [Fact]
+    public async Task A_gridded_glucose_layer_over_weeks_folds_every_reading_not_the_ones_a_point_budget_keeps()
+    {
+        var (runner, context, _, _) = Arrange(Registry, Scope.GlucoseRead, Scope.TreatmentsRead);
+        var spec = Spec(Layers(Layer("""{ "name": "glucose_series" }""", "line"), ", \"grid\": 60", """, "range": { "hours": 672 }"""));
+
+        var layer = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels[0].Tracks[0].Layers[0];
+
+        layer.Rows[0]["glucose"].Should().Be(106.0,
+            "the mean of the twelve readings 100 to 111 of the first hour; the budget's one reading in 21 minutes would give 105");
     }
 
     [Fact]

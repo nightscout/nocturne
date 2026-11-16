@@ -190,7 +190,12 @@ export class Vocabulary {
     return this.ws.againstGridMinutes;
   }
 
-  /** The grid a smoothed timeline of `rangeHours` is drawn on: the finest that keeps the axis within its slots. */
+  /** Whether a timeline of `rangeHours` is drawn on its grid even with nothing smoothed: longer than the API draws raw. */
+  timelineGridded(rangeHours: number): boolean {
+    return rangeHours > this.ws.timelineRawHours;
+  }
+
+  /** The grid a smoothed or long timeline of `rangeHours` is drawn on: the finest that keeps the axis within its slots. */
   timelineGrid(rangeHours: number): number {
     const least = Math.ceil((rangeHours * 60) / this.ws.maxTimeSlots);
     const grids = this.ws.timelineGrids;

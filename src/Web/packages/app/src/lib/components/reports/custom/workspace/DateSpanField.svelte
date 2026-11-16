@@ -20,6 +20,8 @@
     /** The trigger's accessible name before the dates. */
     label: string;
     open?: boolean;
+    /** Whether these dates are the choice in force, beside a row of other choices. */
+    pressed?: boolean;
   }
 
   let {
@@ -28,6 +30,7 @@
     placeholder,
     label,
     open = $bindable(false),
+    pressed = false,
   }: Props = $props();
 
   const range = $derived<DateRange | undefined>(
@@ -52,7 +55,7 @@
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
         {...props}
-        variant="outline"
+        variant={pressed ? "secondary" : "outline"}
         size="xs"
         aria-label="{label}: {value ? text(value) : placeholder}"
       >

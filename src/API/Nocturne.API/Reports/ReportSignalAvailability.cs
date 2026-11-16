@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Reports;
@@ -79,7 +81,7 @@ internal static class ReportDataSources
     public static readonly IReadOnlyDictionary<string, Func<NocturneDbContext, DateTime, DateTime, CancellationToken, Task<bool>>> All =
         new Dictionary<string, Func<NocturneDbContext, DateTime, DateTime, CancellationToken, Task<bool>>>
         {
-            [SensorGlucose] = (db, from, to, ct) => db.SensorGlucose.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [SensorGlucose] = (db, from, to, ct) => Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [BgChecks] = (db, from, to, ct) => db.BGChecks.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [Boluses] = (db, from, to, ct) => db.Boluses.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [Carbs] = (db, from, to, ct) => db.CarbIntakes.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
@@ -140,9 +142,9 @@ internal static class ReportDataSources
             [DndWindows] = (db, from, to, ct) =>
                 db.DndWindows.AnyAsync(e => e.StartedAt < to && (e.EndsAt == null || e.EndsAt >= from) && (e.ClearedAt == null || e.ClearedAt >= from), ct),
             [SensorTrendRates] = (db, from, to, ct) =>
-                db.SensorGlucose.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.TrendRate != null, ct),
+                Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.TrendRate != null, ct),
             [SensorNoise] = (db, from, to, ct) =>
-                db.SensorGlucose.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.Noise != null, ct),
+                Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.Noise != null, ct),
             [MeterGlucose] = (db, from, to, ct) => db.MeterGlucose.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [CompressionLows] = (db, from, to, ct) =>
             {
@@ -150,6 +152,10 @@ internal static class ReportDataSources
                 return db.CompressionLowSuggestions.AnyAsync(e => e.StartMills < end && e.EndMills >= start, ct);
             },
         };
+
+    /// <summary>The sensor readings a report reads: the canonical stream's, as <see cref="Datasets.ReportRunCache.GlucoseAsync"/> asks for them.</summary>
+    private static IQueryable<SensorGlucoseEntity> Canonical(NocturneDbContext db) =>
+        db.SensorGlucose.ExcludeDuplicates().Where(e => !e.IsSecondaryStream);
 
     private static long Mills(DateTime at) => new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 

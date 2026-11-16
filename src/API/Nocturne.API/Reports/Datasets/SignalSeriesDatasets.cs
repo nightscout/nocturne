@@ -336,10 +336,10 @@ internal sealed class LabHbA1cDataset : IReportDataset
         var zone = await SeriesRows.ZoneAsync(request, cancellationToken);
         var first = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(request.From, zone).DateTime);
         var last = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(request.To, zone).DateTime);
-        var (start, end) = (first.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), last.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var (start, end) = (first.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), last.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var results = await db.LabHbA1cResults.AsNoTracking()
-            .Where(r => r.MeasuredAt >= start && r.MeasuredAt <= end)
+            .Where(r => r.MeasuredAt >= start && r.MeasuredAt < end)
             .OrderBy(r => r.MeasuredAt).Take(Budget)
             .Select(r => new { r.MeasuredAt, r.ValuePercent })
             .ToListAsync(cancellationToken);

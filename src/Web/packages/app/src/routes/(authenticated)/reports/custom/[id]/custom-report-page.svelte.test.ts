@@ -135,11 +135,31 @@ describe("saved custom report page", () => {
     expect(calls.updates).toEqual([]);
   });
 
+  it("runs the report over two dates the reader picks, without changing what is saved", async () => {
+    render(CustomReportPage, {});
+    await vi.waitFor(() => expect(calls.runs).toHaveLength(1));
+
+    await page.getByRole("button", { name: /^Dates to show/ }).click();
+    await vi.waitFor(() => expect(document.querySelectorAll("[data-bits-day]").length).toBeGreaterThan(0));
+    const days = [...document.querySelectorAll<HTMLElement>("[data-bits-day]")].filter(
+      (d) => !d.hasAttribute("data-disabled") && !d.hasAttribute("data-outside-month")
+    );
+    days[0].click();
+    days[2].click();
+
+    await vi.waitFor(() => expect(calls.runs).toHaveLength(2));
+    const run = calls.runs[1] as { spec: { range: { from?: string; to?: string } } };
+    expect(Object.keys(run.spec.range)).toEqual(["from", "to"]);
+    expect(Date.parse(run.spec.range.to!) - Date.parse(run.spec.range.from!)).toBeGreaterThanOrEqual(3 * 23 * 3_600_000);
+    expect(calls.updates).toEqual([]);
+  });
+
   it("renames, copies the link and deletes after the reader confirms", async () => {
     render(CustomReportPage, {});
 
     await page.getByTestId("report-actions").click();
     await page.getByRole("menuitem", { name: "Rename" }).click();
+    await expect.element(page.getByLabelText("Name")).toHaveFocus();
     await page.getByLabelText("Name").fill("Two weeks of lunches");
     await page.getByRole("button", { name: "Save" }).click();
     await vi.waitFor(() => expect(calls.updates).toEqual([{ id: "a1", request: { name: "Two weeks of lunches" } }]));
@@ -178,7 +198,7 @@ describe("saved custom report page", () => {
     render(CustomReportPage, {});
 
     await expect.element(page.getByText("0 is not a supported version. Send the number 1.")).toBeVisible();
-    await expect.element(page.getByText("Show the spec")).toBeVisible();
+    await expect.element(page.getByText("Show the technical details")).toBeVisible();
     expect(calls.runs).toEqual([]);
   });
 });

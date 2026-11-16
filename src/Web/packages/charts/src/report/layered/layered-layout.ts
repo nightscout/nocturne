@@ -759,7 +759,8 @@ export type TipValue = (value: ReportRow[string], field: ReportField, unit: bool
 
 /**
  * What the tooltip lists for a layer at its `rows` under the pointer. A band of one set is one entry: the
- * layer's name, its middle line's value and its shaded span's ends, since its edges are parts of one band.
+ * layer's name, its middle line's value and its shaded span's ends, since its edges are parts of one band; a band of
+ * edges only is its name and its outer ends.
  * Spans name their state; every other mark lists each drawn field. The rows' sentences sit under the
  * layer's last entry, so each says which layer it is about.
  */
@@ -789,6 +790,22 @@ export function tipEntries(layer: ReportLayer, rows: readonly ReportRow[], text:
           value: text(row[middle.name], middle, true),
           range: low && high && row[low.name] != null && row[high.name] != null ? `${text(row[low.name], low, false)}–${text(row[high.name], high, false)}` : null,
           color: fieldColor(layer, middle),
+          notes: [],
+        })),
+    );
+  }
+  if (layer.mark === "band" && !severalSeries && !middle && (edges.length === 2 || edges.length === 4)) {
+    const [low, high] = boundFields(layer, edges.length === 4 ? [edges[0], edges[3]] : edges);
+    if (!low || !high) return [];
+    return withNotes(
+      rows
+        .filter((row) => row[low.name] != null && row[high.name] != null)
+        .map((row, i) => ({
+          key: `${layer.id}-${i}`,
+          label: title,
+          value: `${text(row[low.name], low, false)}–${text(row[high.name], high, true)}`,
+          range: null,
+          color: fieldColor(layer, low),
           notes: [],
         })),
     );

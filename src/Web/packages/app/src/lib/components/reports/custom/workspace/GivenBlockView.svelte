@@ -1,14 +1,13 @@
 <!--
   An open block held as the spec gave it, result first: its preview in the main column; beside it on
   a wide block (under it on a narrow one) what it shows and how to change it. A chart lists its
-  signals, adds one from the catalogue, and keeps the rest in its advanced settings; figures and a
-  table list their columns; a comparison its two periods.
+  signals, adds one from the catalogue (only the signals along its axis), and keeps the rest in its
+  advanced settings; figures and a table list their columns; a comparison its two periods.
 -->
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
@@ -17,12 +16,15 @@
   import BlockPreview from "./BlockPreview.svelte";
   import BlockTitleRange from "./BlockTitleRange.svelte";
   import DateSpanField from "./DateSpanField.svelte";
+  import { givenSource } from "./catalogue-source.js";
   import { describe } from "./describe.js";
   import GivenChartAdvanced from "./GivenChartAdvanced.svelte";
   import { givenKind } from "./given.svelte.js";
   import type { PreviewRunner } from "./preview-runner.svelte.js";
   import type { GivenBlock, Report } from "./report.svelte.js";
-  import { markLabel, signalLabel } from "./vocabulary-words.svelte.js";
+  import SignalCatalogue from "./SignalCatalogue.svelte";
+  import { SignalPicks } from "./signal-picks.svelte.js";
+  import { markLabel } from "./vocabulary-words.svelte.js";
 
   interface Props {
     report: Report;
@@ -39,15 +41,9 @@
   let refused = $state<string | null>(null);
   let titleOpen = $state(false);
 
-  const lens = $derived(report.givenLens(block));
-  /** The catalogue's signals this chart can take along its axis, each with why it cannot be added now. */
-  const addable = $derived(
-    kind === "chart"
-      ? report.vocab.signals
-          .filter((s) => report.vocab.cellOf(lens, s.id))
-          .map((s) => ({ id: s.id, reason: report.givenSignalReason(block, s.id) }))
-      : []
-  );
+  const source = $derived(givenSource(report, block));
+  const picks = new SignalPicks();
+  let catalogueOpen = $state(false);
   const periods = $derived(kind === "comparison" ? report.givenComparison(block) : null);
 </script>
 
@@ -71,7 +67,7 @@
         <ul class="space-y-0.5">
           {#each layers as layer (layer.id)}
             <li class="flex min-h-11 items-center gap-2 rounded-md pl-2 hover:bg-accent/50 @4xl:min-h-9">
-              <span class="min-w-0 flex-1 truncate text-sm">{layer.name}</span>
+              <span class="min-w-0 flex-1 py-1 text-sm leading-snug text-pretty wrap-break-word">{layer.name}</span>
               <span class="shrink-0 text-xs text-muted-foreground">{markLabel(layer.mark)}</span>
               <Button
                 variant="ghost"
@@ -87,26 +83,14 @@
             </li>
           {/each}
         </ul>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props }: { props: Record<string, unknown> })}
-              <Button {...props} variant="dashed" size="touch-sm" class="w-full justify-start" data-testid="add-signal">
-                <Plus aria-hidden="true" />
-                Add a signal
-              </Button>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="start" class="max-h-80 overflow-y-auto">
-            {#each addable as s (s.id)}
-              <DropdownMenu.Item disabled={s.reason !== null} onSelect={() => (refused = report.addGivenSignal(block, s.id))}>
-                <span class="flex flex-col">
-                  {signalLabel(s.id)}
-                  {#if s.reason}<span class="text-xs text-muted-foreground">{s.reason}</span>{/if}
-                </span>
-              </DropdownMenu.Item>
-            {/each}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+        <SignalCatalogue {report} {source} {picks} bind:open={catalogueOpen}>
+          {#snippet trigger(props)}
+            <Button {...props} variant="dashed" size="touch-sm" class="w-full justify-start" data-testid="add-signal">
+              <Plus aria-hidden="true" />
+              Add a signal
+            </Button>
+          {/snippet}
+        </SignalCatalogue>
         {#if refused}
           <p class="px-2 text-xs text-muted-foreground" role="status">{refused}</p>
         {/if}

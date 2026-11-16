@@ -1,7 +1,9 @@
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Services.Identity;
 
 namespace Nocturne.API.Reports;
@@ -17,7 +19,8 @@ internal sealed class ReportRenderer(
     ITenantAccessor tenant,
     ITenantGlucoseUnits glucoseUnits,
     ReportReadLog readLog,
-    TenantClockResolver tenantClock)
+    TenantClockResolver tenantClock,
+    ISubjectRepository subjects)
 {
     /// <summary>The report, with each panel's built-in web report link on the request's host.</summary>
     public async Task<ReportResult> RunAsync(ReportSpec spec, CancellationToken cancellationToken)
@@ -27,7 +30,10 @@ internal sealed class ReportRenderer(
         var useMmol = await UsesMmolAsync(cancellationToken);
         var tenantZone = (await tenantClock.ResolveAsync(cancellationToken)).Zone;
         var look = await appearance.GetTenantAppearanceAsync(tenant.TenantId, cancellationToken);
-        bool? hour12 = look.TimeFormat is null ? null : look.TimeFormat != "24";
+        var own = await CallerPreferencesAsync(http, cancellationToken);
+        var timeFormat = own?.TimeFormat ?? look.TimeFormat;
+        var regionFormat = string.IsNullOrWhiteSpace(own?.RegionFormat) ? look.RegionFormat : own.RegionFormat;
+        bool? hour12 = timeFormat is null ? null : timeFormat != "24";
 
         var report = await runner.RunAsync(
             spec,
@@ -43,9 +49,22 @@ internal sealed class ReportRenderer(
             Panels = [.. report.Panels.Select((panel, i) => panel.Status == ReportPanelStatus.Ok
                 ? panel with { Link = ReportLinks.For(origin, spec.Panels[i], panel, zone) }
                 : panel)],
-            Locale = string.IsNullOrWhiteSpace(look.RegionFormat) ? null : look.RegionFormat,
+            Locale = string.IsNullOrWhiteSpace(regionFormat) ? null : regionFormat,
             Hour12 = hour12,
         };
+    }
+
+    /// <summary>
+    /// The caller's own display preferences, or null for a caller with no subject (a share, a legacy secret). The web
+    /// draws with a member's own clock and region first and the tenant's where the member set none
+    /// (<c>applyTenantPresentation</c>), so the times a report writes in words follow the same order.
+    /// </summary>
+    private async Task<UserDisplayPreferences?> CallerPreferencesAsync(HttpContext http, CancellationToken cancellationToken)
+    {
+        if (http.GetAuthContext()?.SubjectId is not { } subjectId)
+            return null;
+        var subject = await subjects.GetAsync(subjectId, cancellationToken);
+        return subject is null ? null : UserDisplayPreferences.Deserialize(subject.Preferences);
     }
 
     /// <summary>Whether the tenant shows glucose in mmol/L.</summary>

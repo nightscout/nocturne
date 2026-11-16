@@ -555,7 +555,10 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 Status = ReportPanelStatus.Ok,
                 Window = new ReportWindow(fromMs, toMs),
                 Fields = [.. outputFields.Where(f => bound.Contains(f.Name))],
-                Rows = [.. computed.Output!.Rows.Select(row => (IReadOnlyDictionary<string, object?>)bound.ToDictionary(n => n, n => row.GetValueOrDefault(n)))],
+                Rows = [.. computed.Output!.Rows.Select(row => (IReadOnlyDictionary<string, object?>)bound.ToDictionary(n => n, n =>
+                    row.GetValueOrDefault(n) is double v && outputFields.FirstOrDefault(f => f.Name == n) is { } field
+                        ? ReportGrid.Rounded(v, field)
+                        : row.GetValueOrDefault(n)))],
                 Facts = computed.Output.Facts.Take(ReportFacts.Max).ToList(),
                 Sentence = cut is null ? computed.Output.Sentence : $"{computed.Output.Sentence} {cut}",
                 Summary = cut is null
@@ -573,7 +576,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var dataset = registry.Find(layer.Dataset!.DatasetName)!;
         var bindings = layer.Bindings!;
         var valueNames = ValueNames(bindings);
-        var read = await ReadAsync(dataset, layer.Dataset, range, from, to, ReportPanelKind.Chart, bindings.X, run, LayerShape(bindings));
+        var folded = panel.Grid is > 0 && ReportGrid.Applies(layer.XKind) && layer.Mark != ReportMark.Spans;
+        var read = await ReadAsync(dataset, layer.Dataset, range, from, to, ReportPanelKind.Chart, bindings.X, run,
+            folded && dataset.FoldsWhole ? LayerShape(bindings) with { Whole = true } : LayerShape(bindings));
         if (read.Output is not { } output)
             return (Empty(read.Status, read.Note!, from, to), null);
 
@@ -604,7 +609,6 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows = [.. output.Rows.Select(row =>
             (IReadOnlyDictionary<string, object?>)names.ToDictionary(n => n, n => row.GetValueOrDefault(n)))];
 
-        var folded = panel.Grid is > 0 && ReportGrid.Applies(layer.XKind) && layer.Mark != ReportMark.Spans;
         var step = folded ? ReportGrid.Step(layer.XKind, panel.Grid!.Value, from, to) : 0;
         string? context = null;
         if (folded)
@@ -828,6 +832,10 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             return DerivedTitle(derived, new Dictionary<string, IReadOnlyList<ReportCohort>>());
         var dataset = registry.Find(layer.Dataset!.DatasetName)!;
         var fields = dataset.FieldsFor(ReportPanelKind.Chart);
+        if (layer.Mark == ReportMark.Band && layer.Bindings!.Y is null && layer.Bindings.Edges is { } edges
+            && ReportBandSpan.Of([.. edges.Select(n => fields.FirstOrDefault(f => f.Name == n)).OfType<ReportField>()]) is [var only]
+            && only.Label.EndsWith(" range", StringComparison.Ordinal))
+            return only.Label;
         var signals = (layer.Bindings!.Y ?? []).Concat(layer.Mark == ReportMark.Band && layer.Bindings.Y is null ? layer.Bindings.Edges ?? [] : [])
             .Select(n => fields.FirstOrDefault(f => f.Name == n)?.Label).OfType<string>()
             .Select(ReportNames.Signal).Distinct(StringComparer.Ordinal).ToList();

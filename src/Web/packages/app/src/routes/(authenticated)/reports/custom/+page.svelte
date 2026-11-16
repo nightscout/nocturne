@@ -11,10 +11,11 @@
   import type { CustomReportSummary } from "#lib/api/generated/nocturne-api-client.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { formatDateTime, formatNumber } from "#lib/utils/formatting.js";
+  import { formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
   import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import { toast } from "svelte-sonner";
 
   const resource = contextResource(() => getCustomReports(), {
     errorTitle: "Could not load the custom reports",
@@ -34,6 +35,7 @@
     try {
       await deleteCustomReport(pendingDelete.id);
       pendingDelete = null;
+      toast.success("Nocturne deleted the report.");
     } catch (err) {
       deleteError = describeSubmitError(err, "Could not delete the report. Try again.");
     } finally {
@@ -74,7 +76,8 @@
   {#if resource.current}
     {#if reports.length === 0}
       <p class="text-sm text-muted-foreground">
-        No custom reports.{#if !clamped} To make a report, select New report.{/if}
+        No custom reports.
+        {#if !clamped}To make a report, select New report.{/if}
       </p>
     {:else}
       <Table.Root>
@@ -92,7 +95,7 @@
               <Table.Cell class="font-medium">
                 <a href={resolve(`reports/custom/${report.id}`)} class="hover:underline">{report.name}</a>
               </Table.Cell>
-              <Table.Cell class="whitespace-nowrap tabular-nums">{formatDateTime(report.updatedAt)}</Table.Cell>
+              <Table.Cell class="whitespace-nowrap tabular-nums">{formatMediumDateTime(report.updatedAt)}</Table.Cell>
               <Table.Cell class="tabular-nums">{formatNumber(report.panelCount ?? 0)}</Table.Cell>
               <Table.Cell class="text-right">
                 {#if report.canEdit}

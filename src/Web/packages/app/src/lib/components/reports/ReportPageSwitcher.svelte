@@ -30,7 +30,7 @@
   const customPages = $derived(page.url.pathname === "/reports/custom" || page.url.pathname.startsWith("/reports/custom/"));
   const saved = $derived(customPages ? getCustomReports() : null);
   const linkClass =
-    "rounded-md px-2.5 py-1 text-sm pointer-coarse:py-2 font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+    "rounded-md px-2.5 py-1 text-sm pointer-coarse:py-2 font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-sm:inline-flex max-sm:min-h-11 max-sm:items-center";
 </script>
 
 {#if customPages}
@@ -59,7 +59,7 @@
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props }: { props: Record<string, unknown> })}
-            <Button {...props} variant="ghost-muted" size="xs" class="ml-auto shrink-0" data-testid="report-switcher">
+            <Button {...props} variant="ghost-muted" size="touch-sm" class="ml-auto shrink-0" data-testid="report-switcher">
               Other reports
               <ChevronDown aria-hidden="true" />
             </Button>
@@ -67,12 +67,12 @@
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="max-h-80 overflow-y-auto">
           {#each saved?.current ?? [] as report (report.id)}
-            <DropdownMenu.Item onSelect={() => goto(resolve("/(authenticated)/reports/custom/[id]", { id: report.id ?? "" }))}>
+            <DropdownMenu.Item class="max-sm:min-h-11" onSelect={() => goto(resolve("/(authenticated)/reports/custom/[id]", { id: report.id ?? "" }))}>
               {report.name}
             </DropdownMenu.Item>
           {/each}
           <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={() => goto(resolve("/(authenticated)/reports/custom/new"))}>
+          <DropdownMenu.Item class="max-sm:min-h-11" onSelect={() => goto(resolve("/(authenticated)/reports/custom/new"))}>
             <Plus aria-hidden="true" />
             New report
           </DropdownMenu.Item>

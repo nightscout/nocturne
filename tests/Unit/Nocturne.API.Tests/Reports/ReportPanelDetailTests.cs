@@ -169,4 +169,24 @@ public class Phase6ReviewTests
         ReportBandSpan.Of([F("a", "Glucose P25"), F("b", "Change P25")]).Single().Label
             .Should().Be("Glucose P25 to Change P25", "two families keep both names");
     }
+
+    [Fact]
+    public void A_band_between_a_ranges_low_and_high_is_named_by_the_range()
+    {
+        static ReportField F(string name, string label) => new(name, label, ReportFieldKind.Number, "mg/dL", "");
+
+        ReportBandSpan.Of([F("a", "Target low"), F("b", "Target high")]).Single().Label.Should().Be("Target range");
+        ReportBandSpan.Of([F("a", "Target range low"), F("b", "Target range high")]).Single().Label.Should().Be("Target range");
+    }
+
+    [Fact]
+    public void A_folded_or_derived_glucose_is_written_as_a_reading_is()
+    {
+        static ReportField F(string unit) => new("glucose", "Glucose", ReportFieldKind.Number, unit, "");
+
+        ReportGrid.Rounded(75.8333, F("mg/dL")).Should().Be(76);
+        ReportGrid.Rounded(4.2166, F("mmol/L")).Should().Be(4.2);
+        ReportGrid.Rounded(4.25, F("mmol/L")).Should().Be(4.3, "a half rounds away from zero, as the app rounds");
+        ReportGrid.Rounded(1.23456, F("U")).Should().Be(1.2346);
+    }
 }

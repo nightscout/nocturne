@@ -17,8 +17,10 @@
   import CustomReportRun from "#lib/components/reports/custom/CustomReportRun.svelte";
   import CustomReportQuery from "#lib/components/reports/custom/CustomReportQuery.svelte";
   import SpecErrorList from "#lib/components/reports/custom/SpecErrorList.svelte";
+  import DateSpanField from "#lib/components/reports/custom/workspace/DateSpanField.svelte";
   import RangeChoices from "#lib/components/reports/custom/workspace/RangeChoices.svelte";
-  import { viewerRange } from "#lib/components/reports/custom/workspace/viewer-range.svelte.js";
+  import { CUSTOM_RANGE, viewerRange } from "#lib/components/reports/custom/workspace/viewer-range.svelte.js";
+  import type { DateSpan } from "#lib/components/reports/custom/workspace/workspace.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -33,6 +35,7 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import SquarePen from "@lucide/svelte/icons/square-pen";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import { tick } from "svelte";
 
   const id = $derived(page.params.id ?? "");
 
@@ -55,13 +58,19 @@
   let confirmingDelete = $state(false);
   /** The range the viewer runs the report over, by preset id, or null for the range it was saved with. */
   let rangeChoice = $state<string | null>(null);
+  /** The two dates the viewer picked, shown while `rangeChoice` is the custom range. */
+  let span = $state<DateSpan | null>(null);
+  let nameField = $state<HTMLInputElement | null>(null);
 
-  const range = $derived(report && catalogue.current ? viewerRange(catalogue.current, report.spec, rangeChoice) : null);
+  const range = $derived(report && catalogue.current ? viewerRange(catalogue.current, report.spec, rangeChoice, span) : null);
 
-  function startRename() {
+  async function startRename() {
     name = report?.name ?? "";
     actionError = null;
     renaming = true;
+    await tick();
+    nameField?.focus();
+    nameField?.select();
   }
 
   async function rename(event: SubmitEvent) {
@@ -72,6 +81,7 @@
     try {
       await updateCustomReport({ id, request: { name: name.trim() } });
       renaming = false;
+      toast.success("Nocturne renamed the report.");
     } catch (err) {
       actionError = describeSubmitError(err, "Could not rename the report. Try again.");
     } finally {
@@ -85,6 +95,7 @@
     try {
       await deleteCustomReport(id);
       confirmingDelete = false;
+      toast.success("Nocturne deleted the report.");
       await goto(resolve("/(authenticated)/reports/custom"));
     } catch (err) {
       actionError = describeSubmitError(err, "Could not delete the report. Try again.");
@@ -105,7 +116,7 @@
       <form class="flex flex-col gap-2 @lg:flex-row @lg:items-end" onsubmit={rename}>
         <div class="flex flex-1 flex-col gap-1.5">
           <Label for="custom-report-name">Name</Label>
-          <Input id="custom-report-name" bind:value={name} maxlength={catalogue.current?.maxNameLength ?? 120} required autocomplete="off" />
+          <Input id="custom-report-name" bind:ref={nameField} bind:value={name} maxlength={catalogue.current?.maxNameLength ?? 120} required autocomplete="off" />
         </div>
         <div class="flex gap-2">
           <Button type="submit" disabled={busy || name.trim() === ""}>Save</Button>
@@ -115,13 +126,25 @@
     {:else}
       <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2" data-testid="report-toolbar">
         {#if range && specErrors.length === 0}
-          <RangeChoices
-            id="view-range"
-            label="Range to show"
-            options={range.options}
-            value={range.value}
-            onchange={(choice) => (rangeChoice = choice === range.saved ? null : choice)}
-          />
+          <div class="flex flex-wrap items-start gap-2">
+            <RangeChoices
+              id="view-range"
+              label="Range to show"
+              options={range.options}
+              value={range.value}
+              onchange={(choice) => (rangeChoice = choice === range.saved ? null : choice)}
+            />
+            <DateSpanField
+              value={rangeChoice === CUSTOM_RANGE ? span : null}
+              label="Dates to show"
+              placeholder="Choose dates"
+              pressed={range.value === CUSTOM_RANGE}
+              onchange={(picked) => {
+                span = picked;
+                rangeChoice = CUSTOM_RANGE;
+              }}
+            />
+          </div>
         {:else}
           <span></span>
         {/if}
@@ -145,20 +168,27 @@
                 </Button>
               {/snippet}
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end">
-              <DropdownMenu.Item onSelect={copyLink}>
+            <DropdownMenu.Content
+              align="end"
+              onCloseAutoFocus={(event: Event) => {
+                if (!renaming) return;
+                event.preventDefault();
+                nameField?.focus();
+              }}
+            >
+              <DropdownMenu.Item class="max-sm:min-h-11" onSelect={copyLink}>
                 <Link aria-hidden="true" />
                 Copy link
               </DropdownMenu.Item>
               {#if canEdit}
-                <DropdownMenu.Item onSelect={startRename}>
+                <DropdownMenu.Item class="max-sm:min-h-11" onSelect={startRename}>
                   <Pencil aria-hidden="true" />
                   Rename
                 </DropdownMenu.Item>
               {/if}
               {#if report.canEdit}
                 <DropdownMenu.Separator />
-                <DropdownMenu.Item variant="destructive" onSelect={() => (confirmingDelete = true)}>
+                <DropdownMenu.Item class="max-sm:min-h-11" variant="destructive" onSelect={() => (confirmingDelete = true)}>
                   <Trash2 aria-hidden="true" />
                   Delete
                 </DropdownMenu.Item>
@@ -171,6 +201,9 @@
     {#if actionError}
       <p class="text-sm text-destructive" role="alert">{actionError}</p>
     {/if}
+    {#if range?.spanReason}
+      <p class="text-xs text-muted-foreground" role="status" data-testid="span-reason">{range.spanReason}</p>
+    {/if}
     {#if range?.note}
       <p class="text-xs text-muted-foreground" data-testid="range-note">{range.note}</p>
     {/if}
@@ -178,7 +211,7 @@
     {#if specErrors.length > 0}
       <SpecErrorList errors={specErrors} spec={report.spec} />
     {:else}
-      {#key `${id}|${rangeChoice ?? ""}`}
+      {#key `${id}|${range?.value ?? ""}|${range?.value === CUSTOM_RANGE && span ? `${span.from}/${span.to}` : ""}`}
         <CustomReportQuery request={{ spec: range?.spec ?? report.spec }}>
           {#snippet children(run)}
             <CustomReportRun {run} pageHeading={report.name} />

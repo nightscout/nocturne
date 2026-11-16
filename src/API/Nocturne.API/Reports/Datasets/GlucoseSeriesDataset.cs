@@ -40,10 +40,10 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
             Color: ChartColor.GlucoseInRange, Aggregate: ReportAggregate.Mean),
         new("direction", "Trend", ReportFieldKind.Category, null,
             "The trend arrow: DoubleUp, SingleUp, FortyFiveUp, Flat, FortyFiveDown, SingleDown, DoubleDown, or empty."),
-        new("targetLow", "Range low", ReportFieldKind.Number, ReportField.GlucoseUnit,
+        new("targetLow", "Target range low", ReportFieldKind.Number, ReportField.GlucoseUnit,
             "The lower limit of the in-range band, 70 mg/dL (3.9 mmol/L), the clinical consensus limit the reports use. Not the user's profile target.",
             Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last, Setting: ReportSetting.FixedLimit),
-        new("targetHigh", "Range high", ReportFieldKind.Number, ReportField.GlucoseUnit,
+        new("targetHigh", "Target range high", ReportFieldKind.Number, ReportField.GlucoseUnit,
             "The upper limit of the in-range band, 180 mg/dL (10.0 mmol/L), the clinical consensus limit the reports use. Not the user's profile target.",
             Color: ChartColor.GlucoseInRange, Step: true, Aggregate: ReportAggregate.Last, Setting: ReportSetting.FixedLimit),
         new("iob", "IOB", ReportFieldKind.Number, "U", "Insulin on board at the reading.",
@@ -73,12 +73,22 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
 
     public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
 
+    /// <summary>
+    /// A whole read keeps every reading (a source or a layer folded onto a grid), so it is cached apart from a sampled
+    /// one; both are rows of one chart read (<see cref="ReportRunCache.ChartAsync"/>), so the read cap counts them once.
+    /// </summary>
+    public string? ReadVariant(ReportReadShape shape) => shape.Whole ? "whole" : null;
+
+    public string? SharedRead(ReportDatasetParameters parameters) => Name;
+
+    public bool FoldsWhole => true;
+
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var data = await request.Cache.ChartAsync(request, cancellationToken);
         RecordReads(data, request.ReadLog);
         var treatments = request.HasScope(Scope.TreatmentsRead);
-        var interval = IntervalFor(request.From, request.To, 1, Budget);
+        var interval = request.Whole ? 1 : IntervalFor(request.From, request.To, 1, Budget);
         var sampled = Downsample(data.GlucoseData, request.From.ToUnixTimeMilliseconds(), interval);
 
         var omitted = treatments

@@ -5917,7 +5917,7 @@
     },
     {
      "name": "targetLow",
-     "label": "Range low",
+     "label": "Target range low",
      "kind": "number",
      "unit": "mg/dL",
      "description": "",
@@ -5929,7 +5929,7 @@
     },
     {
      "name": "targetHigh",
-     "label": "Range high",
+     "label": "Target range high",
      "kind": "number",
      "unit": "mg/dL",
      "description": "",
@@ -12330,7 +12330,8 @@
     "leaveOut": false,
     "spanKind": "pump_mode",
     "scopes": [
-     "treatments.read"
+     "treatments.read",
+     "devices.read"
     ],
     "permitted": true,
     "maxRangeHours": 336
@@ -12374,7 +12375,8 @@
     "leaveOut": false,
     "spanKind": "profile",
     "scopes": [
-     "treatments.read"
+     "treatments.read",
+     "therapy.read"
     ],
     "permitted": true,
     "maxRangeHours": 336
@@ -14885,7 +14887,8 @@
     "leaveOut": false,
     "spanKind": "pump_connectivity",
     "scopes": [
-     "treatments.read"
+     "treatments.read",
+     "devices.read"
     ],
     "permitted": true,
     "maxRangeHours": 336
@@ -14929,7 +14932,8 @@
     "leaveOut": false,
     "spanKind": "data_exclusion",
     "scopes": [
-     "treatments.read"
+     "treatments.read",
+     "glucose.read"
     ],
     "permitted": true,
     "maxRangeHours": 336
@@ -16890,6 +16894,7 @@
    240
   ],
   "maxTimeSlots": 2000,
+  "timelineRawHours": 336,
   "events": {
    "shows": [
     {

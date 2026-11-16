@@ -48,11 +48,11 @@ function claims(ws: Workspace): { claim: string; holds: boolean }[] {
   return out;
 }
 
-describe("the caption", () => {
-  it("never claims what the spec does not send, for any starter, lens or view", () => {
-    for (const s of STARTERS)
-      for (const lens of vocab.lenses)
-        for (const show of vocab.shows) {
+describe("the caption never claims what the spec does not send", () => {
+  // One test per starter: each walks every lens and view in both orders.
+  it.each(STARTERS.map((s) => [s.id, s] as const))("for %s, in any lens or view", (_, s) => {
+    for (const lens of vocab.lenses)
+      for (const show of vocab.shows)
         for (const optionsFirst of [true, false]) {
           const ws = new Workspace(liveCatalogue, s);
           ws.setLens(lens);
@@ -67,7 +67,6 @@ describe("the caption", () => {
           // An empty chart shows no caption.
           if (ws.toSpec() === null) continue;
           for (const c of claims(ws)) expect(c.holds, `${s.id} ${lens} ${show}: ${c.claim}`).toBe(true);
-        }
         }
   });
 });

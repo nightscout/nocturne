@@ -50,14 +50,26 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   }),
 }));
 
+type Navigation = { type: string; to: { url: URL } | null; cancel: () => void };
+const guards = vi.hoisted(() => [] as ((navigation: Navigation) => void)[]);
+
 vi.mock("$app/navigation", () => ({
   goto: (url: string) => {
     calls.gotos.push(url);
     return Promise.resolve();
   },
+  beforeNavigate: (guard: (navigation: Navigation) => void) => guards.push(guard),
 }));
 
+/** Runs the page's latest navigation guard, as SvelteKit does before a navigation; true when it cancels it. */
+function navigate(type: string, to: string | null): boolean {
+  let cancelled = false;
+  guards.at(-1)?.({ type, to: to ? { url: new URL(to, window.location.href) } : null, cancel: () => (cancelled = true) });
+  return cancelled;
+}
+
 import NewCustomReportPage from "./+page.svelte";
+import { minuteLabel as minuteText } from "#lib/components/reports/custom/workspace/clock.js";
 
 const layerIds = (spec: Spec) => spec.panels.flatMap((p) => (p.tracks ?? []).flatMap((t) => t.layers.map((l) => l.id)));
 
@@ -381,14 +393,29 @@ describe("a new custom report", () => {
     await vi.waitFor(() => expect(document.activeElement?.textContent?.trim()).toBe("Narrow"));
   });
 
-  it("names the thumbs of a time of day, and says the window once a thumb is let go", async () => {
+  it("sets a time of day that runs past midnight, and never a start and an end at the same minute", async () => {
     await start("What does a later breakfast do?");
     await page.getByTestId("moment-row").first().getByRole("button", { name: /^Time of day:/ }).click();
+    await page.getByRole("radio", { name: "Overnight" }).click();
 
-    const sliders = page.getByRole("slider");
-    await expect.element(sliders.nth(0)).toHaveAttribute("aria-label", "Start");
-    await expect.element(sliders.nth(1)).toHaveAttribute("aria-label", "End");
-    expect(sliders.nth(0).element().getAttribute("aria-valuetext")).toMatch(/6|06/);
+    await expect.element(page.getByTestId("time-of-day-window")).toHaveTextContent(/past midnight/);
+    await vi.waitFor(() => {
+      const cohorts = JSON.stringify(calls.runs.at(-1)?.spec);
+      expect(cohorts).toContain('"fromMinute":1320');
+      expect(cohorts).toContain('"toMinute":360');
+    });
+
+    await page.getByLabelText("End", { exact: true }).click();
+    await expect.element(page.getByRole("option", { name: minuteText(1320) })).toHaveAttribute("data-disabled");
+  });
+
+  it("removes the time of day when Full day is chosen", async () => {
+    await start("What does a later breakfast do?");
+    const row = page.getByTestId("moment-row").first();
+    await row.getByRole("button", { name: /^Time of day:/ }).click();
+    await page.getByRole("radio", { name: "Full day" }).click();
+
+    await vi.waitFor(() => expect(row.getByRole("button", { name: /^Time of day:/ }).elements()).toHaveLength(0));
   });
 
 
@@ -398,5 +425,61 @@ describe("a new custom report", () => {
 
     await expect.element(page.getByTestId("clamped-note")).toHaveTextContent("Your access is limited to the last 24 hours. It cannot create reports.");
     expect(page.getByTestId("report-starters").elements()).toHaveLength(0);
+  });
+});
+
+describe("the safety net of a new report", () => {
+  beforeEach(async () => {
+    calls.runs.length = 0;
+    calls.creates.length = 0;
+    calls.gotos.length = 0;
+    guards.length = 0;
+    refusal = null;
+    runsFail = false;
+    known = liveCatalogue;
+    decorate = () => {};
+    availability = ({ hours }) => ({ hours, signals: [] });
+    localStorage.clear();
+    pageState.data = {};
+    await page.viewport(1280, 900);
+  });
+
+  it("restores the unsaved changes after a reload, and discards them on request", async () => {
+    await start("Is there a dawn rise?");
+    await page.getByLabelText("Report title").fill("Mornings, unsaved");
+    await vi.waitFor(() => expect(localStorage.length).toBe(1));
+
+    document.body.innerHTML = "";
+    render(NewCustomReportPage, {});
+
+    await expect.element(page.getByText("Restored your unsaved changes.")).toBeVisible();
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("Mornings, unsaved");
+
+    await page.getByRole("button", { name: "Discard and start again" }).click();
+    await expect.element(page.getByRole("heading", { name: "Start with a question" })).toBeVisible();
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("asks before it leaves unsaved changes, and not after a save", async () => {
+    await start("Is there a dawn rise?");
+    expect(navigate("link", "/reports")).toBe(false);
+
+    await page.getByLabelText("Report title").fill("Mornings, unsaved");
+    await vi.waitFor(() => expect(navigate("leave", null)).toBe(true));
+    expect(navigate("link", "/reports")).toBe(true);
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Your changes are not saved.");
+    await dialog.getByRole("button", { name: "Stay" }).click();
+    expect(calls.gotos).toEqual([]);
+
+    expect(navigate("link", "/reports")).toBe(true);
+    await page.getByRole("alertdialog").getByRole("button", { name: "Leave" }).click();
+    await vi.waitFor(() => expect(calls.gotos).toHaveLength(1));
+    expect(String(calls.gotos[0])).toContain("/reports");
+
+    await save("Dawn");
+    await vi.waitFor(() => expect(calls.gotos.map(String)).toContain("/reports/custom/new-id"));
+    expect(navigate("link", "/reports")).toBe(false);
+    expect(localStorage.length).toBe(0);
   });
 });

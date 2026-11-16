@@ -279,6 +279,29 @@ public class ReportWorkspaceTests
     }
 
     [Fact]
+    public void A_kind_of_state_span_needs_the_scope_its_records_are_withheld_without()
+    {
+        var cells = Workspace().Cells.Where(c => c.SpanKind is not null).ToDictionary(c => c.Signal, c => c.Scopes);
+
+        cells["pumpModes"].Should().Contain(Scope.DevicesRead);
+        cells["profiles"].Should().Contain(Scope.TherapyRead);
+        cells["overrides"].Should().Equal(Scope.TreatmentsRead);
+        Workspace(Scope.TreatmentsRead).Signals.Single(s => s.Id == "pumpModes").Permitted
+            .Should().BeFalse("the lane comes back withheld without devices.read");
+        Workspace(Scope.TreatmentsRead, Scope.DevicesRead).Signals.Single(s => s.Id == "pumpModes").Permitted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_timeline_longer_than_two_weeks_is_drawn_on_its_grid()
+    {
+        var workspace = Workspace();
+
+        workspace.TimelineRawHours.Should().Be(336);
+        TimelineGrid(workspace, 672).Should().Be(30);
+        TimelineGrid(workspace, 2160).Should().Be(120);
+    }
+
+    [Fact]
     public void The_vocabulary_carries_ids_and_no_words()
     {
         var json = JsonSerializer.Serialize(Workspace(), Json);

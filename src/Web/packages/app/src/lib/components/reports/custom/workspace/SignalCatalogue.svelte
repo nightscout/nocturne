@@ -5,7 +5,8 @@
   sections and their groups. A signal with no data in the range, or that the reader cannot read, is in a
   closed group at the end. A signal the lens cannot draw offers to switch the view, or to put it in a new
   chart. Signals whose data does not cover the chart's range are counted once, above the list, with the
-  range that fits.
+  range that fits. A chart held as a spec gave it lists only the signals along its axis
+  (catalogue-source.ts).
 -->
 <script lang="ts">
   import { tick } from "svelte";
@@ -23,7 +24,8 @@
   import Star from "@lucide/svelte/icons/star";
   import type { Snippet } from "svelte";
   import type { SignalId } from "./catalogue-vocabulary.js";
-  import type { ChartBlock, Report } from "./report.svelte.js";
+  import type { CatalogueSource } from "./catalogue-source.js";
+  import type { Report } from "./report.svelte.js";
   import { searchSignals } from "./signal-search.js";
   import type { SignalPicks } from "./signal-picks.svelte.js";
   import Swatch from "./Swatch.svelte";
@@ -40,16 +42,17 @@
 
   interface Props {
     report: Report;
-    block: ChartBlock;
+    /** The chart the catalogue was opened from. */
+    source: CatalogueSource;
     picks: SignalPicks;
     open: boolean;
     /** The control that opens the catalogue. */
     trigger: Snippet<[Record<string, unknown>]>;
   }
 
-  let { report, block, picks, open = $bindable(), trigger }: Props = $props();
+  let { report, source, picks, open = $bindable(), trigger }: Props = $props();
 
-  const ws = $derived(block.ws);
+  const vocab = $derived(source.vocab);
   const mobile = new IsMobile();
   /** The sheet has no padding of its own; the dialog has. */
   const pad = $derived(mobile.current);
@@ -63,11 +66,11 @@
   /** Why the last action could not be done. */
   let refused = $state<string | null>(null);
 
-  const entries = $derived(open ? ws.catalogueEntries : []);
+  const entries = $derived(open ? source.entries : []);
   const byId = $derived(new Map(entries.map((e) => [e.id, e])));
   const ids = $derived(entries.map((e) => e.id));
 
-  const availability = $derived(open ? getCustomReportSignalAvailability({ hours: ws.rangeHours }) : null);
+  const availability = $derived(open ? getCustomReportSignalAvailability({ hours: source.rangeHours }) : null);
   const presence = $derived(
     new Map((availability?.current?.signals ?? []).map((s) => [s.signal, s.state]))
   );
@@ -76,19 +79,19 @@
   const noData = $derived(entries.filter((e) => !e.noAccess && presence.get(e.id) === "none").map((e) => e.id));
   const listed = $derived(new Set(entries.filter((e) => !e.noAccess && presence.get(e.id) !== "none").map((e) => e.id)));
 
-  const onChart = $derived(ws.lens === "against" ? ws.againstPair : ws.shown);
+  const onChart = $derived(source.onChart);
   const starred = $derived(picks.starred.filter((id) => listed.has(id)));
   const recent = $derived(picks.recent.filter((id) => listed.has(id)));
 
   const sections = $derived(
-    ws.vocab.sections
+    vocab.sections
       .map((section) => ({
         id: section.id,
         groups: section.groups
           .map((group) => ({
             id: group,
             signals: ids.filter((id) => {
-              const s = ws.vocab.signal(id);
+              const s = vocab.signal(id);
               return listed.has(id) && s?.section === section.id && s.group === group;
             }),
           }))
@@ -98,12 +101,12 @@
   );
 
   function unitOf(id: SignalId): string | null {
-    const unit = ws.vocab.signal(id)?.unit ?? null;
-    return unit === "glucose" ? ws.glucoseUnit : unit;
+    const unit = vocab.signal(id)?.unit ?? null;
+    return unit === "glucose" ? source.glucoseUnit : unit;
   }
 
   function wordsOf(id: SignalId) {
-    const s = ws.vocab.signal(id);
+    const s = vocab.signal(id);
     return {
       name: signalLabel(id),
       other: [
@@ -126,7 +129,9 @@
     return reasons.filter((r, i) => reasons.indexOf(r) === i && reasons.lastIndexOf(r) !== i);
   });
 
-  const needs = $derived(open ? ws.rangeNeeds : []);
+  const scopeText = $derived(source.everyView ? "Search every signal in every view." : "Search the signals this chart can show.");
+
+  const needs = $derived(open ? source.rangeNeeds : []);
 
   function daysText(hours: number): string {
     const days = Math.floor(hours / 24);
@@ -140,7 +145,7 @@
   function describedBy(e: CatalogueEntry, key: string): string {
     const ids = [`${key}-unit`, `${key}-about`];
     if (e.drawable && !e.placed) {
-      if (e.needsShorter) ids.push(needId(ws.vocab.cellOf(ws.lens, e.id)?.maxRangeHours ?? 0));
+      if (e.needsShorter) ids.push(needId(vocab.cellOf(source.lens, e.id)?.maxRangeHours ?? 0));
       else if (e.reason) ids.push(shared.includes(e.reason) ? `catalogue-shared-${shared.indexOf(e.reason)}` : `${key}-why`);
     }
     return ids.join(" ");
@@ -153,14 +158,14 @@
       return;
     }
     const placing = !e.placed;
-    refused = ws.toggleSignal(e.id);
+    refused = source.toggle(e.id);
     if (refused) return;
     if (placing) picks.used(e.id);
     said = placing ? `${signalLabel(e.id)} is on the chart.` : `${signalLabel(e.id)} is off the chart.`;
   }
 
   function switchTo(id: SignalId, lens: string) {
-    refused = ws.placeIn(id, lens);
+    refused = source.placeIn(id, lens);
     if (refused) return;
     picks.used(id);
     expanded = null;
@@ -183,7 +188,7 @@
   }
 
   function useRange(hours: number) {
-    refused = report.setBlockRange(block, hours);
+    refused = source.useRange(hours);
   }
 
   $effect(() => {
@@ -201,7 +206,7 @@
   {#if e}
     {@const key = `${list}-${id}`}
     {@const unit = unitOf(id)}
-    {@const lenses = ws.vocab.lensesOf(id)}
+    {@const lenses = vocab.lensesOf(id)}
     {@const blocked = e.noAccess || (e.drawable && !e.placed && (e.needsShorter || e.reason !== null))}
     {@const isStarred = picks.isStarred(id)}
     <li class="border-b border-border last:border-b-0" data-catalogue-row={id}>
@@ -219,7 +224,7 @@
           onclick={() => toggle(e, key)}
           data-signal={id}
         >
-          <span class="pt-1.5"><Swatch swatch={{ kind: "solid", color: ws.vocab.signalColor(id) }} /></span>
+          <span class="pt-1.5"><Swatch swatch={{ kind: "solid", color: vocab.signalColor(id) }} /></span>
           <span class="min-w-0 flex-1 space-y-0.5">
             <span class="flex flex-wrap items-baseline gap-x-2">
               <span id="{key}-name" class="text-sm font-medium">{signalLabel(id)}</span>
@@ -261,7 +266,7 @@
       {/if}
       {#if !e.drawable && !e.noAccess && expanded === key}
         <div id="{key}-views" class="space-y-2 px-2 pb-3 pl-9">
-          <p class="text-xs text-muted-foreground">{lensLabel(ws.lens)} cannot show this signal.</p>
+          <p class="text-xs text-muted-foreground">{lensLabel(source.lens)} cannot show this signal.</p>
           <div class="flex flex-wrap gap-2">
             {#each e.otherLenses as lens (lens)}
               <Button variant="outline" size="touch-sm" onclick={() => switchTo(id, lens)} data-switch={lens}>
@@ -274,9 +279,9 @@
               </Button>
             {/if}
           </div>
-          {#if e.otherLenses.length > 0 && ws.placeInRange(id, e.otherLenses[0]) !== null}
+          {#if e.otherLenses.length > 0 && source.placeInRange(id, e.otherLenses[0]) !== null}
             <p class="text-xs text-muted-foreground">
-              The view shows at most {daysText(ws.placeInRange(id, e.otherLenses[0]) ?? 0)} with this signal.
+              The view shows at most {daysText(source.placeInRange(id, e.otherLenses[0]) ?? 0)} with this signal.
             </p>
           {/if}
           {#if e.reason}<p class="text-xs text-muted-foreground">{e.reason}</p>{/if}
@@ -323,16 +328,16 @@
 {/snippet}
 
 {#snippet body()}
-  <div class={["space-y-1 pr-8", pad && "px-4 pt-4"]}>
+  <div class={["shrink-0 space-y-1 pr-8", pad && "px-4 pt-4"]}>
     {#if mobile.current}
       <Sheet.Title>Add a signal</Sheet.Title>
-      <Sheet.Description>Search every signal in every view.</Sheet.Description>
+      <Sheet.Description>{scopeText}</Sheet.Description>
     {:else}
       <Dialog.Title>Add a signal</Dialog.Title>
-      <Dialog.Description>Search every signal in every view.</Dialog.Description>
+      <Dialog.Description>{scopeText}</Dialog.Description>
     {/if}
   </div>
-  <div class={["space-y-3 @container", pad && "px-4"]}>
+  <div class={["shrink-0 space-y-3 @container", pad && "px-4"]}>
     <InputGroup.Root>
       <InputGroup.Addon>
         <Search aria-hidden="true" />
@@ -375,7 +380,7 @@
       <p id="catalogue-shared-{i}" class="text-xs text-muted-foreground">{reason}</p>
     {/each}
   </div>
-  <div class={["min-h-0 flex-1 space-y-4 overflow-y-auto @container", pad ? "px-2 pb-4" : "-mx-2 px-2"]} data-testid="signal-catalogue">
+  <div class={["min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain @container", pad ? "px-2 pb-4" : "-mx-2 px-2"]} data-testid="signal-catalogue">
     {#if results !== null}
       {#if found.length === 0}
         <p class="px-2 py-4 text-sm text-muted-foreground">No signal has that name. Try a different word.</p>

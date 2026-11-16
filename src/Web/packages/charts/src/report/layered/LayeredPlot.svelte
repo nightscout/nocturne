@@ -59,8 +59,8 @@
     formatTick: (value: unknown, kind: ReportXKind) => string;
     /** Draw a rule at the slot under the pointer, on the page. */
     hover?: boolean;
-    /** The run of tracks and its slot under the pointer, or null; set by the plot. */
-    focus?: PlotFocus | null;
+    /** Hears the run of tracks and its slot under the pointer, or null, as it changes. */
+    onfocus?: (focus: PlotFocus | null) => void;
     /** Values each track's sides cover beyond their own, by track id, so small multiples share one scale. */
     valueExtents?: Record<string, SharedSides>;
     /** The paint of a texture's ink laid over a mark's own fill; none where the layer cannot draw one (a canvas). */
@@ -79,7 +79,7 @@
     hover = false,
     valueExtents,
     texture,
-    focus = $bindable(null),
+    onfocus,
   }: Props = $props();
 
   const chart = getChartContext();
@@ -88,9 +88,15 @@
   const high = $derived(panel.thresholds?.high ?? null);
   const scales = $derived(panel.tracks.map((track, i) => sideScales(track, bands[i], high, valueExtents?.[track.id])));
 
+  /** A horizontal scale: the chart's own, or a time or linear one over a later group. */
+  interface XScale {
+    (value: Date | number): unknown;
+    invert?: (px: number) => unknown;
+  }
+
   /** Each group's horizontal scale over the plot's width: the chart's own for the first. */
   const xScales = $derived(
-    groups.map((group, g) => {
+    groups.map((group, g): XScale => {
       if (g === 0) return chart.xScale;
       const [from, to] = xExtent(group.panel);
       return isTimeAxis(group.kind)
@@ -103,27 +109,34 @@
   const xOf = (t: number) => {
     const g = groupOf[t];
     const kind = groups[g].kind;
-    const scale = xScales[g] as (value: Date | number) => unknown;
+    const scale = xScales[g];
     return (raw: number) => Number(scale(toDomain(kind, raw)));
   };
 
   /** Each group's slots, the x values the pointer and the keyboard move between. */
   const groupSlots = $derived(groups.map((group) => slots(group.panel)));
-  const pixelOf = (g: number, raw: number) => Number((xScales[g] as (value: Date | number) => unknown)(toDomain(groups[g].kind, raw)));
+  const pixelOf = (g: number, raw: number) => Number(xScales[g](toDomain(groups[g].kind, raw)));
+  /** The slot of group `g` nearest the pixel `px` along `scale`, or null where the scale cannot invert. */
+  function slotAt(g: number, scale: XScale, px: number): number | null {
+    const value = scale.invert?.(px);
+    if (!(value instanceof Date) && typeof value !== "number") return null;
+    return nearestSlot(groupSlots[g], fromDomain(groups[g].kind, value));
+  }
+  /** The raw x a tooltip's datum carries, or null. */
+  function rawOf(data: unknown): number | null {
+    return typeof data === "object" && data !== null && "raw" in data && typeof data.raw === "number" ? data.raw : null;
+  }
 
   /** The run the pointer is over and its slot there: the first run's from the tooltip's data, another's from the pointer. */
   const pointed = $derived.by((): PlotFocus | null => {
-    const data = chart.tooltip.data as { raw?: number } | null;
+    const data: unknown = chart.tooltip.data;
     if (!hover || !data || groups.length === 0) return null;
     const g = groupAt(groups, bands, chart.tooltip.y - chart.padding.top);
-    const raw =
-      g === 0
-        ? (data.raw ?? null)
-        : nearestSlot(groupSlots[g], fromDomain(groups[g].kind, (xScales[g] as { invert: (px: number) => Date | number }).invert(chart.tooltip.x - chart.padding.left)));
+    const raw = g === 0 ? rawOf(data) : slotAt(g, xScales[g], chart.tooltip.x - chart.padding.left);
     return raw === null ? null : { group: g, raw, x: pixelOf(g, raw) };
   });
   $effect(() => {
-    focus = pointed;
+    onfocus?.(pointed);
   });
 
   /**
@@ -139,7 +152,7 @@
     const next = pointed === null ? 0 : Math.min(xs.length - 1, Math.max(0, (at < 0 ? 0 : at) + along));
     const raw = xs[next];
     const span = groupSpan(groups, bands, g);
-    const firstRaw = g === 0 ? raw : (nearestSlot(groupSlots[0], fromDomain(groups[0].kind, (chart.xScale as { invert: (px: number) => Date | number }).invert(pixelOf(g, raw)))) ?? raw);
+    const firstRaw = g === 0 ? raw : (slotAt(0, xScales[0], pixelOf(g, raw)) ?? raw);
     chart.tooltip.show({
       data: { raw: firstRaw, x: toDomain(groups[0].kind, firstRaw) },
       point: { x: pixelOf(g, raw) + chart.padding.left, y: (span.top + span.bottom) / 2 + chart.padding.top },

@@ -1,3 +1,4 @@
+import { hasValues } from "../layered/layered-layout.js";
 import type { ReportField, ReportLayer, ReportPanel, ReportRow } from "../types.js";
 
 /**
@@ -6,6 +7,11 @@ import type { ReportField, ReportLayer, ReportPanel, ReportRow } from "../types.
  */
 export function staticPanel(panel: Pick<ReportPanel, "kind">): boolean {
   return panel.kind === "chart" || panel.kind === "comparison";
+}
+
+/** Whether a panel's image would show data: a chart with no values draws only its empty sentence, so it offers no image. */
+export function staticPanelHasData(panel: Pick<ReportPanel, "kind" | "tracks">): boolean {
+  return panel.kind !== "chart" || hasValues(panel);
 }
 
 /** An image's height when the caller names none: one stacked bar is a strip, a comparison lists its figures, a chart grows with its tracks. */

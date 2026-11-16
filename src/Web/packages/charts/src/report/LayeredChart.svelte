@@ -174,7 +174,7 @@
       {/each}
       <LayeredPlot
         bind:this={plot}
-        bind:focus
+        onfocus={(next) => (focus = next)}
         {panel}
         {labels}
         {lineColorMode}
@@ -188,7 +188,6 @@
       />
     </Svg>
     <Tooltip.Root class="z-50 max-w-96 rounded-lg border border-border text-xs shadow-xl">
-      {#snippet children()}
         {#if focus}
           {@const section = sectionAt(focus)}
           <p class="mb-1 border-b border-border pb-1 font-semibold" data-testid="report-tooltip-axis">{section.heading}</p>
@@ -208,7 +207,6 @@
             {/each}
           </div>
         {/if}
-      {/snippet}
     </Tooltip.Root>
 {/snippet}
 
@@ -225,7 +223,8 @@
     <p class="text-sm text-muted-foreground" data-testid="report-chart-empty">{emptyText}</p>
   {/if}
 {:else}
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -- the arrow keys move the crosshair, so the plot takes focus -->
+  <!-- The arrow keys move the crosshair, so the plot takes focus. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
     class="h-(--plot-height) w-full rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     style:--plot-height="{height}px"

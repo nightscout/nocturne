@@ -66,6 +66,8 @@
     const panels = readReport(run.result)?.panels ?? [];
     return panels.length === 0 || panels.every((p) => p.status !== "ok");
   });
+  /** The result on screen is a refusal of settings since changed: it is hidden until the change is checked. */
+  const staleRefusal = $derived(stale && (runner.run?.errors ?? []).length > 0);
   const settled = $derived(
     runner.ran === null || runner.running ? "" : runner.failure !== null || notShown ? NOT_SHOWN[kind] : UPDATED[kind]
   );
@@ -84,13 +86,22 @@
       change.
     </p>
   {/if}
-  {#if runner.run}
+  {#if staleRefusal}
+    <div
+      class="flex min-h-24 items-center justify-center gap-2 rounded-md border border-dashed border-border text-sm text-muted-foreground"
+      aria-busy="true"
+      data-testid="block-checking"
+    >
+      <LoaderCircle class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+      Checking the change
+    </div>
+  {:else if runner.run}
     <div class="relative" aria-busy={stale}>
       <div
         class="transition-opacity duration-150 motion-reduce:transition-none"
         class:opacity-50={stale}
       >
-        <CustomReportRun run={runner.run} {legend} {facts} {heading} />
+        <CustomReportRun run={runner.run} {legend} {facts} {heading} headingLevel={3} />
       </div>
       {#if stale}
         <LoaderCircle

@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
   import { before, removeThenFocus } from "./refocus.js";
-  import { anchorLabel, anchorPhrase } from "./vocabulary-words.svelte.js";
+  import { anchorGroupLabel, anchorLabel, anchorPhrase } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -336,7 +336,7 @@
                   }
                 >
                   {#each ws.vocab.anchorGroups as heading (heading)}
-                    <DropdownMenu.Label>{heading}</DropdownMenu.Label>
+                    <DropdownMenu.Label>{anchorGroupLabel(heading)}</DropdownMenu.Label>
                     {#each ws.vocab.anchors.filter((a) => a.group === heading) as a (a.id)}
                       {@const why = ws.anchorReason(a.id)}
                       {@const note = ws.anchorNote(a.id)}
@@ -384,10 +384,15 @@
                     </p>
                     {#if kind === "timeOfDay" && moment.timeOfDay}
                       <TimeOfDayEditor
+                        id="moment-{moment.key}-time"
                         from={moment.timeOfDay.fromMinute}
                         to={moment.timeOfDay.toMinute}
                         onchange={(fromMinute, toMinute) =>
                           update(i, { timeOfDay: { fromMinute, toMinute } })}
+                        onclear={() => {
+                          open = null;
+                          removeNarrowing(i, moment, "timeOfDay");
+                        }}
                       />
                     {:else if kind === "weekdays"}
                       <WeekdayToggles
