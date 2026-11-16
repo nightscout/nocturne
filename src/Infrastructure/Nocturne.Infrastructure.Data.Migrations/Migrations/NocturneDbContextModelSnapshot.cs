@@ -887,6 +887,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("numeric")
                         .HasColumnName("weight_kg");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.HasKey("TenantId", "Id");
 
                     b.HasIndex("Mills")
@@ -2269,6 +2273,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.HasKey("TenantId", "Id");
 
@@ -4710,6 +4718,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.HasKey("TenantId", "Id");
 
                     b.HasIndex("Category")
@@ -4838,6 +4850,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.HasKey("TenantId", "Id");
 
@@ -6462,6 +6478,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -6619,6 +6639,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -6757,6 +6781,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CorrelationId")
@@ -6878,6 +6906,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.HasKey("Id");
 
@@ -7046,6 +7078,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
@@ -7233,6 +7269,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -7381,6 +7421,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -7522,6 +7566,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -7652,6 +7700,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.HasKey("Id");
 
@@ -7851,6 +7903,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -8044,6 +8100,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -8182,6 +8242,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
@@ -8673,6 +8737,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -8857,6 +8925,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -8991,6 +9063,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.HasKey("Id");
 
@@ -9162,6 +9238,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
                         .HasColumnName("written_live");
@@ -9296,6 +9376,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.HasKey("Id");
 
@@ -9467,6 +9551,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")
@@ -9686,6 +9774,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CorrelationId")
@@ -9825,6 +9917,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
 
                     b.Property<bool>("WrittenLive")
                         .HasColumnType("boolean")

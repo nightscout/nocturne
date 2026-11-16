@@ -171,6 +171,14 @@ public record MigrationJobStatus
     /// <inheritdoc cref="MigrationJobInfo.HasFailures"/>
     public bool HasFailures { get; init; }
 
+    /// <summary>
+    /// Whether the newest part of the range has been read from every collection, so the app has
+    /// current data to show while a live run reads the older history. A Nightscout API run reads
+    /// that part first; a MongoDB run reads each collection whole, so it says this only once it
+    /// has completed.
+    /// </summary>
+    public bool RecentDataReady { get; init; }
+
     public Dictionary<string, CollectionProgress> CollectionProgress { get; init; } = [];
 }
 

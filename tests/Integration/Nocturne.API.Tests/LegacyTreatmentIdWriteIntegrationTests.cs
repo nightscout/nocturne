@@ -31,6 +31,7 @@ public class LegacyTreatmentIdWriteIntegrationTests : ApiIntegrationTestBase
 
     private static readonly DateTimeOffset TimeBase = DateTimeOffset.UtcNow.AddMinutes(-90);
     private static int _timeSlot;
+    private static int _mealHour;
 
     private static DateTimeOffset DistinctTime() => DateTimeOffset.FromUnixTimeMilliseconds(
         TimeBase.AddMilliseconds(-1_001L * Interlocked.Increment(ref _timeSlot)).ToUnixTimeMilliseconds());
@@ -352,4 +353,39 @@ public class LegacyTreatmentIdWriteIntegrationTests : ApiIntegrationTestBase
     }
 
     #endregion
+
+    [Theory]
+    [InlineData("/api/v1/treatments", true)]
+    [InlineData("/api/v1/treatments", false)]
+    [InlineData("/api/v1/treatments/{id}", true)]
+    public async Task APreBolusMealPostedThenPutAsOneRecord_HoldsOneCarbIntakeAtTheOffset(string route, bool withId)
+    {
+        var client = CreateAuthenticatedClient();
+        var at = DistinctTime().AddHours(-3 - Interlocked.Increment(ref _mealHour));
+        var id = Guid.NewGuid().ToString("N")[..24];
+        var meal = new Dictionary<string, object>
+        {
+            ["eventType"] = "Meal Bolus",
+            ["created_at"] = Iso(at),
+            ["carbs"] = 30,
+            ["insulin"] = 2.0,
+            ["preBolus"] = 15,
+        };
+        if (withId)
+            meal["_id"] = id;
+
+        (await client.PostAsJsonAsync("/api/v1/treatments", new[] { meal })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var put = await client.PutAsJsonAsync(route.Replace("{id}", id), meal);
+
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        var (boluses, carbs) = await WithTenantScopeAsync(async sp => (
+            await sp.GetRequiredService<IBolusRepository>().GetAsync(
+                at.UtcDateTime.AddMinutes(-1), at.UtcDateTime.AddMinutes(30), device: null, source: null),
+            await sp.GetRequiredService<ICarbIntakeRepository>().GetAsync(
+                at.UtcDateTime.AddMinutes(-1), at.UtcDateTime.AddMinutes(30), device: null, source: null,
+                limit: 10, offset: 0, descending: true)));
+        boluses.Should().ContainSingle().Which.Timestamp.Should().Be(at.UtcDateTime);
+        var carb = carbs.Should().ContainSingle("one meal holds one carb intake").Which;
+        (carb.Timestamp, carb.Carbs).Should().Be((at.UtcDateTime.AddMinutes(15), 30.0));
+    }
 }

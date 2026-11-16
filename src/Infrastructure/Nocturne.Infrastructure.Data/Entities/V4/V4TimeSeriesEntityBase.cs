@@ -22,7 +22,8 @@ public abstract class V4TimeSeriesEntityBase
         IAuditable,
         ISoftDeletable,
         IV4TimeSeriesEntity,
-        ISystemTimestamped
+        ISystemTimestamped,
+        IWriterStamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -70,6 +71,11 @@ public abstract class V4TimeSeriesEntityBase
     [Column("data_source")]
     [MaxLength(256)]
     public string? DataSource { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("writer_grant_id")]
+    public Guid? WriterGrantId { get; set; }
 
     /// <summary>
     /// Links records that were split from the same legacy Treatment

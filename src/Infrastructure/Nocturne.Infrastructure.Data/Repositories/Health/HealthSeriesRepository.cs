@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories.Health;
@@ -199,7 +200,5 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
     }
 
     private Task<TEntity?> FindByIdAsync(NocturneDbContext db, string id, CancellationToken ct) =>
-        Guid.TryParse(id, out var guid)
-            ? Set(db).FirstOrDefaultAsync(e => e.Id == guid, ct)
-            : Set(db).FirstOrDefaultAsync(e => e.OriginalId == id, ct);
+        Set(db).FirstOrDefaultAsync(RecordIdKey.Matching<TEntity>(id), ct);
 }
