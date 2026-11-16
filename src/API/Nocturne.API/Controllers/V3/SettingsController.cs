@@ -7,6 +7,8 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
+using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Repositories;
@@ -28,15 +30,18 @@ namespace Nocturne.API.Controllers.V3;
 public class SettingsController : BaseV3Controller<Settings>
 {
     private readonly ISettingsRepository _settings;
+    private readonly IWriteSideEffects _sideEffects;
 
     public SettingsController(
         ISettingsRepository settings,
+        IWriteSideEffects sideEffects,
         IDocumentProcessingService documentProcessingService,
         ILogger<SettingsController> logger
     )
         : base(documentProcessingService, logger)
     {
         _settings = settings;
+        _sideEffects = sideEffects;
     }
 
     /// <summary>
@@ -211,6 +216,12 @@ public class SettingsController : BaseV3Controller<Settings>
                 createdRecords.Count()
             );
 
+            await _sideEffects.OnCreatedAsync(
+                RealtimeCategories.Settings,
+                createdRecords.ToList(),
+                cancellationToken: cancellationToken
+            );
+
             return StatusCode(201, createdRecords.ToArray());
         }
         catch (ArgumentException ex)
@@ -283,7 +294,10 @@ public class SettingsController : BaseV3Controller<Settings>
         }
 
         settings.SrvModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        if (!await _settings.PutSettingsAsync(id, settings, cancellationToken))
+        var inserted = await _settings.PutSettingsAsync(id, settings, cancellationToken);
+        await AnnounceWriteAsync(id, inserted, cancellationToken);
+
+        if (!inserted)
         {
             _logger.LogDebug("Replaced settings with ID {Id}", id);
             return V3Replaced();
@@ -291,6 +305,39 @@ public class SettingsController : BaseV3Controller<Settings>
 
         _logger.LogDebug("Inserted settings with ID {Id}", id);
         return V3Inserted(nameof(GetSettingsById), id);
+    }
+
+    /// <summary>
+    /// Announce a PUT as upstream does: <c>create</c> for an insert, <c>update</c> for a replace,
+    /// carrying the document as it is now stored, so <c>identifier</c>, <c>srvModified</c> and the
+    /// writer's own fields arrive exactly as a READ serves them. AAPS acts on a client-control
+    /// command only through this event, and drops one without <c>srvModified</c>.
+    /// </summary>
+    private async Task AnnounceWriteAsync(string id, bool inserted, CancellationToken cancellationToken)
+    {
+        var stored = await _settings.GetSettingsByIdAsync(id, cancellationToken);
+        if (stored == null)
+        {
+            _logger.LogWarning("Settings {Id} was written but cannot be read back to announce it", id);
+            return;
+        }
+
+        if (inserted)
+        {
+            await _sideEffects.OnCreatedAsync(
+                RealtimeCategories.Settings,
+                [stored],
+                cancellationToken: cancellationToken
+            );
+        }
+        else
+        {
+            await _sideEffects.OnUpdatedAsync(
+                RealtimeCategories.Settings,
+                stored,
+                cancellationToken: cancellationToken
+            );
+        }
     }
 
     /// <summary>
@@ -344,6 +391,7 @@ public class SettingsController : BaseV3Controller<Settings>
 
         // CHECKME: Should validate admin permissions here
 
+        var existing = await _settings.GetSettingsByIdAsync(id, cancellationToken);
         var deleted = await _settings.DeleteSettingsAsync(id, cancellationToken);
 
         if (!deleted)
@@ -356,6 +404,12 @@ public class SettingsController : BaseV3Controller<Settings>
         }
 
         _logger.LogDebug("Successfully deleted settings with ID {Id}", id);
+
+        await _sideEffects.OnDeletedAsync(
+            RealtimeCategories.Settings,
+            existing,
+            cancellationToken: cancellationToken
+        );
 
         return CreateV3DeleteResponse();
     }
