@@ -8,7 +8,7 @@ title: GitHub App for app builds
 
 # GitHub App for app builds
 
-With app builds, a site owner can set up, start and monitor their own AAPS build from
+With app builds, a site owner can configure, start and monitor their own AAPS build from
 Nocturne. The build runs in the owner's private GitHub repository. The owner's workflow signs
 the APK with the owner's own key. Nocturne connects to that repository through a GitHub App. Each
 instance registers its own GitHub App. This page tells you how to do that.
@@ -29,11 +29,21 @@ The App does not get **Contents** or **Administration**. Thus Nocturne cannot ch
 workflow file, read the code, or create a repository. The owner creates the repository from
 the AAPS Builder template. Then the owner installs the App on that one repository.
 
+## What the browser lock protects
+
+The browser locks the signing key and its passwords with the public key of the repository
+before it sends them. The Nocturne server receives only the locked value. Thus the key is not
+in the database, the logs or the network traffic of Nocturne as plain text.
+
+The lock does not protect the key from a changed Nocturne server. Such a server can send
+different code or a different public key to the browser. A person who controls the server can
+make this change, so owners must trust the operator of the server.
+
 ## 1. Register the App
 
 1. On GitHub, go to **Settings > Developer settings > GitHub Apps**. For an organization,
    go to the organization's **Settings > Developer settings > GitHub Apps**.
-2. Click **New GitHub App**.
+2. Select **New GitHub App**.
 3. Fill in the fields:
 
 | Field | Value |
@@ -52,7 +62,7 @@ the AAPS Builder template. Then the owner installs the App on that one repositor
 Replace `example.com` with the domain in `BASE_DOMAIN`. Use the apex domain, not a site
 subdomain. Nocturne sends each callback to the site that started it.
 
-4. Click **Create GitHub App**.
+4. Select **Create GitHub App**.
 
 <Callout type="warning" title="Do not add permissions">
 
@@ -66,8 +76,8 @@ subdomain. Nocturne sends each callback to the site that started it.
 On the page of the new App:
 
 1. Copy the **Client ID**.
-2. Click **Generate a new client secret**. Copy the secret. GitHub shows it only one time.
-3. Under **Private keys**, click **Generate a private key**. GitHub downloads a `.pem` file.
+2. Select **Generate a new client secret**. Copy the secret. GitHub shows it only one time.
+3. Under **Private keys**, select **Generate a private key**. GitHub downloads a `.pem` file.
 4. Copy the App name from the App's public page URL, `https://github.com/apps/<name>`.
 
 ## 3. Configure Nocturne
@@ -117,9 +127,9 @@ Only a site owner, or a member who manages site settings, can use app builds. Th
 connects the repository does so with their own GitHub account. Only that person can choose the
 repository, save the signing key and start a build. That person must be an administrator of the
 repository on GitHub. Before each save of the key and each build, Nocturne asks GitHub again. If
-that person is no longer an administrator, Nocturne stops and asks for a new connection. Other
-site owners can see the status and the builds, and they can disconnect. To take over, another
-owner connects again with their own GitHub account.
+that person is no longer an administrator, Nocturne stops. The repository must then be connected
+again. Other site owners can see the status and the builds, and they can disconnect. To take
+over, another owner connects again with their own GitHub account.
 
 ## Remove the App
 
