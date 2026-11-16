@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
@@ -88,6 +89,130 @@ public class DemoGenerationTests
                 && candidate.RecoveryMinutes == 10
                 && candidate.StartMills <= nadir
                 && candidate.EndMills >= nadir);
+    }
+
+    [Theory]
+    [InlineData(2026, 3, 23, 180, false, "Failing", new[] { 14, 3 }, 2)]  // Monday: a false low, generated trace at 180
+    [InlineData(2026, 3, 19, 90, true, "Stuck", new[] { 12 }, 1)]        // Thursday: a false high, generated trace at 90
+    public void CoverageSeeds_PlantAFailingSensorDayWithFingersticks(
+        int year, int month, int day, double real, bool high, string failingPhase, int[] episodes, int alone)
+    {
+        var date = new DateOnly(year, month, day).ToDateTime(TimeOnly.MinValue, DateTimeKind.Local);
+        var error = DemoCoverageSeeds.SensorErrorOn(date)!;
+        error.Day.Should().Be(date.DayOfWeek);
+        DemoCoverageSeeds.SensorErrorOn(date.AddDays(7)).Should().BeNull("it falls every other week");
+        var start = date.Add(error.Start.ToTimeSpan());
+        var length = error.Phases.Sum(phase => phase.Minutes);
+        var margin = DemoCoverageSeeds.RealLevelRampMinutes / 5 + 1;
+        var timeline = Enumerable.Range(-margin, length / 5 + 2 * margin)
+            .Select(index =>
+            {
+                var time = start.AddMinutes(index * 5);
+                return new DemoTimeStep
+                {
+                    Time = time,
+                    Utc = time.ToUniversalTime(),
+                    Entry = new Entry
+                    {
+                        Mills = new DateTimeOffset(time).ToUnixTimeMilliseconds(),
+                        Date = time,
+                        Mgdl = real,
+                        Sgv = real,
+                    },
+                    Iob = 0,
+                    Cob = 0,
+                    EffectiveIsf = 50,
+                    EffectiveCarbRatio = 10,
+                    Scenario = DayScenario.Normal,
+                };
+            })
+            .ToList();
+
+        var readings = timeline.SelectMany(step => DemoCoverageSeeds.CgmReadings(step))
+            .Where(entry => entry.Device != DemoCoverageSeeds.ComparisonCgmSerial)
+            .ToList();
+        var sensor = readings.Where(entry => entry.Type != "mbg").ToList();
+        bool Flagged(Entry entry) => entry.AdditionalProperties is not null;
+        List<Entry> In(DemoCoverageSeeds.SensorErrorPhase phase)
+        {
+            var from = start.AddMinutes(DemoCoverageSeeds.PhaseStart(error, phase));
+            return sensor.Where(entry => entry.Date >= from && entry.Date < from.AddMinutes(phase.Minutes)).ToList();
+        }
+
+        sensor.First().Sgv.Should().Be(real);
+        sensor.Last().Sgv.Should().Be(real);
+        foreach (var phase in error.Phases.Where(p => p.ReadsTrue))
+            In(phase).Should().OnlyContain(entry => entry.AdditionalProperties == null);
+
+        var level = error.RealLevel;
+        var failing = In(error.Phases.Single(p => p.Name == failingPhase));
+        failing.Should().OnlyContain(entry => high ? entry.Sgv >= level + 35 : entry.Sgv <= level - 30,
+            "every reading of the failing sensor is false, flagged or not, whatever the generated trace");
+        failing.Count(entry => !Flagged(entry)).Should().BePositive("some carry no flag");
+
+        var flagged = sensor.Where(Flagged).ToList();
+        flagged.Should().OnlyContain(entry => (string)entry.AdditionalProperties!["quality"] == "Invalid");
+        var runs = new List<int>();
+        for (var i = 0; i < flagged.Count; i++)
+        {
+            if (i == 0 || flagged[i].Mills - flagged[i - 1].Mills > ErroneousReadingEpisodes.MergeGapMinutes * 60_000)
+                runs.Add(0);
+            runs[^1]++;
+        }
+        runs.Where(n => n >= ErroneousReadingEpisodes.MinInvalidReadings).Should().Equal(episodes);
+        runs.Count(n => n < ErroneousReadingEpisodes.MinInvalidReadings).Should().Be(alone);
+
+        var sticks = readings.Where(entry => entry.Type == "mbg").ToList();
+        sticks.Should().HaveCount(error.FingerstickMinutes.Length).And.OnlyContain(entry => entry.Mbg == level);
+        foreach (var stick in sticks)
+        {
+            var gap = sensor.Single(entry => entry.Mills == stick.Mills).Sgv!.Value - level;
+            (high ? gap : -gap).Should().BeInRange(45, 70, "the finger stick shows how far off the sensor is");
+        }
+        DemoCoverageSeeds.FingerstickTreatments(readings).Should().HaveCount(error.FingerstickMinutes.Length)
+            .And.OnlyContain(treatment => treatment.EventType == "BG Check" && treatment.Glucose == level);
+    }
+
+    [Theory]
+    [InlineData(9)]
+    [InlineData(47)]
+    public void CoverageSeeds_FailingSensorDaysFollowAPinnedLunch(int seed)
+    {
+        var end = new DateTime(2026, 10, 25, 23, 0, 0);
+        var generator = new DemoDataGenerator(
+            Options.Create(new DemoModeConfiguration { BackfillDays = 14, RandomSeed = seed }),
+            DemoTestClock.Host,
+            NullLogger<DemoDataGenerator>.Instance,
+            NullLoggerFactory.Instance);
+        var steps = generator.GenerateHistoricalTimeline(end).ToList();
+        var readings = steps.SelectMany(step => DemoCoverageSeeds.CgmReadings(step))
+            .Where(entry => entry.Device != DemoCoverageSeeds.ComparisonCgmSerial)
+            .ToList();
+        var days = steps.Select(step => step.Time.Date).Distinct()
+            .Where(day => DemoCoverageSeeds.SensorErrorOn(day) is not null && day < end.Date)
+            .ToList();
+
+        days.Should().HaveCount(2, "two weeks hold one false low and one false high");
+        foreach (var day in days)
+        {
+            var error = DemoCoverageSeeds.SensorErrorOn(day)!;
+            var lunchAt = day.Add(error.Lunch.ToTimeSpan());
+            steps.SelectMany(step => step.Treatments)
+                .Where(t => t.EventType == "Carbs" && t.FoodType == "Lunch"
+                         && DateTimeOffset.FromUnixTimeMilliseconds(t.Mills).LocalDateTime.Date == day)
+                .Should().ContainSingle().Which.Mills.Should().Be(new DateTimeOffset(lunchAt).ToUnixTimeMilliseconds());
+
+            var high = error.Phases.Any(p => p.OffsetTo > 0);
+            steps.SelectMany(step => step.ExtraEntries)
+                .Where(e => e.Type == "mbg" && e.Date!.Value.Date == day)
+                .Should().NotContain(e => DemoCoverageSeeds.IsAnchored(e.Date!.Value),
+                    "the routine finger sticks keep out of the planted stretch, whose value they don't read");
+            foreach (var stick in readings.Where(e => e.Type == "mbg" && e.Date!.Value.Date == day))
+            {
+                var gap = readings.Single(e => e.Type != "mbg" && e.Mills == stick.Mills).Sgv!.Value - stick.Mbg!.Value;
+                (high ? gap : -gap).Should().BeGreaterThanOrEqualTo(45, $"the finger stick at {stick.Date} shows the error");
+            }
+        }
     }
 
     [Theory]

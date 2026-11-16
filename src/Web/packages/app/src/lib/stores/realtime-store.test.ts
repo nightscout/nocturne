@@ -57,6 +57,7 @@ import type {
 import {
   SyncPhase,
   LegacyConsumableKind,
+  SensorGlucoseQuality,
   TrackerRealtimeAction,
   type InAppNotificationDto,
   type LegacyCoverageDto,
@@ -2094,6 +2095,16 @@ describe("loadInitialGlucose", () => {
     const entries = await loadInitialGlucose(clientWith(getAll), FROM);
 
     expect(entries.map((e) => e.sgv).sort()).toEqual([118, 120, 122, 125, 130]);
+  });
+
+  it("leaves out readings the sensor marked invalid, so a false value is never the current one", async () => {
+    const window = readings(52, 120, 118, 117, 116, 115).data;
+    window[0] = { ...window[0], quality: SensorGlucoseQuality.Invalid } as (typeof window)[number];
+    const getAll = vi.fn().mockResolvedValue({ data: window });
+
+    const entries = await loadInitialGlucose(clientWith(getAll), FROM);
+
+    expect(entries.map((e) => e.sgv)).toEqual([120, 118, 117, 116, 115]);
   });
 
   it("falls back to the newest readings when the window is empty, so a tenant with only old readings has a current one", async () => {

@@ -21,12 +21,14 @@ public interface IChartDataService
     /// <param name="endTime">End of the time range in Unix milliseconds</param>
     /// <param name="intervalMinutes">Interval for IOB/COB series sampling (1-60)</param>
     /// <param name="includeHealthSeries">Whether to load the heart-rate and step series; when false both are empty</param>
+    /// <param name="includeInvalidReadings">Whether the glucose series keeps the readings the sensor marked invalid</param>
     /// <returns>Fully populated dashboard chart data DTO</returns>
     Task<DashboardChartData> GetDashboardChartDataAsync(
         long startTime,
         long endTime,
         int intervalMinutes,
         bool includeHealthSeries,
+        bool includeInvalidReadings,
         CancellationToken cancellationToken = default
     );
 

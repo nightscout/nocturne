@@ -20,7 +20,7 @@ public class ChartDataControllerTests
     {
         _service
             .Setup(s => s.GetDashboardChartDataAsync(
-                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DashboardChartData());
         _service
             .Setup(s => s.GetBasalSeriesAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
@@ -43,7 +43,7 @@ public class ChartDataControllerTests
         OverCapDetail(result.Result).Should().Be($"Date range must not exceed {V4ReadLimits.MaxDateSpanDays} days.");
         _service.Verify(
             s => s.GetDashboardChartDataAsync(
-                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -64,7 +64,7 @@ public class ChartDataControllerTests
 
         _service.Verify(
             s => s.GetDashboardChartDataAsync(
-                Start, Start + 1, 5, includeHealthSeries, It.IsAny<CancellationToken>()),
+                Start, Start + 1, 5, includeHealthSeries, false, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -75,7 +75,31 @@ public class ChartDataControllerTests
 
         _service.Verify(
             s => s.GetDashboardChartDataAsync(
-                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()),
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), true, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetDashboardChartData_forwards_includeInvalidReadings(bool includeInvalidReadings)
+    {
+        await _controller.GetDashboardChartData(Start, Start + 1, includeInvalidReadings: includeInvalidReadings);
+
+        _service.Verify(
+            s => s.GetDashboardChartDataAsync(
+                Start, Start + 1, 5, true, includeInvalidReadings, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetDashboardChartData_leaves_invalid_readings_out_by_default()
+    {
+        await _controller.GetDashboardChartData(Start, Start + 1);
+
+        _service.Verify(
+            s => s.GetDashboardChartDataAsync(
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), false, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

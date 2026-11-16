@@ -78,6 +78,7 @@ public class ChartDataService : IChartDataService
         long endTime,
         int intervalMinutes,
         bool includeHealthSeries,
+        bool includeInvalidReadings,
         CancellationToken cancellationToken = default
     )
     {
@@ -87,6 +88,7 @@ public class ChartDataService : IChartDataService
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
             IncludeHealthSeries = includeHealthSeries,
+            IncludeInvalidReadings = includeInvalidReadings,
         };
 
         foreach (var stage in _pipeline)
@@ -177,6 +179,7 @@ public class ChartDataService : IChartDataService
                 Sgv = r.Mgdl,
                 Direction = r.Direction?.ToWireString(),
                 DataSource = r.DataSource ?? r.Device,
+                Quality = r.Quality,
             })
             .ToList(); // Already sorted
 

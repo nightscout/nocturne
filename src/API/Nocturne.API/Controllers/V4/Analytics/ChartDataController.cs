@@ -55,6 +55,8 @@ public class ChartDataController : ControllerBase
     /// <param name="intervalMinutes">Granularity of the returned series in minutes (1–60, default 5).</param>
     /// <param name="includeHealthSeries">Whether to return the raw heart-rate and step series (default true).
     /// Pass false when they are not drawn; both series are then empty.</param>
+    /// <param name="includeInvalidReadings">Whether the glucose series keeps the readings the sensor
+    /// marked invalid, each with its <c>quality</c> (default false). They count in nothing else.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A fully populated <see cref="DashboardChartData"/> object.</returns>
     /// <exception cref="Exception">Returns HTTP 500 if chart data calculation fails.</exception>
@@ -78,6 +80,7 @@ public class ChartDataController : ControllerBase
         [FromQuery] long endTime,
         [FromQuery] int intervalMinutes = 5,
         [FromQuery] bool includeHealthSeries = true,
+        [FromQuery] bool includeInvalidReadings = false,
         CancellationToken cancellationToken = default
     )
     {
@@ -95,6 +98,7 @@ public class ChartDataController : ControllerBase
             endTime,
             intervalMinutes,
             includeHealthSeries,
+            includeInvalidReadings,
             cancellationToken
         );
 

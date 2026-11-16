@@ -64,6 +64,14 @@ public interface ISensorGlucoseRepository
         GlucoseStreams streams = GlucoseStreams.All);
 
     /// <summary>
+    /// Partial readings of the canonical stream that keep the ones that don't count, with their
+    /// <see cref="SensorGlucose.Quality"/> and <see cref="SensorGlucose.SensorStatus"/>, for a chart
+    /// or a list that marks them. Not for statistics or alerts.
+    /// </summary>
+    Task<IEnumerable<SensorGlucose>> GetCanonicalWithUncountedAsync(
+        DateTime? from, DateTime? to, int limit, bool descending, CancellationToken ct = default);
+
+    /// <summary>
     /// Partial readings for <see cref="EntryProjection.FromSensorGlucose"/> only; omitted V4 fields
     /// must not leak into raw record responses.
     /// </summary>

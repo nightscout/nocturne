@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
-import type { DashboardChartData } from "#lib/api/generated/nocturne-api-client.js";
+import { SensorGlucoseQuality, type DashboardChartData } from "#lib/api/generated/nocturne-api-client.js";
 import { transformChartData } from "#lib/utils/chart-data-transform.js";
 import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
 import { createStaticChartEngine, type ChartDataEngine } from "./chart-data-view.svelte";
@@ -55,6 +55,19 @@ describe("createStaticChartEngine", () => {
     });
     expect(engine.medianGlucose).toBe(110);
     expect(engineFor({}).medianGlucose).toBe(100);
+  });
+
+  it("keeps readings the sensor marked invalid out of the line's series and the median", () => {
+    const engine = engineFor({
+      glucoseData: [
+        { time: at(0), sgv: 120 },
+        { time: at(5), sgv: 45, quality: SensorGlucoseQuality.Invalid },
+        { time: at(10), sgv: 130 },
+      ],
+    });
+    expect(engine.glucoseData.map((d) => d.sgv)).toEqual([120, 130]);
+    expect(engine.invalidGlucoseData.map((d) => d.sgv)).toEqual([45]);
+    expect(engine.medianGlucose).toBe(125);
   });
 
   it("clips spans to the window and drops those outside it", () => {

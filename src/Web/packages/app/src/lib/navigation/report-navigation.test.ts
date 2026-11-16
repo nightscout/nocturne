@@ -169,6 +169,7 @@ describe("a report made of several pages", () => {
 describe("reportSubRouteTitle", () => {
   it.each([
     ["/reports/data-quality/compression-lows", "Compression lows"],
+    ["/reports/data-quality/erroneous-readings", "Erroneous readings"],
     ["/reports/data-quality/sensor-integrity", "Signal integrity"],
     ["/reports/data-quality/cgm-comparison", "CGM comparison"],
     ["/reports/data-quality/rejected-uploads", "Rejected uploads"],

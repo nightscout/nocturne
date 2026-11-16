@@ -83,6 +83,14 @@ describe("ChartLegend", () => {
 			.not.toBeInTheDocument();
 	});
 
+	it("keys the outlined readings only when a reading in view was marked invalid", async () => {
+		const { rerender } = render(ChartLegend, createDefaultProps());
+		await expect.element(page.getByText("Sensor error")).not.toBeInTheDocument();
+
+		await rerender(createDefaultProps({ hasInvalidReadings: true }));
+		await expect.element(page.getByText("Sensor error")).toBeVisible();
+	});
+
 	it("shows core toggle labels: Basal, IOB, COB, Bolus, Carbs", async () => {
 		render(ChartLegend, createDefaultProps());
 

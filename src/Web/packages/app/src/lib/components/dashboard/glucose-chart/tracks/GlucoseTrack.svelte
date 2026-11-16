@@ -83,20 +83,27 @@
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
 
+  // The line runs through every reading, so a sensor error reads as one stretch of the trace;
+  // the invalid ones are outlined on top of it.
+  const lineData = $derived(ctx.engine.allGlucoseData);
   const glucoseData = $derived(ctx.engine.glucoseData);
+  const invalidData = $derived(ctx.engine.invalidGlucoseData);
   const bisectTime = bisector((d: GlucosePoint) => d.time);
-  const drawnData = $derived.by(() => {
-    if (!visibleOnly) return glucoseData;
+  function inView(series: GlucosePoint[]): GlucosePoint[] {
+    if (!visibleOnly) return series;
     const [from, to] = chartCtx.xScale.domain();
-    const start = Math.max(0, bisectTime.left(glucoseData, from) - 2);
-    return glucoseData.slice(start, bisectTime.right(glucoseData, to) + 2);
-  });
+    const start = Math.max(0, bisectTime.left(series, from) - 2);
+    return series.slice(start, bisectTime.right(series, to) + 2);
+  }
+  const drawnLine = $derived(inView(lineData));
+  const drawnData = $derived(inView(glucoseData));
+  const drawnInvalid = $derived(inView(invalidData));
   const glucoseScale = $derived(ctx.layout.glucose.scale);
   const glucoseAxisScale = $derived(ctx.layout.glucose.axisScale);
   const thresholds = $derived(ctx.engine.thresholds);
 
   // Only show points when density is reasonable (less than 0.5 points per pixel)
-  const pointDensity = $derived(glucoseData.length / chartCtx.width);
+  const pointDensity = $derived(lineData.length / chartCtx.width);
   const effectiveShowPoints = $derived(showPoints ?? pointDensity < 0.5);
 
   const effectivePointMode = $derived(
@@ -156,7 +163,7 @@
 {#snippet splineOrArea(stroke: string)}
   {#if areaMode === "off"}
     <Spline
-      data={drawnData}
+      data={drawnLine}
       x={(d) => d.time}
       y={(d) => glucoseScale(d.sgv)}
       {stroke}
@@ -174,7 +181,7 @@
     >
       {#snippet children({ gradient: fillGrad })}
         <Area
-          data={drawnData}
+          data={drawnLine}
           x={(d: GlucosePoint) => d.time}
           y1={(d: GlucosePoint) => glucoseScale(d.sgv)}
           {y0}
@@ -220,6 +227,20 @@
       r={3}
       fill={(d) => pointFill(d.sgv)}
       class="opacity-90"
+    />
+  {/if}
+
+  {#if drawnInvalid.length > 0}
+    <!-- Drawn even with points off, and outlined in the foreground colour like a finger stick,
+         so these readings are the ones the eye goes to. -->
+    <Circle
+      data={drawnInvalid}
+      key={(d) => d.time.getTime()}
+      cx={(d) => d.time}
+      cy={(d) => glucoseScale(d.sgv)}
+      r={3}
+      fill={(d) => pointFill(d.sgv)}
+      class="stroke-foreground [stroke-width:1]"
     />
   {/if}
 </ChartClipPath>

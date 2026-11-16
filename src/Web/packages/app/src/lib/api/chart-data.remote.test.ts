@@ -19,4 +19,12 @@ describe("getChartData", () => {
       expect.objectContaining({ includeHealthSeries: false })
     );
   });
+
+  it("passes on whether the chart marks invalid readings", async () => {
+    await getChartData({ startTime: 0, endTime: 1, intervalMinutes: 5, includeInvalidReadings: true });
+
+    expect(getDashboardChartData).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeInvalidReadings: true })
+    );
+  });
 });

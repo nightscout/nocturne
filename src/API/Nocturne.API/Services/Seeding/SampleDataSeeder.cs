@@ -434,14 +434,15 @@ public class SampleDataSeeder
             // Deterministic legacy id, so writing a step again updates its readings in place.
             entry.Id = $"{entry.Mills:x16}{EntryKindCode(entry.Type):x8}";
         }
-        foreach (var treatment in step.Treatments)
+        List<Treatment> treatments = [.. step.Treatments, .. DemoCoverageSeeds.FingerstickTreatments(readings)];
+        foreach (var treatment in treatments)
             treatment.DataSource = dataSource;
 
         var status = DemoDeviceStatusGenerator.ForStep(step, clock.Demo, config.TargetGlucose, config.BasalRate);
         // Deterministic legacy id, so a re-seed skips the statuses it already wrote.
         status?.Id = status.Mills.ToString("x24");
 
-        return new StepRecords(entries, step.Treatments, status, readings.Count > 0);
+        return new StepRecords(entries, treatments, status, readings.Count > 0);
     }
 
     private static int EntryKindCode(string? type) => type switch

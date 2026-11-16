@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Tooltip, getChartContext } from "layerchart";
   import { cn } from "#lib/utils/index.js";
-  import { BasalDeliveryOrigin, ChartSpanKind } from "#lib/api/generated/nocturne-api-client.js";
+  import { BasalDeliveryOrigin, ChartSpanKind, SensorGlucoseQuality } from "#lib/api/generated/nocturne-api-client.js";
   import {
     bg,
     bgLabel,
@@ -99,6 +99,14 @@
           color="var(--glucose-in-range)"
           class="text-popover-foreground font-bold"
         />
+        {#if data.quality === SensorGlucoseQuality.Invalid}
+          <Tooltip.Item
+            label="Sensor error"
+            value="Not used in statistics"
+            color="var(--muted-foreground)"
+            class="text-muted-foreground"
+          />
+        {/if}
       {/if}
       {#if showBolus && nearbyBolus}
         <Tooltip.Item

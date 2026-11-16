@@ -4,6 +4,12 @@
   import { getGlucoseColor } from "#lib/utils/chart-colors.js";
   import { markerKey } from "#lib/utils/chart-data-merge.js";
 
+  /**
+   * Outline each diamond in the foreground colour instead of cutting it out of the chart, for a
+   * chart that draws highlighted stretches behind it, where the cut-out shows as a white edge.
+   */
+  let { outlined = false }: { outlined?: boolean } = $props();
+
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
 
@@ -22,8 +28,8 @@
         <polygon
           points="0,-7 7,0 0,7 -7,0"
           fill={color}
-          class="stroke-background"
-          stroke-width="2"
+          class={outlined ? "stroke-foreground" : "stroke-background"}
+          stroke-width={outlined ? 1.5 : 2}
         />
       </Group>
     {/each}

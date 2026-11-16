@@ -414,7 +414,7 @@
 
     {#if engine.glucoseData.length > 0}
       <MiniOverviewChart
-        data={engine.glucoseData}
+        data={engine.allGlucoseData}
         fullXDomain={[engine.fullXDomain.from, engine.fullXDomain.to]}
         selectedXDomain={miniSelectedDomain}
         yDomain={[0, engine.thresholds.glucoseYMax]}
@@ -440,6 +440,7 @@
     <ChartLegend
       {glucoseUnits}
       glucoseData={engine.glucoseData}
+      hasInvalidReadings={engine.invalidGlucoseData.length > 0}
       highThreshold={engine.thresholds.high}
       lowThreshold={engine.thresholds.low}
       veryHighThreshold={engine.thresholds.veryHigh}

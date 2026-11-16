@@ -284,11 +284,34 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             .ToListAsync(ct);
     }
 
+    public async Task<IEnumerable<SensorGlucose>> GetCanonicalWithUncountedAsync(
+        DateTime? from, DateTime? to, int limit, bool descending, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await BuildReadQuery(ctx, from, to, null, null, limit, 0,
+                descending, null, null, null, GlucoseStreams.Canonical, includeUncounted: true)
+            .Select(e => new SensorGlucose
+            {
+                Id = e.Id,
+                Timestamp = e.Timestamp,
+                Mgdl = e.Mgdl,
+                PatientDeviceId = e.PatientDeviceId,
+                DataSource = e.DataSource,
+                Device = e.Device,
+                UtcOffset = e.UtcOffset,
+                Direction = SensorGlucoseMapper.ParseDirection(e.Direction),
+                Quality = SensorGlucoseMapper.ParseQuality(e.Quality),
+                SensorStatus = e.SensorStatus,
+            })
+            .ToListAsync(ct);
+    }
+
     private IQueryable<SensorGlucoseEntity> BuildReadQuery(
         NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
-        GlucoseStreams streams, bool orderByValue = false, bool countedOnly = false)
+        GlucoseStreams streams, bool orderByValue = false, bool countedOnly = false,
+        bool includeUncounted = false)
     {
         return PagedRead(
             ctx.SensorGlucose.AsNoTracking(), from, to, device, source, limit, offset, descending,
@@ -298,7 +321,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                     query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
                 if (streams != GlucoseStreams.All)
                     query = query.Where(e => !e.IsSecondaryStream);
-                if (streams != GlucoseStreams.All || countedOnly)
+                if (!includeUncounted && (streams != GlucoseStreams.All || countedOnly))
                     query = query.CountedInStatistics();
                 if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
                     query = query.Where(e => e.DataSource == null

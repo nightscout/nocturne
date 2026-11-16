@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
@@ -182,6 +183,9 @@ public class GlucosePointDto
     public double Sgv { get; set; }
     public string? Direction { get; set; }
     public string? DataSource { get; set; }
+
+    /// <summary>The sensor's verdict, so the chart can mark a reading statistics leave out.</summary>
+    public SensorGlucoseQuality? Quality { get; set; }
 }
 
 /// <summary>

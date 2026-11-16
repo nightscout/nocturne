@@ -295,6 +295,19 @@ export const getDataQualityReport = query(
 );
 
 /**
+ * Sensor-error episodes for a date range: readings the sensor flagged, sensor-error spans and
+ * Trio's sensor-state notes, grouped into episodes and days by the API.
+ */
+export const getErroneousReadingsReport = query(
+  DateRangeSchema.optional(),
+  async (input) => {
+    const { apiClient } = getRequestEvent().locals;
+    const { startDate, endDate } = await resolveReportRange(input, 14);
+    return apiClient.erroneousReadings.getErroneousReadings(startDate, endDate);
+  }
+);
+
+/**
  * Input schema for site change impact analysis. Uses nullish() for date fields
  * to match date-params hook.
  */

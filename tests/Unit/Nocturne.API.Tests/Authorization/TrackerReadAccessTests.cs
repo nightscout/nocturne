@@ -105,7 +105,7 @@ public class TrackerReadAccessTests
         var service = new Mock<IChartDataService>();
         service
             .Setup(s => s.GetDashboardChartDataAsync(
-                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DashboardChartData { TrackerMarkers = [new TrackerMarkerDto()] });
 
         var controller = new ChartDataController(service.Object, NullLogger<ChartDataController>.Instance)

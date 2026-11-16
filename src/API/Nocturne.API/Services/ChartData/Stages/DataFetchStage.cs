@@ -83,17 +83,24 @@ internal sealed class DataFetchStage(
         // stream, not blended concurrent CGMs.
         var sensorGlucoseTask = FetchCanonicalGlucoseAsync();
         async Task<List<SensorGlucose>> FetchCanonicalGlucoseAsync() =>
-            (await sensorGlucoseRepository.GetForAnalyticsAsync(
-                from: startTime.ToUtcDateTime(),
-                to: endTime.ToUtcDateTime(),
-                device: null,
-                source: null,
-                limit: entryLimit,
-                offset: 0,
-                descending: true,
-                ct: cancellationToken,
-                streams: GlucoseStreams.Canonical
-            )).ToList();
+            (context.IncludeInvalidReadings
+                ? await sensorGlucoseRepository.GetCanonicalWithUncountedAsync(
+                    from: startTime.ToUtcDateTime(),
+                    to: endTime.ToUtcDateTime(),
+                    limit: entryLimit,
+                    descending: true,
+                    ct: cancellationToken)
+                : await sensorGlucoseRepository.GetForAnalyticsAsync(
+                    from: startTime.ToUtcDateTime(),
+                    to: endTime.ToUtcDateTime(),
+                    device: null,
+                    source: null,
+                    limit: entryLimit,
+                    offset: 0,
+                    descending: true,
+                    ct: cancellationToken,
+                    streams: GlucoseStreams.Canonical)
+            ).ToList();
 
         var bolusTask = bolusRepository.GetAsync(
             from: window.InsulinReadStart.ToUtcDateTime(),

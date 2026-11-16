@@ -96,6 +96,17 @@ public class SensorGlucoseRepositoryQualityTests : IDisposable
     }
 
     [Fact]
+    public async Task ADisplayRead_KeepsInvalidReadingsMarked()
+    {
+        await SeedEpisodeAsync();
+
+        var read = (await _repo.GetCanonicalWithUncountedAsync(null, null, limit: 100, descending: false)).ToList();
+
+        read.Should().HaveCount(13);
+        read.Select(r => r.Quality).Should().StartWith([null, SensorGlucoseQuality.Uncertain, SensorGlucoseQuality.Invalid]);
+    }
+
+    [Fact]
     public async Task History_DeliversAnInvalidReadingAsDeleted()
     {
         await _repo.CreateAsync(Reading(0, 110, null), WriteOrigin.Live);

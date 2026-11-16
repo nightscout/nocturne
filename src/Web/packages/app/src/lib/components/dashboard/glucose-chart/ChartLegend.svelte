@@ -1,5 +1,6 @@
 <script lang="ts">
   import { DeviceEventType } from "#lib/api/index.js";
+  import SensorErrorSwatch from "./SensorErrorSwatch.svelte";
   import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
   import type { Snippet } from "svelte";
   import { cn } from "#lib/utils/index.js";
@@ -93,6 +94,8 @@
 
     // Marks keyed only on paper, where there is no tooltip to name them
     hasBgChecks?: boolean;
+    /** A reading in view was marked invalid, so the chart outlines it. */
+    hasInvalidReadings?: boolean;
     /** Hatched basal: inferred from the schedule, or past the pump's last sync. */
     hasUnreportedBasal?: boolean;
     hasScheduledBasal?: boolean;
@@ -137,6 +140,7 @@
     expandedPumpModes,
     onToggleExpandedPumpModes,
     hasBgChecks = false,
+    hasInvalidReadings = false,
     hasUnreportedBasal = false,
     hasScheduledBasal = false,
     targetLow = null,
@@ -236,6 +240,7 @@
 {#snippet bgCheckSwatch()}<svg class="h-3 w-3" viewBox="-8 -8 16 16" aria-hidden="true">
     <polygon points="0,-7 7,0 0,7 -7,0" fill="currentColor" />
   </svg>{/snippet}
+{#snippet sensorErrorSwatch()}<SensorErrorSwatch />{/snippet}
 {#snippet hatchSwatch()}<TextureSwatch texture="basal-unreported" color="transparent" />{/snippet}
 {#snippet overrideIcon()}<div
     class="w-3 h-2 rounded border border-pump-mode-boost bg-pump-mode-boost opacity-30"
@@ -270,6 +275,9 @@
   {/if}
   {#if glucoseData.some((d) => d.sgv < veryLowThreshold)}
     {@render glucoseRangeIndicator("bg-glucose-very-low", "Very low", `<${bg(veryLowThreshold, glucoseUnits)}`)}
+  {/if}
+  {#if hasInvalidReadings}
+    {@render legendIndicator(sensorErrorSwatch, "Sensor error")}
   {/if}
   {@render printKey(rangeLimitSwatch, `Range limits ${bg(lowThreshold, glucoseUnits)} / ${bg(highThreshold, glucoseUnits)}`)}
   {#if targetLabel}

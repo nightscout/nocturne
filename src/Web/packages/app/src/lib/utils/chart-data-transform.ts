@@ -56,6 +56,7 @@ export function transformChartData(data: DashboardChartData) {
       sgv: p.sgv ?? 0,
       direction: p.direction,
       dataSource: p.dataSource,
+      quality: p.quality,
       color: getGlucoseColor(p.sgv ?? 0, thresholds),
     })),
     thresholds,
