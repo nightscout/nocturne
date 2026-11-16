@@ -40246,3 +40246,54 @@ msgstr ""
 #: src/lib/components/connectors/OuraImportCard.svelte
 msgid "Sleep sessions: {0}. Heart rate readings: {1}. Days of steps: {2}."
 msgstr ""
+
+#: src/routes/(authenticated)/+layout.svelte
+msgid "The import from Nightscout is complete."
+msgstr ""
+
+#: src/routes/(authenticated)/+layout.svelte
+msgid "The import from Nightscout did not import everything. See Settings."
+msgstr ""
+
+#. 0: percent
+#: src/lib/components/migration/ImportInBackgroundBanner.svelte
+msgid "Importing history from Nightscout: {0}% <0/>"
+msgstr ""
+
+#: src/lib/components/migration/ImportInBackgroundBanner.svelte
+#: src/lib/components/migration/ImportInBackgroundNotice.svelte
+msgid "See the import"
+msgstr ""
+
+#: src/lib/components/migration/ImportInBackgroundNotice.svelte
+msgid "Your recent data is ready."
+msgstr ""
+
+#: src/lib/components/migration/ImportInBackgroundNotice.svelte
+msgid "Nocturne is importing your data."
+msgstr ""
+
+#: src/lib/components/migration/ImportInBackgroundNotice.svelte
+msgid "Nocturne is still importing the older history from Nightscout. You can use Nocturne while the import continues. Older dates show data when their history arrives."
+msgstr ""
+
+#: src/lib/components/migration/ImportInBackgroundNotice.svelte
+msgid "Nocturne imports the newest data from Nightscout first. You can use Nocturne while the import continues."
+msgstr ""
+
+#: src/lib/components/migration/ImportInBackgroundNotice.svelte
+msgid "Import progress"
+msgstr ""
+
+#. 0: percent
+#: src/lib/components/migration/ImportInBackgroundNotice.svelte
+msgid "{0}% imported <0/>"
+msgstr ""
+
+#: src/lib/components/migration/ImportInBackgroundNotice.svelte
+msgid "Continue to Nocturne <0/>"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/Finish.svelte
+msgid "The recent data from Nightscout is in Nocturne. The older history is still importing, and you can use Nocturne while the import continues."
+msgstr ""
