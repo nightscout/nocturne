@@ -3,6 +3,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import sodium from "libsodium-wrappers";
 import * as keystore from "#lib/app-builds/keystore.js";
+import * as sealing from "#lib/app-builds/sealed-secret.js";
 import type { SigningKeystore } from "#lib/app-builds/keystore.js";
 import { appBuildsMocks } from "#lib/test-stubs/app-builds.js";
 import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
@@ -21,6 +22,11 @@ vi.mock("#lib/app-builds/keystore.js", async (importOriginal) => {
     importKeystore: vi.fn(actual.importKeystore),
     createKeystore: vi.fn(actual.createKeystore),
   };
+});
+vi.mock("#lib/app-builds/sealed-secret.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#lib/app-builds/sealed-secret.js")>();
+  return { sealSecret: vi.fn(actual.sealSecret) };
 });
 
 const PROPS = { targetId: "aaps", secretName: "KEYSTORE_SET", appName: "AAPS" };
@@ -138,6 +144,11 @@ describe("SigningKeyStep", () => {
     await expect.element(page.getByLabelText(/Keystore file/)).toBeDisabled();
     await expect.element(button("Make a new key")).toBeDisabled();
     await expect.element(button("Import my key")).toBeDisabled();
+    await expect
+      .element(page.getByLabelText("Keystore password", { exact: true }))
+      .toBeDisabled();
+    await expect.element(page.getByLabelText("Key alias")).toBeDisabled();
+    await expect.element(page.getByRole("checkbox")).toBeDisabled();
     hold.open();
     await expect
       .element(page.getByText("The keystore and the passwords are correct."))
@@ -227,5 +238,69 @@ describe("SigningKeyStep", () => {
     hold.open();
 
     await expect.poll(() => isZeroed(late!.bytes)).toBe(true);
+  });
+
+  it("clears the alias for each new file before it reads the file's names", async () => {
+    const existing = await keystore.createKeystore("Existing#1");
+    render(SigningKeyStep, PROPS);
+
+    await button("Import my key").click();
+    await page
+      .getByLabelText(/Keystore file/)
+      .upload(new File([existing.bytes.slice()], "upload.p12"));
+    await expect.element(page.getByLabelText("Key alias")).toHaveValue("key0");
+
+    await page
+      .getByLabelText(/Keystore file/)
+      .upload(new File([new Uint8Array([0x30, 0x00])], "unnamed.p12"));
+
+    await expect.element(page.getByLabelText("Key alias")).toHaveValue("");
+  });
+
+  it("refuses a file over the size limit before it reads it", async () => {
+    render(SigningKeyStep, PROPS);
+    const large = new Uint8Array(keystore.MAX_KEYSTORE_BYTES + 1);
+    large[0] = 0x30;
+    const file = new File([large], "large.p12");
+    const read = vi.spyOn(Blob.prototype, "arrayBuffer");
+
+    await button("Import my key").click();
+    await page.getByLabelText(/Keystore file/).upload(file);
+
+    await expect
+      .element(
+        page.getByText("This file is too large to be a signing keystore.")
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByLabelText("Keystore password", { exact: true }))
+      .not.toBeInTheDocument();
+    expect(read).not.toHaveBeenCalled();
+    read.mockRestore();
+  });
+
+  it("sends nothing when the step is left after the key is packed and before it is sent", async () => {
+    await repositoryKey();
+    const hold = gate();
+    let packed = false;
+    const actual = vi.mocked(sealing.sealSecret).getMockImplementation()!;
+    vi.mocked(sealing.sealSecret).mockImplementationOnce(async (value, key) => {
+      packed = true;
+      await hold.opened;
+      return actual(value, key);
+    });
+    const onSaved = vi.fn();
+    const screen = render(SigningKeyStep, { ...PROPS, onSaved });
+
+    await makeKeyAndDownload();
+    await button("Save the key to GitHub").click();
+    await expect.poll(() => packed).toBe(true);
+
+    screen.unmount();
+    hold.open();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(appBuildsMocks.put).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
   });
 });

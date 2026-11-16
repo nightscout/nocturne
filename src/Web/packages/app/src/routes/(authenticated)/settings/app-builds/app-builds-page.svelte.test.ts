@@ -15,6 +15,7 @@ import {
   type BuildTarget,
 } from "#lib/api/index.js";
 import { appBuildsMocks } from "#lib/test-stubs/app-builds.js";
+import { afterNavigateCallbacks } from "#lib/test-stubs/app-navigation.js";
 import {
   createQueryResource,
   remoteQuery,
@@ -359,6 +360,7 @@ describe("App builds page", () => {
     page.url = new URL(
       "http://localhost/settings/app-builds?target=aaps&linked=success"
     );
+    afterNavigateCallbacks.length = 0;
     render(AppBuildsPage, { linked: "success" });
 
     await expect
@@ -366,7 +368,14 @@ describe("App builds page", () => {
         browserPage.getByText("The repository is connected to Nocturne.")
       )
       .toBeVisible();
+    expect(page.url.search).not.toBe("");
+    for (const callback of afterNavigateCallbacks) callback({ type: "enter" });
     expect(page.url.search).toBe("");
+    await expect
+      .element(
+        browserPage.getByText("The repository is connected to Nocturne.")
+      )
+      .toBeVisible();
 
     await button("Disconnect the repository").click();
     await button("Disconnect").click();
@@ -390,6 +399,66 @@ describe("App builds page", () => {
     await expect.element(button("Make a new key")).toBeVisible();
     await button("Cancel").click();
     await expect.element(button("Import my key")).not.toBeInTheDocument();
+  });
+
+  it("does not offer Cancel while a replacement key is being saved", async () => {
+    linked(link(AppBuildLinkState.Ready));
+    appBuildsMocks.runs.mockReturnValue(remoteQuery(() => []));
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    appBuildsMocks.secretKey.mockReturnValue(
+      createQueryResource(async () => {
+        await held;
+        await sodium.ready;
+        return {
+          keyId: "1",
+          key: sodium.to_base64(
+            sodium.crypto_box_keypair().publicKey,
+            sodium.base64_variants.ORIGINAL
+          ),
+        };
+      })
+    );
+    appBuildsMocks.put.mockResolvedValue({});
+    render(AppBuildsPage);
+
+    await button("Replace the signing key").click();
+    await button("Make a new key").click();
+    await browserPage
+      .getByLabelText("Password for the new key")
+      .fill("Secret#Pass1");
+    await browserPage
+      .getByLabelText("Type the password again")
+      .fill("Secret#Pass1");
+    await button("Make the key").click();
+    await button("Download the backup file").click();
+    await button("Save the key to GitHub").click();
+
+    await expect.element(button("Cancel")).toBeDisabled();
+    release();
+    await expect
+      .element(
+        browserPage.getByText(
+          "The new signing key is saved. The next build uses it."
+        )
+      )
+      .toBeVisible();
+  });
+
+  it("words a bare 403 as a permission refusal", async () => {
+    linked(link(AppBuildLinkState.Ready));
+    appBuildsMocks.dispatch.mockRejectedValue(refused(403, "Forbidden"));
+    render(AppBuildsPage);
+
+    await button("Start build").click();
+
+    await expect
+      .element(
+        browserPage.getByText(
+          "You must have permission to change the site settings."
+        )
+      )
+      .toBeVisible();
   });
 
   it("does not offer a person who did not link it to replace the key", async () => {

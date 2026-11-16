@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { untrack } from "svelte";
   import { page } from "$app/state";
-  import { replaceState } from "$app/navigation";
+  import { afterNavigate, replaceState } from "$app/navigation";
   import Hammer from "@lucide/svelte/icons/hammer";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
@@ -43,13 +43,19 @@
     !dismissed && outcome.error ? callbackErrorText(outcome.error) : null
   );
 
-  onMount(() => {
+  // afterNavigate, not onMount: on a full load it runs once the router has hydrated, and
+  // replaceState before that rejects in development.
+  afterNavigate(() => {
     if (!outcome.linked && !outcome.error) return;
     const url = new URL(page.url.href);
+    if (
+      !["linked", "error", "target"].some((name) => url.searchParams.has(name))
+    )
+      return;
     for (const name of ["linked", "error", "target"])
       url.searchParams.delete(name);
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus its query, already resolved
-    replaceState(url, page.state);
+    void replaceState(url, page.state)?.catch(() => {});
   });
 </script>
 
@@ -67,8 +73,7 @@
     <div>
       <h1 class="text-2xl font-bold tracking-tight">App builds</h1>
       <p class="text-muted-foreground">
-        Build the AAPS app in your own GitHub repository, signed with your own
-        key.
+        Build an app in your own GitHub repository, signed with your own key.
       </p>
     </div>
   </div>
