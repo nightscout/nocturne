@@ -156,7 +156,7 @@ public sealed class SealedAppBuildSecret
 
 public sealed class DispatchAppBuildRequest
 {
-    /// <summary>Input values by name. An omitted input takes its <see cref="BuildTargetInput.Default"/>.</summary>
+    /// <summary>Input values by name. An omitted input takes its <see cref="BuildInput.Default"/>.</summary>
     public Dictionary<string, string> Inputs { get; set; } = [];
 }
 
