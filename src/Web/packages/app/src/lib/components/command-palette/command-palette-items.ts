@@ -17,6 +17,7 @@ import Clock from "@lucide/svelte/icons/clock";
 import Cpu from "@lucide/svelte/icons/cpu";
 import Droplet from "@lucide/svelte/icons/droplet";
 import FileSearch from "@lucide/svelte/icons/file-search";
+import Hammer from "@lucide/svelte/icons/hammer";
 import House from "@lucide/svelte/icons/house";
 import LifeBuoy from "@lucide/svelte/icons/life-buoy";
 import Link from "@lucide/svelte/icons/link";
@@ -302,6 +303,15 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["site", "tenant", "name", "display name", "address"],
 		icon: Building,
 		href: "/settings/site",
+		scope: "tenant.settings",
+	},
+	{
+		id: "settings-app-builds",
+		label: "App builds",
+		group: "settings",
+		keywords: ["aaps", "build", "apk", "github", "keystore", "signing key"],
+		icon: Hammer,
+		href: "/settings/app-builds",
 		scope: "tenant.settings",
 	},
 	{
