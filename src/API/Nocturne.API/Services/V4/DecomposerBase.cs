@@ -447,7 +447,7 @@ public abstract class DecomposerBase
     /// sync scope's own audit context.
     /// </remarks>
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
-        => SystemAuditScope.Push(auditContext);
+        => SystemAuditScope.Push(auditContext, keepWriter: true);
 
     protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
     {

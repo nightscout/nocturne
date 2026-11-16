@@ -31,7 +31,7 @@ public class MutationAuditLogEntityTests
             Guid.NewGuid(), context, "Entry", Guid.NewGuid(), "update", "{}", DateTime.UtcNow);
 
         var actorProperties = typeof(IAuditContext).GetProperties()
-            .Where(p => p.Name != nameof(IAuditContext.IsSystem))
+            .Where(p => p.Name is not (nameof(IAuditContext.IsSystem) or nameof(IAuditContext.WriterGrantId)))
             .ToList();
         actorProperties.Should().NotBeEmpty();
 

@@ -29,4 +29,11 @@ public interface IAuditContext
     /// false (user-attributed actions), so every existing implementer stays auditable.
     /// </summary>
     bool IsSystem => false;
+
+    /// <summary>
+    /// The grant a row inserted in this scope is stamped with as its writer: the actor's own
+    /// (<see cref="AuditContextExtensions.GrantId"/>), which an uploader's batch keeps while its
+    /// saves are system-attributed to stay out of the mutation audit log.
+    /// </summary>
+    Guid? WriterGrantId => this.GrantId();
 }

@@ -24,6 +24,12 @@ public class AuditContext : IAuditContext, ISystemAttributable
     public string? Endpoint { get; set; }
     public bool IsSystem { get; set; }
 
+    /// <summary>The writer a system-attributed stretch keeps (<see cref="SystemAuditScope"/>).</summary>
+    internal Guid? KeptWriterGrantId { get; set; }
+
+    /// <inheritdoc />
+    public Guid? WriterGrantId => KeptWriterGrantId ?? this.GrantId();
+
     /// <summary>Takes every actor field of <paramref name="source"/>.</summary>
     public void CopyFrom(IAuditContext source)
     {
@@ -44,6 +50,7 @@ public class AuditContext : IAuditContext, ISystemAttributable
         SubjectId = null;
         SubjectName = null;
         TokenId = null;
+        KeptWriterGrantId = null;
         IpAddress = null;
         AuthType = system.AuthType;
         Endpoint = system.Endpoint;

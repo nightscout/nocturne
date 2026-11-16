@@ -20,9 +20,13 @@ public sealed class SystemAuditScope : IDisposable
     private readonly Guid? _tokenId;
     private readonly string? _ipAddress;
     private readonly bool _isSystem;
+    private readonly Guid? _keptWriter;
 
-    private SystemAuditScope(AuditContext target)
+    private SystemAuditScope(AuditContext target, bool keepWriter)
     {
+        _keptWriter = target.KeptWriterGrantId;
+        target.KeptWriterGrantId = keepWriter ? target.WriterGrantId : null;
+
         _target = target;
         _subjectId = target.SubjectId;
         _subjectName = target.SubjectName;
@@ -45,9 +49,16 @@ public sealed class SystemAuditScope : IDisposable
     /// <see cref="AuditContext"/> (e.g. a test double exposing only the interface),
     /// so callers can use the scope uniformly without null-checking.
     /// </summary>
-    public static IDisposable Push(IAuditContext ambient)
+    /// <param name="ambient">The scope's audit context.</param>
+    /// <param name="keepWriter">
+    /// Whether rows inserted inside the scope are still stamped with the caller's grant
+    /// (<see cref="IAuditContext.WriterGrantId"/>). True for an uploader's own batch, which is
+    /// system-attributed only to stay out of the audit log; false for work the caller started and
+    /// did not write, such as a connector sync.
+    /// </param>
+    public static IDisposable Push(IAuditContext ambient, bool keepWriter = false)
         => ambient is AuditContext mutable
-            ? new SystemAuditScope(mutable)
+            ? new SystemAuditScope(mutable, keepWriter)
             : NoOpScope.Instance;
 
     public void Dispose()
@@ -58,6 +69,7 @@ public sealed class SystemAuditScope : IDisposable
         _target.TokenId = _tokenId;
         _target.IpAddress = _ipAddress;
         _target.IsSystem = _isSystem;
+        _target.KeptWriterGrantId = _keptWriter;
     }
 
     private sealed class NoOpScope : IDisposable
