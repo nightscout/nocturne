@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
@@ -100,10 +101,11 @@ public class ClockFacesController : ControllerBase
             return NotFound();
         }
 
-        // Latest two readings: the newest drives the value/trend; the previous is a delta fallback.
+        // Latest two canonical readings: the newest drives the value/trend; the previous is a delta fallback.
         var readings = await _sensorGlucoseRepository.GetAsync(
             from: null, to: null, device: null, source: null,
-            limit: 2, offset: 0, descending: true, ct: HttpContext.RequestAborted);
+            limit: 2, offset: 0, descending: true, ct: HttpContext.RequestAborted,
+            streams: GlucoseStreams.Canonical);
 
         var dtos = readings.Select(r => new ClockGlucoseDto
         {

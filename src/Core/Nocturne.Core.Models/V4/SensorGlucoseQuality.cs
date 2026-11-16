@@ -6,8 +6,10 @@ namespace Nocturne.Core.Models.V4;
 /// The uploader's verdict, from the sensor's own state, on whether a reading can be trusted.
 /// </summary>
 /// <remarks>
-/// <c>null</c> means the uploader did not report one. The vendor's own state is kept beside it in
-/// <see cref="SensorGlucose.SensorStatus"/>.
+/// <c>null</c> means the uploader did not report one, and the reading counts as before. The vendor's
+/// own state is kept beside it in <see cref="SensorGlucose.SensorStatus"/>. <see cref="Invalid"/>
+/// readings are stored and returned, marked, but statistics and alerts leave them out
+/// (<see cref="SensorGlucoseQualityRules"/>).
 /// </remarks>
 [JsonConverter(typeof(JsonStringEnumConverter<SensorGlucoseQuality>))]
 public enum SensorGlucoseQuality
@@ -27,4 +29,20 @@ public enum SensorGlucoseQuality
     /// <see cref="SensorGlucose.SensorStatus"/>.
     /// </summary>
     Invalid,
+}
+
+/// <summary>The one rule for which readings statistics and alerts use.</summary>
+public static class SensorGlucoseQualityRules
+{
+    /// <summary>
+    /// False for <see cref="SensorGlucoseQuality.Invalid"/>: the sensor itself said the value is not
+    /// glucose. Leaving it out turns an error episode into missing data, so time in range treats it
+    /// as uncovered time rather than time out of range, and a single-stream reader (v1/v3, alerts),
+    /// which can't see the field, never acts on the value.
+    /// </summary>
+    public static bool CountsInStatistics(this SensorGlucose reading) =>
+        reading.Quality != SensorGlucoseQuality.Invalid;
+
+    /// <summary>The stored form of <see cref="SensorGlucoseQuality.Invalid"/>, for query filters.</summary>
+    public const string InvalidStored = nameof(SensorGlucoseQuality.Invalid);
 }

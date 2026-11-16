@@ -118,7 +118,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, afterTimestamp, afterId, patientDeviceId, streams, orderByValue)
+                descending, afterTimestamp, afterId, patientDeviceId, streams, orderByValue: orderByValue)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -151,7 +151,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <summary>
     /// Canonical-stream gate for the single-stream surfaces: a live write reaches v1/v3 realtime
     /// clients and the Home Assistant relay only as a canonical read shows it, so neither a duplicate
-    /// copy nor another stream's losing reading interleaves into their feed. Runs after the write's
+    /// copy, another stream's losing reading nor an invalid one interleaves into their feed. Runs after the write's
     /// dedup, so it reads the flags both left. Failures fail open: a broadcast is better than a silent
     /// drop.
     /// </summary>
@@ -164,6 +164,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             var ids = models.Select(m => m.Id).ToArray();
             var shown = (await ctx.SensorGlucose.AsNoTracking()
                     .ExcludeDuplicates()
+                    .CountedInStatistics()
                     .Where(e => ids.Contains(e.Id) && !e.IsSecondaryStream)
                     .Select(e => e.Id)
                     .ToListAsync(ct))
@@ -268,7 +269,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, afterTimestamp, afterId, patientDeviceId, streams)
+                descending, afterTimestamp, afterId, patientDeviceId, streams, countedOnly: true)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -287,7 +288,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
-        GlucoseStreams streams, bool orderByValue = false)
+        GlucoseStreams streams, bool orderByValue = false, bool countedOnly = false)
     {
         return PagedRead(
             ctx.SensorGlucose.AsNoTracking(), from, to, device, source, limit, offset, descending,
@@ -297,6 +298,8 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                     query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
                 if (streams != GlucoseStreams.All)
                     query = query.Where(e => !e.IsSecondaryStream);
+                if (streams != GlucoseStreams.All || countedOnly)
+                    query = query.CountedInStatistics();
                 if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
                     query = query.Where(e => e.DataSource == null
                         || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));
@@ -533,7 +536,10 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             nameof(SensorGlucose),
             ct);
 
-        return entities.Select(e => new HistoryRecord<SensorGlucose>(ToDomain(e), e.DeletedAt is not null)).ToList();
+        return entities
+            .Select(e => (Reading: ToDomain(e), e.DeletedAt))
+            .Select(r => new HistoryRecord<SensorGlucose>(r.Reading, r.DeletedAt is not null || !r.Reading.CountsInStatistics()))
+            .ToList();
     }
 
     /// <inheritdoc />
