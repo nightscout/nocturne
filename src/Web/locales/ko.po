@@ -59,11 +59,11 @@ msgstr ""
 msgid "Using cached data"
 msgstr ""
 
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/compatibility/test/+page.svelte
@@ -77,14 +77,15 @@ msgid "Connection failed"
 msgstr ""
 
 #: src/lib/components/ConnectionStatus.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
@@ -303,8 +304,9 @@ msgstr ""
 #~ msgid "Failed to connect to real-time data"
 #~ msgstr ""
 
-#~ msgid "Syncing"
-#~ msgstr ""
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
+msgid "Syncing"
+msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/components/treatments/edit-dialog/NoteFormFields.svelte
@@ -412,10 +414,7 @@ msgstr ""
 #: src/lib/components/alerts/CriticalAlertTakeover.svelte
 #: src/lib/components/clock/ClockAlertBand.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/lib/components/dashboard/BGStatisticsCards.svelte
 #: src/lib/components/dashboard/BGStatisticsCards.svelte
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
@@ -435,7 +434,6 @@ msgstr ""
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
-#: src/lib/components/settings/ClientDevices.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -447,7 +445,6 @@ msgstr ""
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
@@ -455,21 +452,13 @@ msgid "Unknown"
 msgstr ""
 
 #. 0: credential.createdAt ? formatMediumDateTime(credential.createdAt) \\: "Unknown"
-#. 0: formatMediumDateTime(grant.createdAt)
-#. 0: formatMediumDateTime(app.createdAt)
 #: src/lib/components/account/SecurityCredentialCard.svelte
-#: src/lib/components/settings/ApiTokens.svelte
-#: src/lib/components/settings/ConnectedApps.svelte
 msgid "<0/> Created {0}"
 msgstr ""
 
 #. 0: formatMediumDateTime(credential.lastUsedAt)
-#. 0: formatMediumDateTime(grant.lastUsedAt)
-#. 0: formatMediumDateTime(app.lastUsedAt)
 #. 0: formatMediumDateTime(identity.lastUsedAt)
 #: src/lib/components/account/SecurityCredentialCard.svelte
-#: src/lib/components/settings/ApiTokens.svelte
-#: src/lib/components/settings/ConnectedApps.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 msgid "<0/> Last used {0}"
 msgstr ""
@@ -535,8 +524,7 @@ msgstr ""
 #: src/lib/components/profile/ProfileSwitchDialog.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
-#: src/lib/components/settings/ApiTokens.svelte
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
@@ -814,8 +802,7 @@ msgstr ""
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/members/RolesSection.svelte
-#: src/lib/components/settings/ApiTokens.svelte
-#: src/lib/components/settings/ConnectedApps.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "Permissions"
 msgstr ""
 
@@ -1455,7 +1442,6 @@ msgstr ""
 
 #: src/lib/components/audit/AuditReadsTable.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/status-pills/COBPill.svelte
@@ -1875,6 +1861,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
@@ -2137,6 +2124,7 @@ msgstr ""
 #: src/lib/components/alerts/RuleSidebar.svelte
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/command-palette/CommandPalette.svelte
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -2256,7 +2244,6 @@ msgid "Total: {0} records"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "Data deleted successfully"
 msgstr ""
 
@@ -2321,7 +2308,6 @@ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
 msgid "<0/> Syncing..."
 msgstr ""
 
@@ -2337,7 +2323,6 @@ msgid "<0/> Healthy"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
 msgid "<0/> Disabled"
 msgstr ""
 
@@ -2348,7 +2333,6 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
 msgid "<0/> Offline"
 msgstr ""
 
@@ -2378,7 +2362,6 @@ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
 msgid "Breakdown by type:"
 msgstr ""
 
@@ -2392,7 +2375,6 @@ msgid "Records in last 24 hours"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "Last record received"
 msgstr ""
 
@@ -2480,6 +2462,7 @@ msgstr ""
 #~ msgid "<0/> Download Food Definitions"
 #~ msgstr ""
 
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/lib/components/connectors/DemoDataSection.svelte
@@ -2494,6 +2477,7 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/ui/connector-toggle-group/connector-toggle-group-item.svelte
 msgid "<0/> Configure"
@@ -2508,7 +2492,6 @@ msgid "Select a data source to configure"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
 msgid "<0/> Configured"
 msgstr ""
 
@@ -2520,8 +2503,8 @@ msgstr ""
 msgid "No server-side connectors are registered in this installation."
 msgstr ""
 
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/community/+page.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
@@ -2535,19 +2518,16 @@ msgstr ""
 msgid "Active"
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Stale"
-msgstr ""
+#~ msgid "Stale"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorSetup.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Inactive"
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Records (24h)"
-msgstr ""
+#~ msgid "Records (24h)"
+#~ msgstr ""
 
 #~ msgid "Total Records"
 #~ msgstr ""
@@ -2561,40 +2541,32 @@ msgstr ""
 #~ msgid "<0/> Permanently Delete Data"
 #~ msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 msgid "THIS ACTION CANNOT BE UNDONE"
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "You are about to permanently delete <0>all data</0> from <1/> . This includes:"
-msgstr ""
+#~ msgid "You are about to permanently delete <0>all data</0> from <1/> . This includes:"
+#~ msgstr ""
 
 #~ msgid "All glucose records ({0} records)"
 #~ msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "All treatments entered by this device"
-msgstr ""
+#~ msgid "All treatments entered by this device"
+#~ msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "All device status records"
-msgstr ""
+#~ msgid "All device status records"
+#~ msgstr ""
 
-#. 0: formatNumber(deleteResult.totalDeleted)
 #. 0: formatNumber(demoDeleteResult.totalDeleted)
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/connectors/DemoDataSection.svelte
 msgid "Deleted {0} records"
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Type <0>DELETE</0> to confirm:"
-msgstr ""
+#~ msgid "Type <0>DELETE</0> to confirm:"
+#~ msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Type DELETE"
-msgstr ""
+#~ msgid "Type DELETE"
+#~ msgstr ""
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/connectors/DemoDataSection.svelte
@@ -2682,7 +2654,6 @@ msgstr ""
 msgid "Max historical days"
 msgstr ""
 
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 msgid "Manual sync"
 msgstr ""
@@ -2714,18 +2685,18 @@ msgstr ""
 #~ msgid "General Uploaders"
 #~ msgstr ""
 
+#: src/lib/components/connectors/AddConnectionDialog.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
-#: src/lib/components/connectors/UploaderAppsCard.svelte
 msgid "Android"
 msgstr ""
 
+#: src/lib/components/connectors/AddConnectionDialog.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
-#: src/lib/components/connectors/UploaderAppsCard.svelte
 msgid "Desktop"
 msgstr ""
 
+#: src/lib/components/connectors/AddConnectionDialog.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
-#: src/lib/components/connectors/UploaderAppsCard.svelte
 msgid "Web"
 msgstr ""
 
@@ -2963,7 +2934,7 @@ msgstr ""
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 #: src/lib/components/trackers/CreateTrackersFromLegacyDialog.svelte
 #: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
@@ -2981,14 +2952,12 @@ msgstr ""
 #~ msgid "<0/> Server Connectors"
 #~ msgstr ""
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
-msgid "Connectors that run on the server to pull data from cloud services"
-msgstr ""
+#~ msgid "Connectors that run on the server to pull data from cloud services"
+#~ msgstr ""
 
 #: ../portal/src/routes/changelog/+page.svelte
 #: ../portal/src/routes/roadmap/+page.svelte
 #: src/lib/components/admin/JobsTabContent.svelte
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "<0/> Refresh"
@@ -3013,11 +2982,9 @@ msgstr ""
 #~ msgid "<0/> Set Up an Uploader"
 #~ msgstr ""
 
-#: src/lib/components/connectors/UploaderAppsCard.svelte
-msgid "Connect your CGM app or AID system to push data to Nocturne"
-msgstr ""
+#~ msgid "Connect your CGM app or AID system to push data to Nocturne"
+#~ msgstr ""
 
-#: src/lib/components/connectors/UploaderAppsCard.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/meals/MealsTable.svelte
@@ -3031,10 +2998,8 @@ msgstr ""
 msgid "Other"
 msgstr ""
 
-#: src/lib/components/connectors/UploaderAppsCard.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "<0/> Active"
-msgstr ""
+#~ msgid "<0/> Active"
+#~ msgstr ""
 
 #~ msgid "<0/> Set up {0}"
 #~ msgstr ""
@@ -3051,9 +3016,8 @@ msgstr ""
 #~ msgid "API Key"
 #~ msgstr ""
 
-#: src/lib/components/connectors/UploaderSetupDialog.svelte
-msgid "<0/> Generate API key"
-msgstr ""
+#~ msgid "<0/> Generate API key"
+#~ msgstr ""
 
 #~ msgid "Creates an API token pre-configured for {0}"
 #~ msgstr ""
@@ -3231,11 +3195,13 @@ msgstr ""
 
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/layout/BackupSignInPrompt.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meals/MealSuggestionRow.svelte
 #: src/lib/components/members/JoinWelcome.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Dismiss"
 msgstr ""
 
@@ -4214,7 +4180,7 @@ msgstr ""
 msgid "Notification"
 msgstr ""
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
 #: src/routes/(unauthenticated)/setup/account/+page.svelte
 msgid "Loading..."
 msgstr ""
@@ -4459,7 +4425,7 @@ msgstr ""
 
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/lib/components/members/MemberCard.svelte
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "Only last 24 hours"
 msgstr ""
@@ -4487,6 +4453,7 @@ msgstr ""
 msgid "Pending"
 msgstr ""
 
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 msgid "Revoked"
 msgstr ""
@@ -4552,9 +4519,9 @@ msgstr ""
 msgid "Accessed {0}{1}"
 msgstr ""
 
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/ClientDevices.svelte
-#: src/lib/components/settings/ConnectedApps.svelte
 msgid "<0/> Revoke"
 msgstr ""
 
@@ -4955,8 +4922,8 @@ msgstr ""
 #~ msgid "<0/> Save Changes"
 #~ msgstr ""
 
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/members/MemberCard.svelte
-#: src/lib/components/settings/ApiTokens.svelte
 msgid "<0/> 24-hour limit"
 msgstr ""
 
@@ -5980,63 +5947,59 @@ msgstr ""
 #~ msgid "Save Alarm"
 #~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "Failed to load API tokens."
-msgstr ""
+#~ msgid "Failed to load API tokens."
+#~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "Failed to create token."
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "API token revoked."
-msgstr ""
+#~ msgid "API token revoked."
+#~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "Failed to revoke token."
-msgstr ""
+#~ msgid "Failed to revoke token."
+#~ msgstr ""
 
 #~ msgid "<0/> API Tokens"
 #~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "<0/> Create token"
 msgstr ""
 
 #~ msgid "Legacy — rotate to per-device key"
 #~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "Token created"
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "Copy this token now. It will not be shown again."
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "This token will only be shown once. Copy it now."
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "Create API token"
 msgstr ""
 
 #~ msgid "Choose a label and select the scopes this token should have access to."
 #~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "Label"
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Revoke API token"
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/settings/ClientDevices.svelte
-#: src/lib/components/settings/ConnectedApps.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 msgid "Revoke"
 msgstr ""
@@ -6054,7 +6017,6 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/alerts/ChannelsSection.svelte
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
@@ -6129,9 +6091,8 @@ msgstr ""
 msgid "Wake Lock API not supported"
 msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "App access revoked successfully."
-msgstr ""
+#~ msgid "App access revoked successfully."
+#~ msgstr ""
 
 #~ msgid "Failed to revoke access. Please try again."
 #~ msgstr ""
@@ -6144,19 +6105,18 @@ msgstr ""
 
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
-#: src/lib/components/settings/ConnectedApps.svelte
 msgid "<0/> Add device"
 msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "<0/> Verified"
 msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Self-registered"
 msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Revoke access"
 msgstr ""
 
@@ -6221,7 +6181,6 @@ msgstr ""
 msgid "<0/> Credentials"
 msgstr ""
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 msgid "Not configured"
@@ -6305,17 +6264,14 @@ msgstr ""
 #~ msgid "<0/> Sync Failed"
 #~ msgstr ""
 
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "<0/> Error"
-msgstr ""
+#~ msgid "<0/> Error"
+#~ msgstr ""
 
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "<0/> Stale"
-msgstr ""
+#~ msgid "<0/> Stale"
+#~ msgstr ""
 
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "<0/> Inactive"
-msgstr ""
+#~ msgid "<0/> Inactive"
+#~ msgstr ""
 
 #. 0: formatNumber(lane.migrated)
 #. 0: rejectedCount
@@ -6326,29 +6282,20 @@ msgstr ""
 msgid "{0} records"
 msgstr ""
 
-#. 0: formatNumber(entriesLast24h)
-#. 0: formatNumber(entriesLast24h)
-#: src/lib/components/settings/DataSourceRow.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "{0} in 24h"
-msgstr ""
+#~ msgid "{0} in 24h"
+#~ msgstr ""
 
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "Last 24h by type:"
-msgstr ""
+#~ msgid "Last 24h by type:"
+#~ msgstr ""
 
 #~ msgid "{0} synced so far"
 #~ msgstr ""
 
-#. 0: relativeAge(lastSyncAttempt, { fallback\\: "Never" })
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "Last attempted: {0}"
-msgstr ""
+#~ msgid "Last attempted: {0}"
+#~ msgstr ""
 
-#. 0: relativeAge(lastSuccessfulSync, { fallback\\: "Never" })
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "<0/> Last successful: {0}"
-msgstr ""
+#~ msgid "<0/> Last successful: {0}"
+#~ msgstr ""
 
 #~ msgid "<0/> Dashboard Widgets"
 #~ msgstr ""
@@ -9846,6 +9793,7 @@ msgstr ""
 msgid "Confirm"
 msgstr ""
 
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 msgid "Type <0/> to confirm:"
 msgstr ""
@@ -12011,10 +11959,8 @@ msgstr ""
 #~ msgid "Exclude from statistics"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "Failed to load services"
-msgstr ""
+#~ msgid "Failed to load services"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "Unknown error"
@@ -12042,35 +11988,30 @@ msgstr ""
 #~ msgid "<0/> Active Data Sources"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "Devices and apps currently sending data to this Nocturne instance"
-msgstr ""
+#~ msgid "Devices and apps currently sending data to this Nocturne instance"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "No data sources detected"
-msgstr ""
+#~ msgid "No data sources detected"
+#~ msgstr ""
 
 #~ msgid "Set up an uploader app to start sending data to Nocturne"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "<0/> Demo"
-msgstr ""
+#~ msgid "<0/> Demo"
+#~ msgstr ""
 
 #~ msgid "<0/> API Information"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "Use these endpoints to configure uploaders manually"
-msgstr ""
+#~ msgid "Use these endpoints to configure uploaders manually"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "Base URL"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "<0/> Create API key"
-msgstr ""
+#~ msgid "<0/> Create API key"
+#~ msgstr ""
 
 #~ msgid "<0/> Data Maintenance"
 #~ msgstr ""
@@ -13657,6 +13598,7 @@ msgstr ""
 #~ msgid "Manage the current tenant's details and members"
 #~ msgstr ""
 
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/tenants/SiteAddressCard.svelte
 #: src/lib/components/trackers/CreateTrackersFromLegacyDialog.svelte
 msgid "Created"
@@ -15708,9 +15650,8 @@ msgstr ""
 #~ msgid "Last Record Received"
 #~ msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "This will permanently delete all entries, treatments, and device status records from this data source."
-msgstr ""
+#~ msgid "This will permanently delete all entries, treatments, and device status records from this data source."
+#~ msgstr ""
 
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "Re-sync data from all enabled connectors for the configured lookback period"
@@ -16301,17 +16242,14 @@ msgstr ""
 #~ msgid "Click each capability to test it. These determine what alarm features are available in your browser."
 #~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "Tokens use the <0/> prefix and grant programmatic access to your data. Each token is shown only once at creation."
-msgstr ""
+#~ msgid "Tokens use the <0/> prefix and grant programmatic access to your data. Each token is shown only once at creation."
+#~ msgstr ""
 
 #~ msgid "No API tokens. Create a token to enable programmatic access to your data."
 #~ msgstr ""
 
-#. 0: revokeTarget?.label
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "Are you sure you want to revoke \"{0}\"? Any applications using this token will immediately lose access."
-msgstr ""
+#~ msgid "Are you sure you want to revoke \"{0}\"? Any applications using this token will immediately lose access."
+#~ msgstr ""
 
 #: src/lib/components/settings/ClientDevices.svelte
 msgid "Device renamed."
@@ -16351,10 +16289,8 @@ msgstr ""
 msgid "<0/> Rename"
 msgstr ""
 
-#. 0: relativeAge(device.lastSeenAt, { now\\: now.current, fallback\\: "Unknown" })
-#: src/lib/components/settings/ClientDevices.svelte
-msgid "<0/> Last seen {0}"
-msgstr ""
+#~ msgid "<0/> Last seen {0}"
+#~ msgstr ""
 
 #~ msgid "No connected applications. When you authorize apps to access your data, they will appear here."
 #~ msgstr ""
@@ -16858,9 +16794,8 @@ msgstr ""
 msgid "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "Create an API key below to authenticate uploaders. Each key is scoped to specific permissions and can be revoked independently."
-msgstr ""
+#~ msgid "Create an API key below to authenticate uploaders. Each key is scoped to specific permissions and can be revoked independently."
+#~ msgstr ""
 
 #: src/lib/components/settings/DataMaintenanceCard.svelte
 msgid "Link records from multiple data sources that represent the same underlying event. This improves data quality when the same glucose readings or treatments are uploaded from different apps."
@@ -17428,7 +17363,9 @@ msgid "Insulin in window"
 msgstr ""
 
 #. 0: selectedDataSources.length
+#. 0: otherSources.length
 #: src/lib/components/reports/year-overview/YearOverviewFilters.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "{0} sources"
 msgstr ""
 
@@ -18826,6 +18763,7 @@ msgstr ""
 
 #: ../portal/src/lib/components/docs/OAuthScopeTable.svelte
 #: ../portal/src/routes/features/+page.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Access"
 msgstr ""
 
@@ -19853,6 +19791,9 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/auth/LoginForm.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
 msgid "Last used"
 msgstr ""
 
@@ -20092,9 +20033,8 @@ msgstr ""
 msgid "Widget names could not be loaded, so widgets are listed by their internal id. Choosing and reordering them still works."
 msgstr ""
 
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "<0/> Syncing"
-msgstr ""
+#~ msgid "<0/> Syncing"
+#~ msgstr ""
 
 #. 0: relativeAge(lastReadingAt)
 #: src/lib/components/tenants/TenantOverviewTile.svelte
@@ -23021,9 +22961,8 @@ msgstr ""
 #~ msgid "Records in the last 30 days"
 #~ msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "All glucose records"
-msgstr ""
+#~ msgid "All glucose records"
+#~ msgstr ""
 
 #~ msgid "This source sent {0} records in the last 30 days."
 #~ msgstr ""
@@ -23100,7 +23039,7 @@ msgstr ""
 msgid "The person who shared this data has limited you to the most recent 24 hours. Anything older, including longer report periods, is not shown."
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
 msgid "Restrict this token to only the most recent 24 hours of data."
 msgstr ""
 
@@ -23167,15 +23106,11 @@ msgstr ""
 #~ msgid "Marked Range"
 #~ msgstr ""
 
-#. 0: app.deviceCount; 1: app.deviceCount === 1 ? "" \\: "s"
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "Its {0} paired device{1} will also be removed and stop receiving alerts."
-msgstr ""
+#~ msgid "Its {0} paired device{1} will also be removed and stop receiving alerts."
+#~ msgstr ""
 
-#. 0: app.clientName ?? "this app"
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "Revoke {0}'s access to your data? The app will need to be re-authorized to regain access. <0/>"
-msgstr ""
+#~ msgid "Revoke {0}'s access to your data? The app will need to be re-authorized to regain access. <0/>"
+#~ msgstr ""
 
 #. 0: device.appName
 #: src/lib/components/settings/ClientDevices.svelte
@@ -23693,40 +23628,38 @@ msgstr ""
 msgid "min ago"
 msgstr ""
 
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
 msgstr "Google Health"
 
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
-msgid "Google Health needs attention. Open the connector for details and recovery options."
-msgstr "Google Health에는 주의가 필요합니다. 자세한 내용과 복구 옵션을 보려면 커넥터를 여세요."
+#~ msgid "Google Health needs attention. Open the connector for details and recovery options."
+#~ msgstr "Google Health에는 주의가 필요합니다. 자세한 내용과 복구 옵션을 보려면 커넥터를 여세요."
 
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Reconnect to resume importing"
 msgstr "가져오기를 재개하려면 다시 연결하세요."
 
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Review available data and confirm the import selection"
 msgstr "사용 가능한 데이터를 검토하고 가져오기 선택을 확인합니다."
 
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Choose at least one data type to start importing"
 msgstr "가져오기를 시작하려면 데이터 유형을 하나 이상 선택하세요."
 
-#. 0: relativeAge(connection.lastSync, { fallback\\: "Never" })
 #. 0: relativeAge(status.lastSync, { fallback\\: "Never" })
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
 msgid "Last successful sync: {0}"
 msgstr "마지막으로 성공한 동기화: {0}"
 
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Waiting for the first successful sync"
 msgstr "첫 번째 성공적인 동기화를 기다리는 중"
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
 msgid "Import steps, heart rate, weight, and sleep from Google Health"
 msgstr "Google Health에서 걸음 수, 심박수, 체중, 수면 가져오기"
 
@@ -24445,7 +24378,7 @@ msgstr "Google Health는 현재 이 유형에 대한 읽기 전용 권한을 제
 msgid "Not exposed as a readable Google Health API data type."
 msgstr "Google Health API에서 읽을 수 있는 데이터 유형으로 제공되지 않습니다."
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
 msgid "Status unavailable"
 msgstr "상태를 확인할 수 없음"
 
@@ -24965,34 +24898,29 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "Records in total"
 msgstr ""
 
+#. 0: windowDays
 #. 0: selectedConnector.totalEntriesWindowDays
-#. 0: selectedDataSource.totalEntriesWindowDays
+#. 0: windowDays
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "Records in the last {0} days"
 msgstr ""
 
-#. 0: formatNumber(selectedDataSource.totalEntries)
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "This source sent {0} records in total."
-msgstr ""
+#~ msgid "This source sent {0} records in total."
+#~ msgstr ""
 
-#. 0: formatNumber(selectedDataSource.totalEntries); 1: selectedDataSource.totalEntriesWindowDays
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "This source sent {0} records in the last {1} days."
-msgstr ""
+#~ msgid "This source sent {0} records in the last {1} days."
+#~ msgstr ""
 
-#. 0: formatNumber(totalEntries)
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "{0} records in total"
-msgstr ""
+#~ msgid "{0} records in total"
+#~ msgstr ""
 
-#. 0: formatNumber(totalEntries); 1: totalEntriesWindowDays
-#: src/lib/components/settings/DataSourceRow.svelte
+#. 0: formatNumber(stream.totalRecords); 1: windowDays
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "{0} records in the last {1} days"
 msgstr ""
 
@@ -25049,11 +24977,12 @@ msgstr ""
 msgid "{0} Technical code: {1}."
 msgstr ""
 
-#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Not enabled on this Nocturne server"
 msgstr ""
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/connectors/AddConnectionDialog.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not connected"
 msgstr ""
@@ -25124,22 +25053,17 @@ msgstr ""
 #~ msgid "If a historical import stops or needs to be repeated, reset the Google Health connector from a chosen date. The reset runs in the background, re-reads the range and keeps the normal duplicate protection; platform administrators can monitor or cancel it."
 #~ msgstr ""
 
-#: src/lib/components/connectors/UploaderSetupDialog.svelte
-msgid "Failed to generate API key. You can create one in the API tokens section."
-msgstr ""
+#~ msgid "Failed to generate API key. You can create one in the API tokens section."
+#~ msgstr ""
 
-#: src/lib/components/connectors/UploaderSetupDialog.svelte
-msgid "Copy API key"
-msgstr ""
+#~ msgid "Copy API key"
+#~ msgstr ""
 
-#. 0: getUploaderName(selectedUploader)
-#: src/lib/components/connectors/UploaderSetupDialog.svelte
-msgid "Creates an API key for {0} with read and write access to health data."
-msgstr ""
+#~ msgid "Creates an API key for {0} with read and write access to health data."
+#~ msgstr ""
 
-#: src/lib/components/connectors/UploaderSetupDialog.svelte
-msgid "In AAPS, open Config Builder, then Synchronization, and select NSClient V3. In its settings, paste the URL into Nightscout URL and the API key into NS access token."
-msgstr ""
+#~ msgid "In AAPS, open Config Builder, then Synchronization, and select NSClient V3. In its settings, paste the URL into Nightscout URL and the API key into NS access token."
+#~ msgstr ""
 
 #: src/lib/components/patient/DeviceNameCombobox.svelte
 msgid "Search devices..."
@@ -25395,7 +25319,7 @@ msgstr ""
 msgid "A device wants to access your Nocturne data."
 msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Unverified"
 msgstr ""
 
@@ -29345,17 +29269,15 @@ msgstr ""
 msgid "Publishes the interactive API reference and its OpenAPI specification on this address, for anyone who visits. No sign-in is required. Turn it on if you are building against the API. Otherwise, leave it off. Your data stays behind the same sign-in either way."
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "Your tokens could not be loaded. This list can be incomplete. Refresh the page to try again."
-msgstr ""
+#~ msgid "Your tokens could not be loaded. This list can be incomplete. Refresh the page to try again."
+#~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Legacy: rotate to per-device key"
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "Choose a label and select the scopes that this token can access."
-msgstr ""
+#~ msgid "Choose a label and select the scopes that this token can access."
+#~ msgstr ""
 
 #: src/lib/components/settings/BrowserCapabilities.svelte
 msgid "This is a test notification from Nocturne. Alarms will appear like this."
@@ -33079,7 +33001,6 @@ msgid "Delete all data"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-#: src/lib/components/settings/DataSourceRow.svelte
 msgid "<0/> Backing off"
 msgstr ""
 
@@ -33091,7 +33012,7 @@ msgstr ""
 msgid "Connector offline"
 msgstr ""
 
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "<0/> Sync now"
 msgstr ""
 
@@ -33115,9 +33036,8 @@ msgstr ""
 msgid "Sync capabilities"
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Delete all data from this source"
-msgstr ""
+#~ msgid "Delete all data from this source"
+#~ msgstr ""
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "<0/> Delete data..."
@@ -33128,12 +33048,10 @@ msgid "<0/> Permanently delete data"
 msgstr ""
 
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
-#: src/lib/components/connectors/UploaderAppsCard.svelte
 msgid "CGM apps"
 msgstr ""
 
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
-#: src/lib/components/connectors/UploaderAppsCard.svelte
 msgid "AID systems"
 msgstr ""
 
@@ -33177,33 +33095,27 @@ msgstr ""
 msgid "<0/> Clear demo data"
 msgstr ""
 
-#: src/lib/components/connectors/ManualSyncDialog.svelte
-msgid "<0/> Manual sync results"
-msgstr ""
+#~ msgid "<0/> Manual sync results"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "Connector results"
 msgstr ""
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
-msgid "<0/> Server connectors"
-msgstr ""
+#~ msgid "<0/> Server connectors"
+#~ msgstr ""
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
-msgid "<0/> Manual sync"
-msgstr ""
+#~ msgid "<0/> Manual sync"
+#~ msgstr ""
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
-msgid "<0/> Has data"
-msgstr ""
+#~ msgid "<0/> Has data"
+#~ msgstr ""
 
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
-msgid "Select a connector to configure credentials and settings. Changes take effect immediately."
-msgstr ""
+#~ msgid "Select a connector to configure credentials and settings. Changes take effect immediately."
+#~ msgstr ""
 
-#: src/lib/components/connectors/UploaderAppsCard.svelte
-msgid "<0/> Add an uploader"
-msgstr ""
+#~ msgid "<0/> Add an uploader"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 msgid "Device authorized"
@@ -33237,7 +33149,6 @@ msgstr ""
 msgid "Connection details"
 msgstr ""
 
-#: src/lib/components/connectors/UploaderSetupDialog.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
 msgid "API key"
 msgstr ""
@@ -33925,21 +33836,18 @@ msgstr ""
 msgid "Failed to revoke device. Try again."
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "<0/> API tokens"
-msgstr ""
+#~ msgid "<0/> API tokens"
+#~ msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Failed to revoke access. Try again."
 msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "Connected apps"
-msgstr ""
+#~ msgid "Connected apps"
+#~ msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "OAuth applications that you authorized to access your data"
-msgstr ""
+#~ msgid "OAuth applications that you authorized to access your data"
+#~ msgstr ""
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
@@ -34012,13 +33920,11 @@ msgstr ""
 msgid "Available widgets <0/>"
 msgstr ""
 
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "<0/> Sync complete"
-msgstr ""
+#~ msgid "<0/> Sync complete"
+#~ msgstr ""
 
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "<0/> Sync failed"
-msgstr ""
+#~ msgid "<0/> Sync failed"
+#~ msgstr ""
 
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 msgid "Source default rules"
@@ -35228,21 +35134,17 @@ msgstr ""
 msgid "Connectors & apps - Settings - Nocturne"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "Manage data sources, add new connections, and control app access"
-msgstr ""
+#~ msgid "Manage data sources, add new connections, and control app access"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "<0/> Active data sources"
-msgstr ""
+#~ msgid "<0/> Active data sources"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "Add an uploader app to start sending data to Nocturne"
-msgstr ""
+#~ msgid "Add an uploader app to start sending data to Nocturne"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-msgid "<0/> API information"
-msgstr ""
+#~ msgid "<0/> API information"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Failed to update member. Try again."
@@ -37392,29 +37294,23 @@ msgstr ""
 msgid "No active sessions found"
 msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "No API tokens"
-msgstr ""
+#~ msgid "No API tokens"
+#~ msgstr ""
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "Create a token to enable programmatic access to your data."
-msgstr ""
+#~ msgid "Create a token to enable programmatic access to your data."
+#~ msgstr ""
 
-#: src/lib/components/settings/ClientDevices.svelte
-msgid "No registered devices"
-msgstr ""
+#~ msgid "No registered devices"
+#~ msgstr ""
 
-#: src/lib/components/settings/ClientDevices.svelte
-msgid "When you pair an app such as the Companion, it will appear here."
-msgstr ""
+#~ msgid "When you pair an app such as the Companion, it will appear here."
+#~ msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "No connected applications"
-msgstr ""
+#~ msgid "No connected applications"
+#~ msgstr ""
 
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "When you authorize apps to access your data, they will appear here."
-msgstr ""
+#~ msgid "When you authorize apps to access your data, they will appear here."
+#~ msgstr ""
 
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 msgid "No rules configured"
@@ -39122,6 +39018,7 @@ msgstr ""
 msgid "No links yet. Make a link to invite a person."
 msgstr ""
 
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 msgid "No label"
 msgstr ""
@@ -40296,4 +40193,370 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
 msgid "The recent data from Nightscout is in Nocturne. The older history is still importing, and you can use Nocturne while the import continues."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "<0/> Could not load this list. Close this window, then refresh the page."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Where is the data now?"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Select the app that will send data to Nocturne."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Select the service that Nocturne will fetch data from."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Add a connection"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "An app on your phone or computer"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "The app sends data to Nocturne."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "A cloud account"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Nocturne fetches data from the service."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Search apps"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "No apps match."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "An app uses the token to send data or read data."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Enter a device code"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Authorize an app that shows a code."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
+msgid "Copy base URL"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "API information"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Enter this base URL in an app that you configure manually."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Set up manually"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Search services"
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "No services match."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "All available connectors are configured."
+msgstr ""
+
+#. 0: connector.name
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "{0} documentation"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Access revoked."
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "<0/> Full access"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "1 permission"
+msgstr ""
+
+#. 0: scopes.length
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "{0} permissions"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "No permissions"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
+msgid "API token"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
+msgid "Sends to Nocturne"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
+msgid "Nocturne fetches"
+msgstr ""
+
+#. 0: windowDays
+#. 0: windowDays
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
+msgid "No records in the last {0} days"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Last record"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Last sync"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "<0/> Revoked"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Belongs to another member"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Nocturne also removes its 1 paired device, and the device stops receiving alerts."
+msgstr ""
+
+#. 0: credential.deviceCount
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Nocturne also removes its {0} paired devices, and they stop receiving alerts."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Revoke the access of {0} to your data? To give access again, authorize the app again. <0/>"
+msgstr ""
+
+#. 0: credential.label ?? name
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Revoke \"{0}\"? Apps that use this token lose access immediately."
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "No records"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Records by device name <0/>"
+msgstr ""
+
+#. 0: streamName
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Delete data from {0}"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "<0/> Connector details"
+msgstr ""
+
+#. 0: formatNumber(connection.totalRecords); 1: windowDays
+#: src/lib/components/connectors/ConnectionRow.svelte
+msgid "<0/> {0} records in the last {1} days"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
+msgid "Stopped"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
+msgid "Waiting for first use"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
+msgid "Quiet"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionTime.svelte
+msgid "just now"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+msgid "Sync recent data"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+msgid "Sync a date range"
+msgstr ""
+
+#. 0: source.name
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Deleted 1 record from {0}"
+msgstr ""
+
+#. 0: formatNumber(result.totalDeleted); 1: source.name
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Deleted {0} records from {1}"
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in the last 24 hours"
+msgstr ""
+
+#. 0: windowDays
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in the last {0} days:"
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "You cannot undo this action."
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Nocturne deletes all records from <0/>."
+msgstr ""
+
+#: src/lib/components/connectors/ManualSyncDialog.svelte
+msgid "Syncing connectors"
+msgstr ""
+
+#: src/lib/components/connectors/ManualSyncDialog.svelte
+msgid "Sync results"
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "Could not create the API token. Create one from Add a connection in the Connections card."
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "Copy Nocturne URL"
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "Copy API token"
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "<0/> Create API token"
+msgstr ""
+
+#. 0: getUploaderName(selectedUploader)
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "Creates an API token for {0} with read and write access to health data."
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "In AAPS, open Config Builder, then Synchronization, and select NSClient V3. In its settings, paste the URL into Nightscout URL and the API token into NS access token."
+msgstr ""
+
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
+msgid "Copy token"
+msgstr ""
+
+#: src/lib/components/settings/ApiTokenCreateDialog.svelte
+msgid "Enter a label and select the permissions of this token."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Could not load your connections."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "<0/> Google Health needs attention. Open the connector for details and recovery options."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "The apps, API tokens, and connectors that send data to Nocturne or read data from it"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "<0/> Sync all connectors"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "<0/> Add a connection"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Connections"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Each app, API token, and connector that you added."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "No connections"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Add an app or a cloud account to send data to Nocturne."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Add an app to send data to Nocturne."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "No connection is active."
+msgstr ""
+
+#. 0: unusedConnections.length
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Not in use ({0}) <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Other sources"
+msgstr ""
+
+#. 0: windowDays
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Records in the last {0} days that no connection wrote."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "1 source"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "A connection also sends records under this name."
+msgstr ""
+
+#: src/lib/components/settings/ClientDevices.svelte
+msgid "No registered devices. A paired app, such as the Companion, shows here."
+msgstr ""
+
+#: src/lib/components/settings/ClientDevices.svelte
+msgid "Last seen"
 msgstr ""
