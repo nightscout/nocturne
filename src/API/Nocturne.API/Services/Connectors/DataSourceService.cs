@@ -567,7 +567,7 @@ public class DataSourceService : IDataSourceService
     /// <summary>
     /// Create a DataSourceInfo from a device identifier
     /// </summary>
-    private DataSourceInfo CreateDataSourceInfo(string deviceId, string? dataSource, SourceHandle handle)
+    internal static DataSourceInfo CreateDataSourceInfo(string deviceId, string? dataSource, SourceHandle handle)
     {
         var info = new DataSourceInfo
         {
@@ -934,6 +934,21 @@ public class DataSourceService : IDataSourceService
         return deletedCounts;
     }
 
+    /// <summary>
+    /// The source <paramref name="key"/> names among the records no credential is recorded as the
+    /// writer of, which the connections list shows under either origin handle.
+    /// </summary>
+    private async Task<DataSourceInfo?> FindUnwrittenSourceAsync(string key, CancellationToken ct)
+    {
+        var now = _time.GetUtcNow();
+        var buckets = await _sourceData.WriterBucketsAsync(
+            now.AddDays(-DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
+
+        return buckets.Any(b => b.WriterGrantId is null && (b.DataSource == key || b.Device == key))
+            ? CreateDataSourceInfo(key, key, SourceHandle.Unknown)
+            : null;
+    }
+
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
 
     internal static string CleanDeviceName(string deviceId)
@@ -972,6 +987,8 @@ public class DataSourceService : IDataSourceService
             var source = sources.FirstOrDefault(s =>
                 s.Id == dataSourceId || s.DeviceId == dataSourceId
             );
+
+            source ??= await FindUnwrittenSourceAsync(dataSourceId, cancellationToken);
 
             if (source == null)
             {

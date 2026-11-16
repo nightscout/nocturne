@@ -64,6 +64,7 @@ public class ServicesControllerSyncStatusTests
     private static ServicesController CreateController(IDataSourceService dataSources) =>
         new(
             dataSources,
+            Mock.Of<IConnectionService>(),
             Mock.Of<IConnectorHealthService>(),
             Mock.Of<IConnectorSyncService>(),
             Mock.Of<ILogger<ServicesController>>(),

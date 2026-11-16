@@ -119,6 +119,17 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<WriterBucket>> WriterBucketsAsync(
+        DateTime windowStart, DateTime last24Hours, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var buckets = new List<WriterBucket>();
+        foreach (var table in V4RecordTables.All)
+            buckets.AddRange(await table.WriterBucketsAsync(db, windowStart, last24Hours, ct));
+        return buckets;
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<IReadOnlyDictionary<string, long>> CountsBySourceAsync(
         string source, CancellationToken ct)
     {

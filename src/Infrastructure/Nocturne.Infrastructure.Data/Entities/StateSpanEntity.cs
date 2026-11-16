@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.StateSpan
 /// </summary>
 [Table("state_spans")]
-public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped, IDuplicateFlagged
+public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped, IDuplicateFlagged, IWriterStamped
 {
     /// <inheritdoc />
     [AuditIgnored]
@@ -58,6 +58,11 @@ public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped
     [Column("source")]
     [MaxLength(50)]
     public string? Source { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("writer_grant_id")]
+    public Guid? WriterGrantId { get; set; }
 
     /// <summary>
     /// Category-specific metadata (stored as JSON)

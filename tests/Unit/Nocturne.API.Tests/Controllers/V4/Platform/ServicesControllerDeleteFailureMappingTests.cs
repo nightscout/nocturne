@@ -32,6 +32,7 @@ public class ServicesControllerDeleteFailureMappingTests
     private ServicesController CreateController() =>
         new(
             _dataSourceService.Object,
+            Mock.Of<IConnectionService>(),
             Mock.Of<IConnectorHealthService>(),
             Mock.Of<IConnectorSyncService>(),
             Mock.Of<ILogger<ServicesController>>(),

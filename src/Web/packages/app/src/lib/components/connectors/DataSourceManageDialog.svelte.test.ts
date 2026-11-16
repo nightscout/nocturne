@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
+import type { ConnectionStream } from "#lib/api/generated/nocturne-api-client.js";
 
 let deleteImpl: () => Promise<unknown>;
 let deleteArgs: unknown[];
@@ -15,19 +15,21 @@ vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   },
 }));
 
+const toastSuccess = vi.hoisted(() => vi.fn());
+vi.mock("svelte-sonner", () => ({ toast: { success: toastSuccess } }));
+
 import DataSourceManageDialog from "./DataSourceManageDialog.svelte";
 
-const dataSource: DataSourceInfo = {
-  id: "11111111-1111-1111-1111-111111111111",
+const dataSource: ConnectionStream = {
+  key: "11111111-1111-1111-1111-111111111111",
   name: "Dexcom G7",
-  category: "cgm",
-  status: "active",
-  totalEntries: 4200,
+  totalRecords: 4200,
+  recordCounts: { Glucose: 4100, Boluses: 100 },
 };
 
 async function attemptDelete() {
   render(DataSourceManageDialog, {
-    props: { open: true, selectedDataSource: dataSource },
+    props: { open: true, source: dataSource, windowDays: 30 },
   });
 
   await page.getByRole("button", { name: "Delete data..." }).click();
@@ -39,6 +41,7 @@ describe("DataSourceManageDialog", () => {
   beforeEach(() => {
     deleteImpl = () => Promise.resolve({ success: true, totalDeleted: 1 });
     deleteArgs = [];
+    toastSuccess.mockClear();
     pageState.data = { effectivePermissions: ["tenant.settings"] };
   });
 
@@ -46,13 +49,59 @@ describe("DataSourceManageDialog", () => {
     await attemptDelete();
 
     await expect.poll(() => deleteArgs).toEqual([
-      { id: dataSource.id, allowReimport: false },
+      { id: dataSource.key, allowReimport: false },
     ]);
+  });
+
+  it("reports how many records it deleted, by name", async () => {
+    deleteImpl = () => Promise.resolve({ success: true, totalDeleted: 4200 });
+
+    await attemptDelete();
+
+    await expect
+      .poll(() => toastSuccess.mock.calls)
+      .toEqual([["Deleted 4,200 records from Dexcom G7"]]);
+  });
+
+  it("lists the record types of the source in place of a fixed list", async () => {
+    render(DataSourceManageDialog, {
+      props: { open: true, source: dataSource, windowDays: 30 },
+    });
+
+    await page.getByRole("button", { name: "Delete data..." }).click();
+    const confirm = page.getByRole("alertdialog");
+    await expect.element(confirm).toHaveTextContent("Glucose");
+    await expect.element(confirm).toHaveTextContent("4,100");
+    await expect.element(confirm).toHaveTextContent("Boluses");
+    await expect.element(confirm).not.toHaveTextContent("device status");
+  });
+
+  it("keeps the delete disabled until the shown word is typed", async () => {
+    render(DataSourceManageDialog, {
+      props: { open: true, source: dataSource, windowDays: 30 },
+    });
+
+    await page.getByRole("button", { name: "Delete data..." }).click();
+    const confirm = page.getByRole("button", { name: "Delete all data" });
+    await page.getByRole("textbox").fill("delete");
+    await expect.element(confirm).toBeDisabled();
+    await page.getByRole("textbox").fill("DELETE");
+    await expect.element(confirm).toBeEnabled();
+  });
+
+  it("tells its opener when the reader cancels", async () => {
+    const onCancel = vi.fn();
+    render(DataSourceManageDialog, {
+      props: { open: true, source: dataSource, windowDays: 30, onCancel },
+    });
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 
   it("allows re-import when the option is checked", async () => {
     render(DataSourceManageDialog, {
-      props: { open: true, selectedDataSource: dataSource },
+      props: { open: true, source: dataSource, windowDays: 30 },
     });
 
     await page.getByRole("button", { name: "Delete data..." }).click();
@@ -61,7 +110,7 @@ describe("DataSourceManageDialog", () => {
     await page.getByRole("button", { name: "Delete and allow re-import" }).click();
 
     await expect.poll(() => deleteArgs).toEqual([
-      { id: dataSource.id, allowReimport: true },
+      { id: dataSource.key, allowReimport: true },
     ]);
   });
 
@@ -69,7 +118,7 @@ describe("DataSourceManageDialog", () => {
     pageState.data = { effectivePermissions: ["glucose.read"] };
 
     render(DataSourceManageDialog, {
-      props: { open: true, selectedDataSource: dataSource },
+      props: { open: true, source: dataSource, windowDays: 30 },
     });
 
     await expect.element(page.getByText("Dexcom G7")).toBeVisible();
@@ -80,7 +129,7 @@ describe("DataSourceManageDialog", () => {
 
   it("offers the delete control to a member holding tenant.settings", async () => {
     render(DataSourceManageDialog, {
-      props: { open: true, selectedDataSource: dataSource },
+      props: { open: true, source: dataSource, windowDays: 30 },
     });
 
     await expect
@@ -92,7 +141,7 @@ describe("DataSourceManageDialog", () => {
     pageState.data = { effectivePermissions: ["*"] };
 
     render(DataSourceManageDialog, {
-      props: { open: true, selectedDataSource: dataSource },
+      props: { open: true, source: dataSource, windowDays: 30 },
     });
 
     await expect

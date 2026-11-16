@@ -1,0 +1,239 @@
+using Nocturne.API.Models;
+using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.ClientDevices;
+using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Connectors;
+using Nocturne.Core.Models.Services;
+
+namespace Nocturne.API.Services.Connectors;
+
+/// <summary>
+/// Lists a tenant's connections: one entry per authorized app, API token and configured connector,
+/// each with the records it wrote inside the discovery window.
+/// </summary>
+/// <remarks>
+/// A record belongs to the credential that inserted it (<c>writer_grant_id</c>), not to whatever its
+/// uploader called itself, so one app is one connection however many device strings its record
+/// types carry. An app's grants are one connection: its publisher's software id names every install,
+/// and a client registered without one is its own connection.
+/// </remarks>
+public class ConnectionService(
+    ISourceOwnedDataReader sourceData,
+    IOAuthGrantRepository grants,
+    IConnectorHealthService connectorHealth,
+    IClientDeviceService devices,
+    TimeProvider time) : IConnectionService
+{
+    private const int SenderActiveMinutes = 15;
+    private static readonly TimeSpan ReaderActiveWindow = TimeSpan.FromHours(24);
+
+    /// <inheritdoc />
+    public async Task<ConnectionsOverview> GetConnectionsAsync(Guid? viewerSubjectId, CancellationToken ct = default)
+    {
+        var now = time.GetUtcNow();
+        var buckets = await sourceData.WriterBucketsAsync(
+            now.AddDays(-DataSourceService.DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
+
+        var writerIds = buckets.Where(b => b.WriterGrantId.HasValue).Select(b => b.WriterGrantId!.Value).ToHashSet();
+        var grantRecords = (await grants.ListForConnectionsAsync(viewerSubjectId, writerIds, ct))
+            .Where(g => g.GrantType is OAuthGrantTypes.App or OAuthGrantTypes.Direct)
+            .ToList();
+        var grantsById = grantRecords.ToDictionary(g => g.Id);
+        var deviceCounts = await devices.GetDeviceCountsByGrantAsync([.. grantsById.Keys], ct);
+
+        var connectorBuckets = new Dictionary<string, List<WriterBucket>>(StringComparer.OrdinalIgnoreCase);
+        var otherBuckets = new List<WriterBucket>();
+        var writtenBuckets = new Dictionary<string, List<WriterBucket>>();
+
+        foreach (var bucket in buckets)
+        {
+            if (bucket.WriterGrantId is { } writer && grantsById.TryGetValue(writer, out var grant))
+            {
+                Add(writtenBuckets, KeyOf(grant), bucket);
+            }
+            else if (ConnectorMetadataService.GetByDataSourceId(bucket.DataSource ?? bucket.Device) is { } connector)
+            {
+                Add(connectorBuckets, connector.ConnectorId, bucket);
+            }
+            else if ((bucket.DataSource ?? bucket.Device) is { Length: > 0 })
+            {
+                otherBuckets.Add(bucket);
+            }
+        }
+
+        var connections = grantRecords
+            .GroupBy(KeyOf)
+            .Select(group => FromGrants(
+                group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts, viewerSubjectId, now))
+            .ToList();
+
+        foreach (var status in await connectorHealth.GetConnectorStatusesAsync(ct))
+        {
+            if (!status.IsEnabled && !status.HasDatabaseConfig)
+                continue;
+
+            connections.Add(FromConnector(status, connectorBuckets.GetValueOrDefault(status.Id) ?? []));
+        }
+
+        return new ConnectionsOverview
+        {
+            Connections =
+            [
+                .. connections
+                    .OrderBy(c => c.Status is ConnectionStatus.Quiet or ConnectionStatus.Disabled or ConnectionStatus.Revoked ? 1 : 0)
+                    .ThenBy(c => c.Direction == ConnectionDirection.NoRecords ? 1 : 0)
+                    .ThenByDescending(c => c.LastRecordAt ?? c.LastSyncAt ?? c.LastUsedAt)
+                    .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
+            ],
+            OtherSources = StreamsOf(otherBuckets),
+            WindowDays = DataSourceService.DiscoveryWindowDays,
+        };
+    }
+
+    private static void Add(Dictionary<string, List<WriterBucket>> map, string key, WriterBucket bucket)
+    {
+        if (!map.TryGetValue(key, out var list))
+            map[key] = list = [];
+        list.Add(bucket);
+    }
+
+    private static string KeyOf(OAuthGrantRecord grant) =>
+        grant.GrantType == OAuthGrantTypes.App
+            ? $"app:{grant.Client?.SoftwareId ?? grant.ClientEntityId?.ToString() ?? grant.Id.ToString()}"
+            : $"token:{grant.Id}";
+
+    private static Connection FromGrants(
+        string id,
+        List<OAuthGrantRecord> credentials,
+        List<WriterBucket> buckets,
+        IReadOnlyDictionary<Guid, int> deviceCounts,
+        Guid? viewerSubjectId,
+        DateTimeOffset now)
+    {
+        var newest = credentials[0];
+        var isApp = newest.GrantType == OAuthGrantTypes.App;
+        var lastUsed = credentials.Max(g => g.LastUsedAt);
+        var connection = new Connection
+        {
+            Id = id,
+            Kind = isApp ? ConnectionKind.App : ConnectionKind.Token,
+            Direction = buckets.Count > 0 ? ConnectionDirection.Sends : ConnectionDirection.NoRecords,
+            Name = isApp ? newest.Client?.DisplayName ?? newest.Client?.ClientId : newest.Label,
+            LogoUri = newest.Client?.LogoUri,
+            ClientUri = newest.Client?.ClientUri,
+            Identity = isApp ? newest.ClientIdentity : null,
+            LastUsedAt = lastUsed is { } used ? new DateTimeOffset(used, TimeSpan.Zero) : null,
+            Credentials =
+            [
+                .. credentials.Select(g => new ConnectionCredential
+                {
+                    GrantId = g.Id,
+                    Label = g.Label,
+                    Scopes = g.SubjectId == viewerSubjectId ? Scope.ForDisplay(g.Scopes, g.GrantType) : [],
+                    CreatedAt = g.CreatedAt,
+                    LastUsedAt = g.LastUsedAt,
+                    IsRevoked = g.IsRevoked,
+                    LimitTo24Hours = g.LimitTo24Hours,
+                    IsMigrated = g.IsMigrated,
+                    DeviceCount = deviceCounts.GetValueOrDefault(g.Id),
+                    IsOwn = g.SubjectId == viewerSubjectId,
+                }),
+            ],
+        };
+        ApplyRecords(connection, buckets);
+
+        connection.Status = StatusOf(connection, credentials, now);
+        return connection;
+    }
+
+    /// <summary>The data types an uploader sends continuously, so their absence means it stopped.</summary>
+    private static readonly string[] ContinuousTypes = [SourceDataTypes.Glucose, SourceDataTypes.DeviceStatus];
+
+    private static ConnectionStatus StatusOf(
+        Connection connection, List<OAuthGrantRecord> credentials, DateTimeOffset now)
+    {
+        if (credentials.All(g => g.IsRevoked))
+            return ConnectionStatus.Revoked;
+        if (IsRecent(connection, now))
+            return ConnectionStatus.Active;
+        if (connection.Direction == ConnectionDirection.Sends)
+            return ContinuousTypes.Any(connection.RecordCounts.ContainsKey)
+                ? ConnectionStatus.Stopped
+                : ConnectionStatus.Quiet;
+
+        return connection.LastUsedAt is null ? ConnectionStatus.Waiting : ConnectionStatus.Quiet;
+    }
+
+    private static bool IsRecent(Connection connection, DateTimeOffset now) =>
+        connection.Direction == ConnectionDirection.Sends
+            ? now - connection.LastRecordAt < TimeSpan.FromMinutes(SenderActiveMinutes)
+            : now - connection.LastUsedAt < ReaderActiveWindow;
+
+    private static Connection FromConnector(ConnectorStatusDto status, List<WriterBucket> buckets)
+    {
+        var metadata = ConnectorMetadataService.GetByConnectorId(status.Id);
+        var connection = new Connection
+        {
+            Id = $"connector:{status.Id}",
+            Kind = ConnectionKind.Connector,
+            Direction = ConnectionDirection.Fetches,
+            Name = metadata?.DisplayName ?? status.Name,
+            Icon = metadata?.Icon,
+            ConnectorId = status.Id,
+            LastSyncAt = status.LastSuccessfulSync is { } sync ? new DateTimeOffset(sync, TimeSpan.Zero) : null,
+            Status = status.State switch
+            {
+                "Error" => ConnectionStatus.Error,
+                "Running" => ConnectionStatus.Active,
+                "Configured" => ConnectionStatus.Quiet,
+                _ => ConnectionStatus.Disabled,
+            },
+        };
+        if (connection.Status == ConnectionStatus.Error)
+            connection.ErrorMessage = status.StateMessage;
+
+        ApplyRecords(connection, buckets);
+        return connection;
+    }
+
+    private static void ApplyRecords(Connection connection, List<WriterBucket> buckets)
+    {
+        connection.Streams = StreamsOf(buckets);
+        connection.TotalRecords = connection.Streams.Sum(s => s.TotalRecords);
+        connection.RecordsLast24Hours = connection.Streams.Sum(s => s.RecordsLast24Hours);
+        connection.LastRecordAt = connection.Streams.Max(s => s.LastRecordAt);
+        foreach (var (type, count) in connection.Streams.SelectMany(s => s.RecordCounts))
+            connection.RecordCounts[type] = connection.RecordCounts.GetValueOrDefault(type) + count;
+    }
+
+    private static List<ConnectionStream> StreamsOf(List<WriterBucket> buckets) =>
+    [
+        .. buckets
+            .GroupBy(b => (b.DataSource, b.Device))
+            .Select(group =>
+            {
+                var key = group.Key.DataSource ?? group.Key.Device ?? string.Empty;
+                var described = DataSourceService.CreateDataSourceInfo(
+                    group.Key.Device ?? key, group.Key.DataSource, SourceHandle.Unknown);
+                var stream = new ConnectionStream
+                {
+                    Key = key,
+                    DataSource = group.Key.DataSource,
+                    Device = group.Key.Device,
+                    Name = described.Name,
+                    SourceType = described.SourceType,
+                    Icon = described.Icon,
+                    TotalRecords = group.Sum(b => b.Count),
+                    RecordsLast24Hours = group.Sum(b => b.CountLast24Hours),
+                    LastRecordAt = new DateTimeOffset(group.Max(b => b.Latest), TimeSpan.Zero),
+                    FirstRecordAt = new DateTimeOffset(group.Min(b => b.Oldest), TimeSpan.Zero),
+                };
+                foreach (var bucket in group)
+                    stream.RecordCounts[bucket.DataType] = stream.RecordCounts.GetValueOrDefault(bucket.DataType) + bucket.Count;
+                return stream;
+            })
+            .OrderByDescending(s => s.LastRecordAt),
+    ];
+}

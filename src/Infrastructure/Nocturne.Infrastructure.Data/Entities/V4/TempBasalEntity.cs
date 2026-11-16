@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TempBasal
 /// </summary>
 [Table("temp_basals")]
-public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISyncDedupable, IDeviceAttributedEntity, ISystemTimestamped, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
+public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISyncDedupable, IDeviceAttributedEntity, ISystemTimestamped, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked, IWriterStamped
 {
     /// <inheritdoc />
     [AuditIgnored]
@@ -78,6 +78,11 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Tim
     [Column("data_source")]
     [MaxLength(256)]
     public string? DataSource { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("writer_grant_id")]
+    public Guid? WriterGrantId { get; set; }
 
     /// <summary>
     /// Links records that were split from the same legacy Treatment
