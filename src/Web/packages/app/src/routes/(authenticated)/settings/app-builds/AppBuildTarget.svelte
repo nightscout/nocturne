@@ -50,6 +50,7 @@
   let connecting = $state(false);
   let replacingKey = $state(false);
   let keyReplaced = $state(false);
+  let keyStepBusy = $state(false);
   let expectingRun = $state(false);
   let expectingTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -204,12 +205,17 @@
                   {targetId}
                   {secretName}
                   appName={targetTitle(target.id)}
+                  onBusyChange={(busy) => (keyStepBusy = busy)}
                   onSaved={() => {
                     replacingKey = false;
                     keyReplaced = true;
                   }}
                 />
-                <Button variant="ghost" onclick={() => (replacingKey = false)}>
+                <Button
+                  variant="ghost"
+                  disabled={keyStepBusy}
+                  onclick={() => (replacingKey = false)}
+                >
                   Cancel
                 </Button>
               </div>

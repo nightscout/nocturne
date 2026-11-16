@@ -39,6 +39,12 @@ describe("app build error copy", () => {
     expect(describeError(new Error("network"))).toMatch(/Try again/);
   });
 
+  it("answers a 403 without a known code as a permission refusal", () => {
+    expect(describeError({ status: 403, body: { message: "Forbidden" } })).toBe(
+      errorText("forbidden")
+    );
+  });
+
   it("does not answer an unknown code with its text", () => {
     expect(errorText("constructor")).toBeUndefined();
     expect(

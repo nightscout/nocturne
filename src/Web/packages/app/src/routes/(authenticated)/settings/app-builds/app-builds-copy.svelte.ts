@@ -56,7 +56,7 @@ export function errorText(code: string | null | undefined): string | undefined {
     case "signed_out":
       return "You were not signed in to Nocturne when GitHub sent you back. Sign in, then connect again.";
     case "forbidden":
-      return "Your Nocturne account cannot connect a repository. You must have permission to change the site settings.";
+      return "Your Nocturne account cannot do this. You must have permission to change the site settings.";
     case "installation_gone":
       return "The Nocturne GitHub app is not installed on the repository now. Connect the repository again.";
     case "authorization_denied":
@@ -100,7 +100,11 @@ const POLICY: RemoteErrorPolicy = {
  */
 export function describeError(err: unknown): string {
   const status = errorStatus(err);
-  const known = status === 429 ? undefined : errorText(errorMessage(err));
+  const known =
+    status === 429
+      ? undefined
+      : (errorText(errorMessage(err)) ??
+        (status === 403 ? errorText("forbidden") : undefined));
   if (known === undefined) {
     // Only the status goes on: this API's bodies are codes, so an unknown one is not a sentence.
     return describeRemoteError(

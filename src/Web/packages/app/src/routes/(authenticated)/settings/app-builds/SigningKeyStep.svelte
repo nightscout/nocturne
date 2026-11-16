@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import Download from "@lucide/svelte/icons/download";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -36,9 +36,15 @@
     /** The app's display name. */
     appName: string;
     onSaved?: () => void;
+    /**
+     * Told whether a check, a new key or a save runs; a save in flight cannot
+     * be called back.
+     */
+    onBusyChange?: (busy: boolean) => void;
   }
 
-  let { targetId, secretName, appName, onSaved }: Props = $props();
+  let { targetId, secretName, appName, onSaved, onBusyChange }: Props =
+    $props();
 
   // Loaded only here, so node-forge and libsodium stay out of every other page's bundle.
   const keystoreLibrary = () => import("#lib/app-builds/keystore.js");
@@ -90,9 +96,13 @@
   let saving = $state(false);
   let saveError = $state<string | null>(null);
 
-  const busy = $derived(working || saving);
+  const isBusy = $derived(working || saving);
+  $effect(() => {
+    const busy = isBusy;
+    untrack(() => onBusyChange?.(busy));
+  });
   const canSave = $derived(
-    !busy &&
+    !isBusy &&
       (sealed !== null ||
         heldKind === "checked" ||
         heldKind === "unchecked" ||
@@ -135,10 +145,16 @@
     message = null;
     format = null;
     fileBytes = null;
+    alias = "";
     if (!file) return;
 
+    const { keystoreFormat, MAX_KEYSTORE_BYTES } = await keystoreLibrary();
+    if (mine !== generation) return;
+    if (file.size > MAX_KEYSTORE_BYTES) {
+      message = importProblemText("too_large");
+      return;
+    }
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const { keystoreFormat } = await keystoreLibrary();
     if (mine !== generation) {
       bytes.fill(0);
       return;
@@ -157,6 +173,7 @@
    * checked again.
    */
   function dropCheck() {
+    generation++;
     if (heldKind !== "checked" && heldKind !== "unchecked") return;
     held = null;
     heldKind = null;
@@ -176,7 +193,9 @@
         sameKeyPassword ? storePassword : keyPassword
       );
       if (mine !== generation) {
-        if (result.ok) result.keystore.bytes.fill(0);
+        // A field edit leaves the file current; only a replaced file's bytes are spent.
+        if (result.ok && result.keystore.bytes !== fileBytes)
+          result.keystore.bytes.fill(0);
         return;
       }
       if (result.ok) {
@@ -251,16 +270,26 @@
     if (!canSave) return;
     saving = true;
     saveError = null;
+    // The step can be left while a key is fetched or sealed; nothing is sent for a step that is gone.
+    const mine = generation;
+    const current = () => mine === generation;
+    const keystore = held;
     try {
       if (!sealed) {
-        if (!held) return;
+        if (!keystore) return;
         const [{ packKeystoreSet }, { sealSecret }] = await Promise.all([
           keystoreLibrary(),
           sealLibrary(),
         ]);
+        if (!current()) return;
         const key = await fresh(getAppBuildSecretKey(targetId));
+        if (!current()) return;
         if (!key.key || !key.keyId) throw new Error("no_public_key");
-        const encryptedValue = await sealSecret(packKeystoreSet(held), key.key);
+        const encryptedValue = await sealSecret(
+          packKeystoreSet(keystore),
+          key.key
+        );
+        if (!current()) return;
         sealed = {
           encryptedValue,
           keyId: key.keyId,
@@ -305,7 +334,7 @@
   <div class="flex flex-wrap gap-2">
     <Button
       variant={mode === "import" ? "default" : "outline"}
-      disabled={busy}
+      disabled={isBusy}
       onclick={() => choose("import")}
     >
       <Upload class="h-4 w-4" />
@@ -313,7 +342,7 @@
     </Button>
     <Button
       variant={mode === "create" ? "default" : "outline"}
-      disabled={busy}
+      disabled={isBusy}
       onclick={() => choose("create")}
     >
       <KeyRound class="h-4 w-4" />
@@ -332,7 +361,7 @@
           bind:ref={fileInput}
           type="file"
           accept=".jks,.keystore,.p12,.pfx"
-          disabled={busy}
+          disabled={isBusy}
           onchange={readFile}
         />
       </div>
@@ -344,6 +373,7 @@
             type="password"
             autocomplete="off"
             bind:value={storePassword}
+            disabled={isBusy}
             oninput={dropCheck}
           />
         </div>
@@ -354,6 +384,7 @@
               type="single"
               bind:value={alias}
               onValueChange={dropCheck}
+              disabled={isBusy}
             >
               <Select.Trigger id="keystore-alias" class="w-full max-w-md">
                 {alias}
@@ -370,6 +401,7 @@
               autocomplete="off"
               spellcheck={false}
               bind:value={alias}
+              disabled={isBusy}
               oninput={dropCheck}
             />
           {/if}
@@ -378,6 +410,7 @@
           <Checkbox
             id="same-key-password"
             bind:checked={sameKeyPassword}
+            disabled={isBusy}
             onCheckedChange={dropCheck}
           />
           <Label for="same-key-password">
@@ -392,11 +425,12 @@
               type="password"
               autocomplete="off"
               bind:value={keyPassword}
+              disabled={isBusy}
               oninput={dropCheck}
             />
           </div>
         {/if}
-        <Button onclick={checkImport} disabled={busy}>
+        <Button onclick={checkImport} disabled={isBusy}>
           {#if working}<Loader2 class="h-4 w-4 animate-spin" />{/if}
           Check the key
         </Button>
@@ -424,6 +458,7 @@
             type="password"
             autocomplete="new-password"
             bind:value={newPassword}
+            disabled={isBusy}
           />
         </div>
         <div class="space-y-2">
@@ -433,9 +468,10 @@
             type="password"
             autocomplete="new-password"
             bind:value={newPasswordAgain}
+            disabled={isBusy}
           />
         </div>
-        <Button onclick={createKey} disabled={busy}>
+        <Button onclick={createKey} disabled={isBusy}>
           {#if working}<Loader2 class="h-4 w-4 animate-spin" />{/if}
           Make the key
         </Button>
@@ -457,7 +493,7 @@
             </p>
           </Alert.Description>
         </Alert.Root>
-        <Button variant="outline" disabled={busy} onclick={downloadBackup}>
+        <Button variant="outline" disabled={isBusy} onclick={downloadBackup}>
           <Download class="h-4 w-4" />
           Download the backup file
         </Button>

@@ -146,7 +146,7 @@ function settingsGroups(): SettingsGroup[] {
         },
         {
           title: "App builds",
-          description: "Build the AAPS app in your own GitHub repository.",
+          description: "Build an app in your own GitHub repository.",
           href: "/settings/app-builds",
           icon: Hammer,
           anyScope: ["tenant.settings"],

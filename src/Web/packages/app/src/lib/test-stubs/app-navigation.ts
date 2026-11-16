@@ -21,7 +21,14 @@ export function refreshAll() {
 
 export function beforeNavigate(_callback: unknown) {}
 
-export function afterNavigate(_callback: unknown) {}
+type AfterNavigateCallback = (navigation: { type: string }) => void;
+
+/** Callbacks registered with `afterNavigate`. Nothing calls them unless a test does. */
+export const afterNavigateCallbacks: AfterNavigateCallback[] = [];
+
+export function afterNavigate(callback: AfterNavigateCallback) {
+  afterNavigateCallbacks.push(callback);
+}
 
 export function onNavigate(_callback: unknown) {}
 
