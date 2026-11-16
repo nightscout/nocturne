@@ -365,14 +365,6 @@ public class ServicesController : ControllerBase
             var result = await _dataSourceService.DeleteDataSourceDataAsync(id, allowReimport, cancellationToken);
             if (!result.Success)
             {
-                if (result.ErrorCode == DataSourceDeleteError.SharedWithConnection)
-                {
-                    return Problem(
-                        detail: "A connection also writes records under this name.",
-                        statusCode: 409,
-                        title: "Conflict");
-                }
-
                 if (result.ErrorCode == DataSourceDeleteError.NotFound)
                 {
                     return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");

@@ -163,9 +163,8 @@ describe("DataSourceManageDialog", () => {
       .toBeInTheDocument();
   });
 
-  it("keeps the dialog open with the reason when a connection shares the name", async () => {
-    deleteImpl = async () =>
-      error(409, "A connection also sends records under this name.");
+  it("keeps the dialog open with the reason when the server refuses the delete", async () => {
+    deleteImpl = async () => error(409, "A sync of the connector is running.");
 
     await attemptDelete();
 
@@ -173,7 +172,7 @@ describe("DataSourceManageDialog", () => {
       .element(
         page
           .getByRole("alertdialog")
-          .getByText("A connection also sends records under this name.")
+          .getByText("A sync of the connector is running.")
       )
       .toBeVisible();
     expect(toastSuccess).not.toHaveBeenCalled();

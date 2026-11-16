@@ -116,37 +116,6 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteDataSourceData_RefusesAHandleACredentialAlsoWritesUnder()
-    {
-        SeedImportedSnapshot("aps-1", Rig);
-        using (var db = NewContext())
-        {
-            db.ApsSnapshots.Add(new ApsSnapshotEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = TenantId,
-                LegacyId = "aps-by-token",
-                Device = Rig,
-                Timestamp = DateTime.UtcNow,
-                AidAlgorithm = "Loop",
-                WriterGrantId = Guid.NewGuid(),
-            });
-            db.SaveChanges();
-        }
-
-        await using (var ctx = NewContext())
-        {
-            var result = await CreateService(ctx).DeleteDataSourceDataAsync(Rig);
-
-            result.Success.Should().BeFalse();
-            result.ErrorCode.Should().Be(Nocturne.Core.Models.Services.DataSourceDeleteError.SharedWithConnection);
-        }
-
-        await using var assert = NewContext();
-        (await assert.ApsSnapshots.IgnoreQueryFilters().CountAsync(a => a.DeletedAt != null)).Should().Be(0);
-    }
-
-    [Fact]
     public async Task DeleteDataSourceData_LeavesAnotherRigsSnapshotsAlone()
     {
         SeedImportedSnapshot("aps-1", Rig);

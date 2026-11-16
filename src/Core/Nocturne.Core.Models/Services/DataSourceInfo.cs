@@ -422,10 +422,4 @@ public enum DataSourceDeleteError
     /// A sync of the connector is still running, so nothing was deleted.
     /// </summary>
     SyncRunning,
-
-    /// <summary>
-    /// A credential also writes records under the same origin handle, which a delete by handle
-    /// would remove with the source's own, so nothing was deleted.
-    /// </summary>
-    SharedWithConnection,
 }
