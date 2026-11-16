@@ -28,6 +28,11 @@ public class MigrationRecentFirstTests
 
         public bool FailTreatments { get; init; }
 
+        /// <summary>The treatments request, counted from 1, at which the host stops answering; 0 for never.</summary>
+        public int UnreachableFromTreatmentsRequest { get; init; }
+
+        private int _treatmentRequests;
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -36,6 +41,13 @@ public class MigrationRecentFirstTests
             Requests.Add(uri.AbsolutePath + query);
             onRequest?.Invoke(uri.AbsolutePath + query);
 
+            if (uri.AbsolutePath == "/api/v1/treatments.json"
+                && UnreachableFromTreatmentsRequest > 0
+                && ++_treatmentRequests >= UnreachableFromTreatmentsRequest)
+            {
+                throw new HttpRequestException("connection refused");
+            }
+
             return Task.FromResult(uri.AbsolutePath switch
             {
                 "/api/v1/entries.json" => Json(Array(Within(entries, query, "date").Select(at =>
@@ -43,6 +55,7 @@ public class MigrationRecentFirstTests
                 "/api/v1/treatments.json" when FailTreatments => Json("[]", HttpStatusCode.InternalServerError),
                 "/api/v1/treatments.json" => Json(Array(Within(treatments, query, "created_at").Select(at =>
                     $$"""{"_id":"t{{at.ToUnixTimeMilliseconds()}}","created_at":"{{at.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)}}"}"""))),
+                "/api/v1/devicestatus.json" => Json("[]"),
                 "/api/v1/profile.json" => Json("""[{"_id":"p1","defaultProfile":"Default"}]"""),
                 _ => Json("[]", HttpStatusCode.NotFound),
             });
@@ -152,6 +165,63 @@ public class MigrationRecentFirstTests
         pulls.Select(p => p.Ready).Should().Equal(false, false, true, true);
         pulls[2].EntriesComplete.Should().BeFalse("its older history is still to come");
         final.RecentDataReady.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The app is handed the run on this signal and tells the user their recent data is ready. A
+    /// collection that failed has none, so the run keeps the signal back until it ends and reports
+    /// the failure.
+    /// </summary>
+    [Fact]
+    public async Task A_run_whose_recent_part_lost_a_collection_does_not_say_its_recent_data_is_ready()
+    {
+        MigrationJob? running = null;
+        var readyDuringHistory = new List<bool>();
+        var entryPulls = 0;
+        var handler = new DatedNightscout(
+            entries: [Start.AddDays(-1), Start.AddDays(-400)],
+            treatments: [],
+            onRequest: request =>
+            {
+                if (request.StartsWith("/api/v1/entries.json") && ++entryPulls == 2)
+                    readyDuringHistory.Add(running!.GetStatus().RecentDataReady);
+            })
+        {
+            FailTreatments = true,
+        };
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var final = await RunAsync(provider, ["entries", "treatments"], job => running = job);
+
+        readyDuringHistory.Should().Equal(false);
+        final.State.Should().Be(MigrationJobState.Completed);
+        final.HasFailures.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A connection that fails in the older history leaves collections holding their recent part.
+    /// Each says its older history is missing; none is reported as not attempted.
+    /// </summary>
+    [Fact]
+    public async Task A_host_that_dies_in_the_older_history_names_what_each_collection_is_missing()
+    {
+        var handler = new DatedNightscout(
+            entries: [Start.AddDays(-1), Start.AddDays(-400)],
+            treatments: [Start.AddDays(-2), Start.AddDays(-300)])
+        {
+            UnreachableFromTreatmentsRequest = 2,
+        };
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await RunAsync(provider, ["entries", "treatments", "devicestatus"]);
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.CollectionProgress["entries"].FailureReason.Should().BeNull("both its parts were read");
+        status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(2);
+        status.CollectionProgress["treatments"].DocumentsMigrated.Should().Be(1);
+        status.CollectionProgress["devicestatus"].FailureReason.Should()
+            .Be("The older history was not imported because the connection to Nightscout had already failed.");
+        status.ErrorMessage.Should().NotContain("not attempted");
     }
 
     [Fact]

@@ -57,13 +57,46 @@ describe("the import that continues in the app", () => {
     await expect.element(banner()).not.toBeInTheDocument();
   });
 
+  // A critical alarm opens over whatever is on screen. A modal notice takes pointer events from
+  // the page, and the first tap on the alarm would close the notice instead of acknowledging it.
+  it("leaves the rest of the page able to take a tap", async () => {
+    watchImport("job-1");
+
+    render(Harness);
+
+    await expect.element(notice()).toBeVisible();
+    expect(document.body.style.pointerEvents).not.toBe("none");
+    expect(document.querySelector("[inert]")).toBeNull();
+  });
+
+  it("closes on Escape", async () => {
+    watchImport("job-1");
+
+    render(Harness);
+    await expect.element(notice()).toBeVisible();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+    await expect.element(notice()).not.toBeInTheDocument();
+    await expect.element(banner()).toBeVisible();
+  });
+
+  it("follows an import named after the app loaded", async () => {
+    render(Harness);
+    await expect.element(banner()).not.toBeInTheDocument();
+
+    watchImport("job-late", { acknowledged: true });
+
+    await expect.element(banner()).toBeVisible();
+  });
+
   it("says the newest data comes first when the recent data is not in yet", async () => {
     status = { ...status, recentDataReady: false };
     watchImport("job-1");
 
     render(Harness);
 
-    await expect.element(page.getByText("Your data is importing.")).toBeVisible();
+    await expect.element(page.getByText("Nocturne is importing your data.")).toBeVisible();
   });
 
   it("leaves a banner once the notice is closed, and does not cover the app again", async () => {

@@ -60,14 +60,24 @@ public class NightscoutConnectorConfiguration : BaseConnectorConfiguration
     /// <summary>The <see cref="HistoryDays"/> that sets no limit.</summary>
     public const int WholeHistory = 0;
 
+    /// <summary>The longest <see cref="HistoryDays"/> read as a limit; a saved value past it reads as <see cref="WholeHistory"/>.</summary>
+    public const int LongestHistoryDays = 365;
+
     /// <summary>
-    ///     How many days of the source's history are imported, by the connector's own backfill and by
-    ///     the import started from it; <see cref="WholeHistory"/> for all of it. The default sets no
-    ///     limit: a configuration saved before the setting existed reads as the default, and it was
-    ///     importing everything.
+    ///     How many days of the source's history are imported, by the connector's first backfill and
+    ///     by the import started from it; <see cref="WholeHistory"/> for all of it. The default sets
+    ///     no limit: a configuration saved before the setting existed reads as the default, and it
+    ///     was importing everything.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.HistoryDays, DefaultValue = "0", AllowedNumbers = [30, 90, 365, WholeHistory])]
     public int HistoryDays { get; set; } = WholeHistory;
+
+    /// <summary>
+    ///     The oldest instant a history of <paramref name="historyDays"/> reaches back to from
+    ///     <paramref name="now"/>, or null for the whole history.
+    /// </summary>
+    public static DateTime? HistoryStart(int historyDays, DateTime now) =>
+        historyDays is > WholeHistory and <= LongestHistoryDays ? now.AddDays(-historyDays) : null;
 
     [ConnectorProperty(ConnectorPropertyKey.WriteBackEnabled, DefaultValue = "false")]
     public bool WriteBackEnabled { get; set; } = false;

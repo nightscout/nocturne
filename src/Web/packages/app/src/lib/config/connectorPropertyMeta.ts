@@ -241,7 +241,7 @@ export const connectorPropertyMeta = {
   },
   HistoryDays: {
     label: 'History to import',
-    description: 'How many days of history Nocturne imports from the source',
+    description: 'How many days of history Nocturne imports the first time',
     category: 'Sync',
     optionLabels: {
       30: 'Last 30 days',
@@ -250,7 +250,7 @@ export const connectorPropertyMeta = {
       0: 'All history',
     },
     choiceDescription:
-      'How much history Nocturne imports from the source. A shorter range is imported sooner.',
+      'How much history Nocturne imports the first time. A shorter range is imported sooner. To add older history later, run an import with a date range from Move from Nightscout in Settings.',
   },
 
   // Glooko-specific

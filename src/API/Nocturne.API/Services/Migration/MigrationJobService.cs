@@ -1140,13 +1140,31 @@ internal class MigrationJob
                         // The connection, not this collection, is what failed. Trying the rest would
                         // spend a timeout each to arrive at the sentence already recorded.
                         _abandonedAfter = failure.Cause;
+                        RecordHistoryAbandoned(failure.Cause);
                         return;
                     }
                 }
             }
 
-            _recentDataReady = true;
+            // A collection that failed has no recent data to show, and the run's end is where
+            // that is reported.
+            if (!_collectionProgress.Values.Any(c => c.FailureReason is not null))
+                _recentDataReady = true;
         }
+    }
+
+    /// <summary>
+    /// Gives each collection that had a pass read, and not its last, the reason its older history
+    /// is missing. Without one it would be reported as not attempted, with its recent data in.
+    /// </summary>
+    private void RecordHistoryAbandoned(MigrationFailureCause cause)
+    {
+        var reason = cause is MigrationFailureCause.Unreachable
+            ? "The older history was not imported because the connection to Nightscout had already failed."
+            : "The older history was not imported because Nightscout had already refused this credential.";
+
+        foreach (var name in _answered.Where(name => !Progress(name).IsComplete).ToList())
+            RecordCollectionFailure(name, reason);
     }
 
     /// <summary>A cause that belongs to the connection, so every remaining collection would meet it too.</summary>
@@ -1678,6 +1696,8 @@ internal class MigrationJob
         /// <summary>Ids of the records taken with no usable time. Every pass is served them, so they are taken once.</summary>
         public HashSet<string> UndatedIds { get; } = new(StringComparer.Ordinal);
 
+        public HashSet<string> OutsideIds { get; } = new(StringComparer.Ordinal);
+
         public long Seen => Migrated + Failed + Tally.DocumentsSkipped;
     }
 
@@ -1738,8 +1758,10 @@ internal class MigrationJob
                     && (!collection.Cursor.Within(d, s_noInstant) || d.Id is not { Length: > 0 } id || pull.UndatedIds.Add(id)))
                 .ToArray();
 
-            // Another pass takes what this one's part of the range turns away.
-            pull.OutsideWindow += served.Count(d => !collection.Cursor.Within(d, _window));
+            // Another pass takes what this one's part of the range turns away. Both passes can be
+            // served a record just outside the whole range, so it is counted by id.
+            pull.OutsideWindow += served.Count(d => !collection.Cursor.Within(d, _window)
+                && (d.Id is not { Length: > 0 } id || pull.OutsideIds.Add(id)));
             if (page.Length > 0)
             {
                 try

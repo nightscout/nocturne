@@ -8,6 +8,9 @@ import { errorStatus } from "#lib/forms/submit-error.js";
 // another tab. No import to watch costs the app no request.
 const WATCHED_IMPORT_KEY = "nocturne.import.watched-job";
 
+/** Tells a watcher already started in this tab that there is an import to follow. */
+const WATCHED_IMPORT_EVENT = "nocturne:import-watched";
+
 const POLL_INTERVAL_MS = 5000;
 const MAX_CONSECUTIVE_FAILURES = 5;
 
@@ -61,6 +64,7 @@ export function watchImport(jobId: string, { acknowledged = false } = {}) {
     jobId,
     acknowledged: acknowledged || (current?.jobId === jobId && current.acknowledged),
   });
+  globalThis.dispatchEvent?.(new Event(WATCHED_IMPORT_EVENT));
 }
 
 function isLive(state: MigrationJobState | undefined): boolean {
@@ -77,8 +81,24 @@ export function createImportWatcher(options: {
   let status = $state<MigrationJobStatus>();
   let acknowledged = $state(false);
 
-  /** Starts polling when an import is watched. Returns the function that stops it. */
+  /**
+   * Follows the watched import, and one named later in this tab. Returns the function that
+   * stops it.
+   */
   function start(): () => void {
+    let stop = follow();
+    const refollow = () => {
+      stop();
+      stop = follow();
+    };
+    globalThis.addEventListener?.(WATCHED_IMPORT_EVENT, refollow);
+    return () => {
+      globalThis.removeEventListener?.(WATCHED_IMPORT_EVENT, refollow);
+      stop();
+    };
+  }
+
+  function follow(): () => void {
     const watched = readWatchedImport();
     if (!watched) return () => {};
 
@@ -94,6 +114,12 @@ export function createImportWatcher(options: {
     }
 
     async function poll() {
+      // A hidden tab shows no one the progress, and an import can run for hours.
+      if (globalThis.document?.visibilityState === "hidden") {
+        timer = setTimeout(poll, POLL_INTERVAL_MS);
+        return;
+      }
+
       try {
         const latest = await fresh(migrationRemote.getStatus(watched!.jobId));
         if (!active) return;

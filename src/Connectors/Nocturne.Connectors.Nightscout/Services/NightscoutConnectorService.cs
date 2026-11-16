@@ -51,16 +51,14 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     protected override DateTime? InitialSyncFloor => null;
 
     /// <summary>
-    ///     The oldest instant an open-ended sync reads back to:
-    ///     <see cref="NightscoutConnectorConfiguration.HistoryDays"/> before now, or null for the
-    ///     source's whole history. Every crawl's pages stop at it, so a crawl ends there as it does
-    ///     at the source's first record and its crawl state holds nothing owed below. A sync of an
-    ///     explicit range is answered as asked.
+    ///     Where a crawl with no lower bound stops: <see cref="NightscoutConnectorConfiguration.HistoryDays"/>
+    ///     before now, or null for the source's first record. Only an open lower bound is given
+    ///     one, so the limit shortens the backfill of a family with nothing stored and what such a
+    ///     crawl left owed. A catch-up keeps its resume point however old, so an outage longer than
+    ///     the limit loses nothing, and a sync of an explicit range is answered as asked.
     /// </summary>
     private DateTime? HistoryFloor(TConfig config) =>
-        config.HistoryDays > NightscoutConnectorConfiguration.WholeHistory
-            ? Clock.GetUtcNow().UtcDateTime.AddDays(-config.HistoryDays)
-            : null;
+        NightscoutConnectorConfiguration.HistoryStart(config.HistoryDays, Clock.GetUtcNow().UtcDateTime);
 
 
     public override async Task<bool> AuthenticateAsync()
@@ -183,7 +181,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         var openEnded = request.To is null;
         var historyFloor = openEnded ? HistoryFloor(config) : null;
 
-        DateTime? Floored(DateTime? from) => historyFloor is { } floor && !(from >= floor) ? floor : from;
+        DateTime? Floored(DateTime? from) => from ?? historyFloor;
 
         // Each data type below streams fetch-page → publish-page rather than accumulating
         // the whole range first: a multi-year backfill of a high-volume collection held in

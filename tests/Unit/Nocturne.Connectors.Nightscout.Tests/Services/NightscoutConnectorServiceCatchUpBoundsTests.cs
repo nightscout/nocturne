@@ -223,6 +223,41 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
         handler.CrawlOf("devicestatus").Should().Contain(LowerBound(watermark - CatchUpOverlap));
     }
 
+    /// <summary>
+    /// The limit shortens the first backfill, not a catch-up. A connector that was off for longer
+    /// than the limit resumes from its newest stored record, or the days between that record and
+    /// the limit are skipped with nothing recording them as owed.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WithAHistoryLimit_CatchesUpFromAWatermarkOlderThanTheLimit()
+    {
+        var watermark = DateTime.UtcNow.AddDays(-45);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: watermark);
+
+        await service.SyncDataAsync(
+            new SyncRequest { From = null, To = null, DataTypes = [SyncDataType.DeviceStatus] },
+            NewConfig(historyDays: 30),
+            CancellationToken.None);
+
+        handler.CrawlOf("devicestatus").Should().Contain(LowerBound(watermark - CatchUpOverlap));
+    }
+
+    /// <summary>A saved value outside the choices offered is no limit, not a date the calendar cannot hold.</summary>
+    [Fact]
+    public async Task SyncDataAsync_WithAHistoryLimitNoChoiceOffers_ReadsTheWholeHistory()
+    {
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: null);
+
+        await service.SyncDataAsync(
+            new SyncRequest { From = null, To = null, DataTypes = [SyncDataType.DeviceStatus] },
+            NewConfig(historyDays: 3_000_000),
+            CancellationToken.None);
+
+        handler.CrawlOf("devicestatus").Should().NotContain("$gte");
+    }
+
     /// <summary>A range named at both ends is a deliberate re-import, so it reaches past the limit.</summary>
     [Fact]
     public async Task SyncDataAsync_WithAHistoryLimit_AnswersAnExplicitRangeAsGiven()

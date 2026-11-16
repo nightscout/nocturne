@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.API.Services.Migration;
@@ -10,7 +11,7 @@ namespace Nocturne.API.Services.Migration;
 public record NightscoutConnectorSource(string? Url, string? ApiSecret, int HistoryDays = 0)
 {
     /// <summary>The oldest instant an import started at <paramref name="now"/> reads, or null for the whole history.</summary>
-    public DateTime? HistoryStart(DateTime now) => HistoryDays > 0 ? now.AddDays(-HistoryDays) : null;
+    public DateTime? HistoryStart(DateTime now) => NightscoutConnectorConfiguration.HistoryStart(HistoryDays, now);
 
     /// <summary>The saved source for <paramref name="connectorName"/>, or null when it has no saved configuration.</summary>
     public static async Task<NightscoutConnectorSource?> ReadAsync(
