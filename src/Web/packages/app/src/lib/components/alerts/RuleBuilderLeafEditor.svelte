@@ -65,18 +65,25 @@
     definitionsQuery?.current ?? [],
   );
 
-  // Display strings for operators and trend buckets. Stored on the wire as the
-  // literal symbol/key; formatted symbols (≥, ≤) are display-only.
-  const opLabels: Record<ComparisonOperator, string> = {
-    ">=": "≥",
-    ">": ">",
-    "<=": "≤",
-    "<": "<",
-  };
-  const stalenessOpLabels: Record<StalenessOperator, string> = {
-    ">=": "≥",
-    ">": ">",
-  };
+  // Stored on the wire as the symbol; shown in words.
+  const OPERATORS: readonly ComparisonOperator[] = [">=", ">", "<=", "<"];
+  const STALENESS_OPERATORS: readonly StalenessOperator[] = [">=", ">"];
+
+  /** Built per call so wuchale reads it in the current locale. */
+  function operatorLabel(operator: string): string {
+    switch (operator) {
+      case ">=":
+        return "at least";
+      case ">":
+        return "more than";
+      case "<=":
+        return "at most";
+      case "<":
+        return "less than";
+      default:
+        return operator;
+    }
+  }
   // PumpMode rules use the dedicated pump_state condition (the backend rejects
   // PumpMode on the generic state-span condition at validation time).
   const stateCategories = Object.values(StateSpanCategory).filter(
@@ -92,11 +99,6 @@
     AlertWeekday.Saturday,
     AlertWeekday.Sunday,
   ];
-
-  /** Label for a stored key, or undefined when the key is not one the editor offers. */
-  function labelFor(labels: Partial<Record<string, string>>, key: string): string | undefined {
-    return Object.entries(labels).find(([k]) => k === key)?.[1];
-  }
 
   function isWeekday(value: string): value is AlertWeekday {
     return Object.values(AlertWeekday).some((day) => day === value);
@@ -142,18 +144,19 @@
         if (node.threshold) node.threshold.direction = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-[5rem]">
-        {node.threshold.direction === "above" ? ">" : "<"}
+      <Select.Trigger size="sm" class="w-24" aria-label="Direction">
+        {node.threshold.direction === "above" ? "above" : "below"}
       </Select.Trigger>
       <Select.Content>
-        <Select.Item value="below" label="<" />
-        <Select.Item value="above" label=">" />
+        <Select.Item value="below" label="below" />
+        <Select.Item value="above" label="above" />
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Value"
       step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
-      size="xs"
+      size="sm"
       class="w-20 text-right tabular-nums"
       value={bg(node.threshold.value ?? 0)}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -173,19 +176,20 @@
         if (node.predicted) node.predicted.operator = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-14">
-        {labelFor(opLabels, node.predicted.operator ?? "<=")}
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(node.predicted.operator ?? "<=")}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.entries(opLabels) as [op, label] (op)}
-          <Select.Item value={op} {label} />
+        {#each OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
         {/each}
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Value"
       step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
-      size="xs"
+      size="sm"
       class="w-20 text-right tabular-nums"
       value={bg(node.predicted.value ?? 0)}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -199,8 +203,9 @@
     <span class="text-xs text-muted-foreground">{bgLabel()} within</span>
     <Input
       type="number"
+      aria-label="Minutes"
       min="1"
-      size="xs"
+      size="sm"
       class="w-16 text-right tabular-nums"
       value={node.predicted.within_minutes ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -221,7 +226,7 @@
           node.rate_of_change.direction = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-24">
+      <Select.Trigger size="sm" class="w-24" aria-label="Direction">
         {rateDirectionLabel(node.rate_of_change.direction ?? "falling")}
       </Select.Trigger>
       <Select.Content>
@@ -229,11 +234,12 @@
         <Select.Item value="rising" label={rateDirectionLabel("rising")} />
       </Select.Content>
     </Select.Root>
-    <span class="text-xs text-muted-foreground">≥</span>
+    <span class="text-xs text-muted-foreground">at least</span>
     <Input
       type="number"
+      aria-label="Value"
       step={glucoseUnits.current === "mmol" ? "0.01" : "0.1"}
-      size="xs"
+      size="sm"
       class="w-20 text-right tabular-nums"
       value={bg(node.rate_of_change.rate ?? 0)}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -253,7 +259,7 @@
         if (node.trend) node.trend.bucket = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-32">
+      <Select.Trigger size="sm" class="w-32" aria-label="Trend">
         {trendBucketLabel(node.trend.bucket ?? "falling")}
       </Select.Trigger>
       <Select.Content>
@@ -270,19 +276,20 @@
         if (node.staleness) node.staleness.operator = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-14">
-        {labelFor(opLabels, node.staleness.operator ?? ">=")}
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(node.staleness.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.entries(opLabels) as [op, label] (op)}
-          <Select.Item value={op} {label} />
+        {#each OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
         {/each}
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Value"
       min="1"
-      size="xs"
+      size="sm"
       class="w-16 text-right tabular-nums"
       value={node.staleness.value ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -297,7 +304,8 @@
   {:else if node.type === "time_of_day" && node.time_of_day}
     <Input
       type="time"
-      size="xs"
+      aria-label="From"
+      size="sm"
       class="w-24 tabular-nums"
       value={node.time_of_day.from ?? "00:00"}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -307,7 +315,8 @@
     <span class="text-xs text-muted-foreground">–</span>
     <Input
       type="time"
-      size="xs"
+      aria-label="To"
+      size="sm"
       class="w-24 tabular-nums"
       value={node.time_of_day.to ?? "23:59"}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -345,19 +354,20 @@
         payload.operator = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-14">
-        {labelFor(opLabels, payload.operator ?? ">=")}
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(payload.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.entries(opLabels) as [op, label] (op)}
-          <Select.Item value={op} {label} />
+        {#each OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
         {/each}
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Value"
       step={node.type === "sensitivity_ratio" ? "0.01" : "0.1"}
-      size="xs"
+      size="sm"
       class="w-20 text-right tabular-nums"
       value={payload.value ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -374,19 +384,20 @@
         payload.operator = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-14">
-        {labelFor(stalenessOpLabels, payload.operator ?? ">")}
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(payload.operator ?? ">")}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.entries(stalenessOpLabels) as [op, label] (op)}
-          <Select.Item value={op} {label} />
+        {#each STALENESS_OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
         {/each}
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Minutes"
       min="1"
-      size="xs"
+      size="sm"
       class="w-16 text-right tabular-nums"
       value={payload.minutes ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -395,11 +406,12 @@
     />
     <span class="text-xs text-muted-foreground">min</span>
   {:else if node.type === "signal_loss" && node.signal_loss}
-    <span class="text-xs text-muted-foreground">no data for ≥</span>
+    <span class="text-xs text-muted-foreground">no data for at least</span>
     <Input
       type="number"
+      aria-label="Minutes"
       min="1"
-      size="xs"
+      size="sm"
       class="w-16 text-right tabular-nums"
       value={node.signal_loss.timeout_minutes ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -419,7 +431,7 @@
         if (node.temp_basal && isStringEnumMember(TempBasalMetric, v)) node.temp_basal.metric = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-32">
+      <Select.Trigger size="sm" class="w-32" aria-label="Measure">
         {tempBasalMetricLabel(node.temp_basal.metric ?? TempBasalMetric.Rate)}
       </Select.Trigger>
       <Select.Content>
@@ -435,19 +447,20 @@
         if (node.temp_basal) node.temp_basal.operator = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-14">
-        {labelFor(opLabels, node.temp_basal.operator ?? ">=")}
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(node.temp_basal.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.entries(opLabels) as [op, label] (op)}
-          <Select.Item value={op} {label} />
+        {#each OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
         {/each}
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Value"
       step="0.1"
-      size="xs"
+      size="sm"
       class="w-20 text-right tabular-nums"
       value={node.temp_basal.value ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -462,6 +475,7 @@
     {@const payload = node[node.type]!}
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
+      aria-label="Active"
       checked={payload.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         payload.is_active = checked;
@@ -470,11 +484,12 @@
     />
     <span class="text-xs text-muted-foreground">{payload.is_active ? "active" : "inactive"}</span>
     {#if payload.is_active}
-      <span class="text-xs text-muted-foreground">for ≥</span>
+      <span class="text-xs text-muted-foreground">for at least</span>
       <Input
         type="number"
+      aria-label="Minutes, optional"
         min="1"
-        size="xs"
+        size="sm"
         class="w-16 text-right tabular-nums"
         placeholder="any"
         value={payload.for_minutes ?? ""}
@@ -494,8 +509,8 @@
         if (node.alert_state) node.alert_state.alert_id = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-44">
-        {selectedRule?.name ?? "Select a rule"}
+      <Select.Trigger size="sm" class="w-44" aria-label="Alert">
+        {selectedRule?.name ?? "Select an alert"}
       </Select.Trigger>
       <Select.Content>
         {#each availableRules as rule (rule.id)}
@@ -511,7 +526,7 @@
         if (node.alert_state) node.alert_state.state = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-32">
+      <Select.Trigger size="sm" class="w-32" aria-label="State">
         {alertStateLabel(node.alert_state.state ?? "firing")}
       </Select.Trigger>
       <Select.Content>
@@ -520,11 +535,12 @@
         {/each}
       </Select.Content>
     </Select.Root>
-    <span class="text-xs text-muted-foreground">for ≥</span>
+    <span class="text-xs text-muted-foreground">for at least</span>
     <Input
       type="number"
+      aria-label="Minutes, optional"
       min="1"
-      size="xs"
+      size="sm"
       class="w-16 text-right tabular-nums"
       placeholder="any"
       value={node.alert_state.for_minutes ?? ""}
@@ -539,7 +555,7 @@
     {@const selected = new Set(node.glucose_bucket.buckets ?? [])}
     <ToggleGroup.Root
       type="multiple"
-      size="xs"
+      size="sm"
       spacing={1}
       value={[...selected]}
       onValueChange={(v: string[]) => {
@@ -563,19 +579,20 @@
         if (isStringEnumMember(AlertComparisonOperator, v)) payload.operator = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-14">
-        {labelFor(opLabels, payload.operator ?? ">=")}
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(payload.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.entries(opLabels) as [op, label] (op)}
-          <Select.Item value={op} {label} />
+        {#each OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
         {/each}
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Minutes"
       min="1"
-      size="xs"
+      size="sm"
       class="w-16 text-right tabular-nums"
       value={payload.minutes ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -587,7 +604,7 @@
     {@const selectedDays = new Set(node.day_of_week.days ?? [])}
     <ToggleGroup.Root
       type="multiple"
-      size="xs"
+      size="sm"
       spacing={1}
       value={[...selectedDays]}
       onValueChange={(v: string[]) => {
@@ -610,7 +627,7 @@
         if (node.pump_state && isStringEnumMember(PumpModeState, v)) node.pump_state.mode = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-32">
+      <Select.Trigger size="sm" class="w-32" aria-label="Pump mode">
         {pumpModeLabel(node.pump_state.mode ?? PumpModeState.Suspended)}
       </Select.Trigger>
       <Select.Content>
@@ -621,6 +638,7 @@
     </Select.Root>
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
+      aria-label="Active"
       checked={node.pump_state.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         if (!node.pump_state) return;
@@ -630,11 +648,12 @@
     />
     <span class="text-xs text-muted-foreground">{node.pump_state.is_active ? "active" : "inactive"}</span>
     {#if node.pump_state.is_active}
-      <span class="text-xs text-muted-foreground">for ≥</span>
+      <span class="text-xs text-muted-foreground">for at least</span>
       <Input
         type="number"
+      aria-label="Minutes, optional"
         min="1"
-        size="xs"
+        size="sm"
         class="w-16 text-right tabular-nums"
         placeholder="any"
         value={node.pump_state.for_minutes ?? ""}
@@ -655,7 +674,7 @@
           node.state_span_active.category = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-40">
+      <Select.Trigger size="sm" class="w-40" aria-label="Category">
         {stateSpanCategoryLabel(node.state_span_active.category ?? StateSpanCategory.Override)}
       </Select.Trigger>
       <Select.Content>
@@ -666,7 +685,8 @@
     </Select.Root>
     <Input
       type="text"
-      size="xs"
+      aria-label="State"
+      size="sm"
       class="w-28"
       placeholder="any state"
       value={node.state_span_active.state ?? ""}
@@ -678,6 +698,7 @@
     />
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
+      aria-label="Active"
       checked={node.state_span_active.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         if (!node.state_span_active) return;
@@ -687,11 +708,12 @@
     />
     <span class="text-xs text-muted-foreground">{node.state_span_active.is_active ? "active" : "inactive"}</span>
     {#if node.state_span_active.is_active}
-      <span class="text-xs text-muted-foreground">for ≥</span>
+      <span class="text-xs text-muted-foreground">for at least</span>
       <Input
         type="number"
+      aria-label="Minutes, optional"
         min="1"
-        size="xs"
+        size="sm"
         class="w-16 text-right tabular-nums"
         placeholder="any"
         value={node.state_span_active.for_minutes ?? ""}
@@ -706,6 +728,7 @@
   {:else if node.type === "sleep_session_active" && node.sleep_session_active}
     <span class="text-xs text-muted-foreground">sleep session is</span>
     <Switch
+      aria-label="Active"
       checked={node.sleep_session_active.is_active ?? false}
       onCheckedChange={(checked) => {
         if (node.sleep_session_active)
@@ -724,7 +747,7 @@
         if (node.tracker_age) node.tracker_age.tracker_definition_id = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-44">
+      <Select.Trigger size="sm" class="w-44" aria-label="Tracker">
         {selectedDef?.name ?? "Select a tracker"}
       </Select.Trigger>
       <Select.Content>
@@ -740,19 +763,20 @@
         if (node.tracker_age) node.tracker_age.operator = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-14">
-        {labelFor(opLabels, node.tracker_age.operator ?? ">=")}
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(node.tracker_age.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.entries(opLabels) as [op, label] (op)}
-          <Select.Item value={op} {label} />
+        {#each OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
         {/each}
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Hours"
       step="1"
-      size="xs"
+      size="sm"
       class="w-20 text-right tabular-nums"
       value={(node.tracker_age.minutes ?? 0) / 60}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -766,7 +790,7 @@
       }}
     />
     <span class="text-xs text-muted-foreground">
-      h (negative = before a scheduled event)
+      hours. Use a negative number for the time before a scheduled event.
     </span>
   {/if}
 </div>
