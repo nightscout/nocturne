@@ -12,7 +12,7 @@
   import {
     DEVICE_EVENT_TYPES,
     getDeviceEventTypeLabel,
-  } from "#lib/constants/device-event-types.js";
+  } from "#lib/constants/device-event-types.svelte.js";
 
   interface Props {
     form: {

@@ -1,6 +1,5 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
@@ -8,6 +7,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -194,8 +194,8 @@ internal sealed class EngineAlarmRelay(
         // backend renders them, in the tenant's units.
         var message = payload.GlucoseValue is { } mgdl
             ? useMmol
-                ? $"BG Now: {GlucoseUnits.Scale((double)mgdl, useMmol: true).ToString("0.0", CultureInfo.InvariantCulture)} mmol/L"
-                : $"BG Now: {GlucoseUnits.Scale((double)mgdl, useMmol: false).ToString("0", CultureInfo.InvariantCulture)} mg/dL"
+                ? $"BG Now: {GlucoseUnits.FromMgdl((double)mgdl, GlucoseUnit.Mmol).ToString("0.0", CultureInfo.InvariantCulture)} mmol/L"
+                : $"BG Now: {GlucoseUnits.FromMgdl((double)mgdl, GlucoseUnit.MgDl).ToString("0", CultureInfo.InvariantCulture)} mg/dL"
             : payload.RuleName;
 
         return new EngineAlarm(

@@ -1,84 +1,48 @@
-using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.API.Services.Legacy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Mappers;
-using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Health;
 
 /// <summary>
-/// Domain service for body weight record operations. Inherits standard CRUD, SignalR broadcasting,
-/// and document-processing behaviour from <see cref="SimpleEntityService{TModel,TEntity}"/>.
+/// <see cref="IBodyWeightService"/> over <see cref="IHealthSeriesRepository{T}"/>, broadcasting each
+/// committed write.
 /// </summary>
-/// <seealso cref="IBodyWeightService"/>
-/// <seealso cref="SimpleEntityService{TModel,TEntity}"/>
-public class BodyWeightService
-    : SimpleEntityService<BodyWeight, BodyWeightEntity>,
-        IBodyWeightService
+public class BodyWeightService(
+    IHealthSeriesRepository<BodyWeight> repository,
+    IDocumentProcessingService documentProcessingService,
+    ISignalRBroadcastService signalRBroadcastService
+) : IBodyWeightService
 {
-    /// <param name="contexts">Factory that opens the context each operation reads and writes body weights on.</param>
-    /// <param name="documentProcessingService">Service that applies field processing (e.g. identifier generation) before save.</param>
-    /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
-    /// <param name="timeProvider">Clock that stamps soft deletes.</param>
-    /// <param name="logger">Logger instance for this service.</param>
-    public BodyWeightService(
-        INocturneDbContextFactory contexts,
-        IDocumentProcessingService documentProcessingService,
-        ISignalRBroadcastService signalRBroadcastService,
-        TimeProvider timeProvider,
-        ILogger<BodyWeightService> logger
-    )
-        : base(contexts, documentProcessingService, signalRBroadcastService, timeProvider, logger) { }
+    private readonly HealthSeriesWriter<BodyWeight> _series =
+        new(repository, documentProcessingService, signalRBroadcastService, "bodyweight");
 
-    protected override DbSet<BodyWeightEntity> EntitySet(NocturneDbContext db) => db.BodyWeights;
-    protected override string CollectionName => "bodyweight";
-    protected override string EntityTypeName => "body weight";
-
-    protected override BodyWeight ToDomainModel(BodyWeightEntity entity) =>
-        BodyWeightMapper.ToDomainModel(entity);
-
-    protected override BodyWeightEntity ToEntity(BodyWeight model) =>
-        BodyWeightMapper.ToEntity(model);
-
-    protected override void UpdateEntity(BodyWeightEntity entity, BodyWeight model) =>
-        BodyWeightMapper.UpdateEntity(entity, model);
-
-    /// <remarks>Body weight keys on epoch milliseconds rather than a <see cref="DateTime"/>
-    /// column, which is why it stays on <see cref="SimpleEntityService{TModel,TEntity}"/> rather
-    /// than <see cref="TimeSeriesEntityService{TModel,TEntity}"/>.</remarks>
-    protected override IOrderedQueryable<BodyWeightEntity> OrderByTimestamp(
-        IQueryable<BodyWeightEntity> query
-    ) => query.OrderByDescending(b => b.Mills);
-
-    public Task<IEnumerable<BodyWeight>> GetBodyWeightsAsync(
+    public async Task<IEnumerable<BodyWeight>> GetBodyWeightsAsync(
         int count = 10,
         int skip = 0,
         CancellationToken cancellationToken = default
-    ) => GetAllAsync(count, skip, cancellationToken);
+    ) => await repository.GetNewestFirstAsync(count, skip, cancellationToken);
 
     public Task<BodyWeight?> GetBodyWeightByIdAsync(
         string id,
         CancellationToken cancellationToken = default
-    ) => GetByIdAsync(id, cancellationToken);
+    ) => repository.GetByIdAsync(id, cancellationToken);
 
     public Task<IEnumerable<BodyWeight>> CreateBodyWeightsAsync(
         IEnumerable<BodyWeight> bodyWeights,
         CancellationToken cancellationToken = default
-    ) => CreateManyAsync(bodyWeights, cancellationToken);
+    ) => _series.CreateAsync(bodyWeights, cancellationToken);
 
     public Task<BodyWeight?> UpdateBodyWeightAsync(
         string id,
         BodyWeight bodyWeight,
         CancellationToken cancellationToken = default
-    ) => UpdateOneAsync(id, bodyWeight, cancellationToken);
+    ) => _series.UpdateAsync(id, bodyWeight, cancellationToken);
 
     public Task<bool> DeleteBodyWeightAsync(
         string id,
         CancellationToken cancellationToken = default
-    ) => DeleteOneAsync(id, cancellationToken);
+    ) => _series.DeleteAsync(id, cancellationToken);
 }

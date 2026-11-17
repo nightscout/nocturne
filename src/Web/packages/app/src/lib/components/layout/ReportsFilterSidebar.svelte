@@ -12,7 +12,8 @@
   import { requireDateParamsContext, withRange, type RangeWrite } from "#lib/hooks/date-params.svelte.js";
   import { getReportSlots } from "#lib/hooks/report-slots.svelte.js";
   import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
-  import { dayCount } from "#lib/utils/date-range.js";
+  import { dayCount, exceedsDaySpan, outsideDaySpan } from "#lib/utils/date-range.js";
+  import { getV4ApiLimits } from "#lib/api/generated/metadatas.generated.remote.js";
   import { formatLocale, formatMediumDateRange } from "#lib/utils/formatting.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Filter from "@lucide/svelte/icons/funnel";
@@ -40,6 +41,9 @@
     { label: "30 Days", days: 30 },
     { label: "90 Days", days: 90 },
   ];
+
+  const limits = getV4ApiLimits();
+  const maxDays = $derived(limits.current?.maxDateSpanDays);
 
   // === DRAFT STATE ===
   // The pending date range selection before clicking "Apply filters".
@@ -77,6 +81,16 @@
     const days = dayCount(start.toString(), end.toString());
     return dayPresets.some((p) => p.days === days) ? days : undefined;
   });
+
+  const pendingStart = $derived(
+    draftCalendarValue?.start && !draftCalendarValue.end ? draftCalendarValue.start : undefined
+  );
+  const isDateDisabled = $derived(outsideDaySpan(pendingStart, maxDays));
+  const draftTooLong = $derived(
+    !!draftCalendarValue?.start &&
+      !!draftCalendarValue.end &&
+      exceedsDaySpan(draftCalendarValue.start.toString(), draftCalendarValue.end.toString(), maxDays)
+  );
 
   function selectPreset(daysCount: number) {
     const endDate = today(getLocalTimeZone());
@@ -200,8 +214,15 @@
               captionLayout="dropdown"
               locale={formatLocale()}
               onValueChange={handleCalendarChange}
+              {isDateDisabled}
+              {maxDays}
             />
           </div>
+          {#if draftTooLong}
+            <p class="text-sm text-destructive" role="alert">
+              The date range must not be longer than {maxDays} days.
+            </p>
+          {/if}
         </div>
 
         {#if extension}
@@ -219,7 +240,7 @@
           <RotateCcw class="h-4 w-4 mr-2" />
           Reset
         </Button>
-        <Button class="flex-1" onclick={applyFilters}>Apply filters</Button>
+        <Button class="flex-1" disabled={draftTooLong} onclick={applyFilters}>Apply filters</Button>
       </div>
     </div>
   </Sheet.Content>

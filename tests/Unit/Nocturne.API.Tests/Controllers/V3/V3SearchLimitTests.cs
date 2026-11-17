@@ -150,6 +150,7 @@ public class V3SearchLimitTests
             .ReturnsAsync(Enumerable.Range(0, 300).Select(i => new Food { Name = $"food {i}" }).ToList());
         var controller = new FoodController(
             repository.Object,
+            Mock.Of<IFoodService>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance)
         {

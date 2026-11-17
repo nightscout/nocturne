@@ -136,7 +136,7 @@ internal sealed class DailySummaryDataset : IReportDataset
                 ["timeInRange"] = P(d.InRangePercent),
                 ["timeBelow"] = P(d.VeryLowPercent + d.LowPercent),
                 ["timeAbove"] = P(d.HighPercent + d.VeryHighPercent),
-                ["mean"] = any ? GlucoseUnits.Scale(d.AverageGlucose, useMmol) : null,
+                ["mean"] = any ? ReportGlucose.Scale(d.AverageGlucose, useMmol) : null,
                 ["partial"] = request.HistoryClamped && d.Timestamp < request.From.ToUnixTimeMilliseconds(),
             };
             if (treatments)

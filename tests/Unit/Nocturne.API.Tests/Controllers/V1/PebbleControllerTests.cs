@@ -211,6 +211,7 @@ public class PebbleControllerTests
     [InlineData("mmol", "mgdl", "113")]
     [InlineData("mg/dl", "mmol", "6.3")]
     [InlineData("mg/dl", "mmol/L", "6.3")]
+    [InlineData("mg/dl", " MMOL/L", "6.3")]
     public async Task UnitsParameter_OverridesTenantUnits(string tenantUnits, string units, string expectedSgv)
     {
         var controller = NewController(tenantUnits, Sgv(113, 0), Sgv(108, 5));

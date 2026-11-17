@@ -7,7 +7,7 @@
   import type { AreaMode, LineColorMode } from "@nocturne/charts/core";
   import { plotPadding } from "@nocturne/charts/core";
   import type { TransformedChartData } from "@nocturne/charts/core";
-  import { GLUCOSE_CHART_FETCH_HOURS, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { GLUCOSE_CHART_FETCH_HOURS, type GlucoseRangePalette, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
   /**
    * The dashboard's main plot as the live chart first draws it, for the server to render to markup
@@ -33,6 +33,7 @@
       areaMode: AreaMode;
       areaOpacity: number;
       units: GlucoseUnits;
+      rangePalette: GlucoseRangePalette;
     };
   }
 
@@ -91,6 +92,7 @@
   {engine}
   {legend}
   glucoseUnits={style.units}
+  rangePalette={style.rangePalette}
   padding={plotPadding(compact, false)}
   showTimeAxis={false}
   {size}
@@ -105,6 +107,7 @@
       showPoints={style.showPoints}
       areaMode={style.areaMode}
       areaOpacity={style.areaOpacity}
+      rangePalette={style.rangePalette}
       visibleOnly
     />
   {/snippet}

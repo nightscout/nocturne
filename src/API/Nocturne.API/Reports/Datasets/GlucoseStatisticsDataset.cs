@@ -83,15 +83,15 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
             ["timeInRangePercent"] = IfAny(Math.Round(percentages.Target, 1)),
             ["timeBelow"] = IfAny(Math.Round(percentages.VeryLow + percentages.Low, 1)),
             ["timeAbove"] = IfAny(Math.Round(percentages.High + percentages.VeryHigh, 1)),
-            ["mean"] = IfAny(GlucoseUnits.Scale(analysis.BasicStats.Mean, useMmol)),
+            ["mean"] = IfAny(ReportGlucose.Scale(analysis.BasicStats.Mean, useMmol)),
             ["gmi"] = IfAny(Math.Round(analysis.GMI.Value, 1)),
             ["cv"] = analysis.GlycemicVariability is { } variability && count > 0
                 ? Math.Round(variability.CoefficientOfVariation, 1)
                 : null,
-            ["sd"] = IfAny(GlucoseUnits.Scale(analysis.BasicStats.StandardDeviation, useMmol)),
+            ["sd"] = IfAny(ReportGlucose.Scale(analysis.BasicStats.StandardDeviation, useMmol)),
             ["readings"] = count,
-            ["targetLow"] = GlucoseUnits.Scale(thresholds.TargetBottom, useMmol),
-            ["targetHigh"] = GlucoseUnits.Scale(thresholds.TargetTop, useMmol),
+            ["targetLow"] = ReportGlucose.Scale(thresholds.TargetBottom, useMmol),
+            ["targetHigh"] = ReportGlucose.Scale(thresholds.TargetTop, useMmol),
         };
 
         var treatments = request.HasScope(Scope.TreatmentsRead);

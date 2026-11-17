@@ -10,9 +10,11 @@ namespace Nocturne.API.Services.Caching;
 /// action succeeds.
 /// </summary>
 /// <remarks>
-/// Each controller names every family whose cached value its records can change, except the legacy
-/// read families (<see cref="TenantCacheFamily.Entries"/>, <see cref="TenantCacheFamily.Treatments"/>),
-/// which the repositories clear on every write through <see cref="LegacyReadCacheInvalidation"/>. The
+/// Each controller names every family whose cached value its records can change, except the families
+/// the repositories clear on every write through <see cref="LegacyReadCacheInvalidation"/>: the legacy
+/// reads (<see cref="TenantCacheFamily.Entries"/>, <see cref="TenantCacheFamily.Treatments"/>) and the
+/// profile families (<see cref="TenantCacheFamily.ProfileVersions"/>,
+/// <see cref="TenantCacheFamily.ProfileActivations"/>). The
 /// eHbA1c family is keyed by year and its completed years live for weeks, so it is cleared only for
 /// the years the write's <see cref="TenantCacheWriteFootprint"/> reaches, or whole when the footprint
 /// is empty. A refused, failed or cancelled request clears nothing, so a caller who may not write

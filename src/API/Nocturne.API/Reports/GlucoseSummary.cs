@@ -122,7 +122,7 @@ internal static class GlucoseSummary
         });
 
     internal static string Format(double mgdl, bool useMmol) =>
-        GlucoseUnits.Scale(mgdl, useMmol).ToString(useMmol ? "0.0" : "0", CultureInfo.InvariantCulture);
+        ReportGlucose.Scale(mgdl, useMmol).ToString(useMmol ? "0.0" : "0", CultureInfo.InvariantCulture);
 
     private static string Percent(double percent) =>
         Math.Round(percent).ToString("0", CultureInfo.InvariantCulture);

@@ -230,7 +230,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
 
         await _therapyRepo.SetDefaultAsync(target.Id, ct);
-        await _tempBasalRates.AfterProfilesChangedAsync([profileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
 
         return NoContent();
     }
@@ -381,15 +381,9 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return BadRequest(
-                new { error = $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'." }
-            );
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
 
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
         var data = (await _therapyRepo.GetAsync(
             from,
             to,
@@ -471,7 +465,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(created.Id, ct);
             created.IsDefault = true;
         }
-        await _tempBasalRates.AfterProfilesChangedAsync([created.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync([created.Timestamp], ct);
         return CreatedAtAction(nameof(GetTherapySettingsById), new { id = created.Id }, created);
     }
@@ -517,7 +511,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(id, ct);
             updated.IsDefault = true;
         }
-        await _tempBasalRates.AfterProfilesChangedAsync([updated.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync(
             stored is null ? [updated.Timestamp] : [stored.Timestamp, updated.Timestamp], ct);
         return Ok(updated);
@@ -543,7 +537,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
         }
 
-        await _tempBasalRates.AfterProfilesChangedAsync(stored is null ? [] : [stored.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync(stored is null ? [] : [stored.Timestamp], ct);
         return NoContent();
     }

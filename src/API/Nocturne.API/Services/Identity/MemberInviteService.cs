@@ -221,7 +221,8 @@ public class MemberInviteService : IMemberInviteService
                                 invite.DirectPermissions?.ToList(),
                                 invite.Label,
                                 LimitTo24Hours: invite.LimitTo24Hours,
-                                CreatedFromInviteId: invite.Id),
+                                CreatedFromInviteId: invite.Id,
+                                MadeBy: MembershipMadeBy.Member),
                             token))
                         return AlreadyMember;
 

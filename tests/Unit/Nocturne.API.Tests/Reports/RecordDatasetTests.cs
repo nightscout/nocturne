@@ -8,6 +8,7 @@ using Nocturne.API.Reports;
 using Nocturne.API.Reports;
 using Nocturne.API.Reports.Datasets;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Devices;
@@ -104,7 +105,7 @@ public class RecordDatasetTests
                 .AddSingleton(Boluses.Object).AddSingleton(Carbs.Object).AddSingleton(Temps.Object).AddSingleton(Injections.Object)
                 .AddSingleton(Notes.Object).AddSingleton(Spans.Object).AddSingleton(Pump.Object).AddSingleton(Uploader.Object)
                 .AddSingleton(Age.Object).AddSingleton(Chart.Object).AddSingleton(Loop.Object).AddSingleton(StateSpans.Object)
-                .AddSingleton(new TenantClockResolver(Therapy.Object, new CategoryReadContext(), NullLogger<TenantClockResolver>.Instance))
+                .AddSingleton(new TenantClockResolver(Therapy.Object, new CategoryReadContext(), new ShareClockDouble(Therapy.Object), NullLogger<TenantClockResolver>.Instance))
                 .AddSingleton<IStatisticsService>(new StatisticsService(new FixedTime(Now)))
                 .AddSingleton<TimeProvider>(new FixedTime(Now))
                 .AddSingleton<IHttpContextAccessor>(new HttpContextAccessor { HttpContext = new DefaultHttpContext() })

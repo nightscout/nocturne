@@ -27,20 +27,6 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
     /// </summary>
     private const double KovatchevFloorMgdl = 20.0;
 
-    private static readonly string[] BolusTreatmentTypes = new[]
-    {
-        "Meal Bolus",
-        "Correction Bolus",
-        "Snack Bolus",
-        "Bolus Wizard",
-        "Combo Bolus",
-        "Bolus", // Generic bolus
-        "SMB", // Super Micro Bolus (from loop systems like AndroidAPS)
-        "e-Bolus", // Extended bolus
-        "Extended Bolus", // Extended bolus variant
-        "Dual Wave", // Combo bolus with extended portion
-    };
-
     private static readonly IEnumerable<DistributionBin> DefaultDistributionBins = new[]
     {
         new DistributionBin
@@ -2131,17 +2117,6 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
     }
 
     /// <summary>
-    /// Determine if a legacy treatment is a bolus based on event type.
-    /// Kept for legacy ValidateTreatmentData/CleanTreatmentData support.
-    /// </summary>
-    /// <param name="treatment">Treatment to check</param>
-    /// <returns>True if the treatment is a bolus type</returns>
-    private bool IsBolusTreatment(Treatment treatment)
-    {
-        return BolusTreatmentTypes.Contains(treatment.EventType, StringComparer.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
     /// Internal building block: calculates bolus-only stats.
     /// Called by the public overload which adds basal data on top.
     /// </summary>
@@ -3136,16 +3111,6 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
     #region Unit Conversions
 
     /// <summary>
-    /// Convert mg/dL to mmol/L
-    /// </summary>
-    /// <param name="mgdl">Glucose value in mg/dL</param>
-    /// <returns>Glucose value in mmol/L</returns>
-    public double MgdlToMMOL(double mgdl)
-    {
-        return Math.Round((mgdl / GlucoseConstants.MgdlPerMmol) * 10) / 10;
-    }
-
-    /// <summary>
     /// Convert mmol/L to mg/dL
     /// </summary>
     /// <param name="mmol">Glucose value in mmol/L</param>
@@ -3153,16 +3118,6 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
     public double MmolToMGDL(double mmol)
     {
         return Math.Round(mmol * GlucoseConstants.MgdlPerMmol);
-    }
-
-    /// <summary>
-    /// Convert mg/dL to mmol/L as a formatted string
-    /// </summary>
-    /// <param name="mgdl">Glucose value in mg/dL</param>
-    /// <returns>Glucose value in mmol/L as a formatted string</returns>
-    public string MgdlToMMOLString(double mgdl)
-    {
-        return MgdlToMMOL(mgdl).ToString("F1");
     }
 
     #endregion

@@ -752,10 +752,7 @@ internal class EntryReadService : IEntryStore
     /// precision that its <c>Mills</c> truncates away, so equality on the instant would miss it.
     /// </summary>
     private static (DateTime From, DateTime To) MillisecondOf(long mills) =>
-        (MillsToUtc(mills), MillsToUtc(mills + 1));
-
-    private static DateTime MillsToUtc(long mills) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+        (mills.ToUtcDateTime(), (mills + 1).ToUtcDateTime());
 
     #endregion
 
@@ -807,9 +804,9 @@ internal class EntryReadService : IEntryStore
         // Time range from the parsed find query
         var (fromMills, toMills) = (find.FromMills, find.ToMills);
         if (fromMills.HasValue)
-            from = DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime;
+            from = fromMills.Value.ToUtcDateTime();
         if (toMills.HasValue)
-            to = DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime;
+            to = toMills.Value.ToUtcDateTime();
 
         // DateString takes priority over Find-based time range. Both cannot be combined because
         // the V4 repos accept a single from/to window; DateString wins when both are present.
@@ -822,9 +819,9 @@ internal class EntryReadService : IEntryStore
         // Explicit FromMills/ToMills win outright — typed callers (alert replay) use these
         // instead of round-tripping through Find or DateString.
         if (query.FromMills.HasValue)
-            from = DateTimeOffset.FromUnixTimeMilliseconds(query.FromMills.Value).UtcDateTime;
+            from = query.FromMills.Value.ToUtcDateTime();
         if (query.ToMills.HasValue)
-            to = DateTimeOffset.FromUnixTimeMilliseconds(query.ToMills.Value).UtcDateTime;
+            to = query.ToMills.Value.ToUtcDateTime();
 
         return (from, to);
     }

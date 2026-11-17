@@ -219,7 +219,7 @@ internal sealed class TreatmentsDataset : IReportDataset
         ["insulin"] = r.Type == ReportTreatmentType.Bolus && r.Insulin is { } u ? Math.Round(u, 2) : null,
         ["injectionUnits"] = r.Type == ReportTreatmentType.BasalInjection && r.Insulin is { } units ? Math.Round(units, 2) : null,
         ["carbs"] = r.Carbs is { } g ? Math.Round(g, 1) : null,
-        ["bgCheck"] = r.GlucoseMgdl is { } mgdl ? Extensions.GlucoseUnits.Scale(mgdl, useMmol) : null,
+        ["bgCheck"] = r.GlucoseMgdl is { } mgdl ? ReportGlucose.Scale(mgdl, useMmol) : null,
         ["rate"] = r.Rate is { } rate ? Math.Round(rate, 3) : null,
         ["durationMinutes"] = r.DurationMinutes is { } m ? Math.Round(m) : null,
         ["automatic"] = r.Automatic switch { true => "yes", false => "no", null => null },

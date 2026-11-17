@@ -31,7 +31,9 @@ public sealed record AdoptedLegacyCredential(
     string? LegacyTokenDigest = null);
 
 /// <summary>The client a grant was made for.</summary>
-public sealed record OAuthGrantClient(string ClientId, string? DisplayName, string? ClientUri, string? LogoUri);
+/// <param name="SoftwareId">The identifier the app's publisher registers every install under.</param>
+public sealed record OAuthGrantClient(
+    string ClientId, string? DisplayName, string? ClientUri, string? LogoUri, string? SoftwareId = null);
 
 /// <summary>A stored grant. Its credential hashes stay in the store.</summary>
 /// <param name="Client">Null for a direct or guest grant, and when the client row is gone.</param>

@@ -345,7 +345,6 @@ public class NightscoutPagerBoundaryTests
                 Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
                 Logger.Object,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 registration.Object,
                 publisher.Object);
         }

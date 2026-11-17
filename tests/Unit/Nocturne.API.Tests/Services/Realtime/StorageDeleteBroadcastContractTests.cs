@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Hubs;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using V3DeviceStatusController = Nocturne.API.Controllers.V3.DeviceStatusController;
 using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Health;
@@ -606,7 +607,7 @@ public class StorageDeleteBroadcastContractTests
     /// their delete identifier would emit an id none of those surfaces produces.
     /// </summary>
     [Fact]
-    public async Task SimpleEntityService_Delete_SendsTheUuidVerbatim()
+    public async Task HealthSeries_Delete_SendsTheUuidVerbatim()
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -623,10 +624,9 @@ public class StorageDeleteBroadcastContractTests
 
         var capture = new BroadcastCapture();
         var deleted = await new HeartRateService(
-            context.AsFactory(),
+            new HeartRateRepository(context.AsFactory(), TimeProvider.System),
             Mock.Of<IDocumentProcessingService>(),
-            capture.Broadcast,
-            TimeProvider.System, NullLogger<HeartRateService>.Instance
+            capture.Broadcast
         ).DeleteHeartRateAsync(RecordGuid);
 
         deleted.Should().BeTrue();

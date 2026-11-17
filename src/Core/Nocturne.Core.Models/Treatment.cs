@@ -33,12 +33,33 @@ public class Treatment : ProcessableDocumentBase
     public override string? Id { get; set; }
 
     /// <summary>
+    /// The legacy id the stored record is keyed by: the <c>_id</c>, <c>syncIdentifier</c> or
+    /// content-derived id it was uploaded under. <see cref="Id"/> carries the id the record is served
+    /// by, so this is the only place an upstream instance's own id for the record survives. Never on
+    /// the wire.
+    /// </summary>
+    [JsonIgnore]
+    public string? LegacyId { get; set; }
+
+    /// <summary>
+    /// The uuid of the stored record the treatment is served from, which <see cref="Id"/> does not
+    /// carry once an update path re-keys it to the legacy id. Earlier write-backs sent some
+    /// treatments upstream under its 24-hex prefix, so write-back looks for a copy under it. Never on
+    /// the wire.
+    /// </summary>
+    [JsonIgnore]
+    public Guid? RecordId { get; set; }
+
+    /// <summary>
     /// V3 API identifier - alias for Id for Nightscout V3 compatibility.
     /// Nightscout V3 API returns both _id and identifier fields with the same value.
     /// </summary>
     [JsonPropertyName("identifier")]
     [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Identifier => Id;
+
+    /// <summary>A copy whose reference members, such as <see cref="AdditionalProperties"/>, are shared.</summary>
+    public Treatment ShallowCopy() => (Treatment)MemberwiseClone();
 
     /// <summary>
     /// Server-modified timestamp for V3 compatibility.
@@ -819,22 +840,6 @@ public class Treatment : ProcessableDocumentBase
     /// </summary>
     [JsonExtensionData]
     public Dictionary<string, object>? AdditionalProperties { get; set; }
-
-    /// <summary>
-    /// Canonical group ID for deduplication.
-    /// Records with the same CanonicalId represent the same underlying event from different sources.
-    /// </summary>
-    [JsonPropertyName("canonicalId")]
-    [NocturneOnly]
-    public Guid? CanonicalId { get; set; }
-
-    /// <summary>
-    /// List of data sources that contributed to this unified record.
-    /// Only populated when returning merged/unified DTOs.
-    /// </summary>
-    [JsonPropertyName("sources")]
-    [NocturneOnly]
-    public string[]? Sources { get; set; }
 
     /// <summary>
     /// Snapshot of insulin pharmacokinetic properties at treatment delivery time.

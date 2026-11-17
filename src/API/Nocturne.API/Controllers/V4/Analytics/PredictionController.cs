@@ -80,8 +80,8 @@ public class PredictionController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            // No recent device-status prediction data — the normal state for care-portal-only
-            // tenants now that DeviceStatus is the default source, so not a client fault.
+            // The source has no forecast to give, which is the normal state for a care-portal-only
+            // tenant on the default DeviceStatus source. Not a client fault.
             _logger.LogWarning(ex, "No prediction data available");
             return Problem(detail: ex.Message, statusCode: 404, title: "Not Found");
         }

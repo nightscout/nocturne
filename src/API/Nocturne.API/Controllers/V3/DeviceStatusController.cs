@@ -376,34 +376,21 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(500)]
     [RequireScope(Scope.DevicesRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetDeviceStatusHistory(
+    public Task<ActionResult> GetDeviceStatusHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 devicestatus history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var deviceStatuses = (await _deviceStatuses.GetDeviceStatusesModifiedSinceAsync(
+        =>
+        CreateV3ClockHistoryResponseAsync(
+            "devicestatus",
             lastModified,
             limit,
-            cancellationToken
-        )).ToList();
-
-        if (deviceStatuses.Count > 0)
-        {
-            SetHistoryCursorHeaders(deviceStatuses.Max(d => d.SrvModified ?? d.Mills));
-        }
-
-        var mappedData = deviceStatuses.Select(ToDocument);
-        return CreateV3SuccessResponse(mappedData);
-    }
+            (since, take) =>
+                _deviceStatuses.GetDeviceStatusesModifiedSinceAsync(since, take, cancellationToken),
+            d => d.SrvModified ?? d.Mills,
+            records => records.Select(ToDocument)
+        );
 
     /// <summary>
     /// Process device status for creation/update (date parsing, validation, etc.)

@@ -25,6 +25,11 @@ namespace Nocturne.API.Controllers.V4.Base;
 public static class V4ReadLimits
 {
     /// <summary>
+    /// The most a daylight saving change moves a zone's offset.
+    /// </summary>
+    public static readonly TimeSpan DaylightSavingMargin = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Maximum records a V4 list read may return.
     /// </summary>
     /// <remarks>
@@ -33,16 +38,8 @@ public static class V4ReadLimits
     /// </remarks>
     public const int MaxPageSize = 100_000;
 
-    /// <summary>
-    /// Maximum records reachable across a V4 read that merges several sources in memory before it
-    /// paginates, counting both the page and everything skipped to reach it.
-    /// </summary>
-    /// <remarks>
-    /// Bounds the window rather than the page because such a read over-fetches
-    /// <c>limit + offset</c> records from every source it merges, so clamping <c>limit</c> alone
-    /// would leave the cost proportional to <c>offset</c>. Deeper pages come back empty.
-    /// </remarks>
-    public const int MaxMergedPageWindow = 10_000;
+    /// <inheritdoc cref="V4ApiLimits.MaxMergedPageWindow"/>
+    public const int MaxMergedPageWindow = V4ApiLimits.MaxMergedPageWindow;
 
     /// <summary>
     /// Maximum records one page of a page-numbered V4 read may return.
@@ -118,10 +115,16 @@ public static class V4ReadLimits
     /// <summary>
     /// Rejects a range read whose bounds are further apart than <paramref name="maxDays"/>.
     /// </summary>
+    /// <remarks>
+    /// A client cuts a range of <paramref name="maxDays"/> local calendar days from the first
+    /// midnight to the last millisecond of the last day, and a daylight saving change inside it
+    /// makes that span up to <see cref="DaylightSavingMargin"/> longer in UTC, so the check allows
+    /// that margin.
+    /// </remarks>
     /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
     public static ObjectResult? RejectDateSpan(
         this ControllerBase controller, DateTime? from, DateTime? to, int maxDays = MaxDateSpanDays) =>
-        from is { } start && to is { } end && (end - start).TotalDays > maxDays
+        from is { } start && to is { } end && end - start > TimeSpan.FromDays(maxDays) + DaylightSavingMargin
             ? DateSpanProblem(controller, maxDays)
             : null;
 
@@ -137,14 +140,41 @@ public static class V4ReadLimits
             : null;
 
     /// <summary>
+    /// Reads the <c>sort</c> of a V4 list: <c>timestamp_desc</c> or <c>timestamp_asc</c>.
+    /// </summary>
+    /// <returns>The error response to return, or <c>null</c> when the sort is usable.</returns>
+    public static ObjectResult? RejectInvalidSort(this ControllerBase controller, string sort, out bool descending)
+    {
+        descending = sort == "timestamp_desc";
+        return sort is "timestamp_desc" or "timestamp_asc"
+            ? null
+            : controller.Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+    }
+
+    /// <summary>
+    /// Reads the <c>sort</c> of a V4 list and clamps its paging window to this class's ceilings.
+    /// </summary>
+    /// <returns>The error response to return, or <c>null</c> when the query is usable.</returns>
+    public static ObjectResult? PrepareListPage(
+        this ControllerBase controller, string sort, ref int limit, ref int offset, out bool descending)
+    {
+        if (controller.RejectInvalidSort(sort, out descending) is { } invalid)
+            return invalid;
+
+        limit = ClampLimit(limit);
+        offset = ClampOffset(offset);
+        return null;
+    }
+
+    /// <summary>
     /// Rejects a CGM comparison or sleep trends range that covers more than
     /// <see cref="MaxAnalyticsSpanDays"/> days in the tenant's zone.
     /// </summary>
     /// <remarks>
     /// The zone is looked up only when the span in UTC is within <see cref="ZoneLookupMarginDays"/>
     /// of the cap, because outside that band no zone offset can change the answer. A tenant with no
-    /// zone, and a share, which is never given one, count UTC days: the CGM comparison client cuts
-    /// its days in UTC when the patient has no zone.
+    /// zone counts UTC days: the CGM comparison client cuts its days in UTC when the patient has no
+    /// zone.
     /// </remarks>
     /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
     public static async Task<ObjectResult?> RejectAnalyticsSpanAsync(

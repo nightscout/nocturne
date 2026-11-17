@@ -38,6 +38,23 @@ public class ModelConventionTests
     }
 
     [Fact]
+    public void TheDerivedLists_HoldEveryMappedEntityThatCarriesTheirMarker()
+    {
+        var mapped = Model().GetEntityTypes().Select(e => e.ClrType).ToList();
+
+        NocturneDbContext.V4LegacyIdRecordEntities.Should().BeEquivalentTo(Marked<IV4Entity>(mapped));
+        NocturneDbContext.LegacyIdKeyedEntities.Should().BeEquivalentTo(Marked<ILegacyIdentified>(mapped));
+        NocturneDbContext.SyncDedupedEntities.Should().BeEquivalentTo(Marked<ISyncDedupable>(mapped));
+        NocturneDbContext.V4ProfileNamedEntities.Should().BeEquivalentTo(Marked<IProfileScopedEntity>(mapped));
+    }
+
+    [Fact]
+    public void TheTimestampIndexedRecords_AreEveryV4RecordButTheTwoSpanTables() =>
+        NocturneDbContext.V4TimeSeriesRecordEntities.Should().BeEquivalentTo(
+            NocturneDbContext.V4LegacyIdRecordEntities.Except([typeof(TempBasalEntity), typeof(ProfileActivationEntity)]),
+            "a new V4 record table gets its legacy id index by its marker, and has to be listed here to get its timestamp and watermark indexes");
+
+    [Fact]
     public void EveryV4RecordTable_HasANewestFirstTimestampIndex() =>
         AssertFamily(
             NocturneDbContext.V4TimeSeriesRecordEntities,
@@ -48,22 +65,22 @@ public class ModelConventionTests
                 && i.GetFilter() is null);
 
     [Fact]
-    public void EveryV4RecordTable_HasTheLiveLegacyIdUniqueIndex() =>
+    public void EveryLegacyIdKeyedTable_HasTheLiveLegacyIdUniqueIndex() =>
         AssertFamily(
-            NocturneDbContext.V4LegacyIdRecordEntities,
+            NocturneDbContext.LegacyIdKeyedEntities,
             "_tenant_legacy_id",
-            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)])
+            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)])
                 && i.IsUnique
-                && i.GetFilter() == "legacy_id IS NOT NULL AND deleted_at IS NULL");
+                && i.GetFilter() == $"{i.Properties[1].GetColumnName()} IS NOT NULL AND deleted_at IS NULL");
 
     [Fact]
-    public void EveryV4LegacyIdRecordTable_HasTheUserTombstoneLegacyIdIndex() =>
+    public void EveryLegacyIdKeyedTable_HasTheUserTombstoneLegacyIdIndex() =>
         AssertFamily(
-            NocturneDbContext.V4LegacyIdRecordEntities,
+            NocturneDbContext.LegacyIdKeyedEntities,
             "_tenant_legacy_id_user_deleted",
-            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)])
+            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)])
                 && !i.IsUnique
-                && i.GetFilter() == "legacy_id IS NOT NULL AND deleted_by_user");
+                && i.GetFilter() == $"{i.Properties[1].GetColumnName()} IS NOT NULL AND deleted_by_user");
 
     [Fact]
     public void EverySyncDedupedTable_HasTheUserTombstoneSyncKeyIndex() =>
@@ -320,4 +337,7 @@ public class ModelConventionTests
 
         return ctx.GetService<IDesignTimeModel>().Model;
     }
+
+    private static IEnumerable<Type> Marked<TMarker>(IEnumerable<Type> mapped) =>
+        mapped.Where(t => typeof(TMarker).IsAssignableFrom(t));
 }

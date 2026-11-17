@@ -5,11 +5,11 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts;
-using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -75,28 +75,28 @@ public class RetrospectiveControllerTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), token),
             Times.Once);
 
-    private static IDeviceStatusService NoDeviceStatuses() =>
-        Mock.Of<IDeviceStatusService>(s => s.GetDeviceStatusesAsync(
-                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
-                It.IsAny<bool>(), It.IsAny<ReadSortField>())
-            == Task.FromResult<IReadOnlyList<DeviceStatus>>(Array.Empty<DeviceStatus>()));
-
     private RetrospectiveController CreateController()
     {
+        var reader = new IobCobReader(_iobCalculatorMock.Object, _cobCalculatorMock.Object, _bolusRepoMock.Object,
+            _tempBasalRepoMock.Object, _carbIntakeRepoMock.Object, _therapyTimelineResolverMock.Object, _stateSpans.Object,
+            Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+            TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance);
+        return CreateController(reader);
+    }
+
+    private RetrospectiveController CreateController(IIobCobSeriesReader seriesReader, TimeProvider? timeProvider = null)
+    {
         var controller = new RetrospectiveController(
-            _iobCalculatorMock.Object,
-            _cobCalculatorMock.Object,
             _entryServiceMock.Object,
-            _bolusRepoMock.Object,
-            _carbIntakeRepoMock.Object,
             _tempBasalRepoMock.Object,
-            NoDeviceStatuses(),
             _therapyTimelineResolverMock.Object,
             _stateSpans.Object,
-            Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(),
             new IobCobReader(_iobCalculatorMock.Object, _cobCalculatorMock.Object, _bolusRepoMock.Object,
-                _tempBasalRepoMock.Object, _carbIntakeRepoMock.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
+                _tempBasalRepoMock.Object, _carbIntakeRepoMock.Object, _therapyTimelineResolverMock.Object, _stateSpans.Object,
+                Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+                TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
+            seriesReader,
+            timeProvider ?? TimeProvider.System,
             _loggerMock.Object);
 
         var httpContext = new DefaultHttpContext();
@@ -353,5 +353,43 @@ public class RetrospectiveControllerTests
         basal.Rate.Should().Be(0.4);
         basal.IsTemp.Should().BeFalse();
         VerifyOverridesReadOnce(cts.Token);
+    }
+
+    [Fact]
+    public async Task GetRetrospectiveTimeline_AsksTheReaderForTheDaysTicksWithCarbs()
+    {
+        SetupTimelineDependencies();
+        var reader = new Mock<IIobCobSeriesReader>();
+        reader
+            .Setup(r => r.ReadSeriesAsync(It.IsAny<IobCobSeriesWindow>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobCobSeriesReading([], [], [], [], new TherapyTimeline([new TherapySegment(0, 1, FlatSchedule(0.8))]), new ScheduledBasal([], [])));
+        using var cts = new CancellationTokenSource();
+        var now = new DateTimeOffset(2024, 1, 15, 13, 7, 0, TimeSpan.Zero);
+
+        await CreateController(reader.Object, new FakeTimeProvider(now)).GetRetrospectiveTimeline("2024-01-15", 5, cts.Token);
+
+        var dayStart = new DateTimeOffset(2024, 1, 15, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        reader.Verify(r => r.ReadSeriesAsync(
+            new IobCobSeriesWindow(dayStart, dayStart + (23 * 60 + 55) * 60 * 1000L, 5 * 60 * 1000L)
+            {
+                ReadEnd = dayStart + 24 * 60 * 60 * 1000L - 1,
+            },
+            now.ToUnixTimeMilliseconds(), true, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetRetrospectiveTimeline_ReadsTheDaysRecordsPastTheLastTick()
+    {
+        SetupTimelineDependencies();
+        using var cts = new CancellationTokenSource();
+
+        await CreateController().GetRetrospectiveTimeline("2024-01-15", 60, cts.Token);
+
+        var dayEnd = new DateTime(2024, 1, 15, 23, 59, 59, 999, DateTimeKind.Utc);
+        _tempBasalRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), dayEnd, null, null, It.IsAny<int>(), 0, false, cts.Token), Times.Once);
+        _bolusRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), dayEnd, null, null, It.IsAny<int>(), 0, false,
+            It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), cts.Token), Times.Once);
     }
 }

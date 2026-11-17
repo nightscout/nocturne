@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.Core.Contracts.Auth;
@@ -20,15 +21,22 @@ public sealed record AuthAuditActor(Guid? SubjectId, string? Credential)
     /// case, including an unauthenticated request, so that a caller acting on someone else's
     /// behalf is never mistaken for that someone acting on their own.
     /// </summary>
-    public static AuthAuditActor From(AuthContext? auth) => auth switch
-    {
-        null => new AuthAuditActor(null, UnknownCredential),
-        { SubjectId: not null } => new AuthAuditActor(auth.SubjectId, null),
-        { CredentialFingerprint: not null } =>
-            new AuthAuditActor(null, $"{auth.AuthType}:{auth.CredentialFingerprint}"),
-        { TokenId: not null } => new AuthAuditActor(null, $"{auth.AuthType}:{auth.TokenId}"),
-        _ => new AuthAuditActor(null, auth.AuthType.ToString()),
-    };
+    public static AuthAuditActor From(AuthContext? auth) => auth is null
+        ? new AuthAuditActor(null, UnknownCredential)
+        : Of(auth.SubjectId, auth.AuthType.ToString(), auth.CredentialFingerprint, auth.TokenId);
+
+    /// <summary>
+    /// Describes the caller a scope's <paramref name="audit"/> context names, in the same order as
+    /// <see cref="From(AuthContext?)"/>: its subject, else its fingerprint, else its grant, else its type.
+    /// </summary>
+    public static AuthAuditActor From(IAuditContext audit) =>
+        Of(audit.SubjectId, audit.AuthType ?? UnknownCredential, audit.CredentialFingerprint, audit.TokenId);
+
+    private static AuthAuditActor Of(Guid? subjectId, string authType, string? fingerprint, Guid? tokenId) =>
+        subjectId is not null ? new AuthAuditActor(subjectId, null)
+        : fingerprint is not null ? new AuthAuditActor(null, $"{authType}:{fingerprint}")
+        : tokenId is not null ? new AuthAuditActor(null, $"{authType}:{tokenId}")
+        : new AuthAuditActor(null, authType);
 
     /// <summary>
     /// The caller behind <paramref name="auth"/> when they are distinguishable from

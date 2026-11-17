@@ -26,7 +26,11 @@ public class FoodControllerTests
     {
         _mockFoodRepository = new Mock<IFoodRepository>();
         _mockLogger = new Mock<ILogger<FoodController>>();
-        _controller = new FoodController(_mockFoodRepository.Object, _mockLogger.Object);
+        _controller = new FoodController(
+            _mockFoodRepository.Object,
+            FoodServices.Over(_mockFoodRepository.Object),
+            _mockLogger.Object
+        );
 
         // Set up HttpContext for the controller
         var httpContext = new DefaultHttpContext();

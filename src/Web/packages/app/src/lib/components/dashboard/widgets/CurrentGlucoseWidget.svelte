@@ -146,9 +146,10 @@
          see routes/(authenticated)/+page.svelte. -->
     <div
       data-testid="current-glucose-tile"
-      {@attach coachmark({
-        ...coachFor("quick-tour.current-bg"),
-      })}
+      {@attach coachmark([
+        coachFor("quick-tour.current-bg"),
+        coachFor("share-tour.reading"),
+      ])}
     >
       <GlucoseValueIndicator
         displayValue={formatGlucoseValue(glucose.currentBG, units)}

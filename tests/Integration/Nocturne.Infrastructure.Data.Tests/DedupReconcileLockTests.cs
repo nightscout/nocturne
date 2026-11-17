@@ -94,8 +94,8 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         await using var b = Context(tenant, MeetAfterCursorRead(rendezvous));
 
         var results = await Task.WhenAll(
-            Task.Run(() => Service(a).ReconcileNewLinksAsync(5000, 4)),
-            Task.Run(() => Service(b).ReconcileNewLinksAsync(5000, 4)));
+            Task.Run(() => Service(a).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: null)),
+            Task.Run(() => Service(b).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: null)));
 
         results.Sum(r => r.GroupsMerged).Should().Be(1);
 
@@ -105,7 +105,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         links.Select(l => l.CanonicalId).Distinct().Should().ContainSingle();
         links.Should().ContainSingle(l => l.IsPrimary).Which.RecordId.Should().Be(first);
 
-        var later = await Service(check).ReconcileNewLinksAsync(5000, 4);
+        var later = await Service(check).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: null);
         later.Should().Be(new ReconcileResult(0, true), "the lock went with the winning pass's commit");
     }
 
@@ -153,7 +153,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         await using var reconcile = Context(tenant, MeetAfterCursorRead(rendezvous));
 
         var job = Task.Run(() => DeduplicationModules.Admin(full.AsFactory(), tenant).RunFullAsync());
-        var pass = Task.Run(() => Service(reconcile).ReconcileNewLinksAsync(5000, 4));
+        var pass = Task.Run(() => Service(reconcile).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: null));
         await Task.WhenAll(job, pass);
 
         var jobResult = await job;
@@ -166,6 +166,50 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         links.Select(l => l.RecordId).Should().BeEquivalentTo([first, second]);
         links.Select(l => l.CanonicalId).Distinct().Should().ContainSingle();
         links.Should().ContainSingle(l => l.IsPrimary).Which.RecordId.Should().Be(first);
+    }
+
+    private sealed class FailCarbReads : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default) =>
+            command.CommandText.Contains("carb_intakes")
+                ? throw new InvalidOperationException("Simulated read failure")
+                : ValueTask.FromResult(result);
+    }
+
+    /// <summary>
+    /// A tenant whose first batch always fails: the failure is recorded on a row the record inserts,
+    /// and the next failure skips the batch, both under the runtime role and the tenant's policies.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_that_keeps_failing_is_counted_and_then_skipped()
+    {
+        var tenant = await SeedTenantAsync();
+        await SeedDuplicateCarbsAsync(tenant, DateTime.UtcNow.AddHours(-1));
+        await using var failing = Context(tenant, new FailCarbReads());
+
+        var first = () => Service(failing).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: 2);
+        await first.Should().ThrowAsync<InvalidOperationException>();
+
+        await using (var check = Context(tenant))
+        {
+            var state = await check.DedupReconcileState.AsNoTracking().SingleAsync();
+            state.FailedBatchAttempts.Should().Be(1);
+            state.FailedBatchCursorCreatedAt.Should().Be(state.LastReconciledLinkCreatedAt);
+        }
+
+        var skipped = await Service(failing).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: 2);
+
+        skipped.Should().Be(new ReconcileResult(0, true));
+        await using var after = Context(tenant);
+        var lastLink = (await after.LinkedRecords.AsNoTracking().ToListAsync()).MaxBy(l => l.Id)!;
+        var skippedState = await after.DedupReconcileState.AsNoTracking().SingleAsync();
+        skippedState.LastReconciledLinkId.Should().Be(lastLink.Id);
+        skippedState.FailedBatchCursorCreatedAt.Should().BeNull();
+        skippedState.FailedBatchCursorId.Should().BeNull();
+        skippedState.FailedBatchAttempts.Should().Be(0);
+        (await after.LinkedRecords.AsNoTracking().Select(l => l.CanonicalId).Distinct().CountAsync()).Should().Be(2);
     }
 
     private async Task<(Guid First, Guid Second)> SeedDuplicateCarbsAsync(Guid tenant, DateTime at)

@@ -3,6 +3,7 @@ using Nocturne.Core.Clinical.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -71,7 +72,7 @@ public class DeviceService : IDeviceService
             if (keys[i] is not { } key)
                 continue;
 
-            var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(sightings[i].Mills).UtcDateTime;
+            var timestamp = sightings[i].Mills.ToUtcDateTime();
             if (!_cache.ContainsKey(key))
             {
                 _cache[key] = await _repository.CreateAsync(new Device
@@ -155,7 +156,7 @@ public class DeviceService : IDeviceService
                 return patientDevices.FirstOrDefault()?.Id;
 
             var date = PatientDeviceUsage.LocalDate(
-                DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime, utcOffsetMinutes: null, clock);
+                mills.ToUtcDateTime(), utcOffsetMinutes: null, clock);
             return patientDevices.FirstOrDefault(pd => PatientDeviceUsage.Covers(pd, date))?.Id;
         }
     }

@@ -17,6 +17,7 @@ using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.Services.Profiles.Resolvers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -89,9 +90,11 @@ public partial class StatisticsControllerTests
             .ReturnsAsync([]);
 
         var statistics = statisticsService ?? _statsServiceMock.Object;
+        var readContext = categoryReadContext ?? new CategoryReadContext();
         var tenantClock = new TenantClockResolver(
             _therapySettingsResolverMock.Object,
-            categoryReadContext ?? new CategoryReadContext(),
+            readContext,
+            new ShareClockDouble(_therapySettingsResolverMock.Object),
             _clockLoggerMock.Object);
         var clock = timeProvider ?? new FakeTimeProvider(DefaultNow);
         var insulinDelivery = new InsulinDeliveryReader(
@@ -124,7 +127,9 @@ public partial class StatisticsControllerTests
                 _aidMetricsServiceMock.Object,
                 new DeviceDateClockResolver(
                     TestDoubles.DeviceDateClockDoubles.Timelines([]),
-                    tenantClock),
+                    tenantClock,
+                    readContext,
+                    new ShareClockDouble(_therapySettingsResolverMock.Object)),
                 TimeProvider.System),
             new RangeAnalyticsReader(
                 _glucoseRepoMock.Object,
@@ -697,37 +702,35 @@ public partial class StatisticsControllerTests
         payload.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.NotConfigured);
     }
 
-    [Theory]
-    [InlineData(true, TimeZoneUnavailableReason.Share)]
-    [InlineData(false, TimeZoneUnavailableReason.NotConfigured)]
-    public async Task GetHourlyPatterns_SaysAShareCannotSeeTheTimezoneRatherThanThatNoneIsSet(
-        bool share, TimeZoneUnavailableReason expected)
+    [Fact]
+    public async Task GetHourlyPatterns_ForAShare_BucketsOnTheTenantsTimezone()
     {
         SetupGlucose(new List<SensorGlucose>());
         var category = new CategoryReadContext();
-        if (share)
-            category.MarkShare();
+        category.MarkShare();
         _therapySettingsResolverMock
             .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
+            .ReturnsAsync("Europe/Stockholm");
+        TimeZoneInfo? usedTz = null;
         _statsServiceMock
             .Setup(s => s.CalculateHourlyPatterns(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo?>((_, tz) => usedTz = tz)
             .Returns(new HourlyPatterns());
 
         var result = await CreateController(categoryReadContext: category).GetHourlyPatterns(
             new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
 
+        usedTz!.Id.Should().Be("Europe/Stockholm");
         result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<HourlyPatterns>().Subject
-            .TimeZoneUnavailableReason.Should().Be(expected);
+            .TimeZoneUnavailableReason.Should().BeNull();
     }
 
     [Theory]
-    [InlineData(false, TimeZoneUnavailableReason.Unrecognised)]
-    [InlineData(true, TimeZoneUnavailableReason.Share)]
-    public async Task GetHourlyPatterns_WithAStoredTimezoneThatDoesNotResolve_SaysItIsUnrecognised(
-        bool share, TimeZoneUnavailableReason expected)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetHourlyPatterns_WithAStoredTimezoneThatDoesNotResolve_SaysItIsUnrecognised(bool share)
     {
         SetupGlucose(new List<SensorGlucose>());
         var category = new CategoryReadContext();
@@ -746,7 +749,7 @@ public partial class StatisticsControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<HourlyPatterns>().Subject
-            .TimeZoneUnavailableReason.Should().Be(expected);
+            .TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.Unrecognised);
     }
 
     [Fact]
@@ -2689,6 +2692,41 @@ public partial class StatisticsControllerTests
         result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
         _patientDeviceRepoMock.Verify(r => r.GetByDateRangeAsync(
             It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    public static TheoryData<string> DateRangeActions() => new()
+    {
+        nameof(StatisticsController.GetRangeAnalytics),
+        nameof(StatisticsController.GetWeekdayAverages),
+        nameof(StatisticsController.GetHourlyPatterns),
+        nameof(StatisticsController.GetDailyBasalBolusRatios),
+        nameof(StatisticsController.GetPunchCardData),
+        nameof(StatisticsController.GetInsulinDeliveryStatistics),
+        nameof(StatisticsController.GetBasalAnalysis),
+        nameof(StatisticsController.GetHourlyInsulinDelivery),
+    };
+
+    [Theory]
+    [MemberData(nameof(DateRangeActions))]
+    public async Task DateRangeActions_RejectASpanOverTheReadLimit(string action)
+    {
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(V4ReadLimits.MaxDateSpanDays + 1);
+        var method = typeof(StatisticsController).GetMethod(action)!;
+        object?[] args = method.GetParameters()
+            .Select(p => p.ParameterType == typeof(DateOnly)
+                ? (object)DateOnly.FromDateTime(p.Name == "startDate" ? start : end)
+                : p.ParameterType == typeof(DateTime)
+                    ? p.Name == "startDate" ? start : end
+                    : p.HasDefaultValue ? p.DefaultValue : null)
+            .ToArray();
+
+        var task = (Task)method.Invoke(CreateController(), args)!;
+        await task;
+        var actionResult = task.GetType().GetProperty("Result")!.GetValue(task)!;
+        var result = actionResult.GetType().GetProperty("Result")!.GetValue(actionResult);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]

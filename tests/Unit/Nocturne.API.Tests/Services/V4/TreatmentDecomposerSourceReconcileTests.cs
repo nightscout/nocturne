@@ -19,6 +19,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -46,10 +47,14 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _context = _db.CreateContext();
 
         _decomposer = new(
-            _context.AsFactory(),
-            Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(),
-            Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
-            Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
+            EmptyLegacyKeyed.Of<IBolusRepository, Nocturne.Core.Models.V4.Bolus>(),
+            EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(),
+            EmptyLegacyKeyed.Of<ICarbIntakeRepository, Nocturne.Core.Models.V4.CarbIntake>(),
+            EmptyLegacyKeyed.Of<IBGCheckRepository, Nocturne.Core.Models.V4.BGCheck>(),
+            EmptyLegacyKeyed.Of<INoteRepository, Nocturne.Core.Models.V4.Note>(),
+            EmptyLegacyKeyed.Of<IDeviceEventRepository, Nocturne.Core.Models.V4.DeviceEvent>(),
+            EmptyLegacyKeyed.Of<IBolusCalculationRepository, Nocturne.Core.Models.V4.BolusCalculation>(),
             Mock.Of<IStateSpanService>(),
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
@@ -180,7 +185,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     private void AddSpan(string originalId, string category, string source, string metadataJson, DateTime start) =>
         _context.StateSpans.Add(new StateSpanEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = originalId, Category = category,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = originalId, Category = category,
             State = "Active", StartTimestamp = start, Source = source, MetadataJson = metadataJson,
         });
 
@@ -218,7 +223,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _context.StateSpans.Add(new StateSpanEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, Category = nameof(StateSpanCategory.Override),
-            State = "Custom", StartTimestamp = At, OriginalId = "override",
+            State = "Custom", StartTimestamp = At, LegacyId = "override",
         });
         await _context.SaveChangesAsync();
 

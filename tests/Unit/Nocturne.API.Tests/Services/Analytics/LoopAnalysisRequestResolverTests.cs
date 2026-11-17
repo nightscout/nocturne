@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
@@ -30,7 +31,7 @@ public class LoopAnalysisRequestResolverTests
     {
         var settings = new Mock<ITherapySettingsResolver>();
         settings.Setup(s => s.GetTimezoneAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync("Australia/Sydney");
-        var clock = new TenantClockResolver(settings.Object, new CategoryReadContext(), NullLogger<TenantClockResolver>.Instance);
+        var clock = new TenantClockResolver(settings.Object, new CategoryReadContext(), new ShareClockDouble(settings.Object), NullLogger<TenantClockResolver>.Instance);
         return new LoopAnalysisRequestResolver(clock, new FakeTimeProvider(new DateTimeOffset(Now)));
     }
 

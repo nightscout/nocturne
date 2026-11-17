@@ -13,6 +13,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Entries;
@@ -428,10 +429,13 @@ public partial class AnalyticsReadScopeGuardTests
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
                 new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(3.0, 30.0, null, null, 0, null, null, null))]));
 
+        var stateSpans = MockStateSpans.Empty().Object;
+        var reader = new IobCobReader(
+            iob.Object, cob.Object, boluses.Object, tempBasals.Object, carbs.Object, timelines.Object, stateSpans,
+            Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+            TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance);
         var controller = new RetrospectiveController(
-            iob.Object, cob.Object, entries.Object, boluses.Object, carbs.Object,
-            tempBasals.Object, deviceStatuses: null!, timelines.Object, MockStateSpans.Empty().Object, Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(), new IobCobReader(iob.Object, cob.Object, boluses.Object, tempBasals.Object, carbs.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
+            entries.Object, tempBasals.Object, timelines.Object, stateSpans, reader, reader, TimeProvider.System,
             NullLogger<RetrospectiveController>.Instance)
         {
             ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
@@ -680,6 +684,7 @@ public partial class AnalyticsReadScopeGuardTests
         Reservoir = 42,
         PumpBatteryPercent = 80,
         PumpBatteryVoltage = 1.4,
+        LinkBatteryVoltage = 2.9,
         Thresholds = new ChartThresholdsDto { Low = 70, High = 180, TargetLow = 90, TargetHigh = 140 },
     };
 
@@ -692,6 +697,7 @@ public partial class AnalyticsReadScopeGuardTests
         data.Reservoir.Should().Be(42);
         data.PumpBatteryPercent.Should().Be(80);
         data.PumpBatteryVoltage.Should().Be(1.4);
+        data.LinkBatteryVoltage.Should().Be(2.9);
         data.SensitivityPercent.Should().BeNull();
     }
 
@@ -705,6 +711,7 @@ public partial class AnalyticsReadScopeGuardTests
         data.Reservoir.Should().BeNull();
         data.PumpBatteryPercent.Should().BeNull();
         data.PumpBatteryVoltage.Should().BeNull();
+        data.LinkBatteryVoltage.Should().BeNull();
     }
 
     [Fact]
@@ -1569,7 +1576,7 @@ public partial class AnalyticsReadScopeGuardTests
 
         var settings = new Mock<ITherapySettingsResolver>();
         settings.Setup(s => s.GetTimezoneAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync(timezone);
-        var clock = new TenantClockResolver(settings.Object, readContext, NullLogger<TenantClockResolver>.Instance);
+        var clock = new TenantClockResolver(settings.Object, readContext, new ShareClockDouble(settings.Object), NullLogger<TenantClockResolver>.Instance);
 
         var controller = new LoopAnalysisController(
             service.Object, clock, new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(LoopAnalysisNow)))

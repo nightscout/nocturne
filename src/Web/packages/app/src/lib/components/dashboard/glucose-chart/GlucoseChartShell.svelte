@@ -1,12 +1,13 @@
 <!--
-  The chart package's shell with the app's words, time format, units preference and print
-  state, so a page composing its own tracks passes only the data.
+  The chart package's shell with the app's words, time format, units and range palette
+  preferences and print state, so a page composing its own tracks passes only the data.
 -->
 <script lang="ts">
   import type { ComponentProps } from "svelte";
   import { GlucoseChartShell, type ChartDataView } from "@nocturne/charts";
   import {
     glucoseUnits as glucoseUnitsPreference,
+    glucoseRangePalette,
     type GlucoseUnits,
   } from "#lib/stores/appearance-store.svelte.js";
   import { chartFormat } from "#lib/utils/formatting.js";
@@ -22,7 +23,7 @@
     glucoseUnits?: GlucoseUnits;
   };
 
-  let { engine, glucoseUnits, ...rest }: Props = $props();
+  let { engine, glucoseUnits, rangePalette, ...rest }: Props = $props();
 
   const print = new PrintMode();
 </script>
@@ -30,6 +31,7 @@
 <GlucoseChartShell
   view={engine}
   glucoseUnits={glucoseUnits ?? glucoseUnitsPreference.current}
+  rangePalette={rangePalette ?? glucoseRangePalette.current}
   labels={glucoseChartLabels()}
   format={chartFormat()}
   printing={print.active}

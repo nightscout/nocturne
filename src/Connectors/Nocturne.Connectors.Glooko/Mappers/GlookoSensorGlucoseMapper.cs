@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 using Nocturne.Connectors.Core.Utilities;
 
@@ -337,5 +336,5 @@ public class GlookoSensorGlucoseMapper
     }
 
     private static double ConvertToMgdl(double value, string? meterUnits) =>
-        meterUnits?.ToLowerInvariant() == "mmoll" ? value * GlucoseConstants.MgdlPerMmol : value;
+        GlucoseUnits.ToMgdl(value, GlucoseUnits.Parse(meterUnits) ?? GlucoseUnit.MgDl);
 }

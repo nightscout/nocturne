@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
@@ -32,8 +33,8 @@ public class DataOverviewServiceTimeZoneTests : IDisposable
     {
         { null, false, TimeZoneUnavailableReason.NotConfigured },
         { "Not/AZone", false, TimeZoneUnavailableReason.Unrecognised },
-        { null, true, TimeZoneUnavailableReason.Share },
-        { "Not/AZone", true, TimeZoneUnavailableReason.Share },
+        { null, true, TimeZoneUnavailableReason.NotConfigured },
+        { "Not/AZone", true, TimeZoneUnavailableReason.Unrecognised },
     };
 
     private readonly string _dbName = $"data_overview_zone_{Guid.NewGuid()}";
@@ -94,7 +95,7 @@ public class DataOverviewServiceTimeZoneTests : IDisposable
 
         return new DataOverviewService(
             factory.Object,
-            new TenantClockResolver(settings.Object, category, NullLogger<TenantClockResolver>.Instance),
+            new TenantClockResolver(settings.Object, category, new ShareClockDouble(settings.Object), NullLogger<TenantClockResolver>.Instance),
             statistics.Object,
             TestTenantCache.Create(),
             time ?? TimeProvider.System,

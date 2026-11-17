@@ -158,20 +158,101 @@ public class ScopeTranslatorTests
     /// <summary>
     /// The V1/V2/V3 controllers are gated by the HasPermissions policy, which rejects an empty
     /// PermissionTrie before any scope check runs. A grant holding only a dedicated activity category
-    /// must therefore still produce a legacy permission string.
+    /// must therefore still produce a legacy permission string, and not the activity collection's:
+    /// that one reads back as all three categories.
     /// </summary>
     [Theory]
-    [InlineData(Scope.HeartRateRead)]
-    [InlineData(Scope.StepCountRead)]
-    [InlineData(Scope.SleepRead)]
-    [InlineData(Scope.HeartRateReadWrite)]
-    [InlineData(Scope.StepCountReadWrite)]
-    [InlineData(Scope.SleepReadWrite)]
-    public void ToPermissions_ActivityCategories_MapBackToTheActivityCollection(string scope)
+    [InlineData(Scope.HeartRateRead, "api:heartrate:read")]
+    [InlineData(Scope.StepCountRead, "api:stepcount:read")]
+    [InlineData(Scope.SleepRead, "api:sleep:read")]
+    [InlineData(Scope.HeartRateReadWrite, "api:heartrate:read")]
+    [InlineData(Scope.StepCountReadWrite, "api:stepcount:read")]
+    [InlineData(Scope.SleepReadWrite, "api:sleep:read")]
+    public void ToPermissions_OneActivityCategory_MapsToItsOwnResource(string scope, string expected)
     {
         var permissions = ScopeTranslator.ToPermissions([scope]);
 
+        Assert.Contains(expected, permissions);
+        Assert.DoesNotContain(permissions, permission => permission.StartsWith("api:activity:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ToPermissions_EveryActivityRead_GrantsTheActivityCollectionRead()
+    {
+        var permissions = ScopeTranslator.ToPermissions(ActivityReads);
+
         Assert.Contains("api:activity:read", permissions);
+        Assert.DoesNotContain("api:activity:create", permissions);
+        Assert.Equal(Authority(ActivityReads), Authority(ScopeTranslator.FromPermissions(permissions)));
+    }
+
+    [Fact]
+    public void ToPermissions_EveryActivityReadWrite_GrantsEveryVerbOnTheActivityCollection()
+    {
+        string[] scopes = [Scope.HeartRateReadWrite, Scope.StepCountReadWrite, Scope.SleepReadWrite];
+
+        var permissions = ScopeTranslator.ToPermissions(scopes);
+
+        Assert.Contains("api:activity:read", permissions);
+        Assert.Contains("api:activity:create", permissions);
+        Assert.Contains("api:activity:update", permissions);
+        Assert.Contains("api:activity:delete", permissions);
+        Assert.Equal(Authority(scopes), Authority(ScopeTranslator.FromPermissions(permissions)));
+    }
+
+    [Theory]
+    [InlineData("api:activity:create")]
+    [InlineData("api:activity:update")]
+    [InlineData("api:activity:delete")]
+    public void FromPermissions_ActivityWriteVerb_MapsToReadWriteLikeEveryOtherCollection(string permission)
+    {
+        var scopes = ScopeTranslator.FromPermissions([permission]);
+
+        Assert.Contains(Scope.HeartRateReadWrite, scopes);
+        Assert.Contains(Scope.StepCountReadWrite, scopes);
+        Assert.Contains(Scope.SleepReadWrite, scopes);
+        Assert.DoesNotContain(Scope.TreatmentsReadWrite, scopes);
+    }
+
+    /// <summary>
+    /// Sharing has no read tier, so a read verb on it must not reach the readwrite scope, and a
+    /// read-only category has nothing for a write verb to reach.
+    /// </summary>
+    [Theory]
+    [InlineData("api:sharing:read")]
+    [InlineData("api:reports:create")]
+    [InlineData("api:reports:*")]
+    [InlineData("api:identity:update")]
+    public void FromPermissions_VerbTheCategoryHasNoTierFor_GrantsNothing(string permission)
+    {
+        Assert.Empty(ScopeTranslator.FromPermissions([permission]));
+    }
+
+    [Fact]
+    public void ToPermissions_AlertsReadWrite_CarriesNightscoutAck()
+    {
+        var permissions = ScopeTranslator.ToPermissions([Scope.AlertsReadWrite]);
+
+        Assert.Contains("notifications:*:ack", permissions);
+        Assert.DoesNotContain("notifications:*:ack", ScopeTranslator.ToPermissions([Scope.AlertsRead]));
+    }
+
+    /// <summary>
+    /// See the remarks on <see cref="ScopeTranslator.ToPermissions"/>: a Shiro form here would put a
+    /// device-only credential through the HasPermissions policy.
+    /// </summary>
+    [Fact]
+    public void ToPermissions_MemberPersonalScopes_LeaveTheTrieEmpty()
+    {
+        Assert.Empty(ScopeTranslator.ToPermissions(Scope.MemberPersonalScopes));
+    }
+
+    [Fact]
+    public void ToPermissions_FullAccessAmongOtherScopes_IsTheWildcardAlone()
+    {
+        var permissions = ScopeTranslator.ToPermissions([Scope.GlucoseRead, Scope.FullAccess]);
+
+        Assert.Equal(["*"], permissions);
     }
 
     [Theory]
@@ -310,5 +391,72 @@ public class ScopeTranslatorTests
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
         Assert.Contains(Scope.FoodReadWrite, scopes);
+    }
+
+    private static readonly string[] ActivityReads = [Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead];
+
+    /// <summary>
+    /// The scopes <see cref="ScopeTranslator.ToPermissions"/> gives no Shiro form, for the reason in
+    /// its remarks. They read back as nothing.
+    /// </summary>
+    private static readonly IReadOnlySet<string> NoShiroForm = Scope.MemberPersonalScopes;
+
+    public static TheoryData<string> EveryScope() => [.. Scope.AllScopes];
+
+    /// <summary>
+    /// Clients read a grant's authority from the Shiro form, and the Nightscout subjects API writes
+    /// that form back as the grant's scopes, so it must come back as the scope it was. A scope added
+    /// without a Shiro form, or sharing one, fails here.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryScope))]
+    public void ToPermissions_RoundTripsToTheSameAuthority(string scope)
+    {
+        var roundTripped = ScopeTranslator.FromPermissions(ScopeTranslator.ToPermissions([scope]));
+
+        string[] expected = NoShiroForm.Contains(scope) ? [] : [scope];
+        Assert.Equal(Authority(expected), Authority(roundTripped));
+    }
+
+    public static TheoryData<string, string> EveryPairOfScopes()
+    {
+        var pairs = new TheoryData<string, string>();
+        for (var i = 0; i < Scope.AllScopes.Count; i++)
+        {
+            for (var j = i + 1; j < Scope.AllScopes.Count; j++)
+            {
+                pairs.Add(Scope.AllScopes[i], Scope.AllScopes[j]);
+            }
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
+    /// Two scopes together must not read back as more than the two, which is how a Shiro form
+    /// spanning several scopes would fail while each scope alone round-trips.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryPairOfScopes))]
+    public void ToPermissions_RoundTripsAPairToTheSameAuthority(string first, string second)
+    {
+        var roundTripped = ScopeTranslator.FromPermissions(ScopeTranslator.ToPermissions([first, second]));
+
+        string[] expected = [.. new[] { first, second }.Where(scope => !NoShiroForm.Contains(scope))];
+        Assert.Equal(Authority(expected), Authority(roundTripped));
+    }
+
+    [Fact]
+    public void ToPermissions_RoundTripsEveryScopeTogetherToTheSameAuthority()
+    {
+        var roundTripped = ScopeTranslator.FromPermissions(ScopeTranslator.ToPermissions(Scope.AllScopes));
+
+        Assert.Equal(Authority(Scope.AllScopes.Except(NoShiroForm)), Authority(roundTripped));
+    }
+
+    private static string[] Authority(IEnumerable<string> scopes)
+    {
+        var granted = scopes.ToList();
+        return [.. Scope.AllScopes.Where(atom => Scope.Satisfies(granted, atom)).Order(StringComparer.Ordinal)];
     }
 }

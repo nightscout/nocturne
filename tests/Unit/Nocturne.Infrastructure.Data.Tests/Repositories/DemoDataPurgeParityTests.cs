@@ -30,7 +30,7 @@ public class DemoDataPurgeParityTests : IDisposable
     private static readonly TenantContext Tenant = new(TenantId, "demo", "Nocturne Demo", true, true);
 
     /// <summary>Number of rows <see cref="SeedOneDemoRowOfEveryType"/> writes.</summary>
-    private const int SeededRows = 14;
+    private const int SeededRows = 17;
 
     private readonly SqliteTestDatabase _db;
     private readonly List<(Guid? Tenant, IReadOnlyCollection<Type> Models)> _tenantReports = [];
@@ -85,7 +85,7 @@ public class DemoDataPurgeParityTests : IDisposable
     private DemoDataPurgeRepository ScopePurgeOver(NocturneDbContext context) =>
         new(context.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>(), _scopeReads.Object);
 
-    /// <summary>One demo row in every table the demo seeder and the realtime tick write to.</summary>
+    /// <summary>One demo row in every table the demo purge reaches.</summary>
     private void SeedOneDemoRowOfEveryType(bool softDeleted = false)
     {
         var timestamp = DateTime.UtcNow;
@@ -172,6 +172,21 @@ public class DemoDataPurgeParityTests : IDisposable
             Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
             Device = "trio-rig", Timestamp = timestamp, AidAlgorithm = "Trio", DeletedAt = deletedAt,
         });
+        db.BasalInjections.Add(new BasalInjectionEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+            Timestamp = timestamp, Units = 10, DeletedAt = deletedAt,
+        });
+        db.PumpSnapshots.Add(new PumpSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+            Timestamp = timestamp, DeletedAt = deletedAt,
+        });
+        db.UploaderSnapshots.Add(new UploaderSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+            Timestamp = timestamp, DeletedAt = deletedAt,
+        });
         db.SaveChanges();
     }
 
@@ -190,7 +205,10 @@ public class DemoDataPurgeParityTests : IDisposable
             + await db.TempBasals.IgnoreQueryFilters().LongCountAsync()
             + await db.StateSpans.IgnoreQueryFilters().LongCountAsync()
             + await db.CompressionLowSuggestions.IgnoreQueryFilters().LongCountAsync()
-            + await db.ApsSnapshots.IgnoreQueryFilters().LongCountAsync();
+            + await db.ApsSnapshots.IgnoreQueryFilters().LongCountAsync()
+            + await db.BasalInjections.IgnoreQueryFilters().LongCountAsync()
+            + await db.PumpSnapshots.IgnoreQueryFilters().LongCountAsync()
+            + await db.UploaderSnapshots.IgnoreQueryFilters().LongCountAsync();
     }
 
     private async Task<long> TenantPurgeAsync()
@@ -240,8 +258,8 @@ public class DemoDataPurgeParityTests : IDisposable
         var counts = await ScopePurge().PurgeAsync(default);
 
         counts.Glucose.Should().Be(3);
-        counts.Treatments.Should().Be(10);
-        counts.DeviceStatus.Should().Be(1);
+        counts.Treatments.Should().Be(11);
+        counts.DeviceStatus.Should().Be(3);
     }
 
     [Fact]
@@ -255,6 +273,7 @@ public class DemoDataPurgeParityTests : IDisposable
             typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration),
             typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(Note), typeof(DeviceEvent),
             typeof(BolusCalculation), typeof(TempBasal), typeof(StateSpan), typeof(ApsSnapshot),
+            typeof(BasalInjection), typeof(PumpSnapshot), typeof(UploaderSnapshot),
         ]);
     }
 
@@ -304,6 +323,72 @@ public class DemoDataPurgeParityTests : IDisposable
         report.Tenant.Should().Be(TenantId);
         report.Models.Should().Contain([typeof(Bolus), typeof(CarbIntake), typeof(StateSpan), typeof(ApsSnapshot)])
             .And.NotContain(typeof(SensorGlucose));
+    }
+
+    [Fact]
+    public async Task PurgeTreatments_ReportsExactlyTheTreatmentAndDeviceStatusModels()
+    {
+        SeedOneDemoRowOfEveryType();
+
+        await PlatformAdminPurge().PurgeTreatmentsAsync(Tenant, default);
+
+        _tenantReports.Should().ContainSingle().Which.Models.Should().BeEquivalentTo([
+            typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(Note), typeof(DeviceEvent),
+            typeof(BolusCalculation), typeof(TempBasal), typeof(ProfileActivation), typeof(StateSpan),
+            typeof(CompressionLowSuggestion), typeof(LabHbA1cResult), typeof(ApsSnapshot),
+            typeof(BasalInjection), typeof(PumpSnapshot), typeof(UploaderSnapshot),
+        ]);
+    }
+
+    [Fact]
+    public async Task ScopePurge_TakesDemoProfileActivationsAndLeavesTheProfileAndActivityTables()
+    {
+        var timestamp = DateTime.UtcNow;
+        await using (var db = NewContext())
+        {
+            db.ProfileActivations.Add(new ProfileActivationEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Day",
+            });
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, Bpm = 60,
+            });
+            db.StepCounts.Add(new StepCountEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, Metric = 10,
+            });
+            db.BodyWeights.Add(new BodyWeightEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(), WeightKg = 70,
+            });
+            db.TherapySettings.Add(new TherapySettingsEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, ProfileName = "Day",
+            });
+            db.BasalSchedules.Add(new BasalScheduleEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = timestamp, ProfileName = "Day",
+            });
+            db.SaveChanges();
+        }
+
+        var counts = await ScopePurge().PurgeAsync(default);
+
+        counts.Treatments.Should().Be(1);
+        await using var verify = NewContext();
+        (await verify.ProfileActivations.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await verify.HeartRates.CountAsync()).Should().Be(1);
+        (await verify.StepCounts.CountAsync()).Should().Be(1);
+        (await verify.BodyWeights.CountAsync()).Should().Be(1);
+        (await verify.TherapySettings.CountAsync()).Should().Be(1);
+        (await verify.BasalSchedules.CountAsync()).Should().Be(1);
     }
 
     [Fact]

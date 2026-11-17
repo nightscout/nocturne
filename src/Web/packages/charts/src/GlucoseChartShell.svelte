@@ -17,6 +17,7 @@
     type GlucoseUnits,
   } from "./format.js";
   import type { ChartLabels } from "./labels.js";
+  import type { GlucoseRangePalette } from "./colors.js";
   import { hourTicks } from "./view/axis-ticks.js";
 
   interface Props {
@@ -30,6 +31,8 @@
     onSelectionChange?: (domain: [Date, Date] | null) => void;
     showTimeAxis?: boolean;
     glucoseUnits: GlucoseUnits;
+    /** See {@link GlucoseChartContext.rangePalette}. */
+    rangePalette?: GlucoseRangePalette;
     labels: ChartLabels;
     format: ChartFormat;
     /** Lay the chart out for paper; see {@link GlucoseChartContext.printing}. */
@@ -52,6 +55,7 @@
     onSelectionChange,
     showTimeAxis = true,
     glucoseUnits,
+    rangePalette,
     labels,
     format,
     printing = false,
@@ -129,6 +133,9 @@
     },
     get glucoseUnits() {
       return glucoseUnits;
+    },
+    get rangePalette() {
+      return rangePalette;
     },
     get labels() {
       return labels;

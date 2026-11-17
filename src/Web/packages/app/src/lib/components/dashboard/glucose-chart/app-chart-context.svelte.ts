@@ -1,5 +1,5 @@
 import type { GlucoseChartContext } from "@nocturne/charts";
-import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import { glucoseRangePalette, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { chartFormat } from "#lib/utils/formatting.js";
 import { glucoseChartLabels } from "./chart-labels.svelte";
 
@@ -8,7 +8,8 @@ type Supplied = Pick<GlucoseChartContext, "view" | "layout"> &
 
 /**
  * A chart context for a host that draws tracks in its own layerchart chart rather than in the
- * shell: what it supplies, with the app's words, time format and units preference for the rest.
+ * shell: what it supplies, with the app's words, time format and units and range palette
+ * preferences for the rest.
  * Pass `supplied` as getters; it is read live.
  */
 export function appChartContext(supplied: Supplied): GlucoseChartContext {
@@ -31,6 +32,9 @@ export function appChartContext(supplied: Supplied): GlucoseChartContext {
     },
     get glucoseUnits() {
       return supplied.glucoseUnits ?? glucoseUnits.current;
+    },
+    get rangePalette() {
+      return glucoseRangePalette.current;
     },
     get labels() {
       return labels;

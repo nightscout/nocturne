@@ -21,8 +21,8 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <summary>
 /// Repository for managing sensor glucose (CGM) records in the database. A deduplication
 /// participant on top of the sync-key upsert and keyed delete of
-/// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
-/// (duplicate filter + keyset cursor), the legacy entries projection, the tenant
+/// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the <c>GetAsync</c>
+/// overload that adds a keyset cursor, a patient device and glucose streams to the base read, the legacy entries projection, the tenant
 /// last-reading watermark and the source/time-range deletes.
 /// </summary>
 public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
@@ -218,17 +218,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     protected override void ApplyUpdate(SensorGlucoseEntity target, SensorGlucose source) => SensorGlucoseMapper.UpdateEntity(target, source);
 
     /// <summary>
-    /// Routes the base 7-arg form through the extended sensor-glucose query (duplicate
-    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
-    /// </summary>
-    public override Task<IEnumerable<SensorGlucose>> GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
-        => GetAsync(from, to, device, source, limit, offset, descending,
-            afterTimestamp: null, afterId: null, ct);
-
-    /// <summary>
     /// Gets sensor glucose records based on filter criteria.
     /// Hides the non-primary copies of duplicate groups.
     /// </summary>
@@ -298,50 +287,25 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
         GlucoseStreams streams, bool orderByValue = false)
     {
-        var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null)
-            query = query.Where(e => e.Device == device);
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        if (patientDeviceId.HasValue)
-            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
-
-        query = query.ExcludeDuplicates();
-        if (streams != GlucoseStreams.All)
-            query = query.Where(e => !e.IsSecondaryStream);
-        if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
-            query = query.Where(e => e.DataSource == null
-                || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));
-
-        // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
-        // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
-        if (afterTimestamp.HasValue && afterId.HasValue)
-        {
-            query = descending
-                ? query.Where(e => e.Timestamp < afterTimestamp.Value
-                    || (e.Timestamp == afterTimestamp.Value && e.Id < afterId.Value))
-                : query.Where(e => e.Timestamp > afterTimestamp.Value
-                    || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
-        }
-
-        query = (orderByValue, descending) switch
-        {
-            (true, true) => query.OrderByDescending(e => e.Mgdl).ThenByDescending(e => e.Timestamp).ThenByDescending(e => e.Id),
-            (true, false) => query.OrderBy(e => e.Mgdl).ThenBy(e => e.Timestamp).ThenBy(e => e.Id),
-            (false, true) => query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id),
-            (false, false) => query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id),
-        };
-
-        if (!afterTimestamp.HasValue || !afterId.HasValue)
-        {
-            query = query.Skip(offset);
-        }
-
-        return query.Take(limit);
+        return PagedRead(
+            ctx.SensorGlucose.AsNoTracking(), from, to, device, source, limit, offset, descending,
+            query =>
+            {
+                if (patientDeviceId.HasValue)
+                    query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
+                if (streams != GlucoseStreams.All)
+                    query = query.Where(e => !e.IsSecondaryStream);
+                if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
+                    query = query.Where(e => e.DataSource == null
+                        || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));
+                return query;
+            },
+            afterTimestamp, afterId,
+            query => orderByValue
+                ? descending
+                    ? query.OrderByDescending(e => e.Mgdl).ThenByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
+                    : query.OrderBy(e => e.Mgdl).ThenBy(e => e.Timestamp).ThenBy(e => e.Id)
+                : query.InObservationOrder(descending));
     }
 
     /// <inheritdoc />
@@ -456,25 +420,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             query = query.Where(e => e.Device != null && devices.Contains(e.Device));
         }
         return query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id);
-    }
-
-    /// <summary>
-    /// Gets sensor glucose records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of matching records.</returns>
-    public async Task<IEnumerable<SensorGlucose>> GetByCorrelationIdAsync(
-        Guid correlationId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .SensorGlucose.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(SensorGlucoseMapper.ToDomainModel);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.LoopAnalysis;
 
 namespace Nocturne.Core.Clinical.LoopAnalysis;
@@ -199,8 +200,8 @@ public static class EventResponseCalculator
 
         return new EventResponseRange
         {
-            From = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            To = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            From = from.ToUtcDateTime(),
+            To = to.ToUtcDateTime(),
             Cohorts = cohorts,
             Events = listEvents
                 ? [.. membership.Values.SelectMany(members => members
@@ -334,7 +335,7 @@ public static class EventResponseCalculator
         var (date, time) = LocalSlotBinning.DayInReview(episode.Anchor.Mills, zone);
         return new EventResponseEvent
         {
-            At = DateTimeOffset.FromUnixTimeMilliseconds(episode.Anchor.Mills).UtcDateTime,
+            At = episode.Anchor.Mills.ToUtcDateTime(),
             Date = date,
             Time = time,
             Anchor = episode.Anchor.Kind,

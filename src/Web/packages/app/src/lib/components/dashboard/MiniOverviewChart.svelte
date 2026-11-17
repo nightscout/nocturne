@@ -14,7 +14,11 @@
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { Button } from "#lib/components/ui/button/index.js";
   import { time, formatDateTimeCompact } from "#lib/utils/formatting.js";
-  import type { GlucoseThresholds } from "@nocturne/charts/core";
+  import {
+    distinctRangeStops,
+    type GlucoseThresholds,
+  } from "@nocturne/charts/core";
+  import { glucoseRangePalette } from "#lib/stores/appearance-store.svelte.js";
   import {
     lineStopsFor,
     fillStopsFor,
@@ -160,7 +164,8 @@
             lineColorMode,
             thresholds,
             context.yScale,
-            context.height
+            context.height,
+            distinctRangeStops(glucoseRangePalette.current, thresholds)
           )}
           {@const fillStops = fillStopsFor(
             areaMode,

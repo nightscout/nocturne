@@ -290,7 +290,7 @@ internal sealed class PeriodComparisonDataset : IReportDataset
                 var value = metric.Get(side);
                 if (value is not { } v || double.IsNaN(v) || double.IsInfinity(v))
                     return null;
-                return Math.Round(glucose ? GlucoseUnits.Scale(v, useMmol) : v, digits);
+                return Math.Round(glucose ? ReportGlucose.Scale(v, useMmol) : v, digits);
             }
 
             var va = Read(a);

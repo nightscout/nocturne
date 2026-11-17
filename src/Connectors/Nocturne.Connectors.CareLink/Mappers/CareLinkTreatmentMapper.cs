@@ -146,6 +146,7 @@ public static class CareLinkTreatmentMapper
 
             // bolusAmount is the units delivered over the interval; express as an hourly rate.
             var rate = (marker.BolusAmount ?? 0) * 60.0 / intervalMinutes;
+            var key = AutoBasalKey(start);
 
             results.Add(new TempBasal
             {
@@ -156,6 +157,8 @@ public static class CareLinkTreatmentMapper
                 DataSource = DataSources.CareLinkConnector,
                 Rate = rate,
                 Origin = TempBasalOrigin.Algorithm,
+                LegacyId = key,
+                SyncIdentifier = key,
                 CreatedAt = now,
                 ModifiedAt = now,
             });
@@ -163,6 +166,15 @@ public static class CareLinkTreatmentMapper
 
         return results;
     }
+
+    /// <summary>
+    /// The legacy id and sync key of the auto-basal starting at <paramref name="start"/>. Keyed on
+    /// the start alone, not the marker id, so the stored row carries everything needed to derive it
+    /// (the <c>CareLinkTempBasalLegacyIds</c> migration backfills it from <c>start_timestamp</c>), and
+    /// the span and rate stay free to change once the next marker bounds it.
+    /// </summary>
+    private static string AutoBasalKey(DateTime start) =>
+        FormattableString.Invariant($"carelink_autobasal_{start.ToMills()}");
 
     private static bool IsType(CareLinkMarker marker, string type) =>
         string.Equals(marker.Type, type, StringComparison.OrdinalIgnoreCase);

@@ -69,7 +69,8 @@ public class StatusController : ControllerBase
                     {
                         Status = "error",
                         Name = "Nocturne",
-                        Version = AppVersion.Current,
+                        Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+                        NocturneVersion = AppVersion.Current,
                         ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
                         ServerTime = DateTime.UtcNow,
                         Extended = new ExtendedStatusInfo

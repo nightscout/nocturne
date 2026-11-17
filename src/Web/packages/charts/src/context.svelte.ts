@@ -3,6 +3,7 @@ import type { ChartDataView } from "./view/chart-data-view.svelte.js";
 import type { TrackLayout } from "./view/track-layout.js";
 import type { ChartFormat, GlucoseUnits } from "./format.js";
 import type { ChartLabels } from "./labels.js";
+import type { GlucoseRangePalette } from "./colors.js";
 
 export interface LegendState {
 	readonly iob: boolean;
@@ -42,6 +43,8 @@ export interface GlucoseChartContext {
 	 */
 	readonly printing: boolean;
 	readonly glucoseUnits: GlucoseUnits;
+	/** The range palette the continuous glucose colours follow; the theme's own when absent. */
+	readonly rangePalette?: GlucoseRangePalette;
 	readonly labels: ChartLabels;
 	readonly format: ChartFormat;
 }

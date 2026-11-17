@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
@@ -42,22 +41,6 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// <inheritdoc />
     protected override void ApplyUpdate(CalibrationEntity target, Calibration source) =>
         CalibrationMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// Gets calibration records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of calibrations.</returns>
-    public async Task<IEnumerable<Calibration>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.Calibrations
-            .AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(CalibrationMapper.ToDomainModel);
-    }
 
     /// <summary>
     /// Deletes all calibration records for the given data source.

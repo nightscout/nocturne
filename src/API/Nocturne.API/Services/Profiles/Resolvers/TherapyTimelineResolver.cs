@@ -168,7 +168,7 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
             );
         }
 
-        var anchorDt = DateTimeOffset.FromUnixTimeMilliseconds(anchorMills).UtcDateTime;
+        var anchorDt = anchorMills.ToUtcDateTime();
 
         // Sequential: see INocturneDbContextFactory.
         // An activation's own DIA, carb rate and timezone win over the stored profile's, as

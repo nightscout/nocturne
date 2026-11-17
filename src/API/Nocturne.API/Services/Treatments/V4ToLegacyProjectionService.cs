@@ -69,12 +69,6 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Converts nullable unix milliseconds to nullable DateTime.
-    /// </summary>
-    private static DateTime? MillsToDateTime(long? mills) =>
-        mills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(mills.Value).UtcDateTime : null;
-
     /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
         long? fromMills,
@@ -86,7 +80,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     {
         await using var db = await _contexts.CreateAsync(ct);
         var range = new LegacyTreatmentRange(
-            MillsToDateTime(fromMills), MillsToDateTime(toMills), limit, descending);
+            fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime(), limit, descending);
 
         var rows = await FetchAsync(table => table.InRangeAsync(_repositories, db, range, ct));
         var treatments = await AssembleAsync(db, rows, ct);
@@ -106,7 +100,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         CancellationToken ct = default
     )
     {
-        var at = instants.Distinct().Select(mills => MillsToDateTime(mills)!.Value).ToList();
+        var at = instants.Distinct().Select(mills => mills.ToUtcDateTime()).ToList();
         if (at.Count == 0)
             return [];
 
@@ -128,7 +122,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     {
         await using var db = await _contexts.CreateAsync(ct);
         var rows = await LegacyTreatmentTables.LatestOfTypeAsync(
-            _repositories, db, eventType, MillsToDateTime(fromMills)!.Value, MillsToDateTime(toMills)!.Value, ct);
+            _repositories, db, eventType, fromMills.ToUtcDateTime(), toMills.ToUtcDateTime(), ct);
 
         return (await AssembleAsync(db, rows, ct)).FirstOrDefault();
     }
@@ -263,7 +257,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     public async Task<string?> GetStateSpanTreatmentIdAsync(string id, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        return await FindStateSpanAsync(db, id, ct) is { } row ? ((StateSpanEntity)row.Record).OriginalId : null;
+        return await FindStateSpanAsync(db, id, ct) is { } row ? ((StateSpanEntity)row.Record).LegacyId : null;
     }
 
     /// <summary>
@@ -281,7 +275,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         await using var db = await _contexts.CreateAsync(ct);
         var found = await FindStateSpansAsync(db, ids, ct);
-        return found.ToDictionary(f => f.Key, f => ((StateSpanEntity)f.Value.Record).OriginalId!, StringComparer.Ordinal);
+        return found.ToDictionary(f => f.Key, f => ((StateSpanEntity)f.Value.Record).LegacyId!, StringComparer.Ordinal);
     }
 
     /// <inheritdoc />
@@ -324,7 +318,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             {
                 var bounds = SpanIdBounds.Of(id);
                 var span = spans.Where(bounds.Matches)
-                    .OrderBy(s => s.OriginalId == id ? 0 : 1)
+                    .OrderBy(s => s.LegacyId == id ? 0 : 1)
                     .ThenBy(s => s.Id.ToString("N"), StringComparer.Ordinal)
                     .FirstOrDefault();
                 if (span is not null)
@@ -363,10 +357,10 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         {
             static bool Between(string? value, string from, string to) =>
                 value is not null && string.CompareOrdinal(value, from) >= 0 && string.CompareOrdinal(value, to) <= 0;
-            return span.OriginalId == Id
+            return span.LegacyId == Id
                 || Between(span.Id.ToString(), Low.ToString(), High.ToString())
-                || Between(span.OriginalId, From, To)
-                || Between(span.OriginalId, UpperFrom, UpperTo);
+                || Between(span.LegacyId, From, To)
+                || Between(span.LegacyId, UpperFrom, UpperTo);
         }
 
         public static Expression<Func<StateSpanEntity, bool>> MatchingAny(IEnumerable<SpanIdBounds> bounds)
@@ -376,10 +370,10 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             Expression? matches = null;
             foreach (var (id, low, high, from, to, upperFrom, upperTo) in bounds)
             {
-                Expression<Func<StateSpanEntity, bool>> term = s => s.OriginalId == id
+                Expression<Func<StateSpanEntity, bool>> term = s => s.LegacyId == id
                     || (s.Id >= low && s.Id <= high)
-                    || (string.Compare(s.OriginalId, from) >= 0 && string.Compare(s.OriginalId, to) <= 0)
-                    || (string.Compare(s.OriginalId, upperFrom) >= 0 && string.Compare(s.OriginalId, upperTo) <= 0);
+                    || (string.Compare(s.LegacyId, from) >= 0 && string.Compare(s.LegacyId, to) <= 0)
+                    || (string.Compare(s.LegacyId, upperFrom) >= 0 && string.Compare(s.LegacyId, upperTo) <= 0);
                 var body = ReplacingExpressionVisitor.Replace(term.Parameters[0], row, term.Body);
                 matches = matches is null ? body : Expression.OrElse(matches, body);
             }
@@ -393,7 +387,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
             var span = await MatchingId(table.Rows(db), id)
-                .OrderBy(s => s.OriginalId == id ? 0 : 1)
+                .OrderBy(s => s.LegacyId == id ? 0 : 1)
                 .ThenBy(s => s.Id)
                 .FirstOrDefaultAsync(ct);
 
@@ -423,7 +417,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         long? fromMills, long? toMills, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var (from, to) = (MillsToDateTime(fromMills), MillsToDateTime(toMills));
+        var (from, to) = (fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime());
         long count = 0;
         foreach (var table in LegacyTreatmentTables.All)
             count += await table.CountAsync(_repositories, db, from, to, _logger, ct);
@@ -436,20 +430,20 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         if (Guid.TryParse(id, out var guid))
         {
             string[] forms = [id, guid.ToString(), guid.ToString().ToUpperInvariant()];
-            return rows.Where(s => s.Id == guid || forms.Contains(s.OriginalId!));
+            return rows.Where(s => s.Id == guid || forms.Contains(s.LegacyId!));
         }
 
         if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
         {
             var (lowerFrom, lowerTo) = (low.ToString(), high.ToString());
             var (upperFrom, upperTo) = (lowerFrom.ToUpperInvariant(), lowerTo.ToUpperInvariant());
-            return rows.Where(s => s.OriginalId == id
+            return rows.Where(s => s.LegacyId == id
                 || (s.Id >= low && s.Id <= high)
-                || (string.Compare(s.OriginalId, lowerFrom) >= 0 && string.Compare(s.OriginalId, lowerTo) <= 0)
-                || (string.Compare(s.OriginalId, upperFrom) >= 0 && string.Compare(s.OriginalId, upperTo) <= 0));
+                || (string.Compare(s.LegacyId, lowerFrom) >= 0 && string.Compare(s.LegacyId, lowerTo) <= 0)
+                || (string.Compare(s.LegacyId, upperFrom) >= 0 && string.Compare(s.LegacyId, upperTo) <= 0));
         }
 
-        return rows.Where(s => s.OriginalId == id);
+        return rows.Where(s => s.LegacyId == id);
     }
 
     /// <summary>

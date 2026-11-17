@@ -33,6 +33,4 @@ public sealed class RecreationBlockedException : Exception
         => $"sync identifier '{syncIdentifier}' from '{dataSource}'";
 
     public static string LegacyIdIdentity(string legacyId) => $"legacy id '{legacyId}'";
-
-    public static string OriginalIdIdentity(string originalId) => $"original id '{originalId}'";
 }

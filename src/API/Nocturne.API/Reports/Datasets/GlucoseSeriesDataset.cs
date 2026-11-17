@@ -135,8 +135,8 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         GlycemicThresholds thresholds,
         bool useMmol)
     {
-        var low = GlucoseUnits.Scale(thresholds.TargetBottom, useMmol);
-        var high = GlucoseUnits.Scale(thresholds.TargetTop, useMmol);
+        var low = ReportGlucose.Scale(thresholds.TargetBottom, useMmol);
+        var high = ReportGlucose.Scale(thresholds.TargetTop, useMmol);
         var iob = data.IobSeries.OrderBy(p => p.Timestamp).ToList();
         var cob = data.CobSeries.OrderBy(p => p.Timestamp).ToList();
         var basal = data.BasalSeries.OrderBy(p => p.Timestamp).ToList();
@@ -144,7 +144,7 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         return [.. readings.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
         {
             ["time"] = r.Time,
-            ["glucose"] = GlucoseUnits.Scale(r.Sgv, useMmol),
+            ["glucose"] = ReportGlucose.Scale(r.Sgv, useMmol),
             ["glucoseMgdl"] = Math.Round(r.Sgv),
             ["direction"] = r.Direction,
             ["targetLow"] = low,

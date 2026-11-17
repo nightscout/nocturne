@@ -1,8 +1,9 @@
 namespace Nocturne.Core.Contracts.V4;
 
 /// <summary>
-/// Told, after every committed write of a record type, which types were written, so the legacy
-/// read caches those types are served through stop serving what the write changed. Whatever the
+/// Told, after every committed write of a record type, which types were written, so the
+/// tenant cache families those types feed (the legacy reads and the profile versions and
+/// activations) stop serving what the write changed. Whatever the
 /// <see cref="WriteOrigin"/>, and whether or not the change counted as material, since a change the
 /// material gate does not count (a correlation id) still moves what a legacy read assembles.
 /// </summary>

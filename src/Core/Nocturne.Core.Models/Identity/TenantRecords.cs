@@ -67,6 +67,7 @@ public sealed record NewTenant(
 /// <summary>Changes to a tenant's columns; a null member leaves its column as it is.</summary>
 public sealed record TenantEdit(
     string? DisplayName = null,
+    string? Slug = null,
     bool? IsActive = null,
     bool? IsDemo = null,
     bool? AllowAccessRequests = null,
