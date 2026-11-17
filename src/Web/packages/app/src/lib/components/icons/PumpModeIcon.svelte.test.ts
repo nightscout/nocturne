@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect } from "vitest";
-import { PumpModeState } from "$api";
+import { PumpModeState } from "#lib/api/index.js";
 import PumpModeIcon from "./PumpModeIcon.svelte";
 
 function iconClass(state: string): string {

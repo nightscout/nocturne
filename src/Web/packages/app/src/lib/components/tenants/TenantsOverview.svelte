@@ -1,10 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { getOverview } from "$lib/api/generated/myTenants.generated.remote";
-  import TenantOverviewTile from "$lib/components/tenants/TenantOverviewTile.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { sortTenantsByUrgency } from "$lib/utils/glucose-status";
-  import { pollWhileVisible } from "$lib/utils/poll-while-visible.svelte";
+  import { getOverview } from "#lib/api/generated/myTenants.generated.remote.js";
+  import TenantOverviewTile from "#lib/components/tenants/TenantOverviewTile.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { sortTenantsByUrgency } from "#lib/utils/glucose-status.js";
+  import { pollWhileVisible } from "#lib/utils/poll-while-visible.svelte.js";
 
   /** How often to re-read the cross-tenant overview while the tab is visible. */
   const POLL_MS = 60_000;
@@ -15,7 +15,7 @@
 
   const baseDomain = $derived(page.data.baseDomain ?? null);
 
-  // Detached callback: use .refresh(), not a bare await (no reactive context here).
+  // A bare await would answer with the value this page already holds.
   pollWhileVisible(() => overviewQuery.refresh(), POLL_MS);
 </script>
 

@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({
   getLegacyFallbacks: vi.fn(() => Promise.resolve({ fallbacks: [], covered: [] } as unknown)),
 }));
 
-vi.mock("$lib/api/browser-clients", () => ({
+vi.mock("#lib/api/browser-clients.js", () => ({
   currentTherapyStateClient: () => ({ getCurrentTherapyState: api.getCurrentTherapyState }),
   apsSnapshotClient: () => ({ getAll: api.apsGetAll }),
   sensorGlucoseClient: () => ({ getAll: api.emptyPage }),
@@ -53,7 +53,7 @@ import type {
   TrackerDefinitionUpdateEvent,
   TrackerUpdateEvent,
   WebSocketConnectionStatus,
-} from "$lib/websocket/types";
+} from "#lib/websocket/types.js";
 import {
   SyncPhase,
   LegacyConsumableKind,
@@ -65,7 +65,7 @@ import {
   type SensorGlucose,
   type TrackerDefinitionDto,
   type TrackerInstanceDto,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {
@@ -89,6 +89,7 @@ interface StoreInternals {
       syncProgress?: (event: SyncProgressEvent) => void;
       trackerUpdate?: (event: TrackerUpdateEvent) => void;
       trackerDefinitionUpdate?: (event: TrackerDefinitionUpdateEvent) => void;
+      notificationCreated?: (notification: InAppNotificationDto) => void;
       notificationUpdated?: (notification: InAppNotificationDto) => void;
       notificationArchived?: (notification: InAppNotificationDto) => void;
     };
@@ -1056,14 +1057,57 @@ describe("RealtimeStore optimistic notification removal", () => {
     store.destroy();
   });
 
-  it("lets updates add the notification again once the removal has settled", () => {
+  it("keeps a mark-all-read update that lands after the removal settled from listing it again", () => {
+    const store = makeStore();
+    store.inAppNotifications = [notification("a"), notification("b")];
+
+    store.removeNotification("a").settle();
+    emit(store, "notificationUpdated", notification("a", "2026-09-21T09:00:00Z"));
+    emit(store, "notificationUpdated", notification("b", "2026-09-21T09:00:00Z"));
+
+    expect(store.inAppNotifications.map((n) => n.id)).toEqual(["b"]);
+    store.destroy();
+  });
+
+  it("lists an update for a notification whose removal was released without an archive", () => {
     const store = makeStore();
     store.inAppNotifications = [notification("a")];
 
-    store.removeNotification("a").settle();
-    emit(store, "notificationUpdated", notification("a"));
+    store.removeNotification("a").release();
+    emit(store, "notificationUpdated", notification("a", "2026-09-21T09:00:00Z"));
 
     expect(store.inAppNotifications.map((n) => n.id)).toEqual(["a"]);
+    store.destroy();
+  });
+
+  it("keeps an update that lands after the archive broadcast from listing the notification again", () => {
+    const store = makeStore();
+    store.inAppNotifications = [notification("a")];
+
+    emit(store, "notificationArchived", notification("a"));
+    emit(store, "notificationUpdated", notification("a", "2026-09-21T09:00:00Z"));
+
+    expect(store.inAppNotifications).toEqual([]);
+    store.destroy();
+  });
+
+  it("lists a notification created again after it was archived", () => {
+    const store = makeStore();
+    store.inAppNotifications = [notification("a")];
+
+    emit(store, "notificationArchived", notification("a"));
+    store.websocketClient.eventHandlers.notificationCreated?.(notification("a"));
+
+    expect(store.inAppNotifications.map((n) => n.id)).toEqual(["a"]);
+    store.destroy();
+  });
+
+  it("lists an update for a notification that was never archived", () => {
+    const store = makeStore();
+
+    emit(store, "notificationUpdated", notification("c"));
+
+    expect(store.inAppNotifications.map((n) => n.id)).toEqual(["c"]);
     store.destroy();
   });
 });

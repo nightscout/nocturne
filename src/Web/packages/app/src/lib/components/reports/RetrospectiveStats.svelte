@@ -1,22 +1,22 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Droplet from "@lucide/svelte/icons/droplet";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Apple from "@lucide/svelte/icons/apple";
   import Activity from "@lucide/svelte/icons/activity";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getDirectionInfo } from "$lib/utils";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { getDirectionInfo } from "#lib/utils/index.js";
   import {
     formatClock,
     formatGlucoseValue,
     getUnitLabel,
-  } from "$lib/utils/formatting";
-  import { getRetrospectiveData } from "$api/generated/retrospectives.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  } from "#lib/utils/formatting.js";
+  import { getRetrospectiveData } from "#lib/api/generated/retrospectives.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
   interface Props {
     /** Unix timestamp in milliseconds to fetch data for */

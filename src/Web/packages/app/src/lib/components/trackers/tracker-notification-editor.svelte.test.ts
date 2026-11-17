@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, it, expect } from "vitest";
 import { page as pageState } from "$app/state";
 import TrackerNotificationEditor from "./tracker-notification-editor-test-wrapper.svelte";
-import { NotificationUrgency, TrackerMode } from "$api";
+import { NotificationUrgency, TrackerMode } from "#lib/api/index.js";
 
 describe("TrackerNotificationEditor", () => {
 	beforeEach(() => {

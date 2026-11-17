@@ -6,10 +6,10 @@
   import BatteryMedium from "@lucide/svelte/icons/battery-medium";
   import BatteryWarning from "@lucide/svelte/icons/battery-warning";
   import { onMount } from "svelte";
-  import { relativeAge, time } from "$lib/utils/formatting";
-  import { Now } from "$lib/hooks/now.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
+  import { relativeAge, time } from "#lib/utils/formatting.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { getCurrentBatteryStatus } from "#lib/api/generated/batteries.generated.remote.js";
 
   interface Props {
     /** Override lastUpdated from props instead of realtime store */

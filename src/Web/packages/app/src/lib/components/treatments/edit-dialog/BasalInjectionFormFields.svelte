@@ -3,14 +3,14 @@
     InsulinRole,
     type CreateBasalInjectionRequest,
     type PatientInsulin,
-  } from "$lib/api";
-  import * as Select from "$lib/components/ui/select";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
+  } from "#lib/api/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import { insulinCategoryLabels } from "$lib/components/patient/labels";
+  import { insulinCategoryLabels } from "#lib/components/patient/labels.js";
 
   interface Props {
     value: Partial<CreateBasalInjectionRequest>;

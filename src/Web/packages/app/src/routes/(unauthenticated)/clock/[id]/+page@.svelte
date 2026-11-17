@@ -1,27 +1,27 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { onMount } from "svelte";
-  import { setClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-  import { PublicClockStore } from "$lib/stores/public-clock-store.svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
+  import { setClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
+  import { PublicClockStore } from "#lib/stores/public-clock-store.svelte.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Settings from "@lucide/svelte/icons/settings";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ClockIcon from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
-  import ClockAlertBand from "$lib/components/clock/ClockAlertBand.svelte";
-  import { formatClockTime } from "$lib/components/clock/clock-time";
+  import ClockFaceRenderer from "#lib/components/clock/ClockFaceRenderer.svelte";
+  import ClockAlertBand from "#lib/components/clock/ClockAlertBand.svelte";
+  import { formatClockTime } from "#lib/components/clock/clock-time.js";
   import {
     isClockReadingStale,
     readingAgeLabel,
-  } from "$lib/components/clock/staleness";
-  import type { ClockFaceConfig } from "$lib/api";
-  import { getById as getClockFaceById } from "$api/generated/clockFaces.generated.remote";
+  } from "#lib/components/clock/staleness.js";
+  import type { ClockFaceConfig } from "#lib/api/index.js";
+  import { getById as getClockFaceById } from "#lib/api/generated/clockFaces.generated.remote.js";
 
   // The route param identifies the clock and is the capability for its glucose.
   const id = page.params.id ?? "";
@@ -87,20 +87,13 @@
   });
 
   // Reading age, driven by the ticker above so it advances while the CGM is silent.
-  const isStale = $derived(
-    isClockReadingStale(
-      clockConfig?.settings?.staleMinutes,
-      lastUpdated,
-      currentTime.getTime()
-    )
-  );
-  const timeSince = $derived(
-    lastUpdated === null ? "" : readingAgeLabel(lastUpdated, currentTime.getTime())
-  );
+  const isStale = $derived(isClockReadingStale(clockConfig?.settings?.staleMinutes, lastUpdated, currentTime.getTime()));
 
-  const clockTime = $derived(
-    formatClockTime(currentTime, clockConfig?.settings?.timeFormat)
-  );
+  const timeSince = $derived(lastUpdated === null
+    ? ""
+    : readingAgeLabel(lastUpdated, currentTime.getTime()));
+
+  const clockTime = $derived(formatClockTime(currentTime, clockConfig?.settings?.timeFormat));
 
   // Show time based on configuration
   const showTime = $derived(clockConfig?.settings?.alwaysShowTime || isStale);
@@ -122,7 +115,7 @@
     if (!touchInput) return;
     navRevealed = true;
     clearTimeout(navHideTimer);
-    navHideTimer = setTimeout(() => (navRevealed = false), NAV_REVEAL_MS);
+    navHideTimer = setTimeout(() => navRevealed = false, NAV_REVEAL_MS);
   }
 
   function handlePointerMove(event: PointerEvent) {
@@ -155,13 +148,13 @@
 
 <!-- In the companion's transparent overlay window (`?embed=1`), clear the page background so the
      desktop shows through behind the clock face. -->
-<svelte:body class:embed-transparent={embed} />
+<svelte:body class:embed-transparent={embed}></svelte:body>
 
 <svelte:window
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
   onkeydown={handleKeyDown}
-/>
+></svelte:window>
 
 {#if loading}
   <div class="fixed inset-0 flex items-center justify-center bg-black">
@@ -171,7 +164,11 @@
   <div class="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-black text-white">
     <ClockIcon class="size-12 text-white/30" />
     <p class="text-lg">{error}</p>
-    <Button variant="outline" onclick={() => goto(resolve("/clock"))}>
+
+    <Button
+      variant="outline"
+      onclick={() => goto(resolve('clock'))}
+    >
       <ArrowLeft class="mr-2 size-4" />
       Back to clock faces
     </Button>
@@ -189,35 +186,33 @@
            bg-linear-to-b from-black/50 to-transparent
            transition-opacity duration-300 hover:opacity-100 focus-within:opacity-100
            {navRevealed ? 'opacity-100' : 'opacity-0 pointer-coarse:pointer-events-none'}"
-  >
-    <Button
-      variant="overlay"
-      size="sm"
-      class="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-1.5 pointer-coarse:before:content-['']"
-      onclick={() => goto(resolve("/clock"))}
     >
-      <ArrowLeft class="size-4" />
-      Back
-    </Button>
-    <div class="flex items-center gap-2">
-      {#if demoMode}
+      <Button
+        variant="overlay"
+        size="sm"
+        class="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-1.5 pointer-coarse:before:content-['']"
+        onclick={() => goto(resolve('clock'))}
+      ><ArrowLeft class="size-4" />Back</Button>
+
+      <div class="flex items-center gap-2">
+        {#if demoMode}
         <Badge variant="overlay">
           Demo mode
         </Badge>
-      {/if}
-      {#if canManage}
-        <Button
-          variant="overlay"
-          size="sm"
-          class="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-1.5 pointer-coarse:before:content-['']"
-          onclick={() => goto(resolve("/(authenticated)/clock/config/[id]", { id }))}
+        {/if}
+        {#if canManage}
+          <Button
+            variant="overlay"
+            size="sm"
+            class="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-1.5 pointer-coarse:before:content-['']"
+            onclick={() => goto(resolve("/(authenticated)/clock/config/[id]", { id }))}
         >
           <Settings class="size-4" />
           Edit
         </Button>
-      {/if}
+        {/if}
+      </div>
     </div>
-  </div>
   {/if}
 
   <!-- Clock Display -->

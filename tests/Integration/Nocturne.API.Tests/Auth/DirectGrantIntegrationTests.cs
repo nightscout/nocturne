@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Covers token creation, authentication via noc_ tokens, scope enforcement, revocation, and
 /// verification that the list endpoint never leaks plaintext tokens.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class DirectGrantIntegrationTests : ApiIntegrationTestBase
 {

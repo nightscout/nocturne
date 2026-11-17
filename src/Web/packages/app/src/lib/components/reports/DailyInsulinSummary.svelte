@@ -3,7 +3,7 @@
     formatInsulinDisplay,
     formatCarbDisplay,
     type TreatmentSummary,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
 
   interface Props {
     treatmentSummary: TreatmentSummary;

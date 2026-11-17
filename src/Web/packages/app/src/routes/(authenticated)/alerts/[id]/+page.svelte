@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDayTime } from "$lib/utils/formatting";
+  import { formatDayTime } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -11,30 +11,30 @@
     updateRule,
     deleteRule,
     testFire,
-  } from "$api/generated/alertRules.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { conditionIssuesMessage } from "$lib/components/alerts/conditionIssues.svelte";
-  import { getAlertHistory } from "$api/generated/alerts.generated.remote";
+  } from "#lib/api/generated/alertRules.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { conditionIssuesMessage } from "#lib/components/alerts/conditionIssues.svelte.js";
+  import { getAlertHistory } from "#lib/api/generated/alerts.generated.remote.js";
   import { z } from "zod";
-  import { AlertRuleSeverity } from "$api-clients";
-  import type { HistoryExcursionResponse } from "$api-clients";
+  import { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+  import type { HistoryExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
 
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
     CardDescription,
-  } from "$lib/components/ui/card";
-  import * as Select from "$lib/components/ui/select";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  } from "#lib/components/ui/card/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Save from "@lucide/svelte/icons/save";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -44,14 +44,14 @@
   import PlayCircle from "@lucide/svelte/icons/circle-play";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
 
-  import { EditorActionBar } from "$lib/components/layout";
-  import { EmptyState } from "$lib/components/shared";
-  import RuleBuilder from "$lib/components/alerts/RuleBuilder.svelte";
-  import AutoResolveSection from "$lib/components/alerts/AutoResolveSection.svelte";
-  import ChannelsSection from "$lib/components/alerts/ChannelsSection.svelte";
-  import ReplayPanel from "$lib/components/alerts/ReplayPanel.svelte";
-  import { severity } from "$lib/components/alerts/severity";
-  import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
+  import { EditorActionBar } from "#lib/components/layout/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import RuleBuilder from "#lib/components/alerts/RuleBuilder.svelte";
+  import AutoResolveSection from "#lib/components/alerts/AutoResolveSection.svelte";
+  import ChannelsSection from "#lib/components/alerts/ChannelsSection.svelte";
+  import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
+  import { severity } from "#lib/components/alerts/severity.js";
+  import { severityLabel } from "#lib/components/alerts/severityLabel.svelte.js";
   import {
     parseRule,
     ensureCompositeRoot,
@@ -59,7 +59,7 @@
     buildBody,
     validateChannels,
     type RuleEditorState,
-  } from "$lib/components/alerts/types";
+  } from "#lib/components/alerts/types.js";
 
   // ---- Page state ------------------------------------------------------
   // The dynamic [id] segment is "new" when creating, otherwise a UUID.
@@ -81,21 +81,15 @@
   // Queries — fire on the server during SSR, results land in cache for hydration.
   const rulesQuery = getRules();
   const ruleQuery = $derived(isNew ? null : getRule(ruleId));
-  const historyQuery = $derived(
-    isNew ? null : getAlertHistory({ page: 1, pageSize: 25, alertRuleId: ruleId }),
-  );
 
-  const availableRules = $derived<{ id: string; name: string }[]>(
-    (rulesQuery.current ?? [])
-      .filter((r) => r.id !== ruleId)
-      .map((r) => ({ id: r.id ?? "", name: r.name ?? "(unnamed)" })),
-  );
-  const history = $derived<HistoryExcursionResponse[]>(
-    historyQuery?.current?.items ?? [],
-  );
-  const historyLoading = $derived(
-    historyQuery !== null && historyQuery.current === undefined,
-  );
+  const historyQuery = $derived(isNew
+    ? null
+    : getAlertHistory({ page: 1, pageSize: 25, alertRuleId: ruleId }));
+
+  const availableRules = $derived<{ id: string; name: string }[]>((rulesQuery.current ?? []).filter((r) => r.id !== ruleId).map((r) => ({ id: r.id ?? "", name: r.name ?? "(unnamed)" })));
+  const history = $derived<HistoryExcursionResponse[]>(historyQuery?.current?.items ?? []);
+  const historyLoading = $derived(historyQuery !== null && historyQuery.current === undefined);
+
   // Ready once the rule has seeded the editor, not when `ruleQuery.current` is set: the derived
   // can re-run and hand the template a fresh query that never starts, while the seeding effect
   // below has already read the loaded one (#1751).
@@ -149,9 +143,8 @@
         const created = await createRule(body);
         await goto(
           created?.id
-            ? resolve("/(authenticated)/alerts/[id]", { id: created.id })
-            : resolve("/alerts")
-        );
+          ? resolve("/(authenticated)/alerts/[id]", { id: created.id })
+          : resolve('alerts'));
       } else {
         await updateRule({ id: ruleId, request: body });
         savedBody = buildBody(editor);
@@ -171,8 +164,8 @@
     error = null;
     try {
       await deleteRule(ruleId);
-      await goto(resolve("/alerts"));
-    } catch (e) {
+      await goto(resolve('alerts'));
+    } catch(e) {
       error = describeSubmitError(e, "Failed to delete the alert rule. Try again.");
     } finally {
       deleting = false;
@@ -277,7 +270,7 @@
         type="button"
         variant="ghost"
         size="icon"
-        onclick={() => goto(resolve("/alerts"))}
+        onclick={() => goto(resolve('alerts'))}
         aria-label="Back to alerts"
       >
         <ArrowLeft class="h-4 w-4" />
@@ -441,7 +434,10 @@
           </CardHeader>
           <CardContent>
             {#if editor.condition}
-              <RuleBuilder bind:node={editor.condition} {availableRules} />
+              <RuleBuilder
+                bind:node={editor.condition}
+                availableRules={availableRules}
+              />
             {/if}
           </CardContent>
         </Card>
@@ -472,7 +468,7 @@
               bind:enabled={editor.autoResolveEnabled}
               bind:condition={editor.autoResolveCondition}
               firingCondition={editor.condition}
-              {availableRules}
+              availableRules={availableRules}
             />
           </CardContent>
         </Card>
@@ -519,7 +515,7 @@
                 {#each editor.clientConfig.snooze.conditions as _c, i (i)}
                   <RuleBuilder
                     bind:node={editor.clientConfig.snooze.conditions[i]}
-                    {availableRules}
+                    availableRules={availableRules}
                   />
                 {/each}
               </div>

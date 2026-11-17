@@ -5,11 +5,11 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import Activity from "@lucide/svelte/icons/activity";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import type { AidSystemMetrics } from "$lib/api";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import type { AidSystemMetrics } from "#lib/api/index.js";
+  import { bg, bgLabel } from "#lib/utils/formatting.js";
 
   let { metrics }: { metrics: AidSystemMetrics | undefined } = $props();
 </script>

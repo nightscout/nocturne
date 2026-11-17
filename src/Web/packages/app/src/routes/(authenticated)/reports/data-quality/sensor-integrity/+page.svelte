@@ -6,22 +6,22 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Activity from "@lucide/svelte/icons/activity";
   import Info from "@lucide/svelte/icons/info";
-  import { getDataQualityReport } from "$api/reports.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { buildDayBuckets, type DayBucket } from "$lib/components/reports/sensor-integrity/buckets";
-  import NoiseClusterStrips from "$lib/components/reports/sensor-integrity/NoiseClusterStrips.svelte";
-  import NoiseDayChart from "$lib/components/reports/sensor-integrity/NoiseDayChart.svelte";
-  import DataQualityHeadline from "$lib/components/reports/sensor-integrity/DataQualityHeadline.svelte";
-  import HypoAfterNoiseLog from "$lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte";
-  import ClusterTable from "$lib/components/reports/sensor-integrity/ClusterTable.svelte";
-  import HypoMarker from "$lib/components/reports/sensor-integrity/HypoMarker.svelte";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import type { GlucoseCluster } from "$lib/api";
+  import { getDataQualityReport } from "#lib/api/reports.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { buildDayBuckets, type DayBucket } from "#lib/components/reports/sensor-integrity/buckets.js";
+  import NoiseClusterStrips from "#lib/components/reports/sensor-integrity/NoiseClusterStrips.svelte";
+  import NoiseDayChart from "#lib/components/reports/sensor-integrity/NoiseDayChart.svelte";
+  import DataQualityHeadline from "#lib/components/reports/sensor-integrity/DataQualityHeadline.svelte";
+  import HypoAfterNoiseLog from "#lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte";
+  import ClusterTable from "#lib/components/reports/sensor-integrity/ClusterTable.svelte";
+  import HypoMarker from "#lib/components/reports/sensor-integrity/HypoMarker.svelte";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import type { GlucoseCluster } from "#lib/api/index.js";
 
   const params = requireDateParamsContext(14);
 
@@ -63,7 +63,7 @@
     <!-- Header -->
     <div class="space-y-3">
       <a
-        href={resolve("/reports/data-quality")}
+        href={resolve('reports/data-quality')}
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
@@ -81,7 +81,7 @@
       </div>
     </div>
 
-    <DataQualityHeadline {summary} />
+    <DataQualityHeadline summary={summary} />
 
     <!-- Daily overview: taller than a page at 28 days, so it may break between rows -->
     <Card class="print:break-inside-auto!">
@@ -114,7 +114,11 @@
         </div>
       </CardHeader>
       <CardContent>
-        <NoiseClusterStrips {buckets} {selectedDateMs} onSelectDay={selectDay} />
+        <NoiseClusterStrips
+          buckets={buckets}
+          selectedDateMs={selectedDateMs}
+          onSelectDay={selectDay}
+        />
       </CardContent>
     </Card>
 
@@ -156,9 +160,7 @@
         <CardDescription class="print:hidden">Select a row to expand its day above.</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="overflow-x-auto print:overflow-visible">
-          <ClusterTable {clusters} onSelect={selectCluster} />
-        </div>
+        <div class="overflow-x-auto print:overflow-visible"><ClusterTable clusters={clusters} onSelect={selectCluster} /></div>
       </CardContent>
     </Card>
 

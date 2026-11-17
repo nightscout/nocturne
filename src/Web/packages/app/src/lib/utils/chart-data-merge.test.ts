@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { markerKey, mergeChartData, replaceWindow } from "./chart-data-merge";
 import type { TransformedChartData } from "./chart-data-transform";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 
 function thresholds(
   overrides: Partial<TransformedChartData["thresholds"]> = {}

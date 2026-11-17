@@ -1,7 +1,6 @@
-using System.Reflection;
 using FluentAssertions;
 using Nocturne.API.Controllers.V4.Monitoring;
-using OpenApi.Remote.Attributes;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
@@ -20,7 +19,22 @@ public class TrackerInvalidationTests
     [Fact]
     public void DeletingADefinition_RefreshesTheInstancesAndPresetsItTakesWithIt()
     {
-        Command(nameof(TrackersController.DeleteDefinition)).Invalidates.Should().Contain(
+        RemoteAttributes.Command<TrackersController>(nameof(TrackersController.DeleteDefinition)).Invalidates.Should().Contain(
+        [
+            nameof(TrackersController.GetDefinitions),
+            nameof(TrackersController.GetActiveInstances),
+            nameof(TrackersController.GetInstanceHistory),
+            nameof(TrackersController.GetPresets),
+        ]);
+    }
+
+    /// <summary>Instances and presets list the name of their definition.</summary>
+    [Fact]
+    public void UpdatingADefinition_RefreshesTheInstancesAndPresetsThatCarryItsName()
+    {
+        var update = RemoteAttributes.Form<TrackersController>(nameof(TrackersController.UpdateDefinition));
+
+        update.Invalidates.Should().Contain(
         [
             nameof(TrackersController.GetDefinitions),
             nameof(TrackersController.GetActiveInstances),
@@ -35,14 +49,10 @@ public class TrackerInvalidationTests
     [InlineData(nameof(TrackersController.ApplyPreset))]
     public void Starting_RefreshesTheActiveInstancesAndTheHistory(string write)
     {
-        Command(write).Invalidates.Should().Contain(
+        RemoteAttributes.Command<TrackersController>(write).Invalidates.Should().Contain(
         [
             nameof(TrackersController.GetActiveInstances),
             nameof(TrackersController.GetInstanceHistory),
         ]);
     }
-
-    private static RemoteCommandAttribute Command(string write) =>
-        typeof(TrackersController).GetMethod(write)!
-            .GetCustomAttribute<RemoteCommandAttribute>()!;
 }

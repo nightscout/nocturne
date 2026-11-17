@@ -6,7 +6,6 @@ using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
-using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -23,7 +22,7 @@ public class AppleSignInControllerTests
     public AppleSignInControllerTests()
     {
         var notifications = new AppleNotificationService(
-            Mock.Of<IOidcProviderService>(), Mock.Of<IOidcConfigurationSource>(), Mock.Of<INocturneDbContextFactory>(),
+            Mock.Of<IOidcProviderService>(), Mock.Of<IOidcConfigurationSource>(), Mock.Of<ISubjectRepository>(),
             Mock.Of<IFirstPartyTokenRepository>(), Mock.Of<IAuthAuditService>(),
             NullLogger<AppleNotificationService>.Instance);
 

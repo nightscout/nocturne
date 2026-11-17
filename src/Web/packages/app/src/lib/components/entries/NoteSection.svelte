@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { Note } from "$lib/api";
-  import { Label } from "$lib/components/ui/label";
-  import { Button } from "$lib/components/ui/button";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import type { Note } from "#lib/api/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import FileText from "@lucide/svelte/icons/file-text";
   import X from "@lucide/svelte/icons/x";
 

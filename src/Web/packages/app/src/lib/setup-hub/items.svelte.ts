@@ -7,8 +7,8 @@ import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 import type { Component } from "svelte";
 import { resolve } from "$app/paths";
 import type { PaletteId } from "water-ui";
-import { SetupHubItemKey } from "$api";
-import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+import { SetupHubItemKey } from "#lib/api/index.js";
+import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
 /**
  * How the frontend presents one setup hub item. The server decides which items

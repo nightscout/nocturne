@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import type { ComponentProps } from "svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let expiresAt: string | undefined;
 
@@ -13,8 +13,8 @@ const navigation = vi.hoisted(() => ({
 
 const shell = vi.hoisted(() => ({ probe: vi.fn() }));
 
-vi.mock("$lib/api/shell-session.remote", () => ({
-  getShellSession: () => ({ run: shell.probe }),
+vi.mock("#lib/api/shell-session.remote.js", () => ({
+  getShellSession: () => createQueryResource(shell.probe),
 }));
 
 vi.mock("$app/navigation", async (importOriginal) => ({
@@ -22,7 +22,7 @@ vi.mock("$app/navigation", async (importOriginal) => ({
   ...navigation,
 }));
 
-vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
+vi.mock("#routes/(unauthenticated)/auth/auth.remote.js", () => ({
   getSessionInfo: () =>
     remoteQuery(() => ({
       isAuthenticated: true,
@@ -39,17 +39,23 @@ vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
 import AuthenticatedLayoutHarness from "./AuthenticatedLayoutHarness.test.svelte";
 import SettingsLayout from "./settings/+layout.svelte";
 import InitOrderProbe, { probe } from "./InitOrderProbe.test.svelte";
+import StickyBarProbe from "./StickyBarProbe.test.svelte";
 import NavigationProbe, { navigationProbe } from "./NavigationProbe.test.svelte";
-import type { ShellSession } from "$lib/utils/shell-session";
-import { AuthStore } from "$lib/stores/auth-store.svelte";
-import { RealtimeStore } from "$lib/stores/realtime-store.svelte";
+import type { ShellSession } from "#lib/utils/shell-session.js";
+import { AuthStore } from "#lib/stores/auth-store.svelte.js";
+import { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 import ToolsLayout from "./tools/+layout.svelte";
 import { EngineHost } from "water-ui";
-import { illustrations } from "$lib/stores/illustrations.svelte";
+import { illustrations } from "#lib/stores/illustrations.svelte.js";
 import * as appState from "$app/state";
-import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/shell-data";
+import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "#lib/constants/shell-data.js";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
+
+// The navigation stub's `pushState` adds no history entry, so the `back()` that takes a coach
+// overlay's entry off again would leave the test page.
+window.history.back = () => {};
 
 // A tenantless host keeps the tenant-scoped surfaces (alerts, membership
 // requests, the backup sign-in prompt) unmounted, leaving only the shell.
@@ -78,6 +84,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     limitTo24Hours: false,
     refusedAsDemoSubject: false,
     onboardingComplete: true,
+    pillRows: { desktop: 1, mobile: 1 },
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,
@@ -132,6 +139,20 @@ describe("authenticated layout", () => {
     await expect.element(page.getByText("Guest access")).toBeVisible();
   });
 
+  it("opens a guest's visit with the guest tour, on the countdown", async () => {
+    localStorage.clear();
+    render(AuthenticatedLayoutHarness, {
+      props: {
+        data: layoutData({
+          isGuestSession: true,
+          guestExpiresAt: new Date(BASE + 2 * 60 * 1000).toISOString(),
+        }),
+      },
+    });
+
+    await expect.element(page.getByRole("dialog", { name: "Read-only access" })).toBeVisible();
+  });
+
   it.each([
     { name: "a top-level page", section: undefined },
     { name: "a settings page", section: SettingsLayout },
@@ -145,6 +166,55 @@ describe("authenticated layout", () => {
       .element(page.getByRole("main").getByText("page content"))
       .toBeVisible();
     expect(page.getByRole("main").elements()).toHaveLength(1);
+  });
+
+  describe("banner strip", () => {
+    const stripOf = () =>
+      document.querySelector<HTMLElement>("[data-slot=banner]")!.parentElement!;
+    const barTop = () => page.getByTestId("sticky-bar").element().getBoundingClientRect().top;
+
+    async function renderWithBackupPrompt() {
+      render(AuthenticatedLayoutHarness, {
+        props: {
+          data: layoutData({ tenantless: false, showBackupSignInPrompt: true }),
+          section: StickyBarProbe,
+        },
+      });
+      await expect.element(page.getByText("Add a backup way to sign in")).toBeVisible();
+    }
+
+    const original = [window.innerWidth, window.innerHeight] as const;
+
+    afterEach(async () => {
+      window.scrollTo(0, 0);
+      await page.viewport(original[0], original[1]);
+    });
+
+    it("scrolls away on a phone and leaves a sticky bar under the mobile header", async () => {
+      await page.viewport(360, 640);
+      await renderWithBackupPrompt();
+      const headerBottom = 3.5 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+
+      expect(getComputedStyle(stripOf()).position).toBe("static");
+
+      window.scrollTo(0, 1000);
+      await vi.waitFor(() => expect(window.scrollY).toBeGreaterThan(500));
+
+      expect(barTop()).toBeCloseTo(headerBottom, 0);
+    });
+
+    it("pins above a sticky bar from the md breakpoint", async () => {
+      await page.viewport(1024, 768);
+      await renderWithBackupPrompt();
+
+      expect(getComputedStyle(stripOf()).position).toBe("sticky");
+
+      window.scrollTo(0, 1000);
+      await vi.waitFor(() => expect(window.scrollY).toBeGreaterThan(500));
+
+      expect(stripOf().getBoundingClientRect().top).toBe(0);
+      expect(barTop()).toBeCloseTo(stripOf().getBoundingClientRect().height, 0);
+    });
   });
 
   it("loads the command palette on its first toggle", async () => {

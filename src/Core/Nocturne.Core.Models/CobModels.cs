@@ -18,8 +18,12 @@ public class CobResult
     public bool ReportedByDevice { get; set; }
 
     public long? Mills { get; set; }
-    public string? Display { get; set; }
-    public string? DisplayLine { get; set; }
+
+    /// <summary><see cref="Cob"/> to one decimal, by JavaScript's half-up <c>Math.round</c>, as Nightscout shows it.</summary>
+    public double Display => Math.Floor(Cob * 10 + 0.5) / 10;
+
+    public string DisplayLine => $"COB: {Display.ToString(System.Globalization.CultureInfo.InvariantCulture)}g";
+
     public long? DecayedBy { get; set; }
     public double? IsDecaying { get; set; }
     public double? CarbsHr { get; set; }

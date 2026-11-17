@@ -12,7 +12,7 @@ public class TherapyTimelineTests
     private static TherapyTimeline ManySegments() => new(
         [.. Enumerable.Range(0, Segments).Select(i => new TherapySegment(
             i * Minute, (i + 1) * Minute,
-            new TherapySnapshot(i + 1, 75, 30, null, null, 0, null, null, null)))]);
+            new TherapySnapshot(i + 1, 30, null, null, 0, null, null, null)))]);
 
     [Fact]
     public void ReadsBackwards_FindTheSegmentHoldingEachInstant()

@@ -2,27 +2,27 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import { createQueryResource, remoteQuery } from "$lib/test-stubs/remote-resource";
-import { flushIdle, resetIdle } from "$lib/test-stubs/when-idle";
+import { createQueryResource, remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { flushIdle, resetIdle } from "#lib/test-stubs/when-idle.js";
 
-vi.mock("$lib/utils/when-idle", () => import("$lib/test-stubs/when-idle"));
+vi.mock("#lib/utils/when-idle.js", () => import("#lib/test-stubs/when-idle.js"));
 
 // The sidebar's own remote calls; none says anything about which nav entries it offers.
 const getDnd = vi.hoisted(() => vi.fn());
 const updateDnd = vi.hoisted(() => vi.fn());
-vi.mock("$api/user-preferences.remote", () => ({
+vi.mock("#lib/api/user-preferences.remote.js", () => ({
   updateLanguagePreference: () => Promise.resolve(),
 }));
-vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantAlertSettings.generated.remote.js", () => ({
   get: () => getDnd(),
   update: (arg: unknown) => updateDnd(arg),
 }));
 
 // Switching tenant is a document navigation, which would take the test runner with it.
 const visited: { urls: string[] } = vi.hoisted(() => ({ urls: [] }));
-vi.mock("$lib/utils/tenant-host", async (importOriginal) => {
+vi.mock("#lib/utils/tenant-host.js", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("$lib/utils/tenant-host")>();
+    await importOriginal<typeof import("#lib/utils/tenant-host.js")>();
   return {
     ...actual,
     goToTenant: (slug: string, baseDomain: string) => {
@@ -62,7 +62,7 @@ describe("AppSidebar", () => {
     // Below the sidebar's mobile breakpoint it renders as a closed sheet and offers nothing.
     await page.viewport(1280, 900);
     pageState.data = {};
-    pageState.url.pathname = "/";
+    (pageState.url as URL).pathname = "/";
     visited.urls = [];
     resetIdle();
     getDnd.mockReset();
@@ -80,7 +80,7 @@ describe("AppSidebar", () => {
     await expect.element(link("Sign in")).toBeVisible();
     await expect.element(group("Reports")).not.toBeInTheDocument();
     await expect.element(link("Food")).not.toBeInTheDocument();
-    await expect.element(group("Settings")).not.toBeInTheDocument();
+    await expect.element(group("My settings")).not.toBeInTheDocument();
   });
 
   it("offers a public share its reports when the share grants them", async () => {
@@ -89,7 +89,7 @@ describe("AppSidebar", () => {
     render(Harness, {});
 
     await expect.element(group("Reports")).toBeVisible();
-    await expect.element(group("Settings")).not.toBeInTheDocument();
+    await expect.element(group("My settings")).not.toBeInTheDocument();
   });
 
   it("offers a member the surfaces they own", async () => {
@@ -97,7 +97,7 @@ describe("AppSidebar", () => {
 
     render(Harness, { user: MEMBER });
 
-    await expect.element(group("Settings")).toBeVisible();
+    await expect.element(group("My settings")).toBeVisible();
     await expect.element(link("Food")).toBeVisible();
     await expect.element(group("Reports")).toBeVisible();
   });
@@ -206,7 +206,7 @@ describe("AppSidebar", () => {
 
   it("reads the Do not disturb state straight away on an alerts page", async () => {
     pageState.data = { effectivePermissions: ["*"] };
-    pageState.url.pathname = "/alerts/dnd";
+    (pageState.url as URL).pathname = "/alerts/dnd";
 
     render(Harness, { user: MEMBER });
 
@@ -255,7 +255,7 @@ describe("AppSidebar", () => {
 
     async function renderWith(settings: unknown) {
       pageState.data = { effectivePermissions: ["*"] };
-      pageState.url.pathname = "/alerts/dnd";
+      (pageState.url as URL).pathname = "/alerts/dnd";
       getDnd.mockImplementation(() => remoteQuery(() => settings));
       render(Harness, { user: MEMBER });
       await vi.waitFor(() => expect(getDnd).toHaveBeenCalledOnce());

@@ -16,6 +16,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// membership, a key cannot mint or widen keys, and only the person's own sign-in manages their
 /// credentials and sign-in factors.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
 {

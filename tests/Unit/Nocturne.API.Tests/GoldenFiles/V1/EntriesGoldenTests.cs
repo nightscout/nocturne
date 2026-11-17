@@ -405,11 +405,21 @@ public class EntriesGoldenTests : GoldenFileTestBase, IClassFixture<FixedClockGo
     }
 
     [Fact]
-    public async Task GetEntriesByType_WithCountZero_ReturnsEmptyArray()
+    public async Task GetEntriesByType_WithCountZero_ReturnsTheDefaultPage()
+    {
+        await SeedSensorGlucose(Enumerable.Range(0, 12).Select(i => CreateSgvEntry(i)).ToArray());
+
+        var entries = await GetEntryArrayAsync("/api/v1/entries/sgv.json?count=0");
+
+        entries.Should().HaveCount(10);
+    }
+
+    [Fact]
+    public async Task GetEntriesByType_WithNegativeCount_ReturnsEmptyArray()
     {
         await SeedSensorGlucose(Enumerable.Range(0, 3).Select(i => CreateSgvEntry(i)).ToArray());
 
-        var entries = await GetEntryArrayAsync("/api/v1/entries/sgv.json?count=0");
+        var entries = await GetEntryArrayAsync("/api/v1/entries/sgv.json?count=-1");
 
         entries.Should().BeEmpty();
     }

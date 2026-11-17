@@ -2,13 +2,13 @@
   import Activity from "@lucide/svelte/icons/activity";
   import Droplet from "@lucide/svelte/icons/droplet";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
-  import { bgLabel } from "$lib/utils/formatting";
+  import { bgLabel } from "#lib/utils/formatting.js";
   import type {
     BasalSchedule,
     CarbRatioSchedule,
     SensitivitySchedule,
     TargetRangeSchedule,
-  } from "$api-clients";
+  } from "#lib/api/generated/nocturne-api-client.js";
   import ScheduleView from "./ScheduleView.svelte";
   import TargetRangeCard from "./TargetRangeCard.svelte";
 

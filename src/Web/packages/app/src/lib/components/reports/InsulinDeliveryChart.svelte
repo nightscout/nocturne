@@ -1,14 +1,14 @@
 <script lang="ts">
   import { AreaChart, Spline, Tooltip } from "layerchart";
   import { curveStep } from "d3";
-  import type { HourlyInsulinDeliveryPoint, HourlyInsulinDeliveryResponse } from "$lib/api";
-  import { EmptyState } from "$lib/components/shared";
+  import type { HourlyInsulinDeliveryPoint, HourlyInsulinDeliveryResponse } from "#lib/api/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     dashOf,
     patternClass,
     type TextureKey,
-  } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
 
   interface Props {
     /** Backend-computed hourly delivery averages (24 entries, hour 0-23) and period totals */

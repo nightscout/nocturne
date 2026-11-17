@@ -103,7 +103,9 @@ public class AlertRulesControllerTenantScopingTests
 
         return new AlertRulesController(
             factory,
+            new TenantMembershipRepository(factory),
             new AlertRepository(factory),
+            new AlertRuleRepository(factory),
             MockTenantAccessor.Create(tenantId).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),

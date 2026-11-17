@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { EmptyState } from "$lib/components/shared";
-  import { CompletionReason, type TrackerInstanceDto } from "$api";
+  } from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { CompletionReason, type TrackerInstanceDto } from "#lib/api/index.js";
 
   interface Props {
     historyInstances: TrackerInstanceDto[];

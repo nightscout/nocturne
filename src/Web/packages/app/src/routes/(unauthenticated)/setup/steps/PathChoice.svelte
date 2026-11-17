@@ -2,9 +2,9 @@
   import Check from "@lucide/svelte/icons/check";
   import Sprout from "@lucide/svelte/icons/sprout";
   import Cable from "@lucide/svelte/icons/cable";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
 
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   interface Props {
     path: "fresh" | "migration";

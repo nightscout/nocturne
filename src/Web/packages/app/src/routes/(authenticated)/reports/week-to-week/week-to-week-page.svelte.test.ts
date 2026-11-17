@@ -1,15 +1,15 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 
 const weekday = vi.hoisted(() => ({ current: undefined as unknown }));
 
 vi.mock("layerchart", async () => ({
-  LineChart: (await import("$lib/components/reports/LineChartStub.test.svelte")).default,
+  LineChart: (await import("#lib/components/reports/LineChartStub.test.svelte")).default,
 }));
-vi.mock("$api/reports.remote", () => ({ getWeekdayAverages: vi.fn() }));
-vi.mock("$lib/hooks/date-params.svelte", () => ({
+vi.mock("#lib/api/reports.remote.js", () => ({ getWeekdayAverages: vi.fn() }));
+vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({
     dateRangeInput: {},
     startDate: new Date(2026, 2, 1),
@@ -21,7 +21,7 @@ vi.mock("$lib/hooks/date-params.svelte", () => ({
     reset: () => {},
   }),
 }));
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
   contextResource: () => ({
     get current() {
       return weekday.current;

@@ -4,19 +4,19 @@
   import { page } from "$app/state";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Check from "@lucide/svelte/icons/check";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { FormError } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { FormError } from "#lib/forms/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     getSetupHub,
     setSetupHubItemState,
-  } from "$api/generated/setupHubs.generated.remote";
-  import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
-  import { SetupHubItemState, type SetupHubItemKey } from "$api";
-  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
-  import { setupHubItems } from "$lib/setup-hub/items.svelte";
+  } from "#lib/api/generated/setupHubs.generated.remote.js";
+  import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { SetupHubItemState, type SetupHubItemKey } from "#lib/api/index.js";
+  import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { setupHubItems } from "#lib/setup-hub/items.svelte.js";
   import SetupChrome from "../SetupChrome.svelte";
 
   let { children } = $props();
@@ -35,8 +35,8 @@
     try {
       error = undefined;
       await setSetupHubItemState({ key, request: { state: next } });
-      if (next === SetupHubItemState.NotForMe) await goto(resolve("/setup"));
-    } catch (err) {
+      if (next === SetupHubItemState.NotForMe) await goto(resolve('setup'));
+    } catch(err) {
       error = describeSubmitError(err, "We could not save that.");
     }
   }
@@ -48,10 +48,11 @@
 
 <SetupChrome>
   {#snippet actions()}
-    <Button variant="ghost-muted" size="xs" href={resolve("/setup")}>
-      <ArrowLeft class="h-4 w-4" />
-      Back to setup
-    </Button>
+    <Button
+      variant="ghost-muted"
+      size="xs"
+      href={resolve('setup')}
+    ><ArrowLeft class="h-4 w-4" />Back to setup</Button>
   {/snippet}
 
   <Card.Root size="flush" class="@container mx-auto w-full max-w-3xl" data-testid="guided-item">
@@ -69,11 +70,11 @@
       {@render children()}
     </div>
 
-    <div class="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/40 px-5 py-4 @xl:px-7">
-      <Button variant="outline" href={resolve("/setup")}>
-        <ArrowLeft class="h-4 w-4" />
-        Back to setup
-      </Button>
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/40 px-5 py-4 @xl:px-7"
+    >
+      <Button variant="outline" href={resolve('setup')}><ArrowLeft class="h-4 w-4" />Back to setup</Button>
+
       <div class="flex items-center gap-3">
         <FormError issues={error} />
         {#if itemState === SetupHubItemState.Done}

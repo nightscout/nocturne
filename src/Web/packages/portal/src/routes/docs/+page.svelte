@@ -2,9 +2,9 @@
     import { resolve } from "$app/paths";
     import { ArtworkHero, ConfirmationBackground } from "water-ui";
     import Content from "../../content/docs/index.svx";
-    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
+    import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
-    import { DOCS_HERO } from "$lib/data/docs-artwork";
+    import { DOCS_HERO } from "#lib/data/docs-artwork.js";
 
     const hero = DOCS_HERO[""];
 
@@ -17,10 +17,10 @@
         {
             href: resolve("/docs/installation"),
             title: "Installation guide",
-            desc: "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more.",
+            desc: "Step-by-step guides for deploying Nocturne with the install script, Docker Compose, Portainer, and more.",
         },
         {
-            href: resolve("/docs/configuration"),
+            href: resolve("docs/configuration"),
             title: "Configuration guide",
             desc: "Learn how to configure connectors, settings, and customize your instance.",
         },

@@ -3,13 +3,12 @@ using System.Text;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
 /// <inheritdoc cref="IOidcProviderGrantService"/>
 public class OidcProviderGrantService(
-    INocturneDbContextFactory contexts,
+    ISubjectRepository subjects,
     IOidcProviderService providerService,
     IHttpClientFactory httpClientFactory,
     IDataProtectionProvider dataProtectionProvider,
@@ -26,16 +25,10 @@ public class OidcProviderGrantService(
         if (provider.ProviderType != OidcProviderType.Apple || string.IsNullOrEmpty(refreshToken))
             return;
 
-        await using var db = await contexts.CreateAsync(ct);
-        var identity = await db.SubjectOidcIdentities.FirstOrDefaultAsync(
-            i => i.OidcSubjectId == oidcSubjectId && i.Issuer == provider.IssuerUrl, ct);
-        if (identity is null)
-            return;
-
-        identity.ProviderRefreshTokenEncrypted = _protector.Protect(Encoding.UTF8.GetBytes(refreshToken));
         try
         {
-            await db.SaveChangesAsync(ct);
+            await subjects.SetProviderRefreshTokenAsync(
+                oidcSubjectId, provider.IssuerUrl, _protector.Protect(Encoding.UTF8.GetBytes(refreshToken)), ct);
         }
         catch (DbUpdateException ex)
         {
@@ -48,20 +41,14 @@ public class OidcProviderGrantService(
     public async Task<IReadOnlyList<HeldProviderGrant>> CaptureAsync(
         Guid subjectId, Guid? identityId = null, CancellationToken ct = default)
     {
-        await using var db = await contexts.CreateAsync(ct);
-        var held = await db.SubjectOidcIdentities
-            .AsNoTracking()
-            .Where(i => i.SubjectId == subjectId && i.ProviderRefreshTokenEncrypted != null)
-            .Where(i => identityId == null || i.Id == identityId)
-            .Select(i => new { i.ProviderId, Token = i.ProviderRefreshTokenEncrypted! })
-            .ToListAsync(ct);
+        var held = await subjects.GetProviderRefreshTokensAsync(subjectId, identityId, ct);
 
         var grants = new List<HeldProviderGrant>(held.Count);
         foreach (var row in held)
         {
             try
             {
-                grants.Add(new HeldProviderGrant(row.ProviderId, Encoding.UTF8.GetString(_protector.Unprotect(row.Token))));
+                grants.Add(new HeldProviderGrant(row.ProviderId, Encoding.UTF8.GetString(_protector.Unprotect(row.TokenEncrypted))));
             }
             catch (CryptographicException ex)
             {

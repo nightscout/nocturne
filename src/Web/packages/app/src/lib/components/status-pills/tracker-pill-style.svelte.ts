@@ -1,6 +1,6 @@
 // A .svelte.ts module so wuchale extracts its strings; it holds no runes.
-import { NotificationUrgency } from "$lib/api";
-import { cn } from "$lib/utils";
+import { NotificationUrgency } from "#lib/api/index.js";
+import { cn } from "#lib/utils/index.js";
 
 /** How loud a tracker or legacy age pill is drawn. */
 export type AlertLevel = "none" | "info" | "warn" | "hazard" | "urgent";

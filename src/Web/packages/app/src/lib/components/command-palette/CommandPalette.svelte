@@ -1,17 +1,17 @@
 <script lang="ts">
-  import * as Command from "$lib/components/ui/command";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     glucoseChartLookback,
     setColorScheme,
     getColorScheme,
     getGlucoseUnits,
     setGlucoseUnits,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
   import { userPrefersMode } from "mode-watcher";
   import {
     paletteItemsFor,
@@ -28,10 +28,10 @@
   } from "./command-palette-store.svelte";
   import CommandPaletteVitals from "./CommandPaletteVitals.svelte";
   import { consumableAgeHours } from "./consumable-age";
-  import { LegacyConsumableKind } from "$lib/api";
-  import { formatAge } from "$lib/components/trackers/age.svelte";
+  import { LegacyConsumableKind } from "#lib/api/index.js";
+  import { formatAge } from "#lib/components/trackers/age.svelte.js";
   import Star from "@lucide/svelte/icons/star";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
 
   interface Props {
     open: boolean;
@@ -193,15 +193,15 @@
       }
       case "action-add-treatment":
         open = false;
-        goto(resolve("/reports/treatments"));
+        goto(resolve('reports/treatments'));
         break;
       case "action-add-food":
         open = false;
-        goto(resolve("/food"));
+        goto(resolve('food'));
         break;
       case "action-manual-sync":
         open = false;
-        goto(resolve("/settings/connectors"));
+        goto(resolve('settings/connectors'));
         break;
     }
   }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import BellOff from "@lucide/svelte/icons/bell-off";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { severity } from "./severity";
 
   /**

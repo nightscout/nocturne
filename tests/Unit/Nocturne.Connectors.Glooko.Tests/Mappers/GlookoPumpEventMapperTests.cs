@@ -24,7 +24,7 @@ public class GlookoPumpEventMapperTests
         var timeMapper = new GlookoTimeMapper(config, NullLogger.Instance);
         if (timeline is not null)
             timeMapper.UseTimeline(timeline);
-        return new GlookoPumpEventMapper(ConnectorSource, timeMapper, NullLogger.Instance);
+        return new GlookoPumpEventMapper(ConnectorSource, timeMapper, NullLogger.Instance, TimeProvider.System);
     }
 
     private static GlookoPumpEvent Evt(string? type, string? ts = "2026-03-18T00:03:12.000Z",

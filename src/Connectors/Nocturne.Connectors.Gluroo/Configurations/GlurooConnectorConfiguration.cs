@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.Gluroo.Configurations;
     ServiceNames.GlurooConnector,
     "GLUROO",
     "ConnectSource.Gluroo",
-    "gluroo-connector",
+    DataSources.GlurooConnector,
     "gluroo",
     ConnectorCategory.Sync,
     "Sync glucose, treatment, and profile data from Gluroo Global Connect",

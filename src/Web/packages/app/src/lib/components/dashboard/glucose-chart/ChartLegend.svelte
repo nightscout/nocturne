@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { DeviceEventType } from "$lib/api";
-  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
+  import { DeviceEventType } from "#lib/api/index.js";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
   import type { Snippet } from "svelte";
-  import { cn } from "$lib/utils";
-  import { bg } from "$lib/utils/formatting";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { cn } from "#lib/utils/index.js";
+  import { bg } from "#lib/utils/formatting.js";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     SystemEventIcon,
     PumpModeIcon,
@@ -14,12 +14,12 @@
     BatteryIcon,
     BolusIcon,
     CarbsIcon,
-  } from "$lib/components/icons";
-  import { SystemEventType } from "$lib/api";
+  } from "#lib/components/icons/index.js";
+  import { SystemEventType } from "#lib/api/index.js";
   import Clock from "@lucide/svelte/icons/clock";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
-  import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import { bgPatternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
 
   interface DeviceEventMarker {
     eventType?: string;

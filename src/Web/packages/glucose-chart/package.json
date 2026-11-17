@@ -30,16 +30,16 @@
   },
   "devDependencies": {
     "@nocturne/eslint-config": "workspace:*",
-    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/d3": "^7.4.3",
     "@types/d3-scale": "^4.0.9",
     "d3": "^7.9.0",
     "d3-scale": "^4.0.2",
     "eslint": "^10.3.0",
-    "layerchart": "2.9.0",
-    "svelte": "^5.54.0",
-    "svelte-check": "^4.4.2",
-    "typescript": "^5.9.3",
+    "layerchart": "2.9.1",
+    "svelte": "^5.57.2",
+    "svelte-check": "^4.7.7",
+    "typescript": "^6.0.3",
     "vite": "^8.0.12"
   }
 }

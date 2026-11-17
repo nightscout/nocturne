@@ -11,6 +11,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Controllers.V4;
 
 /// <summary>
@@ -51,6 +53,20 @@ public class UserPreferencesControllerTests
         // And it is actually written to the subject row as a jsonb blob.
         await using var db = new NocturneDbContext(options);
         (await db.Subjects.FirstAsync(s => s.Id == SubjectId)).Preferences.Should().Contain("mmol");
+    }
+
+    [Fact]
+    public async Task UpdatePreferences_acceptsCzechLanguage()
+    {
+        var (controller, _) = NewController();
+
+        var result = await controller.UpdatePreferences(new UpdateUserPreferencesRequest
+        {
+            PreferredLanguage = "cs",
+        });
+
+        OkValue(result).PreferredLanguage.Should().Be("cs");
+        OkValue(await controller.GetPreferences()).PreferredLanguage.Should().Be("cs");
     }
 
     [Fact]
@@ -167,7 +183,7 @@ public class UserPreferencesControllerTests
         }
 
         var dbContext = new NocturneDbContext(options);
-        var controller = new UserPreferencesController(dbContext.AsFactory(), NullLogger<UserPreferencesController>.Instance)
+        var controller = new UserPreferencesController(new SubjectRepository(dbContext.AsFactory()), NullLogger<UserPreferencesController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = HttpContextWith(authenticated) },
         };

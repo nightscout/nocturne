@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { indexBy } from "$lib/utils/collections";
-  import { formatClock } from "$lib/utils/formatting";
+  import { indexBy } from "#lib/utils/collections.js";
+  import { formatClock } from "#lib/utils/formatting.js";
   import { PieChart, Text, Tooltip } from "layerchart";
-  import type { Bolus, CarbIntake } from "$lib/api";
-  import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
-  import * as Breadcrumb from "$lib/components/ui/breadcrumb";
-  import { Button } from "$lib/components/ui/button";
-  import { cn } from "$lib/utils";
-  import ChartKey, { type ChartKeyItem } from "$lib/components/charts/print/ChartKey.svelte";
+  import type { Bolus, CarbIntake } from "#lib/api/index.js";
+  import { patternClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import * as Breadcrumb from "#lib/components/ui/breadcrumb/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { cn } from "#lib/utils/index.js";
+  import ChartKey, { type ChartKeyItem } from "#lib/components/charts/print/ChartKey.svelte";
   import { Key } from "@nocturne/ui/keys";
 
   interface Props {

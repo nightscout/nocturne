@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import type { JoinInviteInfo } from "$lib/api/generated/nocturne-api-client";
+import type { JoinInviteInfo } from "#lib/api/generated/nocturne-api-client.js";
 import InviteSummary from "./InviteSummary.svelte";
 
 const viewerInvite: JoinInviteInfo = {

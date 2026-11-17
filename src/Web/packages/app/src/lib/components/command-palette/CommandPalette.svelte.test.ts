@@ -20,7 +20,7 @@ const { goto, store, NOW } = vi.hoisted(() => {
 
 vi.mock("$app/navigation", () => ({ goto }));
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => store,
 }));
 
@@ -176,7 +176,7 @@ describe("CommandPalette", () => {
     pageState.data = { effectivePermissions: [], isPlatformAdmin: true };
     render(CommandPalette, { open: true });
 
-    await expect.element(item("Tenant management")).toBeVisible();
+    await expect.element(item("All tenants")).toBeVisible();
     await expect.element(item("Access requests")).toBeVisible();
   });
 
@@ -185,7 +185,7 @@ describe("CommandPalette", () => {
     render(CommandPalette, { open: true });
 
     await expect.element(item("Dashboard")).toBeVisible();
-    await expect.element(item("Tenant management")).not.toBeInTheDocument();
+    await expect.element(item("All tenants")).not.toBeInTheDocument();
     await expect.element(item("Access requests")).not.toBeInTheDocument();
   });
 

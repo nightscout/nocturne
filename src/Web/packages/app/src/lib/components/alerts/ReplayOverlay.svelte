@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Circle, Line, getChartContext } from "layerchart";
-  import { AlertReplayEventKind, type AlertReplayEvent } from "$api-clients";
+  import { AlertReplayEventKind, type AlertReplayEvent } from "#lib/api/generated/nocturne-api-client.js";
   import { severityVar } from "./severity";
 
   interface Marker {

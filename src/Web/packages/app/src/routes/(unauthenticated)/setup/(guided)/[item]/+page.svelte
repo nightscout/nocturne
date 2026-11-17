@@ -1,7 +1,7 @@
 <script lang="ts">
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import { Button } from "$lib/components/ui/button";
-  import { setupHubItems } from "$lib/setup-hub/items.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { setupHubItems } from "#lib/setup-hub/items.svelte.js";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

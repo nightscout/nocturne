@@ -3,13 +3,13 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import { ApiException, type SyncResult } from "$api-clients";
-import { SyncRequestSchema } from "$lib/api/generated/schemas";
+import { ApiException, type SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+import { SyncRequestSchema } from "#lib/api/generated/schemas.js";
 
 let syncImpl: () => Promise<SyncResult>;
 let sentRequest: unknown;
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   triggerConnectorSync: (payload: { request: unknown }) => {
     sentRequest = payload.request;
     return syncImpl();
@@ -45,7 +45,7 @@ async function syncing(
     },
   });
 
-  await page.getByRole("button", { name: "Sync now" }).click();
+  await page.getByRole("button", { name: "Sync a date range" }).click();
 }
 
 const syncReturning = (result: SyncResult) => syncing(async () => result);
@@ -78,7 +78,7 @@ describe("ConnectorDetailsDialog", () => {
 
     await expect.element(page.getByText("Nightscout")).toBeVisible();
     expect(
-      page.getByRole("button", { name: "Sync now" }).elements()
+      page.getByRole("button", { name: "Sync a date range" }).elements()
     ).toHaveLength(0);
   });
 
@@ -101,7 +101,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync now" }))
+      .element(page.getByRole("button", { name: "Sync a date range" }))
       .toBeVisible();
   });
 
@@ -126,7 +126,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync now" }))
+      .element(page.getByRole("button", { name: "Sync a date range" }))
       .toBeVisible();
   });
 

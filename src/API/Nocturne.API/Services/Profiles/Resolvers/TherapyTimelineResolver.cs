@@ -139,8 +139,11 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
             .ToList();
     }
 
+    /// <param name="anchorMills">The instant, in Unix milliseconds, the settings are read at.</param>
+    /// <param name="profileName">The stored profile the settings are read from.</param>
     /// <param name="ccp">The percentage and timeshift to apply to the schedules.</param>
     /// <param name="schedules">The activation's own schedules, read in place of the stored profile's.</param>
+    /// <param name="ct">Cancels the operation.</param>
     private async Task<TherapySnapshot> ResolveSegmentSnapshotAsync(
         long anchorMills,
         string profileName,
@@ -155,7 +158,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         {
             return new TherapySnapshot(
                 dia: await _therapySettings.GetDIAAsync(anchorMills, profileName, ct),
-                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
                 carbsPerHour: TherapySnapshot.DefaultCarbsPerHour,
                 timezone: null,
                 ccpPercentage: null,
@@ -166,7 +168,7 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
             );
         }
 
-        var anchorDt = DateTimeOffset.FromUnixTimeMilliseconds(anchorMills).UtcDateTime;
+        var anchorDt = anchorMills.ToUtcDateTime();
 
         // Sequential: see INocturneDbContextFactory.
         // An activation's own DIA, carb rate and timezone win over the stored profile's, as
@@ -184,7 +186,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         {
             return new TherapySnapshot(
                 dia: dia,
-                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
                 carbsPerHour: carbsHr,
                 timezone: ResolveTimezone(timezoneId),
                 ccpPercentage: ccp?.Percentage,
@@ -201,7 +202,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
 
         return new TherapySnapshot(
             dia: dia,
-            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
             carbsPerHour: carbsHr,
             timezone: ResolveTimezone(timezoneId),
             ccpPercentage: ccp?.Percentage,

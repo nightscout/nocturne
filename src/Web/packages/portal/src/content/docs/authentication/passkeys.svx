@@ -4,7 +4,7 @@ title: Passkeys, recovery codes and the authenticator app
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Passkeys, recovery codes and the authenticator app
@@ -63,7 +63,7 @@ current six-digit code. Both have to succeed.
 
 ### Setting one up
 
-Go to **Settings > Account** and choose the authenticator app option. Nocturne shows a QR
+Go to **My settings > Account** and choose the authenticator app option. Nocturne shows a QR
 code; scan it with your authenticator app, then type the six-digit code the app produces to
 confirm the two are in step:
 

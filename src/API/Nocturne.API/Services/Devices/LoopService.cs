@@ -16,6 +16,7 @@ namespace Nocturne.API.Services.Devices;
 /// <seealso cref="IApnsClientFactory"/>
 public class LoopService : ILoopService, IDisposable
 {
+    private readonly TimeProvider _time;
     private readonly ILogger<LoopService> _logger;
     private readonly LoopConfiguration _configuration;
     private readonly IApnsClientFactory _apnsClientFactory;
@@ -24,9 +25,11 @@ public class LoopService : ILoopService, IDisposable
     public LoopService(
         ILogger<LoopService> logger,
         IOptions<LoopConfiguration> configuration,
-        IApnsClientFactory apnsClientFactory
+        IApnsClientFactory apnsClientFactory,
+        TimeProvider timeProvider
     )
     {
+        _time = timeProvider;
         _logger = logger;
         _configuration = configuration.Value;
         _apnsClientFactory = apnsClientFactory;
@@ -259,7 +262,7 @@ public class LoopService : ILoopService, IDisposable
                     {
                         Success = true,
                         Message = "Loop notification sent successfully",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
                         Data = new
                         {
                             eventType = data.EventType,
@@ -438,7 +441,7 @@ public class LoopService : ILoopService, IDisposable
         }
 
         // Add timestamps (matches legacy logic exactly)
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
         payload["sent-at"] = now.ToString("O"); // ISO 8601 format
 
         var expiration = now.AddMinutes(5); // Expire after 5 minutes
@@ -480,7 +483,7 @@ public class LoopService : ILoopService, IDisposable
         {
             Success = false,
             Message = message,
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
         };
     }
 

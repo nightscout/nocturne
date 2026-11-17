@@ -1,19 +1,19 @@
 <script lang="ts">
   import { LineChart } from "layerchart";
   import { parseDate } from "@internationalized/date";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Calendar from "@lucide/svelte/icons/calendar";
-  import { EmptyState } from "$lib/components/shared";
-  import { getWeekdayAverages } from "$api/reports.remote";
-  import type { DayOfWeek } from "$lib/api";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, formatShortDate, hourLabel } from "$lib/utils/formatting";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import { dashClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { getWeekdayAverages } from "#lib/api/reports.remote.js";
+  import type { DayOfWeek } from "#lib/api/index.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { bg, bgLabel, formatShortDate, hourLabel } from "#lib/utils/formatting.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { dashClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
 
   type Weekday = keyof typeof DayOfWeek;
 

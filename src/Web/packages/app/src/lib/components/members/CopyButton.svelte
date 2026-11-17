@@ -1,8 +1,8 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
-  import SubmitButton from "$lib/forms/SubmitButton.svelte";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import SubmitButton from "#lib/forms/SubmitButton.svelte";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   interface Props {
     text: string;

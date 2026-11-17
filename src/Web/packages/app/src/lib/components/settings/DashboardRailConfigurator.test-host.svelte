@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DashboardRailPreference } from "$lib/api/generated/nocturne-api-client";
+  import type { DashboardRailPreference } from "#lib/api/generated/nocturne-api-client.js";
   import DashboardRailConfigurator from "./DashboardRailConfigurator.svelte";
 
   interface Props {

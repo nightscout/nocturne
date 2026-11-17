@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import { fade } from "svelte/transition";
   import { prefersReducedMotion } from "water-ui";
-  import { deferredArtwork } from "$lib/watercolour-deferral.svelte";
+  import { deferredArtwork } from "#lib/watercolour-deferral.svelte.js";
   import FirstReadingEmptyStateLoader from "./FirstReadingEmptyStateLoader.svelte";
 
   interface Props {
@@ -46,7 +46,7 @@
   let arrivalShown = $state(true);
   // Loaded while the empty state shows, so it is in hand when the reading lands; a reading that
   // lands before deferred watercolour comes due plays no sunrise.
-  const arrivalArtwork = deferredArtwork(() => import("$lib/watercolour/artwork"), () => emptyStateShown);
+  const arrivalArtwork = deferredArtwork(() => import("#lib/watercolour/artwork.js"), () => emptyStateShown);
   $effect(() => {
     if (firstReadingArrived) arrivalShown = false;
   });

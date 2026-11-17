@@ -29,6 +29,7 @@ public class VersionCommand : AsyncCommand<VersionCommand.Settings>
     private readonly ILogger<VersionCommand> _logger;
     private readonly IProgressReporter _progressReporter;
     private readonly McpServerConfiguration _configuration;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VersionCommand"/> class.
@@ -36,16 +37,19 @@ public class VersionCommand : AsyncCommand<VersionCommand.Settings>
     /// <param name="logger">The logger.</param>
     /// <param name="progressReporter">The progress reporter.</param>
     /// <param name="configuration">The configuration.</param>
+    /// <param name="timeProvider">The clock.</param>
     public VersionCommand(
         ILogger<VersionCommand> logger,
         IProgressReporter progressReporter,
-        McpServerConfiguration configuration
+        McpServerConfiguration configuration,
+        TimeProvider timeProvider
     )
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _progressReporter =
             progressReporter ?? throw new ArgumentNullException(nameof(progressReporter));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
     /// <summary>
@@ -126,7 +130,7 @@ public class VersionCommand : AsyncCommand<VersionCommand.Settings>
         }
     }
 
-    private static DateTime GetBuildDate(Assembly assembly)
+    private DateTime GetBuildDate(Assembly assembly)
     {
         try
         {
@@ -141,7 +145,7 @@ public class VersionCommand : AsyncCommand<VersionCommand.Settings>
             // Fallback to a reasonable default
         }
 
-        return DateTime.UtcNow;
+        return _timeProvider.GetUtcNow().UtcDateTime;
     }
 
     private static void ShowDependencyVersion(string packageName)

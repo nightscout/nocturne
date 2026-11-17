@@ -1,31 +1,28 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing carbohydrate ratio schedules in the database. A LegacyId-only type (no
-/// SyncId-upsert, no DeduplicationService participation), so it uses the shared
-/// <see cref="V4RepositoryBase{TModel,TEntity}"/> behaviour unchanged plus the carb-ratio-specific
-/// queries below.
+/// SyncId-upsert, no deduplication), so it uses the shared
+/// <see cref="ProfileScopedRepositoryBase{TModel,TEntity}"/> behaviour unchanged.
 /// </summary>
-public class CarbRatioScheduleRepository : V4RepositoryBase<CarbRatioSchedule, CarbRatioScheduleEntity>, ICarbRatioScheduleRepository
+public class CarbRatioScheduleRepository : ProfileScopedRepositoryBase<CarbRatioSchedule, CarbRatioScheduleEntity>, ICarbRatioScheduleRepository
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="CarbRatioScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public CarbRatioScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CarbRatioScheduleRepository> logger, IV4RecordBroadcaster<CarbRatioSchedule>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+    public CarbRatioScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CarbRatioScheduleRepository> logger, IV4RecordBroadcaster<CarbRatioSchedule>? broadcaster = null, ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads)
     {
     }
 
@@ -38,75 +35,4 @@ public class CarbRatioScheduleRepository : V4RepositoryBase<CarbRatioSchedule, C
     /// <inheritdoc />
     protected override void ApplyUpdate(CarbRatioScheduleEntity target, CarbRatioSchedule source) =>
         CarbRatioScheduleMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// Gets carbohydrate ratio schedules by profile name.
-    /// </summary>
-    /// <param name="profileName">The name of the profile.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of carbohydrate ratio schedules.</returns>
-    public async Task<IEnumerable<CarbRatioSchedule>> GetByProfileNameAsync(
-        string profileName,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .CarbRatioSchedules.AsNoTracking()
-            .Where(e => e.ProfileName == profileName)
-            .OrderByDescending(e => e.Timestamp)
-            .ToListAsync(ct);
-        return entities.Select(CarbRatioScheduleMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets the most recent carb ratio schedule for a profile that was active at-or-before the given timestamp.
-    /// </summary>
-    /// <param name="profileName">The name of the profile.</param>
-    /// <param name="timestamp">The point-in-time to query against.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The matching carb ratio schedule, or null if none found.</returns>
-    public async Task<CarbRatioSchedule?> GetActiveAtAsync(
-        string profileName, DateTime timestamp, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entity = await ctx.CarbRatioSchedules
-            .AsNoTracking()
-            .Where(e => e.ProfileName == profileName && e.Timestamp <= timestamp)
-            .OrderByDescending(e => e.Timestamp)
-            .FirstOrDefaultAsync(ct);
-
-        return entity is null ? null : CarbRatioScheduleMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes carbohydrate ratio schedule records by legacy identifier prefix.
-    /// </summary>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.CarbRatioSchedules.Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix)),
-            AuditContext, $"legacy_id_prefix={prefix}", ct);
-    }
-
-    /// <summary>
-    /// Gets carbohydrate ratio schedule records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of carbohydrate ratio schedules.</returns>
-    public async Task<IEnumerable<CarbRatioSchedule>> GetByCorrelationIdAsync(
-        Guid correlationId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .CarbRatioSchedules.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(CarbRatioScheduleMapper.ToDomainModel);
-    }
 }

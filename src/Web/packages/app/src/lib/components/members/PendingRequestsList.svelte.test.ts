@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import type { MembershipRequestDto, TenantRoleDto } from "$api-clients";
+import type { MembershipRequestDto, TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
 import PendingRequestsList from "./PendingRequestsList.svelte";
 
 /** `GET /roles` as an Administrator reads it: every role, Owner not grantable. */

@@ -58,7 +58,6 @@ public class IobCobComputeStageTests
 
         var defaultSnapshot = new TherapySnapshot(
             dia: 3.0,
-            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
             carbsPerHour: TherapySnapshot.DefaultCarbsPerHour,
             timezone: null,
             ccpPercentage: null,
@@ -295,7 +294,7 @@ public class IobCobComputeStageTests
 
         // A snapshot with real schedules so the calculators produce non-trivial output.
         var snapshot = new TherapySnapshot(
-            dia: 3.0, peakMinutes: 75, carbsPerHour: 30.0, timezone: null, ccpPercentage: null, ccpTimeshiftMs: 0,
+            dia: 3.0, carbsPerHour: 30.0, timezone: null, ccpPercentage: null, ccpTimeshiftMs: 0,
             sensitivityEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = 50.0 } },
             carbRatioEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = 10.0 } },
             basalEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = 0.8 } });
@@ -318,7 +317,6 @@ public class IobCobComputeStageTests
             StartTime = startTime,
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
-            BufferStartTime = startTime - 8L * 60 * 60 * 1000,
             DefaultBasalRate = 1.0,
             BolusList = boluses,
             CarbIntakeList = carbs,
@@ -512,7 +510,7 @@ public class IobCobComputeStageTests
         const long minute = 60 * 1000;
         var start = TestMills;
         var timeline = new TherapyTimeline([new TherapySegment(start - 600 * minute, start + 600 * minute,
-            new TherapySnapshot(3.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+            new TherapySnapshot(3.0, TherapySnapshot.DefaultCarbsPerHour,
                 null, null, 0, null, null, null))]);
         List<Bolus> boluses = [new Bolus
         {
@@ -547,7 +545,7 @@ public class IobCobComputeStageTests
         // Two windows whose starts share an epoch five-minute slot tick at different instants.
         const long minute = 60 * 1000;
         var timeline = new TherapyTimeline([new TherapySegment(TestMills - 600 * minute, TestMills + 600 * minute,
-            new TherapySnapshot(3.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+            new TherapySnapshot(3.0, TherapySnapshot.DefaultCarbsPerHour,
                 null, null, 0, null, null, null))]);
         List<Bolus> boluses = [new Bolus
         {
@@ -647,7 +645,7 @@ public class IobCobComputeStageTests
             .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
                 new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(
-                    dia, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    dia, TherapySnapshot.DefaultCarbsPerHour,
                     null, null, 0, null, null, null))]));
         _mockIobCalculator
             .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
@@ -686,7 +684,7 @@ public class IobCobComputeStageTests
             .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
                 new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(
-                    3.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    3.0, TherapySnapshot.DefaultCarbsPerHour,
                     null, null, 0, null, null, basal.ToList()))]));
         _mockIobCalculator
             .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<TherapySnapshot>(), It.IsAny<Func<TempBasal, long, double>>(), It.IsAny<long>(), It.IsAny<long>()))
@@ -790,7 +788,7 @@ public class IobCobComputeStageTests
     private const long Minute = 60 * 1000;
 
     private static TherapySnapshot FlatSchedule(double basalRate) => new(
-        3.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour, null, null, 0,
+        3.0, TherapySnapshot.DefaultCarbsPerHour, null, null, 0,
         [new ScheduleEntry { TimeAsSeconds = 0, Value = 95.0 }], null,
         [new ScheduleEntry { TimeAsSeconds = 0, Value = basalRate }]);
 
@@ -828,7 +826,6 @@ public class IobCobComputeStageTests
         // minutes old and nothing after: -(0.922216 + 0.94444) / 12 = -0.155555 on the DIA 3 h curve,
         // where a dose m minutes old keeps 1 - 0.001852 (m/5)(m/5 + 1). Built from the window start,
         // the timeline would put every chunk under the later 1 U/h profile.
-        var bufferStart = TestMills - 8L * 60 * Minute;
         var switchAt = TestMills - 20 * Minute;
         _mockTherapyTimelineResolver
             .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -844,7 +841,6 @@ public class IobCobComputeStageTests
         {
             StartTime = TestMills,
             EndTime = TestMills,
-            BufferStartTime = bufferStart,
             IntervalMinutes = 5,
             DefaultBasalRate = 1.0,
             TempBasalList = [Temp(TestMills - 30 * Minute, TestMills, rate: 1.0)],
@@ -871,7 +867,6 @@ public class IobCobComputeStageTests
         {
             StartTime = TestMills - 5 * Minute,
             EndTime = TestMills,
-            BufferStartTime = TestMills - 8L * 60 * Minute,
             IntervalMinutes = 5,
             DefaultBasalRate = 1.0,
             BolusList = [new Bolus

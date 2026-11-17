@@ -1,4 +1,4 @@
-import { MealPeriod } from "$lib/api";
+import { MealPeriod } from "#lib/api/index.js";
 
 /** Built per call so wuchale reads them in the current locale. */
 export function mealPeriodLabel(period: MealPeriod | null | undefined): string | undefined {

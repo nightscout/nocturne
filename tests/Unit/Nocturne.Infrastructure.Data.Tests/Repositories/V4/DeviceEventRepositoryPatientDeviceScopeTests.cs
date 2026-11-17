@@ -38,7 +38,7 @@ public class DeviceEventRepositoryPatientDeviceScopeTests : IDisposable
 
         _repo = new DeviceEventRepository(
             new TestNocturneDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance);
     }

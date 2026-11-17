@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteForm, remoteQuery } from "$lib/test-stubs/remote-resource";
-import type { DeviceSetup } from "$api";
+import { remoteForm, remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import type { DeviceSetup } from "#lib/api/index.js";
 
 const remote = vi.hoisted(() => ({
   setup: undefined as unknown,
@@ -15,7 +15,7 @@ const remote = vi.hoisted(() => ({
   removeSetupTracker: vi.fn(),
 }));
 
-vi.mock("$api/generated/setupDevices.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupDevices.generated.remote.js", () => ({
   getDeviceSetup: () => remoteQuery(() => remote.setup),
   confirmSetupDevice: (arg: unknown) => remote.confirmSetupDevice(arg),
   addSetupInsulin: (arg: unknown) => remote.addSetupInsulin(arg),
@@ -24,7 +24,7 @@ vi.mock("$api/generated/setupDevices.generated.remote", () => ({
   addSetupTracker: (arg: unknown) => remote.addSetupTracker(arg),
   removeSetupTracker: (arg: unknown) => remote.removeSetupTracker(arg),
 }));
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
   getDevices: () => remoteQuery(() => []),
   getDiscoveredSources: () => remoteQuery(() => []),
   getInsulins: () => remoteQuery(() => []),
@@ -36,13 +36,13 @@ vi.mock("$api/generated/patientRecords.generated.remote", () => ({
   reorderDevices: vi.fn(),
   deleteInsulin: vi.fn(),
 }));
-vi.mock("$api/generated/insulinCatalogs.generated.remote", () => ({
+vi.mock("#lib/api/generated/insulinCatalogs.generated.remote.js", () => ({
   getCatalog: () => remoteQuery(() => []),
 }));
-vi.mock("$api/generated/setupHubs.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
   getSetupHub: () => remoteQuery(() => undefined),
 }));
-vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getPatientRelationship: () => remoteQuery(() => remote.relationship),
 }));
 
@@ -56,7 +56,7 @@ import {
   PatientRelationship,
   TrackerOfferKind,
   TrackerOfferState,
-} from "$api";
+} from "#lib/api/index.js";
 import DeviceSetupItem from "./DeviceSetupItem.svelte";
 
 const g7 = { id: "dexcom-g7", name: "Dexcom G7", manufacturer: "Dexcom", category: DeviceCategory.CGM };

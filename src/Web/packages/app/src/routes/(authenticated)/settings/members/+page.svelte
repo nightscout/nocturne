@@ -1,12 +1,12 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { describeSubmitError } from "$lib/forms";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { describeSubmitError } from "#lib/forms/index.js";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Users from "@lucide/svelte/icons/users";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Link from "@lucide/svelte/icons/link";
@@ -14,9 +14,9 @@
   import Globe from "@lucide/svelte/icons/globe";
   import Lock from "@lucide/svelte/icons/lock";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
-  import { EmptyState } from "$lib/components/shared";
-  import { getRoles } from "$lib/api/generated/roles.generated.remote";
-  import { getShareLink } from "$api/generated/shareLinks.generated.remote";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { getRoles } from "#lib/api/generated/roles.generated.remote.js";
+  import { getShareLink } from "#lib/api/generated/shareLinks.generated.remote.js";
   import {
     getMembers,
     listInvites,
@@ -25,22 +25,22 @@
     setMemberRoles,
     setMemberPermissions,
     setMemberLimitTo24Hours,
-  } from "$lib/api/generated/memberInvites.generated.remote";
+  } from "#lib/api/generated/memberInvites.generated.remote.js";
   import {
     getPendingRequests,
     approveRequest,
     denyRequest,
-  } from "$lib/api/generated/membershipRequests.generated.remote";
-  import CreateInviteCard from "$lib/components/members/CreateInviteCard.svelte";
-  import PendingInvitesList from "$lib/components/members/PendingInvitesList.svelte";
-  import PendingRequestsList from "$lib/components/members/PendingRequestsList.svelte";
-  import MemberCard, { type MemberChanges } from "$lib/components/members/MemberCard.svelte";
-  import GuestLinksSection from "$lib/components/members/GuestLinksSection.svelte";
-  import PublicAccessCard from "$lib/components/members/PublicAccessCard.svelte";
-  import MembershipRequestsCard from "$lib/components/members/MembershipRequestsCard.svelte";
-  import RolesSection from "$lib/components/members/RolesSection.svelte";
-  import SettingsLinkCard from "$lib/components/settings/SettingsLinkCard.svelte";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  } from "#lib/api/generated/membershipRequests.generated.remote.js";
+  import CreateInviteCard from "#lib/components/members/CreateInviteCard.svelte";
+  import PendingInvitesList from "#lib/components/members/PendingInvitesList.svelte";
+  import PendingRequestsList from "#lib/components/members/PendingRequestsList.svelte";
+  import MemberCard, { type MemberChanges } from "#lib/components/members/MemberCard.svelte";
+  import GuestLinksSection from "#lib/components/members/GuestLinksSection.svelte";
+  import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
+  import MembershipRequestsCard from "#lib/components/members/MembershipRequestsCard.svelte";
+  import RolesSection from "#lib/components/members/RolesSection.svelte";
+  import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
   const granted = $derived(page.data.effectivePermissions ?? []);
   const canInvite = $derived(satisfiesScope(granted, "members.invite"));
@@ -165,9 +165,6 @@
     errorMessage = null;
     try {
       await approveRequest({ id: requestId, request: { roleIds } });
-      // The approved requester becomes a member; GetMembers is on another
-      // controller so ApproveRequest's Invalidates cannot name it.
-      await membersQuery?.refresh();
       successMessage = { text: "Membership request approved.", wash: true };
       clearMessages();
     } catch (err) {

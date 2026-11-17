@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { distinct } from "$lib/utils/collections";
-  import * as Select from "$lib/components/ui/select";
-  import { Separator } from "$lib/components/ui/separator";
-  import { scopeCategories, type Scope, type ScopeCategory } from "$lib/constants/scope-labels.svelte";
-  import { levelsOf, type AccessLevel } from "$lib/components/rbac/permission-categories.svelte";
+  import { distinct } from "#lib/utils/collections.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { scopeCategories, type Scope, type ScopeCategory } from "#lib/constants/scope-labels.svelte.js";
+  import { levelsOf, type AccessLevel } from "#lib/components/rbac/permission-categories.svelte.js";
 
   interface PermissionCategory {
     name: string;

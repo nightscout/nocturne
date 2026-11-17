@@ -18,6 +18,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Identity;
 
 /// <summary>
@@ -198,12 +200,13 @@ public class UnitsAndTimezoneServiceTests
     private UnitsAndTimezoneService Service()
     {
         return new UnitsAndTimezoneService(
-            new TestNocturneDbContextFactory(Context()), _tenants.Object, _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
+            new SubjectRepository(new TestNocturneDbContextFactory(Context())), _tenants.Object, _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
+
             NullLogger<UnitsAndTimezoneService>.Instance);
     }
 
     private NocturneDbContext Context() => new(_options) { TenantId = TenantId };
 
     private static UISettingsService UiSettings(NocturneDbContext db) =>
-        new(new TestNocturneDbContextFactory(db), NullLogger<UISettingsService>.Instance);
+        new(new TestNocturneDbContextFactory(db), TimeProvider.System, NullLogger<UISettingsService>.Instance);
 }

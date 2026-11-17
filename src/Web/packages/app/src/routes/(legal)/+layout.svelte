@@ -1,6 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
 
   let { children } = $props();
@@ -14,7 +14,7 @@
   <!-- Header -->
   <header class="border-b border-border/40">
     <div class="container mx-auto px-4 py-4">
-      <a href={resolve("/")} class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+      <a href={resolve("")} class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
         <div class="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
           <span class="text-primary font-bold">N</span>
         </div>

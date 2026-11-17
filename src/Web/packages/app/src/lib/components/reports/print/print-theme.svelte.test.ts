@@ -1,7 +1,7 @@
 import type {} from "@vitest/browser-playwright";
 import { cdp } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
-import { PRINT_LAYOUT_CLASS } from "$lib/components/charts/print/print-mode.svelte";
+import { PRINT_LAYOUT_CLASS } from "#lib/components/charts/print/print-mode.svelte.js";
 
 const root = document.documentElement;
 

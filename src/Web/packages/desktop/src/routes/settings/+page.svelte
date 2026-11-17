@@ -22,11 +22,11 @@
   import RotateCw from "@lucide/svelte/icons/rotate-cw";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import type { GlucoseUnits } from "@nocturne/ui/glucose";
-  import type { ClockFaceOption } from "$lib/glucose-types";
-  import { preferences } from "$lib/preferences.svelte";
-  import { commandErrorMessage } from "$lib/command-error";
-  import CareLinkConnect from "$lib/CareLinkConnect.svelte";
-  import GlucoseCompanion from "$lib/GlucoseCompanion.svelte";
+  import type { ClockFaceOption } from "#lib/glucose-types.js";
+  import { preferences } from "#lib/preferences.svelte.js";
+  import { commandErrorMessage } from "#lib/command-error.js";
+  import CareLinkConnect from "#lib/CareLinkConnect.svelte";
+  import GlucoseCompanion from "#lib/GlucoseCompanion.svelte";
 
   // Matches the camelCase DeviceCapabilitySettings the `*_device_capabilities` Rust commands carry.
   type DeviceCapabilities = { notify: boolean; trayFlash: boolean };

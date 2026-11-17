@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ConnectorSetup from "$lib/components/connectors/ConnectorSetup.svelte";
+  import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
 
   let {
     onComplete,
@@ -26,6 +26,7 @@
   <ConnectorSetup
     connectorId="nightscout"
     primaryAction="save-and-finish"
+    saveLabel="Start import"
     showToggle={false}
     showDangerZone={false}
     showCapabilities={true}

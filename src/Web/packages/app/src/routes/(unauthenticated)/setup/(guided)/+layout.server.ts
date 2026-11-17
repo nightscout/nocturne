@@ -1,6 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
-import { setupStageFor } from "$lib/server/setup-hub";
+import { setupStageFor } from "#lib/server/setup-hub.js";
 
 /** A guided item belongs to the hub, so it has the hub's audience: an owner past the core. */
 export const load: LayoutServerLoad = async ({ locals, url }) => {

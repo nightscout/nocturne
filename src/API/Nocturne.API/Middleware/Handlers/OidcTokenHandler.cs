@@ -98,7 +98,7 @@ public class OidcTokenHandler : IAuthHandler
         {
             provider = await oidcProviderService.GetProviderByIssuerAsync(issuer);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (CredentialFailure.Is(ex))
         {
             _logger.LogWarning(ex, "Error looking up OIDC provider for issuer {Issuer}", issuer);
             return AuthResult.Skip();
@@ -142,7 +142,7 @@ public class OidcTokenHandler : IAuthHandler
 
             return AuthResult.Success(authContext);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (CredentialFailure.Is(ex))
         {
             _logger.LogError(
                 ex,

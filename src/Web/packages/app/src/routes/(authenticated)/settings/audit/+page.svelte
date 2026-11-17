@@ -1,28 +1,28 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import * as Card from "$lib/components/ui/card";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import X from "@lucide/svelte/icons/x";
-  import { EmptyState } from "$lib/components/shared";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     getMutationAuditLog,
     getReadAccessAuditLog,
     getAuditConfig,
     updateAuditConfig,
-  } from "$lib/api/generated/audits.generated.remote";
-  import AuditMutationsTable from "$lib/components/audit/AuditMutationsTable.svelte";
-  import AuditReadsTable from "$lib/components/audit/AuditReadsTable.svelte";
-  import { localDayStart, localDayEnd } from "$lib/utils/timezone";
-  import { toIsoString } from "$lib/utils/api-date";
+  } from "#lib/api/generated/audits.generated.remote.js";
+  import AuditMutationsTable from "#lib/components/audit/AuditMutationsTable.svelte";
+  import AuditReadsTable from "#lib/components/audit/AuditReadsTable.svelte";
+  import { localDayStart, localDayEnd } from "#lib/utils/timezone.js";
+  import { toIsoString } from "#lib/utils/api-date.js";
 
   // Permissions
   const canManageAudit = $derived(
@@ -218,7 +218,7 @@
 
   <!-- Tabbed Log Viewer -->
   <Tabs.Root bind:value={activeTab} class="space-y-4">
-    <Tabs.List class="grid w-full grid-cols-2">
+    <Tabs.List variant="wrap">
       <Tabs.Trigger value="mutations">
         Data changes
         {#if mutationsTotal > 0}

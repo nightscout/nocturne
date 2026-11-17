@@ -1,25 +1,25 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Bell from "@lucide/svelte/icons/bell";
   import X from "@lucide/svelte/icons/x";
-  import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
-  import { getChannelStatuses } from "$api/generated/systems.generated.remote";
-  import { getCapabilityCatalog } from "$api/generated/clientDevices.generated.remote";
-  import { getInAppRecipients } from "$api/generated/alertRules.generated.remote";
-  import * as Select from "$lib/components/ui/select";
+  import { getLinkedPlatforms } from "#lib/api/generated/linkedPlatforms.generated.remote.js";
+  import { getChannelStatuses } from "#lib/api/generated/systems.generated.remote.js";
+  import { getCapabilityCatalog } from "#lib/api/generated/clientDevices.generated.remote.js";
+  import { getInAppRecipients } from "#lib/api/generated/alertRules.generated.remote.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { ChannelType, AlertRuleSeverity } from "$api-clients";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { ChannelType, AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
   import type {
     ChannelStatusEntry,
     DeviceCapabilityCatalog,
     InAppRecipientResponse,
-  } from "$api-clients";
-  import { EmptyState } from "$lib/components/shared";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
   import { applyChannelDestination, type ChannelDef } from "./types";
   import {

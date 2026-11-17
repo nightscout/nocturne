@@ -9,7 +9,7 @@ public class InsulinToCarbRatioTests
     private static readonly DateTime DayStart = new(2024, 11, 18, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime DayEnd = DayStart.AddDays(1);
 
-    private readonly StatisticsService _statisticsService = new();
+    private readonly StatisticsService _statisticsService = new(TimeProvider.System);
 
     private static CarbIntake Carbs(double hours, double grams, Guid? correlationId = null) =>
         new() { Id = Guid.NewGuid(), Carbs = grams, Timestamp = DayStart.AddHours(hours), CorrelationId = correlationId };

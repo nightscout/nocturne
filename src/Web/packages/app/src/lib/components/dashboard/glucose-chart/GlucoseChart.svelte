@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
   import { findNearbyEntries } from "./engine/nearby-entries";
   import type { Snippet } from "svelte";
-  import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-  import type { PredictionData } from "$api/predictions.remote";
+  import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+  import type { PredictionData } from "#lib/api/predictions.remote.js";
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
   import {
     createChartDataEngine,
   } from "./engine/chart-data-engine.svelte";
   import { createPointInspection, syncInspectionDialogs } from "./engine/point-inspection.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
     chartLineColorMode,
     chartLineColor,
@@ -19,8 +19,7 @@
     chartShowPoints,
     chartAreaMode,
     chartAreaOpacity,
-  } from "$lib/stores/appearance-store.svelte";
-  import { getEntryByTreatmentId } from "$api/entries.remote";
+  } from "#lib/stores/appearance-store.svelte.js";
 
   // Shell & tracks
   import GlucoseChartShell from "./GlucoseChartShell.svelte";
@@ -38,7 +37,8 @@
   import ChartTooltip from "./ChartTooltip.svelte";
   import { openDayInReview } from "./day-in-review";
 
-  import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
+  import ChartEntryActions from "./ChartEntryActions.svelte";
+  import { canLogEvents } from "#lib/components/entries/can-log-events.js";
 
   interface Props {
     dateRange?: { from: Date | string; to: Date | string };
@@ -93,25 +93,25 @@
   // ---- Point inspection ----
   // svelte-ignore state_referenced_locally
   const inspection = enableInspection
-    ? createPointInspection(engine.finders, () => engine.glucoseData, {
-        iobData: () => engine.iobData,
-        cobData: () => engine.cobData,
-        basalData: () => engine.basalData,
-      })
+    ? createPointInspection(
+        engine.finders,
+        () => engine.glucoseData,
+        {
+          iobData: () => engine.iobData,
+          cobData: () => engine.cobData,
+          basalData: () => engine.basalData,
+        },
+        undefined,
+        canLogEvents,
+      )
     : undefined;
 
   // ---- Realtime store (for entry lookups) ----
   const realtimeStore = getRealtimeStore();
 
-  // ---- Entry edit state ----
-  let selectedEntry = $state<EntryRecord | null>(null);
-  let correlatedRecords = $state<EntryRecord[]>([]);
-  let nearbyEntries = $state<EntryRecord[]>([]);
+  // ---- Entry edit ----
+  let entryActions = $state<ReturnType<typeof ChartEntryActions>>();
 
-  // ---- Inspection dialog state ----
-  let isPickerOpen = $derived(inspection?.activeDialog === "picker");
-
-  // ---- Entry lookup helpers ----
   function findAllNearbyEntries(time: Date): EntryRecord[] {
     return findNearbyEntries(
       [...engine.bolusMarkers, ...engine.carbMarkers, ...engine.deviceEventMarkers],
@@ -120,59 +120,14 @@
     );
   }
 
-  async function handleMarkerClick(treatmentId: string) {
-    let entry: EntryRecord | null =
-      realtimeStore.findEntryByTreatmentId(treatmentId) ?? null;
-
-    if (!entry) {
-      const result = await getEntryByTreatmentId({ treatmentId }).run();
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- generated entry shape bridged to the app EntryRecord union
-      entry = result as EntryRecord | null;
-    }
-
-    if (!entry) {
-      console.warn(
-        `[GlucoseChart] No entry found for treatmentId: ${treatmentId}`,
-      );
-      return;
-    }
-
-    const time = new Date(entry.data.mills ?? 0);
-    const nearby = findAllNearbyEntries(time);
-
-    if (nearby.length <= 1) {
-      selectedEntry = entry;
-      correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-      entryEditDialog.open = true;
-    } else {
-      nearbyEntries = nearby;
-      disambiguationDialog.open = true;
-    }
-  }
-
-  function selectEntryFromList(entry: EntryRecord) {
-    disambiguationDialog.open = false;
-    nearbyEntries = [];
-    selectedEntry = entry;
-    correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-    entryEditDialog.open = true;
-  }
-
-  // ---- Inspection dialog handlers ----
-  function handleInspectionSelect(type: "glucose" | "delivery" | "treatment") {
-    inspection?.selectDialog(type);
+  function handleMarkerClick(treatmentId: string) {
+    void entryActions?.editTreatment(treatmentId);
   }
 
   function closeAllInspections() {
     inspection?.close();
   }
 
-  const entryEditDialog = lazyComponent(
-    () => import("$lib/components/entries/EntryEditDialog.svelte"),
-  );
-  const disambiguationDialog = lazyComponent(
-    () => import("./dialogs/TreatmentDisambiguationDialog.svelte"),
-  );
   const glucoseInspectionDialog = lazyComponent(
     () => import("./dialogs/GlucoseInspectionDialog.svelte"),
   );
@@ -231,42 +186,12 @@
   {/snippet}
 </GlucoseChartShell>
 
-<!-- Entry Edit Dialog -->
-{#if entryEditDialog.component}
-  <entryEditDialog.component
-    bind:open={entryEditDialog.open}
-    entry={selectedEntry}
-    {correlatedRecords}
-    onClose={() => {
-      entryEditDialog.open = false;
-      selectedEntry = null;
-      correlatedRecords = [];
-    }}
-  />
+<!-- The picker step of point inspection, marker disambiguation, and the entry editor. -->
+{#if enableInspection}
+  <ChartEntryActions bind:this={entryActions} {inspection} findNearby={findAllNearbyEntries} />
 {/if}
 
-<!-- Disambiguation Dialog -->
-{#if disambiguationDialog.component}
-  <disambiguationDialog.component
-    bind:open={disambiguationDialog.open}
-    entries={nearbyEntries}
-    onSelect={selectEntryFromList}
-    onClose={() => {
-      disambiguationDialog.open = false;
-      nearbyEntries = [];
-    }}
-  />
-{/if}
-
-<!-- Point Inspection Dialogs -->
 {#if inspection}
-  <PointInspectionPicker
-    bind:open={isPickerOpen}
-    options={inspection.pickerOptions}
-    onSelect={handleInspectionSelect}
-    onClose={closeAllInspections}
-  />
-
   {#if inspection.timestamp && inspection.glucosePoint && inspection.context}
     {#if glucoseInspectionDialog.component}
       <glucoseInspectionDialog.component
@@ -346,12 +271,11 @@
         onNavigateGlucose={() => inspection.navigateTo("glucose")}
         onNavigateDelivery={() => inspection.navigateTo("delivery")}
         onEditEntry={() => {
+          const treatmentId =
+            inspection.context?.nearbyBolus?.treatmentId ??
+            inspection.context?.nearbyCarbs?.treatmentId;
           closeAllInspections();
-          if (inspection.context?.nearbyBolus?.treatmentId) {
-            handleMarkerClick(inspection.context.nearbyBolus.treatmentId);
-          } else if (inspection.context?.nearbyCarbs?.treatmentId) {
-            handleMarkerClick(inspection.context.nearbyCarbs.treatmentId);
-          }
+          if (treatmentId) handleMarkerClick(treatmentId);
         }}
       />
     {/if}

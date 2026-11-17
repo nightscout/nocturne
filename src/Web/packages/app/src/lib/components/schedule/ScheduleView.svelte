@@ -7,13 +7,13 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import * as Table from "$lib/components/ui/table";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  } from "#lib/components/ui/card/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { MGDL_PER_MMOL } from "@nocturne/ui/glucose";
 
   interface ScheduleEntry {

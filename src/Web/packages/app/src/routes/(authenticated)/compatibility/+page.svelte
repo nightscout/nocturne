@@ -9,15 +9,15 @@
     getCompatibilityMetrics,
     getCompatibilityAnalyses,
   } from "./data.remote";
-  import { formatDateTimeCompact } from "$lib/utils/formatting";
-  import { formatElapsedMs } from "$lib/utils/duration";
-  import type { AnalysisListItemDto } from "$lib/api";
-  import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
-  import { EmptyState } from "$lib/components/shared";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Select from "$lib/components/ui/select";
+  import { formatDateTimeCompact } from "#lib/utils/formatting.js";
+  import { formatElapsedMs } from "#lib/utils/duration.js";
+  import type { AnalysisListItemDto } from "#lib/api/index.js";
+  import { getMatchTypeDisplay } from "#lib/utils/compatibility-match.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
 
   // Get filter params from URL
   const urlParams = $derived({
@@ -37,24 +37,14 @@
   const analyses = $derived(compatibilityQuery.current?.analyses ?? []);
   const metrics = $derived(
     compatibilityQuery.current?.metrics ?? {
-      totalRequests: 0,
-      compatibilityScore: 0,
-      criticalDifferences: 0,
-      averageNocturneResponseTime: 0,
-    }
-  );
-  const config = $derived(
-    compatibilityQuery.current?.config ?? {
-      nightscoutUrl: "",
-    }
-  );
-  const filters = $derived(
-    compatibilityQuery.current?.filters ?? {
-      requestPath: "",
-      requestMethod: "",
-      overallMatch: "",
-    }
-  );
+    totalRequests: 0,
+    compatibilityScore: 0,
+    criticalDifferences: 0,
+    averageNocturneResponseTime: 0
+  });
+
+  const config = $derived(compatibilityQuery.current?.config ?? { nightscoutUrl: "" });
+  const filters = $derived(compatibilityQuery.current?.filters ?? { requestPath: "", requestMethod: "", overallMatch: "" });
 
   // Mutable state
   let isPolling = $state(true);
@@ -98,9 +88,9 @@
   async function pollData() {
     try {
       const filters = {
-        ...(filterPath && { requestPath: filterPath }),
-        ...(filterMethod && { requestMethod: filterMethod }),
-        ...(filterMatch && { overallMatch: parseInt(filterMatch) }),
+        ...filterPath && { requestPath: filterPath },
+        ...filterMethod && { requestMethod: filterMethod },
+        ...filterMatch && { overallMatch: parseInt(filterMatch) },
         count: 100,
         skip: 0,
       };
@@ -151,12 +141,12 @@
   function applyFilters() {
     const params = new URLSearchParams(
       Object.entries({
-        requestPath: filterPath,
-        requestMethod: filterMethod,
-        overallMatch: filterMatch,
-      }).filter(([, value]) => value)
-    );
-    goto(resolve(`/compatibility?${params.toString()}`));
+      requestPath: filterPath,
+      requestMethod: filterMethod,
+      overallMatch: filterMatch
+    }).filter(([, value]) => value));
+
+    goto(resolve(`compatibility?${params.toString()}`));
   }
 
   // Clear filters
@@ -164,7 +154,7 @@
     filterPath = "";
     filterMethod = "";
     filterMatch = "";
-    goto(resolve("/compatibility"));
+    goto(resolve('compatibility'));
   }
 
   // Filtered analyses based on showCompatible
@@ -368,24 +358,22 @@
             {@const matchType = getMatchTypeDisplay(analysis.overallMatch)}
             {@const compatible = isCompatible(analysis.overallMatch)}
             <tr
-              class="hover:bg-muted/50 cursor-pointer transition {compatible
-                ? 'opacity-60'
-                : ''}"
-              onclick={() => goto(resolve(`/compatibility/${analysis.id}`))}
+              class="hover:bg-muted/50 cursor-pointer transition {compatible ? 'opacity-60' : ''}"
+              onclick={() => goto(resolve(`compatibility/${analysis.id}`))}
             >
+              <td class="px-6 py-4 whitespace-nowrap text-sm">{formatDateTimeCompact(analysis.analysisTimestamp)}</td>
+
+              <td
+                class="px-6 py-4 whitespace-nowrap text-sm font-mono"
+              >{analysis.requestMethod}</td>
+
+              <td
+                class="px-6 py-4 text-sm font-mono truncate max-w-md"
+              >{analysis.requestPath}</td>
+
               <td class="px-6 py-4 whitespace-nowrap text-sm">
-                {formatDateTimeCompact(analysis.analysisTimestamp)}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-mono">
-                {analysis.requestMethod}
-              </td>
-              <td class="px-6 py-4 text-sm font-mono truncate max-w-md">
-                {analysis.requestPath}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <span class="font-mono">
-                  {analysis.nightscoutStatusCode || "N/A"}
-                </span>
+                <span class="font-mono">{analysis.nightscoutStatusCode || "N/A"}</span>
+
                 {#if analysis.nightscoutStatusCode !== analysis.nocturneStatusCode}
                   <span class="text-destructive">≠</span>
                   <span class="font-mono">

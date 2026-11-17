@@ -18,9 +18,11 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Shared.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -31,6 +33,7 @@ public sealed class ShareLinkServiceTests : IDisposable
     private readonly NocturneDbContext _db;
     private readonly ShareLinkService _service;
     private readonly string _dbName;
+    private readonly Guid _ownerSubjectId = Guid.CreateVersion7();
 
     /// <summary>
     /// The real AES-GCM service over a fixed instance key, so the reveal tests exercise an actual
@@ -52,6 +55,7 @@ public sealed class ShareLinkServiceTests : IDisposable
         _dbName = dbName;
         _db = TestDbContextFactory.CreateInMemoryContext(dbName);
         TestDatabaseSeeder.Seed(_db);
+        _db.ActingAs(new TestAuditActor { SubjectId = _ownerSubjectId });
 
         // The seeder grants the Public subject the Clinician role; keep a Viewer role available too
         // so the legacy role-based link scenario can be exercised.
@@ -80,11 +84,13 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         return new ShareLinkService(
             db.AsFactory(),
+            new TenantRepository(db.AsFactory()),
+            new TenantMembershipRepository(db.AsFactory()),
             new ShareTokenGenerator(),
             new ShareTokenCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<ShareTokenCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantRepository(factory.Object.AsNocturneFactory()), NullLogger<ShareTokenCacheService>.Instance),
             new PublicAccessCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<PublicAccessCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory()), NullLogger<PublicAccessCacheService>.Instance),
             secrets,
             NullLogger<ShareLinkService>.Instance,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }));
@@ -95,13 +101,13 @@ public sealed class ShareLinkServiceTests : IDisposable
     /// <summary>Loads the Public subject's membership with its role assignments.</summary>
     private Task<TenantMemberEntity> GetPublicMemberAsync() =>
         _db.TenantMembers.AsNoTracking().Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
 
     /// <summary>Strips the seeded role/scope grant so the Public subject mirrors a fresh tenant.</summary>
     private async Task ResetPublicMemberAccessAsync()
     {
         var member = await _db.TenantMembers.Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
         _db.TenantMemberRoles.RemoveRange(member.MemberRoles);
         member.MemberRoles.Clear();
         member.DirectPermissions = null;
@@ -240,6 +246,98 @@ public sealed class ShareLinkServiceTests : IDisposable
         member.MemberRoles.Should().BeEmpty("rotation seeds direct permissions rather than a role");
     }
 
+    /// <summary>The audit rows written against the Public subject, as event and the details' item.</summary>
+    private async Task<List<(string Event, string Details)>> PublicAuditAsync()
+    {
+        var subjectId = (await GetPublicMemberAsync()).SubjectId;
+        var rows = await _db.AuthAuditLog.AsNoTracking().Where(a => a.TargetSubjectId == subjectId).OrderBy(a => a.Id).ToListAsync();
+        rows.Should().OnlyContain(a => a.ActorSubjectId == _ownerSubjectId && a.TenantId == TenantId && a.Success);
+        return [.. rows.Select(a => (a.EventType, a.DetailsJson!))];
+    }
+
+    private static (string Event, string Details) Row(string eventType, string key, string item) =>
+        (eventType, $$"""{"{{key}}":"{{item}}","kind":"tenant"}""");
+
+    [Fact]
+    public async Task Rotate_audits_the_default_scopes_and_the_clamp_it_seeds_on_first_enable()
+    {
+        await ResetPublicMemberAccessAsync();
+        var publicMember = await _db.TenantMembers.OfPublicSubject().FirstAsync();
+        publicMember.LimitTo24Hours = false;
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
+
+        await _service.RotateAsync(TenantId);
+
+        var expected = Scope.DefaultPublicShareScopes
+            .Select(p => Row(AuthAuditEventType.RoleAssigned, "permission", p))
+            .Append(Row(AuthAuditEventType.HistoryLimitChanged, "history_limit", "24_hours"));
+        (await PublicAuditAsync()).Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public async Task Rotate_again_audits_nothing_because_the_access_is_kept()
+    {
+        await ResetPublicMemberAccessAsync();
+        await _service.RotateAsync(TenantId);
+        var after = await PublicAuditAsync();
+
+        await _service.RotateAsync(TenantId);
+
+        (await PublicAuditAsync()).Should().BeEquivalentTo(after);
+    }
+
+    [Fact]
+    public async Task Disable_audits_each_role_and_permission_it_removes()
+    {
+        await _service.SetScopesAsync(TenantId, [Scope.GlucoseRead]);
+        await _service.RotateAsync(TenantId);
+        var before = (await PublicAuditAsync()).Count;
+
+        await _service.DisableAsync(TenantId);
+
+        (await PublicAuditAsync()).Skip(before).Should().Equal(
+            Row(AuthAuditEventType.RoleRemoved, "permission", Scope.GlucoseRead));
+    }
+
+    [Fact]
+    public async Task SetFullHistory_audits_each_change_of_the_clamp_and_nothing_when_it_does_not_move()
+    {
+        await _service.RotateAsync(TenantId);
+        var before = (await PublicAuditAsync()).Count;
+
+        await _service.SetFullHistoryAsync(TenantId, fullHistory: true);
+        await _service.SetFullHistoryAsync(TenantId, fullHistory: true);
+        await _service.SetFullHistoryAsync(TenantId, fullHistory: false);
+
+        (await PublicAuditAsync()).Skip(before).Should().Equal(
+            Row(AuthAuditEventType.HistoryLimitChanged, "history_limit", "full"),
+            Row(AuthAuditEventType.HistoryLimitChanged, "history_limit", "24_hours"));
+    }
+
+    [Fact]
+    public async Task SetScopes_audits_the_role_it_drops_and_the_permissions_it_swaps()
+    {
+        var clinician = await _db.TenantRoles.AsNoTracking().SingleAsync(r => r.Slug == RoleSeeds.Clinician);
+        await ResetPublicMemberAccessAsync();
+        var publicMemberId = (await GetPublicMemberAsync()).Id;
+        var member = await _db.TenantMembers.SingleAsync(m => m.Id == publicMemberId);
+        member.DirectPermissions = [Scope.GlucoseRead];
+        _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = clinician.Id,
+        });
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
+
+        await _service.SetScopesAsync(TenantId, [Scope.TreatmentsRead]);
+
+        (await PublicAuditAsync()).Should().BeEquivalentTo([
+            Row(AuthAuditEventType.RoleRemoved, "role", RoleSeeds.Clinician),
+            Row(AuthAuditEventType.RoleRemoved, "permission", Scope.GlucoseRead),
+            Row(AuthAuditEventType.RoleAssigned, "permission", Scope.TreatmentsRead)]);
+    }
+
     [Fact]
     public async Task Rotate_changes_the_token_each_time()
     {
@@ -374,7 +472,7 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         // Remove the Public membership entirely, then disable.
         var publicMember = await _db.TenantMembers.Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
         _db.TenantMemberRoles.RemoveRange(publicMember.MemberRoles);
         _db.TenantMembers.Remove(publicMember);
         await _db.SaveChangesAsync();

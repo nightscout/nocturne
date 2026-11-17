@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
-  import { buildPreludeDeepLink } from "$lib/utils/prelude-links";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { buildPreludeDeepLink } from "#lib/utils/prelude-links.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   const copy = createCopyFeedback();
   let viewState: "redirecting" | "fallback" = $state("redirecting");

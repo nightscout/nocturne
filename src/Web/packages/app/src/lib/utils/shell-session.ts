@@ -1,4 +1,5 @@
-import { getShellSession } from "$lib/api/shell-session.remote";
+import { getShellSession } from "#lib/api/shell-session.remote.js";
+import { fresh } from "#lib/api/fresh-query.js";
 
 export type ShellSession = Awaited<ReturnType<typeof getShellSession>>;
 
@@ -39,7 +40,7 @@ export function createShellRevalidator(
   async function probe() {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     try {
-      const session = await getShellSession().run();
+      const session = await fresh(getShellSession());
       if (shellSessionChanged(session, current())) onChanged();
     } catch {
       return;

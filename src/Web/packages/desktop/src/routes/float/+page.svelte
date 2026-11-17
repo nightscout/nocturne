@@ -6,7 +6,7 @@
   import PinOff from "@lucide/svelte/icons/pin-off";
   import X from "@lucide/svelte/icons/x";
   import { Slider } from "@nocturne/ui/ui/slider";
-  import { preferences } from "$lib/preferences.svelte";
+  import { preferences } from "#lib/preferences.svelte.js";
 
   // The floating window hosts the web app's public clock page so the clock face renders from one
   // place (no native re-implementation). This component only owns the window chrome: a full-window

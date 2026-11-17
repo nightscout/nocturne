@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -27,17 +28,20 @@ public class GlookoDeviceClockProbeTests
 {
     private const string EgvsPath = "/api/v2/cgm/egvs";
     private const string UsersPath = "/api/v2/users";
+    private const string BolusesPath = "/api/v2/pumps/normal_boluses";
+
+    private static readonly DateTimeOffset Instant = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task Probe_ReadsEgvsFromARealUtcWindow(bool ssv2)
     {
-        var rig = new Rig(Route(egvs: EgvPage(DateTime.UtcNow.AddHours(-1))));
+        var rig = new Rig(Route(egvs: EgvPage(Instant.UtcDateTime.AddHours(-1))));
 
         await rig.SyncAsync(ssv2);
 
-        AssertWindowStartsNear48HoursAgo(rig.Handler.FirstUpdatedAtOf(EgvsPath));
+        ParseCursor(rig.Handler.FirstUpdatedAtOf(EgvsPath)).Should().Be(Instant.UtcDateTime.AddHours(-48));
         rig.RecordedObservations().Should().Contain(o =>
             o.Source == DeviceClockObservationSource.UploadBatch && o.SampleCount == 3);
     }
@@ -49,7 +53,7 @@ public class GlookoDeviceClockProbeTests
         var rig = new Rig(path =>
             failBoluses && path.Contains("/api/v2/pumps/normal_boluses")
                 ? new HttpResponseMessage(HttpStatusCode.InternalServerError)
-                : Route(egvs: EgvPage(DateTime.UtcNow.AddHours(-1)))(path));
+                : Route(egvs: EgvPage(Instant.UtcDateTime.AddHours(-1)))(path));
 
         await rig.SyncAsync(ssv2: true);
         rig.RecordedObservations().Should().NotContain(o => o.Source == DeviceClockObservationSource.UploadBatch);
@@ -67,7 +71,7 @@ public class GlookoDeviceClockProbeTests
     public async Task SessionAccountThatIsNotThePatient_RecordsNoEvidence(bool ssv2)
     {
         var rig = new Rig(Route(
-            egvs: EgvPage(DateTime.UtcNow.AddHours(-1)),
+            egvs: EgvPage(Instant.UtcDateTime.AddHours(-1)),
             usersCode: "someone-elses-code"));
 
         await rig.SyncAsync(ssv2);
@@ -77,9 +81,19 @@ public class GlookoDeviceClockProbeTests
             It.IsAny<double?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private static void AssertWindowStartsNear48HoursAgo(string cursor) =>
-        DateTime.Parse(cursor, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal)
-            .Should().BeCloseTo(DateTime.UtcNow.AddHours(-48), TimeSpan.FromMinutes(2));
+    [Fact]
+    public async Task Probe_WithNoStoredEvidence_ScansBolusesFromTheRetentionWindowStart()
+    {
+        var rig = new Rig(Route(egvs: EgvPage(Instant.UtcDateTime.AddHours(-1))), hasStoredEvidence: false);
+
+        await rig.SyncAsync(ssv2: true);
+
+        rig.Handler.UpdatedAtCursorsOf(BolusesPath).Select(ParseCursor).Should()
+            .Contain(Instant.UtcDateTime.AddDays(-IDeviceClockService.RetentionDays));
+    }
+
+    private static DateTime ParseCursor(string cursor) =>
+        DateTime.Parse(cursor, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
 
     private static Func<string, HttpResponseMessage> Route(string egvs, string? usersCode = null) => path =>
     {
@@ -110,7 +124,7 @@ public class GlookoDeviceClockProbeTests
 
     private sealed class Rig
     {
-        public Rig(Func<string, HttpResponseMessage> route)
+        public Rig(Func<string, HttpResponseMessage> route, bool hasStoredEvidence = true)
         {
             Handler = new CountingHandler(route);
             DeviceClock
@@ -120,7 +134,7 @@ public class GlookoDeviceClockProbeTests
                 .ReturnsAsync([]);
             DeviceClock
                 .Setup(s => s.GetObservationsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync([new DeviceClockObservation()]);
+                .ReturnsAsync(hasStoredEvidence ? [new DeviceClockObservation()] : []);
             Timeline.Setup(s => s.GetTimelineAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
             Publisher.Setup(p => p.IsAvailable).Returns(true);
             Publisher.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
@@ -151,13 +165,14 @@ public class GlookoDeviceClockProbeTests
                 new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
                 NullLogger<GlookoConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 new StaticGlookoTokenProvider(),
                 Publisher.Object,
                 mealMatchingService: null,
                 timezoneTimelineService: Timeline.Object,
                 deviceClockService: DeviceClock.Object,
-                cursorStore: new FakeCursorStore());
+                cursorStore: new FakeCursorStore(),
+                timeProvider: new FakeTimeProvider(Instant),
+                endpointPause: TimeSpan.Zero);
 
             return service.SyncDataAsync(
                 new SyncRequest { DataTypes = [SyncDataType.Glucose] }, config, CancellationToken.None);
@@ -166,7 +181,7 @@ public class GlookoDeviceClockProbeTests
         public IReadOnlyList<DeviceClockObservation> RecordedObservations() =>
             DeviceClock.Invocations
                 .Where(i => i.Method.Name == nameof(IDeviceClockService.RecordObservationsAsync))
-                .SelectMany(i => (IReadOnlyList<DeviceClockObservation>)i.Arguments[1])
+                .SelectMany(i => (IReadOnlyList<DeviceClockObservation>)i.Arguments[1]!)
                 .ToList();
     }
 
@@ -176,13 +191,17 @@ public class GlookoDeviceClockProbeTests
 
         public int RequestsTo(string endpoint) => _paths.Count(p => p.Contains(endpoint));
 
-        public string FirstUpdatedAtOf(string endpoint)
+        public string FirstUpdatedAtOf(string endpoint) => UpdatedAtCursorsOf(endpoint).First();
+
+        public IEnumerable<string> UpdatedAtCursorsOf(string endpoint)
         {
-            var path = _paths.First(p => p.Contains(endpoint));
             const string marker = "lastUpdatedAt=";
-            var start = path.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
-            var end = path.IndexOf('&', start);
-            return Uri.UnescapeDataString(end < 0 ? path[start..] : path[start..end]);
+            return _paths.Where(p => p.Contains(endpoint)).Select(path =>
+            {
+                var start = path.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+                var end = path.IndexOf('&', start);
+                return Uri.UnescapeDataString(end < 0 ? path[start..] : path[start..end]);
+            });
         }
 
         protected override Task<HttpResponseMessage> SendAsync(

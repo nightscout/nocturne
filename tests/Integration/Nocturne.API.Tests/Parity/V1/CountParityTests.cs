@@ -9,6 +9,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Covers: GET/entries/where, GET/treatments/where, GET/devicestatus/where,
 ///         GET/activity/where, GET/{storage}/where
 /// </summary>
+[Collection(ParityShards.Two)]
 public class CountParityTests : ParityTestBase
 {
     public CountParityTests(ParityTestFixture fixture, ITestOutputHelper output)

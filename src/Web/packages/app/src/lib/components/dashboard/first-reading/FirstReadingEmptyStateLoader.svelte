@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
+  import { getStatus as getConnectorStatuses } from "#lib/api/generated/connectorStatus.generated.remote.js";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import type { ConnectorStatusDto } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     /**

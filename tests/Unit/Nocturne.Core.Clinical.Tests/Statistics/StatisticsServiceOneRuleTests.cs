@@ -14,7 +14,7 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 /// </summary>
 public class StatisticsServiceOneRuleTests
 {
-    private readonly StatisticsService _sut = new();
+    private readonly StatisticsService _sut = new(TimeProvider.System);
 
     private static readonly TimeZoneInfo Kathmandu = TimeZoneInfo.FindSystemTimeZoneById("Asia/Kathmandu");
 

@@ -56,7 +56,7 @@ public class ProfileSnapshotServiceTests
         IEnumerable<ScheduleEntry>? sens = null,
         IEnumerable<ScheduleEntry>? carb = null,
         IEnumerable<ScheduleEntry>? basal = null) =>
-        new(dia, 75, 30.0, timezone, ccpPercentage, ccpTimeshiftMs,
+        new(dia, 30.0, timezone, ccpPercentage, ccpTimeshiftMs,
             sens ?? new[] { Entry(0, 50.0) },
             carb ?? new[] { Entry(0, 10.0) },
             basal ?? new[] { Entry(0, 1.0) });

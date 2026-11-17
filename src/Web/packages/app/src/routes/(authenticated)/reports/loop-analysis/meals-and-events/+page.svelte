@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import EventCohortBuilder from "$lib/components/reports/loop-analysis/EventCohortBuilder.svelte";
-  import { loopAnalysisPath } from "$lib/components/reports/loop-analysis/loop-analysis-pages.svelte";
+  import EventCohortBuilder from "#lib/components/reports/loop-analysis/EventCohortBuilder.svelte";
+  import { loopAnalysisPath } from "#lib/components/reports/loop-analysis/loop-analysis-pages.svelte.js";
   import {
     eventResponseQuery,
     readEventResponse,
@@ -10,12 +10,12 @@
     withoutUnavailableEvents,
     writeEventResponse,
     type EventResponseState,
-  } from "$lib/components/reports/loop-analysis/event-response-filter";
-  import { getEventResponse } from "$api/generated/loopAnalysis.generated.remote";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { getLoopAnalysis } from "$lib/components/reports/loop-analysis/loop-analysis-context.svelte";
-  import PageBodyLoading from "$lib/components/reports/loop-analysis/PageBodyLoading.svelte";
-  import EventResponseBody from "$lib/components/reports/loop-analysis/EventResponseBody.svelte";
+  } from "#lib/components/reports/loop-analysis/event-response-filter.js";
+  import { getEventResponse } from "#lib/api/generated/loopAnalysis.generated.remote.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { getLoopAnalysis } from "#lib/components/reports/loop-analysis/loop-analysis-context.svelte.js";
+  import PageBodyLoading from "#lib/components/reports/loop-analysis/PageBodyLoading.svelte";
+  import EventResponseBody from "#lib/components/reports/loop-analysis/EventResponseBody.svelte";
 
   const analysis = getLoopAnalysis();
   const events = $derived(readEventResponse(page.url.searchParams));
@@ -26,9 +26,8 @@
   const navigate = (next: EventResponseState) =>
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- loopAnalysisPath resolves the path
     goto(loopAnalysisPath("meals-and-events", writeEventResponse(next, page.url.searchParams)), {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true,
+      replace: true,
+      reset: false,
     });
 
   const setEvents = (next: EventResponseState) => {

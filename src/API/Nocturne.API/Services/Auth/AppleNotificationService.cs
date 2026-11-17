@@ -1,11 +1,8 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -30,7 +27,7 @@ namespace Nocturne.API.Services.Auth;
 public class AppleNotificationService(
     IOidcProviderService providerService,
     IOidcConfigurationSource configurations,
-    INocturneDbContextFactory contexts,
+    ISubjectRepository subjects,
     IFirstPartyTokenRepository sessions,
     IAuthAuditService auditService,
     ILogger<AppleNotificationService> logger)
@@ -171,9 +168,7 @@ public class AppleNotificationService(
 
     private async Task ApplyAsync(OidcProvider provider, AppleNotification notification, CancellationToken ct)
     {
-        await using var db = await contexts.CreateAsync(ct);
-        var identity = await db.SubjectOidcIdentities.FirstOrDefaultAsync(
-            i => i.OidcSubjectId == notification.Sub && i.Issuer == provider.IssuerUrl, ct);
+        var identity = (await subjects.FindByOidcIdentityAsync(notification.Sub, provider.IssuerUrl, ct))?.Identity;
 
         if (identity is null)
         {
@@ -185,21 +180,18 @@ public class AppleNotificationService(
         switch (notification.Type)
         {
             case ConsentRevoked:
-                identity.ProviderRefreshTokenEncrypted = null;
-                await db.SaveChangesAsync(ct);
+                await subjects.SetProviderRefreshTokenAsync(notification.Sub, provider.IssuerUrl, null, ct);
                 await EndSessionsAsync(identity, notification.Type, AuthAuditEventType.TokenRevoked, ct);
                 break;
 
             case AccountDeleted:
             case AccountDelete:
-                db.SubjectOidcIdentities.Remove(identity);
-                await db.SaveChangesAsync(ct);
+                await subjects.RemoveDeadOidcIdentityAsync(identity.Id, ct);
                 await EndSessionsAsync(identity, notification.Type, AuthAuditEventType.OidcIdentityUnlinked, ct);
                 break;
 
             case EmailEnabled when !string.IsNullOrEmpty(notification.Email):
-                identity.Email = notification.Email;
-                await db.SaveChangesAsync(ct);
+                await subjects.SetOidcIdentityEmailAsync(identity.Id, notification.Email, ct);
                 break;
 
             default:
@@ -210,7 +202,7 @@ public class AppleNotificationService(
     }
 
     private async Task EndSessionsAsync(
-        SubjectOidcIdentityEntity identity, string appleEvent, string auditEvent, CancellationToken ct)
+        SubjectOidcIdentity identity, string appleEvent, string auditEvent, CancellationToken ct)
     {
         var revoked = await sessions.RevokeAllForSubjectAsync(identity.SubjectId, $"Apple {appleEvent}", ct);
 

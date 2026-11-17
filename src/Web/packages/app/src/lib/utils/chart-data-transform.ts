@@ -1,6 +1,6 @@
-import type { DashboardChartData } from "$lib/api/generated/nocturne-api-client";
-import { resolveChartColor, getGlucoseColor } from "$lib/utils/chart-colors";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+import type { DashboardChartData } from "#lib/api/generated/nocturne-api-client.js";
+import { resolveChartColor, getGlucoseColor } from "#lib/utils/chart-colors.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 
 /**
  * Transform raw NSwag DashboardChartData into the shape consumed by chart

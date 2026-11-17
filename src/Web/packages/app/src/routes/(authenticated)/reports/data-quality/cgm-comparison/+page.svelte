@@ -6,16 +6,16 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import * as Select from "$lib/components/ui/select";
+  } from "#lib/components/ui/card/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import GitCompareArrows from "@lucide/svelte/icons/git-compare-arrows";
-  import { getCgmComparison, getReportsAnalysis } from "$api/reports.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import PairedGlucoseScatter from "$lib/components/reports/cgm-comparison/PairedGlucoseScatter.svelte";
-  import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { getCgmComparison, getReportsAnalysis } from "#lib/api/reports.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import PairedGlucoseScatter from "#lib/components/reports/cgm-comparison/PairedGlucoseScatter.svelte";
+  import { bg, bgDelta, bgLabel } from "#lib/utils/formatting.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
   const params = requireDateParamsContext(14);
 
@@ -38,47 +38,36 @@
     devices.some((d) => d.patientDeviceId === choice) ? choice : null;
 
   const deviceAId = $derived(stillContributing(chosenA) ?? devices[0]?.patientDeviceId ?? null);
-  const deviceBId = $derived(
-    stillContributing(chosenB) ??
-      devices.find((d) => d.patientDeviceId !== deviceAId)?.patientDeviceId ??
-      null
-  );
+  const deviceBId = $derived(stillContributing(chosenB) ?? devices.find((d) => d.patientDeviceId !== deviceAId)?.patientDeviceId ?? null);
+  const nameOf = (id: string | null) => devices.find((d) => d.patientDeviceId === id)?.name ?? "";
+  const comparable = $derived(devices.length >= 2 && deviceAId !== null && deviceBId !== null && deviceAId !== deviceBId);
 
-  const nameOf = (id: string | null) =>
-    devices.find((d) => d.patientDeviceId === id)?.name ?? "";
-
-  const comparable = $derived(
-    devices.length >= 2 && deviceAId !== null && deviceBId !== null && deviceAId !== deviceBId
-  );
-
-  const query = $derived(
-    comparable
-      ? getCgmComparison({
-          ...params.dateRangeInput,
-          deviceAId: deviceAId!,
-          deviceBId: deviceBId!,
+  const query = $derived(comparable
+    ? getCgmComparison({
+      ...params.dateRangeInput,
+      deviceAId: deviceAId!,
+      deviceBId: deviceBId!,
           toleranceMinutes,
-        })
+    })
       : undefined
   );
 
   const comparison = $derived(query?.current);
   const metrics = $derived(comparison?.metrics);
-  const comparisonError = $derived(
-    query?.error ? remoteErrorMessage(query.error, "The comparison could not be loaded.") : null
-  );
+
+  const comparisonError = $derived(query?.error
+    ? remoteErrorMessage(query.error, "The comparison could not be loaded.")
+    : null);
 
   const toleranceOptions = [5, 10, 15];
-
-  const percent = (value: number | undefined) =>
-    value === undefined ? "-" : `${value.toFixed(1)}%`;
+  const percent = (value: number | undefined) => value === undefined ? "-" : `${value.toFixed(1)}%`;
 </script>
 
 {#if resource.current}
   <div class="@container space-y-6">
     <div class="space-y-3">
       <a
-        href={resolve("/reports/data-quality")}
+        href={resolve('reports/data-quality')}
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
@@ -113,7 +102,12 @@
         <CardContent class="flex flex-wrap items-end gap-4">
           <div class="flex min-w-48 flex-col gap-1">
             <label for="cgm-a" class="text-sm text-muted-foreground">Device</label>
-            <Select.Root type="single" value={deviceAId ?? ""} onValueChange={(v) => (chosenA = v)}>
+
+            <Select.Root
+              type="single"
+              value={deviceAId ?? ""}
+              onValueChange={(v) => chosenA = v}
+            >
               <Select.Trigger id="cgm-a" class="w-full">{nameOf(deviceAId)}</Select.Trigger>
               <Select.Content>
                 {#each devices as device (device.patientDeviceId)}
@@ -125,7 +119,12 @@
 
           <div class="flex min-w-48 flex-col gap-1">
             <label for="cgm-b" class="text-sm text-muted-foreground">Reference</label>
-            <Select.Root type="single" value={deviceBId ?? ""} onValueChange={(v) => (chosenB = v)}>
+
+            <Select.Root
+              type="single"
+              value={deviceBId ?? ""}
+              onValueChange={(v) => chosenB = v}
+            >
               <Select.Trigger id="cgm-b" class="w-full">{nameOf(deviceBId)}</Select.Trigger>
               <Select.Content>
                 {#each devices as device (device.patientDeviceId)}
@@ -140,7 +139,7 @@
             <Select.Root
               type="single"
               value={String(toleranceMinutes)}
-              onValueChange={(v) => (toleranceMinutes = Number(v))}
+              onValueChange={(v) => toleranceMinutes = Number(v)}
             >
               <Select.Trigger id="cgm-tolerance" class="w-full">
                 {toleranceMinutes} minutes

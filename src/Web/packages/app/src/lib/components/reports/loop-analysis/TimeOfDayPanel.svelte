@@ -9,8 +9,8 @@
 <script lang="ts">
   import { untrack, type Snippet } from "svelte";
   import { Axis, Chart, Rule, Svg } from "layerchart";
-  import ChartKey, { type ChartKeyItem } from "$lib/components/charts/print/ChartKey.svelte";
-  import { hourLabel, time } from "$lib/utils/formatting";
+  import ChartKey, { type ChartKeyItem } from "#lib/components/charts/print/ChartKey.svelte";
+  import { hourLabel, time } from "#lib/utils/formatting.js";
   import { atMinute, SLOT_MINUTES, slotKeyAction } from "./daily-profile-view";
   import type { TimeOfDayCursor } from "./time-of-day-cursor.svelte";
 

@@ -28,10 +28,11 @@ describe("applyTenantPresentation", () => {
   beforeEach(() => {
     localStorage.clear();
     document.cookie = "nocturne-prefs=;path=/;max-age=0";
+    document.cookie = "nocturne-glucose-units=;path=/;max-age=0";
   });
 
   it("keeps a value this device holds and fills only the ones it does not", async () => {
-    localStorage.setItem("nocturne-glucose-units", JSON.stringify("mg/dl"));
+    document.cookie = "nocturne-glucose-units=mg/dl;path=/";
     const store = await loadStore();
 
     store.applyTenantPresentation({ glucoseUnits: "mmol", timeFormat: "24" });
@@ -127,10 +128,11 @@ describe("presentOwnerPreferences", () => {
   beforeEach(() => {
     localStorage.clear();
     document.cookie = "nocturne-prefs=;path=/;max-age=0";
+    document.cookie = "nocturne-glucose-units=;path=/;max-age=0";
   });
 
   it("draws a field the owner left unset with the default, not the viewer's cookie", async () => {
-    document.cookie = `nocturne-prefs=${encodeURIComponent(JSON.stringify({ glucoseUnits: "mmol" }))};path=/`;
+    document.cookie = "nocturne-glucose-units=mmol;path=/";
     const store = await loadStore();
     expect(store.glucoseUnits.current).toBe("mmol");
 
@@ -150,5 +152,67 @@ describe("presentOwnerPreferences", () => {
     expect(localStorage.getItem("nocturne-glucose-units")).toBeNull();
     expect(storedCookie(store)).not.toHaveProperty("glucoseUnits");
     expect(storedCookie(store)).not.toHaveProperty("timeFormat");
+  });
+});
+
+/**
+ * The base-domain cookie reaches every tenant on a shared device, but a tenant has default units of
+ * its own, so this device's units are kept per tenant host and the base-domain cookie carries none.
+ */
+describe("glucose units on a device shared across tenants", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.cookie = "nocturne-prefs=;path=/;max-age=0";
+    document.cookie = "nocturne-glucose-units=;path=/;max-age=0";
+  });
+
+  it("shows this tenant's default over units the device carries from another tenant", async () => {
+    document.cookie = `nocturne-prefs=${encodeURIComponent(JSON.stringify({ glucoseUnits: "mg/dl", colorTheme: "trio" }))};path=/`;
+    localStorage.setItem("nocturne-glucose-units", JSON.stringify("mg/dl"));
+    localStorage.setItem("nocturne-time-format", JSON.stringify("24"));
+    const store = await loadStore();
+
+    store.showTenantDefaultUnits("mmol");
+
+    expect(store.glucoseUnits.current).toBe("mmol");
+    expect(store.colorTheme.current).toBe("trio");
+    expect(store.timeFormat.current).toBe("24");
+    expect(localStorage.getItem("nocturne-time-format")).toBe(JSON.stringify("24"));
+    expect(store.collectPreferences().glucoseUnits).toBeUndefined();
+  });
+
+  it("reads a choice made on this tenant back on this tenant", async () => {
+    const first = await loadStore();
+    first.glucoseUnits.current = "mmol";
+    expect(storedCookie(first)).not.toHaveProperty("glucoseUnits");
+    localStorage.clear();
+
+    const store = await loadStore();
+    store.showTenantDefaultUnits("mg/dl");
+
+    expect(store.glucoseUnits.current).toBe("mmol");
+  });
+
+  it("keeps the units cookie on this host while the rest spans the base domain", async () => {
+    const store = await loadStore();
+    const writes: string[] = [];
+    const cookie = Object.getOwnPropertyDescriptor(Document.prototype, "cookie")!;
+    vi.spyOn(Document.prototype, "cookie", "set").mockImplementation(function (this: Document, value: string) {
+      writes.push(value);
+      cookie.set!.call(this, value);
+    });
+
+    try {
+      store.registerPreferenceCookieDomain("nocturne.run");
+      store.glucoseUnits.current = "mmol";
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    expect(writes).toContain("nocturne-glucose-units=mmol;path=/;max-age=31536000;SameSite=Lax");
+    expect(writes.filter((write) => write.startsWith("nocturne-glucose-units="))).not.toContainEqual(
+      expect.stringContaining("domain=")
+    );
+    expect(writes).toContainEqual(expect.stringMatching(/^nocturne-prefs=.+;domain=\.nocturne\.run$/));
   });
 });

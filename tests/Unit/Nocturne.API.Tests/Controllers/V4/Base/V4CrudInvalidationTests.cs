@@ -1,7 +1,6 @@
-using System.Reflection;
 using FluentAssertions;
 using Nocturne.API.Controllers.V4.Base;
-using OpenApi.Remote.Attributes;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Base;
@@ -22,9 +21,8 @@ public class V4CrudInvalidationTests
     [InlineData(nameof(V4CrudControllerBase<,,,>.BulkRestore))]
     public void DeletingOrRestoring_DeclaresNoBlanketRefresh(string write)
     {
-        var command = typeof(V4CrudControllerBase<,,,>).GetMethod(write)!.GetCustomAttribute<RemoteCommandAttribute>();
+        var command = RemoteAttributes.Command(typeof(V4CrudControllerBase<,,,>), write);
 
-        command.Should().NotBeNull();
-        command!.Invalidates.Should().BeNullOrEmpty();
+        command.Invalidates.Should().BeNullOrEmpty();
     }
 }

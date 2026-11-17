@@ -2,22 +2,24 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
-import { formatLocale } from "$lib/utils/formatting";
-import { GuestLinkStatus, type GuestLinkInfo } from "$api-clients";
+import { formatLocale } from "#lib/utils/formatting.js";
+import { GuestLinkStatus, type GuestLinkInfo } from "#lib/api/generated/nocturne-api-client.js";
 import {
   remoteCommand,
   remoteQuery,
   updatedBy,
-} from "$lib/test-stubs/remote-resource";
+} from "#lib/test-stubs/remote-resource.js";
 
 let createImpl: (request?: { scopes?: string[] }) => Promise<unknown>;
+let revokeImpl: () => Promise<unknown>;
+let dismissImpl: () => Promise<unknown>;
 let links: GuestLinkInfo[];
 
 vi.mock("$app/state", () => ({
   page: { data: { effectivePermissions: ["*"] } },
 }));
 
-vi.mock("$api/generated/guestLinks.generated.remote", () => ({
+vi.mock("#lib/api/generated/guestLinks.generated.remote.js", () => ({
   getGuestLinks: () => remoteQuery(() => links),
   getGuestLinkScopeOptions: () =>
     remoteQuery(() => ({
@@ -27,8 +29,8 @@ vi.mock("$api/generated/guestLinks.generated.remote", () => ({
   createGuestLink: remoteCommand((request) =>
     createImpl(request as { scopes?: string[] } | undefined)
   ),
-  revokeGuestLink: remoteCommand(() => Promise.resolve()),
-  dismissGuestLink: remoteCommand(() => Promise.resolve()),
+  revokeGuestLink: remoteCommand(() => revokeImpl()),
+  dismissGuestLink: remoteCommand(() => dismissImpl()),
 }));
 
 import {
@@ -36,12 +38,15 @@ import {
   createGuestLink,
   revokeGuestLink,
   dismissGuestLink,
-} from "$api/generated/guestLinks.generated.remote";
+} from "#lib/api/generated/guestLinks.generated.remote.js";
 import GuestLinksSection from "./GuestLinksSection.svelte";
 
 const FALLBACK = "Failed to create guest link. Try again.";
 const REISSUE_FALLBACK =
   "Failed to create a new code. Active links are limited to 5 at a time.";
+
+const REVOKE_FALLBACK = "Failed to revoke the link. Try again.";
+const DISMISS_FALLBACK = "Failed to dismiss the link. Try again.";
 
 const existingLink: GuestLinkInfo = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -68,6 +73,8 @@ async function attemptReissue() {
 describe("GuestLinksSection", () => {
   beforeEach(() => {
     links = [];
+    revokeImpl = () => Promise.resolve();
+    dismissImpl = () => Promise.resolve();
     createImpl = () =>
       Promise.resolve({ code: "ABCD", fullUrl: "/guest/ABCD" });
   });
@@ -155,6 +162,99 @@ describe("GuestLinksSection", () => {
     expect(page.getByText("npgsql: connection reset").elements()).toHaveLength(
       0
     );
+  });
+
+  it("says the link could not be revoked when it is gone", async () => {
+    revokeImpl = async () => error(404, "Not found");
+    links = [existingLink];
+    render(GuestLinksSection);
+
+    await page.getByRole("button", { name: "Revoke" }).click();
+
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent(REVOKE_FALLBACK);
+  });
+
+  it("keeps a server fault behind the revoke wording", async () => {
+    revokeImpl = async () => error(500, "npgsql: connection reset");
+    links = [existingLink];
+    render(GuestLinksSection);
+
+    await page.getByRole("button", { name: "Revoke" }).click();
+
+    await expect.element(page.getByText(REVOKE_FALLBACK)).toBeInTheDocument();
+    expect(page.getByText("npgsql: connection reset").elements()).toHaveLength(
+      0
+    );
+  });
+
+  it("says the link could not be dismissed when it is gone", async () => {
+    dismissImpl = async () => error(404, "Not found");
+    links = [{ ...existingLink, status: GuestLinkStatus.Revoked }];
+    render(GuestLinksSection);
+
+    await page.getByRole("button", { name: "Dismiss" }).click();
+
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent(DISMISS_FALLBACK);
+  });
+
+  it("keeps a server fault behind the dismiss wording", async () => {
+    dismissImpl = async () => error(500, "npgsql: connection reset");
+    links = [{ ...existingLink, status: GuestLinkStatus.Revoked }];
+    render(GuestLinksSection);
+
+    await page.getByRole("button", { name: "Dismiss" }).click();
+
+    await expect.element(page.getByText(DISMISS_FALLBACK)).toBeInTheDocument();
+    expect(page.getByText("npgsql: connection reset").elements()).toHaveLength(
+      0
+    );
+  });
+
+  it("clears a revoke failure when the next revoke succeeds", async () => {
+    revokeImpl = async () => error(404, "Not found");
+    links = [existingLink];
+    render(GuestLinksSection);
+    await page.getByRole("button", { name: "Revoke" }).click();
+    await expect.element(page.getByRole("alert")).toBeInTheDocument();
+
+    revokeImpl = () => Promise.resolve();
+    await page.getByRole("button", { name: "Revoke" }).click();
+
+    await expect.poll(() => page.getByRole("alert").elements()).toHaveLength(0);
+  });
+
+  it("clears a dismiss failure when the next dismiss succeeds", async () => {
+    dismissImpl = async () => error(404, "Not found");
+    links = [{ ...existingLink, status: GuestLinkStatus.Revoked }];
+    render(GuestLinksSection);
+    await page.getByRole("button", { name: "Dismiss" }).click();
+    await expect.element(page.getByRole("alert")).toBeInTheDocument();
+
+    dismissImpl = () => Promise.resolve();
+    await page.getByRole("button", { name: "Dismiss" }).click();
+
+    await expect.poll(() => page.getByRole("alert").elements()).toHaveLength(0);
+  });
+
+  it("shows a refused re-issue beside the links while a created code is still on screen", async () => {
+    links = [existingLink];
+    render(GuestLinksSection);
+    await page.getByRole("button", { name: "Create guest link" }).click();
+    await page.getByRole("textbox").fill("Dr Smith");
+    await page.getByRole("button", { name: "Create link" }).click();
+    await expect.element(page.getByText("ABCD")).toBeInTheDocument();
+
+    createImpl = async () =>
+      error(409, "You already have 5 active links.");
+    await page.getByRole("button", { name: "New code" }).click();
+
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("You already have 5 active links.");
   });
 
   it("words the expiry of a live link and of an expired one through the regional formatter", async () => {

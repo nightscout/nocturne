@@ -1,17 +1,17 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { FormError } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { FormError } from "#lib/forms/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
   import UserRoundKey from "@lucide/svelte/icons/user-round-key";
   import {
     getLockedOutMembers,
     issueRecoveryCode,
-  } from "$lib/api/generated/memberRecoveries.generated.remote";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  } from "#lib/api/generated/memberRecoveries.generated.remote.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import { page } from "$app/state";
 
   /**

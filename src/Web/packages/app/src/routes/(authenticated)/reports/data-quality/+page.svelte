@@ -1,28 +1,23 @@
 <script lang="ts">
 	import { resolve } from "$app/paths";
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#lib/components/ui/card/index.js';
+
 	import {
 		getSuggestions as getCompressionLowSuggestions,
 		triggerDetection as triggerCompressionLowDetection
-	} from '$api/generated/compressionLows.generated.remote';
-	import { getRejectedUploads } from '$api/generated/rejectedUploads.generated.remote';
-	import { reportDescription } from '$lib/navigation/report-navigation.svelte';
-	import { contextResource } from '$lib/hooks/resource-context.svelte';
+	} from '#lib/api/generated/compressionLows.generated.remote.js';
+	import { getRejectedUploads } from '#lib/api/generated/rejectedUploads.generated.remote.js';
+	import { reportDescription } from '#lib/navigation/report-navigation.svelte.js';
+	import { contextResource } from '#lib/hooks/resource-context.svelte.js';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Clock from '@lucide/svelte/icons/clock';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-	import type { CompressionLowSuggestion } from '$lib/api';
-	import FigureStrip from '$lib/components/reports/FigureStrip.svelte';
-	import { setReportPrintMeta } from '$lib/components/reports/print/report-print.svelte';
+	import type { CompressionLowSuggestion } from '#lib/api/index.js';
+	import FigureStrip from '#lib/components/reports/FigureStrip.svelte';
+	import { setReportPrintMeta } from '#lib/components/reports/print/report-print.svelte.js';
 
 	setReportPrintMeta(() => ({ period: { label: 'All recorded nights' } }));
 
@@ -102,16 +97,19 @@
 			<ul class="m-0 list-none divide-y divide-border border-y border-border p-0">
 				<li>
 					<a
-						href={resolve("/reports/data-quality/compression-lows")}
+						href={resolve('reports/data-quality/compression-lows')}
 						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
 					>
 						<div class="min-w-0 flex-1">
 							<div class="font-medium text-foreground">Compression lows</div>
-							<div class="text-sm text-muted-foreground">
-								{reportDescription("/reports/data-quality/compression-lows")}
-							</div>
-							<div class="mt-1 text-sm text-muted-foreground tabular-nums">
-								{acceptedCount} events{#if pendingCount > 0} · {pendingCount} pending{/if}
+							<div class="text-sm text-muted-foreground">{reportDescription("/reports/data-quality/compression-lows")}</div>
+
+							<div
+								class="mt-1 text-sm text-muted-foreground tabular-nums"
+							>
+								{acceptedCount} events{#if pendingCount > 0}
+									· {pendingCount} pending
+								{/if}
 							</div>
 						</div>
 						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
@@ -119,7 +117,7 @@
 				</li>
 				<li>
 					<a
-						href={resolve("/reports/data-quality/sensor-integrity")}
+						href={resolve('reports/data-quality/sensor-integrity')}
 						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
 					>
 						<div class="min-w-0 flex-1">
@@ -133,7 +131,7 @@
 				</li>
 				<li>
 					<a
-						href={resolve("/reports/data-quality/cgm-comparison")}
+						href={resolve('reports/data-quality/cgm-comparison')}
 						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
 					>
 						<div class="min-w-0 flex-1">
@@ -146,23 +144,26 @@
 					</a>
 				</li>
 				{#if rejectedUploads.current}
-				<li>
-					<a
-						href={resolve("/reports/data-quality/rejected-uploads")}
-						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
-					>
-						<div class="min-w-0 flex-1">
-							<div class="font-medium text-foreground">Rejected uploads</div>
-							<div class="text-sm text-muted-foreground">
-								{reportDescription("/reports/data-quality/rejected-uploads")}
+					<li>
+						<a
+							href={resolve('reports/data-quality/rejected-uploads')}
+							class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
+						>
+							<div class="min-w-0 flex-1">
+								<div class="font-medium text-foreground">Rejected uploads</div>
+								<div class="text-sm text-muted-foreground">{reportDescription("/reports/data-quality/rejected-uploads")}</div>
+
+								<div
+									class="mt-1 text-sm text-muted-foreground tabular-nums"
+								>{rejectedCount} records</div>
 							</div>
-							<div class="mt-1 text-sm text-muted-foreground tabular-nums">
-								{rejectedCount} records
-							</div>
-						</div>
-						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
-					</a>
-				</li>
+
+							<ChevronRight
+								class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5"
+								aria-hidden="true"
+							/>
+						</a>
+					</li>
 				{/if}
 			</ul>
 		</section>

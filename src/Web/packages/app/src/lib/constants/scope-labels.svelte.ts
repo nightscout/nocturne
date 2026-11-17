@@ -1,4 +1,4 @@
-import { a1cLabel } from "$lib/utils/a1c-formatting";
+import { a1cLabel } from "#lib/utils/a1c-formatting.js";
 import type { OAuthScope, PermissionAtom } from "../api/generated/nocturne-api-client";
 
 export type Scope = `${OAuthScope}` | `${PermissionAtom}`;

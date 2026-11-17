@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -18,7 +19,8 @@ namespace Nocturne.API.Services.Monitoring;
 /// </summary>
 /// <remarks>
 /// Registered as the <see cref="IDeviceEventReactor"/> adapter, so it runs from the device-event write
-/// chokepoint and therefore fires for connector ingest and direct V4 writes alike.
+/// chokepoint and therefore fires for connector ingest and direct V4 writes alike. It passes over the
+/// events <see cref="TrackerDeviceEventWriter"/> records.
 /// </remarks>
 /// <seealso cref="IDeviceEventReactor"/>
 /// <seealso cref="TrackerDefinitionEntity.TriggerEventTypes"/>
@@ -152,7 +154,9 @@ public class TrackerTriggerService : IDeviceEventReactor
 
         // Oldest first: one batch can carry several changes for the same tracker, and each is what
         // completes the instance the previous one started.
-        foreach (var deviceEvent in created.OrderBy(e => e.Timestamp))
+        foreach (var deviceEvent in created
+            .Where(e => e.DataSource != DataSources.Tracker)
+            .OrderBy(e => e.Timestamp))
         {
             foreach (var (definition, starts, ends) in triggers)
             {
@@ -430,7 +434,7 @@ public class TrackerTriggerService : IDeviceEventReactor
         [.. eventTypes
             .Select(canonicalise)
             .OfType<string>()
-            .Select(name => TreatmentTypes.DeviceEventTypeMap.TryGetValue(name, out var parsed)
+            .Select(name => TreatmentTypeMaps.DeviceEventTypeMap.TryGetValue(name, out var parsed)
                 ? parsed
                 : (DeviceEventType?)null)
             .OfType<DeviceEventType>()];

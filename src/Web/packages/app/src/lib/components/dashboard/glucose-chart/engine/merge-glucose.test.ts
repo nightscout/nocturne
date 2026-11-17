@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { transformChartData } from "$lib/utils/chart-data-transform";
-import type { Entry } from "$lib/websocket/types";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import type { Entry } from "#lib/websocket/types.js";
 import { mergeRealtimeGlucose } from "./merge-glucose";
 
 const thresholds = { veryLow: 54, low: 70, high: 180, veryHigh: 250 };

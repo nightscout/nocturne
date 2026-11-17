@@ -1,6 +1,6 @@
 <script lang="ts">
   let { eager = false }: { eager?: boolean } = $props();
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import VisibleChart from "./VisibleChart.svelte";
   let label = $state("Original data");
 </script>

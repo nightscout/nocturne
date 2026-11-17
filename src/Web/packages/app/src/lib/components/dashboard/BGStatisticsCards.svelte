@@ -4,24 +4,24 @@
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import BatteryCharging from "@lucide/svelte/icons/battery-charging";
   import BatteryFull from "@lucide/svelte/icons/battery-full";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
   import BatteryMedium from "@lucide/svelte/icons/battery-medium";
   import BatteryWarning from "@lucide/svelte/icons/battery-warning";
   import Zap from "@lucide/svelte/icons/zap";
-  import { Now } from "$lib/hooks/now.svelte";
+  import { Now } from "#lib/hooks/now.svelte.js";
   import {
     formatGlucoseDelta,
     getUnitLabel,
     relativeAge,
     time,
-  } from "$lib/utils/formatting";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import WebSocketStatus from "$lib/components/WebSocketStatus.svelte";
-  import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
+  } from "#lib/utils/formatting.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import WebSocketStatus from "#lib/components/WebSocketStatus.svelte";
+  import { getCurrentBatteryStatus } from "#lib/api/generated/batteries.generated.remote.js";
 
   let {
     bgDelta,

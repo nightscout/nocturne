@@ -2,11 +2,11 @@
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import Filter from "@lucide/svelte/icons/funnel";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
-  import * as Select from "$lib/components/ui/select";
-  import { Button } from "$lib/components/ui/button";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { getDataTypeLabel } from "$lib/utils/data-type-labels";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
 
   interface Props {
     disabled?: boolean;

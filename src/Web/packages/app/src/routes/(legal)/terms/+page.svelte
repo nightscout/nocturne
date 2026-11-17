@@ -79,7 +79,9 @@
 </ul>
 
 <p>
-  For more details, see our <a href={resolve("/privacy")}>privacy policy</a>.
+  For more details, see our 
+  <a href={resolve('privacy')}>privacy policy</a>
+  .
 </p>
 
 <h2>5. Acceptable Use</h2>

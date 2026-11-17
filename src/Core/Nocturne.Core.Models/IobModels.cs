@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.V4;
 
@@ -62,20 +63,15 @@ public class IobResult
     /// </summary>
     public double? TreatmentIob { get; set; }
 
-    public string? Display { get; set; }
-
     /// <summary>
-    /// <paramref name="iob"/> as <see cref="Display"/> shows it, by Nightscout's <c>utils.toFixed</c>:
-    /// "0" for zero, else two decimals, with a value that rounds to zero shown unsigned. Invariant, so
-    /// the string never picks up the server's decimal separator.
+    /// <see cref="Iob"/> by Nightscout's <c>utils.toFixed</c>: "0" for zero, else
+    /// <see cref="JsNumber.ToFixed2"/> with a negative value that rounds to zero unsigned. The
+    /// calculator rounds <see cref="Iob"/> to three decimals first, as Nightscout does.
     /// </summary>
-    public static string FormatDisplay(double iob) =>
-        iob == 0
-            ? "0"
-            : (Math.Round(iob, 2, MidpointRounding.AwayFromZero) + 0.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+    public string Display =>
+        Iob == 0 ? "0" : JsNumber.ToFixed2(Iob) switch { "-0.00" => "0.00", var text => text };
 
-    /// <summary>Formatted display line including IOB details.</summary>
-    public string? DisplayLine { get; set; }
+    public string DisplayLine => $"IOB: {Display}U";
 }
 
 /// <summary>
@@ -93,7 +89,7 @@ public class TempBasalResult
     /// <summary>Active combo bolus <see cref="Treatment"/>, if any.</summary>
     public Treatment? ComboBolusTreatment { get; set; }
 
-    /// <summary>Temp basal rate (U/hr), 0 if no temp basal active.</summary>
+    /// <summary>Temp basal rate (U/hr), the scheduled rate when no temp basal is active.</summary>
     public double TempBasal { get; set; }
 
     /// <summary>Extended portion of combo bolus as basal delivery (U/hr).</summary>
@@ -101,4 +97,22 @@ public class TempBasalResult
 
     /// <summary>Total effective basal rate: scheduled + temp basal + combo bolus (U/hr).</summary>
     public double TotalBasal { get; set; }
+}
+
+/// <summary>JavaScript number formatting, for strings Nocturne must show as Nightscout does.</summary>
+public static class JsNumber
+{
+    /// <summary>
+    /// <c>value.toFixed(2)</c>: the exact binary value rounded to two decimals, so 0.015, stored just
+    /// below its midpoint, gives "0.01". .NET's "F2" rounds the exact value too, but breaks an exact
+    /// tie to even, where JavaScript rounds it away from zero. A tie at two decimals is an odd
+    /// multiple of 1/8, which <c>value * 8</c> finds exactly.
+    /// </summary>
+    public static string ToFixed2(double value)
+    {
+        var rounded = Math.IEEERemainder(value * 8, 2) is 1 or -1
+            ? ScaledRounding.Round(value, 2, MidpointRounding.AwayFromZero)
+            : value;
+        return rounded.ToString("F2", CultureInfo.InvariantCulture);
+    }
 }

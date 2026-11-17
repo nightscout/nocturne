@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { EntryRecord } from "$lib/constants/entry-categories";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
   import {
-    ENTRY_CATEGORIES,
     getEntryStyle,
-  } from "$lib/constants/entry-categories";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/constants/entry-categories.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Link from "@lucide/svelte/icons/link";
   import {
     formatDateTimeCompact,
@@ -14,7 +14,7 @@
     formatCarbDisplay,
     bg,
     bgLabel,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
 
   interface Props {
     records: EntryRecord[];
@@ -67,7 +67,6 @@
     </h4>
     {#each records as linked (`${linked.kind}-${linked.data.id}`)}
       {@const linkedStyle = getEntryStyle(linked.kind)}
-      {@const linkedCategory = ENTRY_CATEGORIES[linked.kind]}
       {@const isActive = linked.data.id === activeRecordId}
       <Item
         variant="outline"
@@ -76,7 +75,7 @@
       >
         <div class="flex flex-1 items-center gap-2">
           <Badge variant={linkedStyle.badge}>
-            {linkedCategory.name}
+            {entryCategoryName(linked.kind)}
           </Badge>
           <span class="text-sm">{getPrimaryValue(linked)}</span>
           <span class="ml-auto text-xs text-muted-foreground">

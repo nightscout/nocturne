@@ -2,32 +2,32 @@ import { render } from "vitest-browser-svelte";
 import type { ComponentProps } from "svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import {
   WidgetId,
   WidgetPlacement,
   type FeatureSettings,
   type WidgetConfig,
-} from "$lib/api/generated/nocturne-api-client";
-import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
-import { transformChartData } from "$lib/utils/chart-data-transform";
+} from "#lib/api/generated/nocturne-api-client.js";
+import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
 
 // The dashboard's own sections are stood down to markers, one testid each: what
 // is under test is which of them the page renders, not what any of them shows.
-vi.mock("$lib/components/dashboard", async () => ({
+vi.mock("#lib/components/dashboard/index.js", async () => ({
   CurrentBGDisplay: (
-    await import("$lib/test-stubs/CurrentBgDisplay.test-stub.svelte")
+    await import("#lib/test-stubs/CurrentBgDisplay.test-stub.svelte")
   ).default,
   GlucoseChartCard: (
-    await import("$lib/test-stubs/GlucoseChartCard.test-stub.svelte")
+    await import("#lib/test-stubs/GlucoseChartCard.test-stub.svelte")
   ).default,
   RecentEntriesCard: (
-    await import("$lib/test-stubs/RecentEntriesCard.test-stub.svelte")
+    await import("#lib/test-stubs/RecentEntriesCard.test-stub.svelte")
   ).default,
   RecentTreatmentsCard: (
-    await import("$lib/test-stubs/RecentTreatmentsCard.test-stub.svelte")
+    await import("#lib/test-stubs/RecentTreatmentsCard.test-stub.svelte")
   ).default,
-  WidgetGrid: (await import("$lib/test-stubs/WidgetGrid.test-stub.svelte"))
+  WidgetGrid: (await import("#lib/test-stubs/WidgetGrid.test-stub.svelte"))
     .default,
 }));
 
@@ -36,7 +36,7 @@ const uiSettings = vi.hoisted(() => ({
   predictionEnabled: undefined as boolean | undefined,
 }));
 
-vi.mock("$api/ui-settings.remote", () => ({
+vi.mock("#lib/api/ui-settings.remote.js", () => ({
   getUiSettings: () =>
     remoteQuery(() => ({
       features: uiSettings.features,
@@ -44,7 +44,7 @@ vi.mock("$api/ui-settings.remote", () => ({
     })),
 }));
 
-vi.mock("$api/generated/connectorStatus.generated.remote", () => ({
+vi.mock("#lib/api/generated/connectorStatus.generated.remote.js", () => ({
   getStatus: () => remoteQuery(() => []),
 }));
 
@@ -86,6 +86,7 @@ const pageData: HarnessProps["data"] = {
   limitTo24Hours: false,
   refusedAsDemoSubject: false,
   onboardingComplete: true,
+  pillRows: { desktop: 1, mobile: 1 },
   displayPreferences: [],
   displayLanguage: "en",
   serverPreferences: null,
@@ -99,6 +100,9 @@ const pageData: HarnessProps["data"] = {
   initialChartData: transformChartData({
     glucoseData: [{ time: Date.now(), sgv: 120 }],
   }),
+  plotSnapshot: null,
+  initialUiSettings: null,
+  initialPredictionsAvailable: null,
   initialWindowStart: Date.now() - 6 * 60 * 60 * 1000,
   streamed: { historicalChartData: Promise.resolve(null) },
 };

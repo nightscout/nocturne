@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
-import type { TenantMemberDto, TenantRoleDto } from "$api-clients";
+import type { TenantMemberDto, TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
 import MemberCard, { type MemberChanges } from "./MemberCard.svelte";
 
 const ownerRoleId = "11111111-1111-1111-1111-111111111111";

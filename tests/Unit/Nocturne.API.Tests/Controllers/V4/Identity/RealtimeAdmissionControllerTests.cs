@@ -170,11 +170,21 @@ public class RealtimeAdmissionControllerTests
         admission.HistoryClamped.Should().BeTrue();
     }
 
-    [Fact]
-    public void A_guest_session_is_admitted_to_no_category_whatever_its_scopes()
+    [Theory]
+    [InlineData(Scope.GlucoseRead, new[] { "entries", "glucose" })]
+    [InlineData(Scope.TreatmentsRead, new[] { "treatments", "care" })]
+    public void A_guest_session_is_admitted_to_the_categories_it_holds_a_read_scope_for(string scope, string[] expected)
     {
         AdmissionFor(
             new AuthContext { IsAuthenticated = true, AuthType = AuthType.Guest },
+            scope).Categories.Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public void A_history_clamped_guest_session_is_admitted_to_no_category()
+    {
+        AdmissionFor(
+            new AuthContext { IsAuthenticated = true, AuthType = AuthType.Guest, LimitTo24Hours = true },
             Scope.GlucoseRead, Scope.TreatmentsRead).Categories.Should().BeEmpty();
     }
 

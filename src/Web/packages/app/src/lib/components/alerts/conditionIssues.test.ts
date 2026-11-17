@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { conditionIssuesMessage, storedConditionIssuesMessage } from "./conditionIssues.svelte";
-import type { RustValidationIssue } from "$api-clients";
+import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
 
 const rejected = (status: number, issues: RustValidationIssue[]) => ({
 	status,

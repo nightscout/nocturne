@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PatientRelationship } from "$api";
+import { PatientRelationship } from "#lib/api/index.js";
 import { patientVoice } from "./patient-voice.svelte";
 
 describe("patientVoice", () => {

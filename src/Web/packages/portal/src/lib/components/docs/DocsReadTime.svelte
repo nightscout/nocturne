@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { afterNavigate } from "$app/navigation";
-    import { READ_MILESTONES, track } from "$lib/analytics";
+    import { READ_MILESTONES, track } from "#lib/analytics.js";
 
     // A second counts only while the tab is visible and the reader has scrolled, moved the
     // pointer, touched or typed within this window, so a page left open in the background or

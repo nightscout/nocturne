@@ -4,7 +4,7 @@ title: Mobile App Authentication
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import OAuthScopeTable from '$lib/components/docs/OAuthScopeTable.svelte';
+  import OAuthScopeTable from '#lib/components/docs/OAuthScopeTable.svelte';
 </script>
 
 # Mobile App Authentication

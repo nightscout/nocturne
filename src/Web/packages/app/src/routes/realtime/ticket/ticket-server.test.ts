@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The tests set process.env per case; the getter reads it at each access.
+vi.mock("$app/env/private", () => ({
+  get INSTANCE_KEY() {
+    return process.env.INSTANCE_KEY;
+  },
+}));
 import type { RealtimeGrant } from "@nocturne/bridge/ticket";
 
 /**
@@ -26,16 +33,15 @@ vi.mock("@nocturne/bridge/ticket", async (importOriginal) => ({
     }`;
   },
 }));
-vi.mock("$env/dynamic/public", () => ({ env: {} }));
-vi.mock("$lib/server/api-client-factory", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("$lib/server/api-client-factory")>()),
+vi.mock("#lib/server/api-client-factory.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/server/api-client-factory.js")>()),
   getApiBaseUrl: () => apiBaseUrl,
 }));
-vi.mock("$lib/server/request-host", () => ({
+vi.mock("#lib/server/request-host.js", () => ({
   getEffectiveHost: () => effectiveHost,
   getOriginalProto: () => "https",
 }));
-vi.mock("$lib/config/auth-cookies", () => ({
+vi.mock("#lib/config/auth-cookies.js", () => ({
   AUTH_COOKIE_NAMES: {
     accessToken: "access",
     refreshToken: "refresh",

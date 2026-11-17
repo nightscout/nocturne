@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { TimeZoneUnavailableReason } from "$lib/api";
+  import { TimeZoneUnavailableReason } from "#lib/api/index.js";
   import { timeZoneReasonCopy } from "./time-zone-reasons.svelte";
 
   let { reason, children }: { reason: TimeZoneUnavailableReason; children: Snippet } = $props();

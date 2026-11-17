@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Models.OAuth;
+using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
@@ -117,6 +119,19 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
+    /// The ceilings the V4 API puts on a read, so a client can keep its requests inside them.
+    /// </summary>
+    /// <returns>The V4 read limits</returns>
+    [HttpGet("v4-api-limits")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(V4ApiLimitsMetadata), 200)]
+    public ActionResult<V4ApiLimitsMetadata> GetV4ApiLimits()
+    {
+        return Ok(new V4ApiLimitsMetadata { MaxDateSpanDays = V4ApiLimits.MaxDateSpanDays });
+    }
+
+    /// <summary>
     /// Exposes the phases a connector sync reports in the <c>phase</c> of every <c>syncProgress</c>
     /// event, which the web app validates against
     /// </summary>
@@ -171,6 +186,23 @@ public class MetadataController : ControllerBase
             {
                 AvailableFailures = Enum.GetValues<TotpSetupFailure>(),
                 Description = "Reasons a TOTP setup attempt can be refused",
+            }
+        );
+    }
+
+    /// <summary>
+    /// Get the shapes the instance key change notice carries in its metadata. Exists so the
+    /// generated client has <see cref="UndecryptableAlertChannel"/>, which the notice lists.
+    /// </summary>
+    [HttpGet("instance-key-notice")]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(InstanceKeyNoticeMetadata), 200)]
+    public ActionResult<InstanceKeyNoticeMetadata> GetInstanceKeyNotice()
+    {
+        return Ok(
+            new InstanceKeyNoticeMetadata
+            {
+                Description = "Shapes in the metadata of the instance key change notice",
             }
         );
     }
@@ -332,6 +364,15 @@ public class TrackerRealtimeActionsMetadata
 }
 
 /// <summary>
+/// The ceilings the V4 API puts on a read
+/// </summary>
+public class V4ApiLimitsMetadata
+{
+    /// <inheritdoc cref="V4ApiLimits.MaxDateSpanDays"/>
+    public int MaxDateSpanDays { get; set; }
+}
+
+/// <summary>
 /// Metadata about connector sync phases for NSwag generation
 /// </summary>
 public class SyncPhasesMetadata
@@ -344,5 +385,16 @@ public class SyncPhasesMetadata
     /// <summary>
     /// Description of the sync phases
     /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The metadata shapes of the <c>system.instance_key_changed</c> notice.
+/// </summary>
+public class InstanceKeyNoticeMetadata
+{
+    /// <summary>One entry of the notice's <c>AlertChannels</c> list.</summary>
+    public UndecryptableAlertChannel? AlertChannel { get; set; }
+
     public string Description { get; set; } = string.Empty;
 }

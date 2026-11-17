@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
@@ -13,7 +14,7 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// <summary>
 /// The tenant merge lock against PostgreSQL under the runtime role and Row Level Security: two
 /// contexts stand in for two instances merging one tenant, through
-/// <see cref="DeduplicationService.ReconcileNewLinksAsync"/> and <see cref="DeduplicationService.DeduplicateAllAsync"/>.
+/// <see cref="DuplicateReconciler.ReconcileNewLinksAsync"/> and <see cref="DeduplicationAdmin.RunAsync"/>.
 /// </summary>
 [Trait("Category", "Integration")]
 public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
@@ -79,9 +80,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
             .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
             .Options) { TenantId = tenant };
 
-    private static DeduplicationService Service(NocturneDbContext context) =>
-        new(context.AsFactory(), new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<DeduplicationService>.Instance);
+    private static DuplicateReconciler Service(NocturneDbContext context) => DeduplicationModules.Reconciler(context.AsFactory());
 
     [Fact]
     public async Task Concurrent_passes_over_one_tenant_merge_a_duplicate_pair_once()
@@ -95,8 +94,8 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         await using var b = Context(tenant, MeetAfterCursorRead(rendezvous));
 
         var results = await Task.WhenAll(
-            Task.Run(() => Service(a).ReconcileNewLinksAsync(5000, 4)),
-            Task.Run(() => Service(b).ReconcileNewLinksAsync(5000, 4)));
+            Task.Run(() => Service(a).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: null)),
+            Task.Run(() => Service(b).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: null)));
 
         results.Sum(r => r.GroupsMerged).Should().Be(1);
 
@@ -106,8 +105,39 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         links.Select(l => l.CanonicalId).Distinct().Should().ContainSingle();
         links.Should().ContainSingle(l => l.IsPrimary).Which.RecordId.Should().Be(first);
 
-        var later = await Service(check).ReconcileNewLinksAsync(5000, 4);
+        var later = await Service(check).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: null);
         later.Should().Be(new ReconcileResult(0, true), "the lock went with the winning pass's commit");
+    }
+
+    /// <summary>
+    /// A tenant's first reconcile and its first full run both create its state row. The run's start waits
+    /// for the reconcile's uncommitted insert and then uses the row, instead of failing on the key.
+    /// </summary>
+    [Fact]
+    public async Task A_first_full_run_started_during_a_first_reconcile_uses_the_row_the_reconcile_inserts()
+    {
+        var tenant = await SeedTenantAsync();
+        var cursor = new ReconcileCursor(DateTime.UtcNow.AddHours(-1), Guid.CreateVersion7());
+
+        // A context without the retrying strategy, which refuses a transaction held open by hand.
+        await using var reconcile = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(database.AppConnectionString)
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options) { TenantId = tenant };
+        await using var transaction = await reconcile.Database.BeginTransactionAsync();
+        await DuplicateReconciler.SetCursorAsync(reconcile, cursor, default);
+
+        await using var admin = Context(tenant);
+        var start = Task.Run(() => DeduplicationModules.Admin(admin.AsFactory(), tenant).StartRunAsync());
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, start);
+
+        await transaction.CommitAsync();
+        var runId = await start.WaitAsync(TimeSpan.FromSeconds(30));
+
+        await using var check = Context(tenant);
+        var state = await check.DedupReconcileState.AsNoTracking().SingleAsync();
+        state.LastReconciledLinkId.Should().Be(cursor.Id, "the start left the reconcile's cursor as it was");
+        state.Run.Should().Contain(runId.ToString());
     }
 
     [Fact]
@@ -122,18 +152,64 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         await using var full = Context(tenant, MeetAfterFullCarbMergeRead(rendezvous));
         await using var reconcile = Context(tenant, MeetAfterCursorRead(rendezvous));
 
-        var job = Task.Run(() => Service(full).DeduplicateAllAsync());
-        var pass = Task.Run(() => Service(reconcile).ReconcileNewLinksAsync(5000, 4));
+        var job = Task.Run(() => DeduplicationModules.Admin(full.AsFactory(), tenant).RunFullAsync());
+        var pass = Task.Run(() => Service(reconcile).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: null));
         await Task.WhenAll(job, pass);
 
-        job.Result.Success.Should().BeTrue(job.Result.ErrorMessage);
-        (job.Result.DuplicateGroupsFound + pass.Result.GroupsMerged).Should().Be(1);
+        var jobResult = await job;
+        var passResult = await pass;
+        jobResult.Success.Should().BeTrue(jobResult.ErrorMessage);
+        (jobResult.DuplicateGroupsFound + passResult.GroupsMerged).Should().Be(1);
 
         await using var check = Context(tenant);
         var links = await check.LinkedRecords.AsNoTracking().ToListAsync();
         links.Select(l => l.RecordId).Should().BeEquivalentTo([first, second]);
         links.Select(l => l.CanonicalId).Distinct().Should().ContainSingle();
         links.Should().ContainSingle(l => l.IsPrimary).Which.RecordId.Should().Be(first);
+    }
+
+    private sealed class FailCarbReads : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default) =>
+            command.CommandText.Contains("carb_intakes")
+                ? throw new InvalidOperationException("Simulated read failure")
+                : ValueTask.FromResult(result);
+    }
+
+    /// <summary>
+    /// A tenant whose first batch always fails: the failure is recorded on a row the record inserts,
+    /// and the next failure skips the batch, both under the runtime role and the tenant's policies.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_that_keeps_failing_is_counted_and_then_skipped()
+    {
+        var tenant = await SeedTenantAsync();
+        await SeedDuplicateCarbsAsync(tenant, DateTime.UtcNow.AddHours(-1));
+        await using var failing = Context(tenant, new FailCarbReads());
+
+        var first = () => Service(failing).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: 2);
+        await first.Should().ThrowAsync<InvalidOperationException>();
+
+        await using (var check = Context(tenant))
+        {
+            var state = await check.DedupReconcileState.AsNoTracking().SingleAsync();
+            state.FailedBatchAttempts.Should().Be(1);
+            state.FailedBatchCursorCreatedAt.Should().Be(state.LastReconciledLinkCreatedAt);
+        }
+
+        var skipped = await Service(failing).ReconcileNewLinksAsync(5000, 4, skipBatchAfterFailures: 2);
+
+        skipped.Should().Be(new ReconcileResult(0, true));
+        await using var after = Context(tenant);
+        var lastLink = (await after.LinkedRecords.AsNoTracking().ToListAsync()).MaxBy(l => l.Id)!;
+        var skippedState = await after.DedupReconcileState.AsNoTracking().SingleAsync();
+        skippedState.LastReconciledLinkId.Should().Be(lastLink.Id);
+        skippedState.FailedBatchCursorCreatedAt.Should().BeNull();
+        skippedState.FailedBatchCursorId.Should().BeNull();
+        skippedState.FailedBatchAttempts.Should().Be(0);
+        (await after.LinkedRecords.AsNoTracking().Select(l => l.CanonicalId).Distinct().CountAsync()).Should().Be(2);
     }
 
     private async Task<(Guid First, Guid Second)> SeedDuplicateCarbsAsync(Guid tenant, DateTime at)

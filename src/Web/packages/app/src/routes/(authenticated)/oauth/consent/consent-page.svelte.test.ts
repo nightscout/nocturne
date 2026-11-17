@@ -3,22 +3,15 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { page } from "$app/state";
 
-const { clientInfo, formStub } = vi.hoisted(() => {
-  const formStub = () => ({
-    pending: 0,
-    fields: { allIssues: () => [] },
-    enhance: () => ({}),
-  });
-  return {
-    clientInfo: { current: undefined as unknown, error: undefined as unknown },
-    formStub,
-  };
-});
-
-vi.mock("../oauth.remote", () => ({
-  getClientInfo: () => clientInfo,
-  consentForm: { ...formStub(), for: formStub },
+const { clientInfo, consent } = vi.hoisted(() => ({
+  clientInfo: { current: undefined as unknown, error: undefined as unknown },
+  consent: vi.fn(),
 }));
+
+vi.mock("../oauth.remote", async () => {
+  const { remoteForm } = await import("#lib/test-stubs/remote-resource.js");
+  return { getClientInfo: () => clientInfo, consentForm: remoteForm((data: unknown) => consent(data)) };
+});
 
 import ConsentPage from "./+page.svelte";
 
@@ -67,5 +60,16 @@ describe("consent approval", () => {
       .element(browserPage.getByText("Could not load the details of this app."))
       .toBeVisible();
     await expect.element(approve()).not.toBeInTheDocument();
+  });
+
+  it("shows why the server refused, and keeps Approve usable", async () => {
+    consent.mockRejectedValueOnce({ status: 400, body: { message: "The redirect address is not allowed" } });
+    clientInfo.current = { clientId: "trio", displayName: "Trio", isKnown: true, deletionAccess: "ReadWrite" };
+    render(ConsentPage);
+
+    await approve().click();
+
+    await expect.element(browserPage.getByRole("alert")).toHaveTextContent("The redirect address is not allowed");
+    await expect.element(approve()).toBeEnabled();
   });
 });

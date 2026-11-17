@@ -1,4 +1,4 @@
-import type { Entry } from "$lib/websocket/types";
+import type { Entry } from "#lib/websocket/types.js";
 
 /** Identifies an entry by its `_id`, or by its reading when it has none. */
 export function entryIdentity(entry: Entry): string {

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Check from "@lucide/svelte/icons/check";
-  import { playAlarmSound, stopAlarmSound } from "$lib/audio/alarm-sounds";
-  import { Now } from "$lib/hooks/now.svelte";
-  import { formatDateTimeCompact, relativeAge, toDate } from "$lib/utils/formatting";
+  import { playAlarmSound, stopAlarmSound } from "#lib/audio/alarm-sounds.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
+  import { formatDateTimeCompact, relativeAge, toDate } from "#lib/utils/formatting.js";
   import { createAlertActions, SNOOZE_MINUTES } from "./alert-actions.svelte";
 
   /**

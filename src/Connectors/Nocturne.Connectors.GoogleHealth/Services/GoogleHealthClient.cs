@@ -30,8 +30,13 @@ public sealed class GoogleHealthException(
     public bool RequiresReconnect => Message is "reconnect_required" or "client_changed";
 }
 
-public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClient>? logger = null)
+public sealed class GoogleHealthClient(
+    HttpClient http,
+    ILogger<GoogleHealthClient>? logger = null,
+    TimeProvider? timeProvider = null)
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     // A faulty provider can keep issuing unique cursors that bypass cycle detection.
     internal const int MaximumHistoryPages = 10_000;
 
@@ -224,7 +229,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
         }
         logger?.LogWarning("Google Health API error HTTP {StatusCode} for {DataType}: {Code}, {ProviderReason}",
             (int)response.StatusCode, dataType, code, providerReason);
-        return new GoogleHealthException(code, GoogleHealthHttpError.RetryAfter(response), "data_read", dataType, providerReason,
+        return new GoogleHealthException(code, GoogleHealthHttpError.RetryAfter(response, clock.GetUtcNow()), "data_read", dataType, providerReason,
             (int)response.StatusCode);
     }
 

@@ -11,13 +11,13 @@
     type EventResponseReport,
     type EventResponseSlot,
     type LoopAnalysisAggregate,
-  } from "$lib/api";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { plural } from "$lib/utils/plural";
-  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { bg, bgDelta, bgLabel, convertToDisplayUnits } from "$lib/utils/formatting";
+  } from "#lib/api/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { plural } from "#lib/utils/plural.js";
+  import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { bg, bgDelta, bgLabel, convertToDisplayUnits } from "#lib/utils/formatting.js";
   import Info from "@lucide/svelte/icons/info";
   import TimeOfDayPanel from "./TimeOfDayPanel.svelte";
   import PercentileBands from "./PercentileBands.svelte";
@@ -25,7 +25,7 @@
   import EventMetricsTable from "./EventMetricsTable.svelte";
   import EventList from "./EventList.svelte";
   import EventSlotEvents from "./EventSlotEvents.svelte";
-  import NoTimeZone from "$lib/components/reports/NoTimeZone.svelte";
+  import NoTimeZone from "#lib/components/reports/NoTimeZone.svelte";
   import { loopAnalysisTimeZoneNeed } from "./time-zone-need.svelte";
   import CohortDot from "./CohortDot.svelte";
   import { TimeOfDayCursor } from "./time-of-day-cursor.svelte";

@@ -56,7 +56,7 @@ public static class LocalSlotBinning
     }
 
     public static DateTime LocalTime(long mills, TimeZoneInfo tz) =>
-        TimeZoneInfo.ConvertTimeFromUtc(DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime, tz);
+        TimeZoneInfo.ConvertTimeFromUtc(mills.ToUtcDateTime(), tz);
 
     /// <summary>The local date (yyyy-MM-dd) and time (HH:mm) Day in Review is linked to an instant by.</summary>
     public static (string Date, string Time) DayInReview(long mills, TimeZoneInfo tz)
@@ -124,12 +124,6 @@ public static class LocalSlotBinning
     /// </summary>
     public static long LocalInstantMills(DateOnly day, int hour, TimeZoneInfo tz)
     {
-        var local = day.ToDateTime(new TimeOnly(hour, 0), DateTimeKind.Unspecified);
-        while (tz.IsInvalidTime(local))
-            local = local.AddMinutes(1);
-        var offset = tz.IsAmbiguousTime(local)
-            ? tz.GetAmbiguousTimeOffsets(local).Max()
-            : tz.GetUtcOffset(local);
-        return new DateTimeOffset(local, offset).ToUnixTimeMilliseconds();
+        return TimeZoneHelper.LocalToUtc(day.ToDateTime(new TimeOnly(hour, 0)), tz).ToMills();
     }
 }

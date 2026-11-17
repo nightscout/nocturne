@@ -34,7 +34,7 @@ public class SiteChangeImpactTests
             new DeviceEvent { Timestamp = change.AddDays(10), EventType = DeviceEventType.PodChange },
         };
 
-        var result = new StatisticsService().CalculateSiteChangeImpact(readings, events, 1, 1, 30);
+        var result = new StatisticsService(TimeProvider.System).CalculateSiteChangeImpact(readings, events, 1, 1, 30);
 
         result.SiteChangeCount.Should().Be(2);
         result.DataPoints.Select(p => p.MinutesFromChange).Should().Equal(-60, 0, 30);
@@ -45,9 +45,9 @@ public class SiteChangeImpactTests
     [Fact]
     public void ServesTheConsensusEdgesTheChartDrawsItsTargetRangeBetween()
     {
-        var result = new StatisticsService().CalculateSiteChangeImpact([], []);
+        var result = new StatisticsService(TimeProvider.System).CalculateSiteChangeImpact([], []);
 
-        result.Thresholds.Should().BeEquivalentTo(new StatisticsService().HourlyBandThresholds);
+        result.Thresholds.Should().BeEquivalentTo(new StatisticsService(TimeProvider.System).HourlyBandThresholds);
         result.Thresholds.VeryLow.Should().Be(54);
         result.Thresholds.TargetBottom.Should().Be(70);
         result.Thresholds.TargetTop.Should().Be(180);

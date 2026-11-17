@@ -5,8 +5,8 @@
    */
   import { Chart, Line, Path, Svg } from "layerchart";
   import { scaleLinear } from "d3-scale";
-  import { bg, bgLabel } from "$lib/utils/formatting";
-  import type { CgmPairedReading } from "$lib/api";
+  import { bg, bgLabel } from "#lib/utils/formatting.js";
+  import type { CgmPairedReading } from "#lib/api/index.js";
 
   interface Props {
     pairs: CgmPairedReading[];

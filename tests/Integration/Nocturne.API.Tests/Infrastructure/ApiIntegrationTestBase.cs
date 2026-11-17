@@ -13,9 +13,9 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 
 /// <summary>
 /// Base class for the API integration tests: the API in-process on a real port and its own
-/// PostgreSQL database, from <see cref="ApiIntegrationTestFixture"/>.
+/// PostgreSQL database, from <see cref="ApiIntegrationTestFixture"/>. A derived class names its
+/// shard in <see cref="ApiIntegrationShards"/>.
 /// </summary>
-[Collection("ApiIntegration")]
 [Parity]
 public abstract class ApiIntegrationTestBase : IAsyncLifetime
 {

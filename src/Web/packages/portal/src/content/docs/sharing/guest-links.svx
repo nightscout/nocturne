@@ -4,7 +4,7 @@ title: Temporary guest links
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Temporary guest links
@@ -15,7 +15,7 @@ look; they can't change anything. It **expires on its own 48 hours after you mak
 it** and can only be used **once**, so there's nothing to remember to switch off
 afterwards.
 
-You create and manage guest links from **Settings > Sharing & Privacy**, where
+You create and manage guest links from **Site settings > Sharing & Privacy**, where
 they sit alongside the people you have invited and your public link:
 
 <Screenshot id="sharing-guest-links" />

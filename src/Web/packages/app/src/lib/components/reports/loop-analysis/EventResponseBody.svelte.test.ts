@@ -1,10 +1,10 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { LoopAnalysisSeries, TimeZoneUnavailableReason } from "$lib/api";
+import { LoopAnalysisSeries, TimeZoneUnavailableReason } from "#lib/api/index.js";
 import EventResponseBody from "./EventResponseBody.svelte";
 import { eventResponse, TREATMENT_SERIES } from "./event-response.test-fixtures";
-import { time } from "$lib/utils/formatting";
+import { time } from "#lib/utils/formatting.js";
 import { atMinute } from "./daily-profile-view";
 
 const PANELS = [

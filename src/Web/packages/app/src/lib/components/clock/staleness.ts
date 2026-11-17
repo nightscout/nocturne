@@ -8,7 +8,7 @@
  * wall-mounted clock showing an hours-old value with no age indication.
  */
 
-import { relativeAge } from "$lib/utils/formatting";
+import { relativeAge } from "#lib/utils/formatting.js";
 
 /** Whole minutes elapsed between `lastUpdated` and `now`, floored at 0. */
 export function readingAgeMinutes(lastUpdated: number, now: number): number {

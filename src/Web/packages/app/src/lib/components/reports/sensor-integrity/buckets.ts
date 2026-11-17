@@ -9,9 +9,9 @@ import type {
   SensorGlucose,
   GlucoseCluster,
   SensorIntegrityHypoEvent,
-} from "$lib/api";
-import { formatLocale } from "$lib/utils/formatting";
-import { getLocalDayBoundariesUtc } from "$lib/utils/timezone";
+} from "#lib/api/index.js";
+import { formatLocale } from "#lib/utils/formatting.js";
+import { getLocalDayBoundariesUtc } from "#lib/utils/timezone.js";
 
 const MIN_MS = 60_000;
 

@@ -3,12 +3,12 @@
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
-	import { Button } from "$lib/components/ui/button";
-	import { Input } from "$lib/components/ui/input";
+	import { Button } from "#lib/components/ui/button/index.js";
+	import { Input } from "#lib/components/ui/input/index.js";
 	import { getBotAuthorizeContext, buildTenantRedirectUrl } from "../bot.remote";
-	import { getPending, claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
-	import { retainQuery } from "$lib/api/retain-query.svelte";
-	import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+	import { getPending, claimLink } from "#lib/api/generated/chatIdentities.generated.remote.js";
+	import { retainQuery } from "#lib/api/retain-query.svelte.js";
+	import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
 
 	// Read state token from URL
 	const stateToken = $derived(page.url.searchParams.get("state") ?? "");
@@ -76,8 +76,8 @@
 		claimError = null;
 		try {
 			await claimLink({ token: stateToken });
-			goto(resolve("/auth/bot/authorize/done"));
-		} catch (err) {
+			goto(resolve('auth/bot/authorize/done'));
+		} catch(err) {
 			const status = errorStatus(err);
 			claimError =
 				status === 409
@@ -138,7 +138,7 @@
 				Sign in to your Nocturne account to finish connecting your chat account.
 			</p>
 			<a
-				href={resolve(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`)}
+				href={resolve(`auth/login?returnUrl=${encodeURIComponent(returnUrl)}`)}
 				class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 			>
 				Sign in

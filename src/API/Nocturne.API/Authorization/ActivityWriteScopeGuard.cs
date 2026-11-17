@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -22,8 +23,7 @@ internal static class ActivityWriteScopeGuard
 {
     /// <summary>
     /// Returns the first write scope the caller is missing for any record in the batch, or
-    /// <see langword="null"/> when every record's destination scope is satisfied (including the
-    /// regular activities that require no category scope).
+    /// <see langword="null"/> when every record's destination scope is satisfied.
     /// </summary>
     /// <param name="activities">The activities about to be written.</param>
     /// <param name="decomposer">Classifier that maps each activity to its required write scope.</param>
@@ -33,12 +33,9 @@ internal static class ActivityWriteScopeGuard
         IActivityDecomposer decomposer,
         IReadOnlySet<string> grantedScopes)
     {
-        foreach (var scope in activities
-            .Select(decomposer.RequiredWriteScope)
-            .Where(scope => scope is not null)
-            .Distinct())
+        foreach (var scope in activities.Select(decomposer.RequiredWriteScope).Distinct())
         {
-            if (!Scope.Satisfies(grantedScopes, scope!))
+            if (!Scope.Satisfies(grantedScopes, scope))
                 return scope;
         }
 

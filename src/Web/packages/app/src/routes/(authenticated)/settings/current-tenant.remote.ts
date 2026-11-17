@@ -4,8 +4,8 @@
  */
 import { getRequestEvent, query } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
-import { classifyRequestHost } from "$lib/server/tenantless-host";
-import { errorStatus } from "$lib/forms/submit-error";
+import { classifyRequestHost } from "#lib/server/tenantless-host.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 /**
  * Get the tenant the request's host serves, of those the authenticated user can reach.
@@ -15,10 +15,10 @@ import { errorStatus } from "$lib/forms/submit-error";
  * membership where they own none.
  */
 export const getCurrentTenantId = query(async () => {
-  const { locals, url, request } = getRequestEvent();
+  const { locals, request } = getRequestEvent();
 
   if (!locals.isAuthenticated) {
-    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
+    throw redirect(302, "/auth/login");
   }
 
   const apiClient = locals.apiClient;
@@ -30,7 +30,7 @@ export const getCurrentTenantId = query(async () => {
   } catch (err) {
     const status = errorStatus(err);
     if (status === 401) {
-      throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
+      throw redirect(302, "/auth/login");
     }
     if (status === 403) throw error(403, "Forbidden");
     console.error("Error in getCurrentTenantId:", err);

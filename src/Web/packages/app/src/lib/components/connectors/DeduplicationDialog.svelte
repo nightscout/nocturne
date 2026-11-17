@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import { onDestroy } from "svelte";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { toast } from "svelte-sonner";
   import Link2 from "@lucide/svelte/icons/link-2";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -13,12 +13,13 @@
     startDeduplicationJob,
     getJobStatus as getDeduplicationJobStatus,
     cancelJob as cancelDeduplicationJob,
-  } from "$api/generated/deduplications.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/api/generated/deduplications.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     DeduplicationJobState,
     type DeduplicationJobStatus,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     open: boolean;
@@ -65,7 +66,7 @@
       if (!deduplicationJobId) return;
 
       try {
-        const status = await getDeduplicationJobStatus(deduplicationJobId).run();
+        const status = await fresh(getDeduplicationJobStatus(deduplicationJobId));
         if (status) {
           deduplicationStatus = status;
 

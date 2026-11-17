@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import MealSuggestionRow from "./MealSuggestionRow.svelte";
-import type { SuggestedMealMatch } from "$lib/api";
+import type { SuggestedMealMatch } from "#lib/api/index.js";
 
 // The API serialises absent names and scores as null, which the generated type omits.
 type SuggestionOverrides = {

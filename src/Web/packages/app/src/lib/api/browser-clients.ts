@@ -1,6 +1,6 @@
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { createAuthenticatedFetch } from "./auth-interceptor";
-import { initialReadsStash, takeInitialRead } from "$lib/stores/initial-reads";
+import { initialReadsStash, takeInitialRead } from "#lib/stores/initial-reads.js";
 import {
   ApsSnapshotClient,
   BGCheckClient,

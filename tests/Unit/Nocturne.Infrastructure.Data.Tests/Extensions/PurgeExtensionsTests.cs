@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -74,6 +75,48 @@ public class PurgeExtensionsTests : IDisposable
         purged.Should().Be(2, "the soft-deleted row is exactly what the purge exists to remove");
         (await CountAllAsync(_tenantA)).Should().Be(0);
     }
+
+    [Fact]
+    public async Task PurgeAsync_DeletesTheLinksOfThePurgedRowsAndNoOthers()
+    {
+        await using var db = NewContext(_tenantA);
+        var purgedIds = await db.Boluses.IgnoreQueryFilters().Where(b => b.TenantId == _tenantA)
+            .Select(b => b.Id).ToListAsync();
+        var kept = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _tenantA, DataSource = "other", Timestamp = DateTime.UtcNow, Insulin = 3,
+        };
+        db.Boluses.Add(kept);
+        foreach (var id in purgedIds.Append(kept.Id))
+            db.LinkedRecords.Add(Link(_tenantA, "bolus", id));
+        // A link of another type sharing a record id is not this table's link.
+        db.LinkedRecords.Add(Link(_tenantA, "carbintake", purgedIds[0]));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        await db.Boluses.PurgeAsync(b => b.DataSource == Source);
+
+        var links = await db.LinkedRecords.IgnoreQueryFilters().Where(l => l.TenantId == _tenantA)
+            .Select(l => new { l.RecordType, l.RecordId }).ToListAsync();
+        links.Should().BeEquivalentTo(
+        [
+            new { RecordType = "bolus", RecordId = kept.Id },
+            new { RecordType = "carbintake", RecordId = purgedIds[0] },
+        ], "a hard delete takes the row's links with it, so no sweep has to find them later");
+    }
+
+    private static LinkedRecordEntity Link(Guid tenantId, string recordType, Guid recordId) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TenantId = tenantId,
+        CanonicalId = Guid.CreateVersion7(),
+        RecordType = recordType,
+        RecordId = recordId,
+        SourceTimestamp = 0,
+        DataSource = Source,
+        IsPrimary = true,
+        SysCreatedAt = DateTime.UtcNow,
+    };
 
     [Fact]
     public async Task PurgeAsync_LeavesOtherTenantsRowsAlone()

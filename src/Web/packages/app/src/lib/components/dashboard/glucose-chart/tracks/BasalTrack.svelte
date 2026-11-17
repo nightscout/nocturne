@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dashOf } from "$lib/components/charts/print/chart-print-patterns";
+  import { dashOf } from "#lib/components/charts/print/chart-print-patterns.js";
   import {
     Area,
     Spline,
@@ -12,11 +12,11 @@
     getChartContext,
   } from "layerchart";
   import { curveStepAfter } from "d3";
-  import { BasalDeliveryOrigin } from "$api-clients";
+  import { BasalDeliveryOrigin } from "#lib/api/generated/nocturne-api-client.js";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import TrackAxis from "./TrackAxis.svelte";
   import TrackLabel from "./TrackLabel.svelte";
-  import { markerKey } from "$lib/utils/chart-data-merge";
+  import { markerKey } from "#lib/utils/chart-data-merge.js";
 
   interface Props {
     onPointClick?: (time: Date) => void;

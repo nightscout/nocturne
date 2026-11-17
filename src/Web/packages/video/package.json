@@ -22,13 +22,13 @@
 		"@nocturne/app": "workspace:*",
 		"@nocturne/eslint-config": "workspace:*",
 		"@playwright/test": "^1.60.0",
-		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@tailwindcss/vite": "^4.3.0",
 		"devalue": "^5.1.1",
 		"eslint": "^10.3.0",
 		"hyperframes": "0.8.185",
 		"layerchart": "2.2.0",
-		"svelte": "^5.55.5",
+		"svelte": "^5.57.2",
 		"tailwindcss": "^4.3.0",
 		"vite": "^8.0.12"
 	}

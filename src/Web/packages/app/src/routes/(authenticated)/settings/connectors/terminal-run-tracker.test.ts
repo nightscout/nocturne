@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SyncPhase } from "$lib/api";
-import type { SyncProgressEvent } from "$lib/websocket/types";
+import { SyncPhase } from "#lib/api/index.js";
+import type { SyncProgressEvent } from "#lib/websocket/types.js";
 import { createTerminalRunTracker } from "./terminal-run-tracker";
 
 function event(

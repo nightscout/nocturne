@@ -4,8 +4,8 @@
  * Per-user display preferences (units, time format, theme, prediction, chart
  * style, widgets) are backed by a `SyncedPref`: it keeps the reactive `.current`
  * API of runed's PersistedState, but additionally
- *  - hydrates from the `nocturne-prefs` cookie / legacy per-key localStorage,
- *  - mirrors every change into one `nocturne-prefs` cookie so a returning device
+ *  - hydrates from the `nocturne-prefs` and units cookies / legacy per-key localStorage,
+ *  - mirrors every change into those cookies so a returning device
  *    hydrates synchronously at module load (before first paint), avoiding a wait
  *    on the session/API round-trip, and
  *  - writes through to the backend user-preferences endpoint (injected callback)
@@ -22,7 +22,7 @@
  * field of the preferences blob.
  */
 
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
@@ -106,6 +106,14 @@ export type SupportedLocale = (typeof supportedLocales)[number];
 export const PREFS_COOKIE_NAME = "nocturne-prefs";
 const PREFS_COOKIE_MAX_AGE = 31536000; // 1 year
 
+/**
+ * Cookie holding this device's glucose units, apart from the rest of its preferences because a
+ * tenant has default units of its own. It is host-only, so a choice made on one tenant's host is
+ * never read on another's, where it would hide that tenant's default. A host with no tenant keeps
+ * one of its own too, which no tenant host is sent.
+ */
+export const UNITS_COOKIE_NAME = "nocturne-glucose-units";
+
 /** The type-independent face of a `SyncedPref`, so prefs of every type share one registry. */
 interface SyncedEntry {
   hydrateFrom(prefs: UserDisplayPreferences): void;
@@ -171,7 +179,8 @@ let preferenceCookieDomain: string | null = null;
 
 /**
  * Scope preference cookies to the base domain, and rewrite the ones this document already wrote
- * host-scoped: cookies are written at module load, before the layout can supply the domain.
+ * host-scoped: cookies are written at module load, before the layout can supply the domain. The
+ * units cookie stays host-only (see {@link UNITS_COOKIE_NAME}).
  */
 export function registerPreferenceCookieDomain(
   baseDomain: string | null | undefined
@@ -182,7 +191,7 @@ export function registerPreferenceCookieDomain(
   if (domain === preferenceCookieDomain) return;
   preferenceCookieDomain = domain;
 
-  const prefs = readPrefsCookie();
+  const prefs = readDevicePreferences();
   if (prefs) writePrefsCookie(prefs);
   syncLanguageCookie(preferredLanguage.current);
 }
@@ -274,7 +283,7 @@ function persistLocal<T>(key: string, value: T): void {
 /**
  * A per-user preference with the same reactive `.current` surface as runed's
  * PersistedState, so no consumer changes. Writes propagate to localStorage (cache),
- * the shared cookie, and the backend. `hydrate` sets the value without a
+ * the device cookies (see {@link writePrefsCookie}), and the backend. `hydrate` sets the value without a
  * backend/cookie echo (used when applying server- or cross-tab-sourced values).
  * `read` locates this preference inside a `UserDisplayPreferences` payload, and is
  * the single mapping used for both hydration and server-side resolution.
@@ -318,6 +327,15 @@ class SyncedPref<T> implements SyncedEntry {
       }
     }
     return this._fallback ?? this._value;
+  }
+
+  /** The value one request's preference layers give it, highest precedence first, else the default. */
+  resolve(layers: readonly UserDisplayPreferences[]): T {
+    for (const prefs of layers) {
+      const value = this._read(prefs);
+      if (value !== undefined && value !== null) return value;
+    }
+    return this._initial;
   }
 
   /** What this device holds for the preference: never the default, never a fallback. */
@@ -380,6 +398,14 @@ class SyncedPref<T> implements SyncedEntry {
     this._fallback = undefined;
   }
 
+  /** Drop what this device holds and show the default. Browser-only, as {@link hydrate}. */
+  forget(): void {
+    this._value = this._initial;
+    this._held = false;
+    this._fallback = undefined;
+    localStorage.removeItem(this._key);
+  }
+
   /** Hydrate from another tab's localStorage write, ignoring a malformed one. */
   hydrateJson(json: string): void {
     const value = this._parse(parseJson(json));
@@ -410,7 +436,8 @@ export const glucoseRangePalette = new SyncedPref<GlucoseRangePalette>(
 );
 
 /**
- * Blood glucose units preference. Per-user: syncs across devices/tenants.
+ * Blood glucose units preference. The saved value follows the user across devices and tenants;
+ * this device's value stays on one tenant's host (see {@link UNITS_COOKIE_NAME}).
  */
 export const glucoseUnits = new SyncedPref<GlucoseUnits>(
   "nocturne-glucose-units",
@@ -1034,10 +1061,15 @@ export function preferenceCookieWrites(
   return [`${name}=;path=/;max-age=0;SameSite=Lax`, `${write};domain=${domain}`];
 }
 
-/** The one writer for every preference cookie, so a scope can never drift between them. */
-function writePreferenceCookie(name: string, value: string, maxAge: number): void {
+/** The one writer for every preference cookie; each caller names the cookie's scope. */
+function writePreferenceCookie(
+  name: string,
+  value: string,
+  maxAge: number,
+  domain: string | null
+): void {
   if (!browser) return;
-  for (const assignment of preferenceCookieWrites(name, value, maxAge, preferenceCookieDomain)) {
+  for (const assignment of preferenceCookieWrites(name, value, maxAge, domain)) {
     document.cookie = assignment;
   }
 }
@@ -1049,15 +1081,22 @@ function writePreferenceCookie(name: string, value: string, maxAge: number): voi
  */
 const COLOR_SCHEME_COOKIE_KEY = "colorScheme";
 
+/**
+ * Mirror a preference set into this device's cookies: units into the host-only
+ * {@link UNITS_COOKIE_NAME}, everything else into `nocturne-prefs` on the base domain.
+ */
 function writePrefsCookie(prefs: UserDisplayPreferences): void {
+  const { glucoseUnits: units, ...shared } = prefs;
   writePreferenceCookie(
     PREFS_COOKIE_NAME,
-    encodeURIComponent(JSON.stringify({ ...prefs, [COLOR_SCHEME_COOKIE_KEY]: getColorScheme() })),
-    PREFS_COOKIE_MAX_AGE
+    encodeURIComponent(JSON.stringify({ ...shared, [COLOR_SCHEME_COOKIE_KEY]: getColorScheme() })),
+    PREFS_COOKIE_MAX_AGE,
+    preferenceCookieDomain
   );
+  writePreferenceCookie(UNITS_COOKIE_NAME, units ?? "", units ? PREFS_COOKIE_MAX_AGE : 0, null);
 }
 
-/** Decode a raw `nocturne-prefs` cookie value; also used server-side by the root layout load. */
+/** Decode a raw `nocturne-prefs` cookie value. */
 export function parsePrefsCookie(
   value: string | null | undefined
 ): UserDisplayPreferences | null {
@@ -1069,6 +1108,21 @@ export function parsePrefsCookie(
   } catch {
     return null;
   }
+}
+
+/**
+ * This device's display preferences from its raw `nocturne-prefs` and units cookie values; also
+ * used server-side, so SSR reads the device as the browser does. Units come only from the units
+ * cookie: one that `nocturne-prefs` still carries names no tenant, so it is ignored.
+ */
+export function parseDevicePreferences(
+  prefsCookie: string | null | undefined,
+  unitsCookie: string | null | undefined
+): UserDisplayPreferences | null {
+  const prefs = parsePrefsCookie(prefsCookie);
+  const glucoseUnits = oneOfPref(GLUCOSE_UNITS)(unitsCookie);
+  if (!prefs && !glucoseUnits) return null;
+  return { ...prefs, glucoseUnits };
 }
 
 /**
@@ -1094,22 +1148,25 @@ export function parseColorSchemeCookie(value: string | null | undefined): ColorS
 }
 
 function mirrorColorScheme(): void {
-  writePrefsCookie(readPrefsCookie() ?? {});
+  writePrefsCookie(readDevicePreferences() ?? {});
 }
 
 function readCookie(name: string): string | null {
   return browser ? readCookieFrom(document.cookie, name) : null;
 }
 
-function readPrefsCookie(): UserDisplayPreferences | null {
-  return parsePrefsCookie(readCookie(PREFS_COOKIE_NAME));
+function readDevicePreferences(): UserDisplayPreferences | null {
+  return parseDevicePreferences(readCookie(PREFS_COOKIE_NAME), readCookie(UNITS_COOKIE_NAME));
 }
 
 // Hydrate synchronously from the cookie on load (before first paint) so a known
 // device renders the user's units/theme immediately; server reconciliation
 // (via reconcilePreferences in +layout) then confirms/corrects.
 if (browser) {
-  applyPreferences(readPrefsCookie());
+  const devicePreferences = readDevicePreferences();
+  // localStorage can hold units another tenant's cookie put there, which SSR never sees.
+  if (!devicePreferences?.glucoseUnits) glucoseUnits.forget();
+  applyPreferences(devicePreferences);
   mirrorColorScheme();
 
   // Cross-tab sync: mirror another tab's change into this tab's store.
@@ -1190,7 +1247,7 @@ export function hasLanguagePreference(): boolean {
  * Sync language preference to cookie for server-side access
  */
 function syncLanguageCookie(locale: SupportedLocale): void {
-  writePreferenceCookie(LANGUAGE_COOKIE_NAME, locale, LANGUAGE_COOKIE_MAX_AGE);
+  writePreferenceCookie(LANGUAGE_COOKIE_NAME, locale, LANGUAGE_COOKIE_MAX_AGE, preferenceCookieDomain);
 }
 
 /**

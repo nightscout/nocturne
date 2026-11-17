@@ -3,9 +3,9 @@
  *
  * UI-specific types for displaying status information in pill format.
  * Data types (DeviceStatus, Bolus, CarbIntake, DeviceEvent, Profile, etc.)
- * come from the backend via the generated API client in $lib/api.
+ * come from the backend via the generated API client in #lib/api.
  *
- * @see $lib/api for backend types: DeviceStatus, LoopStatus, PumpStatus,
+ * @see #lib/api for backend types: DeviceStatus, LoopStatus, PumpStatus,
  *      OpenApsStatus, LoopIob, LoopCob, Bolus, CarbIntake, DeviceEvent, Profile, etc.
  */
 

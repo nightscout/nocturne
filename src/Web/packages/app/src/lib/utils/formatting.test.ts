@@ -11,17 +11,17 @@ import {
 	relativeAge as sharedRelativeAge,
 	relativeTime as sharedRelativeTime,
 } from "@nocturne/ui/relative-time";
-import type { RegionFormat } from "$lib/stores/appearance-store.svelte";
+import type { RegionFormat } from "#lib/stores/appearance-store.svelte.js";
 
 // `formatting.ts` imports from appearance-store which imports mode-watcher.
 // mode-watcher has no node export. We stub the entire chain so Vite never
 // resolves the real package.
-vi.mock("$app/environment", () => ({ browser: false }));
+vi.mock("$app/env", () => ({ browser: false }));
 vi.mock("mode-watcher", () => ({}));
 vi.mock("runed", () => ({
 	PersistedState: class { current: unknown; constructor(v: unknown) { this.current = v; } },
 }));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
 	glucoseUnits: { current: "mg/dl" },
 	carbRatioFormat: { current: "1:x" },
 	timeFormat: { current: "12" },
@@ -72,7 +72,7 @@ const {
 
 // The mocked store holds plain objects, so a test can move a preference and read
 // the effect the same way the app does.
-const store = await import("$lib/stores/appearance-store.svelte");
+const store = await import("#lib/stores/appearance-store.svelte.js");
 /** Run `body` with the 12/24 time-format preference set to `value`. */
 function withTimeFormat<T>(value: "12" | "24", run: () => T): T {
 	const previous = store.timeFormat.current;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { useSubmission } from "./submission.svelte";
-import { GENERIC_SUBMIT_ERROR } from "./submit-error";
+import { genericSubmitError } from "./submit-messages.svelte";
 
 describe("useSubmission", () => {
   it("starts with no error", () => {
@@ -37,7 +37,7 @@ describe("useSubmission", () => {
       })
     ).resolves.toBe(false);
 
-    expect(submission.error).toBe(GENERIC_SUBMIT_ERROR);
+    expect(submission.error).toBe(genericSubmitError());
   });
 
   it("uses the handler's message for a 4xx rejection", async () => {

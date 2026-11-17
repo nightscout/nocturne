@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import type { GlucoseUnits } from "$lib/utils/formatting";
+  import type { GlucoseUnits } from "#lib/utils/formatting.js";
   import {
     glucoseScale,
     intensityScale,
@@ -8,7 +8,7 @@
     type ColorBoundary,
     type ColorEnds,
     type ColorFocusRange as Range,
-  } from "$lib/utils/metric-color-focus";
+  } from "#lib/utils/metric-color-focus.js";
   import ColorFocusRange from "./ColorFocusRange.svelte";
 
   let {

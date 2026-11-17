@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Badge } from "$lib/components/ui/badge";
-  import { getSetupHub } from "$api/generated/setupHubs.generated.remote";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
 
   const hubQuery = getSetupHub();
   const open = $derived(hubQuery.current?.openCount ?? 0);

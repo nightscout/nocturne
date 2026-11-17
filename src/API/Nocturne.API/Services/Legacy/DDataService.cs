@@ -6,11 +6,12 @@ using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Services.Legacy;
 
@@ -28,24 +29,25 @@ public class DDataService : IDDataService
     private const long FrameTreatmentsWindowMills = 5 * DayMills / 2;
     private const long LiveFrameWindowMills = 5L * 60 * 1000;
 
-    private readonly IEntryStore _store;
+    private readonly IEntryService _entries;
     private readonly ITreatmentService _treatments;
     private readonly IProfileProjectionService _profiles;
-    private readonly DeviceStatusProjectionService _projectionService;
+    private readonly IDeviceStatusService _deviceStatuses;
     private readonly IFoodRepository _food;
     private readonly IActivityService _activities;
     private readonly IStoreSizeReader _storeSize;
+    private readonly TimeProvider _time;
     private readonly ILogger<DDataService> _logger;
 
     private static readonly (string EventType, long WindowMills)[] FrameLatestTreatments =
     {
-        ("Profile Switch", 31 * 12 * DayMills),
-        ("Sensor Start", 62 * DayMills),
-        ("Sensor Change", 62 * DayMills),
-        ("Sensor Stop", 62 * DayMills),
-        ("Site Change", 62 * DayMills),
-        ("Insulin Change", 62 * DayMills),
-        ("Pump Battery Change", 62 * DayMills),
+        (TreatmentTypes.ProfileSwitch, 31 * 12 * DayMills),
+        (TreatmentTypes.SensorStart, 62 * DayMills),
+        (TreatmentTypes.SensorChange, 62 * DayMills),
+        (TreatmentTypes.SensorStop, 62 * DayMills),
+        (TreatmentTypes.SiteChange, 62 * DayMills),
+        (TreatmentTypes.InsulinChange, 62 * DayMills),
+        (TreatmentTypes.PumpBatteryChange, 62 * DayMills),
     };
 
     // Device type fields that should be considered for recent device status
@@ -59,19 +61,21 @@ public class DDataService : IDDataService
     };
 
     public DDataService(
-        IEntryStore store,
+        IEntryService entries,
         ITreatmentService treatments,
         IProfileProjectionService profiles,
-        DeviceStatusProjectionService projectionService,
+        IDeviceStatusService deviceStatuses,
         IFoodRepository food,
         IActivityService activities,
         IStoreSizeReader storeSize,
+        TimeProvider timeProvider,
         ILogger<DDataService> logger)
     {
-        _store = store;
+        _time = timeProvider;
+        _entries = entries;
         _treatments = treatments;
         _profiles = profiles;
-        _projectionService = projectionService;
+        _deviceStatuses = deviceStatuses;
         _food = food;
         _activities = activities;
         _storeSize = storeSize;
@@ -82,7 +86,14 @@ public class DDataService : IDDataService
     public Task<DData> GetDDataAsync(
         long timestamp,
         CancellationToken cancellationToken = default
-    ) => LoadDDataAsync(new DData { LastUpdated = timestamp }, cancellationToken);
+    ) => GetDDataAsync(timestamp, DDataCollections.All, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<DData> GetDDataAsync(
+        long timestamp,
+        DDataCollections collections,
+        CancellationToken cancellationToken = default
+    ) => LoadDDataAsync(new DData { LastUpdated = timestamp }, collections, cancellationToken);
 
     /// <inheritdoc />
     public async Task<DDataFrame> GetDDataFrameAsync(
@@ -90,33 +101,47 @@ public class DDataService : IDDataService
         CancellationToken cancellationToken = default
     )
     {
-        var isLive = Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - timestamp) < LiveFrameWindowMills;
+        var isLive = Math.Abs(_time.GetUtcNow().ToUnixTimeMilliseconds() - timestamp) < LiveFrameWindowMills;
         var frame = await LoadDDataAsync(
             new DDataFrame
             {
                 LastUpdated = timestamp,
                 Page = isLive ? null : new DDataFramePage { After = timestamp },
             },
+            DDataCollections.All,
             cancellationToken);
         frame.Sgvs = frame.Sgvs.OrderBy(e => e.Mills).ToList();
         return frame;
     }
 
-    private async Task<T> LoadDDataAsync<T>(T ddata, CancellationToken cancellationToken)
+    private async Task<T> LoadDDataAsync<T>(
+        T ddata,
+        DDataCollections collections,
+        CancellationToken cancellationToken
+    )
         where T : DData
     {
         var timestamp = ddata.LastUpdated;
 
         // Sequential: see INocturneDbContextFactory.
-        await LoadSgvsAsync(ddata, timestamp, cancellationToken);
-        await LoadTreatmentsAsync(ddata, timestamp, cancellationToken);
-        await LoadMbgsAsync(ddata, timestamp, cancellationToken);
-        await LoadCalsAsync(ddata, timestamp, cancellationToken);
-        await LoadProfilesAsync(ddata, cancellationToken);
-        await LoadDeviceStatusAsync(ddata, timestamp, cancellationToken);
-        await LoadFoodAsync(ddata, cancellationToken);
-        await LoadActivityAsync(ddata, timestamp, cancellationToken);
-        await LoadDbStatsAsync(ddata, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Sgvs))
+            await LoadSgvsAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Treatments))
+            await LoadTreatmentsAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Mbgs))
+            await LoadMbgsAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Cals))
+            await LoadCalsAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Profiles))
+            await LoadProfilesAsync(ddata, cancellationToken);
+        if (collections.HasFlag(DDataCollections.DeviceStatus))
+            await LoadDeviceStatusAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Food))
+            await LoadFoodAsync(ddata, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Activity))
+            await LoadActivityAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.DbStats))
+            await LoadDbStatsAsync(ddata, cancellationToken);
 
         // Process treatments to create filtered lists
         var processedTreatments = ProcessTreatments(ddata.Treatments, false);
@@ -150,7 +175,7 @@ public class DDataService : IDDataService
     /// <inheritdoc />
     public async Task<DData> GetCurrentDDataAsync(CancellationToken cancellationToken = default)
     {
-        var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var currentTime = _time.GetUtcNow().ToUnixTimeMilliseconds();
         return await GetDDataAsync(currentTime, cancellationToken);
     }
 
@@ -185,14 +210,14 @@ public class DDataService : IDDataService
 
         // filter & prepare 'Site Change' events
         ddata.SiteChangeTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Site Change"))
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.SiteChange))
             .OrderBy(t => t.Mills)
             .ToList();
 
         // filter & prepare 'Insulin Change' events
         ddata.InsulinChangeTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Insulin Change")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.InsulinChange)
             )
             .OrderBy(t => t.Mills)
             .ToList();
@@ -200,7 +225,7 @@ public class DDataService : IDDataService
         // filter & prepare 'Pump Battery Change' events
         ddata.BatteryTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Pump Battery Change")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.PumpBatteryChange)
             )
             .OrderBy(t => t.Mills)
             .ToList();
@@ -213,13 +238,13 @@ public class DDataService : IDDataService
 
         // filter & prepare 'Combo Bolus' events
         ddata.ComboBolusTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == "Combo Bolus")
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == TreatmentTypes.ComboBolus)
             .OrderBy(t => t.Mills)
             .ToList();
 
         // filter & prepare 'Profile Switch' events
         var profileTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == "Profile Switch")
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == TreatmentTypes.ProfileSwitch)
             .OrderBy(t => t.Mills)
             .ToList();
         if (preserveOriginalTreatments)
@@ -230,7 +255,7 @@ public class DDataService : IDDataService
 
         // filter & prepare temp basals
         var tempBasalTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Temp Basal"))
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.TempBasal))
             .ToList();
         if (preserveOriginalTreatments)
         {
@@ -631,8 +656,8 @@ public class DDataService : IDDataService
         {
             ["created_at"] = new Dictionary<string, string>
             {
-                ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime.ToString("o"),
-                ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime.ToString("o"),
+                ["$gte"] = fromMills.ToUtcDateTime().ToString("o"),
+                ["$lte"] = toMills.ToUtcDateTime().ToString("o"),
             },
         });
 
@@ -645,7 +670,7 @@ public class DDataService : IDDataService
         try
         {
             // Load SGV entries with type filter - reduced count to prevent memory issues
-            var sgvs = await _store.QueryAsync(
+            var sgvs = await _entries.QueryEntriesAsync(
                 FrameEntryQuery(ddata, "sgv", timestamp),
                 cancellationToken);
             ddata.Sgvs = sgvs.ToList();
@@ -724,7 +749,7 @@ public class DDataService : IDDataService
         try
         {
             // Load MBG entries with type filter - reduced count to prevent memory issues
-            var mbgs = await _store.QueryAsync(
+            var mbgs = await _entries.QueryEntriesAsync(
                 FrameEntryQuery(ddata, "mbg", timestamp),
                 cancellationToken);
             ddata.Mbgs = mbgs.ToList();
@@ -745,7 +770,7 @@ public class DDataService : IDDataService
         try
         {
             // Load calibration entries with type filter - reduced count to prevent memory issues
-            var cals = await _store.QueryAsync(
+            var cals = await _entries.QueryEntriesAsync(
                 FrameEntryQuery(ddata, "cal", timestamp),
                 cancellationToken);
             ddata.Cals = cals.ToList();
@@ -787,15 +812,15 @@ public class DDataService : IDDataService
             {
                 ["created_at"] = new Dictionary<string, string>
                 {
-                    ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp - DeviceStatusWindowMills).UtcDateTime.ToString("o"),
-                    ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.ToString("o"),
+                    ["$gte"] = (timestamp - DeviceStatusWindowMills).ToUtcDateTime().ToString("o"),
+                    ["$lte"] = timestamp.ToUtcDateTime().ToString("o"),
                 },
             };
-            var deviceStatuses = await _projectionService.GetMatchingAsync(
-                DeviceStatusProjectionService.ParseFind(JsonSerializer.Serialize(window)),
+            var deviceStatuses = await _deviceStatuses.GetDeviceStatusesAsync(
+                FindQuery.ParseDeviceStatus(JsonSerializer.Serialize(window)),
                 count: 1000,
                 skip: 0,
-                ct: cancellationToken
+                cancellationToken: cancellationToken
             );
             ddata.DeviceStatus = deviceStatuses.ToList();
         }

@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { reactiveFields } from "$lib/test-stubs/reactive-fields.svelte";
-import { relativeAge, time } from "$lib/utils/formatting";
+import { reactiveFields } from "#lib/test-stubs/reactive-fields.svelte.js";
+import { relativeAge, time } from "#lib/utils/formatting.js";
 
 const store = reactiveFields({
   connectionPresentation: "live" as
@@ -18,7 +18,7 @@ const store = reactiveFields({
   reconnect: vi.fn(),
 });
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => store,
 }));
 

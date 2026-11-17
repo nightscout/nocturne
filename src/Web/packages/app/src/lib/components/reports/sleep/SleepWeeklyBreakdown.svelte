@@ -4,10 +4,10 @@
    * tracked night is a weekday-keyed link to its single-night report.
    */
   import { resolve } from "$app/paths";
-  import type { SleepNightSummary, SleepWeekSummary } from "$lib/api";
-  import { formatMinutesDuration } from "$lib/utils/duration";
-  import { parseCalendarDate, weekdayIndex, weekdayLabels } from "$lib/components/calendar/calendar-date";
-  import { formatLocale } from "$lib/utils/formatting";
+  import type { SleepNightSummary, SleepWeekSummary } from "#lib/api/index.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import { parseCalendarDate, weekdayIndex, weekdayLabels } from "#lib/components/calendar/calendar-date.js";
+  import { formatLocale } from "#lib/utils/formatting.js";
 
   interface Props {
     weeks: SleepWeekSummary[];

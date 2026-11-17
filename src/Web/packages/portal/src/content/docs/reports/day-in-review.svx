@@ -3,7 +3,7 @@ title: Day in Review
 ---
 
 <script>
-  import Video from '$lib/components/docs/Video.svelte';
+  import Video from '#lib/components/docs/Video.svelte';
 </script>
 
 # Day in Review

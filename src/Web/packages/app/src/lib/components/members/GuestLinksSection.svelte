@@ -1,22 +1,22 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { formatDayTime, relativeTime } from "$lib/utils/formatting";
+  import type { RemoteCommand } from '$app/server';
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { formatDayTime, relativeTime } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
-  import type { RemoteCommand } from "@sveltejs/kit";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { toggled } from "$lib/utils/collections";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { toggled } from "#lib/utils/collections.js";
   import { categoriesIn, formatList } from "./data-categories";
-  import { EmptyState } from "$lib/components/shared";
-  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import UserAvatar from "#lib/components/account/UserAvatar.svelte";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import CopyButton from "$lib/components/members/CopyButton.svelte";
+  import CopyButton from "#lib/components/members/CopyButton.svelte";
   import { Artwork } from "water-ui";
   import Clock from "@lucide/svelte/icons/clock";
   import X from "@lucide/svelte/icons/x";
@@ -30,13 +30,13 @@
     createGuestLink,
     revokeGuestLink,
     dismissGuestLink,
-  } from "$api/generated/guestLinks.generated.remote";
+  } from "#lib/api/generated/guestLinks.generated.remote.js";
   import {
     type GuestLinkInfo,
     GuestLinkStatus,
-  } from "$api/generated/nocturne-api-client";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError } from "$lib/forms";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { describeSubmitError, FormError } from "#lib/forms/index.js";
 
   let { onCreated }: { onCreated?: () => void } = $props();
 
@@ -71,6 +71,7 @@
   const chosenScopes = $derived(pickedScopes ?? scopeOptions?.defaults ?? []);
   let isCreating = $state(false);
   let createError = $state<string | null>(null);
+  let linkError = $state<string | null>(null);
   let createdCode = $state<string | null>(null);
   let createdUrl = $state<string | null>(null);
 
@@ -128,17 +129,11 @@
   }
 
   function isTerminal(link: GuestLinkInfo): boolean {
-    return (
-      link.status === GuestLinkStatus.Revoked ||
-      link.status === GuestLinkStatus.Expired
-    );
+    return link.status === GuestLinkStatus.Revoked || link.status === GuestLinkStatus.Expired;
   }
 
   function canRevoke(link: GuestLinkInfo): boolean {
-    return (
-      link.status === GuestLinkStatus.Pending ||
-      link.status === GuestLinkStatus.Active
-    );
+    return link.status === GuestLinkStatus.Pending || link.status === GuestLinkStatus.Active;
   }
 
   /** The backend may report http behind a reverse proxy; use the browser's origin */
@@ -174,21 +169,36 @@
     }
   }
 
-  async function mutateLink(id: string, run: RemoteCommand<string, unknown>) {
+  async function mutateLink(
+    id: string,
+    run: RemoteCommand<string, unknown>,
+    failureMessage: string
+  ) {
     pendingIds = new Set([...pendingIds, id]);
+    linkError = null;
     try {
       await run(id).updates(getGuestLinks);
+    } catch (err) {
+      linkError = describeSubmitError(err, failureMessage);
     } finally {
       pendingIds = new Set([...pendingIds].filter((x) => x !== id));
     }
   }
 
   async function handleDismiss(id: string) {
-    await mutateLink(id, dismissGuestLink);
+    await mutateLink(
+      id,
+      dismissGuestLink,
+      "Failed to dismiss the link. Try again."
+    );
   }
 
   async function handleRevoke(id: string) {
-    await mutateLink(id, revokeGuestLink);
+    await mutateLink(
+      id,
+      revokeGuestLink,
+      "Failed to revoke the link. Try again."
+    );
   }
 
   let reissuingId = $state<string | null>(null);
@@ -199,7 +209,7 @@
    */
   async function handleReissue(link: GuestLinkInfo) {
     reissuingId = link.id!;
-    createError = null;
+    linkError = null;
     try {
       const result = await createGuestLink({
         label: link.label || "Untitled",
@@ -209,11 +219,10 @@
       createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
       showCreateForm = true;
     } catch (err) {
-      createError = describeSubmitError(
+      linkError = describeSubmitError(
         err,
         "Failed to create a new code. Active links are limited to 5 at a time."
       );
-      showCreateForm = true;
     } finally {
       reissuingId = null;
     }
@@ -252,7 +261,7 @@
         <Button
           variant="outline"
           size="sm"
-          onclick={() => (showCreateForm = true)}
+          onclick={() => showCreateForm = true}
         >
           <Link class="mr-1.5 h-3.5 w-3.5" />
           Create guest link
@@ -369,10 +378,7 @@
                         </div>
                         <Switch
                           checked={on}
-                          onCheckedChange={() =>
-                            (pickedScopes = [
-                              ...toggled(new Set(chosenScopes), cat.scope),
-                            ])}
+                          onCheckedChange={() => pickedScopes = [...toggled(new Set(chosenScopes), cat.scope)]}
                           aria-label={cat.name}
                         />
                       </label>
@@ -381,13 +387,7 @@
                 </div>
               {/if}
 
-              {#if createError}
-                <div
-                  class="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-                >
-                  <p class="text-sm text-destructive">{createError}</p>
-                </div>
-              {/if}
+              <FormError issues={createError} focusOnShow />
 
               <div class="flex gap-3">
                 <Button
@@ -426,6 +426,7 @@
       />
     {:else if allLinks.length > 0}
       <div class="space-y-2">
+        <FormError issues={linkError} focusOnShow />
         {#each guestLinks as link (link.id)}
           <div
             class={link.dismissedAt ? "opacity-50" : undefined}
@@ -465,7 +466,7 @@
                     {/if}
                   </div>
                 </div>
-                {#if link.status === GuestLinkStatus.Active || (isTerminal(link) && !link.dismissedAt)}
+                {#if link.status === GuestLinkStatus.Active || isTerminal(link) && !link.dismissedAt}
                   <Button
                     variant="ghost-muted"
                     size="sm"
@@ -513,11 +514,8 @@
         <Button
           variant="ghost-muted"
           size="xs"
-          onclick={() => (showDismissed = !showDismissed)}
-        >
-          {showDismissed ? "Hide" : "Show"}
-          {dismissedCount} dismissed
-        </Button>
+          onclick={() => showDismissed = !showDismissed}
+        >{showDismissed ? "Hide" : "Show"} {dismissedCount} dismissed</Button>
       {/if}
     {/if}
   </div>

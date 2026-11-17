@@ -2,16 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { page } from "$app/state";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let faces: { id: string; name: string }[] = [];
 
-vi.mock("$api/generated/clockFaces.generated.remote", () => ({
+vi.mock("#lib/api/generated/clockFaces.generated.remote.js", () => ({
   list: () => remoteQuery(() => faces),
   create: vi.fn(),
   remove: vi.fn(),
 }));
-vi.mock("$lib/components/clock/ClockFacePreview.svelte", () => ({ default: () => {} }));
+vi.mock("#lib/components/clock/ClockFacePreview.svelte", () => ({ default: () => {} }));
 
 import ClockPage from "./+page.svelte";
 

@@ -4,14 +4,14 @@ import type {
   BotApiClient,
   DirectoryCandidate,
 } from "@nocturne/bot";
-import type { ApiClient } from "$lib/api";
+import type { ApiClient } from "#lib/api/index.js";
 import {
   createServerApiClient,
   getApiBaseUrl,
-} from "$lib/server/api-client-factory";
-import { getHashedInstanceKey } from "$lib/server/instance-key";
-import { AlertAcknowledgementOutcome, ChannelType } from "$api-clients";
-import { errorStatus } from "$lib/forms/submit-error";
+} from "#lib/server/api-client-factory.js";
+import { getHashedInstanceKey } from "#lib/server/instance-key.js";
+import { AlertAcknowledgementOutcome, ChannelType } from "#lib/api/generated/nocturne-api-client.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 const CHANNEL_TYPES: readonly ChannelType[] = Object.values(ChannelType);
 
@@ -57,6 +57,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
           sort,
           device,
           source,
+          undefined,
           signal,
         );
       },

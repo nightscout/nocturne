@@ -1,16 +1,16 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import * as Card from "$lib/components/ui/card";
-  import { Switch } from "$lib/components/ui/switch";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import BookOpen from "@lucide/svelte/icons/book-open";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import {
     getTenantSettings,
     setPublicDocs,
-  } from "$api/generated/tenantSettings.generated.remote";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   const canManageSettings = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings"),

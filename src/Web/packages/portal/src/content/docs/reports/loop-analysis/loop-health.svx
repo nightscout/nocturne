@@ -3,7 +3,7 @@ title: Loop health
 ---
 
 <script>
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Loop health

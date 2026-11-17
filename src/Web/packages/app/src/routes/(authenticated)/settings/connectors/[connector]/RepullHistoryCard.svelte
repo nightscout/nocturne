@@ -4,28 +4,28 @@
   import {
     getConnectorCapabilities,
     resetConnectorCursor,
-  } from "$api/generated/services.generated.remote";
-  import { SyncDataType } from "$lib/api/generated/nocturne-api-client";
-  import type { SyncResult } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/services.generated.remote.js";
+  import { SyncDataType } from "#lib/api/generated/nocturne-api-client.js";
+  import type { SyncResult } from "#lib/api/generated/nocturne-api-client.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import * as Alert from "$lib/components/ui/alert";
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  } from "#lib/components/ui/card/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import History from "@lucide/svelte/icons/history";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { getDataTypeLabel } from "$lib/utils/data-type-labels";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
 
   let { connectorId }: { connectorId: string } = $props();
 

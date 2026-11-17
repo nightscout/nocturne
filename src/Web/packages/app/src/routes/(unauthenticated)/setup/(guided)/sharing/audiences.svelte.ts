@@ -3,9 +3,9 @@ import School from "@lucide/svelte/icons/school";
 import Globe from "@lucide/svelte/icons/globe";
 import UserRound from "@lucide/svelte/icons/user-round";
 import type { Component } from "svelte";
-import { RoleAccessLevel, type TenantRoleDto } from "$api";
-import type { InviteRoleChoice } from "$lib/components/members/CreateInviteCard.svelte";
-import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+import { RoleAccessLevel, type TenantRoleDto } from "#lib/api/index.js";
+import type { InviteRoleChoice } from "#lib/components/members/CreateInviteCard.svelte";
+import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
 export type SharingAudienceId = "family" | "temporary" | "public" | "just-me";
 
@@ -106,4 +106,12 @@ export function familyRoleChoices(roles: TenantRoleDto[]): InviteRoleChoice[] {
     const role = roles.find((r) => r.slug === slug);
     return role?.id && role.accessLevel === level ? [{ roleId: role.id, label, description }] : [];
   });
+}
+
+/** The owner role, the one thing a helper's invite grants: the person they hand Nocturne over to. */
+export function handoverRoleChoices(roles: TenantRoleDto[]): InviteRoleChoice[] {
+  const owner = roles.find((r) => r.slug === "owner");
+  return owner?.id
+    ? [{ roleId: owner.id, label: "Owner", description: "They own Nocturne, the same as you." }]
+    : [];
 }

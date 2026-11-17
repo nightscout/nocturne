@@ -11,6 +11,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Apple's two endpoints are reached the way Apple reaches them: anonymously, on the apex, as a
 /// cross-site POST from appleid.apple.com. The sign-in itself needs Apple; unit tests cover it.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class AppleSignInEndpointsTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : ApiIntegrationTestBase(fixture, output)

@@ -30,8 +30,8 @@ public interface IIobCalculator
     Task<IobResult> CalculateFromTreatmentsAsync(
         List<Bolus> boluses, List<TempBasal>? tempBasals, long time, CancellationToken ct = default);
 
-    IobResult FromBoluses(List<Bolus> boluses, long? time = null);
-    IobContribution CalcBolus(Bolus bolus, long? time = null);
+    IobResult FromBoluses(List<Bolus> boluses, long currentTime);
+    IobContribution CalcBolus(Bolus bolus, long currentTime);
 
     // --- Async-free overloads for the chart IOB/COB tick loop ---
     // These resolve DIA, peak and sensitivity from a pre-built, in-memory <see cref="TherapySnapshot"/>
@@ -39,10 +39,10 @@ public interface IIobCalculator
     // (TherapyTimeline.SnapshotAt) and evaluates hundreds of treatments against it without any DB
     // round trip; see IobCobSeries.
 
-    /// <inheritdoc cref="CalcBolus(Bolus, long?)"/>
+    /// <inheritdoc cref="CalcBolus(Bolus, long)"/>
     IobContribution CalcBolus(Bolus bolus, TherapySnapshot snapshot, long time);
 
-    /// <inheritdoc cref="FromBoluses(List{Bolus}, long?)"/>
+    /// <inheritdoc cref="FromBoluses(List{Bolus}, long)"/>
     IobResult FromBoluses(List<Bolus> boluses, TherapySnapshot snapshot, long time);
 
     /// <summary>

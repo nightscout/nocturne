@@ -1,30 +1,32 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { browser } from "$app/environment";
-  import { RailItemId, type LegacyConsumableKind, type TrackerCategory } from "$lib/api";
-  import { hiddenLegacyFallbacks } from "$lib/stores/appearance-store.svelte";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { cn } from "$lib/utils";
+  import { RailItemId, type LegacyConsumableKind, type TrackerCategory } from "#lib/api/index.js";
+  import { hiddenLegacyFallbacks } from "#lib/stores/appearance-store.svelte.js";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { cn } from "#lib/utils/index.js";
   import COBPill from "./COBPill.svelte";
   import BasalPill from "./BasalPill.svelte";
   import IOBPill from "./IOBPill.svelte";
   import LoopPill from "./LoopPill.svelte";
   import ReservoirPill from "./ReservoirPill.svelte";
+  import LinkBatteryPill from "./LinkBatteryPill.svelte";
   import TrackerPillBar from "./TrackerPillBar.svelte";
   import { visibleLegacyFallbacks, visibleTrackerInstances } from "./tracker-pill-visibility";
+  import { writePillRows, type PillRail } from "./pill-rows";
 
   interface Props {
     /** The rail items to show, in order. */
     items: readonly RailItemId[];
-    /** localStorage key for the number of rows this rail last filled. */
-    rowsKey: string;
+    /** Which rail this is, for the rows it last filled on this device (`pill-rows.ts`). */
+    rail: PillRail;
+    /** The rows to reserve until the pills arrive: what this rail last filled, as the server read it. */
+    initialRows?: number;
     onTrackerComplete?: (
       instanceId: string,
       instanceName: string,
       category: TrackerCategory,
-      definitionId: string,
-      completionEventType?: string
+      definitionId: string
     ) => void;
     /** Shown ahead of the items, inside the same wrapping row. */
     leading?: Snippet;
@@ -36,7 +38,8 @@
 
   let {
     items,
-    rowsKey,
+    rail,
+    initialRows = 1,
     onTrackerComplete,
     leading,
     hideWhenEmpty = false,
@@ -60,7 +63,7 @@
   );
 
   const conversionDialog = lazyComponent(
-    () => import("$lib/components/trackers/CreateTrackersFromLegacyDialog.svelte")
+    () => import("#lib/components/trackers/CreateTrackersFromLegacyDialog.svelte")
   );
   let conversionKind = $state<LegacyConsumableKind | undefined>();
 
@@ -74,28 +77,20 @@
     items.filter((item) =>
       item === RailItemId.Reservoir
         ? realtimeStore.currentReservoir !== null
-        : item === RailItemId.Trackers
-          ? hasTrackerPills
-          : true
+        : item === RailItemId.LinkBattery
+          ? realtimeStore.currentLinkBatteryVoltage !== null
+          : item === RailItemId.Trackers
+            ? hasTrackerPills
+            : true
     )
   );
 
   // The pills arrive after the page paints and can wrap onto more rows than the one the row
-  // starts with, so the rows last rendered under this key are held until they do. Until then
+  // starts with, so the rows last rendered on this device are held until they do. Until then
   // the pills are empty placeholders, whose row count says nothing about the loaded ones.
   // StatusPill is 2.75rem tall (text-xs label, text-sm value, py-1) and rows sit gap-y-1 apart.
-  const MAX_PILL_ROWS = 4;
-
-  function storedPillRows(): number {
-    try {
-      const rows = Number(localStorage.getItem(rowsKey));
-      return Number.isInteger(rows) && rows > 1 ? Math.min(rows, MAX_PILL_ROWS) : 1;
-    } catch {
-      return 1;
-    }
-  }
-
-  let reservedPillRows = $state(browser ? storedPillRows() : 1);
+  // svelte-ignore state_referenced_locally
+  let reservedPillRows = $state(initialRows);
   let pillsEl = $state<HTMLElement>();
 
   function laidOutChildren(el: Element): Element[] {
@@ -114,18 +109,14 @@
 
   $effect(() => {
     const el = pillsEl;
-    const key = rowsKey;
+    const which = rail;
     if (!el || !realtimeStore.isReady) return;
     const observer = new ResizeObserver(() => {
       // A hidden layout fills no rows and says nothing about how many the pills need.
       const rows = renderedPillRows(el);
       if (rows === 0) return;
       reservedPillRows = rows;
-      try {
-        localStorage.setItem(key, String(rows));
-      } catch {
-        // Storage is unavailable; the next load reserves one row.
-      }
+      writePillRows(which, rows);
     });
     observer.observe(el);
     return () => observer.disconnect();
@@ -161,6 +152,8 @@
             <LoopPill data={realtimeStore.pillsData.loop} />
           {:else if item === RailItemId.Reservoir && realtimeStore.currentReservoir !== null}
             <ReservoirPill reservoir={realtimeStore.currentReservoir} />
+          {:else if item === RailItemId.LinkBattery && realtimeStore.currentLinkBatteryVoltage !== null}
+            <LinkBatteryPill voltage={realtimeStore.currentLinkBatteryVoltage} />
           {:else if item === RailItemId.Trackers}
             <TrackerPillBar
               instances={realtimeStore.trackerInstances}

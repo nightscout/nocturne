@@ -87,7 +87,8 @@ public class CareLinkSignInFailureTests
             resolver,
             provider,
             configService.Object,
-            NullLogger<CareLinkConnectorService>.Instance);
+            NullLogger<CareLinkConnectorService>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
 
         try
         {
@@ -122,7 +123,7 @@ public class CareLinkSignInFailureTests
         ILogger<CareLinkAuthTokenProvider> logger,
         IRetryDelayStrategy retryDelayStrategy,
         HttpMessageHandler handler)
-        : CareLinkAuthTokenProvider(httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
+        : CareLinkAuthTokenProvider(httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy, TimeProvider.System)
     {
         protected override CareLinkAuthFlowService CreateAuthFlow() => new(NullLogger.Instance, handler);
     }

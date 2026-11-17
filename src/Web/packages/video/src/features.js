@@ -29,7 +29,7 @@ export const features = {
   },
   "smart-snooze": { pages: [{ route: "/alerts/{id}", page: "alerts/[id]/+page.svelte" }] },
   trackers: {
-    pages: [{ route: "/settings/trackers", page: "settings/trackers/+page.svelte" }],
+    pages: [{ route: "/trackers", page: "trackers/+page.svelte" }],
   },
   bots: { stage: "BotChat.svelte", fixture: "clocks" },
   widget: { stage: "Widget.svelte", fixture: "clocks" },

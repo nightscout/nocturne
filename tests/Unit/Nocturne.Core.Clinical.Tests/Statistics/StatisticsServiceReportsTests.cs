@@ -6,7 +6,7 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 
 public class StatisticsServiceReportsTests
 {
-    private readonly StatisticsService _service = new();
+    private readonly StatisticsService _service = new(TimeProvider.System);
     private static readonly DateTime June1 = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTimeOffset Now = new(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -59,7 +59,7 @@ public class StatisticsServiceReportsTests
         var pump = new PatientDevice { Id = Guid.NewGuid(), DeviceCategory = DeviceCategory.InsulinPump, Model = "P" };
 
         var result = _service.CalculateContributingDevices(
-            [Reading(June1, 100, a.Id), Reading(June1, 100, a.Id), Reading(June1, 100), Reading(June1, 100, pump.Id)],
+            [(a.Id, 2), (null, 1), (pump.Id, 1)],
             [a, idle, pump]);
 
         result.Select(d => (d.PatientDeviceId, d.Name, d.ReadingCount))
@@ -128,6 +128,33 @@ public class StatisticsServiceReportsTests
 
         start.Should().Be(new DateTime(2026, 8, 31, 14, 0, 0, DateTimeKind.Utc));
         end.Should().Be(new DateTime(2026, 9, 30, 14, 0, 0, DateTimeKind.Utc).AddTicks(-1));
+    }
+
+    [Theory]
+    [InlineData(2026, 10, 25, 1792879200000L, 1792969200000L)]
+    [InlineData(2026, 3, 29, 1774738800000L, 1774821600000L)]
+    [InlineData(2026, 6, 10, 1781042400000L, 1781128800000L)]
+    public void PunchCard_BoundsEachDayByItsOwnLocalMidnights(int year, int month, int day, long start, long end)
+    {
+        var berlin = TimeZoneInfo.FindSystemTimeZoneById("Europe/Berlin");
+        var date = new DateOnly(year, month, day);
+
+        var punchCardDay = PunchCard([], date, date, berlin).Months.Single().Days.Single();
+
+        punchCardDay.Timestamp.Should().Be(start);
+        punchCardDay.EndTimestamp.Should().Be(end);
+    }
+
+    [Fact]
+    public void PunchCard_TakesDayBoundsFromTheTenantZoneNotTheHostZone()
+    {
+        var auckland = TimeZoneInfo.FindSystemTimeZoneById("Pacific/Auckland");
+        var date = new DateOnly(2026, 6, 10);
+
+        var punchCardDay = PunchCard([], date, date, auckland).Months.Single().Days.Single();
+
+        punchCardDay.Timestamp.Should().Be(new DateTimeOffset(2026, 6, 10, 0, 0, 0, TimeSpan.FromHours(12)).ToUnixTimeMilliseconds());
+        punchCardDay.EndTimestamp.Should().Be(new DateTimeOffset(2026, 6, 11, 0, 0, 0, TimeSpan.FromHours(12)).ToUnixTimeMilliseconds());
     }
 
     [Fact]

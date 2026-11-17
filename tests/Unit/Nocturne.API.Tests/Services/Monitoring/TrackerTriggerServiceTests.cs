@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -170,6 +171,31 @@ public class TrackerTriggerServiceTests
         await _sut.OnCreatedAsync([Event(new DateTime(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc), DeviceEventType.SensorStart)]);
 
         _started.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnEventATrackerRecorded_StartsCompletesAndEndsNothing(bool replay)
+    {
+        var restarted = GivenDefinition(triggerEventTypes: ["Sensor Start"]);
+        var ended = GivenDefinition(triggerEventTypes: [], endEventTypes: ["Sensor Stop"]);
+        GivenActiveInstance(restarted, new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc));
+        GivenActiveInstance(ended, new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc));
+        var at = new DateTime(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc);
+        DeviceEvent[] recorded =
+        [
+            new() { Id = Guid.NewGuid(), Timestamp = at, EventType = DeviceEventType.SensorStart, DataSource = DataSources.Tracker },
+            new() { Id = Guid.NewGuid(), Timestamp = at, EventType = DeviceEventType.SensorStop, DataSource = DataSources.Tracker },
+        ];
+
+        if (replay)
+            await _sut.OnReplayedAsync(recorded);
+        else
+            await _sut.OnCreatedAsync(recorded);
+
+        _started.Should().BeEmpty();
+        _completed.Should().BeEmpty();
     }
 
     [Fact]

@@ -58,7 +58,8 @@ public class MigrationSourceIdentityTests
             NullLogger<MigrationJobService>.Instance,
             provider,
             new ConfigurationBuilder().Build(),
-            _runGuard);
+            _runGuard,
+            TimeProvider.System);
 
         return (service, provider);
     }
@@ -274,7 +275,8 @@ public class MigrationSourceIdentityTests
                 ["MIGRATION_MODE"] = "Api",
                 ["MIGRATION_NS_URL"] = "https://user:pass@example-nightscout.invalid/nightscout/?token=synthetic-token",
             }).Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
 
         var pending = service.GetPendingConfig();
 

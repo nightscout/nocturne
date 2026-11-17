@@ -1,12 +1,12 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { BodyWeight } from "$api";
+import type { BodyWeight } from "#lib/api/index.js";
 import {
   remoteCommand,
   remoteQuery,
   updatedBy,
-} from "$lib/test-stubs/remote-resource";
+} from "#lib/test-stubs/remote-resource.js";
 
 const entries: BodyWeight[] = [
   { _id: "bw-1", weightKg: 72.5, mills: 1_700_000_000_000 },
@@ -16,13 +16,13 @@ const server = vi.hoisted(() => ({
   deleteAnswer: (): Promise<unknown> => Promise.resolve(),
 }));
 
-vi.mock("$api/generated/bodyWeights.generated.remote", () => ({
+vi.mock("#lib/api/generated/bodyWeights.generated.remote.js", () => ({
   getBodyWeights: () => remoteQuery(() => entries),
   create: remoteCommand(() => Promise.resolve()),
   deleteBodyWeight: remoteCommand(() => server.deleteAnswer()),
 }));
 
-import * as bw from "$api/generated/bodyWeights.generated.remote";
+import * as bw from "#lib/api/generated/bodyWeights.generated.remote.js";
 import WeightPage from "./+page.svelte";
 
 describe("weight settings page", () => {

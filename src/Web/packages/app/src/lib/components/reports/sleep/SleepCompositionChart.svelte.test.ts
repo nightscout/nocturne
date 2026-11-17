@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
-import type { SleepNightSummary } from "$lib/api";
+import type { SleepNightSummary } from "#lib/api/index.js";
 const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
 vi.mock("$app/navigation", () => ({ goto }));
 vi.mock("$app/paths", () => ({

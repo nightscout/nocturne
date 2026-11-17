@@ -47,7 +47,7 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
         _contextA = _db.CreateContext(TenantA);
         _contextB = _db.CreateContext(TenantB);
 
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var audit = new Mock<IAuditContext>().Object;
 
         _tempBasalsA = new TempBasalRepository(

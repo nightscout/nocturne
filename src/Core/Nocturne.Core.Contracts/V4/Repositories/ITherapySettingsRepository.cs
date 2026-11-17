@@ -76,6 +76,14 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
     Task<IReadOnlyList<TherapySettings>> GetDocumentRowsAsync(string documentId, CancellationToken ct = default);
 
     /// <summary>
+    /// <see cref="GetDocumentRowsAsync(string, CancellationToken)"/> for each of
+    /// <paramref name="documentIds"/>, in one query. A document with no live row is absent.
+    /// </summary>
+    /// <param name="documentIds">The documents' <c>_id</c> values.</param>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<TherapySettings>>> GetDocumentRowsAsync(
+        IReadOnlyCollection<string> documentIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Makes the row <paramref name="id"/> the tenant's only <see cref="TherapySettings.IsDefault"/> row,
     /// or clears the flag on every row when <paramref name="id"/> is <c>null</c>.
     /// </summary>

@@ -10,6 +10,7 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// Integration tests for DataHub WebSocket functionality
 /// Tests real-time data updates and client-server communication
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Parity]
 public class DataHubIntegrationTests : ApiIntegrationTestBase
 {

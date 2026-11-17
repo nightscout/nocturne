@@ -6,12 +6,12 @@
     LegacyFallbackDto,
     TrackerInstanceDto,
     TrackerDefinitionDto,
-  } from "$lib/api";
-  import { TrackerCategory } from "$lib/api";
-  import { cn } from "$lib/utils";
+  } from "#lib/api/index.js";
+  import { TrackerCategory } from "#lib/api/index.js";
+  import { cn } from "#lib/utils/index.js";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import { toured, whileShown } from "$lib/coach-marks/attach";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import { whileShown } from "#lib/coach-marks/attach.js";
   import {
     trackerDefinition,
     visibleTrackerInstances,
@@ -36,8 +36,7 @@
       instanceId: string,
       instanceName: string,
       category: TrackerCategory,
-      definitionId: string,
-      completionEventType?: string
+      definitionId: string
     ) => void;
     /** Opens the conversion of the legacy ages with one kind selected. */
     onCreateTracker?: (kind: LegacyConsumableKind) => void;
@@ -80,14 +79,12 @@
       {#if index === 0}
         <div
           class="flex"
-          {@attach toured()
-            ? whileShown(
-                coachmark([
-                  { ...coachFor("tracker-intro.pill") },
-                  { ...coachFor("tracker-intro.complete") },
-                ])
-              )
-            : undefined}
+          {@attach whileShown(
+            coachmark([
+              { ...coachFor("tracker-intro.pill") },
+              { ...coachFor("tracker-intro.complete") },
+            ])
+          )}
         >
           {@render pill(instance)}
         </div>

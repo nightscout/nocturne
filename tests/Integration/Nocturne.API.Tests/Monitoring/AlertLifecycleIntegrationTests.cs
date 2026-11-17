@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>/api/v4/alerts</c> covering active alerts, acknowledgement,
 /// snooze, history, and delivery workflows.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
 {

@@ -1,23 +1,23 @@
 <script lang="ts">
   import type { MealSortColumn } from "./meal-sort";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import * as Table from "$lib/components/ui/table";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Utensils from "@lucide/svelte/icons/utensils";
   import X from "@lucide/svelte/icons/x";
-  import type { MealEvent, TreatmentFood, SuggestedMealMatch } from "$lib/api";
+  import type { MealEvent, TreatmentFood, SuggestedMealMatch } from "#lib/api/index.js";
   import SortableColumnHeader from "./SortableColumnHeader.svelte";
   import MealSuggestionRow from "./MealSuggestionRow.svelte";
-  import CarbBreakdownBar from "$lib/components/treatments/CarbBreakdownBar.svelte";
-  import FoodEntryDetails from "$lib/components/treatments/FoodEntryDetails.svelte";
-  import { getMealNameForTime } from "$lib/constants/meal-times";
-  import { time } from "$lib/utils/formatting";
-  import { PaintedMoment } from "$lib/forms";
+  import CarbBreakdownBar from "#lib/components/treatments/CarbBreakdownBar.svelte";
+  import FoodEntryDetails from "#lib/components/treatments/FoodEntryDetails.svelte";
+  import { getMealNameForTime } from "#lib/constants/meal-times.js";
+  import { time } from "#lib/utils/formatting.js";
+  import { PaintedMoment } from "#lib/forms/index.js";
 
   interface MealsByDay {
     date: string;

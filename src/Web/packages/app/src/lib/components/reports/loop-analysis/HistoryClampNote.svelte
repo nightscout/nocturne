@@ -5,7 +5,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import Clock from "@lucide/svelte/icons/clock";
-  import { plural } from "$lib/utils/plural";
+  import { plural } from "#lib/utils/plural.js";
 
   interface Props {
     response: { historyClamped?: boolean; historyWindowHours?: number };

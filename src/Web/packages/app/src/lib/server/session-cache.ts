@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { SessionInfo } from "$lib/api/generated/nocturne-api-client";
+import type { SessionInfo } from "#lib/api/generated/nocturne-api-client.js";
 
 /**
  * A short memo of the API's answer to "who is this caller", keyed by the credentials presented.

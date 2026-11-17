@@ -6,7 +6,7 @@ import {
 	OidcProviderType,
 	type OidcProviderResponse,
 	type TenantRoleDto,
-} from "$lib/api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 function make_provider(
 	overrides: Partial<OidcProviderResponse> = {},

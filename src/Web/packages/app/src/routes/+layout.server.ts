@@ -1,18 +1,16 @@
 import type { LayoutServerLoad } from "./$types";
-import type { UserDisplayPreferences } from "$lib/api";
-import { resolvePermissions } from "$lib/server/resolve-permissions";
-import { classifyRequestHost, isTenantlessHost } from "$lib/server/tenantless-host";
-import { getRequestStatus } from "$lib/server/request-status";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
-import { parseLastSignIn } from "$lib/components/auth/last-sign-in";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
+import { resolvePermissions } from "#lib/server/resolve-permissions.js";
+import { displayPreferenceLayers, displayPreferenceSources } from "#lib/server/display-preference-layers.js";
+import { classifyRequestHost, isTenantlessHost } from "#lib/server/tenantless-host.js";
+import { getRequestStatus } from "#lib/server/request-status.js";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import { parseLastSignIn } from "#lib/components/auth/last-sign-in.js";
 import {
   LANGUAGE_COOKIE_NAME,
-  PREFS_COOKIE_NAME,
-  hasStoredPreferences,
-  parsePrefsCookie,
   resolveLanguage,
-} from "$lib/stores/appearance-store.svelte";
+} from "#lib/stores/appearance-store.svelte.js";
 
 /**
  * The owner's presentation settings, for the viewers with no account of their own to save any: a
@@ -62,29 +60,14 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
     kind === "apex" ? Boolean((await getRequestStatus(locals))?.tenantSlug) : false
   );
 
-  // Display preferences for SSR, in the same precedence the browser applies them so the markup
-  // matches hydration: a share is drawn as its owner draws it, the viewer's cookie left out;
-  // a member's backend blob wins over the cookie; a guest's own cookie wins field by field, and
-  // the tenant's presentation stands in only for the defaults. Together with the scopes because
-  // on a share host both are API round-trips and neither reads the other.
+  // Together with the scopes because on a share host both are API round-trips and neither
+  // reads the other.
   const [tenantPresentation, permissions] = await Promise.all([
     resolveTenantPresentation(locals),
     resolvePermissions(locals),
   ]);
-  const serverPrefs = locals.isShareHost
-    ? tenantPresentation
-    : locals.isAuthenticated
-      ? (locals.user?.preferences ?? null)
-      : null;
-  const tenantPreferences = locals.isGuestSession ? tenantPresentation : null;
-  const cookiePrefs = locals.isShareHost ? null : parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
-  const tenantDefault = locals.isAuthenticated ? locals.user?.defaultGlucoseUnits : undefined;
-  const displayPreferences = [
-    hasStoredPreferences(serverPrefs) ? serverPrefs : null,
-    cookiePrefs,
-    hasStoredPreferences(tenantPreferences) ? tenantPreferences : null,
-    tenantDefault ? { glucoseUnits: tenantDefault } : null,
-  ].filter((prefs) => prefs !== null && prefs !== undefined);
+  const sources = displayPreferenceSources(locals, cookies, tenantPresentation);
+  const displayPreferences = displayPreferenceLayers(sources);
   const displayLanguage = resolveLanguage(
     locals.isAuthenticated ? locals.user?.preferredLanguage : null,
     cookies.get(LANGUAGE_COOKIE_NAME)
@@ -95,8 +78,8 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
   return {
     displayPreferences,
     displayLanguage,
-    serverPreferences: serverPrefs,
-    tenantPreferences,
+    serverPreferences: sources.serverPrefs,
+    tenantPreferences: sources.tenantPreferences,
     user: locals.user,
     isAuthenticated: locals.isAuthenticated,
     hasAccount,

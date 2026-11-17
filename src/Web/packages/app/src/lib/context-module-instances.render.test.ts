@@ -15,7 +15,7 @@ const cases: Case[] = [
   {
     name: "date params",
     load: (instance) =>
-      import(/* @vite-ignore */ `$lib/hooks/date-params.svelte?instance=${instance}`) as Promise<Module>,
+      import(/* @vite-ignore */ `#lib/hooks/date-params.svelte.js?instance=${instance}`) as Promise<Module>,
     provide: (m) =>
       (m.setDateParamsContext as (p: unknown) => unknown)({ marker: true }),
     read: (m) => m.getDateParamsContext(),
@@ -23,14 +23,14 @@ const cases: Case[] = [
   {
     name: "resource context",
     load: (instance) =>
-      import(/* @vite-ignore */ `$lib/hooks/resource-context.svelte?instance=${instance}`) as Promise<Module>,
+      import(/* @vite-ignore */ `#lib/hooks/resource-context.svelte.js?instance=${instance}`) as Promise<Module>,
     provide: (m) => m.createResourceContext(),
     read: (m) => m.getResourceContext(),
   },
   {
     name: "report print",
     load: (instance) =>
-      import(/* @vite-ignore */ `$lib/components/reports/print/report-print.svelte?instance=${instance}`) as Promise<Module>,
+      import(/* @vite-ignore */ `#lib/components/reports/print/report-print.svelte.js?instance=${instance}`) as Promise<Module>,
     provide: (m) => m.createReportPrintContext(),
     read: (m) => m.getReportPrintContext(),
   },

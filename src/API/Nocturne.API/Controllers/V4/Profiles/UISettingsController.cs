@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -6,6 +7,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Services.Profiles;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Authorization;
@@ -16,7 +18,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 /// <summary>
 /// UI Settings controller providing frontend configuration data.
 /// This endpoint provides aggregated settings for all frontend settings pages.
-/// Supports both GET (read) and PUT (write) operations for settings persistence.
+/// Supports GET (read), PUT (whole configuration) and PATCH (one section) operations for settings persistence.
 /// </summary>
 /// <seealso cref="IUISettingsService"/>
 [ApiController]
@@ -39,18 +41,9 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// </summary>
     public string WriteScope => Scope.AlertsReadWrite;
 
-    /// <summary>
-    /// Deadline for the demo service's ui-settings read. The demo service is co-deployed and answers
-    /// this route from memory, so anything slower than a few seconds is a hang, and the demo tenant
-    /// has fixtures to fall back on. The unnamed <see cref="IHttpClientFactory"/> client carries no
-    /// resilience handler, so without a deadline a hung demo service would hold the request open for
-    /// <see cref="HttpClient"/>'s 100-second default.
-    /// </summary>
-    internal static readonly TimeSpan DemoServiceProxyTimeout = TimeSpan.FromSeconds(3);
-
     private readonly ILogger<UISettingsController> _logger;
     private readonly IDemoModeService _demoMode;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly DemoUISettingsProxy _demoSettings;
     private readonly IUISettingsService _settingsService;
 
     /// <summary>
@@ -58,18 +51,18 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// </summary>
     /// <param name="logger">Logger instance.</param>
     /// <param name="demoMode">Owner of whether this deployment is a demo, and of the demo service URL.</param>
-    /// <param name="httpClientFactory">Factory for creating HTTP clients to proxy demo service calls.</param>
+    /// <param name="demoSettings">The demo service's ui-settings, served in demo mode.</param>
     /// <param name="settingsService">Service for persisting and retrieving UI settings.</param>
     public UISettingsController(
         ILogger<UISettingsController> logger,
         IDemoModeService demoMode,
-        IHttpClientFactory httpClientFactory,
+        DemoUISettingsProxy demoSettings,
         IUISettingsService settingsService
     )
     {
         _logger = logger;
         _demoMode = demoMode;
-        _httpClientFactory = httpClientFactory;
+        _demoSettings = demoSettings;
         _settingsService = settingsService;
     }
 
@@ -116,39 +109,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
         try
         {
             if (_demoMode.IsEnabled)
-            {
-                if (_demoMode.IsConfigured)
-                {
-                    try
-                    {
-                        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
-                            cancellationToken
-                        );
-                        deadline.CancelAfter(DemoServiceProxyTimeout);
-
-                        var httpClient = _httpClientFactory.CreateClient();
-                        var response = await httpClient.GetFromJsonAsync<UISettingsConfiguration>(
-                            $"{_demoMode.ServiceUrl?.TrimEnd('/')}/ui-settings",
-                            deadline.Token
-                        );
-
-                        if (response != null)
-                        {
-                            _logger.LogDebug("Successfully fetched UI settings from demo service");
-                            return Ok(response);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(
-                            ex,
-                            "Failed to fetch UI settings from demo service, falling back to defaults"
-                        );
-                    }
-                }
-
-                return Ok(GenerateDemoSettings());
-            }
+                return Ok(await _demoSettings.GetAsync(cancellationToken) ?? GenerateDemoSettings());
 
             // Read what was persisted by SaveUISettings; the service falls back to
             // defaults when the tenant has never saved. Returning freshly generated
@@ -156,10 +117,9 @@ public class UISettingsController : ControllerBase, IWriteScopedController
             // next load, so every settings page appeared to revert on reload.
             //
             // A null is a read the service could not make. Serving defaults instead would not
-            // merely mislead the reader: saving one section is a read-modify-write over this body
-            // (saveUiSettingsSection), so a defaults document handed out here is written back over
-            // every section the tenant owns. 503 keeps that write from ever being composed, and
-            // says the condition is transient.
+            // merely mislead the reader: a client that saves the whole document writes a defaults
+            // document handed out here back over every section the tenant owns. 503 keeps that
+            // write from ever being composed, and says the condition is transient.
             var settings = await _settingsService.GetSettingsAsync(cancellationToken);
             if (settings == null)
             {
@@ -265,40 +225,119 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     }
 
     /// <summary>
-    /// Save notification settings including alarm configuration.
+    /// Patch the notifications section by JSON merge-patch (RFC 7386). Its alarm configuration is
+    /// the one the <c>notifications/alarms</c> routes serve, and a list in a patch replaces the
+    /// stored list whole.
     /// </summary>
-    /// <param name="settings">The notification settings to save</param>
+    /// <param name="settings">
+    /// The fields to change: only the properties present in the body are applied, the rest of the
+    /// stored section is kept. A key must be the exact, case-sensitive name of a property of the
+    /// section, at any depth. A <c>null</c> resets a nullable property to its default, and is
+    /// refused on any other property.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The saved notification settings</returns>
-    [HttpPut("notifications")]
+    /// <returns>The notification settings after the patch</returns>
+    [HttpPatch("notifications")]
     [RequireDeclaredWriteScope]
+    [BufferRequestBody]
     [ProducesResponseType(typeof(NotificationSettings), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<NotificationSettings>> SaveNotificationSettings(
+    public Task<ActionResult<NotificationSettings>> PatchNotificationSettings(
         [FromBody] NotificationSettings settings,
         CancellationToken cancellationToken = default
-    )
+    ) => PatchSection<NotificationSettings>(UISettingsSections.Notifications, cancellationToken);
+
+    /// <summary>
+    /// Patch the features section by JSON merge-patch (RFC 7386). Every other section row is left
+    /// as it is.
+    /// </summary>
+    /// <param name="settings">
+    /// The fields to change: only the properties present in the body are applied, the rest of the
+    /// stored section is kept. A key must be the exact, case-sensitive name of a property of the
+    /// section, at any depth. A <c>null</c> resets a nullable property to its default, and is
+    /// refused on any other property.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The feature settings after the patch</returns>
+    [HttpPatch("features")]
+    [RequireDeclaredWriteScope]
+    [BufferRequestBody]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(FeatureSettings), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(500)]
+    public Task<ActionResult<FeatureSettings>> PatchFeatureSettings(
+        [FromBody] FeatureSettings settings,
+        CancellationToken cancellationToken = default
+    ) => PatchSection<FeatureSettings>(UISettingsSections.Features, cancellationToken);
+
+    /// <summary>
+    /// Patch the data quality section by JSON merge-patch (RFC 7386). Every other section row is
+    /// left as it is.
+    /// </summary>
+    /// <param name="settings">
+    /// The fields to change: only the properties present in the body are applied, the rest of the
+    /// stored section is kept. A key must be the exact, case-sensitive name of a property of the
+    /// section, at any depth. A <c>null</c> resets a nullable property to its default, and is
+    /// refused on any other property.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The data quality settings after the patch</returns>
+    [HttpPatch("dataQuality")]
+    [RequireDeclaredWriteScope]
+    [BufferRequestBody]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(DataQualitySettings), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(500)]
+    public Task<ActionResult<DataQualitySettings>> PatchDataQualitySettings(
+        [FromBody] DataQualitySettings settings,
+        CancellationToken cancellationToken = default
+    ) => PatchSection<DataQualitySettings>(UISettingsSections.DataQuality, cancellationToken);
+
+    /// <summary>
+    /// The bound body only types the request: it fills every property the body leaves out with its
+    /// default, so the patch is taken from the buffered JSON, where an absent property is absent.
+    /// </summary>
+    private async Task<ActionResult<T>> PatchSection<T>(string section, CancellationToken cancellationToken)
+        where T : class
     {
-        _logger.LogDebug("Saving notification settings");
+        _logger.LogDebug("Patching {Section} settings", section);
 
         try
         {
+            Request.Body.Position = 0;
+            // Decoded with the request's charset, as the typed binder decodes it.
+            var patch = await Request.ReadFromJsonAsync<JsonElement>(cancellationToken);
+
             if (_demoMode.IsEnabled)
             {
-                return Ok(settings);
+                var shown = await ReadUISettings(cancellationToken);
+                if (shown.Result is not OkObjectResult { Value: UISettingsConfiguration config })
+                    return shown.Result ?? StatusCode(500);
+
+                return Ok(
+                    _settingsService.PreviewPatch(
+                        section,
+                        UISettingsSections.Find(section)!.Get(config) as T,
+                        patch
+                    )
+                );
             }
 
-            var savedSettings = await _settingsService.SaveNotificationSettingsAsync(
-                settings,
-                cancellationToken
+            return Ok(
+                await _settingsService.PatchSectionAsync<T>(section, patch, cancellationToken)
             );
-            return Ok(savedSettings);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: $"Invalid {section} patch: {ex.Message}", statusCode: 400, title: "Bad Request");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving notification settings");
-            return Problem(detail: "Failed to save notification settings", statusCode: 500, title: "Internal Server Error");
+            _logger.LogError(ex, "Error patching {Section} settings", section);
+            return Problem(detail: $"Failed to save {section} settings", statusCode: 500, title: "Internal Server Error");
         }
     }
 
@@ -408,33 +447,8 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 );
             }
 
-            var config = await _settingsService.GetAlarmConfigurationAsync(cancellationToken);
-            if (config == null)
-            {
-                return AlarmConfigurationUnavailable();
-            }
-
-            config.Profiles ??= [];
-
-            // A blank id would match every other blank-id profile on the next upsert, so the
-            // list could never hold more than one of them.
-            if (string.IsNullOrWhiteSpace(profile.Id))
-            {
-                profile.Id = Guid.CreateVersion7().ToString();
-            }
-
-            var existing = config.Profiles.FindIndex(p => p.Id == profile.Id);
-            if (existing >= 0)
-            {
-                config.Profiles[existing] = profile;
-            }
-            else
-            {
-                config.Profiles.Add(profile);
-            }
-
             return Ok(
-                await _settingsService.SaveAlarmConfigurationAsync(config, cancellationToken)
+                await _settingsService.AddOrUpdateAlarmProfileAsync(profile, cancellationToken)
             );
         }
         catch (Exception ex)
@@ -471,26 +485,18 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 );
             }
 
-            var config = await _settingsService.GetAlarmConfigurationAsync(cancellationToken);
-            if (config == null)
-            {
-                return AlarmConfigurationUnavailable();
-            }
+            var config = await _settingsService.DeleteAlarmProfileAsync(
+                profileId,
+                cancellationToken
+            );
 
-            config.Profiles ??= [];
-
-            if (config.Profiles.RemoveAll(p => p.Id == profileId) == 0)
-            {
-                return Problem(
+            return config == null
+                ? Problem(
                     detail: $"Alarm profile not found: {profileId}",
                     statusCode: 404,
                     title: "Not Found"
-                );
-            }
-
-            return Ok(
-                await _settingsService.SaveAlarmConfigurationAsync(config, cancellationToken)
-            );
+                )
+                : Ok(config);
         }
         catch (Exception ex)
         {
@@ -501,8 +507,8 @@ public class UISettingsController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// <see cref="IUISettingsService.GetAlarmConfigurationAsync"/> normalizes every successful read
-    /// to a configuration, so null means the read failed. Substituting a value here would let the
-    /// following write replace the tenant's profiles.
+    /// to a configuration, so null means the read failed. Substituting a value here would serve a
+    /// tenant with profiles an empty list.
     /// </summary>
     private ObjectResult AlarmConfigurationUnavailable()
     {

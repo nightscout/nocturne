@@ -6,7 +6,7 @@ import { CoachMarkContext, type CoachMarkAdapter } from "@nocturne/coach";
 import { coachCopy, coachLabels } from "./copy.svelte";
 import { ONBOARDING_CORE_GATE, sequences } from "./sequences";
 
-vi.mock("$app/paths", () => ({ resolve: (path: string) => path }));
+vi.mock("$app/paths", () => import("#lib/test-stubs/app-paths.js"));
 
 const SRC = fileURLToPath(new URL("../..", import.meta.url));
 const TOUR = "tracker-intro";
@@ -34,7 +34,6 @@ const TARGETS: Record<string, string> = {
   "tracker-intro.settings": join(
     "routes",
     "(authenticated)",
-    "settings",
     "trackers",
     "+page.svelte"
   ),
@@ -154,7 +153,8 @@ describe("a run of the tracker introduction", () => {
       2000,
       () => ({
         [ONBOARDING_CORE_GATE]: true,
-      })
+      }),
+      () => "member"
     );
     await context.initialize();
     return context;

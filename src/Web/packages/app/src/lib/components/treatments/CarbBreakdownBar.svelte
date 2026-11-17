@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { washInterior } from '$lib/watercolour-wash';
-  import type { TreatmentFood } from "$lib/api";
-  import { cn } from "$lib/utils";
+  import { washInterior } from '#lib/watercolour-wash.js';
+  import type { TreatmentFood } from "#lib/api/index.js";
+  import { cn } from "#lib/utils/index.js";
   import { BarChart } from "layerchart";
   import { untrack } from "svelte";
   import { Artwork, seedFromName } from "water-ui";

@@ -3,7 +3,7 @@ title: Data Quality
 ---
 
 <script>
-  import Video from '$lib/components/docs/Video.svelte';
+  import Video from '#lib/components/docs/Video.svelte';
 </script>
 
 # Data Quality
@@ -61,7 +61,7 @@ To review a possible compression low:
 4. Select **Accept** if it is a false low from pressure on the sensor.
 5. Select **Dismiss** if it is a real low.
 
-Each item has a **Confidence** badge: **High**, **Medium** or **Low**. Use the
+Each item has a **Confidence** badge: **High** or **Medium**. Use the
 status menu above the list to show **All**, **Pending**, **Accepted** or
 **Dismissed** items.
 

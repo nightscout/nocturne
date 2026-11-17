@@ -3,10 +3,10 @@
   import { DropSurface } from "water-ui";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Check from "@lucide/svelte/icons/check";
-  import { Badge } from "$lib/components/ui/badge";
-  import { SetupHubItemState, type SetupHubItem } from "$api";
-  import { setupHubItems } from "$lib/setup-hub/items.svelte";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { SetupHubItemState, type SetupHubItem } from "#lib/api/index.js";
+  import { setupHubItems } from "#lib/setup-hub/items.svelte.js";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   let { item, voice }: { item: SetupHubItem; voice: PatientVoice } = $props();
 

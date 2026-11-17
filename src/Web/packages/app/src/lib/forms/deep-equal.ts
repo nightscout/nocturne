@@ -3,7 +3,7 @@
  * Designed for comparing Zod-schema-shaped form values — not a general-purpose utility.
  * Treats undefined values and missing keys as equivalent.
  */
-import { isRecord } from "$lib/utils/type-guards";
+import { isRecord } from "#lib/utils/type-guards.js";
 
 export function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { relativeAge, time } from "$lib/utils/formatting";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { relativeAge, time } from "#lib/utils/formatting.js";
 
   interface Props {
     /**

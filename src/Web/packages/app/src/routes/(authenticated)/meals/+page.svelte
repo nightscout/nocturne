@@ -1,34 +1,34 @@
 <script lang="ts">
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { distinct, groupBy, toggled } from "$lib/utils/collections";
-  import { startOfDay, toDayString } from "$lib/utils/date-range";
-  import { formatLongDate } from "$lib/utils/formatting";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { distinct, groupBy, toggled } from "#lib/utils/collections.js";
+  import { startOfDay, toDayString } from "#lib/utils/date-range.js";
+  import { formatLongDate } from "#lib/utils/formatting.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import type {
     MealEvent,
     TreatmentFood,
     CarbIntakeFoodRequest,
     SuggestedMealMatch,
-  } from "$lib/api";
-  import { getMeals, addCarbIntakeFood, deleteCarbIntakeFood } from "$api/generated/nutritions.generated.remote";
-  import { getSuggestions as getMealMatchingSuggestions, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
+  } from "#lib/api/index.js";
+  import { getMeals, addCarbIntakeFood, deleteCarbIntakeFood } from "#lib/api/generated/nutritions.generated.remote.js";
+  import { getSuggestions as getMealMatchingSuggestions, acceptMatch, dismissMatch } from "#lib/api/generated/mealMatchings.generated.remote.js";
   import { toast } from "svelte-sonner";
-  import { toastSaved, useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "#lib/forms/index.js";
   import {
     TreatmentFoodSelectorDialog,
     TreatmentFoodEntryEditDialog,
-  } from "$lib/components/treatments";
-  import { getMealNameForTime } from "$lib/constants/meal-times";
-  import { MealMatchReviewDialog } from "$lib/components/meal-matching";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import MealsFilterBar from "$lib/components/meals/MealsFilterBar.svelte";
-  import MealsTable from "$lib/components/meals/MealsTable.svelte";
-  import MealBolusDialog from "$lib/components/meals/MealBolusDialog.svelte";
+  } from "#lib/components/treatments/index.js";
+  import { getMealNameForTime } from "#lib/constants/meal-times.js";
+  import { MealMatchReviewDialog } from "#lib/components/meal-matching/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import MealsFilterBar from "#lib/components/meals/MealsFilterBar.svelte";
+  import MealsTable from "#lib/components/meals/MealsTable.svelte";
+  import MealBolusDialog from "#lib/components/meals/MealBolusDialog.svelte";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import { localDayStart, localDayEnd } from "$lib/utils/timezone";
-  import { toIsoString } from "$lib/utils/api-date";
-  import { Now } from "$lib/hooks/now.svelte";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import { localDayStart, localDayEnd } from "#lib/utils/timezone.js";
+  import { toIsoString } from "#lib/utils/api-date.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
 
   let dateRange = $state<{ from?: string; to?: string }>({});
   let filterMode = $state<"all" | "unattributed">("all");
@@ -347,12 +347,6 @@
       toast.error(describeSubmitError(err, "Failed to dismiss match"));
     }
   }
-
-  function handleReviewComplete() {
-    reviewMatch = null;
-    mealsQuery?.refresh();
-    suggestionsQuery.refresh();
-  }
 </script>
 
 <svelte:head>
@@ -466,7 +460,6 @@
     if (!value) reviewMatch = null;
   }}
   match={reviewMatch}
-  onComplete={handleReviewComplete}
   onAccepted={markMatched}
 />
 

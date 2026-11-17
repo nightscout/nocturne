@@ -5,7 +5,7 @@
   and the clamp note says so instead.
 -->
 <script lang="ts">
-  import * as Alert from "$lib/components/ui/alert";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import FilterX from "@lucide/svelte/icons/funnel-x";
   import { ignoredFilterLabel } from "./filter-labels.svelte";
 

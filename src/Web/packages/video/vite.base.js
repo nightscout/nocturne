@@ -72,17 +72,17 @@ export function baseConfig({ out, content, aliases = [], compilerOptions }) {
     resolve: {
       dedupe: ["svelte", "layerchart"],
       alias: [
-        { find: "$app/environment", replacement: stub("app-environment.ts") },
+        // Before `$app/env`, which would otherwise match them as a prefix.
+        { find: /^\$app\/env\/(private|public)$/, replacement: stub("app-env-vars.ts") },
+        { find: "$app/env", replacement: stub("app-environment.ts") },
         // A film's own: reactive, so a page that keeps state in its URL re-renders, and never navigating.
         { find: "$app/navigation", replacement: here("src/replay/app-navigation.js") },
         { find: "$app/paths", replacement: stub("app-paths.ts") },
         { find: "$app/server", replacement: stub("app-server.ts") },
         { find: "$app/state", replacement: here("src/replay/app-state.svelte.js") },
         { find: "@sveltejs/kit", replacement: stub("sveltekit.ts") },
-        { find: "$api-clients", replacement: `${app}src/lib/api/generated/nocturne-api-client` },
+        // This package's own sources reach into the app's lib; the app's files use its `#lib`.
         { find: "$lib", replacement: `${app}src/lib` },
-        { find: "$api", replacement: `${app}src/lib/api` },
-        { find: "$routes", replacement: `${app}src/routes` },
         ...aliases,
       ],
     },

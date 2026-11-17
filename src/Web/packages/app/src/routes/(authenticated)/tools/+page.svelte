@@ -5,7 +5,7 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import Luggage from "@lucide/svelte/icons/luggage";
 </script>
 
@@ -16,7 +16,7 @@
   </div>
 
   <div class="grid gap-4 @xl:grid-cols-2">
-    <a href={resolve("/tools/packing")} class="block">
+    <a href={resolve('tools/packing')} class="block">
       <Card interactive class="h-full cursor-pointer">
         <CardHeader>
           <div class="flex items-center gap-3">

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Tidepool.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 using Nocturne.Connectors.Core.Utilities;
 
@@ -11,20 +10,20 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
     private readonly string _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public IEnumerable<SensorGlucose> MapBgValues(TidepoolBgValue[]? bgValues)
+    public IEnumerable<SensorGlucose> MapBgValues(TidepoolBgValue[]? bgValues, DateTime now)
     {
         if (bgValues == null || bgValues.Length == 0) return [];
 
         return ConnectorFaults.NonNullRecords(bgValues, _logger, _connectorSource, "Tidepool BG value")
             .Where(bg => bg.Value > 0 && bg.Time.HasValue)
-            .Select(ConvertBgValue)
+            .Select(bg => ConvertBgValue(bg, now))
             .Where(sg => sg != null)
             .Cast<SensorGlucose>()
             .OrderBy(sg => sg.Mills)
             .ToList();
     }
 
-    private SensorGlucose? ConvertBgValue(TidepoolBgValue bgValue)
+    private SensorGlucose? ConvertBgValue(TidepoolBgValue bgValue, DateTime now)
     {
         try
         {
@@ -32,7 +31,6 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
             if (mgdl <= 0) return null;
 
             var timestamp = bgValue.Time!.Value.ToUniversalTime();
-            var now = DateTime.UtcNow;
 
             return new SensorGlucose
             {
@@ -53,14 +51,6 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
         }
     }
 
-    internal static double ConvertToMgdl(double value, string units)
-    {
-        if (string.IsNullOrEmpty(units)) return value;
-        return units.ToLowerInvariant() switch
-        {
-            "mmol/l" or "mmol" => value * GlucoseConstants.MgdlPerMmol,
-            "mg/dl" => value,
-            _ => value
-        };
-    }
+    internal static double ConvertToMgdl(double value, string? units) =>
+        GlucoseUnits.ToMgdl(value, GlucoseUnits.Parse(units) ?? GlucoseUnit.MgDl);
 }

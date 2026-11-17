@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Extensions;
@@ -9,7 +10,9 @@ using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -40,7 +43,7 @@ public class TrackersControllerTenantAccessTests
     {
         _alerts
             .Setup(a => a.GetUnacknowledgedExcursionIdsAsync(
-                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(
@@ -59,6 +62,10 @@ public class TrackersControllerTenantAccessTests
             _alerts.Object,
             Mock.Of<ITenantAccessor>(),
             Mock.Of<IAlertAcknowledgementService>(),
+            new TrackerDeviceEventWriter(
+                Mock.Of<IDeviceEventRepository>(),
+                Mock.Of<IPatientDeviceStamper>(),
+                NullLogger<TrackerDeviceEventWriter>.Instance),
             Mock.Of<ILogger<TrackersController>>()
         );
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };

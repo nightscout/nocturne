@@ -5,16 +5,16 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Globe from "@lucide/svelte/icons/globe";
   import Bell from "@lucide/svelte/icons/bell";
-  import { browser } from "$app/environment";
-  import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
-  import { getDefaultSettings } from "$lib/components/settings/constants";
+  import { browser } from "$app/env";
+  import type { TitleFaviconSettings } from "#lib/stores/serverSettings.js";
+  import { getDefaultSettings } from "#lib/components/settings/constants.js";
 
   // Local storage key
   const STORAGE_KEY = "nocturne-title-favicon-settings";

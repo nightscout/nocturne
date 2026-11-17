@@ -1,6 +1,7 @@
-import { DayOfWeek, LoopAnalysisComparison } from "$lib/api";
-import type { getDailyProfile } from "$api/generated/loopAnalysis.generated.remote";
-import { isDayString } from "$lib/utils/date-range";
+import { DayOfWeek, LoopAnalysisComparison } from "#lib/api/index.js";
+import type { getDailyProfile } from "#lib/api/generated/loopAnalysis.generated.remote.js";
+import { isDayString } from "#lib/utils/date-range.js";
+import type { ReadonlyURLSearchParams } from "$app/state";
 
 type DailyProfileQuery = Parameters<typeof getDailyProfile>[0];
 
@@ -70,7 +71,7 @@ export function toWeekdays(values: readonly (string | number)[]): DayOfWeek[] {
   return WEEKDAYS.filter((day) => picked.has(day));
 }
 
-export function readLoopAnalysisFilter(search: URLSearchParams): LoopAnalysisFilterState {
+export function readLoopAnalysisFilter(search: ReadonlyURLSearchParams): LoopAnalysisFilterState {
   const compareFrom = search.get("compareFrom");
   const compareTo = search.get("compareTo");
 
@@ -96,9 +97,9 @@ export function readLoopAnalysisFilter(search: URLSearchParams): LoopAnalysisFil
  */
 export function writeLoopAnalysisFilter(
   filter: LoopAnalysisFilterState,
-  search: URLSearchParams
+  search: ReadonlyURLSearchParams
 ): URLSearchParams {
-  const next = new URLSearchParams(search);
+  const next = new URLSearchParams(search.toString());
   for (const name of FILTER_PARAM_NAMES) next.delete(name);
 
   if (filter.compare !== LoopAnalysisComparison.None) next.set("compare", filter.compare.toLowerCase());

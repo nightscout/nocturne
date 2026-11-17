@@ -5,6 +5,7 @@ export { default as COBPill } from './COBPill.svelte';
 export { default as BasalPill } from './BasalPill.svelte';
 export { default as LoopPill } from './LoopPill.svelte';
 export { default as ReservoirPill } from './ReservoirPill.svelte';
+export { default as LinkBatteryPill } from './LinkBatteryPill.svelte';
 export { default as StatusPillBar } from './StatusPillBar.svelte';
 export { default as TrackerPill } from './TrackerPill.svelte';
 export { default as TrackerPillBar } from './TrackerPillBar.svelte';
@@ -21,6 +22,6 @@ export type {
 	LoopStatusCode,
 	StatusPillsConfig,
 	PillType
-} from '$lib/types/status-pills';
+} from '#lib/types/status-pills.js';
 
-export { DEFAULT_PILLS_CONFIG } from '$lib/types/status-pills';
+export { DEFAULT_PILLS_CONFIG } from '#lib/types/status-pills.js';

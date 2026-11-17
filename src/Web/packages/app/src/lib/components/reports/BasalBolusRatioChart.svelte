@@ -2,10 +2,10 @@
   import { Axis, BarChart, Points, Spline, Tooltip } from "layerchart";
   import { scaleLinear } from "d3-scale";
   import { carbAxisMax as niceCarbAxisMax, carbsOnInsulinScale } from "./carb-axis";
-  import { EmptyState } from "$lib/components/shared";
-  import { dashClass, patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import type { DailyBasalBolusRatioData, DailyBasalBolusRatioResponse } from "$lib/api";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { dashClass, patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import type { DailyBasalBolusRatioData, DailyBasalBolusRatioResponse } from "#lib/api/index.js";
 
   interface Props {
     /** Optional pre-loaded ratio data */

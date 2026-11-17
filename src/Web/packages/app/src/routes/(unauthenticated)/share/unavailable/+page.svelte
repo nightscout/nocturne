@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DeadEndCard } from "$lib/components/shared";
+  import { DeadEndCard } from "#lib/components/shared/index.js";
   import Link2Off from "@lucide/svelte/icons/link-2-off";
 </script>
 

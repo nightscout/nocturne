@@ -1,16 +1,16 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { EmptyState } from "$lib/components/shared";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import FormError from "$lib/forms/FormError.svelte";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
+  import PermissionSummary from "#lib/components/rbac/PermissionSummary.svelte";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import FormError from "#lib/forms/FormError.svelte";
   import Shield from "@lucide/svelte/icons/shield";
   import Ban from "@lucide/svelte/icons/ban";
   import Plus from "@lucide/svelte/icons/plus";
@@ -20,14 +20,13 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Users from "@lucide/svelte/icons/users";
   import Lock from "@lucide/svelte/icons/lock";
-  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import {
     getRoles,
     createRole,
     updateRole,
     deleteRole,
-  } from "$lib/api/generated/roles.generated.remote";
-  import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/roles.generated.remote.js";
+  import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
 
   // Query
   const rolesQuery = getRoles();
@@ -68,13 +67,11 @@
 
   // Messages
   let dialogError = $state<string | null>(null);
-  let errorMessage = $state<string | null>(null);
   let successMessage = $state<{ text: string; wash: boolean } | null>(null);
 
   function clearMessages() {
     setTimeout(() => {
       successMessage = null;
-      errorMessage = null;
     }, 3000);
   }
 
@@ -108,8 +105,14 @@
     deleteId = role.id ?? "";
     deleteName = role.name ?? "";
     deleteMemberCount = role.memberCount ?? 0;
+    dialogError = null;
     isDeleteOpen = true;
   }
+
+  const nameProblems = {
+    role_name_taken: "A role with this name already exists. Use a different name.",
+    role_name_reserved: "This name is reserved. Use a different name.",
+  };
 
   async function handleCreate() {
     isCreating = true;
@@ -124,7 +127,7 @@
       resetCreateForm();
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to create role. Try again.");
+      dialogError = describeSubmitError(err, "Failed to create role. Try again.", nameProblems);
     } finally {
       isCreating = false;
     }
@@ -146,7 +149,7 @@
       isEditOpen = false;
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to update role. Try again.");
+      dialogError = describeSubmitError(err, "Failed to update role. Try again.", nameProblems);
     } finally {
       isEditing = false;
     }
@@ -154,15 +157,14 @@
 
   async function handleDelete() {
     isDeleting = true;
-    errorMessage = null;
+    dialogError = null;
     try {
       await deleteRole(deleteId);
       successMessage = { text: "Role deleted successfully.", wash: false };
       isDeleteOpen = false;
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to delete role. Try again.");
-      clearMessages();
+      dialogError = describeSubmitError(err, "Failed to delete role. Try again.");
     } finally {
       isDeleting = false;
     }
@@ -180,13 +182,6 @@
       Create role
     </Button>
   </div>
-
-  {#if errorMessage}
-    <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-      <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-      <p class="text-sm text-destructive">{errorMessage}</p>
-    </div>
-  {/if}
 
   {#if successMessage}
     <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
@@ -237,6 +232,7 @@
               <Button
                 variant="outline-destructive"
                 size="sm"
+                aria-label="Delete role"
                 onclick={() => openDeleteDialog(role)}
               >
                 <Trash2 class="h-3.5 w-3.5" />
@@ -351,6 +347,7 @@
 <!-- Delete Role Confirmation -->
 <ConfirmDialog
   bind:open={isDeleteOpen}
+  destructive
   title="Delete role"
   confirmLabel="Delete"
   busy={isDeleting}
@@ -363,4 +360,5 @@
       They will lose any permissions granted by this role.
     {/if}
   {/snippet}
+  <FormError issues={dialogError} focusOnShow />
 </ConfirmDialog>

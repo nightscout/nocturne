@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models.Battery;
@@ -71,6 +72,15 @@ public class BatteryReading
     [JsonPropertyName("notification")]
     public string? Notification { get; set; }
 
+    /// <summary>
+    /// Volts to three places with a "v" suffix; a value above 1000 is millivolts.
+    /// </summary>
+    public static string FormatVoltage(double voltage)
+    {
+        var volts = voltage > 1000 ? voltage / 1000 : voltage;
+        return volts.ToString("F3", CultureInfo.InvariantCulture) + "v";
+    }
+
     private string GetDisplayValue()
     {
         var chargeIndicator = IsCharging ? "⚡" : "";
@@ -82,8 +92,7 @@ public class BatteryReading
 
         if (Voltage.HasValue)
         {
-            var displayVoltage = Voltage.Value > 1000 ? Voltage.Value / 1000 : Voltage.Value;
-            return $"{displayVoltage:F3}v{chargeIndicator}";
+            return $"{FormatVoltage(Voltage.Value)}{chargeIndicator}";
         }
 
         return $"?%{chargeIndicator}";

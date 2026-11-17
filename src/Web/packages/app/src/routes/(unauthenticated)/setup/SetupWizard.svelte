@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -9,31 +9,29 @@
   import Sprout from "@lucide/svelte/icons/sprout";
   import Cable from "@lucide/svelte/icons/cable";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { markSetupComplete } from "./setup.remote";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Progress } from "$lib/components/ui/progress";
-  import {
-    getServicesOverview,
-    getActiveDataSources,
-    getUploaderSetup,
-  } from "$api/generated/services.generated.remote";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Progress } from "#lib/components/ui/progress/index.js";
+  import { getServicesOverview, getActiveDataSources, getUploaderSetup } from "#lib/api/generated/services.generated.remote.js";
+
   import {
     getPatientRelationship,
     setPatientRelationship,
     getUnitsAndTimezone,
     setUnitsAndTimezone,
-  } from "$api/generated/tenantSettings.generated.remote";
-  import { applyPreferences, type GlucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { isGlucoseUnits } from "$lib/utils/formatting";
-  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
+  } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { applyPreferences, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { isGlucoseUnits } from "#lib/utils/formatting.js";
+  import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
   import { startOrResumeMigration } from "./migration-session";
-  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+  import { watchImport } from "#lib/migration/background-import.svelte.js";
+  import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
   import type {
     UploaderApp,
     DataSourceInfo,
     PatientRelationship,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
 
   import StepSidebar from "./StepSidebar.svelte";
   import SetupChrome from "./SetupChrome.svelte";
@@ -43,16 +41,16 @@
   import UnitsAndTimezone from "./steps/UnitsAndTimezone.svelte";
   import PathChoice from "./steps/PathChoice.svelte";
   import NightscoutConnect from "./steps/NightscoutConnect.svelte";
-  import DataSourceSelectionView from "$lib/components/connectors/DataSourceSelectionView.svelte";
-  import ConnectorSetup from "$lib/components/connectors/ConnectorSetup.svelte";
-  import UploaderSetupView from "$lib/components/connectors/UploaderSetupView.svelte";
+  import DataSourceSelectionView from "#lib/components/connectors/DataSourceSelectionView.svelte";
+  import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
+  import UploaderSetupView from "#lib/components/connectors/UploaderSetupView.svelte";
   import ImportProgress from "./steps/ImportProgress.svelte";
   import Finish, {
     type ImportResult,
     type SourceResult,
   } from "./steps/Finish.svelte";
   import StepArtwork, { type StepArt } from "./StepArtwork.svelte";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
   // Auth check is handled server-side in +page.server.ts:
   // - setupRequired=true → show two-step setup (tenant identity → account creation)
@@ -216,12 +214,7 @@
   );
   const activeIndex = $derived(setupRequired ? setupStepIndex : stepIndex);
   const activeStep = $derived(activeSteps[activeIndex]);
-  const progressPct = $derived(
-    activeSteps.length <= 1
-      ? 100
-      : (activeIndex / (activeSteps.length - 1)) * 100
-  );
-
+  const progressPct = $derived(activeSteps.length <= 1 ? 100 : activeIndex / (activeSteps.length - 1) * 100);
   let stepCard = $state<HTMLElement>();
   let shownStepId: string | undefined;
 
@@ -356,7 +349,7 @@
 
   async function handleExitSetup() {
     await markSetupComplete();
-    await goto(resolve("/"), { invalidateAll: true });
+    await goto(resolve(""), { refreshAll: true });
   }
 
   // The core ends on the setup hub, which /setup serves only once the server has recorded the
@@ -369,13 +362,13 @@
       continueFailed = true;
       return;
     }
-    await goto(resolve("/setup"), { invalidateAll: true });
+    await goto(resolve('setup'), { refreshAll: true });
   }
 
   async function handleTakeTour() {
     await markSetupComplete();
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved dashboard route plus a ?coach= param
-    await goto(`${resolve("/")}?coach=quick-tour`, { invalidateAll: true });
+    await goto(`${resolve("")}?coach=quick-tour`, { refreshAll: true });
   }
 
   function handleSelectConnector(id: string) {
@@ -417,13 +410,45 @@
     if (path !== "migration" || !nightscoutConnected) return;
     try {
       migrationStartError = undefined;
+      migrationJobId = undefined;
+      importResult = null;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
+      // The app follows the run from here, whichever way setup is left.
+      if (migrationJobId) watchImport(migrationJobId);
     } catch (err) {
       // Every 400 from start-from-connector means the saved connector is missing or has no URL.
       migrationStartError =
         errorStatus(err) === 400
           ? "Your Nightscout connection is not saved yet."
           : describeSubmitError(err, "Could not start the import. Try again.");
+    }
+  }
+
+  // The recent data is in, so the app has something to show: setup ends on the dashboard, where
+  // the app's own notice follows the rest of the run. Where the server cannot record setup as
+  // finished, the finish step says the same and offers the retry.
+  async function handleRecentDataReady() {
+    const result = await markSetupComplete().catch(() => undefined);
+    if (!result?.completed) {
+      goToFinish();
+      return;
+    }
+    await goto(resolve(""), { refreshAll: true });
+  }
+
+  // Counts the runs this visit to the step has watched, so a retry mounts a fresh ImportProgress.
+  let importAttempt = $state(0);
+  let retryingImport = $state(false);
+
+  async function retryImport() {
+    retryingImport = true;
+    try {
+      await startImport();
+      importSettled = false;
+      importProgress = 0;
+      importAttempt++;
+    } finally {
+      retryingImport = false;
     }
   }
 </script>
@@ -476,7 +501,7 @@
             path={setupRequired ? "fresh" : path}
             currentStep={activeIndex}
             steps={activeSteps}
-            {voice}
+            voice={voice}
             onJumpToStep={handleJumpToStep}
           />
         </aside>
@@ -488,13 +513,11 @@
           <div
             class="flex items-center justify-between flex-wrap gap-2.5 px-4 py-3.5 @xl/card:px-7 @xl/card:py-5 border-b"
           >
-            <div class="flex items-center gap-3 text-xs text-muted-foreground">
-              <span class="font-mono uppercase tracking-wide">
-                Step {String(activeIndex + 1).padStart(2, "0")} / {String(
-                  activeSteps.length
-                ).padStart(2, "0")}
-              </span>
-              <span aria-hidden="true">&middot;</span>
+            <div
+              class="flex items-center gap-3 text-xs text-muted-foreground"
+            >
+              <span class="font-mono uppercase tracking-wide">Step {String(activeIndex + 1).padStart(2, "0")} / {String(activeSteps.length).padStart(2, "0")}</span>
+              <span aria-hidden="true">·</span>
               <span>{activeStep?.short}</span>
             </div>
             <div class="flex items-center gap-3">
@@ -529,27 +552,20 @@
               <AccountCreation onComplete={handleAccountCreated} />
             {:else if activeStep?.id === "who"}
               <WhoFor
-                bind:relationship={
-                  () => relationship, (value) => (chosenRelationship = value)
-                }
-                bind:patientName={
-                  () => patientName, (value) => (chosenName = value)
-                }
+                bind:relationship={() => relationship, (value) => chosenRelationship = value}
+                bind:patientName={() => patientName, (value) => chosenName = value}
                 error={relationshipError}
               />
             {:else if activeStep?.id === "path"}
-              <PathChoice bind:path {voice} />
+              <PathChoice bind:path voice={voice} />
             {:else if activeStep?.id === "units"}
               <UnitsAndTimezone
-                bind:units={() => units, (value) => (chosenUnits = value)}
-                bind:timezone={
-                  () => timezone, (value) => (chosenTimezone = value)
-                }
-                timezoneDetected={chosenTimezone === undefined &&
-                  !unitsAnswer?.timezone}
+                bind:units={() => units, (value) => chosenUnits = value}
+                bind:timezone={() => timezone, (value) => chosenTimezone = value}
+                timezoneDetected={chosenTimezone === undefined && !unitsAnswer?.timezone}
                 nightscout={unitsAnswer?.nightscout}
                 nightscoutUnavailable={unitsAnswer?.nightscoutUnavailable}
-                {voice}
+                voice={voice}
                 error={unitsError}
               />
             {:else if activeStep?.id === "connect"}
@@ -582,8 +598,8 @@
                   </p>
                 </div>
                 <DataSourceSelectionView
-                  {connectors}
-                  {uploaderApps}
+                  connectors={connectors}
+                  uploaderApps={uploaderApps}
                   dataSources={activeDataSources}
                   isLoading={servicesLoading}
                   loadError={null}
@@ -647,23 +663,26 @@
                 {/if}
               </div>
             {:else if activeStep?.id === "import"}
-              <ImportProgress
-                jobId={migrationJobId}
-                startError={migrationStartError}
-                {voice}
-                onProgressChange={(pct) => (importProgress = pct)}
-                onResult={(result) => (importResult = result)}
-                onSettled={() => (importSettled = true)}
-                onComplete={goToFinish}
-              />
+              {#key importAttempt}
+                <ImportProgress
+                  jobId={migrationJobId}
+                  startError={migrationStartError}
+                  voice={voice}
+                  onProgressChange={(pct) => importProgress = pct}
+                  onResult={(result) => importResult = result}
+                  onSettled={() => importSettled = true}
+                  onRecentReady={handleRecentDataReady}
+                  onComplete={goToFinish}
+                />
+              {/key}
             {:else if activeStep?.id === "finish"}
               <Finish
-                {path}
+                path={path}
                 source={sourceResult}
-                {importResult}
-                {voice}
+                importResult={importResult}
+                voice={voice}
                 onContinue={handleContinueToHub}
-                {continueFailed}
+                continueFailed={continueFailed}
                 onTakeTour={handleTakeTour}
               />
             {/if}
@@ -689,6 +708,11 @@
                   </Button>
                 {:else if currentStep?.id === "import"}
                   {#if importSettled}
+                    {#if importResult === "failed" || migrationStartError}
+                      <Button variant="outline" onclick={retryImport} disabled={retryingImport}>
+                        Try again
+                      </Button>
+                    {/if}
                     <Button onclick={handleNext}>
                       Continue
                       <ArrowRight class="h-4 w-4" />
@@ -703,9 +727,12 @@
                     <ArrowRight class="h-4 w-4" />
                   </Button>
                 {:else if currentStep?.id === "units"}
-                  <Button variant="ghost" onclick={handleUnitsLeave} disabled={unitsSaving}>
-                    Skip for now
-                  </Button>
+                  <Button
+                    variant="ghost"
+                    onclick={handleUnitsLeave}
+                    disabled={unitsSaving}
+                  >Skip for now</Button>
+
                   <Button
                     onclick={handleUnitsLeave}
                     disabled={unitsSaving || !units || !timezone}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Item } from "$lib/components/ui/item";
+  import { Item } from "#lib/components/ui/item/index.js";
   import {
     getBrowserCapabilities,
     requestNotificationPermission,
@@ -9,7 +9,7 @@
     previewAlarmSound,
     stopPreview,
     type BrowserAlarmCapabilities,
-  } from "$lib/audio/alarm-sounds";
+  } from "#lib/audio/alarm-sounds.js";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import Bell from "@lucide/svelte/icons/bell";
   import Vibrate from "@lucide/svelte/icons/vibrate";

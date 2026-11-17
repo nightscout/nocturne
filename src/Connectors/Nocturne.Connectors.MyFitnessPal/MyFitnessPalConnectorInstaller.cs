@@ -9,7 +9,6 @@ public class MyFitnessPalConnectorInstaller()
     : ConnectorInstaller<MyFitnessPalConnectorConfiguration, MyFitnessPalConnectorService, MyFitnessPalAuthTokenProvider>(
         new ConnectorOptions
         {
-            ConnectorName = "MyFitnessPal",
             // Fixed hosts rather than a region mapping; both call sites use absolute URLs.
             DefaultServer = MyFitnessPalConstants.Servers.GraphQl,
             UserAgent = $"MyFitnessPal/{MyFitnessPalConstants.AppVersion} Android",

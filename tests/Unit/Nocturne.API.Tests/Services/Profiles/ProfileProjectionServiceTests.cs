@@ -15,10 +15,21 @@ public class ProfileProjectionServiceTests
     private readonly Mock<ICarbRatioScheduleRepository> _carbRatioRepo = new();
     private readonly Mock<ISensitivityScheduleRepository> _sensitivityRepo = new();
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeRepo = new();
+    private readonly List<BasalSchedule> _basals = [];
+    private readonly List<CarbRatioSchedule> _carbRatios = [];
+    private readonly List<SensitivitySchedule> _sensitivities = [];
+    private readonly List<TargetRangeSchedule> _targetRanges = [];
     private readonly ProfileProjectionService _sut;
 
     public ProfileProjectionServiceTests()
     {
+        _basalRepo.Serve(_basals);
+        _carbRatioRepo.Serve(_carbRatios);
+        _sensitivityRepo.Serve(_sensitivities);
+        _targetRangeRepo.Serve(_targetRanges);
+        _therapyRepo.Setup(r => r.GetStoreIndexAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
         _sut = new ProfileProjectionService(
             _therapyRepo.Object,
             _basalRepo.Object,
@@ -402,15 +413,6 @@ public class ProfileProjectionServiceTests
         var settings = CreateTherapySettings(correlationId: correlationId);
 
         SetupGetLatest(settings);
-        // Set up correlation lookups that return no matching profile name
-        _basalRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(Enumerable.Empty<BasalSchedule>());
-        _carbRatioRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(Enumerable.Empty<CarbRatioSchedule>());
-        _sensitivityRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(Enumerable.Empty<SensitivitySchedule>());
-        _targetRangeRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(Enumerable.Empty<TargetRangeSchedule>());
 
         var result = await _sut.GetCurrentProfileAsync();
 
@@ -429,22 +431,118 @@ public class ProfileProjectionServiceTests
         var basal = CreateBasalSchedule(null, "Default");
 
         SetupGetLatest(settings);
-
-        _basalRepo.Setup(r => r.GetByProfileNameAsync("Default", default))
-            .ReturnsAsync(new[] { basal });
-        _carbRatioRepo.Setup(r => r.GetByProfileNameAsync("Default", default))
-            .ReturnsAsync(Enumerable.Empty<CarbRatioSchedule>());
-        _sensitivityRepo.Setup(r => r.GetByProfileNameAsync("Default", default))
-            .ReturnsAsync(Enumerable.Empty<SensitivitySchedule>());
-        _targetRangeRepo.Setup(r => r.GetByProfileNameAsync("Default", default))
-            .ReturnsAsync(Enumerable.Empty<TargetRangeSchedule>());
+        _basals.Add(basal);
 
         var result = await _sut.GetCurrentProfileAsync();
 
         result.Should().NotBeNull();
         result!.Store["Default"].Basal.Should().HaveCount(1);
+    }
 
-        _basalRepo.Verify(r => r.GetByProfileNameAsync("Default", default), Times.Once);
+    [Fact]
+    public async Task NoCorrelationId_ServesTheNewestScheduleFiledUnderTheProfileName()
+    {
+        var settings = CreateTherapySettings(correlationId: null, profileName: "Default");
+        var older = CreateBasalSchedule(null, "Default", value: 0.5);
+        older.Timestamp = new DateTime(2025, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        var newer = CreateBasalSchedule(null, "Default", value: 0.8);
+        newer.Timestamp = new DateTime(2025, 5, 2, 0, 0, 0, DateTimeKind.Utc);
+
+        SetupGetLatest(settings);
+        _basals.AddRange([older, newer]);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        result!.Store["Default"].Basal.Should().ContainSingle().Which.Value.Should().Be(0.8);
+    }
+
+    /// <summary>
+    /// A correlated row is served from its correlation group only; a newer row filed under the same
+    /// store name belongs to another upload.
+    /// </summary>
+    [Fact]
+    public async Task CorrelatedRow_IsNotServedTheNewestScheduleFiledUnderItsName()
+    {
+        var correlationId = Guid.NewGuid();
+        var correlated = CreateTherapySettings(correlationId: correlationId, profileName: "Default");
+        var uncorrelated = CreateTherapySettings(correlationId: null, profileName: "Default");
+        var nameRow = CreateBasalSchedule(null, "Default", value: 2.5);
+        nameRow.Timestamp = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        _therapyRepo.Setup(r => r.GetDocumentsAsync(10, 0, true, default))
+            .ReturnsAsync([[correlated], [uncorrelated]]);
+        SetupCorrelationLookups(correlationId, basals: [CreateBasalSchedule(correlationId, "Default", value: 1.0)]);
+        _basals.Add(nameRow);
+
+        var result = (await _sut.GetProfilesAsync()).ToList();
+
+        result[0].Store["Default"].Basal.Should().ContainSingle().Which.Value.Should().Be(1.0);
+        result[1].Store["Default"].Basal.Should().ContainSingle().Which.Value.Should().Be(2.5);
+    }
+
+    /// <summary>
+    /// A page reads each schedule kind with one query per rule, whatever its number of documents and
+    /// stores. Every row here takes a different rule, and correlation groups span several stores.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(4, 3)]
+    public async Task GetProfilesAsync_ReadsEachScheduleKindWithAFixedNumberOfQueries(int documentCount, int storeCount)
+    {
+        var documents = new List<IReadOnlyList<TherapySettings>>();
+        for (var d = 0; d < documentCount; d++)
+        {
+            var correlationId = Guid.NewGuid();
+            var rows = new List<TherapySettings>();
+            for (var s = 0; s < storeCount; s++)
+            {
+                var store = $"Store {s}";
+                var value = d * 10 + s + 1;
+                switch (s % 3)
+                {
+                    case 0:
+                        rows.Add(CreateTherapySettings(correlationId: correlationId, profileName: store));
+                        SetupCorrelationLookups(correlationId, basals: [CreateBasalSchedule(correlationId, store, value)]);
+                        break;
+                    case 1:
+                        rows.Add(CreateTherapySettings(profileName: $"{store} of {d}"));
+                        _basals.Add(CreateBasalSchedule(null, $"{store} of {d}", value));
+                        break;
+                    default:
+                        var legacyId = $"profile{d}:{store}";
+                        rows.Add(CreateTherapySettings(correlationId: correlationId, profileName: store, legacyId: legacyId));
+                        SetupLegacyIdLookups(legacyId, store, value);
+                        break;
+                }
+            }
+
+            documents.Add(rows);
+        }
+
+        _therapyRepo.Setup(r => r.GetDocumentsAsync(10, 0, true, default)).ReturnsAsync(documents);
+
+        var result = (await _sut.GetProfilesAsync()).ToList();
+
+        for (var d = 0; d < documentCount; d++)
+        {
+            for (var s = 0; s < storeCount; s++)
+            {
+                var store = s % 3 == 1 ? $"Store {s} of {d}" : $"Store {s}";
+                result[d].Store[store].Basal.Should().ContainSingle()
+                    .Which.Value.Should().Be(d * 10 + s + 1, $"document {d} store {s} reads its own schedule");
+            }
+        }
+
+        _basalRepo.Verify(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), default), Times.Once);
+        _basalRepo.Verify(r => r.GetNewestByProfileNamesAsync(It.IsAny<IEnumerable<string>>(), default), Times.Once);
+        _basalRepo.Verify(r => r.GetByLegacyIdsAsync(It.IsAny<IEnumerable<string>>(), default), Times.AtMostOnce);
+        _basalRepo.Verify(r => r.GetByCorrelationIdAsync(It.IsAny<Guid>(), default), Times.Never);
+        _basalRepo.Verify(r => r.GetByProfileNameAsync(It.IsAny<string>(), default), Times.Never);
+        _basalRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
+        _basalRepo.Invocations.Should().HaveCountLessThanOrEqualTo(3);
+        _carbRatioRepo.Invocations.Should().HaveCountLessThanOrEqualTo(3);
+        _sensitivityRepo.Invocations.Should().HaveCountLessThanOrEqualTo(3);
+        _targetRangeRepo.Invocations.Should().HaveCountLessThanOrEqualTo(3);
     }
 
     /// <summary>
@@ -491,9 +589,9 @@ public class ProfileProjectionServiceTests
             legacyId: $"profile1:{storeName}");
 
         SetupGetLatest(settings);
-        SetupCorrelationLookups(correlationId);
-        _basalRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(
+        SetupCorrelationLookups(
+            correlationId,
+            basals:
             [
                 new BasalSchedule
                 {
@@ -679,42 +777,45 @@ public class ProfileProjectionServiceTests
         var result = await _sut.GetCurrentProfileAsync();
 
         result!.Store["Default"].Basal.Should().ContainSingle().Which.Value.Should().Be(1.0);
-        _basalRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
-        _carbRatioRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
-        _sensitivityRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
-        _targetRangeRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
+        _basalRepo.Verify(r => r.GetByLegacyIdsAsync(It.IsAny<IEnumerable<string>>(), default), Times.Never);
+        _carbRatioRepo.Verify(r => r.GetByLegacyIdsAsync(It.IsAny<IEnumerable<string>>(), default), Times.Never);
+        _sensitivityRepo.Verify(r => r.GetByLegacyIdsAsync(It.IsAny<IEnumerable<string>>(), default), Times.Never);
+        _targetRangeRepo.Verify(r => r.GetByLegacyIdsAsync(It.IsAny<IEnumerable<string>>(), default), Times.Never);
     }
 
     /// <summary>
     /// Schedules stored under <paramref name="legacyId"/> carrying <paramref name="profileName"/>, or
     /// no row at all when it is null.
     /// </summary>
-    private void SetupLegacyIdLookups(string legacyId, string? profileName)
+    private void SetupLegacyIdLookups(string legacyId, string? profileName, double basalValue = 1.5)
     {
-        _basalRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, default))
-            .ReturnsAsync(profileName is null ? null : new BasalSchedule
-            {
-                ProfileName = profileName,
-                Entries = [new ScheduleEntry { Time = "00:00", Value = 1.5, TimeAsSeconds = 0 }],
-            });
-        _carbRatioRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, default))
-            .ReturnsAsync(profileName is null ? null : new CarbRatioSchedule
-            {
-                ProfileName = profileName,
-                Entries = [new ScheduleEntry { Time = "00:00", Value = 10.0, TimeAsSeconds = 0 }],
-            });
-        _sensitivityRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, default))
-            .ReturnsAsync(profileName is null ? null : new SensitivitySchedule
-            {
-                ProfileName = profileName,
-                Entries = [new ScheduleEntry { Time = "00:00", Value = 50.0, TimeAsSeconds = 0 }],
-            });
-        _targetRangeRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, default))
-            .ReturnsAsync(profileName is null ? null : new TargetRangeSchedule
-            {
-                ProfileName = profileName,
-                Entries = [new TargetRangeEntry { Time = "00:00", Low = 80, High = 120, TimeAsSeconds = 0 }],
-            });
+        if (profileName is null)
+            return;
+
+        _basals.Add(new BasalSchedule
+        {
+            LegacyId = legacyId,
+            ProfileName = profileName,
+            Entries = [new ScheduleEntry { Time = "00:00", Value = basalValue, TimeAsSeconds = 0 }],
+        });
+        _carbRatios.Add(new CarbRatioSchedule
+        {
+            LegacyId = legacyId,
+            ProfileName = profileName,
+            Entries = [new ScheduleEntry { Time = "00:00", Value = 10.0, TimeAsSeconds = 0 }],
+        });
+        _sensitivities.Add(new SensitivitySchedule
+        {
+            LegacyId = legacyId,
+            ProfileName = profileName,
+            Entries = [new ScheduleEntry { Time = "00:00", Value = 50.0, TimeAsSeconds = 0 }],
+        });
+        _targetRanges.Add(new TargetRangeSchedule
+        {
+            LegacyId = legacyId,
+            ProfileName = profileName,
+            Entries = [new TargetRangeEntry { Time = "00:00", Low = 80, High = 120, TimeAsSeconds = 0 }],
+        });
     }
 
     private static TherapySettings CreateTherapySettings(
@@ -751,14 +852,15 @@ public class ProfileProjectionServiceTests
         };
     }
 
-    private static BasalSchedule CreateBasalSchedule(Guid? correlationId, string profileName = "Default")
+    private static BasalSchedule CreateBasalSchedule(
+        Guid? correlationId, string profileName = "Default", double value = 1.0)
     {
         return new BasalSchedule
         {
             Id = Guid.NewGuid(),
             CorrelationId = correlationId,
             ProfileName = profileName,
-            Entries = [new ScheduleEntry { Time = "00:00", Value = 1.0, TimeAsSeconds = 0 }]
+            Entries = [new ScheduleEntry { Time = "00:00", Value = value, TimeAsSeconds = 0 }]
         };
     }
 
@@ -814,14 +916,19 @@ public class ProfileProjectionServiceTests
         SensitivitySchedule[]? sensitivities = null,
         TargetRangeSchedule[]? targetRanges = null)
     {
-        _basalRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(basals ?? Array.Empty<BasalSchedule>());
-        _carbRatioRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(carbRatios ?? Array.Empty<CarbRatioSchedule>());
-        _sensitivityRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(sensitivities ?? Array.Empty<SensitivitySchedule>());
-        _targetRangeRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
-            .ReturnsAsync(targetRanges ?? Array.Empty<TargetRangeSchedule>());
+        Correlate(_basals, basals);
+        Correlate(_carbRatios, carbRatios);
+        Correlate(_sensitivities, sensitivities);
+        Correlate(_targetRanges, targetRanges);
+
+        void Correlate<T>(List<T> stored, T[]? schedules) where T : IV4Record
+        {
+            foreach (var schedule in schedules ?? [])
+            {
+                schedule.CorrelationId = correlationId;
+                stored.Add(schedule);
+            }
+        }
     }
 
     #endregion

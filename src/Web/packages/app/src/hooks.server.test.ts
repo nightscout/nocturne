@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RequestEvent } from "@sveltejs/kit";
 // @ts-expect-error SvelteKit publishes no types for this entry point.
 import * as kitInternal from "@sveltejs/kit/internal/server";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { clearSessionCache } from "$lib/server/session-cache";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { clearSessionCache } from "#lib/server/session-cache.js";
+import type { ServerHttpClientOptions } from "#lib/server/api-client-factory.js";
 
 // The real loaders read catalogs that only a wuchale build compiles.
 vi.mock("wuchale/load-utils/server", () => ({
@@ -21,28 +22,52 @@ vi.mock("../../../locales/js.loader.server.js", () => ({
   loadCatalog: () => ({}),
 }));
 vi.mock("../../../locales/data.js", () => ({ locales: ["en"] }));
-vi.mock("$env/dynamic/public", () => ({ env: {} }));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
   LANGUAGE_COOKIE_NAME: "nocturne-language",
+}));
+
+const env = vi.hoisted(() => ({
+  instanceKey: undefined as string | undefined,
+  devAutoLogin: undefined as string | undefined,
+}));
+// `$app/env/public` resolves to the same stub module, so this mocks both.
+vi.mock("$app/env/private", () => ({
+  PUBLIC_DEFAULT_LANGUAGE: undefined,
+  PUBLIC_API_URL: undefined,
+  MARKETING_URL: undefined,
+  ALLOWED_FRAME_ANCESTORS: undefined,
+  NOCTURNE_API_URL: undefined,
+  get INSTANCE_KEY() {
+    return env.instanceKey;
+  },
+  get NOCTURNE_DEV_AUTO_LOGIN() {
+    return env.devAutoLogin;
+  },
 }));
 
 const getSession = vi.fn();
 const getStatus = vi.fn();
+const clientOptions: (ServerHttpClientOptions | undefined)[] = [];
 
-// Every API client the hooks build (session, status probe, per-request) answers from these.
-vi.mock("$lib/server/api-client-factory", () => ({
+// Every API client the hooks build (session, status probe, per-request) answers from these. Raw
+// calls go through the real createServerHttpClient to the stubbed global fetch.
+vi.mock("#lib/server/api-client-factory.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/server/api-client-factory.js")>()),
   getApiBaseUrl: () => "http://api.test",
-  createServerApiClient: () => ({
-    oidc: { getSession: () => getSession() },
-    status: { getStatus: () => getStatus() },
-  }),
+  createServerApiClient: (_base: string, _fetch: unknown, options?: ServerHttpClientOptions) => {
+    clientOptions.push(options);
+    return {
+      oidc: { getSession: () => getSession() },
+      status: { getStatus: () => getStatus() },
+    };
+  },
 }));
 
-const { handle } = await import("./hooks.server");
+const { handle, handleError } = await import("./hooks.server");
 /** Sets up the request store SvelteKit's server wraps `handle` in, which sequence() reads. */
 const withRequestStore = (kitInternal as { with_request_store: <T>(store: unknown, fn: () => T) => T })
   .with_request_store;
-const { getRequestStatus } = await import("$lib/server/request-status");
+const { getRequestStatus } = await import("#lib/server/request-status.js");
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -59,16 +84,27 @@ const signedIn = {
   [AUTH_COOKIE_NAMES.accessToken]: "access",
 };
 
-function requestEvent(host: string, pathname = "/", cookies: Record<string, string> = {}) {
+/** Cookies the hooks set on the outgoing response, in order. */
+const cookieWrites: { name: string; value: string; opts: Record<string, unknown> }[] = [];
+
+function requestEvent(
+  host: string,
+  pathname = "/",
+  cookies: Record<string, string> = {},
+  routeId: string | null = "/(authenticated)"
+) {
   const jar = new Map(Object.entries(cookies));
   const url = `https://${host}${pathname}`;
   return {
     url: new URL(url),
+    route: { id: routeId },
     request: new Request(url, { headers: { "x-forwarded-host": host } }),
     cookies: {
       get: (name: string) => jar.get(name),
       getAll: () => [],
-      set: () => {},
+      set: (name: string, value: string, opts: Record<string, unknown>) => {
+        cookieWrites.push({ name, value, opts });
+      },
       delete: () => {},
     },
     locals: {},
@@ -110,10 +146,15 @@ beforeEach(() => {
   getSession.mockReset();
   getStatus.mockReset();
   getSession.mockResolvedValue({ isAuthenticated: true, subjectId: "s1", name: "Sam" });
+  clientOptions.length = 0;
+  cookieWrites.length = 0;
+  env.instanceKey = undefined;
+  env.devAutoLogin = undefined;
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("hooks — the status probe", () => {
@@ -301,5 +342,198 @@ describe("hooks — response headers", () => {
     });
 
     expect(response.headers.has("link")).toBe(false);
+  });
+});
+
+describe("hooks — demo sign-in within the request", () => {
+  const demoStatus = { status: "ok", tenantSlug: "demo", anonymousReadAccess: false, isDemo: true };
+  const expires = "Wed, 28 Oct 2026 12:00:00 GMT";
+  const apiSetCookies = [
+    // The host-scoped expiry SetSessionCookies writes ahead of the domain-wide cookie.
+    `${AUTH_COOKIE_NAMES.accessToken}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`,
+    `${AUTH_COOKIE_NAMES.accessToken}=minted-access; expires=${expires}; domain=.nocturne.test; path=/; secure; samesite=lax; httponly`,
+    `${AUTH_COOKIE_NAMES.refreshToken}=minted-refresh; expires=${expires}; domain=.nocturne.test; path=/; secure; samesite=lax; httponly`,
+    `IsAuthenticated=true; expires=${expires}; domain=.nocturne.test; path=/; secure; samesite=lax`,
+  ];
+
+  function minted(): Response {
+    const headers = new Headers({ "content-type": "application/json" });
+    for (const header of apiSetCookies) headers.append("set-cookie", header);
+    return new Response(
+      JSON.stringify({ accessToken: "minted-access", refreshToken: "minted-refresh", expiresInSeconds: 3600 }),
+      { status: 200, headers }
+    );
+  }
+
+  function stubApi(answer: () => Response | Promise<Response>) {
+    const apiFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => answer());
+    vi.stubGlobal("fetch", apiFetch);
+    return apiFetch;
+  }
+
+  it("signs a demo visitor in and renders the page with no redirect", async () => {
+    getStatus.mockResolvedValue(demoStatus);
+    getSession.mockResolvedValue({ isAuthenticated: true, subjectId: "demo-member", name: "Demo" });
+    const apiFetch = stubApi(minted);
+    const event = requestEvent(freshHost(), "/reports");
+
+    const { response } = await run(event);
+
+    expect(response.status).toBe(200);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+    expect(String(apiFetch.mock.calls[0][0])).toBe("http://api.test/api/v4/demo/session?format=json");
+    expect(event.locals.isAuthenticated).toBe(true);
+    expect(event.locals.user?.subjectId).toBe("demo-member");
+    // The session check and the request's API client both carry the minted session.
+    expect(clientOptions.filter((o) => o?.accessToken === "minted-access")).toHaveLength(2);
+    expect(clientOptions.filter((o) => o?.refreshToken === "minted-refresh")).toHaveLength(2);
+  });
+
+  it("forwards the session cookies the API set, attributes intact", async () => {
+    getStatus.mockResolvedValue(demoStatus);
+    stubApi(minted);
+
+    const { response } = await run(requestEvent(freshHost(), "/"));
+
+    const expiry = new Date(expires);
+    expect(cookieWrites).toEqual([
+      {
+        name: AUTH_COOKIE_NAMES.accessToken,
+        value: "minted-access",
+        opts: { path: "/", httpOnly: true, secure: true, sameSite: "lax", expires: expiry, domain: ".nocturne.test" },
+      },
+      {
+        name: AUTH_COOKIE_NAMES.refreshToken,
+        value: "minted-refresh",
+        opts: { path: "/", httpOnly: true, secure: true, sameSite: "lax", expires: expiry, domain: ".nocturne.test" },
+      },
+      {
+        name: "IsAuthenticated",
+        value: "true",
+        opts: { path: "/", httpOnly: false, secure: true, sameSite: "lax", expires: expiry, domain: ".nocturne.test" },
+      },
+    ]);
+    expect(response.headers.getSetCookie()).toContain(apiSetCookies[0]);
+  });
+
+  it("asks without the instance key, naming the visitor by their signed address", async () => {
+    env.instanceKey = "instance-secret";
+    getStatus.mockResolvedValue(demoStatus);
+    const apiFetch = stubApi(minted);
+
+    await run(requestEvent(freshHost(), "/"));
+
+    const headers = new Headers(apiFetch.mock.calls[0][1]?.headers);
+    expect(headers.has("X-Instance-Key")).toBe(false);
+    expect(headers.has("Cookie")).toBe(false);
+    expect(headers.get("X-Nocturne-Client-Ip")).toBe("127.0.0.1");
+    expect(headers.get("X-Nocturne-Client-Ip-Signature")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it.each([
+    ["the API refuses", () => new Response(null, { status: 404 })],
+    ["the API cannot be reached", () => Promise.reject(new TypeError("fetch failed"))],
+    ["the API answers without tokens", () => Response.json({})],
+  ])("leaves the visitor signed out for the layout's redirect when %s", async (_case, answer) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    getStatus.mockResolvedValue(demoStatus);
+    stubApi(answer);
+    const event = requestEvent(freshHost(), "/");
+
+    const { response } = await run(event);
+
+    expect(response.status).toBe(200);
+    expect(event.locals.isAuthenticated).toBe(false);
+    expect(event.locals.mintedSession).toBeUndefined();
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it("does not mint again once the redirect attempt has been spent", async () => {
+    getStatus.mockResolvedValue(demoStatus);
+    const apiFetch = stubApi(minted);
+
+    await run(requestEvent(freshHost(), "/reports?__autologin=1"));
+
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a tenant that is not a demo", { ...demoStatus, isDemo: false }, "/(authenticated)", undefined],
+    ["a page outside the signed-in app", demoStatus, "/(unauthenticated)/auth/login", undefined],
+    ["dev auto-login", demoStatus, "/(authenticated)", "true"],
+    ["a request with no matched route", demoStatus, null, undefined],
+  ])("does not mint for %s", async (_case, status, routeId, devAutoLogin) => {
+    env.devAutoLogin = devAutoLogin;
+    getStatus.mockResolvedValue(status);
+    const apiFetch = stubApi(minted);
+
+    await run(requestEvent(freshHost(), "/", {}, routeId));
+
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("does not mint for a request that is not a GET", async () => {
+    getStatus.mockResolvedValue(demoStatus);
+    const apiFetch = stubApi(minted);
+    const event = requestEvent(freshHost(), "/");
+    const post = { ...event, request: new Request(event.request, { method: "POST" }) };
+
+    await run(post);
+
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("leaves a visitor holding a guest session to it", async () => {
+    getStatus.mockResolvedValue(demoStatus);
+    getSession.mockResolvedValue({ isAuthenticated: false });
+    const apiFetch = stubApi(minted);
+
+    await run(requestEvent(freshHost(), "/", { [AUTH_COOKIE_NAMES.guestSession]: "guest" }));
+
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("hooks — handleError", () => {
+  const event = { request: new Request("https://sleepy.nocturne.test/reports/agp") } as unknown as RequestEvent;
+  const quiet = () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  };
+  afterEach(() => vi.restoreAllMocks());
+
+  it("leaves an error(...) throw as the caller wrote it", async () => {
+    const outcome = await handleError({
+      kind: "app",
+      error: { status: 409, message: "Already redeemed", issues: [] },
+      event,
+    });
+
+    expect(outcome).toBeUndefined();
+  });
+
+  it("leaves a rejected remote argument to SvelteKit's own message", async () => {
+    const outcome = await handleError({
+      kind: "validation",
+      error: { status: 400, message: "Bad Request" },
+      issues: [],
+      event,
+    });
+
+    expect(outcome).toBeUndefined();
+  });
+
+  it("keeps SvelteKit's message for its own errors and names the occurrence", async () => {
+    quiet();
+    const outcome = await handleError({ kind: "framework", error: { status: 404, message: "Not Found" }, event });
+
+    expect(outcome).toMatchObject({ message: "Not Found", errorId: expect.any(String) });
+  });
+
+  it("names an unexpected error and carries its message", async () => {
+    quiet();
+    const outcome = await handleError({ kind: "unknown", error: new Error("boom"), event });
+
+    expect(outcome).toMatchObject({ message: "boom", errorId: expect.any(String) });
   });
 });

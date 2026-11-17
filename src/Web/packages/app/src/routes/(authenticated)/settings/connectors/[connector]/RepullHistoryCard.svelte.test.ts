@@ -2,13 +2,13 @@ import { render } from "vitest-browser-svelte";
 import { page as browser } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { page } from "$app/state";
-import type { SyncResult } from "$api-clients";
+import type { SyncResult } from "#lib/api/generated/nocturne-api-client.js";
 
 let sentPayload: unknown;
 let resetImpl: () => Promise<SyncResult>;
 let supportedDataTypes: string[] | undefined;
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   getConnectorCapabilities: () => ({
     current: { supportedDataTypes, supportsHistoricalSync: true },
   }),

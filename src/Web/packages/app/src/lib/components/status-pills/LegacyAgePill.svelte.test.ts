@@ -7,8 +7,8 @@ import {
   NotificationUrgency,
   TrackerCategory,
   type LegacyFallbackDto,
-} from "$lib/api/generated/nocturne-api-client";
-import { hiddenLegacyFallbacks } from "$lib/stores/appearance-store.svelte";
+} from "#lib/api/generated/nocturne-api-client.js";
+import { hiddenLegacyFallbacks } from "#lib/stores/appearance-store.svelte.js";
 import LegacyAgePill from "./LegacyAgePill.svelte";
 import LegacyAgePillRail from "./LegacyAgePill.test-host.svelte";
 

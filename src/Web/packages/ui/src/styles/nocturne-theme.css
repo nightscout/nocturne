@@ -160,7 +160,7 @@
   --ehba1c-line: oklch(0.55 0.22 300);
 
   /* Record kinds (bolus, carbs, BG check...) as labelled in lists, chips and forms, looked
-     up through ENTRY_CATEGORIES / TREATMENT_CATEGORIES. These are the text grade of the
+     up through ENTRY_CATEGORIES. These are the text grade of the
      chart tokens above (--insulin, --carbs, --basal): the same hue, held at 4.5:1 or
      better on the page and on their own /10 to /20 tints, so each scheme has its own
      lightness. Use them for any text, icon or chart label in a record kind's colour;

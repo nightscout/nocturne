@@ -2,15 +2,12 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Jobs;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Xunit;
@@ -23,6 +20,7 @@ namespace Nocturne.API.Tests.Integration;
 /// applies them, so the version in force at a time is the one whose document started last before it.
 /// Every test names its own profile store, so no profile version a test before it cached answers for it.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
 {
@@ -90,14 +88,13 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
                 .ToList());
         starts.Should().Equal((first.UtcDateTime, 1.0), (second.UtcDateTime, 2.0));
 
-        var (before, between, after) = await WithTenantScopeAsync(async sp =>
-        {
-            var basal = sp.GetRequiredService<IBasalRateResolver>();
-            return (
-                await basal.FindBasalRateAsync(first.AddDays(1).ToUnixTimeMilliseconds()),
-                await basal.FindBasalRateAsync(second.AddDays(1).ToUnixTimeMilliseconds()),
-                await basal.FindBasalRateAsync(Now.ToUnixTimeMilliseconds()));
-        });
+        var rates = await WithTenantScopeAsync(sp => sp.GetRequiredService<IBasalRateResolver>().FindBasalRatesAsync(
+        [
+            first.AddDays(1).ToUnixTimeMilliseconds(),
+            second.AddDays(1).ToUnixTimeMilliseconds(),
+            Now.ToUnixTimeMilliseconds(),
+        ]));
+        var (before, between, after) = (rates[0], rates[1], rates[2]);
         before.Should().Be(1.0, "the first document is in force until the second starts");
         between.Should().Be(2.0, "the second document starts before then");
         after.Should().Be(2.0);
@@ -249,11 +246,11 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
 
     /// <summary>
     /// A version moved with no re-resolution after it, as <c>RepairEpochProfileVersions</c> moves them
-    /// in SQL, has its percent temp rates re-resolved by the startup sweep for the job the migration
-    /// left, once.
+    /// in SQL, has its percent temp rates re-resolved by the job the migration requests, run by the
+    /// host's job scheduler, once.
     /// </summary>
     [Fact]
-    public async Task StartupSweep_ReresolvesRatesAgainstAVersionMovedWithoutAWrite()
+    public async Task MovedVersionsJob_ReresolvesRatesAgainstAVersionMovedWithoutAWrite()
     {
         var store = StoreName();
         await PostAsync("/api/v1/profile", EditorProfile(store, 1.0, DaysAgo(20)));
@@ -271,40 +268,33 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
             var second = (await schedules.GetByProfileNameAsync(store)).Single(v => v.Entries.Single().Value == 2.0);
             second.Timestamp = DaysAgo(10).UtcDateTime;
             await schedules.UpdateAsync(second.Id, second, WriteOrigin.Live);
-            await sp.GetRequiredService<ProfileVersionCache>().RefreshAsync(schedules, store, default);
             return 0;
         });
 
-        await RunSweepAsync();
-        (await TempBasalAtAsync(createdAt)).ScheduledRate.Should().Be(2.0, "no migration left a job for the tenant");
+        (await TempBasalAtAsync(createdAt)).ScheduledRate.Should().Be(2.0, "nothing has requested the job for the tenant");
 
-        var factory = Fixture.Services.GetRequiredService<INocturneDbContextFactory>();
-        await using (var platform = await factory.CreatePlatformAsync())
-        {
-            platform.PendingTenantJobs.Add(new PendingTenantJobEntity
-            {
-                TenantId = Fixture.TenantId,
-                Job = PendingTenantJobs.ProfileVersionsMoved,
-                RequestedAt = DateTime.UtcNow,
-            });
-            await platform.SaveChangesAsync();
-        }
-
-        await RunSweepAsync();
+        var ledger = Fixture.Services.GetRequiredService<IJobLedger>();
+        await ledger.RequestAsync(ProfileVersionsMovedJob.JobName, Fixture.TenantId, default);
+        var row = await WaitUntilFinishedAsync(ledger);
 
         var tempBasal = await TempBasalAtAsync(createdAt);
         tempBasal.ScheduledRate.Should().Be(1.0);
         tempBasal.Rate.Should().BeApproximately(0.5, 1e-9);
-        await using var after = await factory.CreatePlatformAsync();
-        (await after.PendingTenantJobs.CountAsync(j => j.TenantId == Fixture.TenantId))
-            .Should().Be(0, "the job runs once");
+        row.NextDueAt.Should().BeNull("the job runs once");
+        row.Attempts.Should().Be(0);
     }
 
-    private async Task RunSweepAsync()
+    private async Task<JobLedgerEntry> WaitUntilFinishedAsync(IJobLedger ledger)
     {
-        var sweep = new TempBasalRateSweepService(Fixture.Services, NullLogger<TempBasalRateSweepService>.Instance);
-        await sweep.StartAsync(default);
-        await sweep.ExecuteTask!;
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (true)
+        {
+            var row = (await ledger.ListAsync(100_000, default)).Rows
+                .Single(j => j.Job == ProfileVersionsMovedJob.JobName && j.TenantId == Fixture.TenantId);
+            if (row.NextDueAt is null || DateTime.UtcNow > deadline)
+                return row;
+            await Task.Delay(250);
+        }
     }
 
     private Task<Nocturne.Core.Models.V4.TempBasal> TempBasalAtAsync(DateTimeOffset createdAt) =>

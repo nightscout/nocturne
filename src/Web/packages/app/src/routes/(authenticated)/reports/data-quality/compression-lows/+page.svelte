@@ -1,49 +1,53 @@
 <script lang="ts">
 	import { timeDay } from "d3-time";
-	import { withAll } from "$lib/utils/collections";
+	import { withAll } from "#lib/utils/collections.js";
 	import { page } from '$app/state';
-	import { satisfiesScope } from '$lib/authorization/scopes';
+	import { satisfiesScope } from '#lib/authorization/scopes.js';
 	import { toast } from 'svelte-sonner';
-	import { permissionGatedMutationError } from '$lib/forms';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
-	import { Badge } from '$lib/components/ui/badge';
-	import * as Table from '$lib/components/ui/table';
-	import { setReportPrintMeta } from '$lib/components/reports/print/report-print.svelte';
-	import { startOfDay, toDayString } from '$lib/utils/date-range';
+	import { permissionGatedMutationError } from '#lib/forms/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Card, CardContent, CardHeader, CardTitle } from '#lib/components/ui/card/index.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import * as Table from '#lib/components/ui/table/index.js';
+	import { setReportPrintMeta } from '#lib/components/reports/print/report-print.svelte.js';
+	import { startOfDay, toDayString } from '#lib/utils/date-range.js';
 	import {
 		Select,
 		SelectContent,
 		SelectItem,
 		SelectTrigger
-	} from '$lib/components/ui/select';
+	} from '#lib/components/ui/select/index.js';
 	import {
 		getSuggestions as getCompressionLowSuggestions,
 		getSuggestion as getCompressionLowSuggestion,
-		acceptSuggestion as acceptCompressionLow,
-		dismissSuggestion as dismissCompressionLow,
-		deleteSuggestion as deleteCompressionLow,
+		reviewSuggestions as reviewCompressionLows,
 		triggerDetection as triggerCompressionLowDetection
-	} from '$api/generated/compressionLows.generated.remote';
-	import { contextResource } from '$lib/hooks/resource-context.svelte';
-	import { createChartDataEngine } from '$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte';
-	import GlucoseChartShell from '$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte';
-	import GlucoseTrack from '$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte';
-	import BasalTrack from '$lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte';
-	import IobCobTrack from '$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
-	import ThresholdRules from '$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
-	import ChartTooltip from '$lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
-	import { openDayInReview } from '$lib/components/dashboard/glucose-chart/day-in-review';
+	} from '#lib/api/generated/compressionLows.generated.remote.js';
+	import { contextResource } from '#lib/hooks/resource-context.svelte.js';
+	import { createChartDataEngine } from '#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js';
+	import GlucoseChartShell from '#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte';
+	import GlucoseTrack from '#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte';
+	import BasalTrack from '#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte';
+	import IobCobTrack from '#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
+	import ThresholdRules from '#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
+	import ChartTooltip from '#lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
+	import { openDayInReview } from '#lib/components/dashboard/glucose-chart/day-in-review.js';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import { EmptyState } from '$lib/components/shared';
-	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
-	import type { CompressionLowSuggestion } from '$lib/api';
+	import { EmptyState } from '#lib/components/shared/index.js';
+	import { bg, bgLabel, formatShortDate, time } from "#lib/utils/formatting.js";
+	import {
+		CompressionLowBatchAction,
+		CompressionLowConfidenceBand,
+		CompressionLowStatus,
+		type CompressionLowSuggestion
+	} from '#lib/api/index.js';
+	import { fresh } from "#lib/api/fresh-query.js";
 
 	// Accepting, dismissing, deleting and re-running detection all write state
 	// spans and suggestion rows, so the server gates them on glucose.readwrite.
@@ -56,8 +60,9 @@
 	const mutationError = (err: unknown) =>
 		permissionGatedMutationError(err, NEEDS_GLUCOSE_READWRITE);
 
+	const suggestionsQuery = $derived(getCompressionLowSuggestions({}));
 	const suggestionsResource = contextResource(
-		() => getCompressionLowSuggestions({}),
+		() => suggestionsQuery,
 		{ errorTitle: 'Error loading compression low history' }
 	);
 
@@ -122,7 +127,7 @@
 		if (filteredSuggestions.length > 0 && !activeSuggestion) {
 			const first = filteredSuggestions[0];
 			if (first?.id) {
-				// `.run()` rejects during the render/effect flush, so defer out of it.
+				// Deferred so this effect does not track what the load reads.
 				const id = first.id;
 				queueMicrotask(() => loadSuggestionDetail(id));
 			}
@@ -152,84 +157,51 @@
 		if (selectedSuggestions.size === 0) {
 			selectedSuggestions = new Set([id]);
 		}
-		suggestionDetail = await getCompressionLowSuggestion(id).run();
+		suggestionDetail = await fresh(getCompressionLowSuggestion(id));
 		if (suggestionDetail && suggestionDetail.suggestion?.startMills && suggestionDetail.suggestion?.endMills) {
 			brushDomain = [new Date(suggestionDetail.suggestion.startMills), new Date(suggestionDetail.suggestion.endMills)];
 		}
 	}
 
-	async function handleAccept() {
+	async function review(action: CompressionLowBatchAction) {
 		if (selectedSuggestions.size === 0) return;
 		isLoading = true;
+		const ids = [...selectedSuggestions];
+		const reviewed = new Set(ids);
+		const firstSelectedIndex = filteredSuggestions.findIndex((s) => s.id === ids[0]);
+		const reviewedStatus =
+			action === CompressionLowBatchAction.Accept
+				? CompressionLowStatus.Accepted
+				: CompressionLowStatus.Dismissed;
+		const optimistic = (current: CompressionLowSuggestion[]) =>
+			action === CompressionLowBatchAction.Delete
+				? current.filter((s) => !s.id || !reviewed.has(s.id))
+				: current.map((s) => (s.id && reviewed.has(s.id) ? { ...s, status: reviewedStatus } : s));
 		try {
-			const ids = [...selectedSuggestions];
-			const firstSelectedIndex = filteredSuggestions.findIndex((s) => s.id === ids[0]);
-			for (const id of ids) {
-				if (id === activeSuggestion && brushDomain) {
-					await acceptCompressionLow({
-						id,
-						request: {
-							startMills: brushDomain[0].getTime(),
-							endMills: brushDomain[1].getTime()
-						}
-					});
-				} else {
-					const s = suggestions.find((s) => s.id === id);
-					if (s?.startMills && s?.endMills) {
-						await acceptCompressionLow({
-							id,
-							request: { startMills: s.startMills, endMills: s.endMills }
-						});
-					}
-				}
-			}
-			suggestionsResource.refresh();
+			const call = reviewCompressionLows({
+				action,
+				items: ids.map((id) =>
+					action === CompressionLowBatchAction.Accept && id === activeSuggestion && brushDomain
+						? { id, startMills: brushDomain[0].getTime(), endMills: brushDomain[1].getTime() }
+						: { id }
+				)
+			}).updates(suggestionsQuery.withOverride(optimistic));
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
+			await call;
 		} catch (err) {
 			toast.error(mutationError(err));
+			selectedSuggestions = reviewed;
+			void loadSuggestionDetail(ids[0]);
+			suggestionsResource.refresh();
 		} finally {
 			isLoading = false;
 		}
 	}
 
-	async function handleDismiss() {
-		if (selectedSuggestions.size === 0) return;
-		isLoading = true;
-		try {
-			const ids = [...selectedSuggestions];
-			const firstSelectedIndex = filteredSuggestions.findIndex((s) => s.id === ids[0]);
-			for (const id of ids) {
-				await dismissCompressionLow(id);
-			}
-			suggestionsResource.refresh();
-			selectedSuggestions = new Set();
-			selectNextSuggestion(firstSelectedIndex);
-		} catch (err) {
-			toast.error(mutationError(err));
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	async function handleDelete() {
-		if (selectedSuggestions.size === 0) return;
-		isLoading = true;
-		try {
-			const ids = [...selectedSuggestions];
-			const firstSelectedIndex = filteredSuggestions.findIndex((s) => s.id === ids[0]);
-			for (const id of ids) {
-				await deleteCompressionLow(id);
-			}
-			suggestionsResource.refresh();
-			selectedSuggestions = new Set();
-			selectNextSuggestion(firstSelectedIndex);
-		} catch (err) {
-			toast.error(mutationError(err));
-		} finally {
-			isLoading = false;
-		}
-	}
+	const handleAccept = () => review(CompressionLowBatchAction.Accept);
+	const handleDismiss = () => review(CompressionLowBatchAction.Dismiss);
+	const handleDelete = () => review(CompressionLowBatchAction.Delete);
 
 	function selectNextSuggestion(previousIndex: number) {
 		if (filteredSuggestions.length === 0) {
@@ -305,18 +277,13 @@
 		return mills == null ? '—' : time(mills);
 	}
 
-	function getConfidenceLabel(confidence: number): string {
-		if (confidence >= 0.75) return 'High';
-		if (confidence >= 0.6) return 'Medium';
-		return 'Low';
+	function getConfidenceLabel(band: CompressionLowConfidenceBand | undefined): string {
+		return band === CompressionLowConfidenceBand.High ? 'High' : 'Medium';
 	}
 
-	function getConfidenceVariant(confidence: number): 'default' | 'secondary' | 'outline' {
-		if (confidence >= 0.75) return 'default';
-		if (confidence >= 0.6) return 'secondary';
-		return 'outline';
+	function getConfidenceVariant(band: CompressionLowConfidenceBand | undefined): 'default' | 'secondary' {
+		return band === CompressionLowConfidenceBand.High ? 'default' : 'secondary';
 	}
-
 
 	function formatNightOf(nightOf: string | Date): string {
 		const date = nightDate(nightOf);
@@ -485,7 +452,7 @@
 								<Table.Cell class="text-right tabular-nums">
 									{suggestion.recoveryMinutes ?? '-'}
 								</Table.Cell>
-								<Table.Cell>{getConfidenceLabel(suggestion.confidence ?? 0)}</Table.Cell>
+								<Table.Cell>{getConfidenceLabel(suggestion.confidenceBand)}</Table.Cell>
 								<Table.Cell>{getStatusLabel(suggestion.status)}</Table.Cell>
 							</Table.Row>
 						{/each}
@@ -529,8 +496,8 @@
 										</p>
 									</div>
 								</div>
-								<Badge variant={getConfidenceVariant(suggestion.confidence ?? 0)}>
-									{getConfidenceLabel(suggestion.confidence ?? 0)}
+								<Badge variant={getConfidenceVariant(suggestion.confidenceBand)}>
+									{getConfidenceLabel(suggestion.confidenceBand)}
 								</Badge>
 							</div>
 						</button>

@@ -1,4 +1,4 @@
-import { GlucoseBucket, PumpModeState, StateSpanCategory, TempBasalMetric } from "$api-clients";
+import { GlucoseBucket, PumpModeState, StateSpanCategory, TempBasalMetric } from "#lib/api/generated/nocturne-api-client.js";
 import { isTrendBucket } from "./types";
 
 const RATE_DIRECTIONS = ["falling", "rising"] as const;

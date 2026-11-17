@@ -1,7 +1,7 @@
 <script lang="ts">
   /** Count cards summarising the sensor-integrity analysis. Figures come straight from the API. */
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import type { SensorIntegritySummary } from "$lib/api";
+  import { Card, CardContent } from "#lib/components/ui/card/index.js";
+  import type { SensorIntegritySummary } from "#lib/api/index.js";
 
   interface Props {
     summary: SensorIntegritySummary | undefined;

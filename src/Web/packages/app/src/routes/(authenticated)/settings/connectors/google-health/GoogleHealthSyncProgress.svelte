@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { GoogleHealthStatus } from "$lib/api";
-  import { Progress } from "$lib/components/ui/progress";
-  import { relativeAge } from "$lib/utils/formatting";
+  import type { GoogleHealthStatus } from "#lib/api/index.js";
+  import { Progress } from "#lib/components/ui/progress/index.js";
+  import { relativeAge } from "#lib/utils/formatting.js";
   import { syncPhaseLabel } from "./google-health-copy.svelte";
 
   let { status }: { status: GoogleHealthStatus } = $props();

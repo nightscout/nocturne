@@ -1,9 +1,9 @@
 import { getContext, setContext } from "svelte";
 import { page } from "$app/state";
-import type { LoopAnalysisResponse } from "$lib/api";
-import { getEnvelope } from "$api/generated/loopAnalysis.generated.remote";
-import type { ReportsParamsReturn } from "$lib/hooks/date-params.svelte";
-import { contextResource } from "$lib/hooks/resource-context.svelte";
+import type { LoopAnalysisResponse } from "#lib/api/index.js";
+import { getEnvelope } from "#lib/api/generated/loopAnalysis.generated.remote.js";
+import type { ReportsParamsReturn } from "#lib/hooks/date-params.svelte.js";
+import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 import { dailyProfileQuery, readLoopAnalysisFilter } from "./loop-analysis-filter";
 import { loopAnalysisPageAt, loopAnalysisPath, type LoopAnalysisPage } from "./loop-analysis-pages.svelte";
 

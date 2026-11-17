@@ -3,21 +3,21 @@
     getActivationStatus,
     endActivation,
     renewActivation,
-  } from "$api/generated/profileActivations.generated.remote";
-  import { ProfileActivationOrigin, type ProfileActivationDto } from "$api-clients";
-  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import * as Alert from "$lib/components/ui/alert";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/api/generated/profileActivations.generated.remote.js";
+  import { ProfileActivationOrigin, type ProfileActivationDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { Card, CardContent, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import User from "@lucide/svelte/icons/user";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import Plug from "@lucide/svelte/icons/plug";
   import Repeat from "@lucide/svelte/icons/repeat";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import { profileActivationSource } from "$lib/utils/profile-activation-label";
-  import { formatDateTimeCompact } from "$lib/utils/formatting";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { describeSubmitError } from "$lib/forms";
+  import { profileActivationSource } from "#lib/utils/profile-activation-label.js";
+  import { formatDateTimeCompact } from "#lib/utils/formatting.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { describeSubmitError } from "#lib/forms/index.js";
 
   const statusQuery = getActivationStatus(undefined);
   const status = $derived(statusQuery.current);

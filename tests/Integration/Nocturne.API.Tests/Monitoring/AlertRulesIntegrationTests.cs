@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// Integration tests for the alert rules CRUD endpoints at
 /// <c>/api/v4/alert-rules</c>.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class AlertRulesIntegrationTests : ApiIntegrationTestBase
 {

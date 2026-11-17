@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { userEvent } from "vitest/browser";
 import { timeDay } from "d3-time";
-import type { DailySummaryDay } from "$api/generated/nocturne-api-client";
-import { PRINT_LAYOUT_CLASS } from "$lib/components/charts/print/print-mode.svelte";
-import { regionFormat, type RegionFormat } from "$lib/stores/appearance-store.svelte";
+import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
+import { PRINT_LAYOUT_CLASS } from "#lib/components/charts/print/print-mode.svelte.js";
+import { regionFormat, type RegionFormat } from "#lib/stores/appearance-store.svelte.js";
 import Harness from "./YearHeatmap.test-harness.svelte";
 
 const START_OF_2024 = new Date(2024, 0, 1);

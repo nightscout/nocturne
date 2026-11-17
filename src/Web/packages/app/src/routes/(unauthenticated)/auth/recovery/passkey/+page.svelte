@@ -1,13 +1,13 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { FormError } from "$lib/forms";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { FormError } from "#lib/forms/index.js";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Check from "@lucide/svelte/icons/check";
   import { Artwork } from "water-ui";
-  import { fingerprintArtwork } from "$lib/watercolour-icons";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,
@@ -15,11 +15,11 @@
   import {
     registerOptions,
     registerComplete,
-  } from "$lib/api/generated/passkeys.generated.remote";
+  } from "#lib/api/generated/passkeys.generated.remote.js";
   import {
     describePasskeyError,
     parseCeremonyOptions,
-  } from "$lib/components/auth/passkey-errors";
+  } from "#lib/components/auth/passkey-errors.js";
   import { page } from "$app/state";
 
   /**
@@ -28,11 +28,9 @@
    * with; naming someone else changes nothing about which account is enrolled.
    */
   const username = $derived(page.url.searchParams.get("username") ?? "");
-  const returnUrl = $derived(page.url.searchParams.get("returnUrl") ?? "/");
-  const loginUrl = $derived(
-    resolve(`/auth/login?${new URLSearchParams({ returnUrl })}`)
-  );
 
+  const returnUrl = $derived(page.url.searchParams.get("returnUrl") ?? "/");
+  const loginUrl = $derived(resolve(`auth/login?${new URLSearchParams({ returnUrl })}`));
   let isRegistering = $state(false);
   let registered = $state(false);
   let errorMessage = $state<string | null>(null);

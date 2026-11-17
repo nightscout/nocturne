@@ -107,6 +107,13 @@ public class MigrationRunEntity
     public string? CollectionOutcomes { get; set; }
 
     /// <summary>
+    /// The source's alarm thresholds and switches as read when an API-mode run began, as JSON; null
+    /// when the run read none. The setup hub starts the Alerts item from them.
+    /// </summary>
+    [Column("source_alarm_settings", TypeName = "jsonb")]
+    public string? SourceAlarmSettings { get; set; }
+
+    /// <summary>
     /// Navigation property for the migration source
     /// </summary>
     [ForeignKey(nameof(SourceId))]

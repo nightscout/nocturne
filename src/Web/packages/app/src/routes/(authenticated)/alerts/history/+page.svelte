@@ -1,25 +1,25 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { getAlertHistory } from "$api/generated/alerts.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import type { HistoryExcursionResponse } from "$api-clients";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  import { getAlertHistory } from "#lib/api/generated/alerts.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import type { HistoryExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import HistoryIcon from "@lucide/svelte/icons/history";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { EmptyState } from "$lib/components/shared";
-  import { formatElapsedDuration } from "$lib/utils/duration";
-  import { formatDateTimeCompact } from "$lib/utils/formatting";
-  import { severity } from "$lib/components/alerts/severity";
-  import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { formatElapsedDuration } from "#lib/utils/duration.js";
+  import { formatDateTimeCompact } from "#lib/utils/formatting.js";
+  import { severity } from "#lib/components/alerts/severity.js";
+  import { severityLabel } from "#lib/components/alerts/severityLabel.svelte.js";
 
   let page = $state(1);
   const historyQuery = $derived(getAlertHistory({ page, pageSize: 25 }));
@@ -33,7 +33,7 @@
       type="button"
       variant="ghost"
       size="icon"
-      onclick={() => goto(resolve("/alerts"))}
+      onclick={() => goto(resolve('alerts'))}
       aria-label="Back to alerts"
     >
       <ArrowLeft class="h-4 w-4" />
@@ -82,7 +82,7 @@
           <EmptyState art="clock" variant="outline" title="No alert history yet" />
         {:else}
           <div class="space-y-2">
-            {#each (history.items ?? []) as h (h.id)}
+            {#each history.items ?? [] as h (h.id)}
               {@render historyRow(h)}
             {/each}
           </div>
@@ -94,22 +94,18 @@
                 variant="outline"
                 size="sm"
                 disabled={page <= 1}
-                onclick={() => (page = page - 1)}
-              >
-                Previous
-              </Button>
-              <span class="text-xs text-muted-foreground tabular-nums">
-                Page {page} of {history.totalPages}
-              </span>
+                onclick={() => page = page - 1}
+              >Previous</Button>
+
+              <span class="text-xs text-muted-foreground tabular-nums">Page {page} of {history.totalPages}</span>
+
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 disabled={page >= (history.totalPages ?? 1)}
-                onclick={() => (page = page + 1)}
-              >
-                Next
-              </Button>
+                onclick={() => page = page + 1}
+              >Next</Button>
             </div>
           {/if}
         {/if}

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Notifications;
 using Nocturne.Core.Contracts.Notifications;
@@ -32,14 +33,15 @@ public class NotificationV1ServiceTests
         _service = CreateService(TenantA);
     }
 
-    private NotificationV1Service CreateService(Guid tenantId) =>
+    private NotificationV1Service CreateService(Guid tenantId, TimeProvider? time = null) =>
         new(
             _mockLogger.Object,
             _mockAuthorizationService.Object,
             _mockSignalRBroadcastService.Object,
             Mock.Of<ITenantAccessor>(a => a.TenantId == tenantId),
             _snoozes,
-            _notifications
+            _notifications,
+            time ?? TimeProvider.System
         );
 
     [Fact]
@@ -53,6 +55,17 @@ public class NotificationV1ServiceTests
         Assert.True(first.Success);
         Assert.False(second.Success);
         Assert.Contains("already been snoozed", second.Message);
+    }
+
+    [Fact]
+    public async Task AckNotificationAsync_StampsTheResponseFromTheClock()
+    {
+        var now = new DateTimeOffset(2026, 10, 29, 3, 4, 5, TimeSpan.Zero);
+        var request = new NotificationAckRequest { Level = 1, Group = "default", Time = 1800000 };
+
+        var result = await CreateService(TenantA, new FakeTimeProvider(now)).AckNotificationAsync(request, CancellationToken.None);
+
+        Assert.Equal(now.ToUnixTimeMilliseconds(), result.Timestamp);
     }
 
     [Fact]

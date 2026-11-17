@@ -55,15 +55,15 @@
 <script lang="ts">
   import { onMount, type Snippet } from "svelte";
   import type { ArtworkId, IconArtworkSource, PaletteId } from "water-ui";
-  import { stillArtwork } from "$lib/watercolour-deferral.svelte";
-  import { watercolourWanted } from "$lib/stores/illustrations.svelte";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
+  import { watercolourWanted } from "#lib/stores/illustrations.svelte.js";
   import EmptyStatePlainIcon, { hasPlainGlyph } from "./EmptyStatePlainIcon.svelte";
-  import * as Card from "$lib/components/ui/card";
-  import { cn } from "$lib/utils";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { cn } from "#lib/utils/index.js";
 
   interface Props {
     /**
-     * A catalogue artwork id, or a Lucide icon source from `$lib/watercolour-icons`.
+     * A catalogue artwork id, or a Lucide icon source from `#lib/watercolour-icons.js`.
      * Without a GPU a catalogue artwork plays its baked reveal (its final frame under
      * reduced motion); an icon source draws its baked final, else the plain Lucide icon.
      * With illustrations off or the browser saving data, either shows the Lucide glyph it

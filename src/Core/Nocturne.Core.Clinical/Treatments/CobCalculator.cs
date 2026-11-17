@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -42,13 +41,13 @@ public class CobCalculator(
         // A reported COB of exactly zero is a real value ("no carbs on board"), not a missing one.
         if (await GetDeviceCobAsync(time, live, ct) is { } deviceCob)
         {
-            return AddDisplay(deviceCob);
+            return deviceCob;
         }
 
         var treatmentCOB =
             carbIntakes?.Any() == true
                 ? await FromCarbIntakesAsync(carbIntakes, boluses, tempBasals, time, ct)
-                : new CobResult();
+                : new CobResult { DecayedBy = 0, IsDecaying = 0, RawCarbImpact = 0 };
 
         var result = new CobResult
         {
@@ -63,7 +62,7 @@ public class CobCalculator(
             TreatmentCOB = treatmentCOB,
         };
 
-        return AddDisplay(result);
+        return result;
     }
 
     internal async Task<CobResult> FromCarbIntakesAsync(
@@ -317,8 +316,8 @@ public class CobCalculator(
     {
         var (from, to) = DeviceReportedValues.Window(time, live);
         var aps = (await apsSnapshotRepo.GetAsync(
-            from: DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            to: DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            from: from.ToUtcDateTime(),
+            to: to.ToUtcDateTime(),
             device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))
             .Select(s => new DeviceReading(
                 s.Timestamp.ToMills(), DeviceSource.Aps, s.Iob, s.Cob,
@@ -335,20 +334,6 @@ public class CobCalculator(
             Mills = reading.Mills,
             ReportedByDevice = true,
         };
-    }
-
-    private static CobResult AddDisplay(CobResult cob)
-    {
-        if (cob.Cob <= 0)
-            return cob;
-
-        // Invariant: these strings go out over the API, so they must not pick up the
-        // server's decimal separator.
-        var display = (Math.Round(cob.Cob * 10) / 10).ToString(CultureInfo.InvariantCulture);
-        cob.Display = display;
-        cob.DisplayLine = $"COB: {display}g";
-
-        return cob;
     }
 
     private async Task<double> GetCarbAbsorptionRateOrDefaultAsync(long time, CancellationToken ct)

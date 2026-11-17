@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { InsulinActionTimeSource } from "$api";
+import { InsulinActionTimeSource } from "#lib/api/index.js";
 import InsulinActionTimeNote from "./InsulinActionTimeNote.svelte";
 
 const sam = { kind: "named", name: "Sam" } as const;

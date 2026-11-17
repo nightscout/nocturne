@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { formatGlucoseValue } from "$lib/utils/formatting";
-  import type { GlucoseUnits } from "$lib/utils/formatting";
-  import type { PunchCardMonthSummary } from "$api";
+  import { formatGlucoseValue } from "#lib/utils/formatting.js";
+  import type { GlucoseUnits } from "#lib/utils/formatting.js";
+  import type { PunchCardMonthSummary } from "#lib/api/index.js";
 
   interface Props {
     monthSummary?: PunchCardMonthSummary;

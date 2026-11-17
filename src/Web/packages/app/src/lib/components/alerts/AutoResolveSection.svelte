@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Button } from "$lib/components/ui/button";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Wand2 from "@lucide/svelte/icons/wand-sparkles";
   import RuleBuilder from "./RuleBuilder.svelte";
   import {

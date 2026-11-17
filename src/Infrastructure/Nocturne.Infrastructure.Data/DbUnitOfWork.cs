@@ -27,6 +27,25 @@ public sealed class DbUnitOfWork : IAsyncDisposable
         new(await contexts.CreateAsync(ct));
 
     /// <summary>
+    /// Opens a unit on a context pinned to <paramref name="tenantId"/> in place of the scope's, for
+    /// a caller that has checked the reader may write there, such as a platform admin acting on a
+    /// tenant other than their own. The pin is what <c>INocturneDbContextFactory.CreateForTenantAsync</c>
+    /// gives: tenant only, the scope's share, clamp and audit state unchanged.
+    /// </summary>
+    public static async ValueTask<DbUnitOfWork> OpenForTenantAsync(
+        INocturneDbContextFactory contexts, Guid tenantId, CancellationToken ct = default) =>
+        new(await contexts.CreateForTenantAsync(tenantId, ct));
+
+    /// <summary>
+    /// Opens a unit on a context with no tenant and no subject, for a write to platform tables, or
+    /// one that provisions a tenant and pins it once the row exists. The pin is what
+    /// <c>INocturneDbContextFactory.CreatePlatformAsync</c> gives.
+    /// </summary>
+    public static async ValueTask<DbUnitOfWork> OpenPlatformAsync(
+        INocturneDbContextFactory contexts, CancellationToken ct = default) =>
+        new(await contexts.CreatePlatformAsync(ct));
+
+    /// <summary>
     /// Takes ownership of <paramref name="context"/>, for a test that runs a writer on a context it
     /// built by hand. Disposing the unit disposes it.
     /// </summary>
@@ -83,6 +102,32 @@ public readonly struct DbContextLease : IAsyncDisposable
             return new DbContextLease(unit.Context, owned: false);
         ArgumentNullException.ThrowIfNull(contexts);
         return new DbContextLease(await contexts.CreateAsync(ct), owned: true);
+    }
+
+    /// <summary>
+    /// Leases <paramref name="unit"/>'s context when there is one, whose pin its owner set, else a
+    /// new context from <paramref name="contexts"/> pinned to <paramref name="tenantId"/>.
+    /// </summary>
+    public static async ValueTask<DbContextLease> OpenForTenantAsync(
+        DbUnitOfWork? unit, INocturneDbContextFactory? contexts, Guid tenantId, CancellationToken ct = default)
+    {
+        if (unit is not null)
+            return new DbContextLease(unit.Context, owned: false);
+        ArgumentNullException.ThrowIfNull(contexts);
+        return new DbContextLease(await contexts.CreateForTenantAsync(tenantId, ct), owned: true);
+    }
+
+    /// <summary>
+    /// Leases <paramref name="unit"/>'s context when there is one, else a new platform context
+    /// from <paramref name="contexts"/>.
+    /// </summary>
+    public static async ValueTask<DbContextLease> OpenPlatformAsync(
+        DbUnitOfWork? unit, INocturneDbContextFactory? contexts, CancellationToken ct = default)
+    {
+        if (unit is not null)
+            return new DbContextLease(unit.Context, owned: false);
+        ArgumentNullException.ThrowIfNull(contexts);
+        return new DbContextLease(await contexts.CreatePlatformAsync(ct), owned: true);
     }
 
     /// <inheritdoc />

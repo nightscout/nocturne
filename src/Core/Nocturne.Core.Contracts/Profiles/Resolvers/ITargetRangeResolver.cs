@@ -20,4 +20,10 @@ public interface ITargetRangeResolver
     /// Returns the low and high BG targets in mg/dL at the given time from a single resolution.
     /// </summary>
     Task<(double Low, double High)> GetBGTargetRangeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// As <see cref="GetBGTargetRangeAsync"/>, but null when no schedule gives a range at that time
+    /// in place of the defaults.
+    /// </summary>
+    Task<(double Low, double High)?> FindBGTargetRangeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
 }

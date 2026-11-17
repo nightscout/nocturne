@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as Popover from "$lib/components/ui/popover";
-  import * as Command from "$lib/components/ui/command";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as Command from "#lib/components/ui/command/index.js";
   import Filter from "@lucide/svelte/icons/funnel";
   import X from "@lucide/svelte/icons/x";
   import Check from "@lucide/svelte/icons/check";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
   import type { Component } from "svelte";
 
   interface Option {

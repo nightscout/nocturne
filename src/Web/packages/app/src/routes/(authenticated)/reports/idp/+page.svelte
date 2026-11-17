@@ -1,40 +1,40 @@
 <script lang="ts">
-  import { EmptyState } from "$lib/components/shared";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     a1cLabel,
     a1cUnitLabel,
     formatA1cValue,
-  } from "$lib/utils/a1c-formatting";
+  } from "#lib/utils/a1c-formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Target from "@lucide/svelte/icons/target";
   import Activity from "@lucide/svelte/icons/activity";
   import Droplets from "@lucide/svelte/icons/droplets";
-  import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
-  import ScheduledBasalRateChart from "$lib/components/reports/ScheduledBasalRateChart.svelte";
-  import HourlyBolusChart from "$lib/components/reports/HourlyBolusChart.svelte";
-  import ScheduleFooter from "$lib/components/reports/ScheduleFooter.svelte";
-  import ActiveProfileHeading from "$lib/components/reports/ActiveProfileHeading.svelte";
-  import AidSystemUseCard from "$lib/components/reports/AidSystemUseCard.svelte";
-  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
-  import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import { getIdpData } from "$api/idp.remote";
-  import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { AmbulatoryGlucoseProfile } from "#lib/components/ambulatory-glucose-profile/index.js";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import GlycemicRiskIndexChart from "#lib/components/reports/GlycemicRiskIndexChart.svelte";
+  import ScheduledBasalRateChart from "#lib/components/reports/ScheduledBasalRateChart.svelte";
+  import HourlyBolusChart from "#lib/components/reports/HourlyBolusChart.svelte";
+  import ScheduleFooter from "#lib/components/reports/ScheduleFooter.svelte";
+  import ActiveProfileHeading from "#lib/components/reports/ActiveProfileHeading.svelte";
+  import AidSystemUseCard from "#lib/components/reports/AidSystemUseCard.svelte";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import { bgPatternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { getIdpData } from "#lib/api/idp.remote.js";
+  import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is the standard IDP report period
@@ -49,7 +49,8 @@
 
   const data = $derived({
     readingCount: reportsResource.current?.readingCount ?? 0,
-    boluses: reportsResource.current?.boluses ?? [],
+    hourlyBolusCounts: reportsResource.current?.hourlyBolusCounts ?? [],
+    hourlyTimeZoneUnavailableReason: reportsResource.current?.hourlyTimeZoneUnavailableReason,
     insulinDeliveryStats: reportsResource.current?.insulinDeliveryStats,
     activeSchedules: reportsResource.current?.activeSchedules ?? [],
     analysis: reportsResource.current?.analysis,
@@ -60,7 +61,6 @@
 
   // Derived values from data
   const readingCount = $derived(data.readingCount);
-  const boluses = $derived(data.boluses);
   const insulinStats = $derived(data.insulinDeliveryStats);
   const analysis = $derived(data.analysis);
   const aidMetrics = $derived(data.aidSystemMetrics);
@@ -109,7 +109,7 @@
   {#if data.timeZoneUnavailableReason}
     <p class="text-sm text-muted-foreground">
       <TimeZoneNote reason={data.timeZoneUnavailableReason}>
-        The hourly figures place each reading at the local time its device reported. Days of data
+        The hourly glucose figures place each reading at the local time its device reported. Days of data
         are counted on UTC days.
       </TimeZoneNote>
     </p>
@@ -127,21 +127,17 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        {@const avgBasal = insulinStats?.totalBasal != null ? insulinStats.totalBasal / dayCount : null}
-        {@const avgBolus = insulinStats?.totalBolus != null ? insulinStats.totalBolus / dayCount : null}
-        {@const avgScheduled = insulinStats?.scheduledBasal != null ? insulinStats.scheduledBasal / dayCount : null}
-
         {@const basalPct = insulinStats?.basalPercent ?? 0}
         {@const bolusPct = insulinStats?.bolusPercent ?? 0}
         <div class="space-y-1">
           <div class="flex justify-between text-xs text-muted-foreground">
             <span class="flex items-center gap-1">
               <TextureSwatch texture="insulin-scheduled-basal" color="var(--basal)" />
-              Basal: {avgBasal?.toFixed(1) ?? "--"} U/day ({basalPct.toFixed(0)}%)
+              Basal: {insulinStats?.totalBasalPerDay?.toFixed(1) ?? "--"} U/day ({basalPct.toFixed(0)}%)
             </span>
             <span class="flex items-center gap-1">
               <TextureSwatch texture="insulin-bolus" />
-              Bolus: {avgBolus?.toFixed(1) ?? "--"} U/day ({bolusPct.toFixed(0)}%)
+              Bolus: {insulinStats?.totalBolusPerDay?.toFixed(1) ?? "--"} U/day ({bolusPct.toFixed(0)}%)
             </span>
           </div>
           <div class="flex h-4 rounded-full overflow-hidden">
@@ -164,11 +160,11 @@
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
             <div class="text-muted-foreground">Avg delivered basal</div>
-            <div class="font-semibold">{avgBasal?.toFixed(1) ?? "--"} U/day</div>
+            <div class="font-semibold">{insulinStats?.totalBasalPerDay?.toFixed(1) ?? "--"} U/day</div>
           </div>
           <div>
             <div class="text-muted-foreground">Avg scheduled basal</div>
-            <div class="font-semibold">{avgScheduled?.toFixed(1) ?? "--"} U/day</div>
+            <div class="font-semibold">{insulinStats?.scheduledBasalPerDay?.toFixed(1) ?? "--"} U/day</div>
           </div>
         </div>
 
@@ -186,13 +182,13 @@
           <div>
             <div class="text-muted-foreground">Meal boluses/day</div>
             <div class="font-semibold">
-              {insulinStats?.mealBoluses != null ? (insulinStats.mealBoluses / dayCount).toFixed(1) : "--"}
+              {insulinStats?.mealBolusesPerDay?.toFixed(1) ?? "--"}
             </div>
           </div>
           <div>
             <div class="text-muted-foreground">Correction boluses/day</div>
             <div class="font-semibold">
-              {insulinStats?.correctionBoluses != null ? (insulinStats.correctionBoluses / dayCount).toFixed(1) : "--"}
+              {insulinStats?.correctionBolusesPerDay?.toFixed(1) ?? "--"}
             </div>
           </div>
         </div>
@@ -277,7 +273,11 @@
 
       <div class="w-full">
         <h4 class="text-sm font-semibold text-muted-foreground mb-1">User-initiated boluses per day</h4>
-        <HourlyBolusChart {boluses} {dayCount} />
+        {#if data.hourlyTimeZoneUnavailableReason}
+          <p class="text-xs text-muted-foreground">This chart cannot show boluses by hour of day.</p>
+        {:else}
+          <HourlyBolusChart hours={data.hourlyBolusCounts} />
+        {/if}
       </div>
 
       <ScheduleFooter profiles={data.activeSchedules} />

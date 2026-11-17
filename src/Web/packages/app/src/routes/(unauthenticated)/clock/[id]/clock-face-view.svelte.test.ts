@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page as browserPage, userEvent } from "vitest/browser";
 import { page } from "$app/state";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const navigation = vi.hoisted(() => ({ goto: vi.fn(async () => {}) }));
 vi.mock("$app/navigation", () => navigation);
-vi.mock("$lib/stores/public-clock-store.svelte", () => ({
+vi.mock("#lib/stores/public-clock-store.svelte.js", () => ({
   PublicClockStore: class {
     demoMode = false;
     watchAlerts() {}
@@ -14,10 +14,10 @@ vi.mock("$lib/stores/public-clock-store.svelte", () => ({
     stop() {}
   },
 }));
-vi.mock("$lib/stores/realtime-store.svelte", () => ({ setClockGlucoseSource: () => {} }));
-vi.mock("$lib/components/clock/ClockFaceRenderer.svelte", () => ({ default: () => {} }));
-vi.mock("$lib/components/clock/ClockAlertBand.svelte", () => ({ default: () => {} }));
-vi.mock("$api/generated/clockFaces.generated.remote", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({ setClockGlucoseSource: () => {} }));
+vi.mock("#lib/components/clock/ClockFaceRenderer.svelte", () => ({ default: () => {} }));
+vi.mock("#lib/components/clock/ClockAlertBand.svelte", () => ({ default: () => {} }));
+vi.mock("#lib/api/generated/clockFaces.generated.remote.js", () => ({
   getById: () => remoteQuery(() => ({ id: "f", config: { rows: [], settings: {} } })),
 }));
 

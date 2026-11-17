@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PumpModeState } from "$lib/api";
+  import { PumpModeState } from "#lib/api/index.js";
   import AutomaticModeIcon from "./AutomaticModeIcon.svelte";
   import ManualModeIcon from "./ManualModeIcon.svelte";
   import BoostModeIcon from "./BoostModeIcon.svelte";

@@ -5,7 +5,7 @@ import {
   AidAlgorithm,
   InsulinCategory,
   InsulinRole,
-} from "$api";
+} from "#lib/api/index.js";
 
 export const diabetesTypeLabels: Record<DiabetesType, string> = {
   [DiabetesType.Type1]: "Type 1",

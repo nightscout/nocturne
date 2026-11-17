@@ -4,21 +4,11 @@ vi.mock("$app/navigation", () => ({
   beforeNavigate: vi.fn(),
 }));
 
-vi.mock("runed", () => ({
-  Debounced: class {
-    current: unknown;
-    constructor(fn: () => unknown, _delay: number) {
-      this.current = fn();
-    }
-  },
-}));
-
-import { beforeNavigate } from "$app/navigation";
+import { beforeNavigate, type BeforeNavigate } from "$app/navigation";
 import { z } from "zod";
 import type { Mock } from "vitest";
-import type { BeforeNavigate } from "@sveltejs/kit";
 import { FormGuard, type GuardedForm } from "./form-guard.svelte";
-import { FOLLOW_UP_ERROR, GENERIC_SUBMIT_ERROR } from "./submit-error";
+import { followUpError, genericSubmitError } from "./submit-messages.svelte";
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -136,36 +126,66 @@ describe("FormGuard", () => {
   });
 
   describe("issuesFor", () => {
-    it("returns issues filtered by field path", () => {
-      const guard = new FormGuard({
-        form: createMockForm(),
+    function invalidGuard(form = createMockForm()) {
+      return new FormGuard({
+        form,
         schema,
         el: () => null,
         initial: () => ({ name: "Alice", age: 30 }),
         values: () => ({ name: "A", age: -1 }),
       });
+    }
+
+    it("holds back every issue before a submit is attempted, and still counts them", () => {
+      const guard = invalidGuard();
 
       guard.validate();
 
+      expect(guard.issuesFor("name")).toHaveLength(0);
+      expect(guard.visibleIssues).toHaveLength(0);
+      expect(guard.issues).toHaveLength(2);
+      expect(guard.valid).toBe(false);
+    });
+
+    it("returns issues filtered by field path once a submit was attempted", async () => {
+      const form = createMockForm();
+      const guard = invalidGuard(form);
+      guard.enhance();
+
+      await form._triggerEnhance();
+
       const nameIssues = guard.issuesFor("name");
       const ageIssues = guard.issuesFor("age");
-
       expect(nameIssues.length).toBe(1);
       expect(nameIssues[0].message).toContain("2 characters");
       expect(ageIssues.length).toBe(1);
       expect(ageIssues[0].message).toContain("non-negative");
+      expect(guard.visibleIssues).toHaveLength(2);
     });
 
-    it("returns empty array for fields with no issues", () => {
+    it("clears submitted on reset", async () => {
+      const form = createMockForm();
+      const guard = invalidGuard(form);
+      guard.enhance();
+      await form._triggerEnhance();
+
+      guard.reset();
+
+      expect(guard.submitted).toBe(false);
+    });
+
+    it("returns empty array for fields with no issues", async () => {
+      const form = createMockForm();
       const guard = new FormGuard({
-        form: createMockForm(),
+        form,
         schema,
         el: () => null,
         initial: () => ({ name: "Alice", age: 30 }),
         values: () => ({ name: "Alice", age: 30 }),
       });
+      guard.enhance();
+      await form._triggerEnhance();
 
-      guard.validate();
       expect(guard.issuesFor("name")).toHaveLength(0);
     });
   });
@@ -269,6 +289,7 @@ describe("FormGuard", () => {
           type: "goto",
           from: null,
           to: null,
+          shallow: false,
           willUnload: false,
           complete: Promise.resolve(),
           cancel: cancelSpy,
@@ -315,7 +336,7 @@ describe("FormGuard", () => {
       });
 
       const result = guard.enhance();
-      expect(result).toEqual({ action: "/mock", method: "POST" });
+      expect(result).toMatchObject({ action: "/mock", method: "POST" });
     });
 
     it("blocks submission when validation fails", async () => {
@@ -347,7 +368,7 @@ describe("FormGuard", () => {
       expect(form._submitSpy).toHaveBeenCalled();
     });
 
-    it("sets submitted and re-snapshots on success", async () => {
+    it("clears submitted and re-snapshots on success", async () => {
       const form = createMockForm();
       const guard = new FormGuard({
         form,
@@ -358,7 +379,7 @@ describe("FormGuard", () => {
       });
       guard.enhance();
       await form._triggerEnhance();
-      expect(guard.submitted).toBe(true);
+      expect(guard.submitted).toBe(false);
       expect(guard.touched).toBe(false);
       expect(guard.submitError).toBeNull();
     });
@@ -397,7 +418,7 @@ describe("FormGuard", () => {
       guard.enhance();
       await form._triggerEnhance();
 
-      expect(guard.submitted).toBe(false);
+      expect(guard.submitted).toBe(true);
       expect(guard.dirty).toBe(true);
       expect(guard.snapshot).toEqual({ name: "Alice", age: 30 });
     });
@@ -441,7 +462,7 @@ describe("FormGuard", () => {
       await expect(form._triggerEnhance()).resolves.toBeUndefined();
 
       expect(guard.submitError).toBe("Diabetes type is required");
-      expect(guard.submitted).toBe(false);
+      expect(guard.submitted).toBe(true);
       expect(guard.dirty).toBe(true);
     });
 
@@ -462,7 +483,7 @@ describe("FormGuard", () => {
       guard.enhance();
       await form._triggerEnhance();
 
-      expect(guard.submitError).toBe(GENERIC_SUBMIT_ERROR);
+      expect(guard.submitError).toBe(genericSubmitError());
     });
 
     it("uses the configured fallback message", async () => {
@@ -503,7 +524,7 @@ describe("FormGuard", () => {
       fail = false;
       await form._triggerEnhance();
       expect(guard.submitError).toBeNull();
-      expect(guard.submitted).toBe(true);
+      expect(guard.submitted).toBe(false);
       expect(guard.saved).toBe(1);
     });
 
@@ -559,8 +580,8 @@ describe("FormGuard", () => {
       });
       await form._triggerEnhance();
 
-      expect(guard.submitError).toBe(FOLLOW_UP_ERROR);
-      expect(guard.submitted).toBe(true);
+      expect(guard.submitError).toBe(followUpError());
+      expect(guard.submitted).toBe(false);
       expect(guard.saved).toBe(0);
     });
   });

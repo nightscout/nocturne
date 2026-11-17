@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import type { TenantDto } from "$lib/api/generated/nocturne-api-client";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import type { TenantDto } from "#lib/api/generated/nocturne-api-client.js";
 
 const state = vi.hoisted(() => ({
   page: {
@@ -24,7 +24,7 @@ vi.mock("$app/navigation", () => ({
 function navigate(url: string) {
   for (const cb of state.afterNavigate) cb({ to: { url: new URL(url) } });
 }
-vi.mock("$api/generated/myTenants.generated.remote", () => ({
+vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
   getMyTenants: () => remoteQuery(() => state.tenants),
 }));
 

@@ -30,12 +30,12 @@
 </script>
 
 <script lang="ts">
-  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     cn,
     type WithElementRef,
     type WithoutChildrenOrChild,
-  } from "$lib/utils";
+  } from "#lib/utils/index.js";
   import { mergeProps } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";

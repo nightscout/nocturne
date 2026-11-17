@@ -4,7 +4,7 @@ title: Request membership
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Request membership
@@ -39,7 +39,7 @@ when they decide, so a blank one is simply harder to say yes to.
 
 ## What the owner sees
 
-The toggle and the requests themselves both live on **Settings > Sharing & Privacy**; see
+The toggle and the requests themselves both live on **Site settings > Sharing & Privacy**; see
 [reviewing requests](/docs/sharing/members#membership-requests) for the owner's side of this,
 including what each role lets the person see and do.
 

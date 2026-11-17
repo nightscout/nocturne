@@ -46,7 +46,8 @@ public class OAuthAccessTokenHandlerTests
                 Audience = "nocturne-api",
                 AccessTokenLifetimeMinutes = 15,
             }),
-            NullLogger<JwtService>.Instance);
+            NullLogger<JwtService>.Instance,
+            TimeProvider.System);
 
         var revocationCache = new Mock<IOAuthTokenRevocationCache>();
         revocationCache

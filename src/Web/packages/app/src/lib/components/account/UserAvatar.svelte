@@ -12,8 +12,8 @@
 </script>
 
 <script lang="ts">
-  import * as Avatar from "$lib/components/ui/avatar";
-  import { stillArtwork } from "$lib/watercolour-deferral.svelte";
+  import * as Avatar from "#lib/components/ui/avatar/index.js";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
 
   interface Props {
     name: string | null | undefined;
@@ -30,7 +30,7 @@
   let status = $state<"loading" | "loaded" | "error">("loading");
   // A wash behind a loaded photo would be simulated for nothing.
   const showWash = $derived(!src || status === "error");
-  const avatarWash = stillArtwork(() => import("$lib/watercolour/avatar-wash"), () => showWash);
+  const avatarWash = stillArtwork(() => import("#lib/watercolour/avatar-wash.js"), () => showWash);
 </script>
 
 <Avatar.Root {size} onLoadingStatusChange={(next) => (status = next)}>

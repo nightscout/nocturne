@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Configuration;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -52,11 +53,16 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
     private TenantService Service() => new(
         (new Factory(_db.Options, _tenantId)).AsNocturneFactory(),
+        new TenantRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
+        new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
+        new SubjectRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new GrantRevocationService(
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        TimeProvider.System,
         Mock.Of<ILogger<TenantService>>());
 
     /// <summary>Adds a membership, optionally carrying the owner role or being a system subject.</summary>
@@ -216,7 +222,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
         result.Ok.Should().BeTrue();
         var directory = new ChatIdentityDirectoryService(
-            (new Factory(_db.Options, _tenantId)).AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            (new Factory(_db.Options, _tenantId)).AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
         (await directory.GetCandidatesAsync("discord", "chat-user", default))
             .Select(c => c.Label).Should().BeEquivalentTo(["elsewhere"]);
         (await directory.GetCandidatesAsync("discord", "another-chat-user", default))

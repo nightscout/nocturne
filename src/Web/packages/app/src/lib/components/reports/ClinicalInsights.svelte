@@ -40,8 +40,8 @@
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge, type BadgeVariant } from "$lib/components/ui/badge";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import Lightbulb from "@lucide/svelte/icons/lightbulb";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -53,7 +53,7 @@
     formatInsight,
     getInsightTypeFromKey,
     type FormattedInsight,
-  } from "$lib/utils/insight-localization";
+  } from "#lib/utils/insight-localization.js";
 
   // Local types for glucose analytics and insights
   interface ClinicalAssessment {

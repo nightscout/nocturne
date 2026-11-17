@@ -1,19 +1,19 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import TimezoneCombobox from "#lib/components/patient/TimezoneCombobox.svelte";
   import Globe from "@lucide/svelte/icons/globe";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import { EmptyState } from "$lib/components/shared";
-  import * as tz from "$api/generated/timezoneTimelines.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import type { TimezoneTimelineEntry } from "$api";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import * as tz from "#lib/api/generated/timezoneTimelines.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import type { TimezoneTimelineEntry } from "#lib/api/index.js";
 
   const timelineQuery = tz.getTimeline();
   const entries = $derived<TimezoneTimelineEntry[]>(timelineQuery.current ?? []);

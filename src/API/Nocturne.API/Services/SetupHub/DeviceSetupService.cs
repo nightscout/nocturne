@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
-using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -34,6 +35,7 @@ public sealed class DeviceSetupConflictException(string message) : Exception(mes
 /// </summary>
 public partial class DeviceSetupService(
     INocturneDbContextFactory contexts,
+    IConnectorConfigurationRepository connectorConfigurations,
     IPatientDeviceRepository devices,
     IPatientInsulinRepository insulins,
     IDeviceReattributionService reattribution,
@@ -41,6 +43,7 @@ public partial class DeviceSetupService(
     ITrackerAlertRuleSyncService trackerRuleSync,
     ITherapySettingsResolver therapySettings,
     ConsumableTrackerWriter trackerWriter,
+    TimeProvider time,
     ILogger<DeviceSetupService> logger)
 {
     /// <summary>How far back data counts as evidence of what is in use now.</summary>
@@ -52,9 +55,10 @@ public partial class DeviceSetupService(
     /// </summary>
     private static readonly (string Token, string CatalogId)[] ModelTokens =
     [
+        ("dexcomg715day", "dexcom-g7-15-day"), ("g715day", "dexcom-g7-15-day"),
         ("dexcomg7", "dexcom-g7"), ("g7", "dexcom-g7"),
         ("dexcomg6", "dexcom-g6"), ("g6", "dexcom-g6"),
-        ("libre3", "libre-3"), ("libre2plus", "libre-2-plus"), ("libre2", "libre-2"),
+        ("libre3plus", "libre-3-plus"), ("libre3", "libre-3"), ("libre2plus", "libre-2-plus"), ("libre2", "libre-2"),
         ("guardian4", "medtronic-guardian-4"), ("guardian3", "medtronic-guardian-3"),
         ("omnipod5", "omnipod-5"), ("dash", "omnipod-dash"),
         ("mobi", "tandem-mobi"), ("tslim", "tandem-tslim-x2"),
@@ -120,7 +124,7 @@ public partial class DeviceSetupService(
 
     /// <summary>The insulin action time in use now, resolved as insulin on board resolves it.</summary>
     public Task<InsulinActionTime> ActionTimeAsync(CancellationToken ct) =>
-        therapySettings.GetActionTimeAsync(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct: ct);
+        therapySettings.GetActionTimeAsync(time.GetUtcNow().ToUnixTimeMilliseconds(), ct: ct);
 
     /// <summary>
     /// Records a confirmed guess, or the catalogue entry it was swapped for, as the current device of
@@ -166,7 +170,7 @@ public partial class DeviceSetupService(
         var zone = TimeZoneInfo.TryFindSystemTimeZoneById(await therapySettings.GetTimezoneAsync(ct: ct) ?? "", out var found)
             ? found
             : TimeZoneInfo.Utc;
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone));
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(time.GetUtcNow().UtcDateTime, zone));
     }
 
     /// <summary>
@@ -327,6 +331,8 @@ public partial class DeviceSetupService(
     }
 
     /// <summary>The offer of <paramref name="kind"/> and the tracker it stands for.</summary>
+    /// <param name="kind">The offer to find among those of the recorded devices.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <param name="db">The caller's transaction context, so the offer reads what it holds.</param>
     private async Task<(TrackerOffer Offer, ConsumableTrackerSpec Spec)> OfferAsync(
         TrackerOfferKind kind, CancellationToken ct, NocturneDbContext? db = null)
@@ -483,7 +489,7 @@ public partial class DeviceSetupService(
     private async Task<Evidence> GatherEvidenceAsync(CancellationToken ct)
     {
         await using var db = await contexts.CreateAsync(ct);
-        var since = DateTime.UtcNow - EvidenceWindow;
+        var since = time.GetUtcNow().UtcDateTime - EvidenceWindow;
         var found = new List<DeviceEvidence>();
 
         var readingLabel = await db.SensorGlucose
@@ -502,11 +508,9 @@ public partial class DeviceSetupService(
         if (pump is not null)
             found.Add(new(DeviceEvidenceSource.PumpStatus, $"{pump.Manufacturer} {pump.Model}".Trim()));
 
-        var connectors = await db.ConnectorConfigurations
-            .Select(c => new { c.ConnectorName, c.ConfigurationJson })
-            .ToListAsync(ct);
+        var connectors = await connectorConfigurations.ListAsync(ct);
         found.AddRange(connectors
-            .Where(c => ConnectorConfigurationService.GetEnabledFromConfig(c.ConfigurationJson))
+            .Where(c => ConnectorEnabledKey.IsEnabled(c.ConfigurationJson))
             .Select(c => c.ConnectorName)
             .Order()
             .Select(n => new DeviceEvidence(DeviceEvidenceSource.Connector, n)));

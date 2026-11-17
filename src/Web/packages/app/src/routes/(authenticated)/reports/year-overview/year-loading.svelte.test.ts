@@ -4,50 +4,48 @@ import { page } from "vitest/browser";
 import type {
   DailySummaryResponse,
   GriTimelineResponse,
-} from "$api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 const requests = vi.hoisted(() => ({
   metadata: vi.fn(),
   daily: vi.fn(),
   gri: vi.fn(),
 }));
-vi.mock("$api/generated/dataOverviews.generated.remote", () => ({
-  getAvailableYears: () => ({
-    run: () => requests.metadata(),
-  }),
-  getYearSummary: (params: { year: number }) => ({
-    run: async () => {
+vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", () => ({
+  getAvailableYears: () => createQueryResource(() => requests.metadata()),
+  getYearSummary: (params: { year: number }) =>
+    createQueryResource(async () => {
       const [dailySummary, griTimeline] = await Promise.all([
         requests.daily(params),
         requests.gri(params),
       ]);
       return { dailySummary, griTimeline };
-    },
-  }),
+    }),
 }));
 vi.mock(
-  "$lib/components/reports/year-overview/YearHeatmap.svelte",
+  "#lib/components/reports/year-overview/YearHeatmap.svelte",
   async () => ({
     default: (
-      await import("$lib/components/reports/year-overview/YearHeatmap.test-stub.svelte")
+      await import("#lib/components/reports/year-overview/YearHeatmap.test-stub.svelte")
     ).default,
   })
 );
 vi.mock(
-  "$lib/components/reports/year-overview/HeatmapLegend.svelte",
+  "#lib/components/reports/year-overview/HeatmapLegend.svelte",
   async () => ({
     default: (
-      await import("$lib/components/reports/year-overview/Empty.test-stub.svelte")
+      await import("#lib/components/reports/year-overview/Empty.test-stub.svelte")
     ).default,
   })
 );
-vi.mock("$lib/components/reports/GlycemicRiskIndexChart.svelte", async () => ({
+vi.mock("#lib/components/reports/GlycemicRiskIndexChart.svelte", async () => ({
   default: (
-    await import("$lib/components/reports/year-overview/Empty.test-stub.svelte")
+    await import("#lib/components/reports/year-overview/Empty.test-stub.svelte")
   ).default,
 }));
 
 import Harness from "./YearOverview.test-harness.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 let intersect: IntersectionObserverCallback;
 beforeEach(() => {

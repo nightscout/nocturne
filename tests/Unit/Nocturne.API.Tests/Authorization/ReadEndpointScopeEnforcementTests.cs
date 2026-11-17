@@ -146,6 +146,8 @@ public class ReadEndpointScopeEnforcementTests
             ["ShareLinkController.GetShareLink"] = V4Reason.ActionChecksAccess,
             ["GuestLinkController.GetGuestLinkScopeOptions"] = V4Reason.ActionChecksAccess,
             ["TenantSettingsController.GetTenantSettings"] = V4Reason.ActionChecksAccess,
+            ["TenantSettingsController.GetSubdomain"] = V4Reason.ActionChecksAccess,
+            ["ReleasesController.GetReleaseStatus"] = V4Reason.ActionChecksAccess,
             ["AuditController.GetMutationAuditLog"] = V4Reason.ActionChecksAccess,
             ["AuditController.GetReadAccessAuditLog"] = V4Reason.ActionChecksAccess,
             ["AuditController.GetAuditConfig"] = V4Reason.ActionChecksAccess,
@@ -168,6 +170,7 @@ public class ReadEndpointScopeEnforcementTests
             ["SystemController.GetChannelStatuses"] = V4Reason.StaticReference,
             ["TrackersController.GetTriggerEventTypes"] = V4Reason.StaticReference,
             ["TrackersController.GetEndEventTypes"] = V4Reason.StaticReference,
+            ["TrackersController.GetDeviceEventTypes"] = V4Reason.StaticReference,
             ["ServicesController.GetUploaderApps"] = V4Reason.StaticReference,
             ["ServicesController.GetUploaderSetup"] = V4Reason.StaticReference,
             ["ServicesController.GetConnectorCapabilities"] = V4Reason.StaticReference,
@@ -175,6 +178,9 @@ public class ReadEndpointScopeEnforcementTests
             ["SupportController.GetFallbackUrl"] = V4Reason.StaticReference,
 
             ["DatabaseCapacityController.Get"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["JobLedgerController.List"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["TenantCreationInviteAdminController.GetOverview"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["PlatformPolicyController.GetPolicy"] = V4ScopeGuardExemptions.PlatformAdminRole,
 
             ["WebhookSettingsController.GetWebhookSettings"] = V4Reason.NotStored,
 

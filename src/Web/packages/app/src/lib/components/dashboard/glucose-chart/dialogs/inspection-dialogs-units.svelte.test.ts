@@ -2,17 +2,17 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("$lib/api/generated/apsSnapshots.generated.remote", () => ({
+vi.mock("#lib/api/generated/apsSnapshots.generated.remote.js", () => ({
   getAll: vi.fn(async () => ({
     data: [{ mills: Date.parse("2026-01-01T12:00:00Z"), enacted: true, currentBg: 185, eventualBg: 150, targetBg: 99 }],
   })),
 }));
-vi.mock("$lib/api/generated/bolusCalculations.generated.remote", () => ({
+vi.mock("#lib/api/generated/bolusCalculations.generated.remote.js", () => ({
   getAll: vi.fn(async () => ({ data: [{ bloodGlucoseInput: 220 }] })),
 }));
 
-import { MealPeriod } from "$lib/api";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { MealPeriod } from "#lib/api/index.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import DeliveryInspectionDialog from "./DeliveryInspectionDialog.svelte";
 import GlucoseInspectionDialog from "./GlucoseInspectionDialog.svelte";
 import TreatmentInspectionDialog from "./TreatmentInspectionDialog.svelte";

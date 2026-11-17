@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// the <c>dnd_windows</c> endpoints (idempotency, one-per-scope supersede, resolve-on-read) and
 /// the manual-DND toggle on <c>tenant-alert-settings</c> backed by a <c>scope=all</c> window.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class DndWindowsIntegrationTests : ApiIntegrationTestBase
 {

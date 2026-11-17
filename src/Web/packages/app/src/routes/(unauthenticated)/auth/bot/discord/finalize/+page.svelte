@@ -3,9 +3,9 @@
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
-	import { Button } from "$lib/components/ui/button";
-	import { retainQuery } from "$lib/api/retain-query.svelte";
-	import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+	import { Button } from "#lib/components/ui/button/index.js";
+	import { retainQuery } from "#lib/api/retain-query.svelte.js";
+	import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
 	import { confirmDiscordLink, getDiscordLinkClaim } from "./finalize.remote";
 
 	const claim = $derived(page.url.searchParams.get("claim") ?? "");
@@ -13,7 +13,7 @@
 	$effect(() => {
 		if (!page.data.isAuthenticated && claim) {
 			const returnUrl = `/auth/bot/discord/finalize?claim=${encodeURIComponent(claim)}`;
-			goto(resolve(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`), { replaceState: true });
+			goto(resolve(`auth/login?returnUrl=${encodeURIComponent(returnUrl)}`), { replace: true });
 		}
 	});
 
@@ -58,7 +58,7 @@
 			(label <code>{linked.label}</code>). Run <code>/bg</code> in Discord to get started.
 		</p>
 		<a
-			href={resolve("/settings/integrations/discord")}
+			href={resolve('settings/integrations/discord')}
 			class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 		>
 			Back to settings
@@ -70,7 +70,7 @@
 			Discord account again from Settings.
 		</p>
 		<a
-			href={resolve("/settings/integrations/discord")}
+			href={resolve('settings/integrations/discord')}
 			class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 		>
 			Back to settings

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 
 const getRangeAnalytics = vi.fn(async () => ({
   analysis: {},
@@ -18,8 +18,8 @@ vi.mock("$app/server", () => ({
           getRangeAnalytics,
           getInsulinDeliveryStatistics: async () => ({}),
           getAidSystemMetrics: async () => ({}),
+          getHourlyInsulinDelivery: async () => ({ hours: [] }),
         },
-        bolus: { getAll: async () => ({ data: [] }) },
         sensorGlucose: { getAll: async () => ({ data: [], pagination: { total: 0 } }) },
         profile: { getActiveSchedules: async () => [] },
       },
@@ -29,21 +29,20 @@ vi.mock("$app/server", () => ({
   query: (schemaOrFn: unknown, fn?: unknown) => fn ?? schemaOrFn,
 }));
 
-vi.mock("$lib/server/patient-timezone", () => ({
+vi.mock("#lib/server/patient-timezone.js", () => ({
   resolvePatientTimeZone: async () => "UTC",
   readable: async (read: () => Promise<unknown>) => read(),
 }));
 
 vi.mock("./glucose-pagination", () => ({ fetchAllGlucose: async () => [] }));
 
-const { getReportsData, getReportsAnalysis } = await import("./reports.remote");
+const { getReportsAnalysis } = await import("./reports.remote");
 const { getIdpData } = await import("./idp.remote");
 
 const range = { from: "2026-03-01", to: "2026-03-14" };
 
 describe("range analytics time zone reason", () => {
   it.each([
-    ["getReportsData", () => getReportsData(range)],
     ["getReportsAnalysis", () => getReportsAnalysis(range)],
     ["getIdpData", () => getIdpData(range)],
   ])("%s forwards the reason the API carries", async (_name, call) => {

@@ -11,7 +11,7 @@ vi.mock("$app/server", () => ({
   query: (schemaOrFn: unknown, fn?: unknown) => fn ?? schemaOrFn,
 }));
 
-vi.mock("$lib/server/patient-timezone", () => ({
+vi.mock("#lib/server/patient-timezone.js", () => ({
   resolvePatientTimeZone: async () => patientZone,
   readable: async (read: () => Promise<unknown>) => read(),
 }));

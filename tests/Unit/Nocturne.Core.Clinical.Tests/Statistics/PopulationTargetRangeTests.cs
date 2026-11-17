@@ -14,7 +14,7 @@ public class PopulationTargetRangeTests
 {
     private static readonly DateTime Start = new(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private readonly StatisticsService _sut = new();
+    private readonly StatisticsService _sut = new(TimeProvider.System);
 
     /// <summary>
     /// A day alternating between 120 mg/dL (inside 63-140) and 160 mg/dL (above 140, inside

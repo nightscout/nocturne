@@ -1,7 +1,8 @@
 // See https://svelte.dev/docs/kit/types#app
 // for information about these interfaces
-import { ApiClient, RustValidationIssue, UserDisplayPreferences } from "$lib/api";
-import type { LastSignIn } from "$lib/components/auth/last-sign-in";
+import { ApiClient, RustValidationIssue, UserDisplayPreferences } from "#lib/api/index.js";
+import type { LastSignIn } from "#lib/components/auth/last-sign-in.js";
+import type { MintedSession } from "#lib/server/demo-session.js";
 
 
 export interface ServerSettings {
@@ -45,6 +46,8 @@ declare global {
 			errorId?: string;
 			/** The server's structured validation issues, when the rejection carried them. */
 			issues?: RustValidationIssue[];
+			/** The stable machine code of the problem, when the rejection carried one. */
+			code?: string;
 		}
 		type TenantStatus = TenantStatusResponse;
 		/** How this request's status call settled: its body, or the failure the client threw. */
@@ -63,6 +66,11 @@ declare global {
 			 * than touching it directly.
 			 */
 			statusPromise?: Promise<TenantStatusResponse | null>;
+			/**
+			 * A demo session minted during this request. Its tokens stand in for the session cookies
+			 * the browser has not yet sent back. See mintDemoSession.
+			 */
+			mintedSession?: MintedSession;
 			/**
 			 * Set when the API could not be reached (or answered 5xx) while resolving the session,
 			 * so that an unauthenticated request is not known to be signed out.

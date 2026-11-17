@@ -77,10 +77,13 @@ public static class ActivityStateSpanMapper
     }
 
     /// <summary>
-    /// The stored <c>Source</c> of every sleep session <see cref="ToSleepSession"/> projects: the half
-    /// of its (Source, OriginalId) dedup key an activity does not carry.
+    /// The <c>Source</c> of every sleep session <see cref="ToSleepSession"/> projects: the half of its
+    /// (Source, OriginalId) dedup key an activity does not carry.
     /// </summary>
-    public const string SleepSessionSource = nameof(SleepSource.Manual);
+    public const SleepSource SleepSessionSource = SleepSource.Manual;
+
+    /// <summary><see cref="SleepSessionSource"/> as a sleep session row stores it.</summary>
+    public static readonly string StoredSleepSessionSource = SleepSessionSource.ToString();
 
     /// <summary>
     /// Projects a v1 Activity with a sleep-type into a <see cref="SleepSession"/>.
@@ -89,7 +92,7 @@ public static class ActivityStateSpanMapper
     {
         ArgumentNullException.ThrowIfNull(activity);
 
-        var start = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime;
+        var start = activity.Mills.ToUtcDateTime();
         var end = activity.Duration is > 0
             ? start.AddMinutes(activity.Duration.Value)
             : start.AddHours(8); // default 8-hour session when no duration provided
@@ -104,7 +107,7 @@ public static class ActivityStateSpanMapper
             EndTime = end,
             Type = isNap ? SleepSessionType.Nap : SleepSessionType.Overnight,
             DetectionMethod = SleepDetectionMethod.Manual,
-            Source = SleepSource.Manual,
+            Source = SleepSessionSource,
             // Dedup key half for UpsertSessionAsync (Source + OriginalId); mirrors
             // ToStateSpan, which sets OriginalId = activity.Id on the StateSpan path
             OriginalId = activity.Id,
@@ -212,7 +215,7 @@ public static class ActivityStateSpanMapper
                     ? GetMetadataString(props, MotionClassKey)
                     : null)
                 ?? activity.Type ?? category.ToString().ToLowerInvariant(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime,
+            StartTimestamp = activity.Mills.ToUtcDateTime(),
             EndTimestamp = CalculateEndTimestamp(activity),
             // DataSource is the connector a resume watermark is scoped by; EnteredBy is the
             // uploader name, and stays the fallback for activities posted through the v1 API.
@@ -279,7 +282,7 @@ public static class ActivityStateSpanMapper
     {
         if (activity.Duration.HasValue && activity.Duration.Value > 0)
         {
-            var start = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime;
+            var start = activity.Mills.ToUtcDateTime();
             return start.AddMinutes(activity.Duration.Value);
         }
 

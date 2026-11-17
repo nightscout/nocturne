@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { WidgetId } from "$lib/api/generated/nocturne-api-client";
+  import type { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
   import { MAX_TOP_WIDGETS, knownTopWidgets, loadTopWidget, topWidgetPlaceholder } from "./widget-registry";
   import WidgetCard from "./widgets/WidgetCard.svelte";
   import WidgetPlaceholder from "./widgets/WidgetPlaceholder.svelte";
-  import { Card } from "$lib/components/ui/card";
+  import { Card } from "#lib/components/ui/card/index.js";
 
   interface Props {
     /** Ordered list of widget IDs to display */

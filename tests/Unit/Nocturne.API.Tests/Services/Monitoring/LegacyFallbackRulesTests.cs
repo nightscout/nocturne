@@ -343,6 +343,34 @@ public class ConsumableTrackerSpecsTests
             .Which.Hours.Should().Be(72 + 12 - ConsumableTrackerSpecs.UrgentHoursBeforeStop);
     }
 
+    [Theory]
+    [InlineData("dexcom-g7", 10)]
+    [InlineData("dexcom-g7-15-day", 15)]
+    [InlineData("dexcom-one-plus", 10)]
+    public void ADexcomG7Sensor_RaisesAnUrgentAlertBeforeItStops(string catalogId, int days)
+    {
+        var spec = ConsumableTrackerSpecs.SpecsFor(DeviceCatalog.GetById(catalogId)!).Single();
+
+        spec.GraceHours.Should().Be(12);
+        ConsumableTrackerSpecs.Thresholds(spec)
+            .Should().ContainSingle(t => t.Urgency == NotificationUrgency.Urgent)
+            .Which.Hours.Should().Be(days * 24 + 12 - ConsumableTrackerSpecs.UrgentHoursBeforeStop);
+    }
+
+    [Fact]
+    public void ASensorWithNoGrace_KeepsTheWarnAndHazardLadder()
+    {
+        var spec = ConsumableTrackerSpecs.SpecsFor(DeviceCatalog.GetById("dexcom-g6")!)
+            .Single(s => s.Category == TrackerCategory.Sensor);
+
+        spec.GraceHours.Should().BeNull();
+        ConsumableTrackerSpecs.Thresholds(spec)
+            .Select(t => (t.Urgency, t.Hours))
+            .Should().Equal(
+                (NotificationUrgency.Warn, -ConsumableTrackerSpecs.WarnHoursBeforeEnd),
+                (NotificationUrgency.Hazard, 240));
+    }
+
     [Fact]
     public void APodTrackerOfAnotherPodPump_FollowsThePodSpec()
     {

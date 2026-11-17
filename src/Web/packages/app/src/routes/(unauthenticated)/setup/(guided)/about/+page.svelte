@@ -1,11 +1,11 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { confirmAboutSetupItem, getSetupHub } from "$api/generated/setupHubs.generated.remote";
-  import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
-  import { PatientClinicalForm, type ClinicalState } from "$lib/components/patient";
-  import { FormActions } from "$lib/forms";
-  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import { confirmAboutSetupItem, getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
+  import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { PatientClinicalForm, type ClinicalState } from "#lib/components/patient/index.js";
+  import { FormActions } from "#lib/forms/index.js";
+  import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   const relationshipQuery = getPatientRelationship();
   const voice = $derived(patientVoice(relationshipQuery.current));
@@ -16,7 +16,7 @@
   async function saved() {
     await confirmAboutSetupItem();
     await getSetupHub().refresh();
-    await goto(resolve("/setup"));
+    await goto(resolve('setup'));
   }
 </script>
 
@@ -43,7 +43,10 @@
     {/if}
   </div>
 
-  <PatientClinicalForm onstate={(state) => (clinical = state)} onsaved={saved} />
+  <PatientClinicalForm
+    onstate={(state) => clinical = state}
+    onsaved={saved}
+  />
 
   <FormActions
     formId="clinical-form"

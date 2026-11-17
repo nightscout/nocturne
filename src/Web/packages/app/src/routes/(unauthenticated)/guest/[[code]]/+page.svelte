@@ -1,8 +1,8 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
+  import * as Card from "#lib/components/ui/card/index.js";
   import Activity from "@lucide/svelte/icons/activity";
   import { page } from "$app/state";
-  import GuestCodeForm from "$lib/components/auth/GuestCodeForm.svelte";
+  import GuestCodeForm from "#lib/components/auth/GuestCodeForm.svelte";
 </script>
 
 <svelte:head>

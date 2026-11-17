@@ -6,16 +6,17 @@
     getUploaderSetup,
     getActiveDataSources,
     getServicesOverview,
-  } from "$api/generated/services.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  } from "#lib/api/generated/services.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import type {
     UploaderApp,
     UploaderSetupResponse,
     AvailableConnector,
-  } from "$lib/api/generated/nocturne-api-client";
-  import ConnectorSetup from "$lib/components/connectors/ConnectorSetup.svelte";
-  import DataSourceSelectionView from "$lib/components/connectors/DataSourceSelectionView.svelte";
-  import UploaderSetupView from "$lib/components/connectors/UploaderSetupView.svelte";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
+  import DataSourceSelectionView from "#lib/components/connectors/DataSourceSelectionView.svelte";
+  import UploaderSetupView from "#lib/components/connectors/UploaderSetupView.svelte";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   type ViewState = "selection" | "connector" | "uploader";
   let viewState = $state<ViewState>("selection");
@@ -38,7 +39,7 @@
     viewState = "uploader";
 
     try {
-      const result = app.id ? await getUploaderSetup(app.id).run() : null;
+      const result = app.id ? await fresh(getUploaderSetup(app.id)) : null;
       setupResponse = result ?? null;
     } catch {
       // The view renders its own "no setup available" state from a null response,
@@ -55,7 +56,7 @@
   }
 
   // The item is done at the first reading, which the hub checks; a saved source is not yet one.
-  const backToHub = () => goto(resolve("/setup"));
+  const backToHub = () => goto(resolve('setup'));
 </script>
 
 {#if viewState === "selection"}
@@ -85,17 +86,17 @@
       />
     {/snippet}
 
-    {@const uploaderApps = (await uploaderAppsQuery) ?? []}
-    {@const dataSources = (await dataSourcesQuery) ?? []}
+    {@const uploaderApps = await uploaderAppsQuery ?? []}
+    {@const dataSources = await dataSourcesQuery ?? []}
     {@const overview = await overviewQuery}
     {@const connectors = (overview?.availableConnectors ?? []).filter(
       (c) => c.id?.toLowerCase() !== "nightscout"
     )}
 
     <DataSourceSelectionView
-      {connectors}
-      {uploaderApps}
-      {dataSources}
+      connectors={connectors}
+      uploaderApps={uploaderApps}
+      dataSources={dataSources}
       isLoading={false}
       loadError={null}
       onSelectConnector={(id) => {
@@ -119,7 +120,7 @@
 {:else if viewState === "uploader"}
   <UploaderSetupView
     app={selectedApp}
-    {setupResponse}
+    setupResponse={setupResponse}
     onBack={backToSelection}
     onConnected={backToHub}
   />

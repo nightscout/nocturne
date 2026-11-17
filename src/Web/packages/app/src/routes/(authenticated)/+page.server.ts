@@ -1,16 +1,22 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { getOriginalProto } from '$lib/server/request-host';
-import { resolveSingleTenantLanding } from '$lib/utils/tenant-host';
-import { classifyRequestHost } from '$lib/server/tenantless-host';
-import { transformChartData, type TransformedChartData } from '$lib/utils/chart-data-transform';
+import { getOriginalProto } from '#lib/server/request-host.js';
+import { resolveSingleTenantLanding } from '#lib/utils/tenant-host.js';
+import { classifyRequestHost } from '#lib/server/tenantless-host.js';
+import { transformChartData, type TransformedChartData } from '#lib/utils/chart-data-transform.js';
+import { hasPlotSize, renderPlotSnapshot } from '#lib/server/plot-snapshot.js';
+import { mergeChartData } from '#lib/utils/chart-data-merge.js';
+import { displayPreferenceLayers, displayPreferenceSources } from '#lib/server/display-preference-layers.js';
+import { showsPredictions } from '#lib/types/dashboard-widgets.js';
 
 // Hours of data for initial fast load (most recent)
 const INITIAL_HOURS = 6;
 // Total hours to fetch (matches GLUCOSE_CHART_FETCH_HOURS)
 const TOTAL_HOURS = 48;
+// The live chart's window when the tenant sets none (focusHours in +page.svelte).
+const DEFAULT_LOOKBACK_HOURS = 12;
 
-export const load: PageServerLoad = async ({ locals, request, parent }) => {
+export const load: PageServerLoad = async ({ locals, request, parent, cookies, isDataRequest }) => {
 	const { apiClient } = locals;
 
 	// Only the apex and a reserved dashboard slug can be tenantless, so on any other host the
@@ -22,6 +28,10 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 		!maybeTenantless && (locals.isAuthenticated || locals.isShareHost)
 			? loadChartData(apiClient)
 			: null;
+	// A document's first render draws the chart as it will stay: the window the tenant set and
+	// the forecast's room, not the defaults the client queries would correct a second later. A
+	// client navigation reads them from those queries' cache.
+	const chartSettings = chartData && !isDataRequest ? loadChartSettings(apiClient) : null;
 
 	// `parent()` in a server data request reruns every ancestor server load, invalidated or not,
 	// so a client navigation to the dashboard would repeat the layouts' API calls. Only a host
@@ -40,7 +50,7 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 			getOriginalProto(request) + ':',
 			dashboardSlugs
 		);
-		if (landing) throw redirect(303, landing);
+		if (landing) throw redirect(303, landing, { external: true });
 
 		return { initialChartData: null };
 	}
@@ -48,15 +58,57 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 	const loaded = chartData ?? (maybeTenantless ? loadChartData(apiClient) : null);
 	if (!loaded) return { initialChartData: null };
 	const { initialChartData, initialWindowStart, historicalDataPromise } = loaded;
+	const [initialData, settings] = await Promise.all([initialChartData, chartSettings]);
+
+	// A share or guest viewer reads the owner's presentation, which this load does not fetch.
+	// The live chart first draws both windows merged, so the snapshot waits for the second: the
+	// API answers either in the same time, and both are in this document anyway.
+	const plotSnapshot =
+		settings && !locals.isShareHost && !locals.isGuestSession && hasPlotSize(cookies)
+			? renderPlotSnapshot({
+					chartData: initialData && mergeChartData(initialData, await historicalDataPromise),
+					nowMs: Date.now(),
+					lookbackHours: settings.uiSettings?.features?.display?.focusHours ?? DEFAULT_LOOKBACK_HOURS,
+					predictions:
+						settings.predictionsAvailable === true && showsPredictions(settings.uiSettings),
+					cookies,
+					preferenceLayers: displayPreferenceLayers(displayPreferenceSources(locals, cookies, null)),
+				})
+			: null;
 
 	return {
-		initialChartData: await initialChartData,
+		initialChartData: initialData,
+		initialUiSettings: settings?.uiSettings ?? null,
+		initialPredictionsAvailable: settings?.predictionsAvailable ?? null,
+		plotSnapshot,
 		initialWindowStart,
 		streamed: {
 			historicalChartData: historicalDataPromise,
 		},
 	};
 };
+
+/**
+ * The tenant's dashboard settings and whether forecasts can be made, as the page's `getUiSettings`
+ * and the chart's `getPredictionStatus` would answer. Each is null when it cannot be read; the
+ * client queries then decide, as before.
+ */
+async function loadChartSettings(apiClient: App.Locals['apiClient']) {
+	const [uiSettings, predictionsAvailable] = await Promise.all([
+		apiClient.uiSettings.getUISettings().catch((err: unknown) => {
+			console.error('Error loading UI settings:', err);
+			return null;
+		}),
+		apiClient.predictions
+			.getStatus()
+			.then((status) => status.available ?? false)
+			.catch((err: unknown) => {
+				console.error('Error checking prediction status:', err);
+				return null;
+			}),
+	]);
+	return { uiSettings, predictionsAvailable };
+}
 
 /**
  * Starts the 6h initial window and the 48h historical window concurrently. Each settles to null

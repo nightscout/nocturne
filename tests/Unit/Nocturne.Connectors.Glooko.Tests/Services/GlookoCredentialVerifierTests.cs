@@ -5,9 +5,11 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
+using Nocturne.Core.Contracts.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -28,7 +30,7 @@ public class GlookoCredentialVerifierTests
         var handler = new SignInHandler(acceptCredentials: true);
         var verifier = BuildVerifier(handler);
 
-        var result = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), CancellationToken.None);
+        var result = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), [], CancellationToken.None);
 
         result.Supported.Should().BeTrue();
         result.Success.Should().BeTrue();
@@ -41,7 +43,7 @@ public class GlookoCredentialVerifierTests
         var handler = new SignInHandler(acceptCredentials: false);
         var verifier = BuildVerifier(handler);
 
-        var result = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), CancellationToken.None);
+        var result = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), [], CancellationToken.None);
 
         result.Supported.Should().BeTrue();
         result.Success.Should().BeFalse();
@@ -57,7 +59,7 @@ public class GlookoCredentialVerifierTests
         var verifier = BuildVerifier(handler);
 
         var result = await verifier.VerifyAsync(
-            BuildConfigurationJson(), new Dictionary<string, string>(), CancellationToken.None);
+            BuildConfigurationJson(), new Dictionary<string, string>(), [], CancellationToken.None);
 
         result.Supported.Should().BeTrue();
         result.Success.Should().BeFalse();
@@ -82,7 +84,7 @@ public class GlookoCredentialVerifierTests
         var configuration = JsonDocument.Parse(
             $$"""{"email":"{{Email}}","server":"{{GlookoConstants.RegionEU}}","useV3Api":false,"maxRetryAttempts":10}""");
 
-        var result = await verifier.VerifyAsync(configuration, BuildSecrets(), CancellationToken.None);
+        var result = await verifier.VerifyAsync(configuration, BuildSecrets(), [], CancellationToken.None);
 
         result.Supported.Should().BeTrue();
         result.Success.Should().BeFalse();
@@ -91,7 +93,123 @@ public class GlookoCredentialVerifierTests
         retryDelay.VerifyNoOtherCalls();
     }
 
+    /// <summary>
+    /// An operator's <c>CONNECT_GLOOKO_SERVER</c> reaches sync through the registration defaults, and
+    /// the settings form never submits a server the stored row does not carry. Verification must
+    /// sign in where sync would, or it calls correct credentials wrong.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAsync_ServerNotSubmitted_SignsInAtTheConfiguredDefaultServer()
+    {
+        var handler = new SignInHandler(acceptCredentials: true);
+        var verifier = BuildVerifier(handler, defaults: new GlookoConnectorConfiguration
+        {
+            Server = GlookoConstants.RegionEU,
+            UseV3Api = false,
+        });
+
+        var result = await verifier.VerifyAsync(
+            JsonDocument.Parse($$"""{"email":"{{Email}}"}"""), BuildSecrets(), [], CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        handler.SignInHosts.Should().Equal("eu.api.glooko.com");
+    }
+
+    [Fact]
+    public async Task VerifyAsync_StoredPassword_SignsInWithItAndGivesTheSubmittedOutcome()
+    {
+        var handler = new SignInHandler(acceptCredentials: true);
+        var verifier = BuildVerifier(handler, stored: StoredGlooko());
+
+        var result = await verifier.VerifyAsync(null, [], ["password"], CancellationToken.None);
+
+        result.Should().BeEquivalentTo(ConnectorCredentialVerificationResult.Verified());
+        handler.SignInPasswords.Should().Equal(Password);
+        handler.SignInHosts.Should().Equal("eu.api.glooko.com");
+    }
+
+    [Fact]
+    public async Task VerifyAsync_StoredPasswordRejected_FailsExactlyAsASubmittedOneWould()
+    {
+        var submitted = await BuildVerifier(new SignInHandler(acceptCredentials: false))
+            .VerifyAsync(BuildConfigurationJson(), BuildSecrets(), [], CancellationToken.None);
+
+        var stored = await BuildVerifier(new SignInHandler(acceptCredentials: false), stored: StoredGlooko())
+            .VerifyAsync(null, [], ["password"], CancellationToken.None);
+
+        stored.Should().BeEquivalentTo(submitted);
+        stored.Message.Should().NotContain(Password);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_StoredPasswordWithTheStoredConfigurationRepeated_IsAllowed()
+    {
+        var handler = new SignInHandler(acceptCredentials: true);
+        var verifier = BuildVerifier(handler, stored: StoredGlooko());
+
+        var result = await verifier.VerifyAsync(BuildConfigurationJson(), [], ["password"], CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        handler.SignInPasswords.Should().Equal(Password);
+    }
+
+    /// <summary>
+    /// A stored password must only go where the tenant's stored configuration sends it, so a
+    /// caller cannot name a server and have the stored secret signed in there.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAsync_StoredPasswordWithAnotherServer_IsRefusedBeforeReadingSecrets()
+    {
+        var handler = new SignInHandler(acceptCredentials: true);
+        var configService = new Mock<IConnectorConfigurationService>(MockBehavior.Strict);
+        configService.Setup(s => s.GetConfigurationAsync("Glooko", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(StoredGlooko().Configuration);
+        var verifier = BuildVerifier(handler, configService: configService);
+
+        var verify = () => verifier.VerifyAsync(
+            JsonDocument.Parse($$"""{"server":"{{GlookoConstants.RegionUS}}"}"""), [], ["password"],
+            CancellationToken.None);
+
+        await verify.Should().ThrowAsync<InvalidVerificationRequestException>();
+        handler.SignInRequests.Should().Be(0);
+        configService.Verify(s => s.GetSecretsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("email")]
+    [InlineData("server")]
+    [InlineData("notAField")]
+    public async Task VerifyAsync_StoredKeyThatIsNotASecret_IsRefused(string key)
+    {
+        var handler = new SignInHandler(acceptCredentials: true);
+        var verifier = BuildVerifier(handler, stored: StoredGlooko());
+
+        var verify = () => verifier.VerifyAsync(null, [], [key], CancellationToken.None);
+
+        await verify.Should().ThrowAsync<InvalidVerificationRequestException>();
+        handler.SignInRequests.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_SecretBothSubmittedAndStored_IsRefused()
+    {
+        var handler = new SignInHandler(acceptCredentials: true);
+        var verifier = BuildVerifier(handler, stored: StoredGlooko());
+
+        var verify = () => verifier.VerifyAsync(null, BuildSecrets(), ["password"], CancellationToken.None);
+
+        await verify.Should().ThrowAsync<InvalidVerificationRequestException>();
+        handler.SignInRequests.Should().Be(0);
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────────
+
+    private sealed record StoredConnector(
+        ConnectorConfigurationResponse Configuration, Dictionary<string, string> Secrets);
+
+    private static StoredConnector StoredGlooko() => new(
+        new ConnectorConfigurationResponse { ConnectorName = "Glooko", Configuration = BuildConfigurationJson() },
+        new Dictionary<string, string> { ["password"] = Password });
 
     private static JsonDocument BuildConfigurationJson() => JsonDocument.Parse(
         $$"""{"email":"{{Email}}","server":"{{GlookoConstants.RegionEU}}","useV3Api":false}""");
@@ -106,7 +224,11 @@ public class GlookoCredentialVerifierTests
     /// must neither read or write a cached session nor require a tenant context.
     /// </summary>
     private static GlookoCredentialVerifier BuildVerifier(
-        SignInHandler handler, Mock<IRetryDelayStrategy>? retryDelayStrategy = null)
+        SignInHandler handler,
+        Mock<IRetryDelayStrategy>? retryDelayStrategy = null,
+        GlookoConnectorConfiguration? defaults = null,
+        StoredConnector? stored = null,
+        Mock<IConnectorConfigurationService>? configService = null)
     {
         var retryDelay = retryDelayStrategy ?? new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -119,7 +241,23 @@ public class GlookoCredentialVerifierTests
             NullLogger<GlookoAuthTokenProvider>.Instance,
             retryDelay.Object);
 
-        return new GlookoCredentialVerifier(tokenProvider);
+        if (configService == null)
+        {
+            configService = new Mock<IConnectorConfigurationService>(MockBehavior.Strict);
+            if (stored != null)
+            {
+                configService.Setup(s => s.GetConfigurationAsync("Glooko", It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(stored.Configuration);
+                configService.Setup(s => s.GetSecretsAsync("Glooko", It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(stored.Secrets);
+            }
+        }
+
+        return new GlookoCredentialVerifier(
+            new CredentialVerificationTokenProvider<GlookoAuthTokenProvider>(tokenProvider),
+            new ConnectorRegistration<GlookoConnectorConfiguration>(
+                defaults ?? new GlookoConnectorConfiguration(), "Glooko"),
+            configService.Object);
     }
 
     private sealed class UnresolvedTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
@@ -132,29 +270,35 @@ public class GlookoCredentialVerifierTests
 
     /// <summary>
     /// Answers the v2 sign-in endpoint: 200 with a session cookie when accepting, 401 otherwise.
+    /// Records the host and password of every sign-in.
     /// </summary>
     private sealed class SignInHandler(bool acceptCredentials, HttpStatusCode? rejectWith = null)
         : HttpMessageHandler
     {
-        public int SignInRequests { get; private set; }
+        public int SignInRequests => SignInHosts.Count;
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        public List<string> SignInHosts { get; } = [];
+
+        public List<string?> SignInPasswords { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.PathAndQuery ?? string.Empty;
 
             if (path.Contains("/users/sign_in", StringComparison.OrdinalIgnoreCase))
             {
-                SignInRequests++;
+                SignInHosts.Add(request.RequestUri!.Host);
+                using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+                SignInPasswords.Add(body.RootElement.GetProperty("userLogin").GetProperty("password").GetString());
 
                 if (!acceptCredentials)
                 {
-                    return Task.FromResult(
-                        new HttpResponseMessage(rejectWith ?? HttpStatusCode.Unauthorized)
-                        {
-                            Content = new StringContent(
-                                "{\"error\":\"Invalid email or password.\"}", Encoding.UTF8, "application/json"),
-                        });
+                    return new HttpResponseMessage(rejectWith ?? HttpStatusCode.Unauthorized)
+                    {
+                        Content = new StringContent(
+                            "{\"error\":\"Invalid email or password.\"}", Encoding.UTF8, "application/json"),
+                    };
                 }
 
                 var response = new HttpResponseMessage(HttpStatusCode.OK)
@@ -165,10 +309,10 @@ public class GlookoCredentialVerifierTests
                 };
                 response.Headers.Add(
                     "Set-Cookie", $"{GlookoConstants.SessionCookieName}=sess; Path=/; HttpOnly");
-                return Task.FromResult(response);
+                return response;
             }
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
     }
 }

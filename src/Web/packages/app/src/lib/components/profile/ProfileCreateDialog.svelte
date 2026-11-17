@@ -1,12 +1,12 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import { BG_UNITS, DEFAULT_PROFILE_ICON } from "$lib/constants/profile-icons";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { BG_UNITS, DEFAULT_PROFILE_ICON } from "#lib/constants/profile-icons.js";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
-  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import TimezoneCombobox from "#lib/components/patient/TimezoneCombobox.svelte";
   import Plus from "@lucide/svelte/icons/plus";
 
   interface Props {

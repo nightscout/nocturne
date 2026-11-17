@@ -1,22 +1,11 @@
-import type { RustValidationIssue } from "$api-clients";
-import { parseIssues } from "$lib/api/error-body";
-import { recordApiFailure } from "$lib/support/api-failure-log";
-
-/** Fallback shown when a submission fails for a reason we can't safely surface. */
-export const GENERIC_SUBMIT_ERROR =
-  "We couldn't save your changes. Please try again.";
-
-/** For a form whose follow-up step, after the record itself saved, threw. */
-export const FOLLOW_UP_ERROR =
-  "Your changes were saved, but the step after saving didn't finish. Please try again.";
-
-/** Shown when a rate limiter turned the attempt away, so the credential is unspent. */
-export const RATE_LIMITED_ERROR =
-  "Too many attempts. Please wait a few minutes and try again.";
-
-/** Shown when the thing an action referred to is no longer on the server. */
-export const MISSING_ITEM_ERROR =
-  "That item no longer exists. Refresh the page to see what's there now.";
+import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
+import { parseCode, parseIssues } from "#lib/api/error-body.js";
+import { recordApiFailure } from "#lib/support/api-failure-log.js";
+import {
+  genericSubmitError,
+  missingItemError,
+  rateLimitedError,
+} from "./submit-messages.svelte";
 
 /** The HTTP status carried by a thrown value, if it has one. */
 export function errorStatus(err: unknown): number | undefined {
@@ -27,19 +16,26 @@ export function errorStatus(err: unknown): number | undefined {
   return undefined;
 }
 
-/** The `body` a thrown `HttpError` carries, when it has one. */
+/**
+ * The `App.Error` behind a rejection: the `body` of a thrown `HttpError`, or the error itself where
+ * SvelteKit hands it over unwrapped, as a query's `error` does.
+ */
 function errorBody(err: unknown): object | undefined {
-  if (!err || typeof err !== "object" || !("body" in err)) return undefined;
+  if (!err || typeof err !== "object") return undefined;
 
-  const { body } = err;
-  if (!body || typeof body !== "object") return undefined;
+  if ("body" in err) {
+    const { body } = err;
+    return body && typeof body === "object" ? body : undefined;
+  }
 
-  return body;
+  if (!(err instanceof Error) && "status" in err && typeof err.status === "number") return err;
+
+  return undefined;
 }
 
 /**
  * The message a remote handler put in `error(status, message)`. SvelteKit
- * delivers it as `HttpError.body.message`.
+ * delivers it as `HttpError.body.message`, or as `message` on a query's `error`.
  */
 export function errorMessage(err: unknown): string | undefined {
   const body = errorBody(err);
@@ -63,6 +59,23 @@ export function errorIssues(
 
   return parseIssues(body.issues);
 }
+
+/**
+ * The stable problem code a rejection carries, when the server sent one in the
+ * shape the API writes its codes in.
+ */
+export function errorCode(err: unknown): string | undefined {
+  const body = errorBody(err);
+  if (body === undefined || !("code" in body)) return undefined;
+
+  return parseCode(body.code);
+}
+
+/**
+ * The sentences a call site has for the problem codes it knows, keyed by code.
+ * A code outside the map, or none, leaves the answer to {@link RemoteErrorPolicy}.
+ */
+export type ProblemCodeMessages = Readonly<Record<string, string>>;
 
 /**
  * The bodies the client wrote itself rather than carried from the server.
@@ -122,7 +135,7 @@ function serverWrittenReason(err: unknown): string | undefined {
  * Which one a call site wants follows from the operation, not from the sentence
  * it passes: `describeSubmitError` is the writing half, for a command, form or
  * any other mutation, where a person is mid-task; `remoteErrorMessage`
- * (`$lib/api/remote-error`) is the reading half, for a query whose rejection is
+ * (`#lib/api/remote-error.js`) is the reading half, for a query whose rejection is
  * rendered in place of the data it was going to show.
  *
  * The fallback sentence is the usual tell — a mutation's names the action the
@@ -142,7 +155,7 @@ function serverWrittenReason(err: unknown): string | undefined {
  *   the data would have been, and a permission sentence there would tell
  *   someone who holds the permission that they lack it the moment they act on
  *   an id someone else deleted, so the reader answers with
- *   {@link MISSING_ITEM_ERROR} instead. A caller that can say something better
+ *   {@link missingItemError} instead. A caller that can say something better
  *   ("already removed") reads the status itself.
  * - `forbiddenReason` (403). A writer's fallback ("You don't have permission to
  *   save this") beats the client's own boilerplate but loses to a refusal the
@@ -162,20 +175,20 @@ function serverWrittenReason(err: unknown): string | undefined {
  *   `missing`, on the other axis: a writer's fallback names the action, which
  *   is what failed, so it wins; a permission sentence would tell someone who
  *   holds the permission that they lack it because the database hiccupped, so a
- *   caller passing one answers with {@link GENERIC_SUBMIT_ERROR} instead.
+ *   caller passing one answers with {@link genericSubmitError} instead.
  *
  * `missing` and `fault` are therefore the two axes the fallback sentence rather
  * than the operation decides, and the two {@link PERMISSION_GATED_MUTATION}
  * sets.
  *
- * A 429 answers with {@link RATE_LIMITED_ERROR} ahead of all of them, because
+ * A 429 answers with {@link rateLimitedError} ahead of all of them, because
  * the rate limiter's body carries no `message` and a caller's fallback
  * describes what it asked for — "this invite link is invalid" for a request the
  * limiter never let reach the invite.
  */
 export interface RemoteErrorPolicy {
   /** Answer for a 404, or the caller's fallback when absent. */
-  readonly missing?: string;
+  readonly missing?: () => string;
   /** Whether a 403 the server worded itself outranks the caller's fallback. */
   readonly forbiddenReason: boolean;
   /**
@@ -188,7 +201,7 @@ export interface RemoteErrorPolicy {
    * Answer once a body that did not come with a 4xx is suppressed, or the
    * caller's fallback when absent. Read only when `serverError` is false.
    */
-  readonly fault?: string;
+  readonly fault?: () => string;
 }
 
 const WRITE_SURFACE: RemoteErrorPolicy = {
@@ -206,10 +219,10 @@ const WRITE_SURFACE: RemoteErrorPolicy = {
  * mutation whose fallback names the action.
  */
 export const PERMISSION_GATED_MUTATION: RemoteErrorPolicy = {
-  missing: MISSING_ITEM_ERROR,
+  missing: missingItemError,
   forbiddenReason: true,
   serverError: false,
-  fault: GENERIC_SUBMIT_ERROR,
+  fault: genericSubmitError,
 };
 
 /**
@@ -223,7 +236,7 @@ export const permissionGatedMutationError = (
 
 /** @see RemoteErrorPolicy */
 export const READ_SURFACE: RemoteErrorPolicy = {
-  missing: MISSING_ITEM_ERROR,
+  missing: missingItemError,
   forbiddenReason: false,
   serverError: true,
 };
@@ -232,10 +245,11 @@ export const READ_SURFACE: RemoteErrorPolicy = {
 export function describeRemoteError(
   err: unknown,
   fallback: string,
-  policy: RemoteErrorPolicy
+  policy: RemoteErrorPolicy,
+  codes?: ProblemCodeMessages
 ): string {
   const status = errorStatus(err);
-  const described = describe(err, fallback, policy, status);
+  const described = describe(err, fallback, policy, status, codes);
 
   // Every rejected API call the user is told about passes through here, and the
   // transport carries no path or correlation id, so this is the only place the
@@ -249,10 +263,17 @@ function describe(
   err: unknown,
   fallback: string,
   policy: RemoteErrorPolicy,
-  status: number | undefined
+  status: number | undefined,
+  codes: ProblemCodeMessages | undefined
 ): string {
-  if (status === 429) return RATE_LIMITED_ERROR;
-  if (status === 404) return policy.missing ?? fallback;
+  if (status === 429) return rateLimitedError();
+
+  const code = errorCode(err);
+  if (code !== undefined && codes !== undefined && Object.hasOwn(codes, code)) {
+    return codes[code];
+  }
+
+  if (status === 404) return policy.missing?.() ?? fallback;
   if (status === 403) {
     return (
       (policy.forbiddenReason ? serverWrittenReason(err) : undefined) ??
@@ -263,16 +284,18 @@ function describe(
   const is4xx = status !== undefined && status >= 400 && status < 500;
   if (is4xx || policy.serverError) return serverWrittenReason(err) ?? fallback;
 
-  return policy.fault ?? fallback;
+  return policy.fault?.() ?? fallback;
 }
 
 /**
  * Turns a rejected form submission into a message for the user, on the writing
- * half of {@link RemoteErrorPolicy}.
+ * half of {@link RemoteErrorPolicy}. `codes` holds the sentences the caller has
+ * for the problem codes it expects.
  */
 export function describeSubmitError(
   err: unknown,
-  fallback = GENERIC_SUBMIT_ERROR
+  fallback = genericSubmitError(),
+  codes?: ProblemCodeMessages
 ): string {
-  return describeRemoteError(err, fallback, WRITE_SURFACE);
+  return describeRemoteError(err, fallback, WRITE_SURFACE, codes);
 }

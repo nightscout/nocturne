@@ -14,21 +14,13 @@
    */
   import {
     type DateValue,
-    endOfMonth,
-    endOfWeek,
     getLocalTimeZone,
     parseDate,
-    startOfMonth,
-    startOfWeek,
     today,
   } from "@internationalized/date";
-  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Button } from "$lib/components/ui/button";
-  import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import { getPunchCardData } from "$api/generated/statistics.generated.remote";
-  import { formatLocale } from "$lib/utils/formatting";
+  import { outsideDaySpan } from "#lib/utils/date-range.js";
+  import GlucoseMonthGrid from "#lib/components/alerts/GlucoseMonthGrid.svelte";
+  import GlucosePickerCell from "#lib/components/alerts/GlucosePickerCell.svelte";
 
   interface Props {
     /** ISO start of the confirmed range, or undefined. */
@@ -39,6 +31,8 @@
     onRangeChange?: (start: string, end: string) => void;
     /** Days strictly after this value are disabled. Defaults to today. */
     maxDate?: string;
+    /** The most days a confirmed range may cover. No limit when undefined. */
+    maxDays?: number;
     /**
      * Locale tag used for week-start and weekday labels. Defaults to the user's
      * regional format, so a European format gives Monday-first weeks.
@@ -51,20 +45,15 @@
     endDate,
     onRangeChange,
     maxDate,
-    locale: localeProp,
+    maxDays,
+    locale,
   }: Props = $props();
 
-  const locale = $derived(localeProp ?? formatLocale());
-
-  const tz = getLocalTimeZone();
-  const todayValue = today(tz);
+  const todayValue = today(getLocalTimeZone());
   const maxValue = $derived(maxDate ? parseDate(maxDate) : todayValue);
 
-  // Anchor view on the confirmed end date, or today.
   // svelte-ignore state_referenced_locally
-  let viewMonth = $state<DateValue>(
-    startOfMonth(endDate ? parseDate(endDate) : todayValue)
-  );
+  const initialMonth = endDate ? parseDate(endDate) : todayValue;
 
   // Confirmed range (from props).
   const confirmedStart = $derived(startDate ? parseDate(startDate) : null);
@@ -81,75 +70,6 @@
     pendingStart = null;
     hoverDate = null;
   });
-
-  const monthLabel = $derived(
-    viewMonth.toDate(tz).toLocaleDateString(locale, {
-      month: "long",
-      year: "numeric",
-    })
-  );
-
-  const gridDays = $derived.by<{ date: DateValue; inMonth: boolean }[]>(() => {
-    const monthStart = startOfMonth(viewMonth);
-    const monthEnd = endOfMonth(viewMonth);
-    const gridStart = startOfWeek(monthStart, locale);
-    const gridEnd = endOfWeek(monthEnd, locale);
-    const days: { date: DateValue; inMonth: boolean }[] = [];
-    let cur = gridStart;
-    while (cur.compare(gridEnd) <= 0) {
-      days.push({
-        date: cur,
-        inMonth: cur.month === viewMonth.month && cur.year === viewMonth.year,
-      });
-      cur = cur.add({ days: 1 });
-    }
-    return days;
-  });
-
-  const weekdayLabels = $derived.by(() => {
-    const first = startOfWeek(startOfMonth(viewMonth), locale);
-    const labels: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = first.add({ days: i }).toDate(tz);
-      labels.push(d.toLocaleDateString(locale, { weekday: "narrow" }));
-    }
-    return labels;
-  });
-
-  type EntriesByDate = Record<string, { mills: number; mgdl: number }[]>;
-  // Use the QueryResult reactively rather than awaiting a fresh Promise on
-  // each derivation: SvelteKit's query() dedupes by serialized args, so
-  // re-opening the popover with the same viewMonth resolves synchronously
-  // from `.current` instead of flicking back through a loading state.
-  const punchCardQuery = $derived(
-    getPunchCardData({
-      startDate: startOfMonth(viewMonth).toString(),
-      endDate: endOfMonth(viewMonth).toString(),
-    })
-  );
-  const entriesByDate = $derived.by<EntriesByDate>(() => {
-    const data = punchCardQuery.current;
-    const out: EntriesByDate = {};
-    for (const m of data?.months ?? []) {
-      for (const d of m.days ?? []) {
-        if (d.date && d.entries && d.entries.length > 0) {
-          out[d.date] = d.entries.map((e) => ({
-            mills: e.mills ?? 0,
-            mgdl: e.mgdl ?? 0,
-          }));
-        }
-      }
-    }
-    return out;
-  });
-
-  function isFuture(d: DateValue): boolean {
-    return d.compare(maxValue) > 0;
-  }
-
-  function dateKey(d: DateValue): string {
-    return d.toString();
-  }
 
   // Effective range to highlight — either the confirmed range or the
   // in-progress preview (pendingStart + hover).
@@ -184,9 +104,10 @@
     return d.compare(rangeStart) > 0 && d.compare(rangeEnd) < 0;
   }
 
-  function pick(d: DateValue): void {
-    if (isFuture(d)) return;
+  const isOutsideSpan = $derived(outsideDaySpan(pendingStart ?? undefined, maxDays));
 
+  function pick(d: DateValue): void {
+    if (isOutsideSpan(d)) return;
     if (!pendingStart) {
       // Start a new selection.
       pendingStart = d;
@@ -218,85 +139,30 @@
   function onMouseLeave(): void {
     hoverDate = null;
   }
-
-  const canGoNext = $derived(endOfMonth(viewMonth).compare(maxValue) < 0);
-
-  function gotoPrevMonth(): void {
-    viewMonth = startOfMonth(viewMonth).subtract({ months: 1 });
-  }
-
-  function gotoNextMonth(): void {
-    viewMonth = startOfMonth(viewMonth).add({ months: 1 });
-  }
 </script>
 
-<div class="p-3 w-[480px]">
-  <div class="flex items-center justify-between mb-2">
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      onclick={gotoPrevMonth}
-      aria-label="Previous month"
-    >
-      <ChevronLeft class="h-4 w-4" />
-    </Button>
-    <div class="text-sm font-medium">
-      {monthLabel}
-      {#if pendingStart}
-        <span class="ml-2 text-xs text-muted-foreground font-normal">
-          Select end date
-        </span>
-      {/if}
-      {#if punchCardQuery.loading}
-        <span class="ml-2 text-xs text-muted-foreground font-normal">
-          loading…
-        </span>
-      {/if}
+<GlucoseMonthGrid {initialMonth} {maxValue} {locale} onGridLeave={onMouseLeave}>
+  {#snippet status()}
+    {#if pendingStart}
+      <span class="ml-2 text-xs text-muted-foreground font-normal">
+        Select end date
+      </span>
+    {/if}
+  {/snippet}
+  {#snippet day({ date, inMonth, disabled, entries })}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div onmouseenter={() => onCellHover(date)}>
+      <GlucosePickerCell
+        {date}
+        {entries}
+        {inMonth}
+        disabled={disabled || isOutsideSpan(date)}
+        isStart={isRangeStart(date)}
+        isEnd={isRangeEnd(date)}
+        inRange={isInRange(date)}
+        {locale}
+        onclick={() => pick(date)}
+      />
     </div>
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      onclick={gotoNextMonth}
-      disabled={!canGoNext}
-      aria-label="Next month"
-    >
-      <ChevronRight class="h-4 w-4" />
-    </Button>
-  </div>
-
-  <div class="grid grid-cols-7 gap-1 mb-1">
-    {#each weekdayLabels as label, i (i)}
-      <div class="text-2xs text-center text-muted-foreground uppercase tracking-wide font-medium">
-        {label}
-      </div>
-    {/each}
-  </div>
-
-  {#if punchCardQuery.current?.timeZoneUnavailableReason}
-    <p class="mb-2 text-sm text-muted-foreground">
-      <TimeZoneNote reason={punchCardQuery.current.timeZoneUnavailableReason}>
-        This calendar cannot show each day's glucose trace.
-      </TimeZoneNote>
-    </p>
-  {/if}
-
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="grid grid-cols-7 gap-1" onmouseleave={onMouseLeave}>
-    {#each gridDays as { date, inMonth } (dateKey(date))}
-      {@const entries = entriesByDate[dateKey(date)] ?? []}
-      <div onmouseenter={() => onCellHover(date)}>
-        <GlucosePickerCell
-          {date}
-          {entries}
-          {inMonth}
-          disabled={isFuture(date)}
-          isStart={isRangeStart(date)}
-          isEnd={isRangeEnd(date)}
-          inRange={isInRange(date)}
-          {locale}
-          onclick={() => pick(date)}
-        />
-      </div>
-    {/each}
-  </div>
-</div>
+  {/snippet}
+</GlucoseMonthGrid>

@@ -7,10 +7,10 @@
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";
   import { computeTrackLayout } from "./engine/track-layout";
-  import { formatWeekdayDate, hourLabel } from "$lib/utils/formatting";
+  import { formatWeekdayDate, hourLabel } from "#lib/utils/formatting.js";
   import { hourTicks } from "./engine/axis-ticks";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
 
   interface Props {
     engine: ChartDataEngine;
@@ -26,6 +26,8 @@
     tracks: Snippet<[GlucoseChartContext]>;
     /** HTML overlays rendered after Svg but inside Chart (tooltips, etc.) */
     overlays?: Snippet<[GlucoseChartContext]>;
+    /** Draws at this size instead of measuring its box, which lets the server render it. */
+    size?: { width: number; height: number };
   }
 
   const {
@@ -41,6 +43,7 @@
     glucoseUnits,
     tracks,
     overlays,
+    size,
   }: Props = $props();
 
   let chartHeight = $state(0);
@@ -129,6 +132,9 @@
     yDomain={[0, engine.thresholds.glucoseYMax]}
     {padding}
     tooltipContext={{ mode: "quadtree-x" }}
+    ssr={size !== undefined}
+    width={size?.width}
+    height={size?.height}
   >
     {#snippet children({ context })}
       {(chartHeight = context.height, "")}

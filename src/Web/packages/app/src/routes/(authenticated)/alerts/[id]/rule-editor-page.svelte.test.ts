@@ -2,8 +2,8 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import type { AlertRuleResponse } from "$api-clients";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const RULE_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -23,7 +23,7 @@ const history = { items: [], totalCount: 0 };
 
 const refusal = vi.hoisted(() => ({ error: new Error("network down") as unknown }));
 
-vi.mock("$api/generated/alertRules.generated.remote", () => ({
+vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => rules),
   getRule: () => remoteQuery(() => rule),
   createRule: remoteCommand(() => Promise.reject(refusal.error)),
@@ -33,28 +33,28 @@ vi.mock("$api/generated/alertRules.generated.remote", () => ({
   getInAppRecipients: () => remoteQuery(() => []),
 }));
 
-vi.mock("$api/generated/alerts.generated.remote", () => ({
+vi.mock("#lib/api/generated/alerts.generated.remote.js", () => ({
   getAlertHistory: () => remoteQuery(() => history),
 }));
 
-vi.mock("$api/generated/alertReplays.generated.remote", () => ({
+vi.mock("#lib/api/generated/alertReplays.generated.remote.js", () => ({
   replay: remoteCommand(() => Promise.reject(refusal.error)),
   replayDryRun: remoteCommand(() => Promise.reject(refusal.error)),
 }));
 
-vi.mock("$api/generated/linkedPlatforms.generated.remote", () => ({
+vi.mock("#lib/api/generated/linkedPlatforms.generated.remote.js", () => ({
   getLinkedPlatforms: () => remoteQuery(() => ({ platforms: [] })),
 }));
 
-vi.mock("$api/generated/systems.generated.remote", () => ({
+vi.mock("#lib/api/generated/systems.generated.remote.js", () => ({
   getChannelStatuses: () => remoteQuery(() => ({ channels: [] })),
 }));
 
-vi.mock("$api/generated/clientDevices.generated.remote", () => ({
+vi.mock("#lib/api/generated/clientDevices.generated.remote.js", () => ({
   getCapabilityCatalog: () => remoteQuery(() => ({ capabilities: [] })),
 }));
 
-vi.mock("$api/generated/trackers.generated.remote", () => ({
+vi.mock("#lib/api/generated/trackers.generated.remote.js", () => ({
   getDefinitions: () => remoteQuery(() => []),
 }));
 

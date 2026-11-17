@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   desktopToken: vi.fn(),
 }));
 
-vi.mock("$lib/api/generated/careLinkConnects.generated.remote", () => ({
+vi.mock("#lib/api/generated/careLinkConnects.generated.remote.js", () => ({
   start: (...args: unknown[]) => mocks.start(...args),
   complete: (...args: unknown[]) => mocks.complete(...args),
   desktopToken: (...args: unknown[]) => mocks.desktopToken(...args),

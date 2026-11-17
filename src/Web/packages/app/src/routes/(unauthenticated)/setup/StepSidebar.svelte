@@ -1,6 +1,6 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   let {
     path,

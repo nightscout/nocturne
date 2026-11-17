@@ -1,14 +1,14 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
   import type { IconArtworkSource } from "water-ui";
-  import { fingerprintArtwork } from "$lib/watercolour-icons";
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import User from "@lucide/svelte/icons/user";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
@@ -31,27 +31,28 @@
     removeCredential,
     getRecoveryStatus,
     regenerateRecoveryCodes,
-  } from "$lib/api/generated/passkeys.generated.remote";
+  } from "#lib/api/generated/passkeys.generated.remote.js";
   import {
     setup as totpSetup,
     verifySetup as totpVerifySetup,
     listCredentials as totpListCredentials,
     removeCredential as totpRemoveCredential,
-  } from "$lib/api/generated/totps.generated.remote";
-  import LinkedOidcIdentities from "$lib/components/settings/LinkedOidcIdentities.svelte";
-  import UserProfileCard from "$lib/components/account/UserProfileCard.svelte";
-  import SecurityCredentialCard from "$lib/components/account/SecurityCredentialCard.svelte";
-  import TotpSetupDialog from "$lib/components/account/TotpSetupDialog.svelte";
-  import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
+  } from "#lib/api/generated/totps.generated.remote.js";
+  import LinkedOidcIdentities from "#lib/components/settings/LinkedOidcIdentities.svelte";
+  import ActiveSessions from "#lib/components/settings/ActiveSessions.svelte";
+  import UserProfileCard from "#lib/components/account/UserProfileCard.svelte";
+  import SecurityCredentialCard from "#lib/components/account/SecurityCredentialCard.svelte";
+  import TotpSetupDialog from "#lib/components/account/TotpSetupDialog.svelte";
+  import RecoveryCodes from "#lib/components/auth/RecoveryCodes.svelte";
   import {
     describePasskeyError,
     parseCeremonyOptions,
-  } from "$lib/components/auth/passkey-errors";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/components/auth/passkey-errors.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     describeTotpSetupError,
     describeTotpSetupStartError,
-  } from "$lib/components/account/totp-errors";
+  } from "#lib/components/account/totp-errors.js";
   import { page } from "$app/state";
   import { invalidateAll } from "$app/navigation";
 
@@ -183,14 +184,13 @@
         attestationResponseJson: pendingPasskey.attestationResponseJson,
         challengeToken: pendingPasskey.challengeToken,
         label: newPasskeyLabel.trim() || undefined,
-      });
-      await credentialsQuery.refresh();
-      await invalidateAll();
+      }).updates(credentialsQuery);
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
       successMessage = { text: "Passkey added successfully.", wash: true, icon: fingerprintArtwork };
       clearMessages();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to register passkey.");
     } finally {
@@ -220,9 +220,9 @@
 
     try {
       await removeCredential(removeTarget.id);
-      await invalidateAll();
       successMessage = { text: "Passkey removed.", wash: false };
       clearMessages();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove passkey.");
     } finally {
@@ -244,7 +244,7 @@
       const result = await regenerateRecoveryCodes();
       newRecoveryCodes = result.codes ?? [];
       showNewCodesDialog = true;
-      await invalidateAll();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(
         err,
@@ -503,6 +503,11 @@
           </Button>
         </Card.Content>
       </Card.Root>
+
+      <!-- A tenantless host admits the account page but not the sessions endpoint. -->
+      {#if page.data.tenantless !== true}
+        <ActiveSessions />
+      {/if}
 
       <!-- Section 4: Recovery Mode Info -->
       <Card.Root>

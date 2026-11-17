@@ -1,3 +1,5 @@
+using System.Globalization;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles;
@@ -33,6 +35,8 @@ public class MealMatchingService : IMealMatchingService
     private readonly IInAppNotificationService _notificationService;
     private readonly IInAppNotificationRepository _notificationRepository;
     private readonly IMyFitnessPalMatchingSettingsService _settingsService;
+    private readonly TenantClockResolver _tenantClock;
+    private readonly TimeProvider _time;
     private readonly ILogger<MealMatchingService> _logger;
 
     public MealMatchingService(
@@ -42,6 +46,8 @@ public class MealMatchingService : IMealMatchingService
         IInAppNotificationService notificationService,
         IInAppNotificationRepository notificationRepository,
         IMyFitnessPalMatchingSettingsService settingsService,
+        TenantClockResolver tenantClock,
+        TimeProvider timeProvider,
         ILogger<MealMatchingService> logger)
     {
         _foodEntryRepository = foodEntryRepository;
@@ -50,6 +56,8 @@ public class MealMatchingService : IMealMatchingService
         _notificationService = notificationService;
         _notificationRepository = notificationRepository;
         _settingsService = settingsService;
+        _tenantClock = tenantClock;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -207,7 +215,7 @@ public class MealMatchingService : IMealMatchingService
                     Carbs: entry.Carbs,
                     ConsumedAt: entry.ConsumedAt,
                     CarbIntakeId: carbIntake.Id,
-                    CarbIntakeCarbs: (decimal)carbIntake.Carbs,
+                    CarbIntakeCarbs: carbIntake.Carbs.ToDecimal(),
                     CarbIntakeMills: carbIntake.Mills,
                     MatchScore: CalculateMatchScore(entry, carbIntake, settings)
                 ));
@@ -346,7 +354,8 @@ public class MealMatchingService : IMealMatchingService
         }
 
         var foodName = entry.Food?.Name ?? entry.MealName;
-        var timeDisplay = FormatTimeDisplay(CarbIntakeTime(carbIntake));
+        var clock = await _tenantClock.ResolveAsync(ct);
+        var timeDisplay = FormatTimeDisplay(CarbIntakeTime(carbIntake), clock.Zone ?? TimeZoneInfo.Utc);
 
         var title = $"Confirm you ate \"{foodName}\" {timeDisplay}";
         var subtitle = $"{entry.MealName} · {entry.Carbs:0}g carbs · via MyFitnessPal";
@@ -383,22 +392,22 @@ public class MealMatchingService : IMealMatchingService
             carbIntake.Id);
     }
 
-    private static string FormatTimeDisplay(DateTimeOffset time)
+    private string FormatTimeDisplay(DateTimeOffset time, TimeZoneInfo zone)
     {
-        var now = DateTimeOffset.UtcNow;
-        var localTime = time.ToLocalTime();
+        var localTime = TimeZoneInfo.ConvertTime(time, zone);
+        var today = TimeZoneInfo.ConvertTime(_time.GetUtcNow(), zone).Date;
 
-        if (localTime.Date == now.Date)
+        if (localTime.Date == today)
         {
-            return $"at {localTime:h:mmtt}".ToLowerInvariant();
+            return string.Create(CultureInfo.InvariantCulture, $"at {localTime:h:mmtt}").ToLowerInvariant();
         }
-        else if (localTime.Date == now.Date.AddDays(-1))
+        else if (localTime.Date == today.AddDays(-1))
         {
-            return $"yesterday at {localTime:h:mmtt}".ToLowerInvariant();
+            return string.Create(CultureInfo.InvariantCulture, $"yesterday at {localTime:h:mmtt}").ToLowerInvariant();
         }
         else
         {
-            return $"on {localTime:MMM d} at {localTime:h:mmtt}".ToLowerInvariant();
+            return string.Create(CultureInfo.InvariantCulture, $"on {localTime:MMM d} at {localTime:h:mmtt}").ToLowerInvariant();
         }
     }
 

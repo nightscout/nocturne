@@ -143,7 +143,19 @@ public static class TimeZoneHelper
     }
 
     /// <summary>
-    /// Calculate overnight window boundaries in Unix milliseconds for a given night and timezone
+    /// Hours from <paramref name="bedtimeHour"/> to the next <paramref name="wakeTimeHour"/>, 1 to 24.
+    /// Equal hours span a full day.
+    /// </summary>
+    public static int SleepSpanHours(int bedtimeHour, int wakeTimeHour)
+    {
+        var hours = ((wakeTimeHour - bedtimeHour) % 24 + 24) % 24;
+        return hours == 0 ? 24 : hours;
+    }
+
+    /// <summary>
+    /// Calculate overnight window boundaries in Unix milliseconds for a given night and timezone.
+    /// The window runs from bedtime on <paramref name="nightOf"/> to the next wake time after it:
+    /// the same day when the wake hour is later than the bedtime hour, otherwise the next day.
     /// </summary>
     /// <param name="nightOf">The night to analyze (date when sleep started)</param>
     /// <param name="userTimeZone">User's timezone</param>
@@ -156,17 +168,68 @@ public static class TimeZoneHelper
         int bedtimeHour = 23,
         int wakeTimeHour = 7)
     {
-        // Night of 2026-02-01 means bedtime on Feb 1 to wake time on Feb 2 in user's local time
+        var wakeDay = wakeTimeHour > bedtimeHour ? nightOf : nightOf.AddDays(1);
         var startLocalDateTime = nightOf.ToDateTime(new TimeOnly(bedtimeHour, 0));
-        var endLocalDateTime = nightOf.AddDays(1).ToDateTime(new TimeOnly(wakeTimeHour, 0));
+        var endLocalDateTime = wakeDay.ToDateTime(new TimeOnly(wakeTimeHour, 0));
 
-        // Convert local times to UTC for querying
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(startLocalDateTime, userTimeZone);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(endLocalDateTime, userTimeZone);
+        var startUtc = LocalToUtc(startLocalDateTime, userTimeZone);
+        var endUtc = LocalToUtc(endLocalDateTime, userTimeZone);
 
-        var windowStart = startUtc.ToMills();
-        var windowEnd = endUtc.ToMills();
+        return (startUtc.ToMills(), endUtc.ToMills());
+    }
 
-        return (windowStart, windowEnd);
+    /// <summary>
+    /// The UTC instant a wall-clock time falls at in <paramref name="timeZone"/>. Only the clock reading
+    /// of <paramref name="local"/> is used, whatever its <see cref="DateTimeKind"/>. A time the clock
+    /// skipped resolves to the first instant after the gap, exact to the tick. An ambiguous time resolves
+    /// to its first occurrence, the one at the larger offset.
+    /// </summary>
+    /// <returns>The instant, with <see cref="DateTimeKind.Utc"/>.</returns>
+    public static DateTime LocalToUtc(DateTime local, TimeZoneInfo timeZone)
+    {
+        var wall = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+
+        if (timeZone.IsInvalidTime(wall))
+            return DateTime.SpecifyKind(GapEnd(wall, timeZone), DateTimeKind.Utc);
+
+        var offset = timeZone.IsAmbiguousTime(wall)
+            ? timeZone.GetAmbiguousTimeOffsets(wall).Max()
+            : timeZone.GetUtcOffset(wall);
+
+        return DateTime.SpecifyKind(wall - offset, DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// <see cref="TimeZoneInfo.ConvertTimeToUtc(DateTime, TimeZoneInfo)"/>, which reads an ambiguous
+    /// time as standard time, except that a time the clock skipped resolves to the first instant
+    /// after the gap. The framework throws for one, on Linux only from .NET 11, and a zone whose
+    /// clocks go forward at midnight (America/Asuncion, Asia/Amman) skips the start of a local day.
+    /// </summary>
+    public static DateTime ConvertTimeToUtc(DateTime local, TimeZoneInfo timeZone)
+    {
+        var wall = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+        return timeZone.IsInvalidTime(wall)
+            ? DateTime.SpecifyKind(GapEnd(wall, timeZone), DateTimeKind.Utc)
+            : TimeZoneInfo.ConvertTimeToUtc(wall, timeZone);
+    }
+
+    private static DateTime GapEnd(DateTime wall, TimeZoneInfo timeZone)
+    {
+        var before = timeZone.GetUtcOffset(wall.AddDays(-1));
+        var after = timeZone.GetUtcOffset(wall.AddDays(1));
+
+        var low = (wall - after).Ticks;
+        var high = (wall - before).Ticks;
+        while (low < high)
+        {
+            var middle = low + (high - low) / 2;
+            var offset = timeZone.GetUtcOffset(new DateTimeOffset(middle, TimeSpan.Zero));
+            if (offset == before)
+                low = middle + 1;
+            else
+                high = middle;
+        }
+
+        return new DateTime(low, DateTimeKind.Utc);
     }
 }

@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import BGCheckSection from "./BGCheckSection.svelte";
-import { GlucoseType, GlucoseUnit } from "$lib/api/generated/nocturne-api-client";
+import { GlucoseType, GlucoseUnit } from "#lib/api/generated/nocturne-api-client.js";
 
 describe("BGCheckSection", () => {
 	it("renders section heading", async () => {

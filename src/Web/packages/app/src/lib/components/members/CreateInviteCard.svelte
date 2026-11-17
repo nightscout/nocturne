@@ -8,25 +8,25 @@
 </script>
 
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
-  import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
+  import { Select, SelectContent, SelectItem, SelectTrigger } from "#lib/components/ui/select/index.js";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
-  import CopyButton from "$lib/components/members/CopyButton.svelte";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
+  import CopyInvitationMessageButton from "#lib/components/members/CopyInvitationMessageButton.svelte";
+  import CopyButton from "#lib/components/members/CopyButton.svelte";
   import { Artwork } from "water-ui";
-  import { createInvite } from "$api/generated/memberInvites.generated.remote";
-  import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
-  import { describeSubmitError } from "$lib/forms";
+  import { createInvite } from "#lib/api/generated/memberInvites.generated.remote.js";
+  import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { describeSubmitError, FormError } from "#lib/forms/index.js";
 
   interface Props {
     roles: TenantRoleDto[];
@@ -35,6 +35,10 @@
      * someone who should not need to know the roles by name. Empty falls back to the checkboxes.
      */
     roleChoices?: InviteRoleChoice[];
+    /** The link lets in one person, with no choice to allow more. */
+    singleUseOnly?: boolean;
+    /** Offers the 24-hour limit. Off for a role the server never clamps, which would refuse it. */
+    offerHistoryLimit?: boolean;
     onCreated?: (url: string) => void;
     onCancel: () => void;
   }
@@ -42,11 +46,15 @@
   let {
     roles = [],
     roleChoices,
+    singleUseOnly = false,
+    offerHistoryLimit = true,
     onCreated,
     onCancel,
   }: Props = $props();
 
-  const grantableRoles = $derived(roles.filter((r) => r.canGrant));
+  // A role with no access level grants nothing. It is how a member is given no access, which
+  // an invite cannot mean.
+  const grantableRoles = $derived(roles.filter((r) => r.canGrant && r.accessLevel != null));
   const grantableChoices = $derived(
     (roleChoices ?? []).filter((c) => grantableRoles.some((r) => r.id === c.roleId)),
   );
@@ -66,7 +74,13 @@
     EXPIRY_OPTIONS.find((o) => o.value === expiresInDays)?.label ?? `${expiresInDays} days`,
   );
   let inviteLabel = $state("");
-  let inviteRoleIds = $state<string[]>([]);
+  let chosenRoleIds = $state<string[]>([]);
+  /** A single choice is the answer already, so it needs no click. */
+  const inviteRoleIds = $derived(
+    chosenRoleIds.length === 0 && grantableChoices.length === 1
+      ? [grantableChoices[0].roleId]
+      : chosenRoleIds,
+  );
   let inviteDirectPermissions = $state<string[]>([]);
   let showInvitePermissions = $state(false);
   let allowMultipleUses = $state(false);
@@ -77,10 +91,10 @@
   let errorMessage = $state<string | null>(null);
 
   function toggleInviteRole(roleId: string) {
-    if (inviteRoleIds.includes(roleId)) {
-      inviteRoleIds = inviteRoleIds.filter((r) => r !== roleId);
+    if (chosenRoleIds.includes(roleId)) {
+      chosenRoleIds = chosenRoleIds.filter((r) => r !== roleId);
     } else {
-      inviteRoleIds = [...inviteRoleIds, roleId];
+      chosenRoleIds = [...chosenRoleIds, roleId];
     }
   }
 
@@ -126,7 +140,7 @@
   function resetForm() {
     expiresInDays = 7;
     inviteLabel = "";
-    inviteRoleIds = [];
+    chosenRoleIds = [];
     inviteDirectPermissions = [];
     showInvitePermissions = false;
     allowMultipleUses = false;
@@ -199,7 +213,7 @@
               class="gap-2"
               aria-labelledby="invite-access-label"
               value={inviteRoleIds[0]}
-              onValueChange={(value) => (inviteRoleIds = [value])}
+              onValueChange={(value) => (chosenRoleIds = [value])}
             >
               {#each grantableChoices as choice (choice.roleId)}
                 <RadioGroup.Card value={choice.roleId}>
@@ -280,6 +294,7 @@
         </Collapsible.Root>
         {/if}
 
+        {#if offerHistoryLimit}
         <div
           class="flex items-start gap-2 rounded-md border p-3 bg-muted/30"
         >
@@ -302,7 +317,9 @@
             </p>
           </div>
         </div>
+        {/if}
 
+        {#if !singleUseOnly}
         <div
           class="flex items-start gap-2 rounded-md border p-3 bg-muted/30"
         >
@@ -325,14 +342,9 @@
             </p>
           </div>
         </div>
-
-        {#if errorMessage}
-          <div
-            class="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-          >
-            <p class="text-sm text-destructive">{errorMessage}</p>
-          </div>
         {/if}
+
+        <FormError issues={errorMessage} focusOnShow />
 
         <div class="flex gap-3">
           <Button

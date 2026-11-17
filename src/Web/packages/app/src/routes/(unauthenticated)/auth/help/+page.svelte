@@ -1,16 +1,16 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Globe from "@lucide/svelte/icons/globe";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import { Artwork } from "water-ui";
-  import { fingerprintArtwork } from "$lib/watercolour-icons";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   // Quote the sign-in controls by name — this is the page a locked-out person
   // reaches, so the names have to match what they're looking at.
-  import { signInMethodLabels } from "$lib/components/auth/labels";
+  import { signInMethodLabels } from "#lib/components/auth/labels.js";
 </script>
 
 <svelte:head>

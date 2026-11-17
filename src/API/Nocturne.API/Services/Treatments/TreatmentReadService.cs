@@ -1,5 +1,4 @@
 using System.Data.Common;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
@@ -13,7 +12,6 @@ using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
-using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Treatments;
 
@@ -21,26 +19,16 @@ namespace Nocturne.API.Services.Treatments;
 /// V4-only <see cref="ITreatmentStore"/> that reads all treatments from V4 repositories
 /// via the projection service and routes writes through the decomposer.
 /// </summary>
-public class TreatmentReadService : ITreatmentStore
+internal class TreatmentReadService : ITreatmentStore
 {
     private readonly IV4ToLegacyProjectionService _projection;
     private readonly ITreatmentDecomposer _decomposer;
-    private readonly IDecompositionPipeline _pipeline;
-    private readonly ITempBasalRepository _tempBasalRepo;
-    private readonly IBolusRepository _bolusRepo;
-    private readonly ICarbIntakeRepository _carbIntakeRepo;
-    private readonly IBGCheckRepository _bgCheckRepo;
-    private readonly INoteRepository _noteRepo;
-    private readonly IDeviceEventRepository _deviceEventRepo;
-    private readonly IBolusCalculationRepository _bolusCalcRepo;
-    private readonly IProfileActivationRepository _activationRepo;
-    private readonly IStateSpanService _stateSpans;
+    private readonly LegacyTreatmentStore _store;
     private readonly ILogger<TreatmentReadService> _logger;
 
     public TreatmentReadService(
         IV4ToLegacyProjectionService projection,
         ITreatmentDecomposer decomposer,
-        IDecompositionPipeline pipeline,
         ITempBasalRepository tempBasalRepo,
         IBolusRepository bolusRepo,
         ICarbIntakeRepository carbIntakeRepo,
@@ -54,16 +42,13 @@ public class TreatmentReadService : ITreatmentStore
     {
         _projection = projection;
         _decomposer = decomposer;
-        _pipeline = pipeline;
-        _tempBasalRepo = tempBasalRepo;
-        _bolusRepo = bolusRepo;
-        _carbIntakeRepo = carbIntakeRepo;
-        _bgCheckRepo = bgCheckRepo;
-        _noteRepo = noteRepo;
-        _deviceEventRepo = deviceEventRepo;
-        _bolusCalcRepo = bolusCalcRepo;
-        _activationRepo = activationRepo;
-        _stateSpans = stateSpans;
+        _store = new LegacyTreatmentStore(
+            new LegacyTreatmentRepositories(
+                bolusRepo, carbIntakeRepo, bgCheckRepo, noteRepo, deviceEventRepo, tempBasalRepo, bolusCalcRepo,
+                activationRepo),
+            projection,
+            decomposer,
+            stateSpans);
         _logger = logger;
     }
 
@@ -171,24 +156,12 @@ public class TreatmentReadService : ITreatmentStore
         _projection.GetLatestProjectedTreatmentAsync(eventType, fromMills, toMills, ct);
 
     /// <inheritdoc />
-    public async Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default)
-    {
-        var (stored, spanId) = await ResolveAsync(id, ct);
-        return (stored is null ? null : await ProjectAsync(stored.Record, ct))
-            ?? await _projection.GetProjectedStateSpanTreatmentAsync(spanId, ct);
-    }
+    public async Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default) =>
+        await _store.ResolveAsync(id, ct) is { } resolved ? await resolved.ReadAsync(ct) : null;
 
     /// <inheritdoc />
-    public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
-        => await _tempBasalRepo.IsDeletedByUserAsync(id, ct)
-            || await _bolusRepo.IsDeletedByUserAsync(id, ct)
-            || await _carbIntakeRepo.IsDeletedByUserAsync(id, ct)
-            || await _bgCheckRepo.IsDeletedByUserAsync(id, ct)
-            || await _deviceEventRepo.IsDeletedByUserAsync(id, ct)
-            || await _bolusCalcRepo.IsDeletedByUserAsync(id, ct)
-            || await _activationRepo.IsDeletedByUserAsync(id, ct)
-            || await _noteRepo.IsDeletedByUserAsync(id, ct)
-            || await _projection.IsStateSpanDeletedByUserAsync(id, ct);
+    public Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default) =>
+        _store.IsDeletedByUserAsync(id, ct);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> GetByRangeAsync(
@@ -214,144 +187,188 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The batch is decomposed in one call (<see cref="ITreatmentDecomposer.DecomposeBatchAsync"/>); a
+    /// treatment refused for its data is answered as refused and the rest are written.
+    /// </remarks>
     public async Task<BulkWrite<Treatment>> CreateAsync(
-        IReadOnlyList<Treatment> treatments, CancellationToken ct = default, ICollection<Treatment>? stored = null)
+        IReadOnlyList<Treatment> treatments,
+        WriteOrigin origin,
+        CancellationToken ct = default,
+        ICollection<StoredTreatment>? stored = null)
     {
-        var results = new List<Treatment>();
-        var rejected = new List<BulkWriteRejection<Treatment>>();
-        var skippedDeleted = 0;
-
-        for (var i = 0; i < treatments.Count; i++)
+        var decomposition = new TreatmentDecomposition();
+        try
         {
-            var treatment = treatments[i];
-            DecompositionResult? result = null;
-            try
-            {
-                result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-                skippedDeleted += result.SkippedDeleted;
-                var created = await ToCreatedAsync(treatment, result, ct);
-                results.Add(created);
-                stored?.Add(created);
-            }
-            catch (DbUpdateException ex) when (result is null && StoreRefusal.ReasonFor(ex) is { } reason)
-            {
-                rejected.Add(Reject(i, treatment, ex, reason));
-            }
-            catch (TreatmentMappingException ex)
-            {
-                rejected.Add(Reject(i, treatment, ex, ex.Message));
-            }
-            catch (DbUpdateException ex) { throw Stopped(ex); }
-            catch (DbException ex) { throw Stopped(ex); }
-            catch (TimeoutException ex) { throw Stopped(ex); }
-            catch (InvalidOperationException ex) { throw Stopped(ex); }
-            catch (OperationCanceledException ex) { throw Stopped(ex); }
+            await _store.KeyToServedAsync(treatments, ct);
+            await _decomposer.DecomposeBatchAsync(treatments, origin, ct, decomposition);
+        }
+        catch (Exception ex) when (Stops(ex))
+        {
+            throw Stopped(ex, decomposition);
+        }
+        catch (Exception) when (stored is not null)
+        {
+            await ReportCommittedAsync(treatments, decomposition, stored);
+            throw;
+        }
 
-            TreatmentBatchFailedException Stopped(Exception ex)
+        var results = new List<Treatment>(treatments.Count);
+        var rejected = Rejections(treatments, decomposition);
+        var accepted = Enumerable.Range(0, treatments.Count).Where(i => !decomposition.Rejected.ContainsKey(i)).ToList();
+        var updated = accepted.Where(i => UpdatedStoredRecord(treatments[i], decomposition.Of(i))).ToHashSet();
+        IReadOnlyList<StoredTreatment> created;
+        try
+        {
+            created = await _store.ToCreatedAsync([.. accepted.Select(i => (treatments[i], decomposition.Of(i)))], ct);
+        }
+        catch (Exception ex) when (Stops(ex))
+        {
+            var failedAt = accepted.First(i => LegacyTreatmentStore.NeedsRead(decomposition.Of(i)));
+            _logger.LogError(ex, "Failed to read back treatment {Id}; ending the batch", treatments[failedAt].Id);
+            _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
+            accepted = [.. accepted.TakeWhile(i => i < failedAt)];
+            created = await _store.ToCreatedAsync([.. accepted.Select(i => (treatments[i], decomposition.Of(i)))], ct);
+            Record();
+            List<Treatment> unread = [treatments[failedAt]];
+            if (Wrote(decomposition.Of(failedAt)))
+                stored?.Add(new StoredTreatment.Unnamed(treatments[failedAt]));
+            for (var j = failedAt + 1; j < treatments.Count; j++)
             {
-                _logger.LogError(ex, "Failed to store treatment {Id}; ending the batch", treatment.Id);
-                _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-                var written = result is null ? results : [.. results, treatment];
-                if (result is not null)
-                    stored?.Add(treatment);
-                return new TreatmentBatchFailedException(
-                    new BulkWrite<Treatment>(written, skippedDeleted) { Rejected = rejected },
-                    i, treatments.Count, failedOneStored: result is not null, ex);
+                var later = decomposition.Of(j);
+                if (later.StoredRecords.Any())
+                    unread.Add(treatments[j]);
+                if (Wrote(later))
+                    stored?.Add(new StoredTreatment.Unnamed(treatments[j]));
+            }
+            throw new TreatmentBatchFailedException(
+                new BulkWrite<Treatment>([.. results, .. unread], decomposition.SkippedDeleted) { Rejected = rejected },
+                failedAt, treatments.Count, failedOneStored: true, ex);
+        }
+
+        Record();
+
+        _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
+        return new BulkWrite<Treatment>(results, decomposition.SkippedDeleted) { Rejected = rejected };
+
+        void Record()
+        {
+            for (var k = 0; k < accepted.Count; k++)
+            {
+                results.Add(created[k].Created);
+                if (Wrote(decomposition.Of(accepted[k])))
+                    stored?.Add(created[k] with { Updated = updated.Contains(accepted[k]) });
             }
         }
 
-        _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(results, skippedDeleted) { Rejected = rejected };
+        TreatmentBatchFailedException Stopped(Exception ex, TreatmentDecomposition committed)
+        {
+            _logger.LogError(ex, "Failed to store a batch of {Count} treatments", treatments.Count);
+            var written = new List<Treatment>();
+            int? failedIndex = null;
+            for (var i = 0; i < treatments.Count; i++)
+            {
+                var of = committed.Of(i);
+                if (of.StoredRecords.Any())
+                {
+                    written.Add(treatments[i]);
+                    if (Wrote(of))
+                        stored?.Add(new StoredTreatment.Unnamed(treatments[i]));
+                }
+                else if (failedIndex is null && !committed.StoresNothing(i))
+                {
+                    failedIndex = i;
+                }
+            }
+
+            var skippedDeleted = committed.SkippedDeleted;
+            _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
+            return new TreatmentBatchFailedException(
+                new BulkWrite<Treatment>(written, skippedDeleted) { Rejected = Rejections(treatments, committed) },
+                failedIndex, treatments.Count, failedOneStored: false, ex);
+        }
     }
+
+    /// <summary>
+    /// Reports each treatment that wrote a record before a failure the batch does not expect, as the
+    /// create would have answered it, or under the id it was sent with when that read fails too.
+    /// </summary>
+    private async Task ReportCommittedAsync(
+        IReadOnlyList<Treatment> treatments, TreatmentDecomposition decomposition, ICollection<StoredTreatment> stored)
+    {
+        var wrote = Enumerable.Range(0, Math.Min(treatments.Count, decomposition.Groups.Count))
+            .Where(i => Wrote(decomposition.Of(i)))
+            .Select(i => (treatments[i], decomposition.Of(i)))
+            .ToList();
+        try
+        {
+            foreach (var created in await _store.ToCreatedAsync(wrote, CancellationToken.None))
+                stored.Add(created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex, "Stored treatments {Ids} could not be read back", wrote.Select(w => w.Item1.Id));
+            foreach (var (treatment, _) in wrote)
+                stored.Add(new StoredTreatment.Unnamed(treatment));
+        }
+    }
+
+    /// <summary>A failure that ends the batch, rather than one treatment's refusal.</summary>
+    private static bool Stops(Exception ex) =>
+        ex is DbUpdateException or DbException or TimeoutException or InvalidOperationException or OperationCanceledException;
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Treatment?>> ReadBackAsync(
+        IReadOnlyList<StoredTreatment> stored, CancellationToken ct = default) =>
+        _store.ReadBackAsync(stored, ct);
+
+    /// <summary>
+    /// Whether decomposing <paramref name="treatment"/> updated a record already stored for it: one of
+    /// its records, or the span it is stored as (an override, a temporary target), which carries the
+    /// treatment's id as its original id. Another span the decomposition updated, such as the
+    /// suspension a pump resume closes, belongs to another treatment. Read before
+    /// <see cref="LegacyTreatmentStore.ToCreatedAsync"/> rewrites the treatment's id.
+    /// </summary>
+    private static bool UpdatedStoredRecord(Treatment treatment, DecompositionResult result) =>
+        result.UpdatedRecords.Any(r => r is IV4Record
+            || (r is StateSpan { OriginalId: { Length: > 0 } originalId } && originalId == treatment.Id));
+
+    /// <summary>
+    /// A treatment stored only as rows that already held what it carries is served in the response
+    /// but not announced.
+    /// </summary>
+    private static bool Wrote(DecompositionResult result) =>
+        result.CreatedRecords.Count > 0 || result.UpdatedRecords.Count > 0;
+
+    private List<BulkWriteRejection<Treatment>> Rejections(
+        IReadOnlyList<Treatment> treatments, TreatmentDecomposition decomposition) =>
+        [.. decomposition.Rejected.OrderBy(r => r.Key).Select(r => Reject(r.Key, treatments[r.Key], r.Value))];
 
     /// <summary>
     /// A treatment whose write fails the same way on every attempt is answered as refused and the
     /// batch goes on, so neither a client resending the batch nor a connector re-reading the page
     /// is held on it forever. The records written for it before the refusal stay written.
     /// </summary>
-    private BulkWriteRejection<Treatment> Reject(int index, Treatment treatment, Exception ex, string reason)
+    private BulkWriteRejection<Treatment> Reject(int index, Treatment treatment, Exception refusal)
     {
-        _logger.LogRefused(nameof(Treatment), reason, treatment.DataSource ?? "api", ex);
+        var reason = refusal is DbUpdateException db && StoreRefusal.ReasonFor(db) is { } stored ? stored : refusal.Message;
+        _logger.LogRefused(nameof(Treatment), reason, treatment.DataSource ?? "api", refusal);
         return new BulkWriteRejection<Treatment>(
             index, treatment, $"{reason}; parts of the treatment may be stored");
     }
 
     /// <inheritdoc />
-    public async Task<Treatment?> UpdateAsync(string id, Treatment treatment, CancellationToken ct = default)
-    {
-        var (stored, spanId) = await ResolveAsync(id, ct);
-        if (stored is null)
-            return await UpdateStateSpanAsync(spanId, treatment, ct);
-
-        if (await ProjectAsync(stored.Record, ct) is not { } existing)
-            return null;
-
-        TreatmentClientId.KeepStored(treatment, existing);
-
-        var upsertKey = await UpsertKeyAsync(stored, ct);
-        treatment.Id = upsertKey;
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-        return await GetByIdAsync(upsertKey, ct)
-            ?? throw ReadBackFailed(id);
-    }
-
-    private static InvalidOperationException ReadBackFailed(string id) =>
-        new($"Treatment {id} did not read back after the update");
-
-    /// <summary>
-    /// Updates the state span a treatment was decomposed into, by re-decomposing the update under the
-    /// treatment id the span was written under, which the decomposer upserts it on.
-    /// </summary>
-    private async Task<Treatment?> UpdateStateSpanAsync(string id, Treatment treatment, CancellationToken ct)
-    {
-        if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { Id: { } spanId }
-            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } upsertKey)
-            return null;
-
-        treatment.Id = upsertKey;
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-        return await _projection.GetProjectedStateSpanTreatmentAsync(spanId, ct)
-            ?? throw ReadBackFailed(id);
-    }
+    public async Task<Treatment?> UpdateAsync(string id, Treatment treatment, CancellationToken ct = default) =>
+        await _store.ResolveAsync(id, ct) is { } resolved ? await resolved.UpdateAsync(treatment, ct) : null;
 
     /// <inheritdoc />
-    public async Task<TreatmentDeletion?> DeleteAsync(string id, CancellationToken ct = default)
-    {
-        var (stored, spanId) = await ResolveAsync(id, ct);
-        if (stored is null)
-            return await DeleteStateSpanAsync(spanId, ct);
+    public async Task<TreatmentDeletion?> DeleteAsync(string id, CancellationToken ct = default) =>
+        await _store.ResolveAsync(id, ct) is { } resolved ? await resolved.DeleteAsync(ct) : null;
 
-        var served = await ProjectAsync(stored.Record, ct);
-
-        // Every record one treatment decomposed into (a meal bolus's carb, a bolus wizard's
-        // calculation, a correction's note) shares its legacy id, so deleting by it leaves no sibling
-        // behind as a phantom treatment of its own.
-        if (stored.Record.LegacyId is { Length: > 0 } legacyId)
-        {
-            var records = await _pipeline.DeleteByLegacyIdAsync<Treatment>(legacyId, WriteOrigin.Live, ct);
-            var span = await _projection.GetStateSpanTreatmentIdAsync(legacyId, ct) == legacyId
-                ? await DeleteStateSpanAsync(legacyId, ct)
-                : null;
-            return span ?? (records > 0 ? new TreatmentDeletion(served) : null);
-        }
-
-        await stored.DeleteAsync(ct);
-        return new TreatmentDeletion(served);
-    }
-
-    /// <summary>
-    /// Deletes a served state span with the Note its treatment wrote beside it before notes were kept
-    /// on the span, which is served as part of the span and would otherwise outlive it.
-    /// </summary>
-    private async Task<TreatmentDeletion?> DeleteStateSpanAsync(string id, CancellationToken ct)
-    {
-        if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { Id: { } spanId } served
-            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } treatmentId)
-            return null;
-
-        await _pipeline.DeleteByLegacyIdAsync<Treatment>(treatmentId, WriteOrigin.Live, ct);
-        return await _stateSpans.DeleteStateSpanAsync(spanId, ct) ? new TreatmentDeletion(served) : null;
-    }
+    /// <inheritdoc />
+    public async Task<Treatment?> GetForUpdateAsync(string id, CancellationToken ct = default) =>
+        await _store.ResolveAsync(id, ct) is { } resolved ? await resolved.ForUpdateAsync(ct) : null;
 
     /// <inheritdoc />
     public async Task<long> CountAsync(string? find = null, CancellationToken ct = default)
@@ -371,248 +388,6 @@ public class TreatmentReadService : ITreatmentStore
             return projected.Count(findQuery.Matches);
         }
 
-        var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
-        var from = fromMills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime : (DateTime?)null;
-        var to = toMills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime : (DateTime?)null;
-
-        var bolusCount = await _bolusRepo.CountAsync(from, to, ct);
-        var carbCount = await _carbIntakeRepo.CountAsync(from, to, ct);
-        var bgCheckCount = await _bgCheckRepo.CountAsync(from, to, ct);
-        var noteCount = await _projection.CountNotesServedApartAsync(fromMills, toMills, ct);
-        var deviceEventCount = await _deviceEventRepo.CountAsync(from, to, ct);
-        var tempBasalCount = await _tempBasalRepo.CountAsync(from, to, ct);
-        var bolusCalcCount = await _bolusCalcRepo.CountAsync(from, to, ct);
-        var stateSpanCount = await _projection.CountProjectedStateSpanTreatmentsAsync(fromMills, toMills, ct);
-
-        return bolusCount + carbCount + bgCheckCount + noteCount
-             + deviceEventCount + tempBasalCount + bolusCalcCount + stateSpanCount;
+        return await _projection.CountProjectedTreatmentsAsync(findQuery.FromMills, findQuery.ToMills, ct);
     }
-
-    #region Private - stored record resolution
-
-    /// <summary>
-    /// The create response for a decomposed treatment. It carries the id every read serves for the
-    /// treatment, so a client that keeps the response id (Loop's objectIdCache, AAPS's nightscoutId)
-    /// can edit and delete by it later; the client's own id stays stored as the records' LegacyId.
-    /// A treatment that wrote none of the projected tables keeps the id it was sent with.
-    /// </summary>
-    private async Task<Treatment> ToCreatedAsync(Treatment treatment, DecompositionResult result, CancellationToken ct)
-    {
-        var written = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
-        if (written.OfType<Core.Models.V4.TempBasal>().FirstOrDefault() is { } tempBasal)
-            return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
-
-        if (written.OfType<StateSpan>().FirstOrDefault(IsServedStateSpan) is { OriginalId: { } spanKey })
-        {
-            if (await _projection.GetProjectedStateSpanTreatmentAsync(spanKey, ct) is { Id: { } spanId })
-                treatment.Id = spanId;
-            return treatment;
-        }
-
-        var served = ServedRecordTypes
-            .Select(type => written.OfType<IV4Record>().FirstOrDefault(type.IsInstanceOfType))
-            .FirstOrDefault(record => record is not null);
-        if (served is not null)
-            treatment.Id = served.Id.ToString();
-
-        return treatment;
-    }
-
-    /// <summary>
-    /// Whether a state span the decomposer wrote is read back as the treatment, under the span's id.
-    /// </summary>
-    private static bool IsServedStateSpan(StateSpan span) =>
-        span is { OriginalId: not null, Category: StateSpanCategory.Override or StateSpanCategory.TemporaryTarget };
-
-    /// <summary>
-    /// The record a decomposed treatment is read back under: a bolus heads a Meal Bolus, and a note
-    /// is only its own treatment when nothing else was written.
-    /// </summary>
-    private static readonly Type[] ServedRecordTypes =
-    [
-        typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(DeviceEvent), typeof(BolusCalculation),
-        typeof(ProfileActivation), typeof(Note),
-    ];
-
-    /// <summary>
-    /// The stored record a client-sent treatment id names, or none and the id to look a state span up
-    /// by. A Note a treatment wrote beside another record is served as part of that record, so it
-    /// resolves to it; see <see cref="Nocturne.API.Services.V4.LegacyTreatmentTables.NotesServedWithAnotherRecord"/>.
-    /// </summary>
-    private async Task<(StoredRecord? Stored, string SpanId)> ResolveAsync(string id, CancellationToken ct)
-    {
-        if (await FindStoredRecordAsync(id, ct) is not { } stored)
-            return (null, id);
-
-        if (stored.Record is not Note { LegacyId: { Length: > 0 } legacyId })
-            return (stored, id);
-
-        if (await FindServingRecordAsync(new RecordKey.LegacyId(legacyId), ct) is { } holder)
-            return (holder, id);
-
-        return await _projection.GetStateSpanTreatmentIdAsync(legacyId, ct) == legacyId
-            ? (null, legacyId)
-            : (stored, id);
-    }
-
-    /// <summary>A <see cref="ProfileActivation"/> served as a treatment: one decomposed from a treatment, so carrying its id.</summary>
-    private async Task<StoredRecord?> FindServedActivationAsync(RecordKey key, CancellationToken ct) =>
-        await FindAsync(_activationRepo, key, ct) is { Record.LegacyId: { Length: > 0 } } activation
-            ? activation
-            : null;
-
-    /// <summary>
-    /// Resolves a client-sent treatment id to the stored record it names. Each key is tried against
-    /// every table before the next, looser one, so an exact match always wins over a prefix or hash
-    /// match. The records of one treatment share its legacy id, so the tables are tried in the order
-    /// <see cref="ToCreatedAsync"/> names a treatment by: a legacy id resolves to the record the create
-    /// returned, not to the note a record treatment with notes also writes.
-    /// </summary>
-    private async Task<StoredRecord?> FindStoredRecordAsync(string id, CancellationToken ct)
-    {
-        foreach (var key in RecordKeysFor(id))
-        {
-            var stored = await FindServingRecordAsync(key, ct) ?? await FindAsync(_noteRepo, key, ct);
-            if (stored is not null)
-                return stored;
-        }
-
-        return null;
-    }
-
-    /// <summary>The stored record a key names, the Notes left out.</summary>
-    private async Task<StoredRecord?> FindServingRecordAsync(RecordKey key, CancellationToken ct) =>
-        await FindAsync(_tempBasalRepo, key, ct)
-            ?? await FindAsync(_bolusRepo, key, ct)
-            ?? await FindAsync(_carbIntakeRepo, key, ct)
-            ?? await FindAsync(_bgCheckRepo, key, ct)
-            ?? await FindAsync(_deviceEventRepo, key, ct)
-            ?? await FindAsync(_bolusCalcRepo, key, ct)
-            ?? await FindServedActivationAsync(key, ct);
-
-    /// <summary>
-    /// A UUID is a record's own id or a client's legacy id. A 24-hex id is a client's legacy id, the
-    /// prefix of a record's own id (the id reads serve), or the coerced legacy id an older create
-    /// echoed.
-    /// </summary>
-    private static IEnumerable<RecordKey> RecordKeysFor(string id)
-    {
-        if (Guid.TryParse(id, out var guid))
-        {
-            yield return new RecordKey.RecordId(guid);
-            yield return new RecordKey.LegacyId(id);
-            yield break;
-        }
-
-        yield return new RecordKey.LegacyId(id);
-
-        if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
-        {
-            yield return new RecordKey.RecordIdPrefix(low, high);
-            yield return new RecordKey.LegacyIdUuidPrefix(id);
-            yield return new RecordKey.LegacyIdHash(id);
-        }
-    }
-
-    private static async Task<StoredRecord?> FindAsync<T>(
-        ILegacyKeyedRepository<T> repo, RecordKey key, CancellationToken ct) where T : class, IV4Record
-    {
-        var record = key switch
-        {
-            RecordKey.RecordId k => await repo.GetByIdAsync(k.Id, ct),
-            RecordKey.LegacyId k => await repo.GetByLegacyIdAsync(k.Id, ct),
-            RecordKey.RecordIdPrefix k => await repo.GetByGuidRangeAsync(k.Low, k.High, ct),
-            RecordKey.LegacyIdUuidPrefix k => await repo.GetByLegacyIdUuidPrefixAsync(k.ObjectId, ct),
-            RecordKey.LegacyIdHash k => await repo.GetByLegacyIdHashAsync(k.ObjectId, ct),
-            _ => throw new ArgumentOutOfRangeException(nameof(key)),
-        };
-
-        return record is null
-            ? null
-            : new StoredRecord(
-                record,
-                c => repo.DeleteAsync(record.Id, WriteOrigin.Live, c),
-                c => repo.UpdateAsync(record.Id, record, WriteOrigin.Live, c));
-    }
-
-    private async Task<Treatment?> ProjectAsync(IV4Record record, CancellationToken ct)
-    {
-        if (record is Core.Models.V4.TempBasal tempBasal)
-            return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
-
-        // A carb intake paired into a Meal Bolus is served under the bolus's id.
-        if (record is CarbIntake { CorrelationId: { } correlationId }
-            && (await _bolusRepo.GetByCorrelationIdAsync(correlationId, ct)).FirstOrDefault() is { } pairedBolus)
-            return await FindProjectedTreatmentAsync(pairedBolus.Mills, pairedBolus.Id.ToString(), ct);
-
-        return await FindProjectedTreatmentAsync(record.Mills, record.Id.ToString(), ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<Treatment?> GetForUpdateAsync(string id, CancellationToken ct = default)
-    {
-        var (stored, spanId) = await ResolveAsync(id, ct);
-        if (stored is null)
-            return await GetStateSpanForUpdateAsync(spanId, ct);
-
-        if (await ProjectAsync(stored.Record, ct) is not { } existing)
-            return null;
-
-        existing.Id = await UpsertKeyAsync(stored, ct);
-        return existing;
-    }
-
-    private async Task<Treatment?> GetStateSpanForUpdateAsync(string id, CancellationToken ct)
-    {
-        if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { } existing
-            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } upsertKey)
-            return null;
-
-        existing.Id = upsertKey;
-        return existing;
-    }
-
-    /// <summary>
-    /// The LegacyId the decomposer upserts a stored record on. A native V4 row has none, so the
-    /// decomposer could not match it and would insert a duplicate; it is given the id the wire
-    /// already shows for it.
-    /// </summary>
-    private static async Task<string> UpsertKeyAsync(StoredRecord stored, CancellationToken ct)
-    {
-        if (!string.IsNullOrEmpty(stored.Record.LegacyId))
-            return stored.Record.LegacyId;
-
-        stored.Record.LegacyId = MongoObjectId.FromGuid(stored.Record.Id);
-        await stored.SaveAsync(ct);
-        return stored.Record.LegacyId;
-    }
-
-    private sealed record StoredRecord(
-        IV4Record Record,
-        Func<CancellationToken, Task> DeleteAsync,
-        Func<CancellationToken, Task> SaveAsync);
-
-    private abstract record RecordKey
-    {
-        public sealed record RecordId(Guid Id) : RecordKey;
-
-        public sealed record LegacyId(string Id) : RecordKey;
-
-        public sealed record RecordIdPrefix(Guid Low, Guid High) : RecordKey;
-
-        public sealed record LegacyIdUuidPrefix(string ObjectId) : RecordKey;
-
-        public sealed record LegacyIdHash(string ObjectId) : RecordKey;
-    }
-
-    private async Task<Treatment?> FindProjectedTreatmentAsync(
-        long mills, string treatmentId, CancellationToken ct)
-    {
-        var projected = await _projection.GetProjectedTreatmentsAsync(
-            mills, mills, 100, ct: ct);
-        return projected.FirstOrDefault(t => t.Id == treatmentId);
-    }
-
-    #endregion
-
 }

@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// First requests for one new tenant's docs page arriving together. No unique index stops them each
 /// inserting a Scalar client, so only the per-tenant lock leaves the tenant one row.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class ScalarClientConcurrencyTests : ApiIntegrationTestBase
 {

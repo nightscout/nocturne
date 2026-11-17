@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { InAppNotificationDto } from "$lib/api";
+import type { InAppNotificationDto } from "#lib/api/index.js";
 
 const created = vi.hoisted(() => ({ close: vi.fn(), create: vi.fn() }));
-vi.mock("$lib/audio/alarm-sounds", () => ({
+vi.mock("#lib/audio/alarm-sounds.js", () => ({
   createSystemNotification: created.create,
 }));
-vi.mock("$lib/websocket/websocket-client.svelte", () => ({ WebSocketClient: class {} }));
+vi.mock("#lib/websocket/websocket-client.svelte.js", () => ({ WebSocketClient: class {} }));
 
 import { closeAlertNotification, raiseAlertNotification } from "./alert-notifications.svelte";
 

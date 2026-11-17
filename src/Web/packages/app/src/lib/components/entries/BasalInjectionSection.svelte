@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { InsulinRole, type BasalInjection, type PatientInsulin } from "$lib/api";
-  import * as Select from "$lib/components/ui/select";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Button } from "$lib/components/ui/button";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { InsulinRole, type BasalInjection, type PatientInsulin } from "#lib/api/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import X from "@lucide/svelte/icons/x";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import * as patientRemote from "$api/generated/patientRecords.generated.remote";
-  import { insulinCategoryLabels } from "$lib/components/patient/labels";
+  import * as patientRemote from "#lib/api/generated/patientRecords.generated.remote.js";
+  import { insulinCategoryLabels } from "#lib/components/patient/labels.js";
 
   interface Props {
     injection: Partial<BasalInjection>;

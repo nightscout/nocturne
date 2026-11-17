@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 import DailyProfileBody from "./DailyProfileBody.svelte";
 import { profileResponse } from "./daily-profile.test-fixtures";
 
@@ -245,19 +245,6 @@ describe("DailyProfileBody", () => {
     await expect.element(page.getByText("This report needs a time zone")).toBeVisible();
     await expect.element(page.getByText(/The profile settings do not have a time zone/)).toBeVisible();
     expect(page.getByRole("slider").elements()).toHaveLength(0);
-  });
-
-  it("says why a shared link has no time-of-day view", async () => {
-    render(DailyProfileBody, {
-      props: {
-        response: {
-          primary: { slots: [], days: [] },
-          timeZoneUnavailableReason: TimeZoneUnavailableReason.Share,
-        },
-      },
-    });
-
-    await expect.element(page.getByText(/A shared link does not show the time zone/)).toBeVisible();
   });
 
   it("says the ranges were clamped to the last 24 hours", async () => {

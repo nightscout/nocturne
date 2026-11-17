@@ -11,8 +11,8 @@
   } from "layerchart";
   import { curveStepAfter } from "d3";
   import { scaleLinear } from "d3-scale";
-  import { PumpModeIcon } from "$lib/components/icons";
-  import { BasalDeliveryOrigin } from "$lib/api";
+  import { PumpModeIcon } from "#lib/components/icons/index.js";
+  import { BasalDeliveryOrigin } from "#lib/api/index.js";
 
   interface StateSpanChartData {
     id: string;

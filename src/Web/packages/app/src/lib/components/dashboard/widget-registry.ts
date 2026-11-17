@@ -5,7 +5,7 @@
  * an id without a loader, or a loader without an id, fails to compile.
  */
 
-import { WidgetId } from "$lib/api/generated/nocturne-api-client";
+import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
 import type { Component } from "svelte";
 import type { TopWidgetId } from "./top-widget-ids";
 

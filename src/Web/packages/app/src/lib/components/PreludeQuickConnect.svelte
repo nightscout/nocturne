@@ -1,23 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import QRCode from "qrcode";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
-  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import DeviceCodeApproval from "#lib/components/oauth/DeviceCodeApproval.svelte";
   import Smartphone from "@lucide/svelte/icons/smartphone";
-  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
-  import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import Check from "@lucide/svelte/icons/check";
-  import Shield from "@lucide/svelte/icons/shield";
-  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import X from "@lucide/svelte/icons/x";
-  import { buildPreludeDeepLink, buildConnectPageUrl } from "$lib/utils/prelude-links";
-  import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
-  import { deviceApprove } from "$api/generated/oAuths.generated.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { buildPreludeDeepLink, buildConnectPageUrl } from "#lib/utils/prelude-links.js";
 
   interface Props {
     /** Origin URL of the Nocturne instance (trailing slash tolerated). */
@@ -31,24 +20,6 @@
 
   const connectPageUrl = $derived(buildConnectPageUrl(instanceUrl));
   const deepLink = $derived(buildPreludeDeepLink(instanceUrl));
-
-  // ── Device authorization state ─────────────────────────────────
-  let deviceCodeInput = $state("");
-  let deviceLookupLoading = $state(false);
-  let deviceLookupError = $state<string | null>(null);
-  let deviceInfo = $state<{
-    userCode: string;
-    clientId: string;
-    displayName: string | null;
-    scopes: string[];
-  } | null>(null);
-  let deviceApproveLoading = $state(false);
-  let deviceApproved = $state(false);
-  let deviceDenied = $state(false);
-
-  const deviceAppName = $derived(
-    deviceInfo ? (deviceInfo.displayName ?? deviceInfo.clientId) : "",
-  );
 
   onMount(async () => {
     if (browser) {
@@ -64,66 +35,6 @@
       console.warn("[PreludeQuickConnect] QR code generation failed:", err);
     }
   });
-
-  async function lookupDeviceCode() {
-    const code = deviceCodeInput.trim();
-    if (!code) return;
-
-    deviceLookupLoading = true;
-    deviceLookupError = null;
-
-    try {
-      const info = await getDeviceInfo({ userCode: code }).run();
-      if (!info) {
-        deviceLookupError = "Invalid or expired device code.";
-        return;
-      }
-      deviceInfo = {
-        userCode: info.userCode ?? code,
-        clientId: info.clientId ?? "",
-        displayName: info.clientDisplayName ?? null,
-        scopes: (info.scopes ?? []).filter(Boolean),
-      };
-    } catch (err) {
-      deviceLookupError = describeSubmitError(
-        err,
-        "Invalid or expired device code. Check the code and try again."
-      );
-    } finally {
-      deviceLookupLoading = false;
-    }
-  }
-
-  async function handleApproveDevice() {
-    if (!deviceInfo) return;
-    deviceApproveLoading = true;
-    try {
-      await deviceApprove({ user_code: deviceInfo.userCode, approved: true });
-      deviceApproved = true;
-    } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Could not approve the device. The code possibly expired.");
-    } finally {
-      deviceApproveLoading = false;
-    }
-  }
-
-  async function handleDenyDevice() {
-    if (!deviceInfo) return;
-    deviceApproveLoading = true;
-    try {
-      await deviceApprove({ user_code: deviceInfo.userCode, approved: false });
-      deviceDenied = true;
-    } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Failed to deny the request.");
-    } finally {
-      deviceApproveLoading = false;
-    }
-  }
-
-  function handleDeviceCodeSubmit(e: SubmitEvent) {
-    e.preventDefault();
-    lookupDeviceCode();
-  }
 </script>
 
 <div class="space-y-4">
@@ -172,7 +83,6 @@
 
   <Separator />
 
-  <!-- Device Authorization Code Section -->
   <div class="space-y-3">
     <div>
       <p class="text-sm font-medium">Enter authorization code</p>
@@ -181,119 +91,6 @@
       </p>
     </div>
 
-    {#if deviceApproved}
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        class="flex items-center gap-2 rounded bg-success/10 p-3 text-sm text-success"
-      >
-        <CheckCircle class="h-4 w-4" />
-        Device authorized successfully. Prelude is now connected.
-      </div>
-    {:else if deviceDenied}
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        class="bg-muted flex items-center gap-2 rounded p-3 text-sm"
-      >
-        <X class="h-4 w-4" />
-        Authorization denied. The device will not be granted access.
-      </div>
-    {:else if deviceInfo}
-      <!-- Consent / Approval -->
-      <div class="space-y-3 rounded-md border p-3">
-        <div class="flex items-center gap-2">
-          <Shield class="h-4 w-4 text-primary" />
-          <p class="text-sm font-medium">
-            A device wants access
-          </p>
-        </div>
-
-        <DeviceAppClaimNotice claimedName={deviceAppName} />
-
-        <div>
-          <p class="text-muted-foreground mb-2 text-xs font-medium">Requested permissions:</p>
-          <ul class="space-y-1">
-            {#each deviceInfo.scopes as scope (scope)}
-              <li class="flex items-start gap-2 text-sm">
-                <Check class="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-                <span class="text-muted-foreground">
-                  {getOAuthScopeDescription(scope)}
-                </span>
-              </li>
-            {/each}
-          </ul>
-        </div>
-
-        {#if deviceLookupError}
-          <div
-            class="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-2"
-          >
-            <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <p class="text-sm text-destructive">{deviceLookupError}</p>
-          </div>
-        {/if}
-
-        <div class="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            class="flex-1"
-            disabled={deviceApproveLoading}
-            onclick={handleDenyDevice}
-          >
-            {#if deviceApproveLoading}
-              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-            {/if}
-            Deny
-          </Button>
-          <Button
-            size="sm"
-            class="flex-1"
-            disabled={deviceApproveLoading}
-            onclick={handleApproveDevice}
-          >
-            {#if deviceApproveLoading}
-              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-            {/if}
-            Approve
-          </Button>
-        </div>
-      </div>
-    {:else}
-      <!-- Code Entry -->
-      {#if deviceLookupError}
-        <div
-          class="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-2"
-        >
-          <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <p class="text-sm text-destructive">{deviceLookupError}</p>
-        </div>
-      {/if}
-
-      <form onsubmit={handleDeviceCodeSubmit} class="flex items-center gap-2">
-        <Input
-          type="text"
-          placeholder="XXXX-YYYY"
-          maxlength={9}
-          autocomplete="off"
-          variant="code"
-          bind:value={deviceCodeInput}
-          disabled={deviceLookupLoading}
-        />
-        <Button
-          type="submit"
-          size="sm"
-          disabled={deviceLookupLoading || !deviceCodeInput.trim()}
-        >
-          {#if deviceLookupLoading}
-            <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-          {/if}
-          Continue
-        </Button>
-      </form>
-    {/if}
+    <DeviceCodeApproval />
   </div>
 </div>

@@ -4,9 +4,9 @@
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Badge } from "$lib/components/ui/badge";
+  } from "#lib/components/ui/card/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import SupplyItem from "./supply-item.svelte";

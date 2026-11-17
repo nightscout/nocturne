@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { formatLocale, formatNumericDate } from "$lib/utils/formatting";
+  import { formatLocale, formatNumericDate } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import BatteryCharging from "@lucide/svelte/icons/battery-charging";
   import BatteryFull from "@lucide/svelte/icons/battery-full";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
@@ -20,13 +20,13 @@
   import Zap from "@lucide/svelte/icons/zap";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import type { BatteryStatistics, ChargeCycle, BatteryReading } from "$lib/api";
-  import { getBatteryReportData } from "$api/battery.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { formatMinutesDuration } from "$lib/utils/duration";
-  import { EmptyState } from "$lib/components/shared";
-  import { batteryArtwork } from "$lib/watercolour-icons";
+  import type { BatteryStatistics, ChargeCycle, BatteryReading } from "#lib/api/index.js";
+  import { getBatteryReportData } from "#lib/api/battery.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { batteryArtwork } from "#lib/watercolour-icons.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days is good for battery analysis (typical charge cycle period)
@@ -37,8 +37,8 @@
   const batteryResource = contextResource(
     () => getBatteryReportData({
       device: selectedDevice,
-      from: reportsParams.dateRangeMillis.from,
-      to: reportsParams.dateRangeMillis.to,
+      from: reportsParams.fromDay,
+      to: reportsParams.toDay,
       cycleLimit: 50,
     }),
     { errorTitle: "Error loading battery report" }
@@ -47,8 +47,6 @@
   const statistics = $derived<BatteryStatistics[]>(batteryResource.current?.statistics ?? []);
   const cycles = $derived<ChargeCycle[]>(batteryResource.current?.cycles ?? []);
   const readings = $derived<BatteryReading[]>(batteryResource.current?.readings ?? []);
-
-  const dateRange = $derived(reportsParams.dateRangeMillis);
 
   function fetchData() {
     batteryResource.refresh();
@@ -67,16 +65,20 @@
     });
   }
 
+  /** Icon for each `level` bucket the API serves (0, 25, 50, 75, 100). */
+  const LEVEL_ICONS: Record<number, typeof BatteryFull> = {
+    100: BatteryFull,
+    75: BatteryMedium,
+    50: BatteryMedium,
+    25: BatteryLow,
+  };
+
   function getBatteryIconComponent(
     level: number | undefined,
     isCharging: boolean | undefined
   ) {
     if (isCharging) return BatteryCharging;
-    if (!level) return BatteryWarning;
-    if (level >= 95) return BatteryFull;
-    if (level >= 50) return BatteryMedium;
-    if (level >= 25) return BatteryLow;
-    return BatteryWarning;
+    return LEVEL_ICONS[level ?? 0] ?? BatteryWarning;
   }
 
   function extractDeviceName(device: string | undefined): string {
@@ -119,9 +121,7 @@
   <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground print:hidden">
     <Calendar class="h-4 w-4" />
     <span>
-      {formatNumericDate(new Date(dateRange.from))} – {formatNumericDate(new Date(
-        dateRange.to
-      ))}
+      {formatNumericDate(reportsParams.startDate)} – {formatNumericDate(reportsParams.endDate)}
     </span>
     <span class="text-muted-foreground/50">•</span>
     <span>{readings.length} readings</span>

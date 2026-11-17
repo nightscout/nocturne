@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
+  import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
   import { AreaChart, Tooltip } from "layerchart";
-  import { EmptyState } from "$lib/components/shared";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     glucoseUnits,
     timeFormat,
-  } from "$lib/stores/appearance-store.svelte";
-  import { convertToDisplayUnits, bg, bgLabel, bgRange } from "$lib/utils/formatting";
-  import { CHART_TEXTURES, patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import { GLUCOSE_BANDS } from "$lib/components/reports/percentile-band-colors";
-  import type { AveragedStats, GlycemicThresholds } from "$lib/api";
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { convertToDisplayUnits, bg, bgLabel, bgRange } from "#lib/utils/formatting.js";
+  import { CHART_TEXTURES, patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import { GLUCOSE_BANDS } from "#lib/components/reports/percentile-band-colors.js";
+  import type { AveragedStats, GlycemicThresholds } from "#lib/api/index.js";
   import {
     formatHour as _formatHour,
     transformStats,

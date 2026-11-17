@@ -6,26 +6,26 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
-  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
+  import PermissionSummary from "#lib/components/rbac/PermissionSummary.svelte";
+  import UserAvatar from "#lib/components/account/UserAvatar.svelte";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Clock from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
-  import FormError from "$lib/forms/FormError.svelte";
-  import type { TenantMemberDto, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import FormError from "#lib/forms/FormError.svelte";
+  import type { TenantMemberDto, TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     member: TenantMemberDto;

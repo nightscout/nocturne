@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration;
 /// <c>/api/v1/count/{storage}/where</c> against the API running in-process on real PostgreSQL: the
 /// legacy aggregate shape and the bracketed <c>find[...]</c> filters.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class CountIntegrationTests : ApiIntegrationTestBase
 {

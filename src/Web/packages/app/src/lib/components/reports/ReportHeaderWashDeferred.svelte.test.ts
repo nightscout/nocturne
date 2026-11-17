@@ -1,10 +1,10 @@
 import { render } from "vitest-browser-svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { illustrations } from "$lib/stores/illustrations.svelte";
-import { releaseWatercolour, resetWatercolour } from "$lib/test-stubs/watercolour-deferral.svelte";
+import { illustrations } from "#lib/stores/illustrations.svelte.js";
+import { releaseWatercolour, resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 import ReportHeaderWashDeferred from "./ReportHeaderWashDeferred.svelte";
 
-vi.mock("$lib/watercolour-deferral.svelte", () => import("$lib/test-stubs/watercolour-deferral.svelte"));
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
 
 const wash = (container: HTMLElement) => container.querySelector("canvas");
 

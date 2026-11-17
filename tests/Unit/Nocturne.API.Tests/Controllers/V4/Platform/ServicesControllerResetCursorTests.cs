@@ -24,6 +24,7 @@ public class ServicesControllerResetCursorTests
     private static ServicesController CreateController(IConnectorSyncService syncService) =>
         new(
             Mock.Of<IDataSourceService>(),
+            Mock.Of<IConnectionService>(),
             Mock.Of<IConnectorHealthService>(),
             syncService,
             Mock.Of<ILogger<ServicesController>>(),

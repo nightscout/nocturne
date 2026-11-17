@@ -59,7 +59,7 @@ public class LoopAnalysisEventResponseBudgetTests(ITestOutputHelper output)
         }
 
         var snapshot = new TherapySnapshot(
-            dia: 5, peakMinutes: 75, carbsPerHour: 30, timezone: Zone, ccpPercentage: null, ccpTimeshiftMs: 0,
+            dia: 5, carbsPerHour: 30, timezone: Zone, ccpPercentage: null, ccpTimeshiftMs: 0,
             sensitivityEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 50 }],
             carbRatioEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 10 }],
             basalEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 0.8 }]);

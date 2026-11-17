@@ -19,6 +19,7 @@ namespace Nocturne.API.Tests.Integration.Analytics;
 /// never leaks state between parallel context branches and always
 /// returns a consistent answer under concurrency.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class InsulinDeliveryParallelFetchTests : ApiIntegrationTestBase
 {

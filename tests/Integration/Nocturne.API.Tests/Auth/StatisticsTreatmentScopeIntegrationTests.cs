@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Category row level security applies only to shares, so for a member token nothing below the
 /// controller hides the treatments: the response must be narrowed by the caller's scopes.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class StatisticsTreatmentScopeIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : ApiIntegrationTestBase(fixture, output)

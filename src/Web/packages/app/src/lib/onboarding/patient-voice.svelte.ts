@@ -1,4 +1,4 @@
-import { PatientRelationship, type PatientRelationshipDto } from "$api";
+import { PatientRelationship, type PatientRelationshipDto } from "#lib/api/index.js";
 
 /**
  * Which way onboarding copy speaks of the patient: to them ("your glucose"), by name ("Sam's

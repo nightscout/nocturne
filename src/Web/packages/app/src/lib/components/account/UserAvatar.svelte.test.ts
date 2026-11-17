@@ -1,10 +1,10 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { resetWatercolour } from "$lib/test-stubs/watercolour-deferral.svelte";
+import { resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 import UserAvatar, { initialsOf } from "./UserAvatar.svelte";
 
-vi.mock("$lib/watercolour-deferral.svelte", () => import("$lib/test-stubs/watercolour-deferral.svelte"));
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
 
 describe("initialsOf", () => {
   it("takes the first letter of the first two words", () => {

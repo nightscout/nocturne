@@ -8,26 +8,26 @@
     start as startCareLinkConnect,
     complete as completeCareLinkConnect,
     desktopToken as mintDesktopLinkCode,
-  } from "$lib/api/generated/careLinkConnects.generated.remote";
-  import { CareLinkRegion } from "$lib/constants/carelink-regions";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/api/generated/careLinkConnects.generated.remote.js";
+  import { CareLinkRegion } from "#lib/constants/carelink-regions.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
     CardDescription,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Label } from "$lib/components/ui/label";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Monitor from "@lucide/svelte/icons/monitor";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   // Stable rolling release that always holds the current installers (see desktop-release.yml).
   const DESKTOP_DOWNLOAD_URL =

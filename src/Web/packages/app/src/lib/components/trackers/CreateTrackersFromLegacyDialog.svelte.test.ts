@@ -6,14 +6,14 @@ import {
   TrackerCategory,
   type LegacyConversionDto,
   type LegacyFallbackDto,
-} from "$lib/api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 const { createFromLegacy, coach } = vi.hoisted(() => ({
   createFromLegacy: vi.fn<(request: { kinds: string[] }) => Promise<LegacyConversionDto>>(),
   coach: { startSequence: vi.fn() },
 }));
 
-vi.mock("$api/generated/trackerLegacyFallbacks.generated.remote", () => ({
+vi.mock("#lib/api/generated/trackerLegacyFallbacks.generated.remote.js", () => ({
   createFromLegacy,
 }));
 

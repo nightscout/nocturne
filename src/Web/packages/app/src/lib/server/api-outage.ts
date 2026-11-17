@@ -1,4 +1,4 @@
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 /**
  * Whether a failed API call says nothing about the caller: the API was unreachable, timed out or

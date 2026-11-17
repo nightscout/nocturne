@@ -1,42 +1,25 @@
 <script lang="ts">
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
-	import type { DataQualitySettings } from '$lib/api/generated/nocturne-api-client';
-	import { getUiSettings, saveDataQualitySettings } from '$api/ui-settings.remote';
-	import { remoteErrorMessage } from '$lib/api/remote-error';
-	import { SETTINGS_LOAD_FAILED } from '$lib/api/ui-settings-messages';
-	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
-	import { Switch } from '$lib/components/ui/switch';
-	import { Label } from '$lib/components/ui/label';
-	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import type { DataQualitySettings } from '#lib/api/generated/nocturne-api-client.js';
+	import { getUiSettings } from '#lib/api/ui-settings.remote.js';
+	import { patchDataQualitySettings } from '#lib/api/generated/uiSettings.generated.remote.js';
+	import { remoteErrorMessage } from '#lib/api/remote-error.js';
+	import { describeSubmitError } from '#lib/forms/submit-error.js';
+	import { SETTINGS_LOAD_FAILED } from '#lib/api/ui-settings-messages.js';
+	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#lib/components/ui/card/index.js';
+	import { Switch } from '#lib/components/ui/switch/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '#lib/components/ui/select/index.js';
 	import Moon from '@lucide/svelte/icons/moon';
 	import Activity from '@lucide/svelte/icons/activity';
 	import AlertCircle from '@lucide/svelte/icons/circle-alert';
-	import Globe from '@lucide/svelte/icons/globe';
-	import Weight from '@lucide/svelte/icons/weight';
-	import SettingsPageSkeleton from '$lib/components/settings/SettingsPageSkeleton.svelte';
-	import DataMaintenanceCard from '$lib/components/settings/DataMaintenanceCard.svelte';
-	import SettingsLinkCard from '$lib/components/settings/SettingsLinkCard.svelte';
-	import type { SettingsLink } from '$lib/components/settings/settings-links';
+	import SettingsPageSkeleton from '#lib/components/settings/SettingsPageSkeleton.svelte';
+	import DataMaintenanceCard from '#lib/components/settings/DataMaintenanceCard.svelte';
 	import { toast } from 'svelte-sonner';
 
 	// Read via .current rather than an {#await} block: consuming a remote query
 	// through its thenable reads the hydration cache and throws
 	// hydratable_missing_but_required during hydration.
-	const historyLinks: SettingsLink[] = [
-		{
-			title: 'Timezone history',
-			description: "Where you lived and traveled, for correct timestamps.",
-			href: '/settings/timezone',
-			icon: Globe
-		},
-		{
-			title: 'Weight history',
-			description: 'Your recorded weights over time.',
-			href: '/settings/weight',
-			icon: Weight
-		}
-	];
-
 	const settingsQuery = getUiSettings();
 	const dataQuality = $derived(settingsQuery.current?.dataQuality);
 
@@ -70,25 +53,14 @@
 		return found?.label ?? `${hour}:00`;
 	}
 
-	/**
-	 * Persists the whole section — the API stores it as one document, so the patch
-	 * merges over the loaded values (keeping e.g. the sleep-schedule timezone).
-	 */
+	/** Sends only the fields the control changed. The API merges them into the stored section. */
 	async function save(patch: Partial<DataQualitySettings>) {
-		const current = dataQuality ?? {};
 		try {
-			await saveDataQualitySettings({
-				...current,
-				sleepSchedule: { ...current.sleepSchedule, ...patch.sleepSchedule },
-				compressionLowDetection: {
-					...current.compressionLowDetection,
-					...patch.compressionLowDetection
-				}
-			});
-		} catch {
-			toast.error('Could not save. Check your connection and try again.');
-			await settingsQuery.refresh();
+			await patchDataQualitySettings(patch);
+		} catch (err) {
+			toast.error(describeSubmitError(err, 'Could not save. Check your connection and try again.'));
 		}
+		await settingsQuery.refresh();
 	}
 </script>
 
@@ -210,11 +182,6 @@
 			</CardContent>
 		</Card>
 
-		<!-- Both live here because correct timestamps and weights are what the rest of this
-		     page's analysis is computed from. -->
-		{#each historyLinks as link (link.href)}
-			<SettingsLinkCard {link} />
-		{/each}
 	{/if}
 
 	<!-- Outside the branches above: these tools read no UI settings, so a

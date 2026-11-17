@@ -4,12 +4,12 @@
   import ListChecks from "@lucide/svelte/icons/list-checks";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import X from "@lucide/svelte/icons/x";
-  import { Button } from "$lib/components/ui/button";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     dismissSetupStrip,
     getSetupHub,
-  } from "$api/generated/setupHubs.generated.remote";
+  } from "#lib/api/generated/setupHubs.generated.remote.js";
 
   // The hub is the owner's, so nobody else is asked for it.
   const hubQuery = satisfiesScope(page.data.effectivePermissions ?? [], "*")
@@ -38,12 +38,11 @@
     data-testid="setup-strip"
   >
     <ListChecks class="h-4 w-4 shrink-0 text-muted-foreground" />
-    <span class="text-muted-foreground">
-      {hub.resolvedCount} of {hub.totalCount} set up
-    </span>
-    <span class="text-muted-foreground" aria-hidden="true">&middot;</span>
+    <span class="text-muted-foreground">{hub.resolvedCount} of {hub.totalCount} set up</span>
+    <span class="text-muted-foreground" aria-hidden="true">·</span>
+
     <a
-      href={resolve("/setup")}
+      href={resolve('setup')}
       class="inline-flex items-center gap-1 font-medium text-primary hover:underline"
     >
       Continue

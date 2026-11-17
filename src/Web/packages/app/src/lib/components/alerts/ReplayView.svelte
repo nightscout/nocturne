@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
-  import { Badge } from "$lib/components/ui/badge";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Bell from "@lucide/svelte/icons/bell";
@@ -10,16 +10,16 @@
     type AlertReplayResult,
     type AlertReplayEvent,
     type AlertRuleResponse,
-  } from "$api-clients";
-  import { indexBy } from "$lib/utils/collections";
-  import { time } from "$lib/utils/formatting";
-  import type { ChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte";
-  import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import BasalTrack from "$lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
-  import IobCobTrack from "$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
-  import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
-  import ChartTooltip from "$lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { indexBy } from "#lib/utils/collections.js";
+  import { time } from "#lib/utils/formatting.js";
+  import type { ChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.js";
+  import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
+  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  import BasalTrack from "#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
+  import IobCobTrack from "#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
+  import ThresholdRules from "#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
+  import ChartTooltip from "#lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
   import { severityVar } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
   import ReplayOverlay from "./ReplayOverlay.svelte";

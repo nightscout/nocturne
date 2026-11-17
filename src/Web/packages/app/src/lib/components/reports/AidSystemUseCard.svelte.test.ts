@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { TimeZoneUnavailableReason, type AidSystemMetrics } from "$lib/api";
+import { TimeZoneUnavailableReason, type AidSystemMetrics } from "#lib/api/index.js";
 import AidSystemUseCard from "./AidSystemUseCard.svelte";
 
 const metrics = {
@@ -22,7 +22,6 @@ describe("AidSystemUseCard", () => {
 
   it.each([
     [TimeZoneUnavailableReason.NotConfigured, /do not have a time zone/],
-    [TimeZoneUnavailableReason.Share, /A shared link does not show the time zone/],
     [TimeZoneUnavailableReason.LookupFailed, /The time zone of this data did not load/],
     [TimeZoneUnavailableReason.Unrecognised, /does not recognize the time zone/],
   ])("shows the metrics and the UTC note for %s", async (reason, cause) => {

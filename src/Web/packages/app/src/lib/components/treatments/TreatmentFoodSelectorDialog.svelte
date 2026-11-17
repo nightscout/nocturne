@@ -1,25 +1,25 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { toast } from "svelte-sonner";
-  import { toastSaved, useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "#lib/forms/index.js";
   import {
     CarbIntakeFoodInputMode,
     type Food,
     type CarbIntakeFoodRequest,
-  } from "$lib/api";
+  } from "#lib/api/index.js";
   import {
     getFoods as getAllFoods,
     createFood as createNewFood,
     updateFood as updateExistingFood,
-  } from "$api/generated/foods.generated.remote";
+  } from "#lib/api/generated/foods.generated.remote.js";
   import {
     getFavorites as getFavoriteFoods,
     addFavorite as addFavoriteFood,
     removeFavorite as removeFavoriteFood,
     getRecentFoods,
-  } from "$api/generated/foods.generated.remote";
+  } from "#lib/api/generated/foods.generated.remote.js";
   import FoodSearchCombobox from "./FoodSearchCombobox.svelte";
   import FoodNutritionalForm from "./FoodNutritionalForm.svelte";
   import TreatmentPortionsForm from "./TreatmentPortionsForm.svelte";
@@ -29,7 +29,7 @@
     DEFAULT_UNIT,
     foodCategoryMap,
     newFoodFrom,
-  } from "$lib/components/food";
+  } from "#lib/components/food/index.js";
 
   interface Props {
     open: boolean;

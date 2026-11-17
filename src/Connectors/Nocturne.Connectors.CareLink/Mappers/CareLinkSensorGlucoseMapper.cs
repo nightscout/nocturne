@@ -12,7 +12,7 @@ public class CareLinkSensorGlucoseMapper(ILogger logger)
 {
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public List<SensorGlucose> Map(CareLinkData data)
+    public List<SensorGlucose> Map(CareLinkData data, DateTime now)
     {
         if (data.Sgs is not { Count: > 0 })
             return [];
@@ -22,7 +22,6 @@ public class CareLinkSensorGlucoseMapper(ILogger logger)
             data.CurrentServerTime);
 
         var deviceName = $"CareLink {data.MedicalDeviceFamily ?? "Unknown"}";
-        var now = DateTime.UtcNow;
 
         var validSgs = data.Sgs
             .Where(sg => sg is { Kind: "SG", Sg: > 0 } && !string.IsNullOrEmpty(sg.Datetime))

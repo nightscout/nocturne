@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { toggled } from "$lib/utils/collections";
+  import { toggled } from "#lib/utils/collections.js";
   import { onMount, untrack } from "svelte";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Switch } from "$lib/components/ui/switch";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Droplet from "@lucide/svelte/icons/droplet";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
@@ -27,7 +27,7 @@
   import Moon from "@lucide/svelte/icons/moon";
   import Ban from "@lucide/svelte/icons/ban";
   import Timer from "@lucide/svelte/icons/timer";
-  import type { AlertRuleResponse } from "$api-clients";
+  import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
   import type { ConditionNode } from "./types";
   import {
     composeRuleTruth,

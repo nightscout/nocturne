@@ -1,10 +1,10 @@
-import { bg } from "$lib/utils/formatting";
+import { bg } from "#lib/utils/formatting.js";
 import {
   CHART_TEXTURES,
   patternClass,
   type GlucoseRange,
-} from "$lib/components/charts/print/chart-print-patterns";
-import type { ExtendedTimeInRangePercentages, GlycemicThresholds } from "$lib/api";
+} from "#lib/components/charts/print/chart-print-patterns.js";
+import type { ExtendedTimeInRangePercentages, GlycemicThresholds } from "#lib/api/index.js";
 
 export type HourlyBandKey = keyof ExtendedTimeInRangePercentages;
 

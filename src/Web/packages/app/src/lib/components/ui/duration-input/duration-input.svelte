@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { TrackerMode } from "$lib/api";
-  import { Input } from "$lib/components/ui/input";
-  import { Button } from "$lib/components/ui/button";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { TrackerMode } from "#lib/api/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
 
   interface Props {
     /** The computed hours value (bindable) */
@@ -38,7 +38,22 @@
 
   // Internal state for the text input
   let inputValue = $state("");
-  let parseError = $state(false);
+  // Lifespans and thresholds are stored as whole hours.
+  let parseError = $state<"format" | "fraction" | null>(null);
+  let inputRef = $state<HTMLInputElement | null>(null);
+
+  const parseErrorMessage = $derived(
+    parseError === "fraction"
+      ? "Use a whole number of hours."
+      : parseError === "format"
+        ? "Invalid format. Try: 168, 7x24, 7d, or 1w"
+        : null
+  );
+
+  // `value` keeps the last entry that parsed, so an entry that does not must stop the form.
+  $effect(() => {
+    inputRef?.setCustomValidity(parseErrorMessage ?? "");
+  });
 
   // Initialize inputValue from value prop
   $effect(() => {
@@ -114,16 +129,17 @@
 
   function handleInput() {
     const parsed = parseExpression(inputValue);
-    if (parsed !== null) {
-      value = parsed;
-      onchange?.(parsed);
-      parseError = false;
+    const hours = parsed === null ? null : Math.round(parsed);
+    if (parsed !== null && hours !== null && Math.abs(parsed - hours) < 1e-9) {
+      value = hours;
+      onchange?.(hours);
+      parseError = null;
     } else if (inputValue.trim() === "") {
       value = undefined;
       onchange?.(undefined);
-      parseError = false;
+      parseError = null;
     } else {
-      parseError = true;
+      parseError = parsed === null ? "format" : "fraction";
     }
   }
 
@@ -185,13 +201,14 @@
 <div class="space-y-1">
   <div class="relative">
     <Input
+      bind:ref={inputRef}
       {id}
       {disabled}
       bind:value={inputValue}
       oninput={handleInput}
       {placeholder}
       class={cn("pr-10", parseError && "border-destructive", className)}
-      aria-invalid={parseError}
+      aria-invalid={parseError !== null}
     />
     <Tooltip.Root>
       <Tooltip.Trigger>
@@ -266,9 +283,9 @@
     <p class="text-sm text-destructive px-1">
       Exceeds tracker lifespan
     </p>
-  {:else if parseError}
+  {:else if parseErrorMessage}
     <p class="text-sm text-destructive px-1">
-      Invalid format. Try: 168, 7x24, 7d, or 1w
+      {parseErrorMessage}
     </p>
   {/if}
 </div>

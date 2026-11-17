@@ -2,25 +2,25 @@
   import {
     UploaderPlatform,
     UploaderCategory,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
   import type {
     UploaderApp,
     DataSourceInfo,
     AvailableConnector,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getUploaderName, getUploaderDescription } from "$lib/utils/uploader-labels";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Apple from "@lucide/svelte/icons/apple";
-  import { EmptyState } from "$lib/components/shared";
-  import AppLogo from "$lib/components/ui/AppLogo.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
 
   interface Props {
     connectors: AvailableConnector[];
@@ -43,6 +43,12 @@
     onSelectUploader,
     onSkip,
   }: Props = $props();
+
+  // Each of these is set up on its own page, not through the credential form this view leads to.
+  const SET_UP_ELSEWHERE = new Set(["googlehealth", "oura"]);
+  const offeredConnectors = $derived(
+    connectors.filter((connector) => !SET_UP_ELSEWHERE.has(connector.id ?? "")),
+  );
 
   type PlatformFilter = "all" | UploaderPlatform;
   let platformFilter = $state<PlatformFilter>("all");
@@ -121,14 +127,14 @@
 {:else}
   <div class="@container space-y-8">
     <!-- Cloud Services (Connectors) -->
-    {#if connectors.length > 0}
+    {#if offeredConnectors.length > 0}
       <div class="space-y-3">
         <h2 class="text-sm font-medium text-muted-foreground flex items-center gap-2">
           <Cloud class="h-4 w-4" />
           Cloud services
         </h2>
         <div class="grid gap-3 @xl:grid-cols-2">
-          {#each connectors as connector (connector.id)}
+          {#each offeredConnectors as connector (connector.id)}
             {@const configured = connector.isConfigured ?? false}
             <Item
               variant={configured ? "success" : "outline"}
@@ -251,7 +257,7 @@
     {/if}
 
     <!-- Empty state when both are empty -->
-    {#if connectors.length === 0 && uploaderApps.length === 0}
+    {#if offeredConnectors.length === 0 && uploaderApps.length === 0}
       <EmptyState
         art="plug"
         variant="card"

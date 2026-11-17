@@ -2,10 +2,10 @@
   import { page } from "$app/state";
   import { afterNavigate, replaceState } from "$app/navigation";
   import { Artwork } from "water-ui";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import X from "@lucide/svelte/icons/x";
-  import { getMyTenants } from "$api/generated/myTenants.generated.remote";
+  import { getMyTenants } from "#lib/api/generated/myTenants.generated.remote.js";
   import { isWelcomeViewer, takeWelcome } from "./welcome";
 
   let shown = $state(false);

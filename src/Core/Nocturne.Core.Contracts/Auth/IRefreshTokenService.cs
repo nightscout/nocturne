@@ -50,12 +50,13 @@ public interface IRefreshTokenService
     Task<List<RefreshTokenInfo>> GetActiveSessionsForSubjectAsync(Guid subjectId);
 
     /// <summary>
-    /// Resolve the session key (OIDC session ID, or token ID for legacy tokens
-    /// issued before sessions were tagged) for a presented refresh token.
+    /// Resolve the owner of a presented refresh token, whatever its state: its subject and session
+    /// key (OIDC session ID, or token ID for legacy tokens issued before sessions were tagged).
+    /// A rotation carries both to the token's successor.
     /// </summary>
     /// <param name="refreshToken">Plain refresh token string</param>
-    /// <returns>Session key, or null if the token is unknown</returns>
-    Task<string?> GetSessionIdForTokenAsync(string refreshToken);
+    /// <returns>The owner, or null if the token is unknown</returns>
+    Task<RefreshTokenSession?> FindOwnerAsync(string refreshToken);
 
     /// <summary>
     /// Revoke a single session belonging to a subject. The subject scope makes
@@ -87,11 +88,11 @@ public interface IRefreshTokenService
 }
 
 /// <summary>
-/// The owner of a live refresh token.
+/// The subject a refresh token was issued to and the session its rotation chain belongs to.
 /// </summary>
-/// <param name="SessionId">The OIDC session id its rotation chain shares; null for a legacy token
-/// issued before sessions were tagged, whose chain has no stable id.</param>
-public sealed record RefreshTokenSession(Guid SubjectId, string? SessionId);
+/// <param name="SessionId">The OIDC session id the chain shares, or for a legacy chain issued
+/// before sessions were tagged, the id of its first token, which rotation carries forward.</param>
+public sealed record RefreshTokenSession(Guid SubjectId, string SessionId);
 
 /// <summary>
 /// Refresh token information for session management

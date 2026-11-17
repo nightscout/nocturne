@@ -1,23 +1,31 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
+  import { browser } from "$app/env";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     getPatientRelationship,
     setPatientRelationship,
     getUnitsAndTimezone,
     setUnitsAndTimezone,
-  } from "$api/generated/tenantSettings.generated.remote";
-  import { PatientRelationship } from "$api";
-  import { applyPreferences } from "$lib/stores/appearance-store.svelte";
-  import { getUnitLabel, isGlucoseUnits, type GlucoseUnits } from "$lib/utils/formatting";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { PatientRelationship } from "#lib/api/index.js";
+  import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
+  import { getUnitLabel, isGlucoseUnits, type GlucoseUnits } from "#lib/utils/formatting.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
   import WhoFor from "../steps/WhoFor.svelte";
   import UnitsAndTimezone from "../steps/UnitsAndTimezone.svelte";
 
-  let { voice }: { voice: PatientVoice } = $props();
+  interface Props {
+    voice: PatientVoice;
+    /** The stored answer is a helper's, and the person it was set up for has not given theirs. */
+    unanswered?: boolean;
+    /** The answers offered when who it is for changes; all of them by default. */
+    offered?: PatientRelationship[];
+  }
+
+  let { voice, unanswered = false, offered }: Props = $props();
 
   const relationshipQuery = getPatientRelationship();
   // No locale: Basics shows the units in effect, not the core's suggestion for a first answer.
@@ -39,7 +47,10 @@
 
   function edit(which: "who" | "units") {
     error = undefined;
-    relationship = stored?.relationship;
+    relationship =
+      stored?.relationship && (offered ?? [stored.relationship]).includes(stored.relationship)
+        ? stored.relationship
+        : undefined;
     patientName = stored?.patientName ?? "";
     units = storedUnits;
     timezone = storedTimezone ?? (browser ? Intl.DateTimeFormat().resolvedOptions().timeZone : "");
@@ -78,7 +89,9 @@
       <div class="flex flex-col gap-1">
         <dt class="text-xs text-muted-foreground">Who it is for</dt>
         <dd class="text-sm font-medium" data-testid="basics-who">
-          {#if stored?.relationship === PatientRelationship.Self}
+          {#if unanswered}
+            Not answered yet
+          {:else if stored?.relationship === PatientRelationship.Self}
             You
           {:else if stored?.relationship === PatientRelationship.Caregiver && voice.kind === "named"}
             {voice.name}, someone you care for
@@ -122,7 +135,7 @@
     </Dialog.Header>
 
     {#if editing === "who"}
-      <WhoFor bind:relationship bind:patientName {error} />
+      <WhoFor bind:relationship bind:patientName {offered} {error} />
     {:else if editing === "units"}
       <UnitsAndTimezone
         bind:units

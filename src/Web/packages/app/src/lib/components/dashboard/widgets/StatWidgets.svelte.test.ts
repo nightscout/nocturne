@@ -1,14 +1,14 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { GlycemicVariabilityStatus, TimeZoneUnavailableReason } from "$lib/api";
-import { reactiveFields } from "$lib/test-stubs/reactive-fields.svelte";
+import { GlycemicVariabilityStatus, TimeZoneUnavailableReason } from "#lib/api/index.js";
+import { reactiveFields } from "#lib/test-stubs/reactive-fields.svelte.js";
 
 const statistics = vi.hoisted(() => ({ resolve: (_stats: unknown) => {} }));
 const store = reactiveFields({});
 
-vi.mock("$lib/stores/realtime-store.svelte", async () => {
-  const { resolveChartThresholds } = await import("$lib/constants/glucose-thresholds");
+vi.mock("#lib/stores/realtime-store.svelte.js", async () => {
+  const { resolveChartThresholds } = await import("#lib/constants/glucose-thresholds.js");
   return {
     getRealtimeStore: () => store,
     tryGetRealtimeStore: () => store,
@@ -19,14 +19,14 @@ vi.mock("$lib/stores/realtime-store.svelte", async () => {
     }),
   };
 });
-vi.mock("$api/generated/statistics.generated.remote", () => ({
+vi.mock("#lib/api/generated/statistics.generated.remote.js", () => ({
   getMultiPeriodStatistics: () =>
     new Promise((resolve) => {
       statistics.resolve = resolve;
     }),
 }));
 
-import WithTooltipProvider from "$lib/test-stubs/WithTooltipProvider.test-stub.svelte";
+import WithTooltipProvider from "#lib/test-stubs/WithTooltipProvider.test-stub.svelte";
 import WidgetContainerHarness from "./WidgetContainerHarness.test.svelte";
 import TirChartWidget from "./TirChartWidget.svelte";
 import TddWidget from "./TddWidget.svelte";

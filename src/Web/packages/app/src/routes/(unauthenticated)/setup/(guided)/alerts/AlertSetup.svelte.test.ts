@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
-import type { AlertSetupStatus, AlertSetupTest } from "$api";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import type { AlertSetupStatus, AlertSetupTest } from "#lib/api/index.js";
 
 const api = vi.hoisted(() => ({
   save: vi.fn(),
@@ -13,35 +13,35 @@ const api = vi.hoisted(() => ({
   requestPermission: vi.fn(),
 }));
 
-vi.mock("$api/generated/setupAlerts.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupAlerts.generated.remote.js", () => ({
   saveAlertSetup: remoteCommand((arg) => api.save(arg)),
   sendSetupTestAlert: remoteCommand(() => api.send()),
   confirmSetupTestAlertReceived: remoteCommand((arg) => api.confirm(arg)),
   setUrgentLowRecipient: remoteCommand(() => undefined),
   getSetupTestAlert: () => remoteQuery(() => api.test),
 }));
-vi.mock("$api/generated/setupHubs.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
   getSetupHub: () => remoteQuery(() => ({ items: [] })),
 }));
-vi.mock("$api/generated/linkedPlatforms.generated.remote", () => ({
+vi.mock("#lib/api/generated/linkedPlatforms.generated.remote.js", () => ({
   getLinkedPlatforms: () => remoteQuery(() => ({ platforms: [] })),
 }));
-vi.mock("$api/generated/systems.generated.remote", () => ({
+vi.mock("#lib/api/generated/systems.generated.remote.js", () => ({
   getChannelStatuses: () =>
     remoteQuery(() => ({ channels: [{ channelType: "telegram_dm", offered: true, requiresDestination: false }] })),
 }));
-vi.mock("$api/generated/clientDevices.generated.remote", () => ({
+vi.mock("#lib/api/generated/clientDevices.generated.remote.js", () => ({
   getCapabilityCatalog: () => remoteQuery(() => ({ kinds: [], capabilities: [] })),
 }));
-vi.mock("$lib/audio/alarm-sounds", () => ({
+vi.mock("#lib/audio/alarm-sounds.js", () => ({
   getNotificationPermission: () => "default",
   requestNotificationPermission: api.requestPermission,
 }));
-vi.mock("$lib/stores/alert-notifications.svelte", () => ({
+vi.mock("#lib/stores/alert-notifications.svelte.js", () => ({
   listenForAlertNotifications: api.listen,
 }));
 
-import { AlertRouting, ChannelType, StarterAlertKind } from "$api";
+import { AlertRouting, AlertThresholdSource, ChannelType, StarterAlertKind } from "#lib/api/index.js";
 import AlertSetup from "./AlertSetup.svelte";
 
 function status(overrides: Partial<AlertSetupStatus> = {}): AlertSetupStatus {
@@ -62,6 +62,7 @@ function status(overrides: Partial<AlertSetupStatus> = {}): AlertSetupStatus {
     needsDeliveryWhileClosed: false,
     verified: false,
     members: [],
+    thresholdsFrom: AlertThresholdSource.Defaults,
     ...overrides,
   };
 }
@@ -97,9 +98,26 @@ describe("alerts guided page", () => {
     await expect
       .element(page.getByText("These are common starting points. Set them to what you and your care team agreed."))
       .toBeVisible();
+    expect(document.body.textContent).not.toContain("thresholds from your Nightscout site");
     await expect.element(page.getByRole("spinbutton", { name: "Urgent low threshold" })).toHaveValue(3.1);
     await expect.element(page.getByRole("spinbutton", { name: "High threshold" })).toHaveValue(13.9);
     await expect.element(page.getByRole("switch", { name: "No readings for 20 minutes" })).toBeChecked();
+  });
+
+  it("says the thresholds came from Nightscout when they did, and shows them", async () => {
+    render(AlertSetup, { status: status({ thresholdsFrom: AlertThresholdSource.Nightscout, rules: [
+      { kind: StarterAlertKind.UrgentLow, isEnabled: true, threshold: 54 },
+      { kind: StarterAlertKind.Low, isEnabled: true, threshold: 80 },
+      { kind: StarterAlertKind.High, isEnabled: false, threshold: 200 },
+      { kind: StarterAlertKind.NoReadings, isEnabled: true },
+    ] }), voice: self });
+
+    await expect
+      .element(page.getByText("These are the thresholds from your Nightscout site. Check that they are still right."))
+      .toBeVisible();
+    await expect.element(page.getByText("These are common starting points.")).not.toBeInTheDocument();
+    await expect.element(page.getByRole("spinbutton", { name: "Low threshold", exact: true })).toHaveValue(80);
+    await expect.element(page.getByRole("switch", { name: "High", exact: true })).not.toBeChecked();
   });
 
   it("notes, without blocking, that urgent lows go unalerted once urgent low is off", async () => {

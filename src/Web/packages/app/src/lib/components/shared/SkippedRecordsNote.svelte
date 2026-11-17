@@ -1,6 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { formatNumber } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
 
   interface Props {
     /** Records left out because the user had deleted them. */
@@ -48,6 +48,12 @@
     {:else}
       {formatNumber(refused)} records could not be stored. They are listed under
     {/if}
-    <a href={resolve("/reports/data-quality/rejected-uploads")} class="underline">Rejected uploads</a>.
+
+    <a
+      href={resolve('reports/data-quality/rejected-uploads')}
+      class="underline"
+    >Rejected uploads</a>
+
+    .
   </p>
 {/if}

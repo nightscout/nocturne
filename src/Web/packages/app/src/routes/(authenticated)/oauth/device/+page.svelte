@@ -2,12 +2,11 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Shield from "@lucide/svelte/icons/shield";
-  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Check from "@lucide/svelte/icons/check";
   import X from "@lucide/svelte/icons/x";
@@ -18,18 +17,16 @@
     approveDeviceForm,
     denyDeviceForm,
   } from "../oauth.remote";
-  import {
-    getOAuthScopeDescription,
-    isSensitiveDeviceScope,
-  } from "$lib/constants/oauth-scopes";
-  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
-  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
+  import { FormError, useSubmission } from "#lib/forms/index.js";
+  import DeviceAppClaimNotice from "#lib/components/auth/DeviceAppClaimNotice.svelte";
+  import DeviceScopeList from "#lib/components/oauth/DeviceScopeList.svelte";
+  import DeletionDisclosure from "#lib/components/auth/DeletionDisclosure.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(resolve(`/auth/login?returnUrl=${returnUrl}`), { replaceState: true });
+      goto(resolve(`auth/login?returnUrl=${returnUrl}`), { replace: true });
     }
   });
 
@@ -52,30 +49,25 @@
   );
 
   // Check for approval/denial results
-  const approved = $derived(
-    approveDeviceForm.result &&
-      "success" in approveDeviceForm.result &&
-      approveDeviceForm.result.success
-  );
-  const denied = $derived(
-    denyDeviceForm.result &&
-      "denied" in denyDeviceForm.result &&
-      denyDeviceForm.result.denied
-  );
+  const approved = $derived(approveDeviceForm.result && "success" in approveDeviceForm.result && approveDeviceForm.result.success);
+
+  const denied = $derived(denyDeviceForm.result && "denied" in denyDeviceForm.result && denyDeviceForm.result.denied);
+
+  const submission = useSubmission();
 
   // Collect all form-level issues
   const allIssues = $derived([
-    ...(lookupDeviceForm.fields.allIssues() ?? []),
-    ...(approveDeviceForm.fields.allIssues() ?? []),
-    ...(denyDeviceForm.fields.allIssues() ?? []),
+    ...lookupDeviceForm.fields.allIssues() ?? [],
+    ...approveDeviceForm.fields.allIssues() ?? [],
+    ...denyDeviceForm.fields.allIssues() ?? []
   ]);
 
   const scopes = $derived(
-    deviceInfo ? deviceInfo.scopes.filter(Boolean) : []
+    deviceInfo ? (deviceInfo.scopes ?? []).filter(Boolean) : []
   );
   const appName = $derived(
     deviceInfo
-      ? deviceInfo.displayName ?? deviceInfo.clientId
+      ? deviceInfo.clientDisplayName ?? deviceInfo.clientId ?? ""
       : ""
   );
 </script>
@@ -116,26 +108,6 @@
           The device will not be granted access.
         </Card.Description>
       </Card.Header>
-    {:else if deviceInfo?.isExpired}
-      <!-- State 2a: Looked up, but the code is past its expiry -->
-      <Card.Header class="space-y-1 text-center">
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <AlertTriangle class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <Card.Title class="text-2xl font-bold">Code expired</Card.Title>
-        <Card.Description>
-          This code is no longer valid. Start the sign-in again on your device to
-          get a new one.
-        </Card.Description>
-      </Card.Header>
-
-      <Card.Content>
-        <Button href="/oauth/device" data-sveltekit-reload class="w-full">
-          Enter a different code
-        </Button>
-      </Card.Content>
     {:else if deviceInfo}
       <!-- State 2: Consent / Approval -->
       <Card.Header class="space-y-1 text-center">
@@ -161,26 +133,7 @@
           <p class="mb-3 text-sm font-medium text-foreground">
             This application is requesting permission to:
           </p>
-          <ul class="space-y-2">
-            {#each scopes as scope, i (i)}
-              {@const sensitive = isSensitiveDeviceScope(scope)}
-              <li class="flex items-start gap-3 text-sm">
-                {#if sensitive}
-                  <ShieldAlert
-                    class="mt-0.5 h-4 w-4 shrink-0 text-destructive"
-                  />
-                  <span class="font-medium text-destructive">
-                    {getOAuthScopeDescription(scope)}
-                  </span>
-                {:else}
-                  <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <span class="text-muted-foreground">
-                    {getOAuthScopeDescription(scope)}
-                  </span>
-                {/if}
-              </li>
-            {/each}
-          </ul>
+          <DeviceScopeList {scopes} />
         </div>
 
         <DeletionDisclosure access={deviceInfo.deletionAccess} />
@@ -196,14 +149,16 @@
           </div>
         {/each}
 
+        <FormError issues={submission.error} />
+
         <div class="flex gap-3">
           <form
             {...denyDeviceForm.enhance(async ({ submit }) => {
-              await submit();
+              await submission.run(submit);
             })}
             class="flex-1"
           >
-            <input type="hidden" name="user_code" value={deviceInfo.userCode} />
+            <input {...denyDeviceForm.fields.user_code.as("hidden", deviceInfo.userCode ?? "")} />
             <Button
               type="submit"
               variant="outline"
@@ -218,11 +173,11 @@
           </form>
           <form
             {...approveDeviceForm.enhance(async ({ submit }) => {
-              await submit();
+              await submission.run(submit);
             })}
             class="flex-1"
           >
-            <input type="hidden" name="user_code" value={deviceInfo.userCode} />
+            <input {...approveDeviceForm.fields.user_code.as("hidden", deviceInfo.userCode ?? "")} />
             <Button
               type="submit"
               class="w-full"
@@ -253,6 +208,7 @@
       </Card.Header>
 
       <Card.Content class="space-y-4">
+        <FormError issues={submission.error} />
         {#each lookupDeviceForm.fields.allIssues() ?? [] as issue, i (i)}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
@@ -264,13 +220,13 @@
 
         <form
           {...lookupDeviceForm.enhance(async ({ submit }) => {
-            await submit();
+            await submission.run(submit);
           })}
           class="space-y-4"
         >
           <Input
             type="text"
-            name="user_code"
+            name={lookupDeviceForm.fields.user_code.as("text").name}
             placeholder="XXXX-YYYY"
             maxlength={9}
             autocomplete="off"

@@ -14,18 +14,18 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing therapy settings in the database. A LegacyId-only type (no SyncId-upsert,
-/// no DeduplicationService participation), so it uses the shared
+/// no deduplication), so it uses the shared
 /// <see cref="V4RepositoryBase{TModel,TEntity}"/> behaviour unchanged plus the therapy-settings-specific
 /// queries below.
 /// </summary>
-public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, TherapySettingsEntity>, ITherapySettingsRepository
+public class TherapySettingsRepository : ProfileScopedRepositoryBase<TherapySettings, TherapySettingsEntity>, ITherapySettingsRepository
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="TherapySettingsRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public TherapySettingsRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TherapySettingsRepository> logger, IV4RecordBroadcaster<TherapySettings>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+    public TherapySettingsRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TherapySettingsRepository> logger, IV4RecordBroadcaster<TherapySettings>? broadcaster = null, ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads)
     {
     }
 
@@ -38,77 +38,6 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     /// <inheritdoc />
     protected override void ApplyUpdate(TherapySettingsEntity target, TherapySettings source) =>
         TherapySettingsMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// Gets therapy settings by profile name.
-    /// </summary>
-    /// <param name="profileName">The name of the profile.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of therapy settings.</returns>
-    public async Task<IEnumerable<TherapySettings>> GetByProfileNameAsync(
-        string profileName,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .TherapySettings.AsNoTracking()
-            .Where(e => e.ProfileName == profileName)
-            .OrderByDescending(e => e.Timestamp)
-            .ToListAsync(ct);
-        return entities.Select(TherapySettingsMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets the most recent therapy settings for a profile that was active at-or-before the given timestamp.
-    /// </summary>
-    /// <param name="profileName">The name of the profile.</param>
-    /// <param name="timestamp">The point-in-time to query against.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The matching therapy settings, or null if none found.</returns>
-    public async Task<TherapySettings?> GetActiveAtAsync(
-        string profileName, DateTime timestamp, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entity = await ctx.TherapySettings
-            .AsNoTracking()
-            .Where(e => e.ProfileName == profileName && e.Timestamp <= timestamp)
-            .OrderByDescending(e => e.Timestamp)
-            .FirstOrDefaultAsync(ct);
-
-        return entity is null ? null : TherapySettingsMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes therapy settings by legacy identifier prefix.
-    /// </summary>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.TherapySettings.Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix)),
-            AuditContext, $"legacy_id_prefix={prefix}", ct);
-    }
-
-    /// <summary>
-    /// Gets therapy settings by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of therapy settings.</returns>
-    public async Task<IEnumerable<TherapySettings>> GetByCorrelationIdAsync(
-        Guid correlationId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .TherapySettings.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(TherapySettingsMapper.ToDomainModel);
-    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<TherapySettings>> GetDefaultsAsync(CancellationToken ct = default)
@@ -240,6 +169,26 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<TherapySettings>>> GetDocumentRowsAsync(
+        IReadOnlyCollection<string> documentIds,
+        CancellationToken ct = default
+    )
+    {
+        var ids = documentIds.Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0)
+            return new Dictionary<string, IReadOnlyList<TherapySettings>>();
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var rows = await DocumentRows(ctx).Where(d => ids.Contains(d.DocumentId)).ToListAsync(ct);
+        return rows
+            .GroupBy(d => d.DocumentId, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<TherapySettings>)g.Select(d => TherapySettingsMapper.ToDomainModel(d.Row)).ToList(),
+                StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
     public async Task SetDefaultAsync(Guid? id, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
@@ -250,5 +199,6 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
         foreach (var entity in affected)
             entity.IsDefault = entity.Id == id;
         await ctx.SaveChangesAsync(ct);
+        await ReportWrittenAsync();
     }
 }

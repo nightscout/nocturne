@@ -3,7 +3,7 @@
   import FoodRow from './FoodRow.svelte';
   import FoodListHeader from './FoodListHeader.svelte';
   import InlineEditor from './InlineEditor.svelte';
-  import type { Food } from '$api';
+  import type { Food } from '#lib/api/index.js';
 
   const state = getFoodState();
   const PAGE_SIZE = 60;

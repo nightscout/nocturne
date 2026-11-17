@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as Sidebar from "$lib/components/ui/sidebar";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import MobileHeader from "./MobileHeader.svelte";
 </script>
 

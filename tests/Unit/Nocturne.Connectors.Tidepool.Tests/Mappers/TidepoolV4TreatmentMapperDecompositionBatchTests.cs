@@ -10,6 +10,8 @@ namespace Nocturne.Connectors.Tidepool.Tests.Mappers;
 
 public class TidepoolV4TreatmentMapperDecompositionBatchTests
 {
+    private static readonly DateTime Now = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+
     private readonly TidepoolV4TreatmentMapper _mapper;
 
     public TidepoolV4TreatmentMapperDecompositionBatchTests()
@@ -39,11 +41,33 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             }
         };
 
-        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods);
+        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods, Now);
 
         batches.Should().HaveCount(1);
         batches[0].Source.Should().Be("tidepool");
         batches[0].SourceRecordId.Should().Be("f1");
+    }
+
+    [Fact]
+    public void MapTreatments_StampsEveryRecordOfTheBatchWithTheGivenInstant()
+    {
+        var timestamp = Now.AddHours(-3);
+        var boluses = new[] { new TidepoolBolus { Id = "b1", Normal = 3.0, Time = timestamp } };
+        var foods = new[]
+        {
+            new TidepoolFood
+            {
+                Id = "f1",
+                Time = timestamp,
+                Nutrition = new TidepoolNutrition { Carbohydrate = new TidepoolCarbohydrate { Net = 45 } }
+            }
+        };
+
+        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods, Now);
+
+        mappedBoluses.Should().ContainSingle().Which.CreatedAt.Should().Be(Now);
+        mappedCarbs.Should().ContainSingle().Which.CreatedAt.Should().Be(Now);
+        batches.Should().ContainSingle().Which.CreatedAt.Should().Be(Now);
     }
 
     [Fact]
@@ -67,7 +91,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             }
         };
 
-        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods);
+        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods, Now);
 
         var batchId = batches[0].Id;
         mappedBoluses[0].CorrelationId.Should().Be(batchId);
@@ -90,7 +114,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             }
         };
 
-        var (_, mappedCarbs, batches) = _mapper.MapTreatments(null, foods);
+        var (_, mappedCarbs, batches) = _mapper.MapTreatments(null, foods, Now);
 
         batches.Should().BeEmpty();
         mappedCarbs.Should().HaveCount(1);
@@ -105,7 +129,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             new TidepoolBolus { Id = "b1", Normal = 2.0, Time = DateTime.UtcNow }
         };
 
-        var (mappedBoluses, _, batches) = _mapper.MapTreatments(boluses, null);
+        var (mappedBoluses, _, batches) = _mapper.MapTreatments(boluses, null, Now);
 
         batches.Should().BeEmpty();
         mappedBoluses.Should().HaveCount(1);
@@ -136,7 +160,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             },
         };
 
-        var (_, _, batches) = _mapper.MapTreatments(boluses, foods);
+        var (_, _, batches) = _mapper.MapTreatments(boluses, foods, Now);
 
         batches.Should().HaveCount(2);
         batches.Select(b => b.Id).Should().OnlyHaveUniqueItems();
@@ -162,7 +186,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             }
         };
 
-        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods);
+        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods, Now);
 
         batches.Should().BeEmpty();
         mappedBoluses[0].CorrelationId.Should().BeNull();
@@ -179,7 +203,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             new TidepoolBolus { Id = "b2", Normal = 1.5, Time = timestamp },
         };
 
-        var (mappedBoluses, _, _) = _mapper.MapTreatments(boluses, null);
+        var (mappedBoluses, _, _) = _mapper.MapTreatments(boluses, null, Now);
 
         mappedBoluses.Select(b => b.LegacyId).Should().BeEquivalentTo("tidepool_b1", "tidepool_b2");
         mappedBoluses.Sum(b => b.Insulin).Should().Be(4.5);
@@ -206,7 +230,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             },
         };
 
-        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods);
+        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods, Now);
 
         batches.Should().ContainSingle();
         mappedCarbs.Single().CorrelationId.Should().Be(batches[0].Id);
@@ -236,7 +260,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             },
         };
 
-        var (mappedBoluses, _, batches) = _mapper.MapTreatments(boluses, foods);
+        var (mappedBoluses, _, batches) = _mapper.MapTreatments(boluses, foods, Now);
 
         mappedBoluses.Should().HaveCount(2);
         mappedBoluses.Single(b => b.CorrelationId == batches.Single().Id).LegacyId.Should().Be("tidepool_b1");
@@ -264,7 +288,7 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
             },
         };
 
-        var (mappedBoluses, mappedCarbs, _) = _mapper.MapTreatments(boluses, foods);
+        var (mappedBoluses, mappedCarbs, _) = _mapper.MapTreatments(boluses, foods, Now);
 
         mappedBoluses.Should().ContainSingle();
         mappedCarbs.Select(c => c.Carbs).Should().BeEquivalentTo(new[] { 40.0, 15.0 });

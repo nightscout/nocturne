@@ -31,6 +31,7 @@ public class TherapySettingsResolverTests : IDisposable
             _patientRecordRepo.Object,
             _activeProfileResolver.Object,
             new ProfileVersionCache(TestTenantCache.Create(_cache)),
+            TimeProvider.System,
             NullLogger<TherapySettingsResolver>.Instance);
     }
 

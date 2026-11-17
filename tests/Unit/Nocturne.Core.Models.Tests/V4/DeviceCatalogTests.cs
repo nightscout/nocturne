@@ -85,6 +85,29 @@ public class DeviceCatalogTests
         g7.Cgm.TransmitterDurationDays.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("dexcom-g7", 10, 30, 5)]
+    [InlineData("dexcom-g7-15-day", 15, 60, 5)]
+    [InlineData("libre-3", 14, 60, 1)]
+    [InlineData("libre-3-plus", 15, 60, 1)]
+    public void SensorWearAndWarmup_MatchLabelling(string id, int days, int warmupMinutes, int intervalMinutes)
+    {
+        var cgm = DeviceCatalog.GetById(id)!.Cgm!;
+        cgm.SensorDurationDays.Should().Be(days);
+        cgm.WarmupMinutes.Should().Be(warmupMinutes);
+        cgm.UpdateIntervalMinutes.Should().Be(intervalMinutes);
+        cgm.HasSeparateTransmitter.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OnlyTheDexcomG7Sensors_CarryAGracePeriod()
+    {
+        DeviceCatalog.GetByCategory(DeviceCategory.CGM)
+            .Where(e => e.Cgm?.GraceHours is not null)
+            .Select(e => (e.Id, e.Cgm!.GraceHours))
+            .Should().BeEquivalentTo([("dexcom-g7", (int?)12), ("dexcom-g7-15-day", (int?)12), ("dexcom-one-plus", (int?)12)]);
+    }
+
     [Fact]
     public void AllEntries_ShouldHaveUniqueIds()
     {

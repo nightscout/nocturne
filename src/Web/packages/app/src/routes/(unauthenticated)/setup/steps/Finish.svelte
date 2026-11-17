@@ -2,15 +2,21 @@
   /** What the data source step actually achieved; `null` when it was skipped. */
   export type SourceResult = "connector-saved" | "uploader-receiving" | null;
   /** Where the Nightscout import got to; `null` when no run was started. */
-  export type ImportResult = "running" | "complete" | "partial" | "failed" | null;
+  export type ImportResult =
+    | "running"
+    | "background"
+    | "complete"
+    | "partial"
+    | "failed"
+    | null;
 </script>
 
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Alert from "$lib/components/ui/alert";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   let {
     path,
@@ -72,6 +78,9 @@
           The import from Nightscout stopped before it finished, so
           some or all of the history is missing. You can see what arrived and
           try again from Settings.
+        {:else if importResult === "background"}
+          The recent data from Nightscout is in Nocturne. The older history is
+          still importing, and you can use Nocturne while the import continues.
         {:else if importResult === "running"}
           We lost track of your import before it finished. It may still be
           running. Check Settings to see how it ended.

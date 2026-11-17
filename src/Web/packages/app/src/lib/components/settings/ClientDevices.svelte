@@ -1,32 +1,29 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { indexBy } from "$lib/utils/collections";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { indexBy } from "#lib/utils/collections.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Check from "@lucide/svelte/icons/check";
   import X from "@lucide/svelte/icons/x";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import Clock from "@lucide/svelte/icons/clock";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
-  import { relativeAge } from "$lib/utils/formatting";
-  import { EmptyState } from "$lib/components/shared";
-  import { Now } from "$lib/hooks/now.svelte";
+  import ConnectionTime from "#lib/components/connectors/ConnectionTime.svelte";
+  import { Now } from "#lib/hooks/now.svelte.js";
 
   const now = new Now();
-  import { deviceKindLabel } from "$lib/utils/device-kind-labels";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { deviceKindLabel } from "#lib/utils/device-kind-labels.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     getDevices,
     getCapabilityCatalog,
     rename,
     revoke,
-  } from "$lib/api/generated/clientDevices.generated.remote";
+  } from "#lib/api/generated/clientDevices.generated.remote.js";
 
   const devicesQuery = getDevices();
   const catalogQuery = getCapabilityCatalog();
@@ -99,42 +96,38 @@
   }
 </script>
 
-<div class="space-y-4">
-  <div class="space-y-1">
-    <h2 class="text-lg font-semibold tracking-tight">Devices</h2>
-    <p class="text-sm text-muted-foreground">
+<Card.Root>
+  <Card.Header>
+    <h2 class="font-semibold leading-none">Devices</h2>
+    <Card.Description>
       Apps registered to receive alerts and actuations, such as the desktop
       Companion
-    </p>
-  </div>
+    </Card.Description>
+  </Card.Header>
+  <Card.Content class="space-y-4">
+    {#if errorMessage}
+      <div
+        class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
+      >
+        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+        <p class="text-sm text-destructive">{errorMessage}</p>
+      </div>
+    {/if}
 
-  {#if errorMessage}
-    <div
-      class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-    >
-      <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-      <p class="text-sm text-destructive">{errorMessage}</p>
-    </div>
-  {/if}
+    {#if successMessage}
+      <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
+    {/if}
 
-  {#if successMessage}
-    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
-  {/if}
-
-  {#if devices.length === 0}
-    <EmptyState
-      art="phone"
-      variant="card"
-      title="No registered devices"
-      body="When you pair an app such as the Companion, it will appear here."
-    />
-  {:else}
-    {#each devices as device (device.id)}
-      <Card.Root>
-        <Card.Header>
-          <div class="flex items-start justify-between gap-4">
-            <div class="space-y-1 flex-1 min-w-0">
-              <Card.Title class="flex items-center gap-2 flex-wrap">
+    {#if devices.length === 0}
+      <p class="text-sm text-muted-foreground">
+        No registered devices. A paired app, such as the Companion, shows here.
+      </p>
+    {:else}
+      <ul class="divide-y border-y">
+        {#each devices as device (device.id)}
+          <li class="space-y-3 py-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2 font-medium">
                 {#if editingId === device.id}
                   <Input
                     bind:value={editLabel}
@@ -153,124 +146,112 @@
                 <Badge variant="secondary" class="shrink-0">
                   {deviceKindLabel(device.kind)}
                 </Badge>
-              </Card.Title>
+              </div>
+
+              <div class="flex shrink-0 items-center gap-2">
+                {#if editingId === device.id}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onclick={() => saveRename(device.id!)}
+                    disabled={isSaving === device.id}
+                  >
+                    {#if isSaving === device.id}
+                      <LoaderCircle class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    {:else}
+                      <Check class="mr-1.5 h-3.5 w-3.5" />
+                    {/if}
+                    Save
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onclick={cancelEdit}
+                    disabled={isSaving === device.id}
+                  >
+                    <X class="mr-1.5 h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
+                {:else}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onclick={() => startEdit(device.id!, device.label)}
+                  >
+                    <Pencil class="mr-1.5 h-3.5 w-3.5" />
+                    Rename
+                  </Button>
+                  <ConfirmDialog
+                    title="Revoke device"
+                    confirmLabel="Revoke"
+                    onConfirm={() => handleRevoke(device.id!)}
+                  >
+                    {#snippet trigger(props)}
+                      <Button
+                        {...props}
+                        type="button"
+                        variant="outline-destructive"
+                        size="sm"
+                        disabled={isRevoking === device.id}
+                      >
+                        {#if isRevoking === device.id}
+                          <LoaderCircle class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        {:else}
+                          <Trash2 class="mr-1.5 h-3.5 w-3.5" />
+                        {/if}
+                        Revoke
+                      </Button>
+                    {/snippet}
+                    {#snippet description()}
+                      Revoke this device? It will stop receiving alerts until
+                      it re-registers.
+                    {/snippet}
+                  </ConfirmDialog>
+                {/if}
+              </div>
             </div>
 
-            <div class="flex items-center gap-2 shrink-0">
-              {#if editingId === device.id}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onclick={() => saveRename(device.id!)}
-                  disabled={isSaving === device.id}
-                >
-                  {#if isSaving === device.id}
-                    <LoaderCircle class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  {:else}
-                    <Check class="mr-1.5 h-3.5 w-3.5" />
-                  {/if}
-                  Save
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onclick={cancelEdit}
-                  disabled={isSaving === device.id}
-                >
-                  <X class="mr-1.5 h-3.5 w-3.5" />
-                  Cancel
-                </Button>
-              {:else}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onclick={() => startEdit(device.id!, device.label)}
-                >
-                  <Pencil class="mr-1.5 h-3.5 w-3.5" />
-                  Rename
-                </Button>
-                <ConfirmDialog
-                  title="Revoke device"
-                  confirmLabel="Revoke"
-                  onConfirm={() => handleRevoke(device.id!)}
-                >
-                  {#snippet trigger(props)}
-                    <Button
-                      {...props}
-                      type="button"
-                      variant="outline-destructive"
-                      size="sm"
-                      disabled={isRevoking === device.id}
-                    >
-                      {#if isRevoking === device.id}
-                        <LoaderCircle class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      {:else}
-                        <Trash2 class="mr-1.5 h-3.5 w-3.5" />
-                      {/if}
-                      Revoke
-                    </Button>
-                  {/snippet}
-                  {#snippet description()}
-                    Revoke this device? It will stop receiving alerts until
-                    it re-registers.
-                  {/snippet}
-                </ConfirmDialog>
-              {/if}
-            </div>
-          </div>
-        </Card.Header>
-        <Card.Content class="space-y-4">
-          {#if (device.capabilities ?? []).length > 0}
-            <div>
-              <p
-                class="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider"
-              >
-                Capabilities
-              </p>
-              <ul class="space-y-1.5">
-                {#each device.capabilities ?? [] as cap, i (i)}
-                  <li class="flex items-start gap-2 text-sm">
-                    <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                    <span class="text-muted-foreground">
-                      {capabilityLabels.get(cap) ?? cap}
-                    </span>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-
-            <Separator />
-          {/if}
-
-          <div
-            class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground"
-          >
-            {#if device.lastSeenAt}
-              <span class="flex items-center gap-1.5">
-                <Clock class="h-3 w-3" />
-                Last seen {relativeAge(device.lastSeenAt, { now: now.current, fallback: "Unknown" })}
-              </span>
+            {#if (device.capabilities ?? []).length > 0}
+              <div>
+                <p class="mb-2 text-sm font-medium">Capabilities</p>
+                <ul class="space-y-1.5">
+                  {#each device.capabilities ?? [] as cap, i (i)}
+                    <li class="flex items-start gap-2 text-sm">
+                      <Check
+                        class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <span class="text-muted-foreground">
+                        {capabilityLabels.get(cap) ?? cap}
+                      </span>
+                    </li>
+                  {/each}
+                </ul>
+              </div>
             {/if}
-          </div>
 
-          {#if device.appName}
-            <p class="text-xs text-muted-foreground">
-              Paired through {device.appName}
+            <p class="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
+              <ConnectionTime
+                label="Last seen"
+                at={device.lastSeenAt}
+                now={now.current}
+              />
+              <span>
+                {#if device.appName}
+                  Paired through {device.appName}
+                {:else if device.linkedToApp}
+                  Paired through an app that reports no name.
+                {:else}
+                  Not linked to an app. Revoking an app will not remove this device.
+                {/if}
+              </span>
             </p>
-          {:else if device.linkedToApp}
-            <p class="text-xs text-muted-foreground">
-              Paired through an app that reports no name.
-            </p>
-          {:else}
-            <p class="text-xs text-muted-foreground">
-              Not linked to an app. Revoking an app will not remove this device.
-            </p>
-          {/if}
-        </Card.Content>
-      </Card.Root>
-    {/each}
-  {/if}
-</div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </Card.Content>
+</Card.Root>

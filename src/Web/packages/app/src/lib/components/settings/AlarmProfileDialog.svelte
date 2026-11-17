@@ -6,16 +6,16 @@
     DialogFooter,
     DialogHeader,
     DialogTitle,
-  } from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
+  } from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import {
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
-  } from "$lib/components/ui/tabs";
+  } from "#lib/components/ui/tabs/index.js";
   import Bell from "@lucide/svelte/icons/bell";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import Eye from "@lucide/svelte/icons/eye";
@@ -25,8 +25,8 @@
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,
-  } from "$lib/types/alarm-profile";
-  import { normalizeAlarmType } from "$lib/types/alarm-profile";
+  } from "#lib/types/alarm-profile.js";
+  import { normalizeAlarmType } from "#lib/types/alarm-profile.js";
   import AlarmGeneralTab from "./alarm-profile/AlarmGeneralTab.svelte";
   import AlarmAudioTab from "./alarm-profile/AlarmAudioTab.svelte";
   import AlarmVisualTab from "./alarm-profile/AlarmVisualTab.svelte";
@@ -114,7 +114,7 @@
 
     <div class="@container flex-1 overflow-y-auto py-4">
       <Tabs value="general" class="w-full">
-        <TabsList class="grid w-full grid-cols-5">
+        <TabsList variant="wrap">
           <TabsTrigger value="general">
             <Settings2 class="hidden @lg:block h-4 w-4 mr-2" />
             General

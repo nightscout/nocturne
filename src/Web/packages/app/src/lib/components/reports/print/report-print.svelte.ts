@@ -1,5 +1,5 @@
 import { getContext, setContext } from "svelte";
-import { PRINT_LAYOUT_CLASS } from "$lib/components/charts/print/print-mode.svelte";
+import { PRINT_LAYOUT_CLASS } from "#lib/components/charts/print/print-mode.svelte.js";
 
 /**
  * Print-document metadata the reports layout cannot derive itself. A period is

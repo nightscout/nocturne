@@ -1,15 +1,15 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { ArtworkHero } from "water-ui";
-  import { DOCS_HERO } from "$lib/data/docs-artwork";
+  import { DOCS_HERO } from "#lib/data/docs-artwork.js";
   import { Button } from "@nocturne/ui/ui/button";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import MapPin from "@lucide/svelte/icons/map-pin";
-  import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
-  import PikaPodsVoteCard from "$lib/components/PikaPodsVoteCard.svelte";
-  import { campaignUrl, track } from "$lib/analytics";
+  import SystemRequirements from "#lib/components/docs/SystemRequirements.svelte";
+  import PikaPodsVoteCard from "#lib/components/PikaPodsVoteCard.svelte";
+  import { campaignUrl, track } from "#lib/analytics.js";
 
   let showListingRequirements = $state(false);
 
@@ -24,11 +24,18 @@
 
   const PLATFORMS = [
     {
+      id: "install-script",
+      href: resolve("/docs/installation/install-script"),
+      logo: "/logos/nocturne.png",
+      title: "Install script",
+      desc: "Recommended. One script installs Docker and Nocturne on a Linux server, VPS, or Raspberry Pi. You do not need to know Docker.",
+    },
+    {
       id: "docker-compose",
       href: resolve("/docs/installation/docker-compose"),
       logo: "/logos/docker-compose.png",
       title: "Docker Compose",
-      desc: "Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose from the command line.",
+      desc: "Do the same steps by hand with Docker Compose. Use this guide for your own reverse proxy or a host directory for the database.",
     },
     {
       id: "portainer",
@@ -42,7 +49,7 @@
       href: resolve("/docs/installation/oracle-cloud"),
       logo: "/logos/oracle.svg",
       title: "Oracle Cloud",
-      desc: "One command in the browser sets up a free server, HTTPS and Nocturne. No SSH or Docker knowledge needed.",
+      desc: "No server yet? One command in the browser makes a free one and runs the install script on it. No SSH or Docker knowledge needed.",
     },
     {
       id: "byo-postgres",
@@ -53,7 +60,7 @@
     },
     {
       id: "reverse-proxy",
-      href: resolve("/docs/installation/reverse-proxy"),
+      href: resolve("docs/installation/reverse-proxy"),
       logo: "/logos/nginx.svg",
       title: "Bring your own reverse proxy",
       desc: "Terminate TLS with nginx, Traefik, or an existing edge instead of the bundled Caddy. Covers the forwarded headers Nocturne requires.",
@@ -86,8 +93,9 @@
     />
   <h1 class="text-4xl font-bold tracking-tight mb-4">Installation guide</h1>
   <p class="text-lg text-muted-foreground mb-8">
-    Choose a deployment method below to get Nocturne running on your
-    infrastructure. All methods use the same Docker images and configuration.
+    If you have a Linux server, use the install script. The other guides are for
+    a server that you do not have yet, or for a setup that you manage yourself. All
+    methods use the same Docker images and configuration.
   </p>
 
   <h2 class="text-2xl font-bold mt-8 mb-4">System requirements</h2>

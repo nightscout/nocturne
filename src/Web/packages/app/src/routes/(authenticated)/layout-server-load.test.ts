@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const environment = vi.hoisted(() => ({ browser: false }));
-vi.mock("$app/environment", () => ({
+vi.mock("$app/env", () => ({
   get browser() {
     return environment.browser;
   },
@@ -9,9 +9,9 @@ vi.mock("$app/environment", () => ({
   dev: false,
 }));
 import { isRedirect, type Cookies } from "@sveltejs/kit";
-import { classifyHost, isTenantlessHost } from "$lib/server/tenantless-host";
-import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
-import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
+import { classifyHost, isTenantlessHost } from "#lib/server/tenantless-host.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
 import { load } from "./+layout.server";
 import { load as universalLoad } from "./+layout";
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { TrackerMode } from "$lib/api";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { TrackerMode } from "#lib/api/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import TrackerNotificationEditor from "./tracker-notification-editor.svelte";
   import type { TrackerNotification } from "./types";
 

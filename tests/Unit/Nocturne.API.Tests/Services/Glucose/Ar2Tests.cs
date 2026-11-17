@@ -4,9 +4,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
+using Nocturne.API.Services.BolusWizard;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Profiles;
-using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
@@ -128,7 +129,7 @@ public class Ar2Tests
 
         var ddataService = new Mock<IDDataService>();
         ddataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var service = new PropertiesService(
@@ -138,6 +139,10 @@ public class Ar2Tests
             _ar2Service,
             Mock.Of<IDeviceAgeService>(),
             Mock.Of<ITherapySettingsResolver>(),
+            Mock.Of<ISensitivityResolver>(),
+            Mock.Of<ITargetRangeResolver>(),
+            new BolusWizardService(),
+            new OpenApsService(),
             TimeProvider.System,
             Options.Create(new DbSizeOptions())
         );

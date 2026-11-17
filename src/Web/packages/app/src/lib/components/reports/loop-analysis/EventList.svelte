@@ -1,14 +1,13 @@
-<!-- Every event behind the curves, sortable by any figure, each opening Day in Review at its time. -->
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import type { EventCohortDefinition, EventResponseEvent } from "$lib/api";
-  import { Button } from "$lib/components/ui/button";
+  import type { EventCohortDefinition, EventResponseEvent } from "#lib/api/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import { formatWeekdayDate, time } from "$lib/utils/formatting";
-  import { startOfDay } from "$lib/utils/date-range";
-  import { plural } from "$lib/utils/plural";
+  import { formatWeekdayDate, time } from "#lib/utils/formatting.js";
+  import { startOfDay } from "#lib/utils/date-range.js";
+  import { plural } from "#lib/utils/plural.js";
   import { atMinute } from "./daily-profile-view";
   import { clockToMinute } from "./event-response-filter";
   import CohortDot from "./CohortDot.svelte";
@@ -61,10 +60,11 @@
     }
   }
 
-  const ariaSort = (key: EventSortKey) =>
-    sortKey === key ? (descending ? "descending" : "ascending") : "none";
+  const ariaSort = (key: EventSortKey) => sortKey === key ? descending ? "descending" : "ascending" : "none";
   const localTime = (clock: string | undefined) => time(atMinute(clockToMinute(clock ?? "") ?? 0));
 </script>
+
+<!-- Every event behind the curves, sortable by any figure, each opening Day in Review at its time. -->
 
 {#snippet header(key: EventSortKey, label: string, align: string)}
   <th scope="col" class="px-2 py-2 font-medium {align}" aria-sort={ariaSort(key)}>
@@ -127,7 +127,7 @@
           {/if}
           <td class="px-2 py-1.5 text-right">
             <a
-              href={resolve(`/reports/day-in-review?date=${event.date}&time=${event.time}`)}
+              href={resolve(`reports/day-in-review?date=${event.date}&time=${event.time}`)}
               class="inline-flex items-center text-muted-foreground hover:text-foreground"
               aria-label="Open {formatWeekdayDate(startOfDay(event.date ?? ''))} {localTime(event.time)} in Day in review"
             >
@@ -140,7 +140,10 @@
   </table>
 </div>
 {#if sorted.length > shown}
-  <Button variant="outline" size="sm" class="print:hidden" onclick={() => (shown = sorted.length)}>
-    Show all {plural(sorted.length, ["# event", "# events"])}
-  </Button>
+  <Button
+    variant="outline"
+    size="sm"
+    class="print:hidden"
+    onclick={() => shown = sorted.length}
+  >Show all {plural(sorted.length, ["# event", "# events"])}</Button>
 {/if}

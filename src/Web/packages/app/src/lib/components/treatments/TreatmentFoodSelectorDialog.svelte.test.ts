@@ -6,7 +6,7 @@ let favoriteFoods: unknown[] = [];
 let recentFoods: unknown[] = [];
 let allFoods: unknown[] = [];
 
-vi.mock("$api/generated/foods.generated.remote", () => ({
+vi.mock("#lib/api/generated/foods.generated.remote.js", () => ({
   getFoods: () => Promise.resolve(allFoods),
   getFavorites: () => Promise.resolve(favoriteFoods),
   getRecentFoods: () => Promise.resolve(recentFoods),

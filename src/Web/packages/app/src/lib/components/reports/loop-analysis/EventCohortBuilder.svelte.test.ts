@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { EventAnchorKind, type EventResponseDefinition } from "$lib/api";
+import { EventAnchorKind, type EventResponseDefinition } from "#lib/api/index.js";
 import EventCohortBuilder from "./EventCohortBuilder.svelte";
 import type { EventResponseState } from "./event-response-filter";
 import { EVENT_LIMITS as limits } from "./event-response.test-fixtures";

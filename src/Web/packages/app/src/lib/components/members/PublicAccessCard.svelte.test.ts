@@ -3,7 +3,7 @@ import { page as browser } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tick } from "svelte";
 import { page } from "$app/state";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 // The framework registers a query instance from an `$effect.pre` created wherever the query was
 // constructed, and a command's single-flight refresh reaches only the instances still registered.
@@ -86,7 +86,7 @@ const disableShareLink = vi.fn(() => {
 let revealResult: ShareState = { ...enabledShare, url: PLAIN_URL, canReveal: true };
 const revealShareLink = vi.fn(async () => revealResult);
 
-vi.mock("$api/generated/shareLinks.generated.remote", () => ({
+vi.mock("#lib/api/generated/shareLinks.generated.remote.js", () => ({
   getShareLink: () => registerShareQuery(),
   disableShareLink: () => disableShareLink(),
   revealShareLink: () => revealShareLink(),

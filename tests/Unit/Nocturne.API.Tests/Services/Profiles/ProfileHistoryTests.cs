@@ -25,6 +25,9 @@ public class ProfileHistoryTests
     private readonly Mock<ICarbRatioScheduleRepository> _carbRatioRepo = new();
     private readonly Mock<ISensitivityScheduleRepository> _sensitivityRepo = new();
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeRepo = new();
+    private readonly List<BasalSchedule> _basals = [];
+    private readonly List<TherapySettings> _owners = [];
+    private readonly List<TherapySettings> _liveRows = [];
     private readonly ProfileProjectionService _sut;
 
     public ProfileHistoryTests()
@@ -39,9 +42,10 @@ public class ProfileHistoryTests
             .ReturnsAsync([]);
         _targetRangeRepo.Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _therapyRepo.Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        _therapyRepo.Setup(r => r.GetDocumentRowsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _therapyRepo.Serve(_owners);
+        _therapyRepo.ServeDocuments(_liveRows);
+        _basalRepo.Serve(_basals);
+        _therapyRepo.Setup(r => r.GetStoreIndexAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         _sut = new ProfileProjectionService(
@@ -119,18 +123,6 @@ public class ProfileHistoryTests
             .ReturnsAsync([new HistoryRecord<TherapySettings>(settings, Deleted: true)]);
         _basalRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<BasalSchedule>(basal, Deleted: true)]);
-        _therapyRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        _therapyRepo.Setup(r => r.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TherapySettings?)null);
-        _basalRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        _carbRatioRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        _sensitivityRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        _targetRangeRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
 
         var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 10);
 
@@ -188,7 +180,11 @@ public class ProfileHistoryTests
         var profile = page.Records.Should().ContainSingle().Subject;
         profile.Id.Should().Be(documentId);
         profile.IsValid.Should().BeFalse();
-        _therapyRepo.Verify(r => r.GetDocumentRowsAsync(documentId, It.IsAny<CancellationToken>()), Times.Once);
+        _therapyRepo.Verify(
+            r => r.GetDocumentRowsAsync(
+                It.Is<IReadOnlyCollection<string>>(ids => ids.SequenceEqual(new[] { documentId })),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -219,30 +215,110 @@ public class ProfileHistoryTests
         profile.Store.Keys.Should().BeEquivalentTo("Day", "Night");
     }
 
-    private void SetupProfile(TherapySettings settings, BasalSchedule basal)
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(12)]
+    public async Task PageOfDocuments_ReadsTherapyOwnersAndDocumentRowsInConstantCalls(int documents)
     {
-        var correlationId = settings.CorrelationId!.Value;
-        _therapyRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([settings]);
-        _basalRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([basal]);
-        _carbRatioRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        _sensitivityRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        _targetRangeRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var basals = new List<BasalSchedule>();
+        for (var i = 0; i < documents; i++)
+        {
+            var correlationId = Guid.CreateVersion7();
+            var settings = Settings(correlationId, modified: Created);
+            settings.ProfileName = $"Store{i}";
+            settings.LegacyId = $"65f0000000000000000{i:D5}:Store{i}";
+            var basal = Basal(correlationId, modified: Cursor.AddMinutes(1 + i));
+            basal.ProfileName = settings.ProfileName;
+            basals.Add(basal);
+            SetupProfile(settings, basal);
+            SetupDocument(settings);
+        }
+        _basalRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(basals.Select(Live).ToList());
+
+        var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 100);
+
+        page.Records.Should().HaveCount(documents);
+        _therapyRepo.Verify(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _therapyRepo.Verify(r => r.GetByLegacyIdsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _therapyRepo.Verify(r => r.GetByProfileNamesAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _therapyRepo.Verify(r => r.GetDocumentRowsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _therapyRepo.Verify(r => r.GetByCorrelationIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _therapyRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _therapyRepo.Verify(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _therapyRepo.Verify(r => r.GetDocumentRowsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private void SetupDocument(params TherapySettings[] rows) =>
-        _therapyRepo.Setup(r => r.GetDocumentRowsAsync(TherapySettings.DocumentIdOf(rows[0]), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(rows);
+    [Fact]
+    public async Task MixedPage_AssemblesEachDocumentByHowItsSchedulesReachIt_InStampOrder()
+    {
+        var correlated = Settings(Guid.CreateVersion7(), modified: Created);
+        correlated.LegacyId = "65f000000000000000000c01:Default";
+        var correlatedBasal = Basal(correlated.CorrelationId!.Value, modified: Cursor.AddMinutes(1));
+        correlatedBasal.Entries[0].Value = 1.1;
+        SetupProfile(correlated, correlatedBasal);
+        SetupDocument(correlated);
+
+        var legacy = Settings(Guid.CreateVersion7(), modified: Created);
+        legacy.ProfileName = "Legacy";
+        legacy.LegacyId = "65f000000000000000000c02:Legacy";
+        var legacyBasal = Basal(null, modified: Cursor.AddMinutes(2));
+        legacyBasal.ProfileName = "Legacy";
+        legacyBasal.LegacyId = legacy.LegacyId;
+        legacyBasal.Entries[0].Value = 2.2;
+        _owners.Add(legacy);
+        _basals.Add(legacyBasal);
+        SetupDocument(legacy);
+
+        var named = Settings(null, modified: Created);
+        named.ProfileName = "Named";
+        var namedBasal = Basal(null, modified: Cursor.AddMinutes(3));
+        namedBasal.ProfileName = "Named";
+        namedBasal.Entries[0].Value = 3.3;
+        _owners.Add(named);
+        _basals.Add(namedBasal);
+        SetupDocument(named);
+
+        var deletedAt = Cursor.AddMinutes(4);
+        var deleted = Settings(Guid.CreateVersion7(), modified: deletedAt);
+        deleted.ProfileName = "Gone";
+        deleted.LegacyId = "65f000000000000000000c03:Gone";
+        var deletedBasal = Basal(deleted.CorrelationId!.Value, modified: deletedAt);
+        deletedBasal.ProfileName = "Gone";
+        _basals.Add(deletedBasal);
+
+        _therapyRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HistoryRecord<TherapySettings>(deleted, Deleted: true)]);
+        _basalRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Live(correlatedBasal), Live(legacyBasal), Live(namedBasal)]);
+
+        var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 10);
+
+        page.Records.Select(p => p.Id).Should().Equal(
+            "65f000000000000000000c01", "65f000000000000000000c02", named.Id.ToString(), "65f000000000000000000c03");
+        page.Records.Select(p => p.IsValid).Should().Equal(null, null, null, false);
+        page.Records.Select(p => p.SrvModified).Should().Equal(
+            Mills(correlatedBasal.ModifiedAt), Mills(legacyBasal.ModifiedAt), Mills(namedBasal.ModifiedAt), Mills(deletedAt));
+        page.Records.Take(3).Select(p => p.Store.Single().Value.Basal.Single().Value)
+            .Should().Equal(1.1, 2.2, 3.3);
+        page.Records[3].Store.Keys.Should().Equal("Gone");
+        page.CursorMills.Should().Be(Mills(deletedAt));
+    }
+
+    private void SetupProfile(TherapySettings settings, BasalSchedule basal)
+    {
+        _owners.Add(settings);
+        _basals.Add(basal);
+    }
+
+    private void SetupDocument(params TherapySettings[] rows) => _liveRows.AddRange(rows);
 
     private static HistoryRecord<T> Live<T>(T record) => new(record, Deleted: false);
 
     private static long Mills(DateTime value) => new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-    private static TherapySettings Settings(Guid correlationId, DateTime modified) => new()
+    private static TherapySettings Settings(Guid? correlationId, DateTime modified) => new()
     {
         Id = Guid.CreateVersion7(),
         CorrelationId = correlationId,
@@ -253,7 +329,7 @@ public class ProfileHistoryTests
         Units = "mg/dL",
     };
 
-    private static BasalSchedule Basal(Guid correlationId, DateTime modified) => new()
+    private static BasalSchedule Basal(Guid? correlationId, DateTime modified) => new()
     {
         Id = Guid.CreateVersion7(),
         CorrelationId = correlationId,

@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.SensitivitySchedule
 /// </summary>
 [Table("sensitivity_schedules")]
-public class SensitivityScheduleEntity : V4TimeSeriesEntityBase
+public class SensitivityScheduleEntity : V4TimeSeriesEntityBase, IProfileScopedEntity
 {
     /// <summary>
     /// Profile name this sensitivity schedule belongs to

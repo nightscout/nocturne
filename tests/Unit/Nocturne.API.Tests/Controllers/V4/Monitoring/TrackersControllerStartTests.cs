@@ -7,10 +7,16 @@ using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
+using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -32,9 +38,15 @@ public class TrackersControllerStartTests
 
     private readonly Mock<ITrackerRepository> _repository = new();
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
+    private readonly Mock<IDeviceEventRepository> _deviceEvents = new();
+    private readonly List<DeviceEvent> _written = [];
 
     public TrackersControllerStartTests()
     {
+        _deviceEvents
+            .Setup(d => d.CreateAsync(It.IsAny<DeviceEvent>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<DeviceEvent, WriteOrigin, CancellationToken>((e, _, _) => _written.Add(e))
+            .ReturnsAsync((DeviceEvent e, WriteOrigin _, CancellationToken _) => e);
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(
                 It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<TrackerSuccessionResult>>>(),
@@ -52,6 +64,10 @@ public class TrackersControllerStartTests
             Mock.Of<IAlertRepository>(),
             Mock.Of<ITenantAccessor>(),
             Mock.Of<IAlertAcknowledgementService>(),
+            new TrackerDeviceEventWriter(
+                _deviceEvents.Object,
+                Mock.Of<IPatientDeviceStamper>(),
+                NullLogger<TrackerDeviceEventWriter>.Instance),
             Mock.Of<ILogger<TrackersController>>(),
             new FakeTimeProvider(Now)
         );
@@ -434,5 +450,293 @@ public class TrackersControllerStartTests
         });
 
         dto.TriggerEventTypes.Should().Equal("Sensor Start");
+    }
+
+    [Fact]
+    public async Task StartInstance_RecordsTheDefinitionsStartEventAsATrackerDeviceEvent()
+    {
+        var definition = ArrangeDefinition(TrackerMode.Duration);
+        definition.StartEventType = "Sensor Start";
+        var startedAt = Now.AddHours(-2);
+
+        await CreateController().StartInstance(new StartTrackerInstanceRequest
+        {
+            DefinitionId = definition.Id,
+            StartedAt = startedAt,
+            StartNotes = "left arm",
+        });
+
+        var written = _written.Should().ContainSingle().Subject;
+        written.EventType.Should().Be(DeviceEventType.SensorStart);
+        written.Timestamp.Should().Be(startedAt);
+        written.Notes.Should().Be("left arm");
+        written.DataSource.Should().Be(DataSources.Tracker);
+        _deviceEvents.Verify(d => d.CreateAsync(It.IsAny<DeviceEvent>(), WriteOrigin.Live, It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task StartInstance_WithNoStartEventType_RecordsNoEvent()
+    {
+        var definition = ArrangeDefinition(TrackerMode.Duration);
+
+        await CreateController().StartInstance(new StartTrackerInstanceRequest { DefinitionId = definition.Id });
+
+        _written.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StartInstance_WithAStoredEventTypeThatIsNoDeviceEvent_StartsAndRecordsNoEvent()
+    {
+        var definition = ArrangeDefinition(TrackerMode.Duration);
+        definition.StartEventType = "Meal Bolus";
+
+        var result = await CreateController().StartInstance(
+            new StartTrackerInstanceRequest { DefinitionId = definition.Id });
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        _written.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StartInstance_ThatLosesToANewerRun_RecordsNoEvent()
+    {
+        var definition = ArrangeDefinition(TrackerMode.Duration, Running(Now));
+        definition.StartEventType = "Sensor Start";
+
+        var result = await CreateController().StartInstance(
+            new StartTrackerInstanceRequest { DefinitionId = definition.Id, StartedAt = Now.AddHours(-1) });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        _written.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CompleteInstance_RecordsTheDefinitionsCompletionEventAtTheCompletionTime()
+    {
+        var definition = ArrangeDefinition(TrackerMode.Duration);
+        definition.CompletionEventType = "Sensor Stop";
+        var run = Running(Now.AddDays(-9));
+        run.DefinitionId = definition.Id;
+        run.Definition = definition;
+        var completedAt = Now.AddHours(-1);
+        _repository
+            .Setup(r => r.GetInstanceByIdAsync(run.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(run);
+        _repository
+            .Setup(r => r.CompleteInstanceAsync(
+                run.Id, CompletionReason.Completed, "fell off", null, completedAt, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TrackerInstanceEntity
+            {
+                Id = run.Id,
+                DefinitionId = definition.Id,
+                Definition = definition,
+                CreatedBy = OwnerId,
+                StartedAt = run.StartedAt,
+                CompletedAt = completedAt,
+                CompletionReason = CompletionReason.Completed,
+                CompletionNotes = "fell off",
+            });
+
+        await CreateController().CompleteInstance(run.Id, new CompleteTrackerInstanceRequest
+        {
+            Reason = CompletionReason.Completed,
+            CompletionNotes = "fell off",
+            CompletedAt = completedAt,
+        });
+
+        var written = _written.Should().ContainSingle().Subject;
+        written.EventType.Should().Be(DeviceEventType.SensorStop);
+        written.Timestamp.Should().Be(completedAt);
+        written.Notes.Should().Be("fell off");
+        written.DataSource.Should().Be(DataSources.Tracker);
+    }
+
+    [Fact]
+    public async Task CreateDefinition_CanonicalisesItsStartAndCompletionEventTypes()
+    {
+        TrackerDefinitionEntity? persisted = null;
+        _repository
+            .Setup(r => r.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
+            .Callback<TrackerDefinitionEntity, CancellationToken>((e, _) => persisted = e)
+            .ReturnsAsync((TrackerDefinitionEntity e, CancellationToken _) => e);
+
+        await CreateController().CreateDefinition(new CreateTrackerDefinitionRequest
+        {
+            Name = "Sensor",
+            StartEventType = "sensor start",
+            CompletionEventType = " ",
+        });
+
+        persisted!.StartEventType.Should().Be("Sensor Start");
+        persisted.CompletionEventType.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateDefinition_RejectsAStartEventTypeThatIsNoDeviceEvent()
+    {
+        var result = await CreateController().CreateDefinition(new CreateTrackerDefinitionRequest
+        {
+            Name = "Sensor",
+            StartEventType = "Meal Bolus",
+        });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Contain("StartEventType");
+        _repository.Verify(r => r.CreateDefinitionAsync(
+            It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateDefinition_RejectsACompletionEventTypeThatIsNoDeviceEvent()
+    {
+        var existing = ArrangeStored("[]", null);
+
+        var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
+        {
+            CompletionEventType = "Note",
+        });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Contain("CompletionEventType");
+        existing.CompletionEventType.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData(null)]
+    public async Task UpdateDefinition_WithABlankEventType_ClearsBothEvents(string? blank)
+    {
+        var existing = ArrangeStored("[]", null);
+        existing.StartEventType = "Sensor Start";
+        existing.CompletionEventType = "Sensor Stop";
+
+        var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
+        {
+            StartEventType = blank,
+            CompletionEventType = blank,
+        });
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        existing.StartEventType.Should().BeNull();
+        existing.CompletionEventType.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateDefinition_ReplacesAnEventTypeWithTheCanonicalName()
+    {
+        var existing = ArrangeStored("[]", null);
+        existing.StartEventType = "Sensor Start";
+
+        await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
+        {
+            StartEventType = "pod change",
+        });
+
+        existing.StartEventType.Should().Be("Pod Change");
+    }
+
+    [Fact]
+    public void GetDeviceEventTypes_ListsOnlyNamesTheServerAccepts()
+    {
+        var names = CreateController().GetDeviceEventTypes().Result
+            .Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<string[]>().Subject;
+
+        names.Should().NotBeEmpty().And.OnlyHaveUniqueItems();
+        names.Where(name =>
+                !(TrackerDeviceEventWriter.TryNormalise(name, "StartEventType", out var canonical, out _) && canonical == name))
+            .Should().BeEmpty();
+    }
+
+    private void FailEventWrites() =>
+        _deviceEvents
+            .Setup(d => d.CreateAsync(It.IsAny<DeviceEvent>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("device event store unavailable"));
+
+    [Fact]
+    public async Task StartInstance_WhenTheEventWriteFails_StillStarts()
+    {
+        var definition = ArrangeDefinition(TrackerMode.Duration);
+        definition.StartEventType = "Sensor Start";
+        FailEventWrites();
+
+        var result = await CreateController().StartInstance(
+            new StartTrackerInstanceRequest { DefinitionId = definition.Id });
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        _repository.Verify(r => r.StartInstanceAsync(
+            definition.Id, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CompleteInstance_WhenTheEventWriteFails_StillCompletesAndBroadcasts()
+    {
+        var definition = ArrangeDefinition(TrackerMode.Duration);
+        definition.CompletionEventType = "Sensor Stop";
+        var run = Running(Now.AddDays(-9));
+        run.DefinitionId = definition.Id;
+        run.Definition = definition;
+        _repository
+            .Setup(r => r.GetInstanceByIdAsync(run.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(run);
+        _repository
+            .Setup(r => r.CompleteInstanceAsync(
+                run.Id, It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TrackerInstanceEntity
+            {
+                Id = run.Id,
+                DefinitionId = definition.Id,
+                Definition = definition,
+                CreatedBy = OwnerId,
+                StartedAt = run.StartedAt,
+                CompletedAt = Now,
+                CompletionReason = CompletionReason.Completed,
+            });
+        FailEventWrites();
+
+        var result = await CreateController().CompleteInstance(
+            run.Id, new CompleteTrackerInstanceRequest { Reason = CompletionReason.Completed });
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync(
+            TrackerRealtimeAction.Complete, It.Is<TrackerInstanceDto>(d => d.Id == run.Id)), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateDefinition_RepostingAStoredEventTypeThatIsNoDeviceEvent_Saves()
+    {
+        var existing = ArrangeStored("[]", null);
+        existing.StartEventType = "Note";
+
+        var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
+        {
+            Name = "Renamed",
+            StartEventType = "note",
+        });
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        existing.Name.Should().Be("Renamed");
+        existing.StartEventType.Should().Be("Note");
+    }
+
+    [Fact]
+    public async Task UpdateDefinition_ChangingAStoredEventTypeToAnotherThatIsNoDeviceEvent_Is400()
+    {
+        var existing = ArrangeStored("[]", null);
+        existing.StartEventType = "Note";
+
+        var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
+        {
+            StartEventType = "Meal Bolus",
+        });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        existing.StartEventType.Should().Be("Note");
     }
 }

@@ -16,6 +16,7 @@ namespace Nocturne.API.Tests.Integration;
 /// A v3 devicestatus search, read and history return every key the upload carried, AAPS
 /// <c>configuration</c> and <c>app</c> included, and <c>fields=</c> projects extension keys.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class DeviceStatusV3DocumentIntegrationTests : ApiIntegrationTestBase
 {

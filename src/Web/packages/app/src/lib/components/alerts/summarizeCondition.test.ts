@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { AlertWeekday, defaultPayload, GlucoseBucket, PumpModeState, StateSpanCategory, type ConditionNode } from "./types";
 import { alertWeekdayLabel, summarizeCondition } from "./summarizeCondition.svelte";
 import { LEAF_FACTS } from "./factCatalog";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
 describe("summarizeCondition", () => {
 	it("returns a non-empty string for every fact-catalog leaf kind", () => {

@@ -26,6 +26,13 @@ public class BaseDomainOptions
         string.IsNullOrEmpty(BaseDomain) ? null : $"https://{BaseDomain}";
 
     /// <summary>
+    /// Public origin of tenant <paramref name="slug"/>: "https://{slug}.{BaseDomain}", or null when
+    /// no base domain is configured.
+    /// </summary>
+    public string? TenantOrigin(string slug) =>
+        string.IsNullOrEmpty(BaseDomain) ? null : $"https://{slug}.{BaseDomain}";
+
+    /// <summary>
     /// Splits <see cref="BaseDomain"/> into host and optional port. Returns a null host when the
     /// value is empty, carries more than one colon without being a bracketed IPv6 literal, or
     /// names an unparseable port.

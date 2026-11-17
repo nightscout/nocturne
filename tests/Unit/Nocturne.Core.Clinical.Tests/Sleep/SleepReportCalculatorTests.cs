@@ -371,7 +371,7 @@ public class SleepReportCalculatorTests
         var glucose = mgdl.Select((value, i) => MakeGlucose(t0.AddMinutes(i * 5), value)).ToArray();
 
         var hypos = Clinical.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
-        var episodes = new StatisticsService().CalculateTimeInRange(glucose, _thresholds).Episodes;
+        var episodes = new StatisticsService(TimeProvider.System).CalculateTimeInRange(glucose, _thresholds).Episodes;
 
         hypos.Should().HaveCount(episodes.BelowRange).And.HaveCount(2);
         hypos.Count(h => h.Severity == SleepHypoSeverity.VeryLow).Should().Be(episodes.VeryLow).And.Be(1);
@@ -753,6 +753,79 @@ public class SleepReportCalculatorTests
         result.MeanTirPct.Should().BeApproximately(85, 0.01);
         result.TotalHypoCount.Should().Be(1);
         result.NightsWithHypoPct.Should().BeApproximately(50, 0.01);
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_CountsTheNightsEachMeanAverages()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, OvernightTirPct = 80, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, OvernightTirPct = null, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, OvernightTirPct = 90, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, OvernightTirPct = null, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.NightCount.Should().Be(4);
+        result.ScoredNightCount.Should().Be(2);
+        result.TirNightCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_NoScoredOrTirNights_CountsZero()
+    {
+        var nights = new[] { new SleepNightSummary { SleepMinutes = 440 } };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.ScoredNightCount.Should().Be(0);
+        result.TirNightCount.Should().Be(0);
+        result.MeanScore.Should().BeNull();
+        result.MeanTirPct.Should().BeNull();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_IncludesEstimatedScore_WhenAScoredNightIsComputed()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, ScoreSource = SleepScoreSource.Computed, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_DoesNotIncludeEstimatedScore_WhenEveryScoredNightIsFromTheDevice()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_DoesNotIncludeEstimatedScore_WhenOnlyAnUnscoredNightIsComputed()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, ScoreSource = SleepScoreSource.Computed, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeFalse();
     }
 
     [Fact]

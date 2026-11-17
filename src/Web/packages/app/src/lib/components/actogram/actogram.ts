@@ -1,8 +1,8 @@
 import type { ScaleTime } from 'd3-scale';
-import type { ActogramDay as ServedActogramDay } from '$lib/api';
-import type { ChartThresholds } from '$lib/constants/glucose-thresholds';
-import { formatShortDate } from '$lib/utils/formatting';
-import { localDayStart } from '$lib/utils/timezone';
+import type { ActogramDay as ServedActogramDay } from '#lib/api/index.js';
+import type { ChartThresholds } from '#lib/constants/glucose-thresholds.js';
+import { formatShortDate } from '#lib/utils/formatting.js';
+import { localDayStart } from '#lib/utils/timezone.js';
 
 export const MS_PER_HOUR = 3_600_000;
 export const MS_PER_DAY = 86_400_000;

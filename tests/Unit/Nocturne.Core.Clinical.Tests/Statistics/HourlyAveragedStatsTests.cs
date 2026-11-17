@@ -8,7 +8,7 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 [Trait("Category", "Unit")]
 public class HourlyAveragedStatsTests
 {
-    private readonly StatisticsService _service = new();
+    private readonly StatisticsService _service = new(TimeProvider.System);
 
     private static readonly DateTime FirstDay = new(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc);
 

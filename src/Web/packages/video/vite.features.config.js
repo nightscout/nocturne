@@ -45,7 +45,6 @@ export default defineConfig(
       },
     },
     aliases: [
-      { find: "$app/stores", replacement: here("src/features/app-stores.js") },
       // The stages in src/features/stages draw Lucide icons, which this package does not depend on.
       { find: /^@lucide\/svelte\/icons\/(.+)$/, replacement: `${app}node_modules/@lucide/svelte/dist/icons/$1.svelte` },
     ],

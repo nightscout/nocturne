@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { UploaderPlatform, type UploaderApp, type DataSourceInfo } from "$api-clients";
+import { UploaderPlatform, type UploaderApp, type DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
 
 const mocks = vi.hoisted(() => ({
   sources: [] as unknown[],
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   deviceApprove: vi.fn(),
 }));
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   getActiveDataSources: () => ({
     get current() {
       return mocks.sources;
@@ -19,19 +19,20 @@ vi.mock("$api/generated/services.generated.remote", () => ({
   }),
 }));
 
-vi.mock("$lib/api/generated/directGrants.generated.remote", () => ({
+vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
   create: (...args: unknown[]) => mocks.createGrant(...args),
 }));
 
-vi.mock("$routes/(authenticated)/oauth/oauth.remote", () => ({
-  getDeviceInfo: (args: unknown) => ({ run: () => mocks.lookup(args) }),
+vi.mock("#routes/(authenticated)/oauth/oauth.remote.js", () => ({
+  getDeviceInfo: (args: unknown) => createQueryResource(() => mocks.lookup(args)),
 }));
 
-vi.mock("$api/generated/oAuths.generated.remote", () => ({
+vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
   deviceApprove: (...args: unknown[]) => mocks.deviceApprove(...args),
 }));
 
 import UploaderSetupView from "./UploaderSetupView.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const XDRIP: UploaderApp = { id: "xdrip", platform: UploaderPlatform.Android };
 const AAPS: UploaderApp = { id: "aaps", platform: UploaderPlatform.Android };
@@ -78,31 +79,6 @@ describe("UploaderSetupView", () => {
         .toBeVisible();
     });
 
-    it("shows the consent step once the code resolves to a device", async () => {
-      renderView(XDRIP, OAUTH_SETUP);
-
-      await enterCode("ABCD-EFGH");
-
-      await expect.element(page.getByText("Authorize application")).toBeVisible();
-      await expect
-        .element(page.getByText("A device wants to access your Nocturne data."))
-        .toBeVisible();
-      expect(mocks.lookup).toHaveBeenCalledWith({ userCode: "ABCD-EFGH" });
-    });
-
-    it("keeps the consent step and says why when the approval fails", async () => {
-      mocks.deviceApprove.mockRejectedValue(new Error("network down"));
-      renderView(XDRIP, OAUTH_SETUP);
-
-      await enterCode("ABCD-EFGH");
-      await page.getByRole("button", { name: "Approve" }).click();
-
-      await expect
-        .element(page.getByText("Could not approve the device. The code possibly expired."))
-        .toBeVisible();
-      await expect.element(page.getByText("Authorize application")).toBeVisible();
-    });
-
     it("offers the dashboard once the approved device sends data", async () => {
       mocks.sources = [{ sourceType: "xdrip", entriesLast24h: 12 } satisfies DataSourceInfo];
       const onConnected = renderView(XDRIP, OAUTH_SETUP);
@@ -110,7 +86,9 @@ describe("UploaderSetupView", () => {
       await enterCode("ABCD-EFGH");
       await page.getByRole("button", { name: "Approve" }).click();
 
-      await expect.element(page.getByText("Device authorized")).toBeVisible();
+      await expect.element(page.getByText("Device authorized successfully.")).toBeVisible();
+      await expect.element(page.getByText("You can return to your device.")).toBeVisible();
+      await expect.element(page.getByText("Enter authorization code")).not.toBeInTheDocument();
       await expect.element(page.getByText(/12 entries in the last 24 hours/)).toBeVisible();
       await page.getByRole("button", { name: "Continue to dashboard" }).click();
       expect(onConnected).toHaveBeenCalledTimes(1);

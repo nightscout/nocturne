@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -32,8 +33,8 @@ public class ActivityFindTests
     {
         _service
             .Setup(s => s.GetActivitiesAsync(
-                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
-            .Callback((string? find, int? count, int? _, CancellationToken _) =>
+                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Callback((string? find, int? count, int? _, DateTime? _, DateTime? _, CancellationToken _) =>
             {
                 _observedFind = find;
                 _observedCount = count;

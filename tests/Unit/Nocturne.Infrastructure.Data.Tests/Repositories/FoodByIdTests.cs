@@ -89,6 +89,37 @@ public class FoodByIdTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveFoodKey_ReturnsTheKeyForEveryIdFormAFoodIsServedUnder()
+    {
+        var uuidKeyed = Guid.CreateVersion7();
+        var legacyKeyed = Guid.CreateVersion7();
+        var uppercaseKeyed = Guid.CreateVersion7();
+        _context.Foods.AddRange(
+            new FoodEntity { Id = uuidKeyed, TenantId = TenantId, Name = "apple", Carbs = 10 },
+            new FoodEntity { Id = legacyKeyed, OriginalId = "5f1d7a3b9c0e4a2b8d6c1e0a", TenantId = TenantId, Name = "bread", Carbs = 20 },
+            new FoodEntity { Id = uppercaseKeyed, OriginalId = "5F1D7A3B9C0E4A2B8D6C1E0F", TenantId = TenantId, Name = "pear", Carbs = 5 });
+        await _context.SaveChangesAsync();
+
+        (await _foods.ResolveFoodKeyAsync(uuidKeyed.ToString())).Should().Be(uuidKeyed);
+        (await _foods.ResolveFoodKeyAsync(MongoObjectId.Coerce(uuidKeyed.ToString())!)).Should().Be(uuidKeyed);
+        (await _foods.ResolveFoodKeyAsync("5f1d7a3b9c0e4a2b8d6c1e0a")).Should().Be(legacyKeyed);
+        (await _foods.ResolveFoodKeyAsync(MongoObjectId.Coerce("5F1D7A3B9C0E4A2B8D6C1E0F")!)).Should().Be(uppercaseKeyed);
+    }
+
+    [Fact]
+    public async Task ResolveFoodKey_ForAnIdNoLiveFoodHas_IsNull()
+    {
+        var deleted = Guid.CreateVersion7();
+        _context.Foods.Add(new FoodEntity { Id = deleted, TenantId = TenantId, Name = "apple", Carbs = 10 });
+        await _context.SaveChangesAsync();
+        await _foods.DeleteFoodAsync(deleted.ToString());
+
+        (await _foods.ResolveFoodKeyAsync("5f1d7a3b9c0e4a2b8d6c1e0f")).Should().BeNull();
+        (await _foods.ResolveFoodKeyAsync(deleted.ToString())).Should().BeNull();
+        (await _foods.ResolveFoodKeyAsync("")).Should().BeNull();
+    }
+
+    [Fact]
     public async Task UnknownObjectId_FindsNothing()
     {
         (await _foods.GetFoodByIdAsync("5f1d7a3b9c0e4a2b8d6c1e0f")).Should().BeNull();

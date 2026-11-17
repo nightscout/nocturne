@@ -1,10 +1,10 @@
 <script lang="ts">
     import { Key } from "@nocturne/ui/keys";
-    import DocsSidebar from "$lib/components/DocsSidebar.svelte";
-    import DocsScrollDepth from "$lib/components/docs/DocsScrollDepth.svelte";
-    import DocsReadTime from "$lib/components/docs/DocsReadTime.svelte";
-    import DocsInstallSteps from "$lib/components/docs/DocsInstallSteps.svelte";
-    import DocsFeedback from "$lib/components/docs/DocsFeedback.svelte";
+    import DocsSidebar from "#lib/components/DocsSidebar.svelte";
+    import DocsScrollDepth from "#lib/components/docs/DocsScrollDepth.svelte";
+    import DocsReadTime from "#lib/components/docs/DocsReadTime.svelte";
+    import DocsInstallSteps from "#lib/components/docs/DocsInstallSteps.svelte";
+    import DocsFeedback from "#lib/components/docs/DocsFeedback.svelte";
     import { page } from "$app/state";
     import { Button } from "@nocturne/ui/ui/button";
     import Menu from "@lucide/svelte/icons/menu";

@@ -1,18 +1,16 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import { TextareaAutosize } from "$lib/components/ui/textarea";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { TextareaAutosize } from "#lib/components/ui/textarea/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import Check from "@lucide/svelte/icons/check";
-  import { CompletionReason, TrackerCategory } from "$api";
-  import * as trackersRemote from "$api/generated/trackers.generated.remote";
-  import { useToastSubmission } from "$lib/forms";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { create as createDeviceEventForm } from "$api/generated/deviceEvents.generated.remote";
+  import { CompletionReason, TrackerCategory } from "#lib/api/index.js";
+  import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
+  import { useToastSubmission } from "#lib/forms/index.js";
 
   interface TrackerCompletionDialogProps {
     open: boolean;
@@ -22,15 +20,11 @@
     category?: TrackerCategory;
     /** Definition ID for "Start Another" functionality */
     definitionId?: string;
-    /** Event type to create on completion */
-    completionEventType?: string;
     /** Default date/time for completion (Date object or YYYY-MM-DD string). If not provided, defaults to now. */
     defaultCompletedAt?: Date | string;
     onClose: () => void;
     onComplete?: () => void;
   }
-
-  const realtimeStore = tryGetRealtimeStore();
 
   let {
     open = $bindable(false),
@@ -38,7 +32,6 @@
     instanceName = "tracker",
     category,
     definitionId,
-    completionEventType,
     defaultCompletedAt,
     onClose,
     onComplete,
@@ -49,12 +42,6 @@
   let completedAt = $state("");
   let startAnother = $state(false);
   const submission = useToastSubmission("Failed to complete tracker");
-
-  // Hidden form for device event creation
-  let deviceEventFormRef = $state<HTMLFormElement | null>(null);
-  let deviceEventMills = $state(0);
-  let deviceEventEventType = $state<string>("");
-  let deviceEventNotes = $state<string>("");
 
   // Get default completion reason based on tracker category
   function getDefaultReasonForCategory(
@@ -187,15 +174,6 @@
         });
       }
 
-      // Create device event if configured
-      if (completionEventType && deviceEventFormRef) {
-        deviceEventMills = completedAt ? new Date(completedAt).getTime() : Date.now();
-        deviceEventEventType = completionEventType;
-        deviceEventNotes = completionNotes || "";
-        await tick();
-        deviceEventFormRef.requestSubmit();
-      }
-
       open = false;
       await tick();
       onComplete?.();
@@ -207,23 +185,6 @@
     onClose();
   }
 </script>
-
-<!-- Hidden device event form -->
-<form
-  bind:this={deviceEventFormRef}
-  class="hidden"
-  {...createDeviceEventForm.for("tracker-complete").enhance(async ({ submit }) => {
-    await submit();
-    if (createDeviceEventForm.for("tracker-complete").result) realtimeStore?.noteTreatmentWrite();
-  })}
->
-  <input type="hidden" name="n:mills" value={deviceEventMills} />
-  <input type="hidden" name="eventType" value={deviceEventEventType} />
-  {#if deviceEventNotes}
-    <input type="hidden" name="notes" value={deviceEventNotes} />
-  {/if}
-  <input type="hidden" name="app" value="Nocturne Tracker" />
-</form>
 
 <Dialog.Root bind:open>
   <Dialog.Content data-testid="tracker-completion-dialog">

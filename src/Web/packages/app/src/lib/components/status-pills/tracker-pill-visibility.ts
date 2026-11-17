@@ -3,9 +3,9 @@ import type {
   LegacyFallbackDto,
   TrackerDefinitionDto,
   TrackerInstanceDto,
-} from "$lib/api";
-import { DashboardVisibility, NotificationUrgency } from "$lib/api";
-import { reachedUrgency, urgencyRank } from "$lib/components/trackers/schedule";
+} from "#lib/api/index.js";
+import { DashboardVisibility, NotificationUrgency } from "#lib/api/index.js";
+import { reachedUrgency, urgencyRank } from "#lib/components/trackers/schedule.js";
 
 /** The step a pill waits for before it appears; null for always, undefined for never. */
 const SHOWN_FROM: Record<DashboardVisibility, NotificationUrgency | null | undefined> = {

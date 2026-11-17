@@ -1,13 +1,14 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { remoteForm, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteForm, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 // Mock the generated remote functions before importing the component. DeviceListState reads
 // getDevices()/getDiscoveredSources() as reactive queries (`.current`) and calls reorderDevices()
 // as a command. The spies are hoisted with the `vi.mock` call that reaches them: the factory runs
 // while the component is imported, which is before a module-level `const` is initialised.
-const { reorderDevices, deleteDevice } = vi.hoisted(() => ({
+const { reorderDevices, deleteDevice, createDevice } = vi.hoisted(() => ({
+  createDevice: vi.fn(),
   reorderDevices: vi.fn().mockResolvedValue([]),
   deleteDevice: vi.fn().mockResolvedValue(undefined),
 }));
@@ -15,10 +16,10 @@ const { reorderDevices, deleteDevice } = vi.hoisted(() => ({
 let devicesCurrent: unknown[] = [];
 let discoveredCurrent: unknown[] = [];
 
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
   getDevices: () => remoteQuery(() => devicesCurrent),
   getDiscoveredSources: () => remoteQuery(() => discoveredCurrent),
-  createDevice: remoteForm(),
+  createDevice: remoteForm((data: unknown) => createDevice(data)),
   updateDevice: remoteForm(),
   deleteDevice: (...args: unknown[]) => deleteDevice(...args),
   reorderDevices: (...args: unknown[]) => reorderDevices(...args),
@@ -26,7 +27,7 @@ vi.mock("$api/generated/patientRecords.generated.remote", () => ({
 
 let catalogCurrent: unknown[] = [];
 
-vi.mock("$api/generated/deviceCatalogs.generated.remote", () => ({
+vi.mock("#lib/api/generated/deviceCatalogs.generated.remote.js", () => ({
   getCatalog: () => remoteQuery(() => catalogCurrent),
 }));
 
@@ -167,6 +168,22 @@ describe("PatientDeviceManager", () => {
 
       await expect.element(page.getByLabelText("Manufacturer")).toHaveValue("Dexcom");
       await expect.element(page.getByRole("button", { name: "Add device" })).toBeEnabled();
+    });
+
+    it("shows why the server refused the device, and keeps the form", async () => {
+      createDevice.mockRejectedValueOnce({ status: 400, body: { message: "That device already exists" } });
+      catalogCurrent = [
+        { id: "dexcom-g7", name: "Dexcom G7", manufacturer: "Dexcom", category: "CGM", cgm: { hasSeparateTransmitter: false } },
+      ];
+      render(PatientDeviceManager, { variant: "inline" });
+
+      await page.getByRole("button", { name: "Add device" }).click();
+      await page.getByRole("combobox", { name: "Device" }).click();
+      await page.getByRole("option", { name: /Dexcom G7/ }).click();
+      await page.getByRole("button", { name: "Add device" }).click();
+
+      await expect.element(page.getByRole("alert")).toHaveTextContent("That device already exists");
+      await expect.element(page.getByLabelText("Manufacturer")).toHaveValue("Dexcom");
     });
   });
 });

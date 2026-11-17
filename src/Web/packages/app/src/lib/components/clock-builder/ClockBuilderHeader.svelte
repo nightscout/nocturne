@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { SubmitButton } from "$lib/forms";
+  import { useModifierKey } from "@nocturne/ui/modifier-key";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { SubmitButton } from "#lib/forms/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Play from "@lucide/svelte/icons/play";
   import Save from "@lucide/svelte/icons/save";
@@ -41,6 +42,7 @@
     onPreview,
     children,
   }: Props = $props();
+  const modifier = useModifierKey();
 </script>
 
 <header
@@ -65,7 +67,7 @@
       size="icon"
       onclick={onUndo}
       disabled={!canUndo}
-      title="Undo (Ctrl+Z)"
+      title="Undo ({modifier.label}+Z)"
     >
       <Undo2 class="size-4" />
     </Button>
@@ -74,7 +76,7 @@
       size="icon"
       onclick={onRedo}
       disabled={!canRedo}
-      title="Redo (Ctrl+Shift+Z)"
+      title="Redo ({modifier.label}+Shift+Z)"
     >
       <Redo2 class="size-4" />
     </Button>

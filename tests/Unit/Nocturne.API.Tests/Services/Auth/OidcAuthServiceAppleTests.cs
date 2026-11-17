@@ -71,7 +71,7 @@ public class OidcAuthServiceAppleTests
         _subjects.Setup(s => s.GetSubjectRolesAsync(It.IsAny<Guid>())).ReturnsAsync([]);
         _sessions
             .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>()))
-            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, Guid.Empty));
 
         var http = new Mock<IHttpClientFactory>();
         http.Setup(f => f.CreateClient("OidcProvider")).Returns(() => new HttpClient(_tokenEndpoint));

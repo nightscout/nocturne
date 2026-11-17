@@ -2,11 +2,11 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import * as Card from "$lib/components/ui/card";
-	import { Button } from "$lib/components/ui/button";
-	import { Input } from "$lib/components/ui/input";
-	import { Label } from "$lib/components/ui/label";
-	import { Badge } from "$lib/components/ui/badge";
+	import * as Card from "#lib/components/ui/card/index.js";
+	import { Button } from "#lib/components/ui/button/index.js";
+	import { Input } from "#lib/components/ui/input/index.js";
+	import { Label } from "#lib/components/ui/label/index.js";
+	import { Badge } from "#lib/components/ui/badge/index.js";
 	import Link2 from "@lucide/svelte/icons/link-2";
 	import Link2Off from "@lucide/svelte/icons/link-2-off";
 	import Plus from "@lucide/svelte/icons/plus";
@@ -15,22 +15,20 @@
 	import Save from "@lucide/svelte/icons/save";
 	import X from "@lucide/svelte/icons/x";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
-	import { EmptyState } from "$lib/components/shared";
+	import { EmptyState } from "#lib/components/shared/index.js";
 	import {
 		getLinks,
 		setDefault,
 		updateLink,
 		revokeLink,
-	} from "$lib/api/generated/chatIdentities.generated.remote";
+	} from "#lib/api/generated/chatIdentities.generated.remote.js";
 	import { getDiscordConfig, initiateDiscordLink } from "./discord.remote";
-	import { describeSubmitError } from "$lib/forms/submit-error";
+	import { describeSubmitError } from "#lib/forms/submit-error.js";
 
 	// Auth guard
 	$effect(() => {
 		if (!page.data.isAuthenticated) {
-			goto(resolve(`/auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`), {
-				replaceState: true,
-			});
+			goto(resolve(`auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`), { replace: true });
 		}
 	});
 
@@ -151,8 +149,11 @@
 		<Card.Header>
 			<Card.Title>Linked accounts</Card.Title>
 			<Card.Description>
-				Discord accounts linked to <strong>this Nocturne account</strong>. Each one can be
-				queried from Discord with <code>/bg &lt;label&gt;</code>.
+				Discord accounts linked to 
+				<strong>this Nocturne account</strong>
+				. Each one can be queried from Discord with 
+				<code>/bg <label></code>
+				.
 			</Card.Description>
 		</Card.Header>
 		<Card.Content class="space-y-3">
@@ -168,7 +169,7 @@
 						{#if editingId === link.id}
 							<div class="space-y-2">
 								<div class="space-y-1">
-									<Label for="label-{link.id}">Label (used in <code>/bg &lt;label&gt;</code>)</Label>
+									<Label for="label-{link.id}">Label (used in <code>/bg <label></code>)</Label>
 									<Input
 										id="label-{link.id}"
 										bind:value={editLabel}
@@ -287,7 +288,7 @@
 			{:else}
 				<p class="text-xs text-muted-foreground">
 					Discord OAuth2 is not configured on this instance. Ask the administrator to add the
-					Application ID and Client Secret under Settings &gt; Admin &gt; Integrations. The administrator can also set <code>DISCORD_APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code>. Or run <code>/connect</code> directly from Discord.
+					Application ID and Client Secret under Platform &gt; Administration &gt; Integrations. The administrator can also set <code>DISCORD_APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code>. Or run <code>/connect</code> directly from Discord.
 				</p>
 			{/if}
 		</Card.Footer>

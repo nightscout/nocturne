@@ -4,7 +4,7 @@ title: Loop Analysis
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Loop Analysis

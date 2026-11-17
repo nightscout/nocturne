@@ -27,7 +27,8 @@ internal sealed class AlertAcknowledgementService(
     ISignalRBroadcastService broadcastService,
     ITenantMemberService memberService,
     IEngineAlarmRelay alarmRelay,
-    ILogger<AlertAcknowledgementService> logger)
+    ILogger<AlertAcknowledgementService> logger,
+    TimeProvider timeProvider)
     : IAlertAcknowledgementService
 {
     /// <summary>
@@ -51,7 +52,7 @@ internal sealed class AlertAcknowledgementService(
     public async Task AcknowledgeAllAsync(Guid tenantId, string acknowledgedBy, CancellationToken ct)
     {
         await using var db = await CreateContextForAsync(tenantId, ct);
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         // EndedAt > now matches the active-intents snapshot filter: a device_action test fire
         // keeps the tray flashing for its window, so it must be acknowledgeable during it.
@@ -114,7 +115,7 @@ internal sealed class AlertAcknowledgementService(
         CancellationToken ct)
     {
         await using var db = await CreateContextForAsync(tenantId, ct);
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         // Tenant filter is implicit via db.TenantId; the explicit TenantId == tenantId clause is
         // defence-in-depth so a passed tenantId of Guid.Empty (never matches a real row) cannot

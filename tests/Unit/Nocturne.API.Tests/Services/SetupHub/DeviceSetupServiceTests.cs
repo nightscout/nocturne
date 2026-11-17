@@ -19,6 +19,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.SetupHub;
@@ -28,6 +29,7 @@ public class DeviceSetupServiceTests
     private static readonly Guid TenantId = Guid.CreateVersion7();
     private const string Owner = "owner-subject";
 
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 29, 3, 0, 0, TimeSpan.Zero));
     private readonly NocturneDbContext _db;
     private readonly DeviceSetupService _service;
     private readonly Mock<IDeviceReattributionService> _reattribution = new();
@@ -47,6 +49,7 @@ public class DeviceSetupServiceTests
         var factory = new TestNocturneDbContextFactory(_db);
         _service = new DeviceSetupService(
             factory,
+            new ConnectorConfigurationRepository(factory),
             new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
             _reattribution.Object,
@@ -55,8 +58,9 @@ public class DeviceSetupServiceTests
             _therapySettings.Object,
             new ConsumableTrackerWriter(
                 _deviceEvents.Object, _ruleSync.Object, Mock.Of<IDeviceEventReactor>(),
-                _broadcast.Object, TimeProvider.System,
+                _broadcast.Object, _clock,
                 NullLogger<ConsumableTrackerWriter>.Instance),
+            _clock,
             NullLogger<DeviceSetupService>.Instance);
         _therapySettings.Setup(t => t.GetActionTimeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Profile5h);
@@ -77,19 +81,19 @@ public class DeviceSetupServiceTests
     private void Reading(string device, DateTime? at = null) =>
         _db.SensorGlucose.Add(new SensorGlucoseEntity
         {
-            Id = Guid.CreateVersion7(), Timestamp = at ?? DateTime.UtcNow, Mgdl = 110, Device = device,
+            Id = Guid.CreateVersion7(), Timestamp = at ?? _clock.GetUtcNow().UtcDateTime, Mgdl = 110, Device = device,
         });
 
     private void PumpStatus(string manufacturer, string model) =>
         _db.PumpSnapshots.Add(new PumpSnapshotEntity
         {
-            Id = Guid.CreateVersion7(), Timestamp = DateTime.UtcNow, Manufacturer = manufacturer, Model = model,
+            Id = Guid.CreateVersion7(), Timestamp = _clock.GetUtcNow().UtcDateTime, Manufacturer = manufacturer, Model = model,
         });
 
     private void LoopStatus(AidAlgorithm algorithm) =>
         _db.ApsSnapshots.Add(new ApsSnapshotEntity
         {
-            Id = Guid.CreateVersion7(), Timestamp = DateTime.UtcNow, AidAlgorithm = algorithm.ToString(),
+            Id = Guid.CreateVersion7(), Timestamp = _clock.GetUtcNow().UtcDateTime, AidAlgorithm = algorithm.ToString(),
         });
 
     private TrackerDefinitionEntity ExistingTracker(TrackerCategory category, params string[] triggers)
@@ -132,6 +136,18 @@ public class DeviceSetupServiceTests
         cgm.Guess!.Id.Should().Be("dexcom-g7");
         cgm.ModelKnown.Should().BeFalse();
         cgm.Evidence.Should().Equal(new DeviceEvidence(DeviceEvidenceSource.Connector, "dexcom"));
+    }
+
+    [Fact]
+    public async Task AnAbbottConnector_NamesTheMaker_SoTheGuessIsLibre3_Unconfirmed()
+    {
+        Connector("LibreLinkUp");
+        await _db.SaveChangesAsync();
+
+        var cgm = Slot(await Setup(), DeviceCategory.CGM);
+
+        cgm.Guess!.Id.Should().Be("libre-3");
+        cgm.ModelKnown.Should().BeFalse();
     }
 
     [Fact]
@@ -199,6 +215,11 @@ public class DeviceSetupServiceTests
     [InlineData("xDrip-LibreReceiver FreeStyle Libre 2+", "libre-2-plus")]
     [InlineData("xDrip-DexcomG7", "dexcom-g7")]
     [InlineData("Trio G7CGMManager", "dexcom-g7")]
+    [InlineData("Dexcom G7 15 Day", "dexcom-g7-15-day")]
+    [InlineData("FreeStyle Libre 3 Plus", "libre-3-plus")]
+    [InlineData("FreeStyle Libre 3+", "libre-3-plus")]
+    [InlineData("FreeStyle Libre 3", "libre-3")]
+    [InlineData("xDrip-LibreReceiver FreeStyle Libre 2", "libre-2")]
     public async Task XDripAndTrioReadingLabels_NameTheSensor(string label, string expected)
     {
         Reading(label);
@@ -210,9 +231,21 @@ public class DeviceSetupServiceTests
     [Fact]
     public async Task DataOlderThanTheWindow_IsNotEvidence()
     {
-        Reading("xDrip-DexcomG6", DateTime.UtcNow - DeviceSetupService.EvidenceWindow - TimeSpan.FromDays(1));
+        Reading("xDrip-DexcomG6", _clock.GetUtcNow().UtcDateTime - DeviceSetupService.EvidenceWindow - TimeSpan.FromDays(1));
         await _db.SaveChangesAsync();
 
+        Slot(await Setup(), DeviceCategory.CGM).Guess.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DataAtTheEdgeOfTheWindow_IsEvidenceUntilTheClockMovesPastIt()
+    {
+        Reading("xDrip-DexcomG6", _clock.GetUtcNow().UtcDateTime - DeviceSetupService.EvidenceWindow);
+        await _db.SaveChangesAsync();
+
+        Slot(await Setup(), DeviceCategory.CGM).Guess.Should().NotBeNull();
+
+        _clock.Advance(TimeSpan.FromTicks(1));
         Slot(await Setup(), DeviceCategory.CGM).Guess.Should().BeNull();
     }
 
@@ -269,7 +302,7 @@ public class DeviceSetupServiceTests
 
         _db.ChangeTracker.Clear();
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
-            DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Pacific/Auckland")));
+            _clock.GetUtcNow().UtcDateTime, TimeZoneInfo.FindSystemTimeZoneById("Pacific/Auckland")));
         var g6 = _db.PatientDevices.Single(d => d.CatalogId == "dexcom-g6");
         var g7 = _db.PatientDevices.Single(d => d.CatalogId == "dexcom-g7");
         (g6.IsCurrent, g6.StartDate, g6.EndDate).Should().Be((false, (DateOnly?)null, (DateOnly?)today),
@@ -556,7 +589,7 @@ public class DeviceSetupServiceTests
         await _service.ConfirmDeviceAsync("libre-3", null, CancellationToken.None);
         var latest = new DeviceEvent
         {
-            Id = Guid.NewGuid(), EventType = DeviceEventType.SensorStart, Timestamp = DateTime.UtcNow.AddDays(-2),
+            Id = Guid.NewGuid(), EventType = DeviceEventType.SensorStart, Timestamp = _clock.GetUtcNow().UtcDateTime.AddDays(-2),
         };
         _deviceEvents.Setup(r => r.GetLatestByEventTypesAsync(
                 It.IsAny<DeviceEventType[]>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
@@ -577,7 +610,7 @@ public class DeviceSetupServiceTests
                 It.IsAny<DeviceEventType[]>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceEvent
             {
-                Id = Guid.NewGuid(), EventType = DeviceEventType.SensorStart, Timestamp = DateTime.UtcNow.AddDays(-60),
+                Id = Guid.NewGuid(), EventType = DeviceEventType.SensorStart, Timestamp = _clock.GetUtcNow().UtcDateTime.AddDays(-60),
             });
 
         await _service.AddTrackerAsync(TrackerOfferKind.Sensor, "Libre 3 sensor", Owner, CancellationToken.None);

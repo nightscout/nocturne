@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { createRawSnippet } from "svelte";
 import { describe, it, expect } from "vitest";
 import SuccessBanner from "./SuccessBanner.svelte";
-import { fingerprintArtwork } from "$lib/watercolour-icons";
+import { fingerprintArtwork } from "#lib/watercolour-icons.js";
 
 const text = (message: string) =>
   createRawSnippet(() => ({ render: () => `<span>${message}</span>` }));

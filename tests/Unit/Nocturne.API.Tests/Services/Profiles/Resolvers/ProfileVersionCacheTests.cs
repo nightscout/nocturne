@@ -61,6 +61,27 @@ public class ProfileVersionCacheTests : IDisposable
     }
 
     [Fact]
+    public async Task AnUncachedScopeLoadsOncePerProfileAndNeitherReadsFromNorFillsTheCache()
+    {
+        var shared = TestTenantCache.Create(_memoryCache);
+        var cached = new ProfileVersionCache(shared);
+        var uncached = new ProfileVersionCache(shared);
+        uncached.ReadUncached();
+
+        await uncached.GetVersionsAsync(_repo.Object, "Default", default);
+        await cached.GetVersionsAsync(_repo.Object, "Default", default);
+        _repo.Verify(r => r.GetByProfileNameAsync("Default", default), Times.Exactly(2));
+
+        await uncached.GetVersionsAsync(_repo.Object, "Default", default);
+        _repo.Verify(r => r.GetByProfileNameAsync("Default", default), Times.Exactly(2));
+
+        var another = new ProfileVersionCache(shared);
+        another.ReadUncached();
+        await another.GetVersionsAsync(_repo.Object, "Default", default);
+        _repo.Verify(r => r.GetByProfileNameAsync("Default", default), Times.Exactly(3));
+    }
+
+    [Fact]
     public async Task ReturnsTheVersionStartingExactlyAtTheTime()
     {
         var result = await _sut.GetActiveAtAsync(_repo.Object, "Default", Day5, default);

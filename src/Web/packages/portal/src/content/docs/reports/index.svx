@@ -4,7 +4,7 @@ title: Reports
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Video from '$lib/components/docs/Video.svelte';
+  import Video from '#lib/components/docs/Video.svelte';
 </script>
 
 # Reports

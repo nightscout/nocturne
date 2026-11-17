@@ -3,8 +3,8 @@ import type {
   LegacyCoverageDto,
   LegacyFallbackDto,
   TrackerInstanceDto,
-} from "$lib/api";
-import { ageHoursSince } from "$lib/components/trackers/age.svelte";
+} from "#lib/api/index.js";
+import { ageHoursSince } from "#lib/components/trackers/age.svelte.js";
 
 /**
  * The age the palette shows for a consumable at `now`: its legacy fallback's while no tracker

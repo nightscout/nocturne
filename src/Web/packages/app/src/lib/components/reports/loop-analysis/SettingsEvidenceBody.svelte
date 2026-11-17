@@ -16,12 +16,12 @@
     type IsfEvidenceEpisode,
     type SettingsEvidenceFigure,
     type SettingsEvidenceReport,
-  } from "$lib/api";
-  import * as Alert from "$lib/components/ui/alert";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { plural } from "$lib/utils/plural";
-  import { bg, bgDelta, bgLabel, convertToDisplayUnits, hourLabel } from "$lib/utils/formatting";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/api/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { plural } from "#lib/utils/plural.js";
+  import { bg, bgDelta, bgLabel, convertToDisplayUnits, hourLabel } from "#lib/utils/formatting.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import Clock from "@lucide/svelte/icons/clock";
   import EyeOff from "@lucide/svelte/icons/eye-off";
@@ -29,7 +29,7 @@
   import Stethoscope from "@lucide/svelte/icons/stethoscope";
   import TimeOfDayPanel from "./TimeOfDayPanel.svelte";
   import StripKey, { type StripKeyItem } from "./StripKey.svelte";
-  import NoTimeZone from "$lib/components/reports/NoTimeZone.svelte";
+  import NoTimeZone from "#lib/components/reports/NoTimeZone.svelte";
   import { loopAnalysisTimeZoneNeed } from "./time-zone-need.svelte";
   import IgnoredFiltersNotice from "./IgnoredFiltersNotice.svelte";
   import SettingsEvidenceMarks from "./SettingsEvidenceMarks.svelte";

@@ -9,10 +9,11 @@ namespace Nocturne.Core.Models.Serializers;
 /// <remarks>
 /// Nightscout Loop may send targetRange as either:
 /// <list type="bullet">
-/// <item><description>An array: [minValue, maxValue] (e.g., [100, 120])</description></item>
+/// <item><description>An array of exactly two numbers: [minValue, maxValue] (e.g., [100, 120]). Any other
+/// array reads as no range.</description></item>
 /// <item><description>An object: { "minValue": 100, "maxValue": 120 }</description></item>
 /// </list>
-/// On write, always outputs the object format for consistency.
+/// On write, outputs the object format; <see cref="LoopTargetRangeArrayConverter"/> writes the array.
 /// </remarks>
 public class LoopTargetRangeConverter : JsonConverter<LoopTargetRange?>
 {
@@ -40,44 +41,23 @@ public class LoopTargetRangeConverter : JsonConverter<LoopTargetRange?>
         }
     }
 
-    private static LoopTargetRange ReadFromArray(ref Utf8JsonReader reader)
+    private static LoopTargetRange? ReadFromArray(ref Utf8JsonReader reader)
     {
-        var result = new LoopTargetRange();
-        var values = new List<double>();
+        var values = new List<double?>();
 
-        while (reader.Read())
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            if (reader.TokenType == JsonTokenType.EndArray)
-                break;
+            if (reader.TokenType is JsonTokenType.StartArray or JsonTokenType.StartObject)
+                reader.Skip();
 
-            if (reader.TokenType == JsonTokenType.Number)
-            {
-                values.Add(reader.GetDouble());
-            }
-            else if (reader.TokenType == JsonTokenType.String)
-            {
-                // Handle string numbers
-                var stringValue = reader.GetString();
-                if (double.TryParse(stringValue, out var numValue))
-                {
-                    values.Add(numValue);
-                }
-            }
+            values.Add(ReadNullableDouble(ref reader));
         }
 
-        // Nightscout sends [min, max] array format
-        if (values.Count >= 1)
-            result.MinValue = values[0];
-        if (values.Count >= 2)
-            result.MaxValue = values[1];
-
-        return result;
+        return values is [{ } min, { } max] ? new LoopTargetRange { MinValue = min, MaxValue = max } : null;
     }
 
     private static LoopTargetRange? ReadFromObject(ref Utf8JsonReader reader, JsonSerializerOptions options)
     {
-        // Use a clone of the reader to manually parse,
-        // or use the default object deserializer
         var result = new LoopTargetRange();
 
         while (reader.Read())

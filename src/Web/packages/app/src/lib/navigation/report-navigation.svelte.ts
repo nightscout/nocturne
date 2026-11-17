@@ -1,4 +1,5 @@
-import { a1cLabel } from "$lib/utils/a1c-formatting";
+import { resolve } from "$app/paths";
+import { a1cLabel } from "#lib/utils/a1c-formatting.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type IconComponent = any;
 import Activity from "@lucide/svelte/icons/activity";
@@ -24,8 +25,8 @@ import Syringe from "@lucide/svelte/icons/syringe";
 import Utensils from "@lucide/svelte/icons/utensils";
 import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import Target from "@lucide/svelte/icons/target";
-import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
-import { satisfiesAllScopes } from "$lib/authorization/scopes";
+import SiteChangeIcon from "#lib/components/icons/SiteChangeIcon.svelte";
+import { satisfiesAllScopes } from "#lib/authorization/scopes.js";
 
 export interface ReportItem {
   /** Title for the reports overview page */
@@ -395,6 +396,15 @@ export function reportCategories(): ReportCategory[] {
       ],
     },
   ];
+}
+
+/**
+ * The path of a report page under the app's base, with the query string it is shown with. `resolve`
+ * takes only the route ids and pathnames SvelteKit generated, not a registry's runtime `href`.
+ */
+export function reportPagePath(href: string, search: { toString(): string } = "", hash = ""): string {
+  const query = search.toString().replace(/^\?/, "");
+  return `${resolve("").replace(/\/$/, "")}${href}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
 /** A report's full title: a page of a report made of several is named with that report. */

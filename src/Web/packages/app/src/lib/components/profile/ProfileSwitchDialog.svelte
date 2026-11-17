@@ -2,20 +2,20 @@
   import {
     createActivation,
     getActivationStatus,
-  } from "$api/generated/profileActivations.generated.remote";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as Alert from "$lib/components/ui/alert";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Textarea } from "$lib/components/ui/textarea";
+  } from "#lib/api/generated/profileActivations.generated.remote.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import { profileActivationSource } from "$lib/utils/profile-activation-label";
+  import { profileActivationSource } from "#lib/utils/profile-activation-label.js";
   import Info from "@lucide/svelte/icons/info";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { describeSubmitError } from "$lib/forms";
+  import { describeSubmitError } from "#lib/forms/index.js";
 
   interface Props {
     open: boolean;

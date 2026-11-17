@@ -34,7 +34,7 @@ export const badgeVariants = tv({
         "bg-severity-warn text-severity-warn-foreground [a&]:hover:bg-severity-warn/90 border-transparent",
       "severity-info":
         "bg-severity-info text-severity-info-foreground [a&]:hover:bg-severity-info/90 border-transparent",
-      // A record's category (ENTRY_CATEGORIES, TREATMENT_CATEGORIES); notes take secondary.
+      // A record's category (ENTRY_CATEGORIES); notes take secondary.
       "entry-bolus":
         "bg-entry-bolus/10 text-entry-bolus border-entry-bolus/30 [a&]:hover:bg-entry-bolus/20",
       // Sensor-integrity detection confidence.

@@ -3,17 +3,17 @@
   import Droplet from "@lucide/svelte/icons/droplet";
   import Target from "@lucide/svelte/icons/target";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
-  import { Button } from "$lib/components/ui/button";
-  import { FormError } from "$lib/forms";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { FormError } from "#lib/forms/index.js";
   import { resolve } from "$app/paths";
-  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
-  import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
-  import { enterTherapySettings } from "$api/generated/setupTherapies.generated.remote";
-  import { TherapyGlucoseField, type InsulinActionTime, type WrongUnitRule } from "$api";
-  import { InsulinActionTimeNote } from "$lib/components/patient";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getUnitLabel } from "$lib/utils/formatting";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
+  import ScheduleView from "#lib/components/schedule/ScheduleView.svelte";
+  import { enterTherapySettings } from "#lib/api/generated/setupTherapies.generated.remote.js";
+  import { TherapyGlucoseField, type InsulinActionTime, type WrongUnitRule } from "#lib/api/index.js";
+  import { InsulinActionTimeNote } from "#lib/components/patient/index.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { getUnitLabel } from "#lib/utils/formatting.js";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   interface Props {
     voice: PatientVoice;

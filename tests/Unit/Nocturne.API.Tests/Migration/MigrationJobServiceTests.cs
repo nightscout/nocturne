@@ -41,7 +41,8 @@ public class MigrationJobServiceTests
             NullLogger<MigrationJobService>.Instance,
             provider,
             new ConfigurationBuilder().Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
 
         return (service, provider);
     }
@@ -185,7 +186,8 @@ public class MigrationJobServiceTests
             NullLogger<MigrationJobService>.Instance,
             MigrationJobHarness.BuildProvider(handler),
             new ConfigurationBuilder().Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
         var tenant = Tenant(Guid.NewGuid());
 
         try
@@ -217,7 +219,8 @@ public class MigrationJobServiceTests
             NullLogger<MigrationJobService>.Instance,
             MigrationJobHarness.BuildProvider(handler, interceptor: terminalPersist),
             new ConfigurationBuilder().Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
         var tenant = Tenant(Guid.NewGuid());
 
         try
@@ -252,7 +255,8 @@ public class MigrationJobServiceTests
             NullLogger<MigrationJobService>.Instance,
             MigrationJobHarness.BuildProvider(handler),
             new ConfigurationBuilder().Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
 
         var first = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
         var second = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
@@ -303,7 +307,8 @@ public class MigrationJobServiceTests
             new MigrationJobInfo { Id = id, Mode = MigrationMode.Api, CreatedAt = DateTime.UtcNow },
             tenantContext: null,
             NullLogger.Instance,
-            provider);
+            provider,
+            TimeProvider.System);
     }
 
     [Fact]

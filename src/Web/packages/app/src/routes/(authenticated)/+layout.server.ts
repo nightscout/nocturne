@@ -1,12 +1,13 @@
 import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
-import { checkOnboarding } from "$lib/server/onboarding-check";
-import { getRequestStatus } from "$lib/server/request-status";
-import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
-import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
-import { toIsoString } from "$lib/utils/api-date";
-import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "$lib/utils/tenant-host";
-import { autoLoginEndpoint, autoLoginRedirect } from "$lib/server/auto-login";
+import { checkOnboarding } from "#lib/server/onboarding-check.js";
+import { getRequestStatus } from "#lib/server/request-status.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
+import { toIsoString } from "#lib/utils/api-date.js";
+import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "#lib/utils/tenant-host.js";
+import { autoLoginEndpoint, autoLoginRedirect } from "#lib/server/auto-login.js";
+import { PILL_ROWS_COOKIE, parsePillRows } from "#lib/components/status-pills/pill-rows.js";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
 const GLUCOSE_READ_PERMISSIONS = [
@@ -131,7 +132,8 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   //
   // Where auto-login applies (a demo tenant, or dev auto-login) the visitor goes straight to its
   // endpoint: the status in hand already decides it, and the login page would only fetch it again
-  // to redirect onward, costing every first visit a round-trip.
+  // to redirect onward, costing every first visit a round-trip. A demo visitor reaches this when
+  // no session was minted in hooks (mintDemoSession).
   if (!locals.isAuthenticated || !locals.user) {
     if (!publicViewAllowed) {
       const returnUrl = pathname + search;
@@ -175,5 +177,6 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     isDemo,
     nextResetAt,
     onboardingComplete,
+    pillRows: parsePillRows(cookies.get(PILL_ROWS_COOKIE)),
   };
 };

@@ -1,23 +1,24 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { remoteForm, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteForm, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
-const { deleteInsulin } = vi.hoisted(() => ({
+const { deleteInsulin, updateInsulin } = vi.hoisted(() => ({
   deleteInsulin: vi.fn().mockResolvedValue(undefined),
+  updateInsulin: vi.fn(),
 }));
 
 let insulinsCurrent: unknown[] = [];
 let catalogCurrent: unknown[] = [];
 
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
   getInsulins: () => remoteQuery(() => insulinsCurrent),
   createInsulin: remoteForm(),
-  updateInsulin: remoteForm(),
+  updateInsulin: remoteForm((data: unknown) => updateInsulin(data)),
   deleteInsulin: (...args: unknown[]) => deleteInsulin(...args),
 }));
 
-vi.mock("$api/generated/insulinCatalogs.generated.remote", () => ({
+vi.mock("#lib/api/generated/insulinCatalogs.generated.remote.js", () => ({
   getCatalog: () => remoteQuery(() => catalogCurrent),
 }));
 
@@ -77,6 +78,21 @@ describe("PatientInsulinManager", () => {
       await expect.element(page.getByLabelText("End date")).toBeVisible();
     });
 
+    it("shows why the server refused the change, and stays open", async () => {
+      updateInsulin.mockRejectedValueOnce({ status: 400, body: { message: "Duration is too long" } });
+      insulinsCurrent = [
+        { id: "i1", name: "Tresiba", insulinCategory: "UltraLongActing", role: "Basal", isCurrent: true, dia: 42 },
+      ];
+      render(PatientInsulinManager, { variant: "dialog" });
+
+      await expect.element(page.getByText("Tresiba")).toBeVisible();
+      await page.getByRole("button", { name: "Edit insulin" }).click();
+      await page.getByRole("button", { name: "Update Insulin" }).click();
+
+      await expect.element(page.getByRole("alert")).toHaveTextContent("Duration is too long");
+      await expect.element(page.getByRole("heading", { name: "Edit insulin" })).toBeVisible();
+    });
+
     it("opens an edit dialog filled from the insulin", async () => {
       insulinsCurrent = [
         {
@@ -92,8 +108,7 @@ describe("PatientInsulinManager", () => {
       render(PatientInsulinManager, { variant: "dialog" });
 
       await expect.element(page.getByText("Tresiba")).toBeVisible();
-      // The row's first icon button edits, the second deletes.
-      await page.getByRole("button").nth(0).click();
+      await page.getByRole("button", { name: "Edit insulin" }).click();
 
       await expect.element(page.getByRole("heading", { name: "Edit insulin" })).toBeVisible();
       await expect.element(page.getByLabelText("Brand / name")).toHaveValue("Tresiba");

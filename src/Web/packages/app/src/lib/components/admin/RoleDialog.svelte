@@ -1,13 +1,13 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Badge } from "$lib/components/ui/badge";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import type { TenantRoleDto } from "$api";
+  import type { TenantRoleDto } from "#lib/api/index.js";
 
   const permissionCategories = [
     {

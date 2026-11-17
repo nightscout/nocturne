@@ -1,33 +1,38 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { browser } from "$app/environment";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { membershipRequestStorageKey } from "$lib/membership-request-storage";
+  import { page } from "$app/state";
+  import { parkMembershipRequest } from "#lib/membership-request-storage.js";
 
   interface Props {
     open: boolean;
+    /** Where sign-in should land. Defaults to the current page. */
+    returnUrl?: string;
   }
 
-  let { open = $bindable(false) }: Props = $props();
+  let { open = $bindable(false), returnUrl }: Props = $props();
 
   let message = $state("");
 
   function handleSubmit() {
     if (!browser) return;
 
-    try {
-      localStorage.setItem(membershipRequestStorageKey(window.location.host), message);
-    } catch {
-      // Storage full or unavailable
-    }
+    const returnPath = parkMembershipRequest(
+      sessionStorage,
+      page.url.host,
+      message,
+      returnUrl ?? page.url.pathname + page.url.search,
+      crypto.randomUUID(),
+      Date.now(),
+    );
 
     open = false;
 
-    const returnUrl = encodeURIComponent(window.location.pathname);
-    goto(resolve(`/auth/login?returnUrl=${returnUrl}`));
+    goto(resolve(`auth/login?${new URLSearchParams({ returnUrl: returnPath })}`));
   }
 </script>
 
@@ -51,7 +56,7 @@
       </p>
     </div>
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
+      <Button variant="outline" onclick={() => open = false}>Cancel</Button>
       <Button onclick={handleSubmit}>Continue to sign up</Button>
     </Dialog.Footer>
   </Dialog.Content>

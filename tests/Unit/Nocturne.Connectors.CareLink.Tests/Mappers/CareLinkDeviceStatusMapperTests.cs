@@ -7,6 +7,8 @@ namespace Nocturne.Connectors.CareLink.Tests.Mappers;
 
 public class CareLinkDeviceStatusMapperTests
 {
+    private static readonly DateTime Now = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+
     private static CareLinkData CreatePumpData() => new()
     {
         MedicalDeviceFamily = "BLE",
@@ -37,7 +39,7 @@ public class CareLinkDeviceStatusMapperTests
         var data = CreatePumpData();
         data.TherapyAlgorithmState = new CareLinkTherapyAlgorithmState { AutoModeShieldState = shieldState };
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Pump!.PumpMode.Should().Be(expectedMode);
     }
@@ -47,7 +49,7 @@ public class CareLinkDeviceStatusMapperTests
     {
         var data = CreatePumpData();
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Pump!.PumpMode.Should().BeNull();
     }
@@ -56,7 +58,7 @@ public class CareLinkDeviceStatusMapperTests
     public void Map_NonGuardian_PopulatesPumpStatusWithBatteryReservoirAndIob()
     {
         var data = CreatePumpData();
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result.Should().NotBeNull();
         result!.Pump.Should().NotBeNull();
@@ -72,7 +74,7 @@ public class CareLinkDeviceStatusMapperTests
     public void Map_NonGuardian_SetsUploaderBatteryFromConduit()
     {
         var data = CreatePumpData();
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Uploader.Should().NotBeNull();
         result.Uploader!.Battery.Should().Be(72);
@@ -82,7 +84,7 @@ public class CareLinkDeviceStatusMapperTests
     public void Map_Guardian_OmitsPumpStatus()
     {
         var data = CreateGuardianData();
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result.Should().NotBeNull();
         result!.Pump.Should().BeNull();
@@ -92,7 +94,7 @@ public class CareLinkDeviceStatusMapperTests
     public void Map_Guardian_SetsUploaderBatteryFromMedicalDevice()
     {
         var data = CreateGuardianData();
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Uploader.Should().NotBeNull();
         result.Uploader!.Battery.Should().Be(90);
@@ -102,7 +104,7 @@ public class CareLinkDeviceStatusMapperTests
     public void Map_SetsDeviceNameCorrectly()
     {
         var data = CreatePumpData();
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Device.Should().Be("CareLink BLE");
     }
@@ -110,7 +112,7 @@ public class CareLinkDeviceStatusMapperTests
     [Fact]
     public void Map_ReturnsNull_WhenDataIsNull()
     {
-        CareLinkDeviceStatusMapper.Map(null).Should().BeNull();
+        CareLinkDeviceStatusMapper.Map(null, Now).Should().BeNull();
     }
 
     [Fact]
@@ -120,7 +122,7 @@ public class CareLinkDeviceStatusMapperTests
         data.PumpModelNumber = "MMT-1885";
         data.MedicalDeviceSerialNumber = "NG4304436H";
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Pump!.Model.Should().Be("MMT-1885");
         result.Pump.Serial.Should().Be("NG4304436H");
@@ -133,7 +135,7 @@ public class CareLinkDeviceStatusMapperTests
         data.SensorState = "NO_ERROR_MESSAGE";
         data.CgmInfo = new CareLinkCgmInfo { SensorType = "DURABLE" };
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Cgm.Should().NotBeNull();
         result.Cgm!.Manufacturer.Should().Be("Medtronic");
@@ -146,7 +148,7 @@ public class CareLinkDeviceStatusMapperTests
         var data = CreatePumpData();
         data.SensorState = "NO_ERROR_MESSAGE";
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Cgm.Should().NotBeNull();
         result.Cgm!.Model.Should().Be("Guardian");
@@ -159,7 +161,7 @@ public class CareLinkDeviceStatusMapperTests
         data.SensorState = null;
         data.CgmInfo = null;
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Cgm.Should().BeNull();
     }
@@ -170,7 +172,7 @@ public class CareLinkDeviceStatusMapperTests
         var data = CreatePumpData();
         data.MedicalDeviceSuspended = true;
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Pump!.Status!.Suspended.Should().BeTrue();
     }
@@ -182,7 +184,7 @@ public class CareLinkDeviceStatusMapperTests
         data.SensorState = "NO_ERROR_MESSAGE";
         data.GstBatteryLevel = 71;
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Cgm!.TransmitterBattery.Should().Be(71);
     }
@@ -199,7 +201,7 @@ public class CareLinkDeviceStatusMapperTests
             HardwareRevision = "A2.01",
         };
 
-        var result = CareLinkDeviceStatusMapper.Map(data);
+        var result = CareLinkDeviceStatusMapper.Map(data, Now);
 
         result!.Pump!.Model.Should().Be("MMT-1885");
         result.Pump.Extended.Should().ContainKey("firmwareRevision");

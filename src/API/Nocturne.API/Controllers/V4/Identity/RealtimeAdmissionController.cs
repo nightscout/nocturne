@@ -47,9 +47,9 @@ public class RealtimeAdmissionController : ControllerBase
             tenant.TenantId,
             authorization?.CanJoinTenantRelay ?? false,
             authorization?.OwnSubjectId,
-            authorization is { CanJoinTenantRelay: true }
-                ? [.. RealtimeCategories.All.Where(authorization.MayReceiveCategory)]
-                : [],
+            authorization is null
+                ? []
+                : [.. RealtimeCategories.All.Where(authorization.MayReceiveCategory)],
             authorization?.HistoryClamped ?? false,
             authorization is { CanJoinTenantRelay: true } && authorization.Satisfies(Scope.AlertsAcknowledge)));
     }
@@ -71,8 +71,9 @@ public class RealtimeAdmissionController : ControllerBase
 /// </param>
 /// <param name="Categories">
 /// The <see cref="RealtimeCategories"/> whose storage broadcasts the caller may receive through the
-/// bridge. Empty for a caller that may not join the tenant room (a guest link or an anonymous share),
-/// whose socket the bridge keeps out of every room, and for a history-clamped caller.
+/// bridge, as <c>DataHub.Subscribe</c> would join them. A guest link that may not join the tenant
+/// room still receives these. Empty for an anonymous share, which proves no hub credential, and for a
+/// history-clamped caller.
 /// </param>
 /// <param name="HistoryClamped">Whether the caller may read only the last 24 hours.</param>
 /// <param name="MayAck">

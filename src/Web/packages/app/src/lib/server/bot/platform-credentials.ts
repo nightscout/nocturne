@@ -1,10 +1,10 @@
-import { env } from "$env/dynamic/private";
-import type { PlatformCredentials } from "$api";
+import { DISCORD_APPLICATION_ID, DISCORD_CLIENT_SECRET } from "$app/env/private";
+import type { PlatformCredentials } from "#lib/api/index.js";
 import {
 	createServerApiClient,
 	getApiBaseUrl,
-} from "$lib/server/api-client-factory";
-import { getHashedInstanceKey } from "$lib/server/instance-key";
+} from "#lib/server/api-client-factory.js";
+import { getHashedInstanceKey } from "#lib/server/instance-key.js";
 
 /**
  * Fetches all decrypted platform credentials over the instance-key
@@ -56,7 +56,7 @@ export async function getDiscordOAuthConfig(
 		};
 	}
 	return {
-		applicationId: env.DISCORD_APPLICATION_ID || null,
-		clientSecret: env.DISCORD_CLIENT_SECRET || null,
+		applicationId: DISCORD_APPLICATION_ID || null,
+		clientSecret: DISCORD_CLIENT_SECRET || null,
 	};
 }

@@ -29,7 +29,6 @@ public class IobCobSeriesTests
 
     private static TherapySnapshot Snapshot(double basalRate) => new(
         dia: 3.0,
-        peakMinutes: 75,
         carbsPerHour: 30.0,
         timezone: null,
         ccpPercentage: null,
@@ -163,6 +162,29 @@ public class IobCobSeriesTests
         var single = Calculator.CalcBolus(bolus, timeline.SnapshotAt(Now), Now).IobContrib;
         Assert.True(single > 0);
         Assert.Equal(single, tick.BolusIob!.Value, 3);
+    }
+
+    [Fact]
+    public void ABolusWithItsOwnPeak_AgreesWithTheSingleTickAtEveryTick()
+    {
+        // Its record DIA is 3 h, but its curve runs for 5 h, so the window must too.
+        var bolus = new Bolus
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(Now - 330 * Minute).UtcDateTime,
+            Insulin = 4,
+            InsulinContext = new TreatmentInsulinContext { Dia = 3, Peak = 55 },
+        };
+        var timeline = Flat(1.0);
+
+        var ticks = IobCobSeries.Build(
+            Calculator, new Mock<ICobCalculator>(MockBehavior.Strict).Object, [bolus], [], [], timeline,
+            new ScheduledBasal(timeline.BasalSegments(), []), null, Now - 330 * Minute, Now, Now, 5 * Minute);
+
+        Assert.Contains(ticks, tick => tick.Mills == Now - 60 * Minute && tick.BolusIob > 0);
+        Assert.All(ticks, tick => Assert.Equal(
+            Math.Round(Calculator.CalcBolus(bolus, timeline.SnapshotAt(tick.Mills), tick.Mills).IobContrib, 3),
+            tick.BolusIob!.Value,
+            9));
     }
 
     [Fact]

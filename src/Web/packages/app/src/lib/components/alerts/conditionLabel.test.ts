@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AlertConditionType } from "$api-clients";
+import { AlertConditionType } from "#lib/api/generated/nocturne-api-client.js";
 import { conditionLabel } from "./conditionLabel.svelte";
 import { LEAF_FACTS } from "./factCatalog";
 import { toAlertConditionType } from "./types";

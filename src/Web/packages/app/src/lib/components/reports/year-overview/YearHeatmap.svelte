@@ -3,7 +3,7 @@
   import { Chart, Layer, Path, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
   import { timeMonth, timeMonths } from "d3-time";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -13,16 +13,16 @@
     formatMonthLabel,
     formatShortDate,
     formatWeekdayDate,
-  } from "$lib/utils/formatting";
-  import { toDayString } from "$lib/utils/date-range";
-  import { firstDayOfWeek } from "$lib/components/calendar/calendar-date";
-  import type { GlucoseUnits } from "$lib/utils/formatting";
-  import { getDataTypeLabel } from "$lib/utils/data-type-labels";
+  } from "#lib/utils/formatting.js";
+  import { toDayString } from "#lib/utils/date-range.js";
+  import { firstDayOfWeek } from "#lib/components/calendar/calendar-date.js";
+  import type { GlucoseUnits } from "#lib/utils/formatting.js";
+  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
   import { yearCalendarBounds } from "./year-bounds";
   import { layoutYear, monthOutlinePath } from "./week-layout";
   import VisibleChart from "./VisibleChart.svelte";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
-  import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
+  import { patternClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
   import type { DailySummaryDay, YearCalendarDatum } from "./calendar-datum";
 
 
@@ -43,8 +43,11 @@
     unitLabel,
     formatUnits,
     getVisibleCounts,
-    sentinelElement = $bindable(),
-  }: {
+    sentinelElement = $bindable()
+
+    /** Texture laid over a cell's fill to mark its band in black and white. */
+    /** Very-low, low, high and very-high boundaries in mg/dL, in the order the colour ranges run. */
+  }: { 
     year: number;
     yearIndex: number;
     loadingYears: Set<number>;
@@ -53,11 +56,9 @@
     yearData: Map<number, DailySummaryDay[]>;
     transformYearData: (days: DailySummaryDay[]) => YearCalendarDatum[];
     getCellFill: (data: YearCalendarDatum | undefined) => string;
-    /** Texture laid over a cell's fill to mark its band in black and white. */
     getCellHatch?: (data: YearCalendarDatum | undefined) => TextureKey | null;
     navigateToDayInReview: (dateStr: string) => void;
     glucoseColorScale: (mgdl: number) => string;
-    /** Very-low, low, high and very-high boundaries in mg/dL, in the order the colour ranges run. */
     glucoseBands: readonly number[];
     units: GlucoseUnits;
     unitLabel: string;
@@ -175,9 +176,7 @@
                   {@const monthX =
                     layout.columns.find((c) => c.start >= monthDate)?.column ?? 0}
                   <a
-                    href={resolve(
-                      `/calendar?year=${monthDate.getFullYear()}&month=${monthDate.getMonth() + 1}`
-                    )}
+                    href={resolve(`calendar?year=${monthDate.getFullYear()}&month=${monthDate.getMonth() + 1}`)}
                   >
                     <text
                       x={monthX * cellSize}
@@ -204,8 +203,8 @@
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <rect
-                    {x}
-                    {y}
+                    x={x}
+                    y={y}
                     width={cellSize - padding * 2}
                     height={cellSize - padding * 2}
                     rx={4}
@@ -217,25 +216,25 @@
                         navigateToDayInReview(data.dateString);
                       }
                     }}
-                  />
+                  ></rect>
                   {#if hatch}
                     <rect
-                      {x}
-                      {y}
+                      x={x}
+                      y={y}
                       width={cellSize - padding * 2}
                       height={cellSize - padding * 2}
                       rx={4}
                       fill="none"
                       pointer-events="none"
                       class={patternClass(hatch)}
-                    />
+                    ></rect>
                   {/if}
                 {/each}
                 {#each layout.columns as column (column.column)}
                   {@const labelX = column.column * cellSize + cellSize / 2}
                   {@const labelY = 7 * cellSize + 10}
                   <a
-                    href={resolve(`/reports/week-to-week?from=${column.from}&to=${column.to}&isDefault=false`)}
+                    href={resolve(`reports/week-to-week?from=${column.from}&to=${column.to}&isDefault=false`)}
                   >
                     <text
                       x={labelX}

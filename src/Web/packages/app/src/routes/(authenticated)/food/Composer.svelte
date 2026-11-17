@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { Key } from '@nocturne/ui/keys';
-	import type { Food } from '$api';
+	import { useModifierKey } from '@nocturne/ui/modifier-key';
+	import type { Food } from '#lib/api/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
-	import { DEFAULT_PORTION, DEFAULT_GI, FoodFields } from '$lib/components/food';
-	import { Button } from '$lib/components/ui/button';
-	import { PaintedMoment, SubmitButton, toastSaved } from '$lib/forms';
+	import { DEFAULT_PORTION, DEFAULT_GI, FoodFields } from '#lib/components/food/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { PaintedMoment, SubmitButton, toastSaved } from '#lib/forms/index.js';
 	import { getFoodState } from './food-context.js';
 
 	interface Props {
@@ -16,6 +17,7 @@
 
 	const { onadd, onclose }: Props = $props();
 	const foodState = getFoodState();
+	const modifier = useModifierKey();
 
 	function emptyDraft(): Food {
 		return {
@@ -111,7 +113,7 @@
 		</div>
 		<span class="font-semibold text-sm">Add food</span>
 		<span class="text-muted-foreground text-xs">
-			Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close
+			Tab through fields · Enter to save · {modifier.label}+Enter to save and add another · Esc to close
 		</span>
 		<Button type="button" variant="ghost" size="icon-sm" class="ml-auto" onclick={onclose}><X class="h-3.5 w-3.5" /></Button>
 	</div>
@@ -121,7 +123,7 @@
 			<div class="flex items-center gap-2">
 				<PaintedMoment count={addedAnother} artwork="apple" class="text-xs text-muted-foreground">Added</PaintedMoment>
 				<Button type="submit" variant="outline" size="sm" disabled={!canSave}>Save</Button>
-				<SubmitButton type="button" size="sm" saved={addedAnother} disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-xs opacity-60">⌘+Enter</span></SubmitButton>
+				<SubmitButton type="button" size="sm" saved={addedAnother} disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-xs opacity-60">{modifier.label}+Enter</span></SubmitButton>
 			</div>
 		{/snippet}
 	</FoodFields>

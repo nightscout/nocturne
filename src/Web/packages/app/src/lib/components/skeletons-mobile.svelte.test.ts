@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import type { Component } from "svelte";
-import CalendarSkeleton from "$lib/components/calendar/CalendarSkeleton.svelte";
-import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
-import PageBodyLoading from "$lib/components/reports/loop-analysis/PageBodyLoading.svelte";
-import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
+import CalendarSkeleton from "#lib/components/calendar/CalendarSkeleton.svelte";
+import ReportsSkeleton from "#lib/components/reports/ReportsSkeleton.svelte";
+import PageBodyLoading from "#lib/components/reports/loop-analysis/PageBodyLoading.svelte";
+import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
 
 const PHONE_WIDTH = 360;
 const original = [window.innerWidth, window.innerHeight] as const;

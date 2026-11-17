@@ -148,7 +148,7 @@ public class AlertDeliveryEndpointTests
     public void Heartbeat_Returns200()
     {
         // Arrange
-        var controller = new SystemController(new BotHealthService());
+        var controller = new SystemController(new BotHealthService(TimeProvider.System));
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()

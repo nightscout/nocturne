@@ -8,6 +8,14 @@ const LABEL_MAP: Record<string, string> = {
   compression_low_detected_subtitle:
     "Possible overnight compression lows are ready to review",
   review: "Review",
+  release_notes: "Release notes",
+  update_available: "A Nocturne update is available",
+  instance_key_changed: "Enter some secrets again",
+  instance_key_changed_platform: "Enter the platform credentials again",
+  open_connectors: "Open connectors",
+  open_alerts: "Open alerts",
+  open_platform_settings: "Open platform settings",
+  release_installed: "Nocturne is updated",
   share_link_rotated: "Your sharing link has been replaced",
   share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",

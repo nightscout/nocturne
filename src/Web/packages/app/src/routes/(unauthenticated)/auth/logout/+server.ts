@@ -1,7 +1,7 @@
 import type { RequestHandler } from "./$types";
 import { redirect } from "@sveltejs/kit";
-import { clearAuthCookies } from "$lib/config/auth-cookies";
-import { logout } from "$api/generated/oidcs.generated.remote";
+import { clearAuthCookies } from "#lib/config/auth-cookies.js";
+import { logout } from "#lib/api/generated/oidcs.generated.remote.js";
 
 /**
  * Logout is POST-only: a GET that revokes the session is reachable from any
@@ -20,5 +20,5 @@ export const POST: RequestHandler = async ({ cookies }) => {
   // Clear cookies whether or not the backend revocation succeeded.
   clearAuthCookies(cookies);
 
-  throw redirect(303, providerLogoutUrl ?? "/");
+  throw redirect(303, providerLogoutUrl ?? "/", { external: true });
 };

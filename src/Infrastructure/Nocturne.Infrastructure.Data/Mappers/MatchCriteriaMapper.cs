@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Mappers;
 /// Builds each record type's <see cref="MatchCriteria"/> from its entity.
 /// <para>
 /// Both deduplication passes resolve criteria here: the repositories when handing freshly
-/// inserted rows to <c>DeduplicateBatchAsync</c>, and <c>DeduplicationService</c> when reloading
+/// inserted rows to <c>DeduplicateBatchAsync</c>, and <c>LinkedRecordTypes</c> when reloading
 /// stored rows for the merge and reconcile passes. The two passes compare the tolerances against
 /// each other, so a value defined separately per pass makes them disagree about which records are
 /// the same event rather than merely drift out of style.
@@ -45,7 +45,7 @@ public static class MatchCriteriaMapper
 
     /// <summary>
     /// Criteria for a bolus calculation. A correction-only calculation carries no carb input and is
-    /// reported as zero; <c>DeduplicationService.CriteriaMatch</c> refuses to wide-match those.
+    /// reported as zero; <c>DuplicateMatching.CriteriaMatch</c> refuses to wide-match those.
     /// </summary>
     public static MatchCriteria From(BolusCalculationEntity entity) =>
         new() { Carbs = entity.CarbInput ?? 0, CarbsTolerance = CarbsTolerance };
@@ -76,7 +76,7 @@ public static class MatchCriteriaMapper
     /// </summary>
     public static MatchCriteria From(StateSpanEntity entity)
     {
-        StateSpanCategory? category = CategoriesByName.TryGetValue(entity.Category, out var parsed) ? parsed : null;
+        StateSpanCategory? category = StateSpanMapper.TryParseCategory(entity.Category, out var parsed) ? parsed : null;
         return new()
         {
             Category = category,
@@ -86,13 +86,6 @@ public static class MatchCriteriaMapper
                 : null
         };
     }
-
-    /// <summary>
-    /// Categories keyed by name. A name lookup rather than <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>,
-    /// which also accepts the numeric form and would read a column holding "3" as a real category.
-    /// </summary>
-    private static readonly Dictionary<string, StateSpanCategory> CategoriesByName =
-        Enum.GetValues<StateSpanCategory>().ToDictionary(c => c.ToString(), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Criteria for a note. Whitespace runs collapse so a copy re-wrapped by another source still

@@ -153,7 +153,7 @@ function registerWith(
  * @example
  * ```svelte
  * <script>
- *   import { useResourceContext } from "$lib/hooks/resource-context.svelte";
+ *   import { useResourceContext } from "#lib/hooks/resource-context.svelte.js";
  *   import { resource } from "runed";
  *
  *   const myResource = resource(...);
@@ -200,14 +200,14 @@ export function useResourceContext(config: {
  * @example
  * ```svelte
  * <script>
- *   import { contextResource } from "$lib/hooks/resource-context.svelte";
- *   import { getReportsData } from "$api/reports.remote";
- *   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
+ *   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+ *   import { getReportsAnalysis } from "#lib/api/reports.remote.js";
+ *   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
  *
  *   const reportsParams = requireDateParamsContext(14);
  *
  *   const reportsQuery = contextResource(
- *     () => getReportsData(reportsParams.dateRangeInput),
+ *     () => getReportsAnalysis(reportsParams.dateRangeInput),
  *     { errorTitle: "Error Loading AGP Report", dateParams: reportsParams }
  *   );
  *

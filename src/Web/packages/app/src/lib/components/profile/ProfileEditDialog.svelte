@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import * as Table from "$lib/components/ui/table";
-  import * as Select from "$lib/components/ui/select";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Badge } from "$lib/components/ui/badge";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
 
   // Local type definitions for profile
   interface TimeValue {
@@ -37,9 +37,9 @@
     isExternallyManaged?: boolean;
     store?: Record<string, ProfileData>;
   }
-  import { BG_UNITS } from "$lib/constants/profile-icons";
+  import { BG_UNITS } from "#lib/constants/profile-icons.js";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
-  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import TimezoneCombobox from "#lib/components/patient/TimezoneCombobox.svelte";
   import Edit from "@lucide/svelte/icons/square-pen";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -199,7 +199,7 @@
         bind:value={activeTab}
         class="flex-1 overflow-hidden flex flex-col"
       >
-        <Tabs.List class="grid w-full grid-cols-5">
+        <Tabs.List variant="wrap">
           <Tabs.Trigger value="general">General</Tabs.Trigger>
           <Tabs.Trigger value="basal">Basal</Tabs.Trigger>
           <Tabs.Trigger value="carbratio">I:C ratio</Tabs.Trigger>

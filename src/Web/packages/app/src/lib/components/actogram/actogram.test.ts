@@ -10,7 +10,7 @@ import {
 	type GlucosePoint,
 	type RowDataPoint,
 } from './actogram';
-import { servedDay, servedDays } from '$lib/test-stubs/actogram-days';
+import { servedDay, servedDays } from '#lib/test-stubs/actogram-days.js';
 
 describe('sliceIntoRows', () => {
 	const days = servedDays('2026-04-20', 3);

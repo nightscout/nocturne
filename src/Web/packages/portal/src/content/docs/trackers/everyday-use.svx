@@ -4,7 +4,7 @@ title: Everyday use
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Everyday use
@@ -14,8 +14,8 @@ to two things: start it when you put something new on, and complete it when you
 take it off. If your pump or loop already reports those changes, Nocturne can
 do both for you.
 
-Running trackers are listed on the **Active** tab under **Settings >
-Notifications & Trackers**. Each row shows how long it has left, how old it is
+Running trackers are listed on the **Active** tab on the **Trackers**
+page. Each row shows how long it has left, how old it is
 and when it started.
 
 <Screenshot id="trackers-active" />

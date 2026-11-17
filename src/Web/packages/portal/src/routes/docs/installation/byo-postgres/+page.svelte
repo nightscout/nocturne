@@ -1,9 +1,9 @@
 <script lang="ts">
     import { ArtworkHero } from "water-ui";
-    import { DOCS_HERO } from "$lib/data/docs-artwork";
-    import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
-    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-    import bootstrapSql from "$lib/release/bootstrap-roles.sql?raw";
+    import { DOCS_HERO } from "#lib/data/docs-artwork.js";
+    import CodeBlock from "#lib/components/docs/CodeBlock.svelte";
+    import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
+    import bootstrapSql from "#lib/release/bootstrap-roles.sql?raw";
 
     const hero = DOCS_HERO["installation/byo-postgres"];
 </script>

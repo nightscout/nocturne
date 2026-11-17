@@ -178,9 +178,9 @@ public class SensorIntegrityServiceTests
             .Setup(r => r.GetForAnalyticsAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()))
             .ReturnsAsync((DateTime? _, DateTime? _, string? _, string? source, int _, int _, bool _,
-                DateTime? _, Guid? _, CancellationToken _, Guid? _) =>
+                DateTime? _, Guid? _, CancellationToken _, Guid? _, GlucoseStreams _) =>
                 source is null ? readings : readings.Where(r => r.DataSource == source).ToList());
 
         var bolusRepo = new Mock<IBolusRepository>();

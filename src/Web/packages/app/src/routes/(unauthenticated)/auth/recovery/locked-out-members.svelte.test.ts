@@ -2,8 +2,8 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
-import type { LockedOutMember } from "$api-clients";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { LockedOutMember } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let members: LockedOutMember[];
 let issueImpl: (subjectId: string) => Promise<unknown>;
@@ -12,7 +12,7 @@ vi.mock("$app/state", () => ({
   page: { url: new URL("https://acme.nocturne.example/auth/recovery") },
 }));
 
-vi.mock("$lib/api/generated/memberRecoveries.generated.remote", () => ({
+vi.mock("#lib/api/generated/memberRecoveries.generated.remote.js", () => ({
   getLockedOutMembers: () => remoteQuery(() => members),
   issueRecoveryCode: (subjectId: string) => issueImpl(subjectId),
 }));

@@ -4,8 +4,8 @@ title: When an alert fires
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
-  import AlertSimulator from '$lib/components/docs/alert-simulator/AlertSimulator.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
+  import AlertSimulator from '#lib/components/docs/alert-simulator/AlertSimulator.svelte';
 </script>
 
 # When an alert fires

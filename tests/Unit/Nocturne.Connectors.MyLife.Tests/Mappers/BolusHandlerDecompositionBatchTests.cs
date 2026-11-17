@@ -9,6 +9,8 @@ namespace Nocturne.Connectors.MyLife.Tests.Mappers;
 
 public class BolusHandlerDecompositionBatchTests
 {
+    private static readonly DateTime Now = new(2026, 7, 20, 10, 0, 0, DateTimeKind.Utc);
+
     private readonly MyLifeEventProcessor _processor = new();
 
     private static MyLifeEvent CreateBolusEvent(
@@ -38,13 +40,13 @@ public class BolusHandlerDecompositionBatchTests
     {
         var events = new[] { CreateBolusEvent(insulin: 2.5, carbs: 30) };
 
-        var result = _processor.MapRecords(events, false, false, 0);
+        var result = _processor.MapRecords(events, false, false, 0, Now);
 
         result.DecompositionBatches.Should().HaveCount(1);
         var batch = result.DecompositionBatches[0];
         batch.Source.Should().Be("mylife");
         batch.SourceRecordId.Should().NotBeNullOrEmpty();
-        batch.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        batch.CreatedAt.Should().Be(Now);
     }
 
     [Fact]
@@ -52,7 +54,7 @@ public class BolusHandlerDecompositionBatchTests
     {
         var events = new[] { CreateBolusEvent(insulin: 2.5, carbs: 30) };
 
-        var result = _processor.MapRecords(events, false, false, 0);
+        var result = _processor.MapRecords(events, false, false, 0, Now);
 
         result.DecompositionBatches.Should().HaveCount(1);
         var batchId = result.DecompositionBatches[0].Id;
@@ -69,7 +71,7 @@ public class BolusHandlerDecompositionBatchTests
     {
         var events = new[] { CreateBolusEvent(insulin: 3.0, carbs: 45, isCalculated: true) };
 
-        var result = _processor.MapRecords(events, false, false, 0);
+        var result = _processor.MapRecords(events, false, false, 0, Now);
 
         result.DecompositionBatches.Should().HaveCount(1);
         result.BolusCalculations.Should().HaveCount(1);
@@ -81,7 +83,7 @@ public class BolusHandlerDecompositionBatchTests
     {
         var events = new[] { CreateBolusEvent(insulin: 2.5) };
 
-        var result = _processor.MapRecords(events, false, false, 0);
+        var result = _processor.MapRecords(events, false, false, 0, Now);
 
         result.DecompositionBatches.Should().BeEmpty();
         result.Boluses.Should().HaveCount(1);
@@ -98,7 +100,7 @@ public class BolusHandlerDecompositionBatchTests
             CreateBolusEvent(insulin: 3.0, carbs: 50),
         };
 
-        var result = _processor.MapRecords(events, false, false, 0);
+        var result = _processor.MapRecords(events, false, false, 0, Now);
 
         result.DecompositionBatches.Should().HaveCount(2);
         result.DecompositionBatches.Select(b => b.Id).Should().OnlyHaveUniqueItems();
@@ -110,9 +112,9 @@ public class BolusHandlerDecompositionBatchTests
         var events = new[] { CreateBolusEvent(insulin: 2.5, carbs: 30) };
         var eventList = events.ToList();
 
-        var expected = _processor.MapRecords(eventList, false, false, 0);
+        var expected = _processor.MapRecords(eventList, false, false, 0, Now);
 
-        var context = MyLifeContext.Create(eventList, false, false, 0);
+        var context = MyLifeContext.Create(eventList, false, false, 0, Now);
         var actual = _processor.MapRecords(eventList, context);
 
         actual.Boluses.Should().HaveCount(expected.Boluses.Count);
@@ -129,7 +131,7 @@ public class BolusHandlerDecompositionBatchTests
             CreateBolusEvent(insulin: 3.0, carbs: 30),
         };
 
-        var result = _processor.MapRecords(events, false, false, 0);
+        var result = _processor.MapRecords(events, false, false, 0, Now);
 
         result.DecompositionBatches.Should().HaveCount(3);
         var batchIds = result.DecompositionBatches.Select(b => b.Id).ToList();

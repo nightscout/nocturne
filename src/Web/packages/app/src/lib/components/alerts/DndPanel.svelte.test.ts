@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { TenantAlertSettingsResponse } from "$api-clients";
+import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
 
 // The panel reads DND state through the generated remote functions; `update`
 // is swapped per test so a rejection can stand in for the server's 403.
@@ -16,12 +16,13 @@ let settings: TenantAlertSettingsResponse = idle;
 
 let updateImpl: () => Promise<TenantAlertSettingsResponse>;
 
-vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
-  get: () => ({ run: () => Promise.resolve(settings) }),
+vi.mock("#lib/api/generated/tenantAlertSettings.generated.remote.js", () => ({
+  get: () => createQueryResource(() => Promise.resolve(settings)),
   update: () => updateImpl(),
 }));
 
 import DndPanel from "./DndPanel.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const dndToggle = () => page.getByRole("button", { name: /Do not disturb/i });
 

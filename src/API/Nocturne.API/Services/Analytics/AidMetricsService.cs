@@ -126,9 +126,9 @@ public class AidMetricsService : IAidMetricsService
         }
 
         if (aidDurationHours > 0)
-            result.AidActivePercent = Math.Round(weightedAidActive / aidDurationHours, 1);
+            result.AidActivePercent = ScaledRounding.Round(weightedAidActive / aidDurationHours, 1);
         if (pumpDurationHours > 0)
-            result.PumpUsePercent = Math.Round(weightedPumpUse / pumpDurationHours, 1);
+            result.PumpUsePercent = ScaledRounding.Round(weightedPumpUse / pumpDurationHours, 1);
 
         return result;
     }

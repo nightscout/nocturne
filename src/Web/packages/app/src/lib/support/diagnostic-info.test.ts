@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import type { SupportDiagnosticsResponse } from "$api-clients";
+import type { SupportDiagnosticsResponse } from "#lib/api/generated/nocturne-api-client.js";
 import { buildDiagnosticInfo, type DiagnosticSources } from "./diagnostic-info";
-import { isRecord } from "$lib/utils/type-guards";
+import { isRecord } from "#lib/utils/type-guards.js";
 
 const lastSync = "2026-09-10T21:00:00.000Z";
 

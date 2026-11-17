@@ -1,21 +1,21 @@
 <script lang="ts">
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  } from "#lib/components/ui/select/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     predictionMinutes,
     predictionEnabled,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
 
-  import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
+  import type { PredictionDisplayMode } from "#lib/stores/appearance-store.svelte.js";
 
   interface Props {
     /** Whether to show prediction controls (from parent) */

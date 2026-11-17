@@ -1,49 +1,49 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { AvailableConnector } from "$lib/api/generated/nocturne-api-client";
+  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
   import {
     getAllConnectorStatus,
     getConfiguration as getConnectorConfiguration,
     getSchema as getConnectorSchema,
     getEffectiveConfiguration as getConnectorEffectiveConfig,
     setActive as setConnectorActive,
-  } from "$lib/api/generated/configurations.generated.remote";
-  import { normalizeConnectorJsonSchema, type JsonSchema } from "$lib/utils/connector-json-schema";
+  } from "#lib/api/generated/configurations.generated.remote.js";
+  import { normalizeConnectorJsonSchema, type JsonSchema } from "#lib/utils/connector-json-schema.js";
   import {
     saveConfiguration,
     saveSecrets,
-  } from "$lib/api/generated/configurations.generated.remote";
+  } from "#lib/api/generated/configurations.generated.remote.js";
   import {
     getServicesOverview,
     getConnectorCapabilities,
     getConnectorDataSummary,
-  } from "$lib/api/generated/services.generated.remote";
-  import { getMyPermissions } from "$lib/api/generated/myPermissions.generated.remote";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
+  } from "#lib/api/generated/services.generated.remote.js";
+  import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import ConnectorConfigForm from "$lib/components/settings/ConnectorConfigForm.svelte";
-  import CareLinkConnectPanel from "$lib/components/connectors/CareLinkConnectPanel.svelte";
-  import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import ConnectorConfigForm from "#lib/components/settings/ConnectorConfigForm.svelte";
+  import CareLinkConnectPanel from "#lib/components/connectors/CareLinkConnectPanel.svelte";
+  import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
 
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import Lock from "@lucide/svelte/icons/lock";
   import ExternalLink from "@lucide/svelte/icons/external-link";
-  import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
-  import { EmptyState } from "$lib/components/shared";
-  import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import ConnectorSelectionGrid from "#lib/components/connectors/ConnectorSelectionGrid.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import ConnectorDangerZone from "#lib/components/connectors/ConnectorDangerZone.svelte";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
   interface Props {
     /** Pre-select a specific connector (skips selection grid) */
@@ -54,6 +54,8 @@
     onCancel?: () => void;
     /** Show enable/disable toggle. Default: false for setup, true when connectorId set */
     showToggle?: boolean;
+    /** Show the configuration form. False for a connector that has nothing to configure. Default: true */
+    showConfiguration?: boolean;
     /** Show danger zone (delete config/data). Default: false */
     showDangerZone?: boolean;
     /** Show capabilities card. Default: false */
@@ -62,6 +64,8 @@
     primaryAction?: "save-and-finish" | "save-only";
     /** Whether to show .env variable name hints in the config form. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
+    /** See the config form's `saveLabel`. */
+    saveLabel?: string;
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
@@ -73,10 +77,12 @@
     onComplete,
     onCancel,
     showToggle = connectorId !== undefined,
+    showConfiguration = true,
     showDangerZone = false,
     showCapabilities = false,
     primaryAction = connectorId ? "save-only" : "save-and-finish",
     showEnvVarHints = true,
+    saveLabel,
     extras,
   }: Props = $props();
 
@@ -369,7 +375,7 @@
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        {#if canManage}
+        {#if canManage && showConfiguration}
           <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
             {isActive ? "Active" : "Inactive"}
           </Badge>
@@ -423,7 +429,7 @@
             </p>
           </CardContent>
         </Card>
-      {:else if hasRuntimeConfig}
+      {:else if showConfiguration && hasRuntimeConfig}
         <ConnectorConfigForm
           {schema}
           bind:configuration
@@ -431,9 +437,10 @@
           {effectiveConfig}
           {hasSecrets}
           {showEnvVarHints}
+          {saveLabel}
           onSave={handleSave}
         />
-      {:else}
+      {:else if showConfiguration}
         <EmptyState
           art="plug"
           variant="card"

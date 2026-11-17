@@ -1,25 +1,25 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import * as Table from "$lib/components/ui/table";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import CircleDashed from "@lucide/svelte/icons/circle-dashed";
   import Info from "@lucide/svelte/icons/info";
-  import { getHourlyPatterns } from "$api/reports.remote";
+  import { getHourlyPatterns } from "#lib/api/reports.remote.js";
   import {
     HourlyClockBasis,
     HourlyComparison,
     TimeZoneUnavailableReason,
     type HourlyPattern,
-  } from "$lib/api";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, bgRange, formatNumber, formatShortDate } from "$lib/utils/formatting";
-  import HourlyRangeBars from "$lib/components/reports/hourly-patterns/HourlyRangeBars.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import HourlyGlance from "$lib/components/reports/hourly-patterns/HourlyGlance.svelte";
-  import { hourSpan } from "$lib/components/reports/hourly-patterns/hour-labels";
+  } from "#lib/api/index.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { bg, bgLabel, bgRange, formatNumber, formatShortDate } from "#lib/utils/formatting.js";
+  import HourlyRangeBars from "#lib/components/reports/hourly-patterns/HourlyRangeBars.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import HourlyGlance from "#lib/components/reports/hourly-patterns/HourlyGlance.svelte";
+  import { hourSpan } from "#lib/components/reports/hourly-patterns/hour-labels.js";
 
   const reportsParams = requireDateParamsContext(14);
 

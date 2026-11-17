@@ -93,7 +93,6 @@ public class CobCalculatorTests
     // overload must reproduce the async path's COB exactly.
     private static TherapySnapshot MatchingSnapshot() => new(
         dia: DefaultDIA,
-        peakMinutes: 75,
         carbsPerHour: DefaultCarbAbsorptionRate,
         timezone: null,
         ccpPercentage: null,

@@ -5,8 +5,10 @@ using System.Text.Json;
 
 namespace Nocturne.Connectors.GoogleHealth.Services;
 
-public sealed class GoogleHealthOAuthClient(HttpClient http)
+public sealed class GoogleHealthOAuthClient(HttpClient http, TimeProvider? timeProvider = null)
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     public Task<JsonElement> ExchangeAuthorizationCodeAsync(
         Dictionary<string, string> form,
         CancellationToken cancellationToken) =>
@@ -57,7 +59,7 @@ public sealed class GoogleHealthOAuthClient(HttpClient http)
                     System.Net.HttpStatusCode.TooManyRequests => "rate_limited",
                     _ => "google_unavailable"
                 },
-                retryAfter: GoogleHealthHttpError.RetryAfter(response),
+                retryAfter: GoogleHealthHttpError.RetryAfter(response, clock.GetUtcNow()),
                 stage: "account_identity",
                 providerStatus: (int)response.StatusCode);
 
@@ -86,7 +88,7 @@ public sealed class GoogleHealthOAuthClient(HttpClient http)
         }
     }
 
-    private static async Task<GoogleHealthException> OAuthErrorAsync(
+    private async Task<GoogleHealthException> OAuthErrorAsync(
         HttpResponseMessage response,
         string invalidGrantCode,
         string stage,
@@ -123,7 +125,7 @@ public sealed class GoogleHealthOAuthClient(HttpClient http)
 
         return new GoogleHealthException(
             code,
-            GoogleHealthHttpError.RetryAfter(response),
+            GoogleHealthHttpError.RetryAfter(response, clock.GetUtcNow()),
             stage,
             providerReason: providerReason,
             providerStatus: (int)response.StatusCode);

@@ -11,6 +11,9 @@ public class PunchCardDay
     /// <summary>Local-midnight Unix milliseconds for the day.</summary>
     public long Timestamp { get; set; }
 
+    /// <summary>The next local midnight in Unix milliseconds: the exclusive end of the day, which is not always 24 hours after <see cref="Timestamp"/>.</summary>
+    public long EndTimestamp { get; set; }
+
     /// <summary>Count of the day's CGM readings.</summary>
     public int TotalReadings { get; set; }
     public int InRangeCount { get; set; }

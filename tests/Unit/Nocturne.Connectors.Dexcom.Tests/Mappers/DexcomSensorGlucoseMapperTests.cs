@@ -22,7 +22,7 @@ public class DexcomSensorGlucoseMapperTests
             null!,
         ];
 
-        var readings = new DexcomSensorGlucoseMapper(NullLogger.Instance).MapBatchData(entries);
+        var readings = new DexcomSensorGlucoseMapper(NullLogger.Instance).MapBatchData(entries, new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc));
 
         readings.Should().ContainSingle().Which.Mgdl.Should().Be(120);
     }

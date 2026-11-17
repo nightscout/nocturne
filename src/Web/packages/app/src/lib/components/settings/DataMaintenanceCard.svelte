@@ -5,37 +5,26 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Link2 from "@lucide/svelte/icons/link-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import Wrench from "@lucide/svelte/icons/wrench";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
-  import DemoDataSection from "$lib/components/connectors/DemoDataSection.svelte";
-  import { resolve } from "$app/paths";
+  import DeduplicationDialog from "#lib/components/connectors/DeduplicationDialog.svelte";
+  import DemoDataSection from "#lib/components/connectors/DemoDataSection.svelte";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
-
-  const isPlatformAdmin = $derived(
-    page.data.isPlatformAdmin === true
-  );
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
 
   // The two tools answer to different gates: deduplication is RequireSuperuser, so it resolves to
   // the wildcard; deleting demo data is tenant.settings and refuses the demo visitor. Data
   // Quality is a page an ordinary member opens to set a sleep schedule, so neither control is
   // offered to someone the API would refuse.
-  const effectivePermissions = $derived(
-    page.data.effectivePermissions ?? []
-  );
-  const canDeduplicate = $derived(satisfiesScope(effectivePermissions, "*"));
-  const canManageData = $derived(
-    canManageConnectors(effectivePermissions, page.data.refusedAsDemoSubject)
-  );
+  const effectivePermissions = $derived(page.data.effectivePermissions ?? []);
 
+  const canDeduplicate = $derived(satisfiesScope(effectivePermissions, "*"));
+  const canManageData = $derived(canManageConnectors(effectivePermissions, page.data.refusedAsDemoSubject));
   let showDeduplicationDialog = $state(false);
   let isDeduplicating = $state(false);
   let showDemoDataDialog = $state(false);
@@ -74,7 +63,7 @@
               variant="outline"
               size="sm"
               class="mt-3"
-              onclick={() => (showDeduplicationDialog = true)}
+              onclick={() => showDeduplicationDialog = true}
             >
               {#if isDeduplicating}
                 <Loader2 class="h-4 w-4 animate-spin" />
@@ -105,36 +94,12 @@
               variant="outline"
               size="sm"
               class="mt-3"
-              onclick={() => (showDemoDataDialog = true)}
-            >
-              <Sparkles class="h-4 w-4" />
-              Remove demo data
-            </Button>
+              onclick={() => showDemoDataDialog = true}
+            ><Sparkles class="h-4 w-4" />Remove demo data</Button>
           </div>
         </div>
       {/if}
 
-      {#if isPlatformAdmin}
-        <a
-          href={resolve("/settings/admin/connector-cursors")}
-          class="group flex items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
-        >
-          <div
-            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
-          >
-            <RefreshCw class="h-5 w-5 text-primary" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <h4 class="font-medium">Reset connector cursors</h4>
-            <p class="text-sm text-muted-foreground mt-1">
-              Re-sync a connector from a chosen point.
-            </p>
-          </div>
-          <ChevronRight
-            class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-          />
-        </a>
-      {/if}
     </CardContent>
   </Card>
 

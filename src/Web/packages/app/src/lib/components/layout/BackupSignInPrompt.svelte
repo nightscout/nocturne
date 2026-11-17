@@ -1,9 +1,9 @@
 <script lang="ts">
   import KeyRound from "@lucide/svelte/icons/key-round";
   import X from "@lucide/svelte/icons/x";
-  import { Banner } from "$lib/components/ui/banner";
-  import { Button } from "$lib/components/ui/button";
-  import { updateStatus } from "$lib/api/generated/coachMarks.generated.remote";
+  import { Banner } from "#lib/components/ui/banner/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { updateStatus } from "#lib/api/generated/coachMarks.generated.remote.js";
 
   // Persisted with the coach marks, so the dismissal is stored per subject per
   // tenant rather than per browser.

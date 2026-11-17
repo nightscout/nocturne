@@ -1,29 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
-import type { DailySummaryDay } from "$api/generated/nocturne-api-client";
-import { yearOverviewMocks } from "$lib/test-stubs/year-overview-remote";
-import { glucoseUnits, yearOverviewColors, applyPreferences, collectPreferences, registerPreferencesWriteThrough, parsePrefsCookie } from "$lib/stores/appearance-store.svelte";
-import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
-import { rampColor, rampPosition, GLUCOSE_LIMITS, GLUCOSE_RAMP } from "$lib/utils/metric-color-focus";
+import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
+import { yearOverviewMocks } from "#lib/test-stubs/year-overview-remote.js";
+import { glucoseUnits, yearOverviewColors, applyPreferences, collectPreferences, registerPreferencesWriteThrough, parsePrefsCookie } from "#lib/stores/appearance-store.svelte.js";
+import { getGlucoseHeatmapFill } from "#lib/utils/chart-colors.js";
+import { rampColor, rampPosition, GLUCOSE_LIMITS, GLUCOSE_RAMP } from "#lib/utils/metric-color-focus.js";
 
-vi.mock("$api/generated/dataOverviews.generated.remote", async () =>
-  import("$lib/test-stubs/year-overview-remote")
+vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", async () =>
+  import("#lib/test-stubs/year-overview-remote.js")
 );
-vi.mock("$lib/hooks/date-params.svelte", async () =>
-  import("$lib/test-stubs/year-overview-runtime.svelte")
-);
-vi.mock(
-  "$lib/components/reports/year-overview/YearHeatmap.svelte",
-  async () => import("$lib/test-stubs/YearHeatmap.test-stub.svelte")
+vi.mock("#lib/hooks/date-params.svelte.js", async () =>
+  import("#lib/test-stubs/year-overview-runtime.svelte.js")
 );
 vi.mock(
-  "$lib/components/reports/year-overview/YearOverviewFilters.svelte",
-  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
+  "#lib/components/reports/year-overview/YearHeatmap.svelte",
+  async () => import("#lib/test-stubs/YearHeatmap.test-stub.svelte")
 );
 vi.mock(
-  "$lib/components/reports/GlycemicRiskIndexChart.svelte",
-  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
+  "#lib/components/reports/year-overview/YearOverviewFilters.svelte",
+  async () => import("#lib/test-stubs/EmptyYearPanel.test-stub.svelte")
+);
+vi.mock(
+  "#lib/components/reports/GlycemicRiskIndexChart.svelte",
+  async () => import("#lib/test-stubs/EmptyYearPanel.test-stub.svelte")
 );
 
 import YearOverviewPage from "./+page.svelte";

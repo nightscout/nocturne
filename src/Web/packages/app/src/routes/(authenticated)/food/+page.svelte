@@ -2,7 +2,7 @@
   import { FoodState } from './food-state.svelte.js';
   import { setFoodState } from './food-context.js';
   import { onMount } from 'svelte';
-  import { GiIcon, GiLabel, isGiLevel, type GiLevel } from '$lib/components/food';
+  import { GiIcon, GiLabel, isGiLevel, type GiLevel } from '#lib/components/food/index.js';
 
   import FoodList from './FoodList.svelte';
   import Composer from './Composer.svelte';
@@ -13,19 +13,18 @@
   import Search from '@lucide/svelte/icons/search';
   import Star from '@lucide/svelte/icons/star';
   import X from '@lucide/svelte/icons/x';
-  import { EmptyState } from '$lib/components/shared';
-  import * as Select from '$lib/components/ui/select';
-  import { Button } from '$lib/components/ui/button';
-  import { Separator } from '$lib/components/ui/separator';
-  import * as InputGroup from '$lib/components/ui/input-group';
-  import { Toggle } from '$lib/components/ui/toggle';
-  import * as ToggleGroup from '$lib/components/ui/toggle-group';
+  import { EmptyState } from '#lib/components/shared/index.js';
+  import * as Select from '#lib/components/ui/select/index.js';
+  import { Button } from '#lib/components/ui/button/index.js';
+  import { Separator } from '#lib/components/ui/separator/index.js';
+  import * as InputGroup from '#lib/components/ui/input-group/index.js';
+  import { Toggle } from '#lib/components/ui/toggle/index.js';
+  import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 
   const state = new FoodState();
   setFoodState(state);
 
-  // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
-  onMount(() => queueMicrotask(() => state.load()));
+  onMount(() => void state.load());
 
   const giLevels: GiLevel[] = ['low', 'medium', 'high'];
   const ALL_CATEGORIES = '__all';
@@ -35,7 +34,7 @@
   <title>Food editor - Nocturne</title>
 </svelte:head>
 
-<div class="@container flex-1 overflow-auto p-5">
+<div class="@container flex-1 p-5">
   <!-- Header -->
   <div class="mb-5 flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div>
@@ -56,7 +55,7 @@
   </div>
 
   <!-- Main card -->
-  <div class="overflow-hidden rounded-xl border border-border bg-card">
+  <div class="overflow-clip rounded-xl border border-border bg-card">
     <!-- Toolbar -->
     <div class="flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-3.5">
       <InputGroup.Root data-testid="food-search" class="min-w-[180px] flex-1">

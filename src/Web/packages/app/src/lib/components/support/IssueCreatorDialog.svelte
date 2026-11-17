@@ -1,11 +1,11 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Separator } from "$lib/components/ui/separator";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Bug from "@lucide/svelte/icons/bug";
   import Lightbulb from "@lucide/svelte/icons/lightbulb";
   import Database from "@lucide/svelte/icons/database";
@@ -19,12 +19,13 @@
   import Eye from "@lucide/svelte/icons/eye";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Copy from "@lucide/svelte/icons/copy";
-  import { submitIssue, getFallbackUrl, getSupportDiagnostics } from "$lib/api/support.remote";
-  import { readApiFailures, type ApiFailure } from "$lib/support/api-failure-log";
-  import { buildDiagnosticInfo } from "$lib/support/diagnostic-info";
+  import { submitIssue, getFallbackUrl, getSupportDiagnostics } from "#lib/api/support.remote.js";
+  import { readApiFailures, type ApiFailure } from "#lib/support/api-failure-log.js";
+  import { buildDiagnosticInfo } from "#lib/support/diagnostic-info.js";
   import { page } from "$app/state";
-  import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "$api-clients";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "#lib/api/generated/nocturne-api-client.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     open: boolean;
@@ -320,11 +321,11 @@
 
   async function openFallback() {
     try {
-      const fallback = await getFallbackUrl({
+      const fallback = await fresh(getFallbackUrl({
         template,
         title,
         body: generateBodyMarkdown(),
-      }).run();
+      }));
       if (fallback?.url) {
         window.open(fallback.url, "_blank");
       }
@@ -443,7 +444,7 @@
         <input
           bind:this={fileInput}
           type="file"
-          name="images[]"
+          name={submitIssue.fields.images.as("file multiple").name}
           accept="image/png,image/jpeg,image/webp,image/gif"
           multiple
           class="hidden"
@@ -659,20 +660,20 @@
           </Dialog.Footer>
         {:else if formState === "preview" || formState === "submitting"}
           <!-- Named fields the form submits; mirrors the state edited in the idle step -->
-          <input type="hidden" name="channel" value={useOperatorSupport ? "operator" : "github"} />
-          <input type="hidden" name="template" value={template} />
-          <input type="hidden" name="title" value={title} />
-          <input type="hidden" name="description" value={description} />
+          <input {...submitIssue.fields.channel.as("hidden", useOperatorSupport ? "operator" : "github")} />
+          <input {...submitIssue.fields.template.as("hidden", template)} />
+          <input {...submitIssue.fields.title.as("hidden", title)} />
+          <input {...submitIssue.fields.description.as("hidden", description)} />
           {#if template === "bug"}
-            <input type="hidden" name="stepsToReproduce" value={stepsToReproduce} />
-            <input type="hidden" name="expectedBehavior" value={expectedBehavior} />
-            <input type="hidden" name="actualBehavior" value={actualBehavior} />
+            <input {...submitIssue.fields.stepsToReproduce.as("hidden", stepsToReproduce)} />
+            <input {...submitIssue.fields.expectedBehavior.as("hidden", expectedBehavior)} />
+            <input {...submitIssue.fields.actualBehavior.as("hidden", actualBehavior)} />
           {/if}
           {#if template === "data-issue"}
-            <input type="hidden" name="cgmSource" value={cgmSource} />
-            <input type="hidden" name="timeRange" value={timeRange} />
+            <input {...submitIssue.fields.cgmSource.as("hidden", cgmSource)} />
+            <input {...submitIssue.fields.timeRange.as("hidden", timeRange)} />
           {/if}
-          <input type="hidden" name="diagnosticInfo" value={diagnosticInfo} />
+          <input {...submitIssue.fields.diagnosticInfo.as("hidden", diagnosticInfo)} />
 
           <div class="@container flex-1 overflow-y-auto space-y-4 pr-1">
             <div class="space-y-1">

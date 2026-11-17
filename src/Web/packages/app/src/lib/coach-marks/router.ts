@@ -1,7 +1,7 @@
 import { beforeNavigate, goto, pushState } from "$app/navigation";
 import { page } from "$app/state";
 import type { CoachRouter } from "@nocturne/coach";
-import { randomUUID } from "$lib/utils";
+import { randomUUID } from "#lib/utils/index.js";
 
 /** Call once per layout instance, during component init. */
 export function createCoachRouter(): CoachRouter {

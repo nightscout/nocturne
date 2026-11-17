@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { GlucoseType, GlucoseUnit } from "$lib/api";
-  import * as Select from "$lib/components/ui/select";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { GlucoseType, GlucoseUnit } from "#lib/api/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Droplet from "@lucide/svelte/icons/droplet";
 
   interface Props {

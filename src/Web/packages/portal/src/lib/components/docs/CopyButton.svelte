@@ -4,7 +4,7 @@
     import X from "@lucide/svelte/icons/x";
     import { Button } from "@nocturne/ui/ui/button";
     import { copyToClipboard } from "@nocturne/ui/utils";
-    import { installStepBefore, track } from "$lib/analytics";
+    import { installStepBefore, track } from "#lib/analytics.js";
 
     interface Props {
         text: string;

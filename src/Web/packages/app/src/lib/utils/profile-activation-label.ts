@@ -1,5 +1,5 @@
-import type { ProfileActivationDto } from "$api-clients";
-import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
+import type { ProfileActivationDto } from "#lib/api/generated/nocturne-api-client.js";
+import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
 
 /** "Rhys", "Rhys 110%", "Rhys 110% +1h": the profile with the percentage and shift it runs at. */
 export function profileActivationLabel(

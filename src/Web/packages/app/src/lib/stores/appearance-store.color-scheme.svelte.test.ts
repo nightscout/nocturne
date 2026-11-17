@@ -50,10 +50,10 @@ describe("color scheme cookie mirroring", () => {
     expect(parsePrefsCookie(storedCookie())).toMatchObject({
       colorScheme: "light",
     });
-    document.cookie = `${PREFS_COOKIE_NAME}=${encodeURIComponent(JSON.stringify({ glucoseUnits: "mmol" }))};path=/`;
+    document.cookie = `${PREFS_COOKIE_NAME}=${encodeURIComponent(JSON.stringify({ timeFormat: "24" }))};path=/`;
     setColorScheme("dark");
     expect(parsePrefsCookie(storedCookie())).toMatchObject({
-      glucoseUnits: "mmol",
+      timeFormat: "24",
       colorScheme: "dark",
     });
   });

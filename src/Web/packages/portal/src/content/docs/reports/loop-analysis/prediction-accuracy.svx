@@ -3,7 +3,7 @@ title: Prediction accuracy
 ---
 
 <script>
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Prediction accuracy

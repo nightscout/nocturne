@@ -14,16 +14,17 @@ import { z } from "zod";
 import { query, command, form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 
-import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
-import { clearAuthCookies } from "$lib/config/auth-cookies";
-import { errorStatus, RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
-import { safeReturnUrl } from "$lib/server/return-url";
+import type { OidcProviderInfo } from "#lib/api/generated/nocturne-api-client.js";
+import { clearAuthCookies } from "#lib/config/auth-cookies.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
+import { rateLimitedError } from "#lib/forms/submit-messages.svelte.js";
+import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 import { classifyRecoveryError, type RecoveryFailure } from "./recovery-error";
 
-const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailure, string> = {
+const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailure, () => string> = {
   // The API deliberately doesn't say which of the two was wrong.
-  rejected: "That username and recovery code don't match.",
-  "rate-limited": RATE_LIMITED_ERROR,
+  rejected: () => "That username and recovery code don't match.",
+  "rate-limited": rateLimitedError,
 };
 
 // ============================================================================
@@ -294,7 +295,7 @@ export const signInWithRecoveryCode = form(
       );
     }
 
-    if (failure) invalid(issue.code(RECOVERY_FAILURE_MESSAGES[failure]));
+    if (failure) invalid(issue.code(RECOVERY_FAILURE_MESSAGES[failure]()));
 
     const destination = new URLSearchParams({
       username: data.username,

@@ -1,22 +1,22 @@
 <script lang="ts">
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Check from "@lucide/svelte/icons/check";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Droplet from "@lucide/svelte/icons/droplet";
-  import { EmptyState } from "$lib/components/shared";
-  import { cn } from "$lib/utils";
-  import { TrackerCategory } from "$api";
-  import type { NotificationUrgency, TrackerDefinitionDto, TrackerInstanceDto } from "$api";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { cn } from "#lib/utils/index.js";
+  import { TrackerCategory } from "#lib/api/index.js";
+  import type { NotificationUrgency, TrackerDefinitionDto, TrackerInstanceDto } from "#lib/api/index.js";
 
   interface Props {
     definitions: TrackerDefinitionDto[];

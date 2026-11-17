@@ -5,8 +5,8 @@
 -->
 <script lang="ts">
   import { page } from "$app/state";
-  import { reportCategories, visibleReportCategories } from "$lib/navigation/report-navigation.svelte";
-  import { cn } from "$lib/utils";
+  import { reportCategories, reportPagePath, visibleReportCategories } from "#lib/navigation/report-navigation.svelte.js";
+  import { cn } from "#lib/utils/index.js";
 
   const family = $derived(
     reportCategories().find((c) => c.pages && c.reports.some((r) => r.href === page.url.pathname))
@@ -21,12 +21,12 @@
 </script>
 
 {#if family && reachable.length > 0}
-  <div class="border-t border-border px-3 @md:px-6 print:hidden">
+  <div class="relative border-t border-border px-3 @md:px-6 print:hidden">
     <nav aria-label="{family.title} pages" class="flex flex-wrap gap-1 py-1.5" data-testid="report-pages">
       {#each reachable as report (report.href)}
         {@const current = report.href === page.url.pathname}
-        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- report.href is a literal in-app path from report-navigation.svelte.ts -->
-        <a href="{report.href}{page.url.search}"
+        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- reportPagePath puts the app base before the path -->
+        <a href={reportPagePath(report.href, page.url.search)}
           aria-current={current ? "page" : undefined}
           class={cn(
             "rounded-md px-2.5 py-1 text-sm pointer-coarse:py-2 font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",

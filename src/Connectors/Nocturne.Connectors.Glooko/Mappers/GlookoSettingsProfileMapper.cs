@@ -9,7 +9,7 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 /// <summary>
 ///     Maps the SSV2 <c>pumps/settings</c> feed to a Nocturne <see cref="Profile"/>. The SSV2-native
 ///     counterpart to <see cref="GlookoProfileMapper"/> (which maps the v3 <c>devices_and_settings</c>
-///     response), producing the same Profile/ProfileData/TimeValue shapes so <c>PublishProfileDataAsync</c>
+///     response), producing the same Profile/ProfileData/TimeValue shapes so the Profile publish
 ///     works unchanged. One Profile is produced from the most-current settings snapshot.
 ///     <para>
 ///     Unit conventions (see <see cref="GlookoSsv2PumpSettings"/>): segment <c>start</c>/<c>end</c> are
@@ -24,11 +24,13 @@ public class GlookoSettingsProfileMapper
 
     private readonly string _connectorSource;
     private readonly ILogger _logger;
+    private readonly TimeProvider _clock;
 
-    public GlookoSettingsProfileMapper(string connectorSource, ILogger logger)
+    public GlookoSettingsProfileMapper(string connectorSource, ILogger logger, TimeProvider clock)
     {
         _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     /// <summary>
@@ -120,7 +122,7 @@ public class GlookoSettingsProfileMapper
             return null;
 
         var defaultProfile = ResolveDefaultProfileName(settings, store);
-        var timestamp = ParseTimestamp(settings.PumpTimestamp) ?? DateTime.UtcNow;
+        var timestamp = ParseTimestamp(settings.PumpTimestamp) ?? _clock.GetUtcNow().UtcDateTime;
         var mills = timestamp.ToMills();
 
         // Use the v3 GlookoProfileMapper's exact id scheme (glooko_{mills}, keyed on the snapshot's pump

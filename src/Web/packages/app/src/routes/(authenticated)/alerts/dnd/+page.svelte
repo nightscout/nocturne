@@ -3,34 +3,34 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     get as getDnd,
     update as updateDnd,
-  } from "$api/generated/tenantAlertSettings.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import type { TenantAlertSettingsResponse } from "$api-clients";
+  } from "#lib/api/generated/tenantAlertSettings.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
 
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
     CardDescription,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Save from "@lucide/svelte/icons/save";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-  import { EditorActionBar } from "$lib/components/layout";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
-  import { isDndScheduleActiveNow, isDndScheduleConfigured } from "$lib/components/alerts/dnd";
+  import { EditorActionBar } from "#lib/components/layout/index.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
+  import { isDndScheduleActiveNow, isDndScheduleConfigured } from "#lib/components/alerts/dnd.js";
 
   // Manual DND is tenant-wide: it silences every rule that is neither critical
   // nor allowed through DND, for every member. The server gates it on
@@ -50,7 +50,7 @@
   });
   let scheduleStatus = $derived(
     isDndScheduleActiveNow(latest)
-      ? "Scheduled, on now"
+    ? "Scheduled, on now"
       : isDndScheduleConfigured(latest)
         ? "Scheduled"
         : null,
@@ -132,7 +132,7 @@
     type="button"
     variant="ghost"
     size="icon"
-    onclick={() => goto(resolve("/alerts"))}
+    onclick={() => goto(resolve('alerts'))}
     aria-label="Back to alerts"
   >
     <ArrowLeft class="h-4 w-4" />
@@ -193,7 +193,7 @@
           <Switch
             id="dnd-manual"
             checked={dndManualActive}
-            onCheckedChange={(c: boolean) => (dndManualActive = c)}
+            onCheckedChange={(c: boolean) => dndManualActive = c}
           />
         </div>
         {#if dndManualActive}
@@ -203,8 +203,7 @@
               id="dnd-until"
               type="datetime-local"
               value={dndManualUntilLocal}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                (dndManualUntilLocal = e.currentTarget.value)}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) => dndManualUntilLocal = e.currentTarget.value}
             />
             <p class="text-xs text-muted-foreground">Leave blank to keep DND on indefinitely.</p>
           </div>
@@ -228,7 +227,7 @@
           <Switch
             id="dnd-schedule"
             checked={dndScheduleEnabled}
-            onCheckedChange={(c: boolean) => (dndScheduleEnabled = c)}
+            onCheckedChange={(c: boolean) => dndScheduleEnabled = c}
           />
         </div>
         {#if dndScheduleEnabled}
@@ -239,8 +238,7 @@
                 id="dnd-start"
                 type="time"
                 value={dndScheduleStart}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  (dndScheduleStart = e.currentTarget.value)}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => dndScheduleStart = e.currentTarget.value}
               />
             </div>
             <div class="space-y-2">
@@ -249,14 +247,19 @@
                 id="dnd-end"
                 type="time"
                 value={dndScheduleEnd}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  (dndScheduleEnd = e.currentTarget.value)}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => dndScheduleEnd = e.currentTarget.value}
               />
             </div>
           </div>
           <p class="text-xs text-muted-foreground">
-            Scheduled windows are interpreted in your timezone, set on your
-            <a href={resolve("/settings/patient")} class="underline">patient record</a>.
+            Scheduled windows are interpreted in your timezone, set on your 
+
+            <a
+              href={resolve('settings/patient')}
+              class="underline"
+            >patient record</a>
+
+            .
           </p>
         {/if}
       </CardContent>

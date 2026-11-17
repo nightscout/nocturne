@@ -19,7 +19,7 @@ public class KovatchevRiskScaleTests
 {
     private const double RelativeTolerance = 0.01;
 
-    private readonly StatisticsService _sut = new();
+    private readonly StatisticsService _sut = new(TimeProvider.System);
 
     [Theory]
     [InlineData(20.0, 100.042)]

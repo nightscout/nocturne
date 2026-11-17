@@ -15,3 +15,7 @@ additionalProperties:
   useDateTimeOffset: true
   useCollection: false
   returnICollection: false
+# The API's DayOfWeek schema would generate a model named like System.DayOfWeek, which every
+# generated file that also imports System cannot tell apart from it (CS0104).
+modelNameMappings:
+  DayOfWeek: Weekday

@@ -143,7 +143,7 @@ describe('installation tracking', () => {
     const steps = readdirSync(guides, { recursive: true, encoding: 'utf-8' })
       .filter((file) => file.endsWith('.svelte'))
       .flatMap((file) =>
-        [...readFileSync(resolve(guides, file), 'utf-8').matchAll(/data-install-step="([^"]*)"/g)].map(
+        [...readFileSync(resolve(guides, file), 'utf-8').matchAll(/(?:data-install-step|installStep)="([^"]*)"/g)].map(
           (match) => match[1],
         ),
       );

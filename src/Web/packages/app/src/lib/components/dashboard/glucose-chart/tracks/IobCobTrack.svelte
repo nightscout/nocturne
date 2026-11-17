@@ -3,7 +3,7 @@
   import { curveMonotoneX } from "d3";
   import BolusMarker from "../markers/BolusMarker.svelte";
   import CarbMarker from "../markers/CarbMarker.svelte";
-  import { carbMarkerKey, markerKey } from "$lib/utils/chart-data-merge";
+  import { carbMarkerKey, markerKey } from "#lib/utils/chart-data-merge.js";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import type { SeriesPoint } from "../engine/chart-data-view.svelte";
   import {
@@ -12,8 +12,8 @@
     PRINT_LABEL_CHAR_WIDTH,
     type LabelCandidate,
   } from "../engine/marker-label-layout";
-  import { MARKER_HALF_WIDTH } from "$lib/components/icons/marker-shapes";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { MARKER_HALF_WIDTH } from "#lib/components/icons/marker-shapes.js";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
   import { carbMarkerName } from "../meal-period-labels.svelte";
   import TrackAxis from "./TrackAxis.svelte";
   import TrackLabel from "./TrackLabel.svelte";

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import StatusPill from "./StatusPill.svelte";
   import type {
     BasalPillData,
     PillInfoItem,
     AlertLevel,
-  } from "$lib/types/status-pills";
+  } from "#lib/types/status-pills.js";
 
   interface BasalPillProps {
     data: BasalPillData | null;

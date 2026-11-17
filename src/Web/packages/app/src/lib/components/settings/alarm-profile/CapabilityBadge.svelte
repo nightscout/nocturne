@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BrowserAlarmCapabilities } from "$lib/audio/alarm-sounds";
+  import type { BrowserAlarmCapabilities } from "#lib/audio/alarm-sounds.js";
 
   interface Props {
     capabilities: BrowserAlarmCapabilities | null;

@@ -4,8 +4,18 @@
 import { getRequestEvent, query, form } from "$app/server";
 import { z } from "zod";
 import { error, invalid, redirect } from "@sveltejs/kit";
-import { deviceApprove } from "$api/generated/oAuths.generated.remote";
-import { describeSubmitError } from "$lib/forms/submit-error";
+import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
+import { describeSubmitError } from "#lib/forms/submit-error.js";
+
+async function fetchDeviceInfo(userCode: string) {
+  const { apiClient } = getRequestEvent().locals;
+  try {
+    return await apiClient.oAuth.getDeviceInfo(userCode);
+  } catch (err) {
+    console.error("Error looking up device code:", err);
+    throw err;
+  }
+}
 
 // ============================================================================
 // Query Functions
@@ -19,13 +29,9 @@ export const getDeviceInfo = query(
     userCode: z.string().min(1, "User code is required"),
   }),
   async ({ userCode }) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-
     try {
-      return await apiClient.oAuth.getDeviceInfo(userCode);
-    } catch (err) {
-      console.error("Error looking up device code:", err);
+      return await fetchDeviceInfo(userCode);
+    } catch {
       throw error(400, "Invalid or expired device code");
     }
   }
@@ -64,26 +70,9 @@ const deviceLookupSchema = z.object({
  * Form handler to look up a device code
  */
 export const lookupDeviceForm = form(deviceLookupSchema, async (data, issue) => {
-  const event = getRequestEvent();
-  if (!event) {
-    throw new Error("Request event not available");
-  }
-  const { apiClient } = event.locals;
-
   try {
-    const deviceInfo = await apiClient.oAuth.getDeviceInfo(data.user_code);
-    return {
-      deviceInfo: {
-        userCode: deviceInfo.userCode ?? data.user_code,
-        clientId: deviceInfo.clientId ?? "",
-        displayName: deviceInfo.clientDisplayName ?? null,
-        scopes: deviceInfo.scopes ?? [],
-        isExpired: deviceInfo.isExpired ?? false,
-        deletionAccess: deviceInfo.deletionAccess,
-      },
-    };
-  } catch (err) {
-    console.error("Error looking up device code:", err);
+    return { deviceInfo: await fetchDeviceInfo(data.user_code) };
+  } catch {
     invalid(issue.user_code("Invalid or expired device code. Please check the code and try again."));
   }
 });
@@ -191,7 +180,7 @@ export const consentForm = form(consentSchema, async (data, issue) => {
   if (response.status === 302 || response.status === 301) {
     const location = response.headers.get("Location");
     if (location) {
-      throw redirect(302, location);
+      throw redirect(302, location, { external: true });
     }
   }
 

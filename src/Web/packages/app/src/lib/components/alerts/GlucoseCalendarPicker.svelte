@@ -5,26 +5,16 @@
    * bits-ui `Calendar` in the alert replay popover — larger cells (~64px) so
    * the sparkline reads at a glance.
    *
-   * Data is fetched per visible month via `getPunchCardData` and keyed by
-   * YYYY-MM-DD; days outside the current month or with no readings render the
-   * day number on a blank cell, still selectable.
+   * Days outside the current month or with no readings render the day number
+   * on a blank cell, still selectable.
    */
   import {
     type DateValue,
-    endOfMonth,
-    endOfWeek,
     getLocalTimeZone,
-    startOfMonth,
-    startOfWeek,
     today,
   } from "@internationalized/date";
-  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Button } from "$lib/components/ui/button";
-  import { getPunchCardData } from "$api/generated/statistics.generated.remote";
-  import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import { formatLocale } from "$lib/utils/formatting";
+  import GlucoseMonthGrid from "#lib/components/alerts/GlucoseMonthGrid.svelte";
+  import GlucosePickerCell from "#lib/components/alerts/GlucosePickerCell.svelte";
 
   interface Props {
     /** Currently-selected date, or undefined for the "Last 24 hours" sentinel. */
@@ -40,180 +30,23 @@
     locale?: string;
   }
 
-  let { value, onValueChange, maxValue, locale: localeProp }: Props = $props();
+  let { value, onValueChange, maxValue, locale }: Props = $props();
 
-  const locale = $derived(localeProp ?? formatLocale());
-
-  const tz = getLocalTimeZone();
-  const todayValue = today(tz);
-
-  // Anchor the visible month on the selected date when we have one, otherwise
-  // on today. svelte-ignore: deliberate snapshot at mount; user navigates with
-  // the prev/next buttons.
   // svelte-ignore state_referenced_locally
-  let viewMonth = $state<DateValue>(startOfMonth(value ?? todayValue));
-
-  const monthLabel = $derived(
-    viewMonth.toDate(tz).toLocaleDateString(locale, {
-      month: "long",
-      year: "numeric",
-    })
-  );
-
-  // Build a 6×7 grid that includes leading/trailing days from the neighbour
-  // months so the layout stays rectangular.
-  const gridDays = $derived.by<{ date: DateValue; inMonth: boolean }[]>(() => {
-    const monthStart = startOfMonth(viewMonth);
-    const monthEnd = endOfMonth(viewMonth);
-    const gridStart = startOfWeek(monthStart, locale);
-    const gridEnd = endOfWeek(monthEnd, locale);
-    const days: { date: DateValue; inMonth: boolean }[] = [];
-    let cur = gridStart;
-    while (cur.compare(gridEnd) <= 0) {
-      days.push({
-        date: cur,
-        inMonth: cur.month === viewMonth.month && cur.year === viewMonth.year,
-      });
-      cur = cur.add({ days: 1 });
-    }
-    return days;
-  });
-
-  // Generate the localised weekday header from the grid's first row so it
-  // tracks `locale` (Sunday- vs. Monday-first).
-  const weekdayLabels = $derived.by(() => {
-    const first = startOfWeek(startOfMonth(viewMonth), locale);
-    const labels: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = first.add({ days: i }).toDate(tz);
-      labels.push(d.toLocaleDateString(locale, { weekday: "narrow" }));
-    }
-    return labels;
-  });
-
-  // Per-day entries keyed by YYYY-MM-DD. Re-fetches automatically when
-  // `viewMonth` changes via the reactive QueryResult; cached months resolve
-  // synchronously from `.current` so re-opening the popover doesn't flicker
-  // through a loading state.
-  type EntriesByDate = Record<string, { mills: number; mgdl: number }[]>;
-  const punchCardQuery = $derived(
-    getPunchCardData({
-      startDate: startOfMonth(viewMonth).toString(),
-      endDate: endOfMonth(viewMonth).toString(),
-    })
-  );
-  const entriesByDate = $derived.by<EntriesByDate>(() => {
-    const data = punchCardQuery.current;
-    const out: EntriesByDate = {};
-    for (const m of data?.months ?? []) {
-      for (const d of m.days ?? []) {
-        if (d.date && d.entries && d.entries.length > 0) {
-          out[d.date] = d.entries.map((e) => ({
-            mills: e.mills ?? 0,
-            mgdl: e.mgdl ?? 0,
-          }));
-        }
-      }
-    }
-    return out;
-  });
-
-  function isFuture(d: DateValue): boolean {
-    return maxValue ? d.compare(maxValue) > 0 : false;
-  }
-
-  function isSelected(d: DateValue): boolean {
-    return value ? d.compare(value) === 0 : false;
-  }
-
-  function isTodayCell(d: DateValue): boolean {
-    return d.compare(todayValue) === 0;
-  }
-
-  function dateKey(d: DateValue): string {
-    return d.toString();
-  }
-
-  function pick(d: DateValue): void {
-    if (isFuture(d)) return;
-    onValueChange?.(d);
-  }
-
-  function gotoPrevMonth(): void {
-    viewMonth = startOfMonth(viewMonth).subtract({ months: 1 });
-  }
-
-  function gotoNextMonth(): void {
-    viewMonth = startOfMonth(viewMonth).add({ months: 1 });
-  }
-
-  // Block paging into months that are entirely future.
-  const canGoNext = $derived(
-    !maxValue || endOfMonth(viewMonth).compare(maxValue) < 0
-  );
+  const initialMonth = value ?? today(getLocalTimeZone());
 </script>
 
-<div class="p-3 w-[480px]">
-  <div class="flex items-center justify-between mb-2">
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      onclick={gotoPrevMonth}
-      aria-label="Previous month"
-    >
-      <ChevronLeft class="h-4 w-4" />
-    </Button>
-    <div class="text-sm font-medium">
-      {monthLabel}
-      {#if punchCardQuery.loading}
-        <span class="ml-2 text-xs text-muted-foreground font-normal">
-          loading…
-        </span>
-      {/if}
-    </div>
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      onclick={gotoNextMonth}
-      disabled={!canGoNext}
-      aria-label="Next month"
-    >
-      <ChevronRight class="h-4 w-4" />
-    </Button>
-  </div>
-
-  <div class="grid grid-cols-7 gap-1 mb-1">
-    {#each weekdayLabels as label, i (i)}
-      <div
-        class="text-2xs text-center text-muted-foreground uppercase tracking-wide font-medium"
-      >
-        {label}
-      </div>
-    {/each}
-  </div>
-
-  {#if punchCardQuery.current?.timeZoneUnavailableReason}
-    <p class="mb-2 text-sm text-muted-foreground">
-      <TimeZoneNote reason={punchCardQuery.current.timeZoneUnavailableReason}>
-        This calendar cannot show each day's glucose trace.
-      </TimeZoneNote>
-    </p>
-  {/if}
-
-  <div class="grid grid-cols-7 gap-1">
-    {#each gridDays as { date, inMonth } (dateKey(date))}
-      {@const entries = entriesByDate[dateKey(date)] ?? []}
-      {@const future = isFuture(date)}
-      <GlucosePickerCell
-        {date}
-        {entries}
-        {inMonth}
-        disabled={future}
-        selected={isSelected(date)}
-        isToday={isTodayCell(date)}
-        {locale}
-        onclick={() => pick(date)}
-      />
-    {/each}
-  </div>
-</div>
+<GlucoseMonthGrid {initialMonth} {maxValue} {locale}>
+  {#snippet day({ date, inMonth, isToday, disabled, entries })}
+    <GlucosePickerCell
+      {date}
+      {entries}
+      {inMonth}
+      {disabled}
+      selected={value ? date.compare(value) === 0 : false}
+      {isToday}
+      {locale}
+      onclick={() => onValueChange?.(date)}
+    />
+  {/snippet}
+</GlucoseMonthGrid>

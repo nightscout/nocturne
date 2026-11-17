@@ -18,7 +18,7 @@
   import Link2 from "@lucide/svelte/icons/link-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
-  import { commandErrorMessage, commandErrorStatus } from "$lib/command-error";
+  import { commandErrorMessage, commandErrorStatus } from "#lib/command-error.js";
 
   type LinkInfo = { serverUrl: string };
   type CompleteResponse = {

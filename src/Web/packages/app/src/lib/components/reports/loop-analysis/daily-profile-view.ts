@@ -3,7 +3,7 @@ import type {
   DailyProfileDayCoverage,
   DailyProfileRange,
   LoopAnalysisAggregate,
-} from "$lib/api";
+} from "#lib/api/index.js";
 import { Key } from "@nocturne/ui/keys";
 
 export const SLOTS_PER_DAY = 288;

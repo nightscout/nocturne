@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Input } from "$lib/components/ui/input";
-  import * as Select from "$lib/components/ui/select";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Button } from "$lib/components/ui/button";
-  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import TimezoneCombobox from "#lib/components/patient/TimezoneCombobox.svelte";
   import X from "@lucide/svelte/icons/x";
-  import { bg, bgLabel, convertFromDisplayUnits } from "$lib/utils/formatting";
+  import { bg, bgLabel, convertFromDisplayUnits } from "#lib/utils/formatting.js";
   import { alertWeekdayLabel } from "./summarizeCondition.svelte";
   import {
     ALERT_STATES,
@@ -18,10 +18,10 @@
     tempBasalMetricLabel,
     trendBucketLabel,
   } from "./alert-labels.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { untrack } from "svelte";
-  import { getDefinitions } from "$api/generated/trackers.generated.remote";
-  import type { TrackerDefinitionDto } from "$api";
+  import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
+  import type { TrackerDefinitionDto } from "#lib/api/index.js";
   import {
     type ConditionNode,
     type ComparisonOperator,
@@ -34,7 +34,7 @@
     StateSpanCategory,
     AlertWeekday,
   } from "./types";
-  import { AlertComparisonOperator } from "$api-clients";
+  import { AlertComparisonOperator } from "#lib/api/generated/nocturne-api-client.js";
 
   interface AvailableRule {
     id: string;

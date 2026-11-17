@@ -1,11 +1,11 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { UploaderPlatform, type UploaderApp } from "$api-clients";
+import { UploaderPlatform, type UploaderApp } from "#lib/api/generated/nocturne-api-client.js";
 
 const { create } = vi.hoisted(() => ({ create: vi.fn() }));
 
-vi.mock("$lib/api/generated/directGrants.generated.remote", () => ({
+vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
   create: (...args: unknown[]) => create(...args),
 }));
 
@@ -23,14 +23,14 @@ describe("UploaderSetupDialog API key", () => {
   it("shows the generated key in the instructions", async () => {
     render(UploaderSetupDialog, { open: true, selectedUploader: AAPS });
 
-    await page.getByRole("button", { name: "Generate API key" }).click();
+    await page.getByRole("button", { name: "Create API token" }).click();
 
     await expect.element(page.getByText("noc_created")).toBeVisible();
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ scopes: ["health.readwrite"] }),
     );
     await expect
-      .element(page.getByRole("button", { name: "Generate API key" }))
+      .element(page.getByRole("button", { name: "Create API token" }))
       .not.toBeInTheDocument();
   });
 
@@ -44,10 +44,10 @@ describe("UploaderSetupDialog API key", () => {
     create.mockRejectedValue({ status: 400, body: { message: "Label already used." } });
     render(UploaderSetupDialog, { open: true, selectedUploader: JUGGLUCO });
 
-    await page.getByRole("button", { name: "Generate API key" }).click();
+    await page.getByRole("button", { name: "Create API token" }).click();
 
     await expect.element(page.getByText("Label already used.")).toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Generate API key" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Create API token" })).toBeVisible();
   });
 
   it("links to the uploader's website", async () => {

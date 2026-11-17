@@ -3,10 +3,10 @@
   without the Filters panel.
 -->
 <script lang="ts">
-  import type { LoopAnalysisMasks } from "$lib/api";
+  import type { LoopAnalysisMasks } from "#lib/api/index.js";
   import Funnel from "@lucide/svelte/icons/funnel";
   import { MASK_KEYS } from "./loop-analysis-filter";
-  import { weekdayLabel } from "$lib/utils/formatting";
+  import { weekdayLabel } from "#lib/utils/formatting.js";
   import { maskLabels } from "./filter-labels.svelte";
 
   let { applied }: { applied: LoopAnalysisMasks | null | undefined } = $props();

@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V2;
 /// - POST /api/v2/notifications/loop - Send Loop notification
 /// - GET /api/v2/notifications/status - Get notification system status
 /// </summary>
+[Collection(ParityShards.Two)]
 public class NotificationsParityTests : ParityTestBase
 {
     public NotificationsParityTests(ParityTestFixture fixture, ITestOutputHelper output)

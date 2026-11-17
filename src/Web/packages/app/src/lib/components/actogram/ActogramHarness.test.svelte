@@ -1,8 +1,8 @@
 <script lang="ts">
   import Actogram from "./Actogram.svelte";
   import { MS_PER_HOUR } from "./actogram";
-  import { servedDay } from "$lib/test-stubs/actogram-days";
-  import type { ChartThresholds } from "$lib/constants/glucose-thresholds";
+  import { servedDay } from "#lib/test-stubs/actogram-days.js";
+  import type { ChartThresholds } from "#lib/constants/glucose-thresholds.js";
 
   let {
     metric,

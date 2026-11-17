@@ -11,6 +11,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -47,11 +48,10 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
 
         _sut = new EntryReadService(
             new SensorGlucoseRepository(
-                factory, new Mock<IDeduplicationService>().Object, audit,
+                factory, new Mock<IDuplicateLinker>().Object, audit,
                 NullLogger<SensorGlucoseRepository>.Instance),
             new MeterGlucoseRepository(factory, audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(factory, audit, NullLogger<CalibrationRepository>.Instance),
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             demoMode.Object,
             NullLogger<EntryReadService>.Instance);
     }
@@ -114,7 +114,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
 
         var batch = await _sut.CheckDuplicatesAsync(probes);
 
-        batch.Select(e => e?.Id).Should().Equal(expected);
+        batch.Select(e => e?.Entry.Id).Should().Equal(expected);
         // Not a vacuous comparison: the batch really did find duplicates and really did miss some.
         expected.Should().Contain(id => id != null).And.Contain(id => id == null);
     }
@@ -151,7 +151,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         var single = await _sut.CheckDuplicateAsync(device, type, at.ToMills());
 
         (batch.Single() != null).Should().Be(expectDuplicate);
-        batch.Single()?.Id.Should().Be(single?.Id);
+        batch.Single()?.Entry.Id.Should().Be(single?.Id);
     }
 
     [Theory]
@@ -170,7 +170,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         var batch = await _sut.CheckDuplicatesAsync([Probe("Dexcom G6", type, Start)]);
         var single = await _sut.CheckDuplicateAsync("Dexcom G6", type, Start.ToMills());
 
-        batch.Single()!.Mills.Should().Be(Start.ToMills());
+        batch.Single()!.Entry.Mills.Should().Be(Start.ToMills());
         single!.Mills.Should().Be(Start.ToMills());
     }
 
@@ -200,8 +200,8 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         var batch = await _sut.CheckDuplicatesAsync([Probe("Dexcom G6", "sgv", Start)]);
         var single = await _sut.CheckDuplicateAsync("Dexcom G6", "sgv", Start.ToMills());
 
-        batch.Single()!.Id.Should().Be(single!.Id);
-        batch.Single()!.Id.Should().Be(higher.ToString());
+        batch.Single()!.Entry.Id.Should().Be(single!.Id);
+        batch.Single()!.Entry.Id.Should().Be(higher.ToString());
     }
 
     [Fact]
@@ -215,8 +215,8 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         var batch = await _sut.CheckDuplicatesAsync([probe]);
         var single = await _sut.CheckDuplicateAsync("Contour", "mbg", probe.Mills);
 
-        batch.Single()!.Mills.Should().Be(probe.Mills);
-        batch.Single()!.Id.Should().Be(single?.Id);
+        batch.Single()!.Entry.Mills.Should().Be(probe.Mills);
+        batch.Single()!.Entry.Id.Should().Be(single?.Id);
         _statements.Count("SELECT", s => s.Contains("sensor_glucose", StringComparison.OrdinalIgnoreCase)).Should().Be(0);
     }
 
@@ -227,17 +227,9 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         // from reads as a non-primary cross-connector duplicate is still stored, and re-inserting
         // it on every upload cycle is the bug FindStoredDuplicateAsync exists to prevent.
         var id = SeedSgv(Start, 120, "Dexcom G6");
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.NewGuid(),
-            TenantId = TestTenantId,
-            RecordId = id,
-            RecordType = "SensorGlucose",
-            SourceTimestamp = new DateTimeOffset(Start, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            IsPrimary = false,
-            CanonicalId = Guid.NewGuid(),
-        });
-        _context.SaveChanges();
+        await DuplicateGroups.LinkAsync(_context, RecordType.SensorGlucose, primary: null, id);
+        (await _context.SensorGlucose.ExcludeDuplicates().AnyAsync(e => e.Id == id)).Should().BeFalse(
+            "the copy must be hidden from reads for the probe's raw-storage semantics to be tested");
 
         var batch = await _sut.CheckDuplicatesAsync([Probe("Dexcom G6", "sgv", Start)]);
 

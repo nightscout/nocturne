@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Clock from "@lucide/svelte/icons/clock";
-  import type { AlarmProfileConfiguration } from "$lib/types/alarm-profile";
+  import type { AlarmProfileConfiguration } from "#lib/types/alarm-profile.js";
   import DayOfWeekPicker from "./DayOfWeekPicker.svelte";
 
   interface Props {

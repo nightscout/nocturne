@@ -46,7 +46,7 @@ public class LoginHandoffControllerTests : IDisposable
         _sessionService
             .Setup(s => s.IssueSessionAsync(
                 It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionTokenPair("access-token", "refresh-token", 900));
+            .ReturnsAsync(new SessionTokenPair("access-token", "refresh-token", 900, Guid.Empty));
 
         _auditContext = _db.CreateContext();
         var loginCodeService = new LoginCodeService(
@@ -196,7 +196,7 @@ public class LoginHandoffControllerTests : IDisposable
         var row = await _auditContext.AuthAuditLog.AsNoTracking()
             .SingleAsync(a => a.EventType == AuthAuditEventType.LoginHandoff);
         row.Success.Should().BeTrue();
-        row.SubjectId.Should().Be(_memberSubjectId);
+        row.TargetSubjectId.Should().Be(_memberSubjectId);
         row.TenantId.Should().Be(_tenantId);
     }
 
@@ -208,7 +208,7 @@ public class LoginHandoffControllerTests : IDisposable
         var row = await _auditContext.AuthAuditLog.AsNoTracking()
             .SingleAsync(a => a.EventType == AuthAuditEventType.LoginHandoffFailed);
         row.Success.Should().BeFalse();
-        row.SubjectId.Should().BeNull();
+        row.TargetSubjectId.Should().BeNull();
         row.TenantId.Should().Be(_tenantId);
     }
 

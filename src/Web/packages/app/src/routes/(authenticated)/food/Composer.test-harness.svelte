@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Food } from "$api";
+  import type { Food } from "#lib/api/index.js";
   import Composer from "./Composer.svelte";
   import { setFoodState } from "./food-context";
   import type { FoodState } from "./food-state.svelte";

@@ -11,7 +11,7 @@
   } from "@nocturne/ui/glucose";
   import { relativeAge } from "@nocturne/ui/relative-time";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import type { Reading } from "$lib/glucose-types";
+  import type { Reading } from "#lib/glucose-types.js";
 
   let {
     reading,

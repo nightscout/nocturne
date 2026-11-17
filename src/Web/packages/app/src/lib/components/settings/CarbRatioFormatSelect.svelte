@@ -3,15 +3,15 @@
   in its own format, so the choice reads as an example rather than a code.
 -->
 <script lang="ts">
-  import { Label } from "$lib/components/ui/label";
+  import { Label } from "#lib/components/ui/label/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
-  import { carbRatioFormat, CARB_RATIO_FORMATS } from "$lib/stores/appearance-store.svelte";
-  import { formatInsulinToCarbRatio } from "$lib/utils/formatting";
+  } from "#lib/components/ui/select/index.js";
+  import { carbRatioFormat, CARB_RATIO_FORMATS } from "#lib/stores/appearance-store.svelte.js";
+  import { formatInsulinToCarbRatio } from "#lib/utils/formatting.js";
 </script>
 
 <div class="space-y-2">

@@ -7,7 +7,7 @@
     watchSurface,
     type ArtworkPlayer,
   } from "water-ui";
-  import { HUB_PAINTING_STOPS } from "$lib/setup-hub/items.svelte";
+  import { HUB_PAINTING_STOPS } from "#lib/setup-hub/items.svelte.js";
 
   let {
     stop,

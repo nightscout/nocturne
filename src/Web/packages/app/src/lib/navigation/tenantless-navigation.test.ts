@@ -48,7 +48,7 @@ describe("filterTenantlessNav", () => {
       "/settings",
       "/settings/members",
       "/settings/profile",
-      "/settings/trackers",
+      "/trackers",
     ]) {
       expect(isTenantlessRoute(href)).toBe(false);
     }

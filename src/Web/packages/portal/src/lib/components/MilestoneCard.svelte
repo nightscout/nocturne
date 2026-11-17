@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { RoadmapMilestone, GitHubIssue } from "$lib/data/portal";
+    import type { RoadmapMilestone, GitHubIssue } from "#lib/data/portal.js";
     import * as Collapsible from "@nocturne/ui/ui/collapsible";
     import Circle from "@lucide/svelte/icons/circle";
     import CheckCircle2 from "@lucide/svelte/icons/circle-check";

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -26,6 +27,7 @@ public class SummaryService : ISummaryService
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ITherapySettingsRepository _therapySettingsRepository;
     private readonly IProfileProjectionService _profileProjection;
+    private readonly TimeProvider _time;
     private readonly ILogger<SummaryService> _logger;
 
     private static readonly JsonSerializerOptions StoredEntryOptions = new()
@@ -51,9 +53,11 @@ public class SummaryService : ISummaryService
         IActiveProfileResolver activeProfileResolver,
         ITherapySettingsRepository therapySettingsRepository,
         IProfileProjectionService profileProjection,
+        TimeProvider timeProvider,
         ILogger<SummaryService> logger
     )
     {
+        _time = timeProvider;
         _ddataService = ddataService;
         _propertiesService = propertiesService;
         _iobCobReader = iobCobReader;
@@ -71,8 +75,12 @@ public class SummaryService : ISummaryService
     {
         try
         {
-            var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var ddata = await _ddataService.GetDDataAsync(currentTime, cancellationToken);
+            var currentTime = _time.GetUtcNow().ToUnixTimeMilliseconds();
+            var ddata = await _ddataService.GetDDataAsync(
+                currentTime,
+                DDataCollections.All,
+                cancellationToken
+            );
             var sgvs = ProcessSgvs(ddata.Sgvs, hours);
             var profileName = await _activeProfileResolver.GetProfileNameAsync(
                 currentTime,
@@ -80,7 +88,11 @@ public class SummaryService : ISummaryService
             );
             var profile = await ResolveActiveProfileAsync(profileName, cancellationToken);
             var treatments = ProcessTreatments(ddata.Treatments, profile, hours);
-            var state = await ConstructStateAsync(cancellationToken);
+            var state = await ConstructStateAsync(
+                ddata,
+                await ReadIobCobAsync(cancellationToken),
+                cancellationToken
+            );
 
             return new SummaryResponse
             {
@@ -101,7 +113,7 @@ public class SummaryService : ISummaryService
     public List<SummarySgv> ProcessSgvs(List<Entry> sgvs, int hours)
     {
         var bgData = new List<SummarySgv>();
-        var dataCap = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - (hours * 60 * 60 * 1000);
+        var dataCap = _time.GetUtcNow().ToUnixTimeMilliseconds() - (hours * 60 * 60 * 1000);
 
         foreach (var bg in sgvs.OrderBy(e => e.Mills))
         {
@@ -131,11 +143,11 @@ public class SummaryService : ISummaryService
     {
         var result = new SummaryTreatments();
         var tempBasals = new List<Treatment>();
-        var dataCap = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - (hours * 60 * 60 * 1000);
+        var dataCap = _time.GetUtcNow().ToUnixTimeMilliseconds() - (hours * 60 * 60 * 1000);
 
         foreach (var treatment in treatments)
         {
-            if (treatment.EventType == "Temp Basal")
+            if (treatment.EventType == TreatmentTypes.TempBasal)
             {
                 tempBasals.Add(treatment);
                 continue;
@@ -220,7 +232,7 @@ public class SummaryService : ISummaryService
         temps.Add(
             new SummaryTempBasal
             {
-                Start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 24 * 60 * 60 * 1000,
+                Start = _time.GetUtcNow().ToUnixTimeMilliseconds() - 24 * 60 * 60 * 1000,
                 Duration = 0,
                 Absolute = 0,
             }
@@ -228,7 +240,7 @@ public class SummaryService : ISummaryService
         temps.Add(
             new SummaryTempBasal
             {
-                Start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Start = _time.GetUtcNow().ToUnixTimeMilliseconds(),
                 Duration = 0,
                 Absolute = 0,
             }
@@ -289,7 +301,7 @@ public class SummaryService : ISummaryService
         try
         {
             return await _iobCobReader.ReadTotalAsync(
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                _time.GetUtcNow().ToUnixTimeMilliseconds(),
                 live: true,
                 cancellationToken
             );
@@ -301,22 +313,36 @@ public class SummaryService : ISummaryService
         }
     }
 
-    /// <inheritdoc />
-    public async Task<SummaryState> ConstructStateAsync(
-        CancellationToken cancellationToken = default
+    /// <summary>
+    /// Whether the IOB/COB read windows hold a bolus, temp basal or carb intake. With a profile, this
+    /// stands in for Nightscout's COB plugin having any treatment to read, so a profile with only
+    /// insulin gives a COB of zero rather than none. Nightscout counts any treatment in about two
+    /// days of data, so a site change alone gives zero there and none here.
+    /// </summary>
+    private static bool HasTreatments(IobCobInputs inputs) =>
+        inputs.Boluses.Count > 0 || inputs.TempBasals.Count > 0 || inputs.CarbIntakes.Count > 0;
+
+    private async Task<SummaryState> ConstructStateAsync(
+        DData ddata,
+        IobCobReading? reading,
+        CancellationToken cancellationToken
     )
     {
         try
         {
-            var properties = await _propertiesService.GetAllPropertiesAsync(cancellationToken);
+            var properties = await _propertiesService.GetAllPropertiesAsync(
+                ddata,
+                reading,
+                cancellationToken
+            );
 
             var state = new SummaryState();
 
-            var reading = await ReadIobCobAsync(cancellationToken);
+            // Nightscout's summary uses Math.round, not the display's toFixed: 0.015 is 0.02 here and "0.01" there.
             if (reading?.HasIob == true)
                 state.Iob = Math.Floor(reading.Iob.Iob * 100 + 0.5) / 100;
-            if (reading?.HasCob == true)
-                state.Cob = (int)Math.Floor(reading.Cob!.Cob + 0.5);
+            if (reading?.Cob is { } cob && (reading.HasCob || (properties.ContainsKey("profile") && HasTreatments(reading.Inputs))))
+                state.Cob = (int)Math.Floor(cob.Cob + 0.5);
 
             // Extract BWP (Bolus Wizard Preview)
             if (
@@ -329,7 +355,7 @@ public class SummaryService : ISummaryService
                     && double.TryParse(bwpValue?.ToString(), out var bwp)
                 )
                 {
-                    state.Bwp = Math.Round(bwp * 100) / 100;
+                    state.Bwp = Math.Floor(bwp * 100 + 0.5) / 100;
                 }
             }
 

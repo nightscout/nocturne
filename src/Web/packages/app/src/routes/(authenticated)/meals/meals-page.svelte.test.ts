@@ -1,12 +1,12 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { MealEvent, SuggestedMealMatch } from "$lib/api";
+import type { MealEvent, SuggestedMealMatch } from "#lib/api/index.js";
 import {
   remoteCommand,
   remoteQuery,
   updatedBy,
-} from "$lib/test-stubs/remote-resource";
+} from "#lib/test-stubs/remote-resource.js";
 
 const fixture = (): MealEvent[] => [
   {
@@ -44,15 +44,16 @@ let mealsAfterAccept: MealEvent[];
 
 const { toastSuccess } = vi.hoisted(() => ({ toastSuccess: vi.fn() }));
 
-vi.mock("$api/generated/nutritions.generated.remote", () => ({
+vi.mock("#lib/api/generated/nutritions.generated.remote.js", () => ({
   getMeals: () => mealsResource,
   addCarbIntakeFood: remoteCommand(() => Promise.resolve()),
   deleteCarbIntakeFood: remoteCommand(() => Promise.resolve()),
   updateCarbIntakeFood: remoteCommand(() => Promise.resolve()),
 }));
 
-vi.mock("$api/generated/bolus.generated.remote", () => {
-  const form = () => ({ result: undefined, enhance: () => ({}) });
+vi.mock("#lib/api/generated/bolus.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  const form = () => ({ result: undefined, enhance: () => ({}), fields: remoteFormFields() });
   return {
     create: form(),
     update: form(),
@@ -66,12 +67,12 @@ vi.mock("$api/generated/bolus.generated.remote", () => {
   };
 });
 
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
   getInsulins: () => remoteQuery(() => []),
 }));
 
 // The stub's `updates()` refreshes nothing, so the accept lands the refreshed lists itself.
-vi.mock("$api/generated/mealMatchings.generated.remote", () => ({
+vi.mock("#lib/api/generated/mealMatchings.generated.remote.js", () => ({
   getSuggestions: () => remoteQuery(() => shown.suggestions),
   getFoodEntry: () => remoteQuery(() => undefined),
   acceptMatch: remoteCommand(() => {
@@ -83,10 +84,7 @@ vi.mock("$api/generated/mealMatchings.generated.remote", () => ({
   dismissMatch: remoteCommand(() => server.dismissAnswer()),
 }));
 
-vi.mock("sveltekit-search-params", async () => {
-  const { writable } = await import("svelte/store");
-  return { queryParam: () => writable(null) };
-});
+vi.mock("sveltekit-search-params", () => ({ queryParameters: () => ({}) }));
 
 vi.mock("svelte-sonner", async (original) => ({
   ...(await original<typeof import("svelte-sonner")>()),
@@ -94,11 +92,11 @@ vi.mock("svelte-sonner", async (original) => ({
 }));
 vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
 
-import { getMeals } from "$api/generated/nutritions.generated.remote";
+import { getMeals } from "#lib/api/generated/nutritions.generated.remote.js";
 import {
   getSuggestions,
   acceptMatch,
-} from "$api/generated/mealMatchings.generated.remote";
+} from "#lib/api/generated/mealMatchings.generated.remote.js";
 import MealsPage from "./+page.svelte";
 
 beforeEach(() => {

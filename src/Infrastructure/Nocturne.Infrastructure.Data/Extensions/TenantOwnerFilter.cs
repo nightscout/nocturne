@@ -28,6 +28,12 @@ public static class TenantOwnerFilter
         members
             .PeopleOf(tenantId)
             .Where(m => m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
+            .InJoinOrder();
+
+    /// <summary>Memberships ordered by when they joined, earliest first.</summary>
+    public static IOrderedQueryable<TenantMemberEntity> InJoinOrder(
+        this IQueryable<TenantMemberEntity> members) =>
+        members
             .OrderBy(m => m.SysCreatedAt)
             .ThenBy(m => m.Id);
 

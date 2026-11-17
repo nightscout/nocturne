@@ -91,7 +91,7 @@ public class NightscoutTreatmentDeserializationTests
         // (the numeric converters apply to every type these options touch).
         var result = JsonSerializer.Deserialize<decimal?>(jsonValue, JsonDefaults.CaseInsensitive);
 
-        result.Should().Be(expected.HasValue ? (decimal)expected.Value : null);
+        result.Should().Be(expected?.ToDecimal());
     }
 
     [Fact]

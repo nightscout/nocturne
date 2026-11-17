@@ -1,7 +1,7 @@
 import type { ConditionNode } from "./types";
-import { AlertWeekday, PumpModeState, StateSpanCategory } from "$api-clients";
-import { bg, bgLabel, formatLocale, weekdayLabel } from "$lib/utils/formatting";
-import { plural } from "$lib/utils/plural";
+import { AlertWeekday, PumpModeState, StateSpanCategory } from "#lib/api/generated/nocturne-api-client.js";
+import { bg, bgLabel, formatLocale, weekdayLabel } from "#lib/utils/formatting.js";
+import { plural } from "#lib/utils/plural.js";
 import { glucoseBucketLabel } from "./alert-labels.svelte";
 
 /**

@@ -10,19 +10,20 @@
  */
 
 import { getContext, setContext } from "svelte";
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { resolve } from "$app/paths";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { toDate } from "$lib/utils/formatting";
-import { toIsoString } from "$lib/utils/api-date";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { toDate } from "#lib/utils/formatting.js";
+import { toIsoString } from "#lib/utils/api-date.js";
 import {
   getSessionInfo,
   refreshSession as refreshSessionRemote,
   logoutSession as logoutSessionRemote,
 } from "../../routes/(unauthenticated)/auth/auth.remote";
-import { remoteErrorMessage } from "$lib/api/remote-error";
-import { whenIdle } from "$lib/utils/when-idle";
+import { remoteErrorMessage } from "#lib/api/remote-error.js";
+import { whenIdle } from "#lib/utils/when-idle.js";
+import { fresh } from "#lib/api/fresh-query.js";
 
 const AUTH_STORE_KEY = "nocturne:app:auth-store";
 
@@ -116,8 +117,7 @@ export class AuthStore {
 
     if (authCookie) {
       // Nothing on first paint reads the session (the layout's server data carries the user and
-      // permissions), so it loads once the page is idle. That is also out of the render that
-      // constructs the store, where `getSessionInfo().run()` would reject.
+      // permissions), so it loads once the page is idle.
       this._state = "loading";
       this.cancelSessionLoad = whenIdle(() => {
         this.cancelSessionLoad = null;
@@ -168,7 +168,7 @@ export class AuthStore {
     this._error = null;
 
     try {
-      const session = await getSessionInfo().run();
+      const session = await fresh(getSessionInfo());
 
       if (session.isAuthenticated && session.subjectId) {
         this._user = {
@@ -226,7 +226,7 @@ export class AuthStore {
     this._state = "unauthenticated";
 
     // Redirect to home
-    goto(resolve("/"));
+    goto(resolve(""));
   }
 
   /**

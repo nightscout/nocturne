@@ -4,6 +4,7 @@ using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
 using Xunit;
@@ -81,6 +82,29 @@ public partial class AnalyticsReadScopeGuardTests
         data.Primary.Should().BeNull("an empty range would read as no evidence rather than none allowed");
         data.Comparison.Should().BeNull();
         data.PrimaryRange.Should().NotBeNull("the envelope still says what was asked for");
+        service.Verify(
+            s => s.GetSettingsEvidenceAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData(Scope.GlucoseRead, false, SettingsEvidenceWithheldReason.ReadScopes)]
+    [InlineData(Scope.TherapyRead, false, SettingsEvidenceWithheldReason.ReadScopes)]
+    [InlineData(null, true, SettingsEvidenceWithheldReason.HistoryClamped)]
+    public async Task SettingsEvidence_Handler_WithoutATenantTimezone_StillSaysWhyItIsWithheld(
+        string? missing, bool historyClamped, SettingsEvidenceWithheldReason reason)
+    {
+        var (controller, service) = LoopAnalysisHandler(
+            Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories.Where(s => s != missing)]),
+            historyClamped,
+            timezone: null);
+
+        var data = (await controller.GetSettingsEvidence(Week()))
+            .Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<SettingsEvidenceReport>().Subject;
+
+        data.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.NotConfigured);
+        data.WithheldReason.Should().Be(reason, "the tab is withheld for the caller whether or not the dates can be placed");
+        data.WithheldSeries.Contains(LoopAnalysisSeries.SettingsEvidence).Should().Be(missing is not null);
         service.Verify(
             s => s.GetSettingsEvidenceAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<CancellationToken>()),
             Times.Never);

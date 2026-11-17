@@ -28,9 +28,18 @@ onlyBuiltDependencies:
 # Unfixed upstream as of 2.19.3; drop the patch once bits-ui guards it.
 # SignalR 8.0.17 throws from onclose when a transport closes before start resumes.
 # Cover both Node CJS and bundler ESM entry points; remove after an upstream fix.
+# layerchart spreads options that are not attributes onto the elements it renders: a data-mode
+# Circle writes its whole `data` array onto every circle (O(n^2) string building, 5 MB of markup
+# for two days of readings), the chart root gets every chart option. Drop with the release that
+# carries techniq/layerchart#977.
+# svelte's server output writes a `$derived` used as a `style:` shorthand as the getter's source
+# (layerchart's root `style:position`), and a `class:` shorthand on an element with a spread as
+# always on. Drop with the release that carries sveltejs/svelte#19100.
 patchedDependencies:
   "@microsoft/signalr@8.0.17": patches/@microsoft__signalr@8.0.17.patch
   "bits-ui@2.18.1": patches/bits-ui@2.18.1.patch
+  "layerchart@2.9.1": patches/layerchart@2.9.1.patch
+  "svelte@5.57.2": patches/svelte@5.57.2.patch
 
 # Migrated from the package.json "pnpm" field, which pnpm v11+ no longer reads.
 overrides:
@@ -40,7 +49,7 @@ overrides:
   # therefore make every snippet-to-snippet assignment fail with "Two different types with this
   # name exist, but they are unrelated" — 20 such errors in glucose-chart's dialogs alone, and the
   # same trap for anything consuming these packages by path. One copy, one brand.
-  svelte: "5.55.5"
+  svelte: "5.57.2"
 
 packageExtensions:
   tiptap-extension-auto-joiner:
@@ -92,4 +101,4 @@ packageExtensions:
 # the wrappers this workspace generates, so waiting a day to adopt one buys nothing.
 # Drop an entry once its version ages past the cutoff.
 minimumReleaseAgeExclude:
-  - openapi-remote-codegen@0.8.1
+  - openapi-remote-codegen@0.9.0

@@ -36,10 +36,10 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.Local;
 
     /// <summary>
-    /// A week with a sick day and every kind of loop interruption, manual mode among them, so the
+    /// A week with a sick day and a day in manual mode, so the
     /// insulin totals test sees the days the masks take out and the days they leave in.
     /// </summary>
-    private static readonly DateTime End = new(2026, 9, 7, 20, 0, 0);
+    private static readonly DateTime End = new(2026, 8, 7, 20, 0, 0);
 
     private static readonly Lazy<(SettingsEvidenceInputs Inputs, long From, long To)> Week = new(Load);
 
@@ -69,11 +69,11 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
         therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var builder = new BasalSeriesBuilder(therapy.Object, segments.Object, NullLogger<BasalSeriesBuilder>.Instance);
 
-        var profile = DemoTherapyProfile.BuildProfile(config, DateTime.UtcNow).Store[DemoTherapyProfile.ProfileName];
+        var profile = DemoTherapyProfile.BuildProfile(config, DateTime.UtcNow, "Pacific/Auckland").Store[DemoTherapyProfile.ProfileName];
         static List<ScheduleEntry> Entries(IEnumerable<TimeValue> values) =>
             [.. values.Select(v => new ScheduleEntry { Time = v.Time, Value = v.Value, TimeAsSeconds = v.TimeAsSeconds })];
         var snapshot = new TherapySnapshot(
-            profile.Dia, (int)config.InsulinPeakMinutes, profile.CarbsHr, Zone, null, 0,
+            profile.Dia, profile.CarbsHr, Zone, null, 0,
             Entries(profile.Sens), Entries(profile.CarbRatio), Entries(profile.Basal));
         var timeline = new TherapyTimeline([new TherapySegment(from - DailyProfileCalculator.ActingMs, to + 1, snapshot)]);
 

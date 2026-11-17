@@ -7,16 +7,16 @@ import type {
   TrackerCategory,
   ProfileActivationDto,
   MealPeriod,
-} from "$api-clients";
-import type { PredictionData } from "$lib/api/prediction-data";
-import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-import { distinct } from "$lib/utils/collections";
-import { profileActivationLabel } from "$lib/utils/profile-activation-label";
+} from "#lib/api/generated/nocturne-api-client.js";
+import type { PredictionData } from "#lib/api/prediction-data.js";
+import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import { distinct } from "#lib/utils/collections.js";
+import { profileActivationLabel } from "#lib/utils/profile-activation-label.js";
 import {
   resolveChartThresholds,
   type ChartThresholds,
-} from "$lib/constants/glucose-thresholds";
+} from "#lib/constants/glucose-thresholds.js";
 import { bisector } from "d3";
 // ===== Data Point Types =====
 

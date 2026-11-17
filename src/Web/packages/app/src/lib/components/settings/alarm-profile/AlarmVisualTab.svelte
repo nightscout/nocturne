@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Input } from "$lib/components/ui/input";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import Eye from "@lucide/svelte/icons/eye";
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,
-  } from "$lib/types/alarm-profile";
+  } from "#lib/types/alarm-profile.js";
   import {
     getBrowserCapabilities,
     type BrowserAlarmCapabilities,
-  } from "$lib/audio/alarm-sounds";
+  } from "#lib/audio/alarm-sounds.js";
   import AlarmPreview from "../AlarmPreview.svelte";
   import CapabilityBadge from "./CapabilityBadge.svelte";
 

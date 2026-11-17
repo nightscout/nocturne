@@ -4,9 +4,9 @@
   at one end tie one another or sit too close to the rest to call.
 -->
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { HourlyComparison, HourlyExcursion, type HourlyPattern, type HourlyPatterns } from "$lib/api";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { HourlyComparison, HourlyExcursion, type HourlyPattern, type HourlyPatterns } from "#lib/api/index.js";
+  import { bg, bgLabel } from "#lib/utils/formatting.js";
   import HourBandStrip from "./HourBandStrip.svelte";
   import { hourSpan } from "./hour-labels";
 

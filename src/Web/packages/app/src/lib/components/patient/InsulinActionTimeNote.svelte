@@ -1,7 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { InsulinActionTimeSource, type InsulinActionTime } from "$api";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import { InsulinActionTimeSource, type InsulinActionTime } from "#lib/api/index.js";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   interface Props {
     /** From the server's resolver, so the note names the value insulin on board really uses. */

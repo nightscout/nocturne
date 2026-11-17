@@ -56,7 +56,7 @@ public class TreatmentLogControllerTests
 
         _controller = new TreatmentLogController(
             _boluses.Object, _carbs.Object, _bgChecks.Object, _notes.Object,
-            _deviceEvents.Object, _basalInjections.Object, new StatisticsService());
+            _deviceEvents.Object, _basalInjections.Object, new StatisticsService(TimeProvider.System));
         Grant(Scope.ReportsRead, Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead);
     }
 

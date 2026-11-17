@@ -1,14 +1,14 @@
 <script lang="ts">
   import type { GlucoseTileVariant } from "@nocturne/ui/glucose";
   import { unwashed, washSeeds, type PriorFill } from "./glucose-tile-wash-state.svelte";
-  import { washInterior } from '$lib/watercolour-wash';
+  import { washInterior } from '#lib/watercolour-wash.js';
   import { prefersReducedMotion } from "svelte/motion";
   import { Artwork } from "water-ui";
-  import { illustrations } from "$lib/stores/illustrations.svelte";
+  import { illustrations } from "#lib/stores/illustrations.svelte.js";
   import GlucoseTileBloom from "./GlucoseTileBloom.svelte";
   import type { PlayerState } from "water-ui";
   import { untrack } from "svelte";
-  import { deferredWatercolour } from "$lib/watercolour-deferral.svelte";
+  import { deferredWatercolour } from "#lib/watercolour-deferral.svelte.js";
 
   interface Props {
     mills: number | undefined;
@@ -44,6 +44,11 @@
   let noBloomSeed = $state<number | null>(null);
   const noBloom = $derived(noBloomSeed === reading.seed);
 
+  // The wash's chunk and first frame arrive after the tile's flat fill is on screen; held hidden
+  // until then, it soaks into the fill rather than snapping on.
+  let drawnSeed = $state<number | null>(null);
+  let drawnVariant = $state<GlucoseTileVariant | null>(null);
+
   function markSpread() {
     if (spreadSeed === reading.seed) return;
     spreadSeed = reading.seed;
@@ -51,6 +56,7 @@
   }
 
   function onWashState(state: PlayerState) {
+    if (state.mode !== "none") drawnSeed = reading.seed;
     if (state.finished) washSeeds.settled = reading.seed;
     if (state.mode === "none" || state.error !== undefined) markSpread();
   }
@@ -124,19 +130,21 @@
           ontransitioncancel={markFaded}
           use:fadedOnUnmount
         >
-          <Artwork
-            artwork="wash"
-            palette="slate"
-            surface="light"
-            seed={reading.seed}
-            durationMs={11600}
-            tail={0.86}
-            releaseAfterFinish
-            onstatechange={onWashState}
-            fit="fill"
-            crop={washInterior}
-            class="size-full"
-          />
+          <span class="absolute inset-0 wash-arrival" class:drawn={drawnSeed === reading.seed}>
+            <Artwork
+              artwork="wash"
+              palette="slate"
+              surface="light"
+              seed={reading.seed}
+              durationMs={11600}
+              tail={0.86}
+              releaseAfterFinish
+              onstatechange={onWashState}
+              fit="fill"
+              crop={washInterior}
+              class="size-full"
+            />
+          </span>
         </span>
       {/if}
     {/if}
@@ -144,7 +152,20 @@
 {:else}
   {#key variant}
     <span class="absolute inset-0 wash-grain {washBlend}">
-      <Artwork artwork="wash" palette="slate" surface="light" releaseAfterFinish fit="fill" crop={washInterior} class="size-full" />
+      <span class="absolute inset-0 wash-arrival" class:drawn={drawnVariant === variant}>
+        <Artwork
+          artwork="wash"
+          palette="slate"
+          surface="light"
+          releaseAfterFinish
+          onstatechange={(state) => {
+            if (state.mode !== "none") drawnVariant = variant;
+          }}
+          fit="fill"
+          crop={washInterior}
+          class="size-full"
+        />
+      </span>
     </span>
   {/key}
 {/if}
@@ -160,6 +181,15 @@
   /* Must outrank the blend opacity utility. */
   .wash-fade.faded {
     opacity: 0;
+  }
+  /* Inside the blended layer: an opacity below 1 outside it would isolate the blend from the fill
+     while it fades. */
+  .wash-arrival {
+    opacity: 0;
+    transition: opacity 0.9s ease-out;
+  }
+  .wash-arrival.drawn {
+    opacity: 1;
   }
   .prior-fill,
   .bloom {

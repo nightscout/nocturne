@@ -14,6 +14,8 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -369,9 +371,12 @@ public class MemberScopeFilterPipelineTests
         // As AuthenticationMiddleware leaves it.
         httpContext.Items["GrantedScopes"] = Scope.Normalize(credentialScopes);
         httpContext.Items["PermissionTrie"] = new PermissionTrie();
+        (await RequestMembership.ReadAsync(
+                new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None))
+            .Membership.StoreOn(httpContext);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, db.ContextFactory.AsNocturneFactory(), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(httpContext);
 
         return httpContext;

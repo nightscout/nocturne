@@ -1,4 +1,4 @@
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 /**
  * Why a guest-code activation didn't succeed.

@@ -1,8 +1,8 @@
 <script lang="ts">
     import { Artwork } from "water-ui";
-    import { getChangelog, type ChangelogRelease } from "$lib/data/portal";
+    import { getChangelog, type ChangelogRelease } from "#lib/data/portal.js";
     import { Button } from "@nocturne/ui/ui/button";
-    import { renderReleaseMarkdown } from "$lib/utils/release-markdown";
+    import { renderReleaseMarkdown } from "#lib/utils/release-markdown.js";
     import ExternalLink from "@lucide/svelte/icons/external-link";
     import Loader2 from "@lucide/svelte/icons/loader-circle";
     import AlertCircle from "@lucide/svelte/icons/circle-alert";

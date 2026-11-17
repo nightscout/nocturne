@@ -22,7 +22,7 @@ public interface IAlertOrchestrator
     /// <summary>
     /// Evaluate a specific set of rules for the current tenant against <paramref name="context"/>,
     /// with the same enrichment, DND suppression, and delivery side effects as
-    /// <see cref="EvaluateAsync"/>. Used by the sweep service for wall-clock-driven rules
+    /// <see cref="EvaluateAsync"/>. Used by the alert sweep for wall-clock-driven rules
     /// (e.g. <c>tracker_age</c>) that must fire even when no new reading arrives.
     /// </summary>
     /// <param name="rules">The rule snapshots to evaluate. Rules from other tenants are a caller bug.</param>

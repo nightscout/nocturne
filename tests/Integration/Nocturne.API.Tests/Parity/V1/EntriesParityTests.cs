@@ -9,6 +9,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/entries endpoints.
 /// Verifies that Nocturne responses match Nightscout 15.0.3 exactly.
 /// </summary>
+[Collection(ParityShards.One)]
 public class EntriesParityTests : ParityTestBase
 {
     public EntriesParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -194,6 +195,14 @@ public class EntriesParityTests : ParityTestBase
     {
         // Negative count - should both handle gracefully
         await AssertGetParityAsync("/api/v1/entries?count=-1");
+    }
+
+    [Fact]
+    public async Task GetEntries_ZeroCount_ReturnsSameShape()
+    {
+        await SeedEntrySequenceAsync(count: 12);
+
+        await AssertGetParityAsync("/api/v1/entries?count=0");
     }
 
     [Fact]

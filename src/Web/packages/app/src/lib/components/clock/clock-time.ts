@@ -5,7 +5,7 @@
  * reads the same to everyone who opens it.
  */
 
-import { formatLocale } from "$lib/utils/formatting";
+import { formatLocale } from "#lib/utils/formatting.js";
 
 /**
  * Render the time for a clock face. Zero-padded hours because a clock face is

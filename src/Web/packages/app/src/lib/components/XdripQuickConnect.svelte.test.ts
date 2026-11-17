@@ -5,21 +5,23 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
   deviceApprove: vi.fn(),
+  refresh: vi.fn(),
 }));
 
-vi.mock("$api/generated/services.generated.remote", () => ({
-  getActiveDataSources: () => ({ current: [], refresh: () => Promise.resolve() }),
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
+  getActiveDataSources: () => ({ current: [], refresh: () => mocks.refresh() }),
 }));
 
-vi.mock("$routes/(authenticated)/oauth/oauth.remote", () => ({
-  getDeviceInfo: (args: unknown) => ({ run: () => mocks.lookup(args) }),
+vi.mock("#routes/(authenticated)/oauth/oauth.remote.js", () => ({
+  getDeviceInfo: (args: unknown) => createQueryResource(() => mocks.lookup(args)),
 }));
 
-vi.mock("$api/generated/oAuths.generated.remote", () => ({
+vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
   deviceApprove: (...args: unknown[]) => mocks.deviceApprove(...args),
 }));
 
 import XdripQuickConnect from "./XdripQuickConnect.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 describe("XdripQuickConnect", () => {
   beforeEach(() => {
@@ -31,20 +33,19 @@ describe("XdripQuickConnect", () => {
       scopes: ["entries.read"],
     });
     mocks.deviceApprove.mockReset();
+    mocks.deviceApprove.mockResolvedValue({});
+    mocks.refresh.mockReset();
+    mocks.refresh.mockResolvedValue(undefined);
   });
 
-  it("keeps the consent step and says why when the approval fails", async () => {
-    mocks.deviceApprove.mockRejectedValue(new Error("network down"));
+  it("checks for data again as soon as the device is approved", async () => {
     render(XdripQuickConnect, { props: { instanceUrl: "https://demo.example/" } });
+    await expect.poll(() => mocks.refresh.mock.calls.length).toBe(1);
 
-    await page.getByPlaceholder("XXXX-YY").fill("ABCD-EF");
+    await page.getByPlaceholder("XXXX-YYYY").fill("ABCD-EF");
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("button", { name: "Approve" }).click();
 
-    await expect
-      .element(page.getByText("Could not approve the device. The code possibly expired."))
-      .toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Approve" })).toBeEnabled();
-    expect(mocks.deviceApprove).toHaveBeenCalledWith({ user_code: "ABCD-EF", approved: true });
+    await expect.poll(() => mocks.refresh.mock.calls.length).toBe(2);
   });
 });

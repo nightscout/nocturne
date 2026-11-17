@@ -4,16 +4,12 @@
     UploaderApp,
     UploaderSetupResponse,
     DataSourceInfo,
-    ScopeDeletionAccess,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getUploaderName, getUploaderDescription } from "$lib/utils/uploader-labels";
-  import { getActiveDataSources } from "$api/generated/services.generated.remote";
-  import { create as createGrant } from "$lib/api/generated/directGrants.generated.remote";
-  import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
-  import { deviceApprove } from "$api/generated/oAuths.generated.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
+  import { getActiveDataSources } from "#lib/api/generated/services.generated.remote.js";
+  import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
@@ -22,17 +18,12 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Clock from "@lucide/svelte/icons/clock";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import X from "@lucide/svelte/icons/x";
-  import Shield from "@lucide/svelte/icons/shield";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
-  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
-  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
+  import DeviceCodeApproval from "#lib/components/oauth/DeviceCodeApproval.svelte";
   import QRCode from "qrcode";
 
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   interface Props {
     app: UploaderApp | null;
     setupResponse: UploaderSetupResponse | null;
@@ -47,22 +38,9 @@
     onConnected,
   }: Props = $props();
 
-  // ── Device authorization (OAuth) state ────────────────────────
 
   let qrCodeDataUrl = $state<string | null>(null);
-  let deviceCodeInput = $state("");
-  let deviceLookupLoading = $state(false);
-  let deviceLookupError = $state<string | null>(null);
-  let deviceInfo = $state<{
-    userCode: string;
-    clientId: string;
-    displayName: string | null;
-    scopes: string[];
-    deletionAccess: ScopeDeletionAccess | undefined;
-  } | null>(null);
-  let deviceApproveLoading = $state(false);
   let deviceApproved = $state(false);
-  let deviceDenied = $state(false);
 
   // ── API key generation (for apps without OAuth connectUrl) ────
 
@@ -115,63 +93,6 @@
     } catch {
       // Local rendering, not a request — there is no server reason to surface.
       qrCodeDataUrl = null;
-    }
-  }
-
-  async function lookupDeviceCode() {
-    const code = deviceCodeInput.trim();
-    if (!code) return;
-
-    deviceLookupLoading = true;
-    deviceLookupError = null;
-
-    try {
-      const info = await getDeviceInfo({ userCode: code }).run();
-      if (!info) {
-        deviceLookupError = "Invalid or expired device code.";
-        return;
-      }
-      deviceInfo = {
-        userCode: info.userCode ?? code,
-        clientId: info.clientId ?? "",
-        displayName: info.clientDisplayName ?? null,
-        scopes: (info.scopes ?? []).filter(Boolean),
-        deletionAccess: info.deletionAccess,
-      };
-    } catch (err) {
-      deviceLookupError = describeSubmitError(
-        err,
-        "Invalid or expired device code. Check the code and try again."
-      );
-    } finally {
-      deviceLookupLoading = false;
-    }
-  }
-
-  async function handleApproveDevice() {
-    if (!deviceInfo) return;
-    deviceApproveLoading = true;
-    try {
-      await deviceApprove({ user_code: deviceInfo.userCode, approved: true });
-      deviceApproved = true;
-      startPolling();
-    } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Could not approve the device. The code possibly expired.");
-    } finally {
-      deviceApproveLoading = false;
-    }
-  }
-
-  async function handleDenyDevice() {
-    if (!deviceInfo) return;
-    deviceApproveLoading = true;
-    try {
-      await deviceApprove({ user_code: deviceInfo.userCode, approved: false });
-      deviceDenied = true;
-    } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Failed to deny the request.");
-    } finally {
-      deviceApproveLoading = false;
     }
   }
 
@@ -247,26 +168,48 @@
     </div>
 
     {#if setupResponse.connectUrl}
-      <!-- ── OAuth Device Flow (QR code + inline authorization) ── -->
-      {#if deviceApproved}
-        <!-- Approved — waiting for data -->
-        <Card.Root variant="success">
-          <Card.Content class="space-y-2 pt-6">
-            <div class="flex items-center gap-3">
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10">
-                <Check class="h-5 w-5 text-success" />
+      {#if !deviceApproved}
+        <Card.Root>
+          <Card.Header class="text-center pb-3">
+            <Card.Title class="text-sm">Scan to connect</Card.Title>
+            <Card.Description>
+              Scan this QR code with your phone's camera to open {app ? getUploaderName(app) : ''} and start the connection.
+            </Card.Description>
+          </Card.Header>
+          <Card.Content class="flex flex-col items-center gap-4">
+            {#if qrCodeDataUrl}
+              <div class="rounded-lg border bg-white p-2">
+                <img src={qrCodeDataUrl} alt="QR code to connect {app ? getUploaderName(app) : ''}" class="h-48 w-48" />
               </div>
-              <div>
-                <p class="font-medium text-success">Device authorized</p>
-                <p class="text-sm text-muted-foreground">
-                  {app ? getUploaderName(app) : ''} is now connected. You can return to your device.
-                </p>
+            {:else}
+              <div class="flex h-48 w-48 items-center justify-center rounded-lg border bg-muted">
+                <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            </div>
+            {/if}
           </Card.Content>
         </Card.Root>
+      {/if}
 
-        <!-- Connection status (polling for data) -->
+      <Card.Root>
+        {#if !deviceApproved}
+          <Card.Header class="pb-3">
+            <Card.Title class="text-sm">Enter authorization code</Card.Title>
+            <Card.Description>
+              After scanning, {app ? getUploaderName(app) : ''} will show an 8-character code. Enter it here to approve the connection.
+            </Card.Description>
+          </Card.Header>
+        {/if}
+        <Card.Content>
+          <DeviceCodeApproval
+            onApproved={() => {
+              deviceApproved = true;
+              startPolling();
+            }}
+          />
+        </Card.Content>
+      </Card.Root>
+
+      {#if deviceApproved}
         {@const detected = isDetected(app?.id)}
         {@const ds = getDataSource(app?.id)}
         {#if detected && ds}
@@ -298,148 +241,6 @@
             </Card.Content>
           </Card.Root>
         {/if}
-
-      {:else if deviceDenied}
-        <!-- Denied -->
-        <Card.Root>
-          <Card.Content class="flex items-center gap-3 pt-6">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-              <X class="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p class="font-medium">Authorization denied</p>
-              <p class="text-sm text-muted-foreground">The device will not be granted access.</p>
-            </div>
-          </Card.Content>
-        </Card.Root>
-
-      {:else if deviceInfo}
-        <!-- Step 2: Approve / deny the device -->
-        <Card.Root>
-          <Card.Header class="space-y-1 text-center">
-            <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <Shield class="h-6 w-6 text-primary" />
-            </div>
-            <Card.Title class="text-lg">Authorize application</Card.Title>
-            <Card.Description>A device wants to access your Nocturne data.</Card.Description>
-          </Card.Header>
-          <Card.Content class="space-y-4">
-            <DeviceAppClaimNotice claimedName={deviceInfo.displayName ?? deviceInfo.clientId} />
-
-            <Separator />
-
-            <div>
-              <p class="mb-3 text-sm font-medium">This application is requesting permission to:</p>
-              <ul class="space-y-2">
-                {#each deviceInfo.scopes as scope (scope)}
-                  <li class="flex items-start gap-3 text-sm">
-                    <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span class="text-muted-foreground">{getOAuthScopeDescription(scope)}</span>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-
-            <DeletionDisclosure access={deviceInfo.deletionAccess} />
-
-            {#if deviceLookupError}
-              <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <p class="text-sm text-destructive">{deviceLookupError}</p>
-              </div>
-            {/if}
-
-            <Separator />
-
-            <div class="flex gap-3">
-              <Button
-                variant="outline"
-                class="flex-1"
-                disabled={deviceApproveLoading}
-                onclick={handleDenyDevice}
-              >
-                {#if deviceApproveLoading}
-                  <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                {/if}
-                Deny
-              </Button>
-              <Button
-                class="flex-1"
-                disabled={deviceApproveLoading}
-                onclick={handleApproveDevice}
-              >
-                {#if deviceApproveLoading}
-                  <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                {/if}
-                Approve
-              </Button>
-            </div>
-          </Card.Content>
-        </Card.Root>
-
-      {:else}
-        <!-- Step 1: QR code + code entry -->
-        <Card.Root>
-          <Card.Header class="text-center pb-3">
-            <Card.Title class="text-sm">Scan to connect</Card.Title>
-            <Card.Description>
-              Scan this QR code with your phone's camera to open {app ? getUploaderName(app) : ''} and start the connection.
-            </Card.Description>
-          </Card.Header>
-          <Card.Content class="flex flex-col items-center gap-4">
-            {#if qrCodeDataUrl}
-              <div class="rounded-lg border bg-white p-2">
-                <img src={qrCodeDataUrl} alt="QR code to connect {app ? getUploaderName(app) : ''}" class="h-48 w-48" />
-              </div>
-            {:else}
-              <div class="flex h-48 w-48 items-center justify-center rounded-lg border bg-muted">
-                <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            {/if}
-          </Card.Content>
-        </Card.Root>
-
-        <Card.Root>
-          <Card.Header class="pb-3">
-            <Card.Title class="text-sm">Enter authorization code</Card.Title>
-            <Card.Description>
-              After scanning, {app ? getUploaderName(app) : ''} will show an 8-character code. Enter it here to approve the connection.
-            </Card.Description>
-          </Card.Header>
-          <Card.Content class="space-y-4">
-            {#if deviceLookupError}
-              <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <p class="text-sm text-destructive">{deviceLookupError}</p>
-              </div>
-            {/if}
-
-            <form
-              class="flex gap-2"
-              onsubmit={(e) => {
-                e.preventDefault();
-                lookupDeviceCode();
-              }}
-            >
-              <Input
-                type="text"
-                placeholder="XXXX-YYYY"
-                maxlength={9}
-                autocomplete="off"
-                variant="code"
-                bind:value={deviceCodeInput}
-                disabled={deviceLookupLoading}
-              />
-              <Button type="submit" disabled={deviceLookupLoading || !deviceCodeInput.trim()}>
-                {#if deviceLookupLoading}
-                  <Loader2 class="h-4 w-4 animate-spin" />
-                {:else}
-                  Continue
-                {/if}
-              </Button>
-            </form>
-          </Card.Content>
-        </Card.Root>
       {/if}
 
     {:else}

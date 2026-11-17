@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { ReadAccessAuditDto } from "$lib/api/generated/nocturne-api-client";
+  import type { ReadAccessAuditDto } from "#lib/api/generated/nocturne-api-client.js";
   import type {
     Column,
     ColumnDef,
@@ -18,22 +18,22 @@
     createSvelteTable,
     FlexRender,
     renderSnippet,
-  } from "$lib/components/ui/data-table";
+  } from "#lib/components/ui/data-table/index.js";
 </script>
 
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as Table from "$lib/components/ui/table";
+  import { formatLocale } from "#lib/utils/formatting.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import { SvelteSet } from "svelte/reactivity";
-  import DataTableToolbar from "$lib/components/treatments/DataTableToolbar.svelte";
-  import DataTablePagination from "$lib/components/treatments/DataTablePagination.svelte";
-  import ColumnFilterPopover from "$lib/components/treatments/ColumnFilterPopover.svelte";
+  import DataTableToolbar from "#lib/components/treatments/DataTableToolbar.svelte";
+  import DataTablePagination from "#lib/components/treatments/DataTablePagination.svelte";
+  import ColumnFilterPopover from "#lib/components/treatments/ColumnFilterPopover.svelte";
 
   interface Props {
     rows: ReadAccessAuditDto[];
@@ -192,18 +192,17 @@
         return a - b;
       },
     },
-    // Subject column
     {
-      id: "subject",
+      id: "readBy",
       accessorFn: (row) =>
-        row.subjectName ?? row.credentialFingerprint ?? "anonymous",
+        row.actorName ?? row.credentialFingerprint ?? "anonymous",
       header: ({ column }) =>
         renderSnippet(sortableHeaderSnippet, {
           column,
-          label: "Subject",
+          label: "Read by",
         }),
       cell: ({ row }) =>
-        row.original.subjectName ??
+        row.original.actorName ??
         row.original.credentialFingerprint ??
         "anonymous",
     },
@@ -321,8 +320,8 @@
 
       if (r.endpoint) values.push(r.endpoint);
       if (r.entityType) values.push(r.entityType);
-      if (r.subjectName) values.push(r.subjectName);
-      if (r.subjectId) values.push(r.subjectId);
+      if (r.actorName) values.push(r.actorName);
+      if (r.actorSubjectId) values.push(r.actorSubjectId);
       if (r.ipAddress) values.push(r.ipAddress);
       if (r.authType) values.push(r.authType);
       if (r.credentialFingerprint) values.push(r.credentialFingerprint);

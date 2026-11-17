@@ -14,24 +14,24 @@ namespace Nocturne.Connectors.Glooko.Services;
 /// </summary>
 internal sealed class GlookoSyncContext
 {
-    internal GlookoSyncContext(GlookoConnectorConfiguration config, string connectorSource, ILogger logger)
+    internal GlookoSyncContext(GlookoConnectorConfiguration config, string connectorSource, ILogger logger, TimeProvider clock)
     {
         Config = config;
         TimeMapper = new GlookoTimeMapper(config, logger);
-        SensorGlucoseMapper = new GlookoSensorGlucoseMapper(config, connectorSource, TimeMapper, logger);
-        V4TreatmentMapper = new GlookoV4TreatmentMapper(connectorSource, TimeMapper, logger);
+        SensorGlucoseMapper = new GlookoSensorGlucoseMapper(config, connectorSource, TimeMapper, logger, clock);
+        V4TreatmentMapper = new GlookoV4TreatmentMapper(connectorSource, TimeMapper, logger, clock);
         StateSpanMapper = new GlookoStateSpanMapper(connectorSource, TimeMapper, logger);
-        TempBasalMapper = new GlookoTempBasalMapper(connectorSource, TimeMapper, logger);
+        TempBasalMapper = new GlookoTempBasalMapper(connectorSource, TimeMapper, logger, clock);
         SystemEventMapper = new GlookoSystemEventMapper(connectorSource, TimeMapper, logger);
         ProfileMapper = new GlookoProfileMapper(connectorSource, logger);
-        PumpEventMapper = new GlookoPumpEventMapper(connectorSource, TimeMapper, logger);
-        DeviceMapper = new GlookoDeviceMapper(connectorSource, TimeMapper, logger);
-        NoteMapper = new GlookoNoteMapper(connectorSource, TimeMapper, logger);
+        PumpEventMapper = new GlookoPumpEventMapper(connectorSource, TimeMapper, logger, clock);
+        DeviceMapper = new GlookoDeviceMapper(connectorSource, TimeMapper, logger, clock);
+        NoteMapper = new GlookoNoteMapper(connectorSource, TimeMapper, logger, clock);
         ActivityMapper = new GlookoActivityMapper(connectorSource, TimeMapper, logger);
         BodyWeightMapper = new GlookoBodyWeightMapper(connectorSource, TimeMapper, logger);
         StepCountMapper = new GlookoStepCountMapper(connectorSource, TimeMapper, logger);
         HeartRateMapper = new GlookoHeartRateMapper(connectorSource, TimeMapper, logger);
-        SettingsProfileMapper = new GlookoSettingsProfileMapper(connectorSource, logger);
+        SettingsProfileMapper = new GlookoSettingsProfileMapper(connectorSource, logger, clock);
     }
 
     internal GlookoConnectorConfiguration Config { get; }

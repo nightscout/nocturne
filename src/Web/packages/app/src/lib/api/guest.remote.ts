@@ -1,19 +1,19 @@
 import { form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 import { z } from "zod";
-import { RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
-import { safeReturnUrl } from "$lib/server/return-url";
-import { withWelcome } from "$lib/components/members/welcome";
+import { rateLimitedError } from "#lib/forms/submit-messages.svelte.js";
+import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
+import { withWelcome } from "#lib/components/members/welcome.js";
 import {
   classifyActivationError,
   type ActivationFailure,
 } from "./guest-activation-error";
 
-const FAILURE_MESSAGES: Record<ActivationFailure, string> = {
-  rejected:
+const FAILURE_MESSAGES: Record<ActivationFailure, () => string> = {
+  rejected: () =>
     "That code didn't work. It may have expired, already been used, or been entered slightly differently. Ask whoever shared it to send a new one.",
-  "rate-limited": RATE_LIMITED_ERROR,
-  unavailable:
+  "rate-limited": rateLimitedError,
+  unavailable: () =>
     "We couldn't check that code just now. Please try again in a moment.",
 };
 
@@ -43,7 +43,7 @@ export const activateGuestCode = form(
       }
     }
 
-    if (failure) invalid(issue.code(FAILURE_MESSAGES[failure]));
+    if (failure) invalid(issue.code(FAILURE_MESSAGES[failure]()));
 
     redirect(303, withWelcome(safeReturnUrl(data.returnUrl)));
   }

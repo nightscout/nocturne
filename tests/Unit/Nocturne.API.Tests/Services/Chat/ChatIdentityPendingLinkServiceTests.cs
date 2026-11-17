@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Chat;
 using Nocturne.Infrastructure.Data;
@@ -28,7 +29,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
         _factory = _db.ContextFactory;
         _service = new ChatIdentityPendingLinkService(
             _factory.AsNocturneFactory(),
-            Mock.Of<ILogger<ChatIdentityPendingLinkService>>());
+            TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>());
     }
 
     public void Dispose() => _db.Dispose();
@@ -165,6 +166,30 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
         (await db2.ChatIdentityPendingLinks.FirstOrDefaultAsync(p => p.Token == token)).Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task A_token_is_consumable_until_the_lifetime_after_the_clock_has_passed()
+    {
+        var start = new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);
+        var clock = new FakeTimeProvider(start);
+        var service = new ChatIdentityPendingLinkService(
+            _factory.AsNocturneFactory(), clock, Mock.Of<ILogger<ChatIdentityPendingLinkService>>());
+        var inTime = await service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
+        var tooLate = await service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
+
+        using (var db = _factory.CreateDbContext())
+        {
+            var row = await db.ChatIdentityPendingLinks.SingleAsync(p => p.Token == inTime);
+            row.CreatedAt.Should().Be(start.UtcDateTime);
+            row.ExpiresAt.Should().Be(start.UtcDateTime + ChatIdentityPendingLinkService.TokenLifetime);
+        }
+
+        clock.Advance(ChatIdentityPendingLinkService.TokenLifetime - TimeSpan.FromSeconds(1));
+        (await service.TryConsumeAsync(inTime, default)).Should().NotBeNull();
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+        (await service.TryConsumeAsync(tooLate, default)).Should().BeNull();
+    }
+
     // ---- CleanupExpiredAsync ----
 
     [Fact]
@@ -219,7 +244,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
         var fault = new FirstTransactionFault(TransactionFault.AfterCommit);
         var retrying = new ChatIdentityPendingLinkService(
             (new RetryingFactory(TransactionFaultOptions.RetryingSqlite(_db.Connection, fault))).AsNocturneFactory(),
-            Mock.Of<ILogger<ChatIdentityPendingLinkService>>());
+            TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>());
 
         var consumed = await retrying.TryConsumeAsync(token, default);
 

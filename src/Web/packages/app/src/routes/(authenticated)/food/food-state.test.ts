@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Food } from "$api";
+import type { Food } from "#lib/api/index.js";
 
 const { createFood, toastError } = vi.hoisted(() => ({
   createFood: vi.fn<(food: Food) => Promise<Food | undefined>>(),
@@ -7,7 +7,7 @@ const { createFood, toastError } = vi.hoisted(() => ({
 }));
 
 vi.mock("svelte-sonner", () => ({ toast: { error: toastError, success: vi.fn() } }));
-vi.mock("$api/generated/foods.generated.remote", () => ({
+vi.mock("#lib/api/generated/foods.generated.remote.js", () => ({
   getFoods: vi.fn(),
   createFood,
   updateFood: vi.fn(),

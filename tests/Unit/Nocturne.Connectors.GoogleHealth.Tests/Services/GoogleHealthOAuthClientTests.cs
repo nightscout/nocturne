@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Xunit;
 
@@ -39,6 +40,27 @@ public class GoogleHealthOAuthClientTests
 
         Assert.Equal("reconnect_required", exception.Message);
         Assert.Equal("token_refresh", exception.Stage);
+    }
+
+    [Fact]
+    public async Task Retry_after_date_is_measured_from_the_clock()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var client = new GoogleHealthOAuthClient(new HttpClient(new StubHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                Content = new StringContent(string.Empty)
+            };
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(
+                clock.GetUtcNow().AddSeconds(90));
+            return response;
+        })), clock);
+
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(
+            () => client.AccountKeyAsync("access-token", default));
+
+        Assert.Equal(TimeSpan.FromSeconds(90), exception.RetryAfter);
     }
 
     [Theory]

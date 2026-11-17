@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { UserDisplayPreferences } from "$lib/api";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
 
 // Node env (browser=false): DOM/cookie I/O is skipped, so we exercise the pure
 // hydration mapping — the crux of the cross-device fix (server prefs -> store).
-vi.mock("$app/environment", () => ({ browser: false, dev: false }));
+vi.mock("$app/env", () => ({ browser: false, dev: false }));
 vi.mock("$app/navigation", () => ({}));
 vi.mock("$app/state", () => ({}));
 vi.mock("mode-watcher", () => ({

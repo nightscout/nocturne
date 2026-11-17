@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
+  import { Card, CardContent, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
   import Sunrise from "@lucide/svelte/icons/sunrise";
-  import { bg, bgDelta, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
-  import type { SleepDawnPhenomenon } from "$lib/api";
+  import { bg, bgDelta, bgLabel, formatLocale, toDate } from "#lib/utils/formatting.js";
+  import type { SleepDawnPhenomenon } from "#lib/api/index.js";
 
   interface Props {
     dawnPhenomenon: SleepDawnPhenomenon;

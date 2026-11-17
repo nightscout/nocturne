@@ -1,8 +1,8 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { SETUP_TENANT_COOKIE } from "$lib/server/request-host";
-import { isFreshInstallError } from "$lib/server/onboarding-check";
-import { setupStageFor } from "$lib/server/setup-hub";
+import { SETUP_TENANT_COOKIE } from "#lib/server/request-host.js";
+import { isFreshInstallError } from "#lib/server/onboarding-check.js";
+import { setupStageFor } from "#lib/server/setup-hub.js";
 
 export const load: PageServerLoad = async ({ locals, cookies, parent }) => {
   const setupTenantSlug = cookies.get(SETUP_TENANT_COOKIE) ?? null;

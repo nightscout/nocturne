@@ -60,7 +60,7 @@ flowchart TD
         Resolution --> Stamp --> Expire --> BroadcastResolved --> ArchiveInApp
     end
 
-    subgraph sweep ["AlertSweepService (30 s background tick)"]
+    subgraph sweep ["AlertSweepJob (30 s per tenant, from the job ledger)"]
         direction LR
         SAdvance["AdvanceEscalationsAsync<br/>(escalating + due)"]
         SHyst["CloseHysteresisWindowsAsync<br/>tracker.ForceCloseAsync<br/>(Hysteresis)"]

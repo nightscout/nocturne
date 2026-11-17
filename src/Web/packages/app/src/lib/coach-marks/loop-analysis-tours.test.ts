@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { LOOP_ANALYSIS_PAGES } from "$lib/components/reports/loop-analysis/loop-analysis-pages.svelte";
+import { LOOP_ANALYSIS_PAGES } from "#lib/components/reports/loop-analysis/loop-analysis-pages.svelte.js";
 import { coachCopy } from "./copy.svelte";
 import { loopAnalysisTour, sequences } from "./sequences";
 
-vi.mock("$app/paths", () => ({ resolve: (path: string) => path }));
+vi.mock("$app/paths", () => import("#lib/test-stubs/app-paths.js"));
 
 const SHARED = "loop-analysis-pages";
 const copy: Record<string, { title: string; description: string }> = coachCopy();

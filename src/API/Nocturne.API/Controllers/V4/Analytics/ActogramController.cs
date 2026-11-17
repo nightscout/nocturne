@@ -46,6 +46,10 @@ public class ActogramController : ControllerBase
     /// <param name="startTime">Start of the window as Unix milliseconds (inclusive).</param>
     /// <param name="endTime">End of the window as Unix milliseconds (exclusive).
     /// Must be greater than <paramref name="startTime"/>.</param>
+    /// <param name="summaryStartTime">Start of the range the heart-rate and step summaries cover, as
+    /// Unix milliseconds (inclusive); <paramref name="startTime"/> when omitted.</param>
+    /// <param name="summaryEndTime">End of the summary range (exclusive); <paramref name="endTime"/>
+    /// when omitted. The summary range must be non-empty and lie within the window.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet]
     [RemoteQuery]
@@ -62,16 +66,26 @@ public class ActogramController : ControllerBase
     public async Task<ActionResult<ActogramReportData>> GetActogram(
         [FromQuery] long startTime,
         [FromQuery] long endTime,
+        [FromQuery] long? summaryStartTime = null,
+        [FromQuery] long? summaryEndTime = null,
         CancellationToken cancellationToken = default
     )
     {
         if (endTime <= startTime)
             return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
 
+        var summaryStart = summaryStartTime ?? startTime;
+        var summaryEnd = summaryEndTime ?? endTime;
+        if (summaryStart < startTime || summaryEnd > endTime || summaryEnd <= summaryStart)
+            return Problem(
+                detail: "The summary range must be non-empty and lie within startTime and endTime",
+                statusCode: 400,
+                title: "Bad Request");
+
         if (this.RejectDateSpan(startTime, endTime, V4ReadLimits.MaxActogramSpanDays) is { } overlong)
             return overlong;
 
-        var result = await _service.GetAsync(startTime, endTime, cancellationToken);
+        var result = await _service.GetAsync(startTime, endTime, summaryStart, summaryEnd, cancellationToken);
         return Ok(ActogramReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
     }
 }

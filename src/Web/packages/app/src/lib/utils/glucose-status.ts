@@ -6,7 +6,7 @@
 import {
   GlucoseStatus,
   type TenantOverviewItem,
-} from "$lib/api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 import {
   glucoseStatusTileVariant,
   type GlucoseTileVariant,

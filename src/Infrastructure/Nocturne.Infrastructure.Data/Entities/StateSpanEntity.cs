@@ -8,18 +8,20 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.StateSpan
 /// </summary>
 [Table("state_spans")]
-public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped, ISoftDeletable, IOriginalIdentified
+public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped, IDuplicateFlagged, IWriterStamped
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("is_duplicate")]
+    public bool IsDuplicate { get; set; }
+
     /// <summary>
     /// Identifier of the tenant this state span belongs to
     /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
-    /// <summary>
-    /// Primary key - UUID Version 7 for time-ordered, globally unique identification
-    /// </summary>
-    [Key]
+    /// <summary>Row id, unique within its tenant: the primary key is <c>(TenantId, Id)</c>.</summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -57,6 +59,11 @@ public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped, IS
     [MaxLength(50)]
     public string? Source { get; set; }
 
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("writer_grant_id")]
+    public Guid? WriterGrantId { get; set; }
+
     /// <summary>
     /// Category-specific metadata (stored as JSON)
     /// </summary>
@@ -64,11 +71,12 @@ public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped, IS
     public string? MetadataJson { get; set; }
 
     /// <summary>
-    /// Original ID from source system for deduplication
+    /// Identifier from the source system, the re-import key. The domain model carries it as
+    /// <c>StateSpan.OriginalId</c>.
     /// </summary>
     [Column("original_id")]
     [MaxLength(255)]
-    public string? OriginalId { get; set; }
+    public string? LegacyId { get; set; }
 
     /// <summary>
     /// ID of the span that superseded this one (self-referencing FK)

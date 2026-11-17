@@ -1,13 +1,13 @@
-import { isoNow } from "$lib/utils/now";
+import { isoNow } from "#lib/utils/now.js";
 import { page } from "$app/state";
-import { satisfiesScope } from "$lib/authorization/scopes";
+import { satisfiesScope } from "#lib/authorization/scopes.js";
 import {
   getActiveAlerts,
   acknowledgeExcursion,
   markSeen,
   snoozeInstance,
-} from "$api/generated/alerts.generated.remote";
-import type { ActiveExcursionResponse } from "$api-clients";
+} from "#lib/api/generated/alerts.generated.remote.js";
+import type { ActiveExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
 import { markSeenOnThisDevice, seenHere } from "./seen-here.svelte";
 
 /** The snooze lengths every alert surface offers, in minutes. */

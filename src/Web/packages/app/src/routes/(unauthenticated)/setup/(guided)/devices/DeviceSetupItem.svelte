@@ -1,26 +1,26 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { resolve } from "$app/paths";
-  import { labelFor } from "$lib/components/ui/enum-value";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
   import Activity from "@lucide/svelte/icons/activity";
   import Cpu from "@lucide/svelte/icons/cpu";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Timer from "@lucide/svelte/icons/timer";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Toggle } from "$lib/components/ui/toggle";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { FormError } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Toggle } from "#lib/components/ui/toggle/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { FormError } from "#lib/forms/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     InsulinActionTimeNote,
     PatientDeviceManager,
     PatientInsulinManager,
     aidAlgorithmLabels,
-  } from "$lib/components/patient";
+  } from "#lib/components/patient/index.js";
   import {
     getDeviceSetup,
     confirmSetupDevice,
@@ -29,10 +29,10 @@
     setTakesNoInsulin,
     addSetupTracker,
     removeSetupTracker,
-  } from "$api/generated/setupDevices.generated.remote";
-  import { getDevices, getInsulins } from "$api/generated/patientRecords.generated.remote";
-  import { getSetupHub } from "$api/generated/setupHubs.generated.remote";
-  import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
+  } from "#lib/api/generated/setupDevices.generated.remote.js";
+  import { getDevices, getInsulins } from "#lib/api/generated/patientRecords.generated.remote.js";
+  import { getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
+  import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
   import {
     AidAlgorithm,
     DeviceCategory,
@@ -44,8 +44,8 @@
     type DeviceSlot,
     type InsulinChoice,
     type TrackerOffer,
-  } from "$api";
-  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
+  } from "#lib/api/index.js";
+  import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   const setupQuery = getDeviceSetup();
   const hubQuery = getSetupHub();
@@ -55,7 +55,7 @@
   const voice = $derived(patientVoice(relationshipQuery.current));
   const setup = $derived(setupQuery.current);
 
-  const trackerSettingsHref = resolve("/(authenticated)/settings/trackers");
+  const trackerSettingsHref = resolve("/(authenticated)/trackers");
   const alertsHref = resolve("/(authenticated)/alerts");
 
   // The device and insulin managers below write through their own remote functions, which
