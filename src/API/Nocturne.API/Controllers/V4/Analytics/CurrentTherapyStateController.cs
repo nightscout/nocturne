@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -72,10 +73,26 @@ public class CurrentTherapyStateController : ControllerBase
                 Reservoir = latestPump?.Reservoir,
                 PumpBatteryPercent = latestPump?.BatteryPercent,
                 PumpBatteryVoltage = latestPump?.BatteryVoltage,
+                LinkBatteryVoltage = LinkBatteryVoltage(latestPump),
                 Thresholds = thresholds,
             },
             HttpContext.GetGrantedScopes()));
     }
+
+    /// <summary>
+    /// The key AndroidAPS's Medtronic driver puts an OrangeLink's battery voltage under, in the
+    /// pump status's <c>extended</c> block, which a pump snapshot keeps among its additional
+    /// properties.
+    /// </summary>
+    internal const string LinkBatteryVoltageKey = "RileyLinkBatteryVoltage";
+
+    private static double? LinkBatteryVoltage(Nocturne.Core.Models.V4.PumpSnapshot? snapshot) =>
+        snapshot?.AdditionalProperties?.GetValueOrDefault(LinkBatteryVoltageKey) switch
+        {
+            JsonElement { ValueKind: JsonValueKind.Number } number => number.GetDouble(),
+            double voltage => voltage,
+            _ => null,
+        };
 }
 
 /// <summary>
@@ -115,6 +132,13 @@ public class CurrentTherapyStateResponse
     /// pump reports no battery voltage.
     /// </summary>
     public double? PumpBatteryVoltage { get; set; }
+
+    /// <summary>
+    /// Battery voltage of the radio link between the uploader and the pump, from the most recent
+    /// pump snapshot: an OrangeLink's, as AndroidAPS's Medtronic driver reports it. Null when none
+    /// is reported.
+    /// </summary>
+    public double? LinkBatteryVoltage { get; set; }
 
     /// <summary>
     /// The glucose colouring band and the personal target in force now, as the chart data

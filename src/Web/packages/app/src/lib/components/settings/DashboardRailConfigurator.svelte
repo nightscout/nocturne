@@ -58,6 +58,7 @@
     [RailItemId.Iob]: "Insulin on board (IOB)",
     [RailItemId.Loop]: "Loop status",
     [RailItemId.Reservoir]: "Reservoir",
+    [RailItemId.LinkBattery]: "Link battery",
     [RailItemId.Trackers]: "Trackers",
   };
 

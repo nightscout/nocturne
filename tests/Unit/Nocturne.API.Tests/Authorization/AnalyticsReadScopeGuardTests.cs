@@ -673,6 +673,7 @@ public partial class AnalyticsReadScopeGuardTests
         Reservoir = 42,
         PumpBatteryPercent = 80,
         PumpBatteryVoltage = 1.4,
+        LinkBatteryVoltage = 2.9,
         Thresholds = new ChartThresholdsDto { Low = 70, High = 180, TargetLow = 90, TargetHigh = 140 },
     };
 
@@ -685,6 +686,7 @@ public partial class AnalyticsReadScopeGuardTests
         data.Reservoir.Should().Be(42);
         data.PumpBatteryPercent.Should().Be(80);
         data.PumpBatteryVoltage.Should().Be(1.4);
+        data.LinkBatteryVoltage.Should().Be(2.9);
         data.SensitivityPercent.Should().BeNull();
     }
 
@@ -698,6 +700,7 @@ public partial class AnalyticsReadScopeGuardTests
         data.Reservoir.Should().BeNull();
         data.PumpBatteryPercent.Should().BeNull();
         data.PumpBatteryVoltage.Should().BeNull();
+        data.LinkBatteryVoltage.Should().BeNull();
     }
 
     [Fact]
