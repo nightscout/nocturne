@@ -30,7 +30,9 @@ public class AuditContextMiddleware
             mutableContext.SubjectName = authContext?.SubjectName;
             mutableContext.AuthType = authContext?.AuthType.ToString();
             mutableContext.TokenId = authContext?.TokenId;
+            mutableContext.CredentialFingerprint = authContext?.CredentialFingerprint;
             mutableContext.IpAddress = httpContext.Connection.RemoteIpAddress?.ToString();
+            mutableContext.UserAgent = httpContext.Request.Headers.UserAgent.ToString();
             mutableContext.TraceId = httpContext.TraceIdentifier;
             mutableContext.Endpoint =
                 $"{httpContext.Request.Method} {pathRedactor.Redact(httpContext.Request.Path.ToString())}";

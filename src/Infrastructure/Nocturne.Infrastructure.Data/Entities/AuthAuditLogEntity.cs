@@ -26,8 +26,7 @@ public class AuthAuditLogEntity : IEntityCreated
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Event type: 'login', 'logout', 'token_issued', 'token_revoked', 'failed_auth',
-    /// 'permission_denied', 'role_assigned', 'role_removed', 'subject_created', 'subject_deleted'
+    /// Event type: one of the <see cref="Nocturne.Core.Contracts.Auth.AuthAuditEventType"/> constants.
     /// </summary>
     [Required]
     [MaxLength(50)]

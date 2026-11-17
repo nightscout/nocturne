@@ -325,7 +325,8 @@ public static class HubAuthorizationState
                 Middleware.AuthenticationMiddleware.CredentialScopes(authContext),
                 authContext.LimitTo24Hours,
                 authContext.ExpiresAt,
-                authContext.SessionId),
+                authContext.SessionId,
+                authContext.CredentialFingerprint),
         };
     }
 }

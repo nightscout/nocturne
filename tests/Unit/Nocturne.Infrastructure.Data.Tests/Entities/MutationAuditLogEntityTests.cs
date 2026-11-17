@@ -13,6 +13,16 @@ public class MutationAuditLogEntityTests
         [nameof(IAuditContext.SubjectName)] = nameof(MutationAuditLogEntity.ActorName),
     };
 
+    /// <summary>
+    /// Forensic fields <c>auth_audit_log</c> records for access changes. <c>mutation_audit_log</c> has
+    /// no column for them.
+    /// </summary>
+    private static readonly HashSet<string> RecordedByTheAuthAuditOnly =
+    [
+        nameof(IAuditContext.UserAgent),
+        nameof(IAuditContext.CredentialFingerprint),
+    ];
+
     [Fact]
     public void Create_CopiesEveryActorFieldFromTheAuditContext()
     {
@@ -32,6 +42,7 @@ public class MutationAuditLogEntityTests
 
         var actorProperties = typeof(IAuditContext).GetProperties()
             .Where(p => p.Name is not (nameof(IAuditContext.IsSystem) or nameof(IAuditContext.WriterGrantId)))
+            .Where(p => !RecordedByTheAuthAuditOnly.Contains(p.Name))
             .ToList();
         actorProperties.Should().NotBeEmpty();
 
