@@ -19,11 +19,15 @@ public interface IActivityService
     /// </param>
     /// <param name="count">Maximum number of records to return.</param>
     /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="from">Earliest start to include, inclusive. Narrows the find's own lower bound.</param>
+    /// <param name="to">Latest start to include, inclusive. Narrows the find's own upper bound.</param>
     /// <returns>Collection of <see cref="Activity"/> records matching the filter criteria.</returns>
     Task<IEnumerable<Activity>> GetActivitiesAsync(
         string? find = null,
         int? count = null,
         int? skip = null,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     );
 
@@ -103,9 +107,13 @@ public interface IActivityService
     /// </summary>
     /// <param name="categories">The sources to count, named by their read scope.</param>
     /// <param name="find">Optional MongoDB-style query filter string.</param>
+    /// <param name="from">Earliest start to count, inclusive.</param>
+    /// <param name="to">Latest start to count, inclusive.</param>
     Task<IReadOnlyDictionary<string, long>> CountActivitiesByCategoryAsync(
         IReadOnlySet<string> categories,
         string? find = null,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     );
 }

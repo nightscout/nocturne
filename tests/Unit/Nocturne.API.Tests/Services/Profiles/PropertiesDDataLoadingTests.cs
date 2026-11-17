@@ -295,7 +295,7 @@ public class PropertiesDDataLoadingTests
             .Setup(f => f.GetFoodAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Food> { new() { Name = "Apple", Carbs = 15 } });
         _activities
-            .Setup(a => a.GetActivitiesAsync(It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .Setup(a => a.GetActivitiesAsync(It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Activity> { new() { Mills = MinutesAgo(60), Notes = "Walk" } });
         _storeSize
             .Setup(s => s.ReadAsync(It.IsAny<CancellationToken>()))

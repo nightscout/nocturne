@@ -196,7 +196,7 @@ public class ActivityServiceTests
             find,
             count,
             skip,
-            CancellationToken.None
+            null, null, CancellationToken.None
         );
 
         // Assert

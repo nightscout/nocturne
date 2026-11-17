@@ -21,6 +21,11 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// platform context for the reads over every tenant's members. Over a caller's unit of work every
 /// method runs on the unit's context, whose pin the owner set, and stages its write for the
 /// owner's commit.
+/// <para>
+/// Every write of a membership's roles, direct permissions or 24-hour limit that changes them,
+/// including removing a membership and deleting a role members hold, also records one
+/// <c>auth_audit_log</c> row per role, permission or limit that moved, saved with the write.
+/// </para>
 /// </remarks>
 public interface ITenantMembershipRepository
 {

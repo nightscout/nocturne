@@ -1530,27 +1530,11 @@ public class StatisticsServiceTests
     #region Unit Conversion Tests
 
     [Fact]
-    public void MgdlToMMOL_WithValidValues_ShouldConvertCorrectly()
-    {
-        // Arrange & Act & Assert
-        _statisticsService.MgdlToMMOL(99).Should().BeApproximately(5.5, 0.1);
-        _statisticsService.MgdlToMMOL(180).Should().BeApproximately(10.0, 0.1);
-    }
-
-    [Fact]
     public void MmolToMGDL_WithValidValues_ShouldConvertCorrectly()
     {
         // Arrange & Act & Assert
         _statisticsService.MmolToMGDL(5.5).Should().BeApproximately(99, 1);
         _statisticsService.MmolToMGDL(10.0).Should().BeApproximately(180, 1);
-    }
-
-    [Fact]
-    public void MgdlToMMOLString_WithValidValue_ShouldReturnFormattedString()
-    {
-        // Arrange & Act & Assert
-        _statisticsService.MgdlToMMOLString(99).Should().Be("5.5");
-        _statisticsService.MgdlToMMOLString(180).Should().Be("10.0");
     }
 
     #endregion

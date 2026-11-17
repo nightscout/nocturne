@@ -8,6 +8,7 @@ using Nocturne.API.Filters;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Controllers.V3;
 
@@ -575,16 +576,86 @@ public abstract class BaseV3Controller<T> : ControllerBase
         mills.ToUtcDateTime().ToString("R");
 
     /// <summary>
-    /// Set <c>Last-Modified</c> and <c>ETag</c> on a V3 <c>history/{lastModified}</c> response.
-    /// AAPS advances its incremental-sync cursor from these headers; without them the cursor
-    /// stays put and the same page is requested repeatedly.
+    /// A V3 <c>history/{lastModified}</c> read: clamps <paramref name="limit"/>, reads one page,
+    /// sets <c>Last-Modified</c> and <c>ETag</c> from the page's cursor, and answers with the
+    /// V3 envelope around <paramref name="project"/>. AAPS advances its incremental-sync cursor
+    /// from those headers; without them the cursor stays put and the same page is requested
+    /// repeatedly. The response sets no <c>Cache-Control</c>, so a client polling the cursor never
+    /// reads a stored page.
     /// </summary>
-    /// <param name="maxMills">Highest record timestamp in the response, in Unix milliseconds.</param>
-    protected void SetHistoryCursorHeaders(long maxMills)
+    /// <param name="collection">Collection name for the request log.</param>
+    /// <param name="lastModified">The request cursor, in Unix milliseconds.</param>
+    /// <param name="limit">The requested page size, clamped to 1 through <paramref name="maxLimit"/>.</param>
+    /// <param name="read">
+    /// Reads the page that follows a cursor. Its <see cref="ModifiedSincePage{T}.CursorMills"/> is the
+    /// collection's history clock, the same stamp the body's <c>srvModified</c> carries, which the
+    /// next request pages on.
+    /// </param>
+    /// <param name="project">Shapes the page's records into the response result.</param>
+    /// <param name="echoRequestCursorWhenEmpty">
+    /// Whether a page with no cursor sends the request cursor back. AAPS's food and profile loaders
+    /// throw on a missing <c>ETag</c>; the other collections send no cursor header when nothing
+    /// changed, and AAPS keeps its cursor.
+    /// </param>
+    /// <param name="maxLimit">The most one page holds.</param>
+    protected async Task<ActionResult> CreateV3HistoryResponseAsync<TRecord>(
+        string collection,
+        long lastModified,
+        int limit,
+        Func<long, int, Task<ModifiedSincePage<TRecord>>> read,
+        Func<IReadOnlyList<TRecord>, object> project,
+        bool echoRequestCursorWhenEmpty = false,
+        int maxLimit = MaxLimit
+    )
     {
-        Response.Headers["Last-Modified"] = FormatHttpDate(maxMills);
-        Response.Headers["ETag"] = FormatCursorETag(maxMills);
+        _logger.LogDebug(
+            "V3 {Collection} history requested since {LastModified} with limit {Limit}",
+            collection,
+            lastModified,
+            limit
+        );
+
+        var page = await read(lastModified, Math.Clamp(limit, 1, maxLimit));
+
+        var cursor = page.CursorMills ?? (echoRequestCursorWhenEmpty ? lastModified : null);
+        if (cursor is { } cursorMills)
+        {
+            Response.Headers["Last-Modified"] = FormatHttpDate(cursorMills);
+            Response.Headers["ETag"] = FormatCursorETag(cursorMills);
+        }
+
+        return CreateV3SuccessResponse(project(page.Records));
     }
+
+    /// <summary>
+    /// A V3 history read of a collection whose service returns the records alone: the cursor is the
+    /// newest record's <paramref name="clock"/>, or none for an empty page.
+    /// </summary>
+    /// <param name="read">Reads the records modified after a cursor, up to a limit, oldest clock first or last as the collection serves them.</param>
+    /// <param name="clock">The record's history clock in Unix milliseconds.</param>
+    /// <inheritdoc cref="CreateV3HistoryResponseAsync{TRecord}"/>
+    protected Task<ActionResult> CreateV3ClockHistoryResponseAsync<TRecord>(
+        string collection,
+        long lastModified,
+        int limit,
+        Func<long, int, Task<IEnumerable<TRecord>>> read,
+        Func<TRecord, long> clock,
+        Func<IReadOnlyList<TRecord>, object> project
+    ) =>
+        CreateV3HistoryResponseAsync(
+            collection,
+            lastModified,
+            limit,
+            async (since, take) =>
+            {
+                var records = (await read(since, take)).ToList();
+                return new ModifiedSincePage<TRecord>(
+                    records,
+                    records.Count > 0 ? records.Max(clock) : null
+                );
+            },
+            project
+        );
 
     /// <summary>
     /// Create a standardized V3 success response with metadata including pagination headers.
