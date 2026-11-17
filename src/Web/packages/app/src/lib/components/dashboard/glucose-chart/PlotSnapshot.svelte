@@ -8,7 +8,7 @@
   import type { AreaMode, LineColorMode } from "./utils/glucose-gradient-stops";
   import { plotPadding } from "./plot-padding";
   import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
-  import { GLUCOSE_CHART_FETCH_HOURS, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { GLUCOSE_CHART_FETCH_HOURS, type GlucoseRangePalette, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
   /**
    * The dashboard's main plot as the live chart first draws it, for the server to render to markup
@@ -34,6 +34,7 @@
       areaMode: AreaMode;
       areaOpacity: number;
       units: GlucoseUnits;
+      rangePalette: GlucoseRangePalette;
     };
   }
 
@@ -106,6 +107,7 @@
       showPoints={style.showPoints}
       areaMode={style.areaMode}
       areaOpacity={style.areaOpacity}
+      rangePalette={style.rangePalette}
       visibleOnly
     />
   {/snippet}

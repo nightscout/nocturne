@@ -757,8 +757,8 @@ public class PropertiesService : IPropertiesService
                 await _deviceAgeService.GetCannulaAgeAsync(prefs, ct: cancellationToken));
             properties["sage"] = new Dictionary<string, object?>
             {
-                ["Sensor Start"] = ToSensorDictionary(sensor.SensorStart, sensor.Min == "Sensor Start"),
-                ["Sensor Change"] = ToSensorDictionary(sensor.SensorChange, sensor.Min == "Sensor Change"),
+                [TreatmentTypes.SensorStart] = ToSensorDictionary(sensor.SensorStart, sensor.Min == TreatmentTypes.SensorStart),
+                [TreatmentTypes.SensorChange] = ToSensorDictionary(sensor.SensorChange, sensor.Min == TreatmentTypes.SensorChange),
                 ["min"] = sensor.Min,
             };
             properties["iage"] = ToAgeDictionary(
@@ -1025,7 +1025,7 @@ public class PropertiesService : IPropertiesService
             .Where(t =>
                 !string.IsNullOrEmpty(t.EventType)
                 && (
-                    t.EventType.Equals("Temp Basal", StringComparison.OrdinalIgnoreCase)
+                    t.EventType.Equals(TreatmentTypes.TempBasal, StringComparison.OrdinalIgnoreCase)
                     || t.EventType.Equals("temp basal", StringComparison.OrdinalIgnoreCase)
                 )
                 && t.Mills <= time
@@ -1051,7 +1051,7 @@ public class PropertiesService : IPropertiesService
             .Where(t =>
                 !string.IsNullOrEmpty(t.EventType)
                 && (
-                    t.EventType.Equals("Combo Bolus", StringComparison.OrdinalIgnoreCase)
+                    t.EventType.Equals(TreatmentTypes.ComboBolus, StringComparison.OrdinalIgnoreCase)
                     || t.EventType.Equals("combo bolus", StringComparison.OrdinalIgnoreCase)
                 )
                 && t.Mills <= time

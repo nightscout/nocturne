@@ -1,9 +1,7 @@
-using Nocturne.Core.Models;
-
-namespace Nocturne.Connectors.Core.Constants;
+namespace Nocturne.Core.Constants;
 
 /// <summary>
-///     Standard treatment type strings for consistency across connectors.
+///     Nightscout legacy treatment event types and the lists of them.
 ///     These match Nightscout's expected event types.
 /// </summary>
 public static class TreatmentTypes
@@ -155,44 +153,45 @@ public static class TreatmentTypes
     public const string TransmitterSensorInsert = "Transmitter Sensor Insert";
 
     /// <summary>
-    /// Map from Nightscout eventType strings to typed BolusType enum.
-    /// Used for treatment categorization in chart data.
+    /// Temp basal start recorded under its own name.
     /// </summary>
-    public static readonly Dictionary<string, BolusType> BolusEventTypeMap = new(
-        StringComparer.OrdinalIgnoreCase
-    )
-    {
-        [Bolus] = BolusType.Bolus,
-        [MealBolus] = BolusType.MealBolus,
-        [CorrectionBolus] = BolusType.CorrectionBolus,
-        [SnackBolus] = BolusType.SnackBolus,
-        [BolusWizard] = BolusType.BolusWizard,
-        [ComboBolus] = BolusType.ComboBolus,
-        [Smb] = BolusType.Smb,
-        [AutomaticBolus] = BolusType.AutomaticBolus,
-    };
+    public const string TempBasalStart = "Temp Basal Start";
 
     /// <summary>
-    /// Map from Nightscout eventType strings to typed DeviceEventType enum.
-    /// Used for treatment categorization in chart data.
+    /// Temp basal spelt as one word, as OpenAPS-family uploaders send it.
     /// </summary>
-    public static readonly Dictionary<string, DeviceEventType> DeviceEventTypeMap = new(
-        StringComparer.OrdinalIgnoreCase
-    )
-    {
-        [SensorStart] = DeviceEventType.SensorStart,
-        [SensorChange] = DeviceEventType.SensorChange,
-        [SensorStop] = DeviceEventType.SensorStop,
-        [SiteChange] = DeviceEventType.SiteChange,
-        [InsulinChange] = DeviceEventType.InsulinChange,
-        [PumpBatteryChange] = DeviceEventType.PumpBatteryChange,
-        [PodChange] = DeviceEventType.PodChange,
-        [PodActivated] = DeviceEventType.PodActivated,
-        [PodDeactivated] = DeviceEventType.PodDeactivated,
-        [ReservoirChangeEvent] = DeviceEventType.ReservoirChange,
-        [CannulaChange] = DeviceEventType.CannulaChange,
-        [TransmitterSensorInsert] = DeviceEventType.TransmitterSensorInsert,
-        [PumpSuspend] = DeviceEventType.PumpSuspend,
-        [PumpResume] = DeviceEventType.PumpResume,
-    };
+    public const string TempBasalOneWord = "TempBasal";
+
+    /// <summary>
+    /// Every event type that records a temp basal. Compare case-insensitively.
+    /// </summary>
+    public static readonly IReadOnlyList<string> TempBasalEventTypes =
+    [
+        TempBasal,
+        TempBasalStart,
+        TempBasalOneWord,
+    ];
+
+    /// <summary>
+    /// The bolus event types <c>TreatmentService</c> stamps with the patient's primary bolus insulin
+    /// on create. Compare case-insensitively.
+    /// </summary>
+    public static readonly IReadOnlyList<string> InsulinContextBolusEventTypes =
+    [
+        SnackBolus,
+        MealBolus,
+        CorrectionBolus,
+        ComboBolus,
+    ];
+
+    /// <summary>
+    /// The basal event types <c>TreatmentService</c> stamps with the patient's primary basal insulin
+    /// on create. Holds <see cref="TempBasalEventTypes"/> without <see cref="TempBasalOneWord"/>.
+    /// Compare case-insensitively.
+    /// </summary>
+    public static readonly IReadOnlyList<string> InsulinContextBasalEventTypes =
+    [
+        TempBasal,
+        TempBasalStart,
+    ];
 }

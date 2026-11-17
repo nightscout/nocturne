@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
+using Nocturne.Core.Constants;
 using Nocturne.API.Services.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
@@ -51,22 +52,16 @@ internal class TreatmentService : ITreatmentService
     /// <summary>
     /// Bolus event types that should be enriched with the patient's primary bolus insulin context.
     /// </summary>
-    private static readonly HashSet<string> BolusEventTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Snack Bolus",
-        "Meal Bolus",
-        "Correction Bolus",
-        "Combo Bolus"
-    };
+    private static readonly HashSet<string> BolusEventTypes = new(
+        TreatmentTypes.InsulinContextBolusEventTypes,
+        StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Basal event types that should be enriched with the patient's primary basal insulin context.
     /// </summary>
-    private static readonly HashSet<string> BasalEventTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Temp Basal",
-        "Temp Basal Start"
-    };
+    private static readonly HashSet<string> BasalEventTypes = new(
+        TreatmentTypes.InsulinContextBasalEventTypes,
+        StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="TreatmentService"/>.

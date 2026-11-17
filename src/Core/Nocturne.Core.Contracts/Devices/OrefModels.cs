@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Contracts.Devices;
 
@@ -255,7 +256,7 @@ public class OrefTreatment
             Date = timestamp.ToUnixTimeMilliseconds(),
             Timestamp = timestamp.ToString("O"),
             StartedAt = timestamp.ToString("O"),
-            EventType = "Bolus",
+            EventType = TreatmentTypes.Bolus,
         };
 
     public static OrefTreatment TempBasal(
@@ -270,7 +271,7 @@ public class OrefTreatment
             Date = timestamp.ToUnixTimeMilliseconds(),
             Timestamp = timestamp.ToString("O"),
             StartedAt = timestamp.ToString("O"),
-            EventType = "TempBasal",
+            EventType = TreatmentTypes.TempBasalOneWord,
         };
 
     public static OrefTreatment CarbEntry(double carbs, DateTimeOffset timestamp) =>

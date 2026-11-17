@@ -11,7 +11,7 @@ namespace Nocturne.API.Services.Monitoring;
 /// <summary>
 /// Records the device event a definition names for a manual start or completion
 /// (<see cref="TrackerDefinitionEntity.StartEventType"/>, <see cref="TrackerDefinitionEntity.CompletionEventType"/>),
-/// which hold Nightscout event names mapped through <see cref="TreatmentTypes.DeviceEventTypeMap"/>.
+/// which hold Nightscout event names mapped through <see cref="TreatmentTypeMaps.DeviceEventTypeMap"/>.
 /// </summary>
 /// <remarks>
 /// The event is written after the tracker's transaction commits, because a device event write cannot
@@ -25,7 +25,7 @@ public sealed class TrackerDeviceEventWriter(
     ILogger<TrackerDeviceEventWriter> logger)
 {
     /// <summary>
-    /// Canonicalises a requested event name against <see cref="TreatmentTypes.DeviceEventTypeMap"/>.
+    /// Canonicalises a requested event name against <see cref="TreatmentTypeMaps.DeviceEventTypeMap"/>.
     /// Blank is "not supplied"; a name with no device event is an error naming <paramref name="field"/>.
     /// </summary>
     public static bool TryNormalise(string? requested, string field, out string? normalised, out string? error)
@@ -36,7 +36,7 @@ public sealed class TrackerDeviceEventWriter(
             return true;
 
         var name = requested.Trim();
-        normalised = TreatmentTypes.DeviceEventTypeMap.Keys
+        normalised = TreatmentTypeMaps.DeviceEventTypeMap.Keys
             .FirstOrDefault(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase));
         if (normalised is null)
             error = $"{field} '{name}' is not a device event";
@@ -59,7 +59,7 @@ public sealed class TrackerDeviceEventWriter(
         if (string.IsNullOrWhiteSpace(eventType))
             return;
 
-        if (!TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType.Trim(), out var type))
+        if (!TreatmentTypeMaps.DeviceEventTypeMap.TryGetValue(eventType.Trim(), out var type))
         {
             logger.LogDebug("Tracker event type {EventType} is not a device event; none written", eventType);
             return;

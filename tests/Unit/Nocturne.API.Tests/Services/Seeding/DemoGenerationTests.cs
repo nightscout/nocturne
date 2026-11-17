@@ -180,7 +180,7 @@ public class DemoGenerationTests
         // The dashboard age pills only work if the decomposer recognizes the
         // seeded treatment EventTypes.
         foreach (var spec in DemoDeviceLifecycle.TrackerSpecs)
-            TreatmentTypes.DeviceEventTypeMap.Should().ContainKey(spec.TriggerEventType);
+            TreatmentTypeMaps.DeviceEventTypeMap.Should().ContainKey(spec.TriggerEventType);
     }
 
     [Fact]

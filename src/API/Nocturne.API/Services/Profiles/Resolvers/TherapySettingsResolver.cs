@@ -24,7 +24,6 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
     private bool? _hasData;
 
-    private const double DefaultDia = 3.0;
     private const double DefaultCarbsHr = 20.0;
 
     public TherapySettingsResolver(
@@ -84,7 +83,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
         return settings is { Dia: > 0 }
             ? (InsulinActionTimeSource.Profile, settings.Dia, primaryBolus)
-            : (InsulinActionTimeSource.Default, DefaultDia, primaryBolus);
+            : (InsulinActionTimeSource.Default, TherapySnapshot.DefaultDia, primaryBolus);
     }
 
     /// <summary>
