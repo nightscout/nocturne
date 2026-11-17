@@ -307,6 +307,30 @@ public class TenantHubFilterTests
     }
 
     [Fact]
+    public void The_upgrade_credential_resolved_as_the_connections_credential_keeps_its_fingerprint()
+    {
+        var caller = CreateConnection();
+        var upgrade = caller.GetHttpContext()!;
+        upgrade.Items[AuditContext.HttpItemKey] = new AuditContext
+        {
+            AuthType = nameof(Nocturne.Core.Models.Authorization.AuthType.InstanceKey),
+            CredentialFingerprint = "instance-key-fingerprint",
+        };
+        upgrade.SetAuthContext(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = Nocturne.Core.Models.Authorization.AuthType.InstanceKey,
+            CredentialFingerprint = "instance-key-fingerprint",
+            Permissions = ["*"],
+        });
+
+        HubAuthorizationState.Resolve(caller).Should().NotBeNull();
+
+        upgrade.RequestServices.GetRequiredService<IAuditContext>().CredentialFingerprint
+            .Should().Be("instance-key-fingerprint");
+    }
+
+    [Fact]
     public void One_invocation_runs_per_connection_at_a_time()
     {
         var services = new ServiceCollection();

@@ -20,6 +20,8 @@ public class AuditContext : IAuditContext, ISystemAttributable
     public string? AuthType { get; set; }
     public string? IpAddress { get; set; }
     public Guid? TokenId { get; set; }
+    public string? CredentialFingerprint { get; set; }
+    public string? UserAgent { get; set; }
     public string? TraceId { get; set; }
     public string? Endpoint { get; set; }
     public bool IsSystem { get; set; }
@@ -38,6 +40,8 @@ public class AuditContext : IAuditContext, ISystemAttributable
         AuthType = source.AuthType;
         IpAddress = source.IpAddress;
         TokenId = source.TokenId;
+        CredentialFingerprint = source.CredentialFingerprint;
+        UserAgent = source.UserAgent;
         TraceId = source.TraceId;
         Endpoint = source.Endpoint;
         IsSystem = source.IsSystem;
@@ -50,8 +54,10 @@ public class AuditContext : IAuditContext, ISystemAttributable
         SubjectId = null;
         SubjectName = null;
         TokenId = null;
+        CredentialFingerprint = null;
         KeptWriterGrantId = null;
         IpAddress = null;
+        UserAgent = null;
         AuthType = system.AuthType;
         Endpoint = system.Endpoint;
         TraceId = system.TraceId;

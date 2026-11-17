@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
@@ -304,6 +305,43 @@ public class MembershipRequestServiceTests : IDisposable
         request.DecidedAt.Should().BeNull();
         (await _dbContext.TenantMembers.CountAsync(m => m.SubjectId == _subjectId)).Should().Be(1);
         ApprovalNotifications().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ApproveRequestAsync_AuditsEachRoleAndTheClampAgainstTheRequester_AttributedToTheApprover()
+    {
+        _dbContext.ActingAs(new TestAuditActor { SubjectId = _adminSubjectId });
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+        var request = await _dbContext.MembershipRequests.FirstAsync();
+
+        await _service.ApproveRequestAsync(
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
+
+        var rows = await _dbContext.AuthAuditLog.AsNoTracking().Where(a => a.TargetSubjectId == _subjectId).ToListAsync();
+        rows.Should().OnlyContain(a => a.ActorSubjectId == _adminSubjectId && a.TenantId == _tenantId);
+        rows.Select(a => (a.EventType, a.DetailsJson)).Should().BeEquivalentTo(new[]
+        {
+            (AuthAuditEventType.RoleAssigned, """{"role":"admin","kind":"tenant"}"""),
+            (AuthAuditEventType.HistoryLimitChanged, """{"history_limit":"24_hours","kind":"tenant"}"""),
+        });
+    }
+
+    [Fact]
+    public async Task ApproveRequestAsync_WhenRefused_AuditsNothing()
+    {
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+        var request = await _dbContext.MembershipRequests.FirstAsync();
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = _subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.ApproveRequestAsync(
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
+
+        result.Success.Should().BeFalse();
+        (await _dbContext.AuthAuditLog.AsNoTracking().CountAsync(a => a.TargetSubjectId == _subjectId)).Should().Be(0);
     }
 
     private IReadOnlyList<IInvocation> ApprovalNotifications() =>
