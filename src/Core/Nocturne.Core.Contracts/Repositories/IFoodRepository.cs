@@ -111,6 +111,12 @@ public interface IFoodRepository
     );
 
     /// <summary>
+    /// The key of the live food <paramref name="id"/> names, in any form <see cref="GetFoodByIdAsync"/>
+    /// accepts. Null when no live food has it.
+    /// </summary>
+    Task<Guid?> ResolveFoodKeyAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The live catalog food <paramref name="reference"/> names: its UUID when it parses as one, otherwise
     /// its legacy ObjectId. Unlike <see cref="GetFoodByIdAsync"/> it does not match coerced v3 ids.
     /// </summary>
