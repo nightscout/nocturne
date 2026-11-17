@@ -82,19 +82,6 @@ public class SensorContextEnricherTests
     }
 
     [Fact]
-    public async Task TrendLeaf_derives_bucket_from_trend_rate_without_external_fetches()
-    {
-        var enricher = BuildEnricher();
-        var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"rising_fast"}""");
-
-        var enriched = await enricher.EnrichAsync(BaseContext(trendRate: 4.5m), new[] { rule }, CancellationToken.None);
-
-        enriched.TrendBucket.Should().Be(TrendBucket.RisingFast);
-        _treatmentService.Verify(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
-        _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
     public async Task IobAndCob_share_one_treatment_fetch()
     {
         var enricher = BuildEnricher();
@@ -425,27 +412,6 @@ public class SensorContextEnricherTests
 
         enriched.ActiveAlerts.Should().BeSameAs(dict);
         _alertRepository.Verify(r => r.GetActiveAlertSnapshotsAsync(It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Theory]
-    [InlineData(null, null)]
-    [InlineData(3.5, TrendBucket.RisingFast)]
-    [InlineData(3.0, TrendBucket.RisingFast)]
-    [InlineData(1.0, TrendBucket.Rising)]
-    [InlineData(0.0, TrendBucket.Flat)]
-    [InlineData(-1.0, TrendBucket.Flat)]
-    [InlineData(-1.5, TrendBucket.Falling)]
-    [InlineData(-3.0, TrendBucket.Falling)]
-    [InlineData(-3.5, TrendBucket.FallingFast)]
-    public async Task TrendBucket_derivation_boundaries(double? rateInput, TrendBucket? expected)
-    {
-        var enricher = BuildEnricher();
-        var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"flat"}""");
-        decimal? rate = rateInput?.ToDecimal();
-
-        var enriched = await enricher.EnrichAsync(BaseContext(trendRate: rate), new[] { rule }, CancellationToken.None);
-
-        enriched.TrendBucket.Should().Be(expected);
     }
 
     // ----- Looping facts -----

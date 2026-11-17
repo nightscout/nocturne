@@ -21,7 +21,6 @@ public sealed record DataNeedsSet(
     bool NeedsReservoir,
     bool NeedsSiteAge,
     bool NeedsSensorAge,
-    bool NeedsTrendBucket,
     bool NeedsActiveAlerts,
     bool NeedsLastApsCycle,
     bool NeedsLastApsEnacted,
@@ -45,7 +44,7 @@ public sealed record DataNeedsSet(
 {
     /// <summary>An empty needs set with all flags false.</summary>
     public static DataNeedsSet None { get; } =
-        new(false, false, false, false, false, false, false, false,
+        new(false, false, false, false, false, false, false,
             false, false, false, false, false, false, false,
             false, false, false, false,
             new HashSet<PumpModeState>(),
@@ -120,7 +119,6 @@ public static class RuleDataNeeds
             case AlertConditionType.Reservoir: b.Reservoir = true; break;
             case AlertConditionType.SiteAge: b.SiteAge = true; break;
             case AlertConditionType.SensorAge: b.SensorAge = true; break;
-            case AlertConditionType.Trend: b.Trend = true; break;
             case AlertConditionType.AlertState: b.ActiveAlerts = true; break;
             case AlertConditionType.LoopStale: b.LastApsCycle = true; break;
             case AlertConditionType.LoopEnactionStale:
@@ -158,7 +156,7 @@ public static class RuleDataNeeds
             case AlertConditionType.StateSpanActive: /* selection read in VisitLeaf */ break;
             case AlertConditionType.TrackerAge: /* selection read in VisitLeaf */ break;
             // DoNotDisturb deliberately not handled here — see DataNeedsSet docs above.
-            // Threshold, RateOfChange, SignalLoss, Staleness, Composite, Not, Sustained
+            // Threshold, RateOfChange, Trend, SignalLoss, Staleness, Composite, Not, Sustained
             // require no extra context: the base SensorContext carries what they read.
         }
     }
@@ -175,7 +173,6 @@ public static class RuleDataNeeds
         public bool Reservoir;
         public bool SiteAge;
         public bool SensorAge;
-        public bool Trend;
         public bool ActiveAlerts;
         public bool LastApsCycle;
         public bool LastApsEnacted;
@@ -193,7 +190,7 @@ public static class RuleDataNeeds
         public readonly HashSet<Guid> TrackerDefinitions = new();
 
         public DataNeedsSet Build() =>
-            new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, Trend, ActiveAlerts,
+            new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, ActiveAlerts,
                 LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, Override, SensitivityRatio,
                 GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpStates, StateSpans, TrackerDefinitions);
     }

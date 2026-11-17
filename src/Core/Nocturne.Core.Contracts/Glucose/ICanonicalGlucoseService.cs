@@ -26,4 +26,12 @@ public interface ICanonicalGlucoseService
     /// same source filtering as <see cref="GetLatestAsync"/>.
     /// </summary>
     Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default);
+
+    /// <summary>
+    /// The newest reading of <paramref name="reading"/>'s stream and data source in [<paramref name="since"/>, the
+    /// reading's timestamp], hidden copies included
+    /// (<see cref="V4.Repositories.ISensorGlucoseRepository.GetStreamPredecessorAsync"/>).
+    /// </summary>
+    Task<SensorGlucose?> GetStreamPredecessorAsync(
+        SensorGlucose reading, DateTime since, CancellationToken ct = default);
 }

@@ -118,6 +118,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     private sealed class Sweep(IServiceProvider services, IAlertRepository repository, Guid tenantId, DateTime now)
     {
         private TenantAlertContext? _tenant;
+        private (Guid ReadingId, DateTime At, ReadingTrend Trend)? _trend;
 
         public IServiceProvider Services => services;
 
@@ -131,6 +132,20 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         public async Task<TenantAlertContext> TenantAsync(CancellationToken ct) =>
             _tenant ??= await repository.GetTenantAlertContextAsync(tenantId, ct)
                         ?? throw new InvalidOperationException($"Tenant {tenantId} has no alert context.");
+
+        /// <summary>
+        /// The trend of <paramref name="reading"/>, read once per run: the snooze and wall-clock
+        /// contexts both measure the same usable reading.
+        /// </summary>
+        public async Task<ReadingTrend> TrendOfAsync(SensorGlucose reading, CancellationToken ct)
+        {
+            if (_trend is { } kept && kept.ReadingId == reading.Id && kept.At == reading.Timestamp)
+                return kept.Trend;
+
+            var trend = await ReadingTrend.ForAsync(reading, services.GetRequiredService<ICanonicalGlucoseService>(), ct);
+            _trend = (reading.Id, reading.Timestamp, trend);
+            return trend;
+        }
     }
 
     /// <summary>
@@ -349,11 +364,13 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             var fresh = last.Reading is { } usable && sweep.Now - usable.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
                 ? usable
                 : null;
+            var trend = fresh is null ? default : await sweep.TrendOfAsync(fresh, ct);
             var baseContext = new SensorContext
             {
                 LatestValue = fresh?.Mgdl.ToDecimal(),
                 LatestTimestamp = last.At,
-                TrendRate = fresh?.TrendRate?.ToDecimal(),
+                TrendRate = trend.Rate,
+                TrendBucket = trend.Bucket,
                 LastReadingAt = last.At,
             };
             return await enricher.EnrichAsync(baseContext, syntheticRules, ct);
@@ -480,7 +497,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
 
         var last = await LastUsableReadingAsync(sweep, ct);
         var context = last.Reading is { } usable
-            ? CanonicalAlertEvaluator.ContextFor(usable)
+            ? CanonicalAlertEvaluator.ContextFor(usable, await sweep.TrendOfAsync(usable, ct))
             : new SensorContext
             {
                 LatestValue = null,

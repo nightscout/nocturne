@@ -306,6 +306,25 @@ public class AlertSnoozeServiceTests
     }
 
     [Fact]
+    public async Task Resume_carries_the_rate_derived_from_the_previous_reading()
+    {
+        var seeded = await SeedAsync();
+        LatestReading(minutesAgo: 2, mgdl: 61);
+        _canonical
+            .Setup(c => c.GetStreamPredecessorAsync(
+                It.IsAny<SensorGlucose>(), Now.AddMinutes(-2) - ReadingTrend.MaxGap, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SensorGlucose { Id = Guid.NewGuid(), Timestamp = Now.AddMinutes(-7), Mgdl = 71 });
+
+        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
+
+        _delivery.Verify(d => d.DispatchAsync(
+            seeded.InstanceId,
+            It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
+            It.Is<AlertPayload>(p => p.TrendRate == -2m),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Resume_carries_no_reading_when_the_newest_one_is_stale()
     {
         var seeded = await SeedAsync();

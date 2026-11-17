@@ -120,11 +120,13 @@ internal sealed class AlertSnoozeService(
         var fresh = latest is not null && now - latest.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
             ? latest
             : null;
+        var trend = fresh is null ? default : await ReadingTrend.ForAsync(fresh, canonicalGlucose, ct);
         var baseContext = new SensorContext
         {
             LatestValue = fresh?.Mgdl.ToDecimal(),
             LatestTimestamp = fresh?.Timestamp,
-            TrendRate = fresh?.TrendRate?.ToDecimal(),
+            TrendRate = trend.Rate,
+            TrendBucket = trend.Bucket,
             LastReadingAt = latest?.Timestamp,
         };
 

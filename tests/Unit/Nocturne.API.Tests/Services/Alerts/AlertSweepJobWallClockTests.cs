@@ -77,6 +77,25 @@ public class AlertSweepJobWallClockTests
     }
 
     [NativeFact]
+    public async Task A_rate_leaf_judges_the_rate_derived_from_the_previous_reading()
+    {
+        const string fallOrLoss = """
+            {"operator": "or", "conditions": [
+              {"type": "rate_of_change", "rate_of_change": {"direction": "falling", "rate": 3}},
+              {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}
+            ]}
+            """;
+        var fixture = new Fixture(AlertConditionType.Composite, fallOrLoss);
+        fixture.Readings.Add(new SensorGlucose { Id = Guid.NewGuid(), Timestamp = T0.AddMinutes(-5), Mgdl = 120 });
+        fixture.Readings.Add(new SensorGlucose { Id = Guid.NewGuid(), Timestamp = T0, Mgdl = 100 });
+        fixture.LastReadingAt = T0;
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.InstancesCreated.Should().Be(1, "the derived rate is -4 mg/dL/min");
+    }
+
+    [NativeFact]
     public async Task Rule_without_a_wall_clock_leaf_is_not_evaluated()
     {
         const string nightLow = """
@@ -406,6 +425,11 @@ public class AlertSweepJobWallClockTests
                 .Setup(x => x.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((DateTime since, CancellationToken _) =>
                     Readings.Where(r => r.Timestamp >= since).OrderByDescending(r => r.Timestamp).ToList());
+            canonical
+                .Setup(x => x.GetStreamPredecessorAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((SensorGlucose reading, DateTime since, CancellationToken _) => Readings
+                    .Where(r => r.Timestamp < reading.Timestamp && r.Timestamp >= since)
+                    .MaxBy(r => r.Timestamp));
             services.AddSingleton(canonical.Object);
 
             var delivery = new Mock<IAlertDeliveryService>();

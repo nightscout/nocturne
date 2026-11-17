@@ -173,10 +173,10 @@ written. Every operand below is present and valid (§1.4).
 | Kind | Payload | Inputs | Semantics | Null / cold-start behaviour |
 |---|---|---|---|---|
 | `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ false |
-| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ false |
+| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ false |
 | `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null ⇒ **false** (cold start); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ false |
-| `trend` | `bucket` (wire string) | `TrendBucket` | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false |
+| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false |
 | `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC |
 | `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ false |
 | `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ false |
@@ -222,6 +222,24 @@ The context is assembled host-side (enricher in the backend; local assembler in
 Prelude). For the crate it is pure input data. Fields and their consumers are the table
 in §3 plus:
 
+- `TrendRate` is the reading's stored (vendor) rate, used unchanged. Without one, it is
+  derived as `(mgdl - previous.mgdl) / minutes between them` from the nearest earlier
+  reading of the same stream and the same uploader with a glucose value. A stream is the
+  registered device the reading is attributed to, else its `(data_source, device)` pair. The
+  uploader is the reading's `data_source`; a null and an empty one are the same uploader and
+  match nothing else. So when two apps upload one registered CGM, another app's copy of a
+  reading is never the earlier reading, linked by deduplication or not. That earlier reading
+  may be a copy deduplication hides or a reading of a bucket its stream lost to another
+  stream, but never a copy in the reading's own duplicate group (one uploader can send a
+  reading twice under two ids at one timestamp). A pair under **30 seconds** apart
+  (a duplicate timestamp included) or over **15 minutes** apart gives null; exactly 30
+  seconds and exactly 15 minutes derive. A reading without a glucose value derives nothing.
+  Replay derives by the same rule from the readings it loads.
+- `TrendBucket` is the bucket of `TrendRate` (`>= 3` rising_fast, `>= 1` rising, `>= -1`
+  flat, `>= -3` falling, else falling_fast, mg/dL/min). With `TrendRate` null it is the
+  bucket of the reading's stored arrow (`DoubleUp` rising_fast, `SingleUp`/`FortyFiveUp`
+  rising, `Flat` flat, `FortyFiveDown`/`SingleDown` falling, `DoubleDown` falling_fast;
+  any other arrow, or none, gives null). The arrow never becomes a `TrendRate`.
 - `CurrentRuleId` / `CurrentPath`: threading state for sustained timers; provided by the
   driver (orchestrator/sweep/replay), maintained by the container evaluators as they
   descend.

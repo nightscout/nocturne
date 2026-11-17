@@ -54,6 +54,10 @@ public class AlertReplayServiceTests
     public AlertReplayServiceTests()
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        _glucoseRepository
+            .Setup(r => r.GetHiddenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         // The repo never returns null; default the DND-window fetches to empty (no DND).
         // Tests that exercise scoped suppression override GetDndWindowsAsOfAsync.

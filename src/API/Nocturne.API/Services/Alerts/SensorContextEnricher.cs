@@ -152,11 +152,6 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             enriched = enriched with { LastSensorStartAt = lastSensorStart };
         }
 
-        if (needs.NeedsTrendBucket)
-        {
-            enriched = enriched with { TrendBucket = DeriveTrendBucket(baseContext.TrendRate) };
-        }
-
         if (needs.NeedsActiveAlerts)
         {
             // Live: pull the canonical snapshot from the alert repo. Replay: the walker
@@ -653,23 +648,5 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             || string.Equals(state, nameof(ProfileState.Active), StringComparison.Ordinal)
             || string.Equals(state, resolved.ProfileName, StringComparison.Ordinal);
         return matches ? resolved.Activation.StartTimestamp : null;
-    }
-
-    /// <summary>
-    /// Maps a glucose rate of change (mg/dL per minute) to a coarse trend bucket. Boundary
-    /// values (e.g. exactly 1.0 mg/dL/min) fall into the more aggressive bucket — matches the
-    /// "rising" labelling that CGM clients show at +1 mg/dL/min.
-    /// </summary>
-    private static TrendBucket? DeriveTrendBucket(decimal? trendRate)
-    {
-        if (trendRate is null)
-            return null;
-
-        var rate = trendRate.Value;
-        if (rate >= 3.0m) return TrendBucket.RisingFast;
-        if (rate >= 1.0m) return TrendBucket.Rising;
-        if (rate >= -1.0m) return TrendBucket.Flat;
-        if (rate >= -3.0m) return TrendBucket.Falling;
-        return TrendBucket.FallingFast;
     }
 }
