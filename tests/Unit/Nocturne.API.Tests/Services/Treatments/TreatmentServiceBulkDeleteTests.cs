@@ -53,14 +53,14 @@ public class TreatmentServiceBulkDeleteTests
                 It.Is<TreatmentQuery>(q => q.Find == find), It.IsAny<CancellationToken>()))
             .ReturnsAsync(matching);
         _store
-            .Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TreatmentDeletion(null));
 
         var deleted = await _service.DeleteTreatmentsAsync(find);
 
         deleted.Should().Be(2);
-        _store.Verify(s => s.DeleteAsync("note-1", It.IsAny<CancellationToken>()), Times.Once);
-        _store.Verify(s => s.DeleteAsync("note-2", It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.DeleteAsync("note-1", false, It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.DeleteAsync("note-2", false, It.IsAny<CancellationToken>()), Times.Once);
         _decomposer.Verify(
             d => d.BulkDeleteAsync(It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -95,7 +95,7 @@ public class TreatmentServiceBulkDeleteTests
         var deleted = await _service.DeleteTreatmentsAsync(find);
 
         deleted.Should().Be(5);
-        _store.Verify(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -135,19 +135,20 @@ public class TreatmentServiceBulkDeleteTests
             new Mock<IBolusCalculationRepository>().Object,
             Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
         _store
             .Setup(s => s.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
             .Returns((TreatmentQuery q, CancellationToken ct) => readService.QueryAsync(q, ct));
         _store
-            .Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TreatmentDeletion(null));
 
         var deleted = await _service.DeleteTreatmentsAsync("find[eventType]=/note/i");
 
         deleted.Should().Be(2);
-        _store.Verify(s => s.DeleteAsync("note-1", It.IsAny<CancellationToken>()), Times.Once);
-        _store.Verify(s => s.DeleteAsync("note-2", It.IsAny<CancellationToken>()), Times.Once);
-        _store.Verify(s => s.DeleteAsync("bolus-1", It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.DeleteAsync("note-1", false, It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.DeleteAsync("note-2", false, It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.DeleteAsync("bolus-1", false, It.IsAny<CancellationToken>()), Times.Never);
     }
 }

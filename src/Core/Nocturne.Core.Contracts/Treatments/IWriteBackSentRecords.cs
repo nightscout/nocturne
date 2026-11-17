@@ -30,6 +30,13 @@ public interface IWriteBackSentRecords
     /// clamped member would learn of a record dated before the window.
     /// </remarks>
     Task<IReadOnlySet<string>> GetSentUpstreamAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// The ids among <paramref name="rowIds"/> of live treatment rows that hold what write-back sent
+    /// upstream. Unlike <see cref="GetSentUpstreamAsync"/> it answers for those rows alone: a tombstone
+    /// or another row under the same legacy id does not count.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> GetSentRowsAsync(IReadOnlyCollection<Guid> rowIds, CancellationToken ct = default);
 }
 
 /// <summary>A stored treatment and the documents it goes upstream as.</summary>

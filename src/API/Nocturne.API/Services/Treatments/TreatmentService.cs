@@ -46,6 +46,7 @@ internal class TreatmentService : ITreatmentService
     private readonly IPatientInsulinRepository _insulinRepo;
     private readonly ILogger<TreatmentService> _logger;
     private readonly IRejectedUploadRecorder? _rejected;
+    private readonly ITreatmentUpstreamDeletion? _upstreamDeletion;
 
     /// <summary>
     /// Bolus event types that should be enriched with the patient's primary bolus insulin context.
@@ -77,6 +78,7 @@ internal class TreatmentService : ITreatmentService
     /// <param name="insulinRepo">The patient insulin repository for enriching treatments with insulin context.</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="rejected">Keeps the treatments a create refused; none in tests that do not look.</param>
+    /// <param name="upstreamDeletion">None where no write-back connector is installed.</param>
     public TreatmentService(
         ITreatmentStore store,
         ITreatmentDecomposer decomposer,
@@ -84,9 +86,11 @@ internal class TreatmentService : ITreatmentService
         IDataEventSink<Treatment> events,
         IPatientInsulinRepository insulinRepo,
         ILogger<TreatmentService> logger,
-        IRejectedUploadRecorder? rejected = null)
+        IRejectedUploadRecorder? rejected = null,
+        ITreatmentUpstreamDeletion? upstreamDeletion = null)
     {
         _rejected = rejected;
+        _upstreamDeletion = upstreamDeletion;
         _store = store;
         _decomposer = decomposer;
         _cache = cache;
@@ -448,14 +452,22 @@ internal class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The only delete that removes the upstream copy (<see cref="ITreatmentUpstreamDeletion"/>): a bulk
+    /// delete would send one request per record.
+    /// </remarks>
     public async Task<bool> DeleteTreatmentAsync(
         string id, CancellationToken cancellationToken = default)
     {
-        if (await _store.DeleteAsync(id, cancellationToken) is not { } deletion)
+        if (await _store.DeleteAsync(id, findUpstreamCopies: true, cancellationToken) is not { } deletion)
             return false;
 
-        if (deletion.Served is not null)
-            await _events.OnDeletedAsync(deletion.Served, cancellationToken);
+        if (deletion.Served is null)
+            return true;
+
+        await _events.OnDeletedAsync(deletion.Served, cancellationToken);
+        if (deletion.UpstreamLegacyIds.Count > 0 && _upstreamDeletion is not null)
+            await _upstreamDeletion.DeleteUpstreamAsync(deletion.Served, deletion.UpstreamLegacyIds, cancellationToken);
 
         return true;
     }
@@ -483,7 +495,7 @@ internal class TreatmentService : ITreatmentService
         long deleted = 0;
         foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id)))
         {
-            if (await _store.DeleteAsync(treatment.Id!, ct) is not null)
+            if (await _store.DeleteAsync(treatment.Id!, findUpstreamCopies: false, ct) is not null)
             {
                 deleted++;
                 await _events.OnDeletedAsync(treatment, ct);

@@ -116,8 +116,14 @@ internal interface ITreatmentStore
     /// <summary>
     /// Deletes a treatment by ID, removing corresponding V4 decomposed records.
     /// </summary>
+    /// <param name="id">The identifier as received from the client.</param>
+    /// <param name="findUpstreamCopies">
+    /// Whether to name the records whose upstream copy may be deleted
+    /// (<see cref="TreatmentDeletion.UpstreamLegacyIds"/>), at the cost of a read; left unasked, none are.
+    /// </param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>What was deleted, or <c>null</c> when nothing is stored under the id.</returns>
-    Task<TreatmentDeletion?> DeleteAsync(string id, CancellationToken ct = default);
+    Task<TreatmentDeletion?> DeleteAsync(string id, bool findUpstreamCopies, CancellationToken ct = default);
 
     /// <summary>
     /// Counts treatments matching the optional find filter, summing across all V4 treatment repositories.
@@ -167,4 +173,12 @@ internal abstract record StoredTreatment(Treatment Created)
 /// The treatment as reads served it before the delete, or <c>null</c> for a record reads do not
 /// serve.
 /// </param>
-internal sealed record TreatmentDeletion(Treatment? Served);
+/// <param name="UpstreamLegacyIds">
+/// The legacy ids of the deleted records whose upstream copy write-back may delete, as
+/// <see cref="LegacyTreatmentStore.UpstreamCopiesMayBeDeletedAsync"/> decides it; none for a state span.
+/// </param>
+internal sealed record TreatmentDeletion(Treatment? Served, IReadOnlyList<string> UpstreamLegacyIds)
+{
+    /// <summary>A deletion whose upstream copies stay.</summary>
+    public TreatmentDeletion(Treatment? served) : this(served, []) { }
+}

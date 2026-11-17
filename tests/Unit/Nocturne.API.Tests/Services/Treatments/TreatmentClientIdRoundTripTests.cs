@@ -128,6 +128,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             tempBasalRepo.Object, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             ProfileActivationTestDeps.Repository(_context),
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
 
         _service = new TreatmentService(

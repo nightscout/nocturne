@@ -85,6 +85,15 @@ public class WriteBackUpstreamEditIntegrationTests(ApiIntegrationTestFixture fix
         (await service.UpdateTreatmentAsync(legacyId, edit)).Should().NotBeNull();
     }
 
+    private async Task DeleteAsync(HttpMessageHandler upstream, string legacyId)
+    {
+        await using var scope = OpenTenantScope();
+        var writeBack = WriteBack(upstream, scope.ServiceProvider);
+        var service = ActivatorUtilities.CreateInstance<TreatmentService>(
+            scope.ServiceProvider, (IDataEventSink<Treatment>)writeBack, (ITreatmentUpstreamDeletion)writeBack);
+        (await service.DeleteTreatmentAsync(legacyId)).Should().BeTrue();
+    }
+
     /// <summary>The events a pull raised, besides the write-back each one is handed to.</summary>
     private sealed class Raised(IDataEventSink<Treatment> writeBack) : IDataEventSink<Treatment>
     {
@@ -227,6 +236,26 @@ public class WriteBackUpstreamEditIntegrationTests(ApiIntegrationTestFixture fix
         again.Created.Should().BeEmpty();
         again.Updated.Should().BeEmpty();
         upstream.Writes.Count.Should().Be(writes);
+    }
+
+    /// <summary>
+    /// The pull restamps a record it applies an upstream edit to, so the record still counts as sent
+    /// and its delete removes the edited copy.
+    /// </summary>
+    [Fact]
+    public async Task ARecordAnUpstreamEditWasAppliedTo_DeletedInNocturne_LosesTheEditedCopyUpstream()
+    {
+        var legacyId = MongoObjectId.NewObjectId();
+        var upstream = new FakeNightscoutTreatments("15.0.8");
+        await CreateAsync(upstream, Meal(legacyId, UniqueSlot()));
+        var copy = Held(upstream).Single();
+        copy["insulin"] = 3.5;
+        await PullAsync(upstream, [copy]);
+        (await BolusesAsync(legacyId)).Should().ContainSingle().Which.Amount.Should().Be(3.5);
+
+        await DeleteAsync(upstream, legacyId);
+
+        upstream.Documents.Should().BeEmpty();
     }
 
     /// <summary>

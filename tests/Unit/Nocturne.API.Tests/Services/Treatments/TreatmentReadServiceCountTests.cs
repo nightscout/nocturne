@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -29,6 +30,7 @@ public class TreatmentReadServiceCountTests
             Mock.Of<IBolusCalculationRepository>(),
             Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
     }
 

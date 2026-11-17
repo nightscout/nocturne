@@ -5,6 +5,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
+using Nocturne.Core.Contracts.Events;
 
 namespace Nocturne.Connectors.Nightscout;
 
@@ -42,5 +43,6 @@ public class NightscoutConnectorInstaller()
         RegisterWriteBackClient<NightscoutProfileWriteBackSink>();
         RegisterWriteBackClient<NightscoutFoodWriteBackSink>();
         RegisterWriteBackClient<NightscoutActivityWriteBackSink>();
+        services.AddTransient<ITreatmentUpstreamDeletion>(sp => sp.GetRequiredService<NightscoutTreatmentWriteBackSink>());
     }
 }

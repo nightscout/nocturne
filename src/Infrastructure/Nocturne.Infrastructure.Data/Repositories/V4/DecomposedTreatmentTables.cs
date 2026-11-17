@@ -123,6 +123,9 @@ public abstract class DecomposedTreatmentTable(Type model)
     /// <summary>The ids of <paramref name="legacyIds"/> a row of this table holds a sent fingerprint under.</summary>
     internal abstract Task<List<string>> SentUpstreamAsync(NocturneDbContext db, string[] legacyIds, CancellationToken ct);
 
+    /// <summary>The ids of this table's live rows among <paramref name="rowIds"/> that hold a sent fingerprint.</summary>
+    internal abstract Task<List<Guid>> SentLiveRowsAsync(NocturneDbContext db, Guid[] rowIds, CancellationToken ct);
+
     /// <summary>This source's live rows and user tombstones under <paramref name="legacyIds"/>.</summary>
     internal abstract Task<List<(StoredLegacyId Row, bool Live)>> ClientIdRowsAsync(
         NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct);
@@ -245,6 +248,12 @@ internal sealed class DecomposedTreatmentTable<T>(
             .Where(e => e.LegacyId != null && legacyIds.Contains(e.LegacyId) && e.WriteBackSentFingerprint != null)
             .Select(e => e.LegacyId!)
             .Distinct()
+            .ToListAsync(ct);
+
+    internal override Task<List<Guid>> SentLiveRowsAsync(NocturneDbContext db, Guid[] rowIds, CancellationToken ct)
+        => rowsOf(db).AsNoTracking()
+            .Where(e => rowIds.Contains(e.Id) && e.DeletedAt == null && e.WriteBackSentFingerprint != null)
+            .Select(e => e.Id)
             .ToListAsync(ct);
 
     internal override async Task<List<(StoredLegacyId Row, bool Live)>> ClientIdRowsAsync(

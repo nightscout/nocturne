@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -71,5 +72,6 @@ public class TreatmentReadServiceFindWindowTests
         new(projection, Mock.Of<ITreatmentDecomposer>(),
             Mock.Of<ITempBasalRepository>(), Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IProfileActivationRepository>(), Mock.Of<IStateSpanService>(), logger);
+            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IProfileActivationRepository>(), Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(), logger);
 }

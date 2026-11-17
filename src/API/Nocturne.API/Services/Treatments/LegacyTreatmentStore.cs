@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -110,7 +112,12 @@ internal abstract record LegacyResolvedTreatment
     /// </summary>
     internal abstract Task<Treatment?> UpdateAsync(Treatment treatment, CancellationToken ct);
 
-    internal abstract Task<TreatmentDeletion?> DeleteAsync(CancellationToken ct);
+    /// <param name="findUpstreamCopies">
+    /// Whether to name the records whose upstream copy may be deleted
+    /// (<see cref="TreatmentDeletion.UpstreamLegacyIds"/>); left unasked, none are.
+    /// </param>
+    /// <param name="ct">Cancels the operation.</param>
+    internal abstract Task<TreatmentDeletion?> DeleteAsync(bool findUpstreamCopies, CancellationToken ct);
 }
 
 /// <summary>
@@ -124,12 +131,14 @@ internal sealed class LegacyTreatmentStore(
     LegacyTreatmentRepositories repositories,
     IV4ToLegacyProjectionService projection,
     ITreatmentDecomposer decomposer,
-    IStateSpanService stateSpans)
+    IStateSpanService stateSpans,
+    IWriteBackSentRecords sentRecords)
 {
     private readonly LegacyTreatmentRepositories _repositories = repositories;
     private readonly IV4ToLegacyProjectionService _projection = projection;
     private readonly ITreatmentDecomposer _decomposer = decomposer;
     private readonly IStateSpanService _stateSpans = stateSpans;
+    private readonly IWriteBackSentRecords _sentRecords = sentRecords;
 
     /// <summary>
     /// What a client-sent treatment id names, or none. A Note a treatment wrote beside another record
@@ -524,6 +533,28 @@ internal sealed class LegacyTreatmentStore(
         return await _stateSpans.DeleteStateSpanAsync(id, ct) ? new TreatmentDeletion(served) : null;
     }
 
+    /// <summary>
+    /// The legacy ids among <paramref name="records"/> whose upstream copy a delete may remove, the one
+    /// rule every upstream delete is gated on: those of a record whose own live row holds what upstream
+    /// accepted of a send (<see cref="IWriteBackSentRecords.GetSentRowsAsync"/>). A record written while
+    /// write-back was off, or whose every send failed, holds no copy Nocturne wrote, so it names none.
+    /// Neither does a tombstone or another table's row under the same legacy id, which may be an earlier
+    /// record's, nor a row the Nightscout connector pulled. Each legacy id is judged on its own, so of a
+    /// meal whose halves hold different ones only the halves sent qualify. Asked before the delete.
+    /// </summary>
+    private async Task<IReadOnlySet<string>> UpstreamCopiesMayBeDeletedAsync(
+        IReadOnlyList<StoredRecord> records, CancellationToken ct)
+    {
+        var candidates = records
+            .Where(r => r.Record.LegacyId is { Length: > 0 } && r.Record.DataSource != DataSources.NightscoutConnector)
+            .ToList();
+        var sent = await _sentRecords.GetSentRowsAsync([.. candidates.Select(r => r.Record.Id)], ct);
+        return candidates
+            .Where(r => sent.Contains(r.Record.Id))
+            .Select(r => r.Record.LegacyId!)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
     private static InvalidOperationException ReadBackFailed(string id) =>
         new($"Treatment {id} did not read back after the update");
 
@@ -557,17 +588,31 @@ internal sealed class LegacyTreatmentStore(
             return await Store.ReadAsync(upsertKey, ct) ?? throw ReadBackFailed(Id);
         }
 
-        internal override async Task<TreatmentDeletion?> DeleteAsync(CancellationToken ct)
+        internal override async Task<TreatmentDeletion?> DeleteAsync(bool findUpstreamCopies, CancellationToken ct)
         {
             var served = await Store.ProjectAsync(Record, ct);
+            var together = await Store.ServedTogetherAsync(this, ct);
+            var upstream = findUpstreamCopies
+                ? await Store.UpstreamCopiesMayBeDeletedAsync(together, ct)
+                : new HashSet<string>();
 
             TreatmentDeletion? deletion = null;
-            foreach (var record in await Store.ServedTogetherAsync(this, ct))
-                deletion = await record.DeleteOneAsync(served, ct) ?? deletion;
-            return deletion;
+            var upstreamLegacyIds = new List<string>();
+            foreach (var record in together)
+            {
+                if (await record.DeleteOneAsync(served, upstream, ct) is not { } one)
+                    continue;
+                deletion = one;
+                upstreamLegacyIds.AddRange(one.UpstreamLegacyIds);
+            }
+
+            return deletion is null ? null : deletion with { UpstreamLegacyIds = upstreamLegacyIds };
         }
 
-        private async Task<TreatmentDeletion?> DeleteOneAsync(Treatment? served, CancellationToken ct)
+        /// <param name="served">The treatment the deleted record was served as, which the deletion carries.</param>
+        /// <param name="upstream">The legacy ids whose upstream copy may be deleted, from <see cref="UpstreamCopiesMayBeDeletedAsync"/>.</param>
+        /// <param name="ct">Cancels the operation.</param>
+        private async Task<TreatmentDeletion?> DeleteOneAsync(Treatment? served, IReadOnlySet<string> upstream, CancellationToken ct)
         {
             // A record written beside another under one legacy id (a bolus wizard's calculation, a
             // correction's note) is deleted by it, so no sibling is left behind as a phantom treatment of
@@ -579,7 +624,7 @@ internal sealed class LegacyTreatmentStore(
                     && await Store._projection.GetProjectedStateSpanTreatmentAsync(legacyId, ct) is { } spanServed
                         ? await Store.DeleteSpanAsync(spanServed, legacyId, ct)
                         : null;
-                return span ?? (records > 0 ? new TreatmentDeletion(served) : null);
+                return span ?? (records > 0 ? new TreatmentDeletion(served, upstream.Contains(legacyId) ? [legacyId] : []) : null);
             }
 
             await Table.Records.DeleteAsync(Store._repositories, Record, ct);
@@ -619,7 +664,7 @@ internal sealed class LegacyTreatmentStore(
                 ?? throw ReadBackFailed(Id);
         }
 
-        internal override Task<TreatmentDeletion?> DeleteAsync(CancellationToken ct) =>
+        internal override Task<TreatmentDeletion?> DeleteAsync(bool findUpstreamCopies, CancellationToken ct) =>
             Store.DeleteSpanAsync(Served, SpanId, ct);
     }
 }

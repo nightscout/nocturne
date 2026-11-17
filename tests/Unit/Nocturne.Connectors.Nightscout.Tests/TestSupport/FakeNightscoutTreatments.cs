@@ -77,12 +77,16 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
 
         if (request.Method == HttpMethod.Delete)
         {
-            var removed = Find(request.RequestUri!) ?? [];
+            // DELETE /treatments/:id casts the id to an ObjectId, which a string _id never equals.
+            var last = request.RequestUri!.AbsolutePath.Split('/')[^1];
+            var removed = last == "treatments"
+                ? Find(request.RequestUri!) ?? []
+                : [.. Documents.Where(d => d.IsObjectId && d.Id == last).Select(d => d.Document)];
             Documents.RemoveAll(d => removed.Contains(d.Document));
             return Json(HttpStatusCode.OK, new JsonObject { ["n"] = removed.Count });
         }
 
-        var body =JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+        var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
         var docs = body is JsonArray array ? array.Select(d => d!.AsObject()).ToList() : [body.AsObject()];
         foreach (var doc in docs)
         {
