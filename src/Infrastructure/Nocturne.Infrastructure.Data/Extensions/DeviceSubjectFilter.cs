@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -93,6 +94,7 @@ public static class DeviceSubjectFilter
             SubjectId = subjectId,
             DirectPermissions = [Scope.FullAccess],
         });
+        MemberAccessAudit.StagePermissions(db, tenantId, subjectId, null, [Scope.FullAccess]);
 
         await db.SaveChangesAsync(ct);
         return subjectId;

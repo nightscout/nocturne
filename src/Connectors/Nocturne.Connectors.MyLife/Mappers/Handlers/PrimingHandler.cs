@@ -40,13 +40,14 @@ internal sealed class PrimingHandler : IMyLifeHandler
             notes = $"{notes} (Priming amount: {amount}U)";
         }
 
-        var results = new List<IV4Record> { MyLifeFactory.CreateDeviceEvent(ev, eventType, notes) };
+        var results = new List<IV4Record> { MyLifeFactory.CreateDeviceEvent(ev, context.Now, eventType, notes) };
 
         // Needle priming implies a site change
         if (ev.EventTypeId == MyLifeEventType.NeedlePriming)
         {
             var siteChange = MyLifeFactory.CreateDeviceEvent(
                 ev,
+                context.Now,
                 DeviceEventType.SiteChange,
                 ev.InformationFromDevice
             );

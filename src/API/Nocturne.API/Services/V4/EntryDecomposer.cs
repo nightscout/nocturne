@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Helpers;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using System.Linq;
 using Nocturne.Core.Contracts.Devices;
@@ -10,6 +11,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.API.Services.Entries;
 
 namespace Nocturne.API.Services.V4;
 
@@ -22,8 +24,7 @@ namespace Nocturne.API.Services.V4;
 /// Supports idempotent create-or-update via <c>LegacyId</c> matching.
 /// </summary>
 /// <seealso cref="IEntryDecomposer"/>
-/// <seealso cref="IDecomposer{T}"/>
-public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Entry>
+internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
 {
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
@@ -59,37 +60,149 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     ];
 
     /// <inheritdoc />
-    public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
+    /// <remarks>
+    /// A batch of one under the caller's attribution, since a user's edit is their trail
+    /// (<see cref="DecomposerBase.SystemAttributedBatchWrites"/>); its id names the stored reading as
+    /// reads resolve it (<see cref="EntryTable{TRecord}.Named"/>).
+    /// </remarks>
+    public Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
+        => DecomposeBatchAsync([entry], origin, edit: true, ct);
+
+    /// <inheritdoc />
+    public Task<DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default)
+        => DecomposeBatchAsync(entries, origin, edit: false, ct);
+
+    /// <summary>
+    /// Four phases with a fixed set of queries whatever the batch's size: the correlation ids its
+    /// legacy ids are stored under and the rows its served-shaped ids name are read, one query per
+    /// table each; every entry is mapped; the readings are attributed to devices in one stamp per
+    /// reading table; and each table is written in one bulk upsert.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="edit"/> marks a user's edit of the readings its ids name, which may carry no
+    /// legacy id or another one. Otherwise an upload's id that only names a reading with no legacy id
+    /// is that reading's echo and is skipped (<see cref="EntryTable{TRecord}.Echoes"/>), and each
+    /// other entry is pointed at the reading it names (<see cref="PointEntriesAtStoredRecordsAsync"/>),
+    /// where a write-back echo is skipped too.
+    /// </remarks>
+    private async Task<DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Entry> entries, WriteOrigin origin, bool edit, CancellationToken ct)
     {
-        var result = new DecompositionResult
+        var result = new DecompositionResult();
+        if (entries.Count == 0)
+            return result;
+
+        var sensor = new EntryTable<SensorGlucose>(_sensorGlucoseRepository);
+        var meter = new EntryTable<MeterGlucose>(_meterGlucoseRepository);
+        var calibration = new EntryTable<Calibration>(_calibrationRepository);
+
+        await sensor.ReadServedAsync(ServedIds("sgv"), ct);
+        await meter.ReadServedAsync(ServedIds("mbg"), ct);
+        await calibration.ReadServedAsync(ServedIds("cal"), ct);
+        var echoes = new HashSet<Entry>(ReferenceEqualityComparer.Instance);
+        if (!edit)
         {
-            CorrelationId = CorrelationIdFor(entry.Id, await GetStoredCorrelationIdsAsync([entry.Id], EntryTables, ct))
-        };
+            echoes.UnionWith(entries.Where(e => !PulledFromNightscout(e) && (e.Type?.ToLowerInvariant() switch
+            {
+                "sgv" => sensor.Echoes(e.Id),
+                "mbg" => meter.Echoes(e.Id),
+                "cal" => calibration.Echoes(e.Id),
+                _ => false,
+            })));
+            echoes.UnionWith(await PointEntriesAtStoredRecordsAsync(entries.Where(e => !echoes.Contains(e)), ct));
+        }
 
-        var entryType = entry.Type?.ToLowerInvariant();
+        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
 
-        switch (entryType)
+        var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in entries.Where(e => !echoes.Contains(e)))
         {
-            case "sgv":
-                await DecomposeSgvAsync(entry, result, origin, ct);
-                break;
-            case "mbg":
-                await DecomposeMbgAsync(entry, result, origin, ct);
-                break;
-            case "cal":
-                await DecomposeCalAsync(entry, result, origin, ct);
-                break;
-            default:
-                var sanitizedType = entry.Type?
-                    .Replace("\r", string.Empty)
-                    .Replace("\n", string.Empty);
+            switch (entry.Type?.ToLowerInvariant())
+            {
+                case "sgv":
+                    await sensor.AddAsync(entry, edit, correlationIds, id => BuildSensorGlucoseAsync(entry, id, ct), result);
+                    break;
+                case "mbg":
+                    await meter.AddAsync(entry, edit, correlationIds, id => Task.FromResult(MapToMeterGlucose(entry, id)), result);
+                    break;
+                case "cal":
+                    await calibration.AddAsync(entry, edit, correlationIds, id => Task.FromResult(MapToCalibration(entry, id)), result);
+                    break;
+                default:
+                    result.SkippedUnsupported++;
+                    unsupportedTypes.Add(LogText.Sanitize(entry.Type));
+                    break;
+            }
+        }
 
-                Logger.LogWarning("Skipped an entry whose type Nocturne does not store: {Type}", sanitizedType);
-                result.SkippedUnsupported++;
-                break;
+        if (result.SkippedUnsupported > 0)
+        {
+            Logger.LogWarning(
+                "Skipped {Count} entries whose type Nocturne does not store: {Types}",
+                result.SkippedUnsupported, string.Join(", ", unsupportedTypes));
+        }
+
+        await AttributeAsync(sensor.Models, DeviceAttributionCategories.SensorGlucose, ct);
+        await AttributeAsync(meter.Models, DeviceAttributionCategories.MeterGlucose, ct);
+
+        using (edit ? null : SystemAttributedBatchWrites(_auditContext))
+        {
+            await sensor.WriteAsync(result, origin, ct);
+            await meter.WriteAsync(result, origin, ct);
+            await calibration.WriteAsync(result, origin, ct);
         }
 
         return result;
+
+        IEnumerable<string> ServedIds(string type) => entries
+            .Where(e => string.Equals(e.Type, type, StringComparison.OrdinalIgnoreCase) && (edit || !PulledFromNightscout(e)))
+            .Select(e => edit ? MongoObjectId.Coerce(e.Id) : e.Id)
+            .Where(id => edit ? MongoObjectId.IsObjectId(id) : MongoObjectId.IsGuidPrefixShaped(id))
+            .OfType<string>();
+    }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> for each entry type, against the one
+    /// table that type is stored in.
+    /// </summary>
+    /// <remarks>
+    /// An entry another uploader sent names a stored record only by the 24-hex prefix the v1 reads
+    /// serve. A uuid it sends is a legacy id of its own, stored beside the record that uuid names,
+    /// which <see cref="EntryReadService.GetByIdAsync"/> resolves ahead of it. A pulled copy may still
+    /// carry the raw uuid older write-backs sent.
+    /// </remarks>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private async Task<HashSet<Entry>> PointEntriesAtStoredRecordsAsync(IEnumerable<Entry> entries, CancellationToken ct)
+    {
+        var echoes = new HashSet<Entry>(ReferenceEqualityComparer.Instance);
+        foreach (var byType in entries.GroupBy(e => e.Type?.ToLowerInvariant()))
+        {
+            var table = byType.Key switch
+            {
+                "sgv" => Table(_sensorGlucoseRepository, WireForms.UuidPrefix),
+                "mbg" => Table(_meterGlucoseRepository, WireForms.UuidPrefix),
+                "cal" => Table(_calibrationRepository, WireForms.UuidPrefix),
+                _ => (KeyedTable?)null,
+            };
+            if (table is { } keyed)
+                echoes.UnionWith(await PointAtStoredRecordsAsync(
+                    byType, [keyed], PulledFromNightscout, ct, MongoObjectId.IsGuidPrefixShaped));
+        }
+
+        return echoes;
+    }
+
+    private static bool PulledFromNightscout(Entry entry) => entry.DataSource == DataSources.NightscoutConnector;
+
+    private async Task AttributeAsync<TRecord>(
+        List<TRecord> records, IReadOnlyList<DeviceCategory> categories, CancellationToken ct)
+        where TRecord : IV4Record, IDeviceAttributed
+    {
+        if (records.Count == 0)
+            return;
+        await _patientDeviceStamper.StampAsync(records.Cast<IDeviceAttributed>().ToList(), categories, batchSource: null, ct);
+        CarryAttributionAcrossResends(records);
     }
 
     /// <summary>
@@ -118,118 +231,115 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         return model;
     }
 
-    private async Task DecomposeSgvAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    /// <summary>
+    /// One reading table's part of a batch: the rows its served-shaped ids name, and the models it
+    /// writes by legacy id or onto a stored row.
+    /// </summary>
+    private sealed class EntryTable<TRecord>(ILegacyKeyedRepository<TRecord> repository)
+        where TRecord : class, IV4Record
     {
-        var model = await BuildSensorGlucoseAsync(entry, result.CorrelationId, ct);
+        private IReadOnlyList<TRecord> _served = [];
+        private readonly List<TRecord> _upserts = [];
+        private readonly List<(TRecord Stored, TRecord Model)> _ontoStored = [];
 
-        await UpsertByLegacyIdAsync(
-            _sensorGlucoseRepository, entry.Id, model, result, origin, ct,
-            beforeWrite: existing => StampAttributionAsync(
-                _patientDeviceStamper, model, existing, DeviceAttributionCategories.SensorGlucose, ct));
-    }
+        /// <summary>Every model the batch writes to the table, in batch order.</summary>
+        public List<TRecord> Models { get; } = [];
 
-    private async Task DecomposeMbgAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
-    {
-        var model = MapToMeterGlucose(entry, result.CorrelationId);
-
-        await UpsertByLegacyIdAsync(
-            _meterGlucoseRepository, entry.Id, model, result, origin, ct,
-            beforeWrite: existing => StampAttributionAsync(
-                _patientDeviceStamper, model, existing, DeviceAttributionCategories.MeterGlucose, ct));
-    }
-
-    private async Task DecomposeCalAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
-        => await UpsertByLegacyIdAsync(
-            _calibrationRepository, entry.Id, MapToCalibration(entry, result.CorrelationId), result, origin, ct);
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return "(none)";
-
-        var sanitized = value.Replace("\r", " ").Replace("\n", " ");
-        return new string(sanitized.Where(c => !char.IsControl(c)).ToArray());
-    }
-
-    /// <inheritdoc />
-    public async Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default)
-    {
-        if (entries.Count == 0)
-            return new DecompositionResult();
-
-        var result = new DecompositionResult();
-
-        var sgvList = new List<SensorGlucose>();
-        var mbgList = new List<MeterGlucose>();
-        var calList = new List<Calibration>();
-        var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
-        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
-
-        foreach (var entry in entries)
+        public async Task ReadServedAsync(IEnumerable<string> objectIds, CancellationToken ct)
         {
-            var correlationId = CorrelationIdFor(entry.Id, correlationIds);
-            switch (entry.Type?.ToLowerInvariant())
+            var ids = objectIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (ids.Count > 0)
+                _served = await repository.GetByServedIdsAsync(ids, ct);
+        }
+
+        /// <summary>
+        /// Whether <paramref name="id"/> is the 24-hex form <see cref="MongoObjectId.FromGuid"/> gave a
+        /// stored reading that has no legacy id, sent by an uploader other than the Nightscout
+        /// connector. Such a reading is often a connector's, keyed by its sync key alone: taking the
+        /// id onto it would rewrite its source and sync key, and the connector's next poll would store
+        /// it again. A pulled copy of it is pointed at it instead
+        /// (<see cref="PointEntriesAtStoredRecordsAsync"/>).
+        /// </summary>
+        public bool Echoes(string? id) => id is not null && ByPrefix(id) is { LegacyId: null };
+
+        /// <summary>
+        /// The stored reading an edit's <paramref name="id"/> names when no reading carries it as its
+        /// legacy id, as <c>EntryReadService.GetStoredByIdAsync</c> resolves it: a uuid names the reading
+        /// with that id, else the one keyed under its ObjectId; a 24-hex id names the reading whose id
+        /// it prefixes.
+        /// </summary>
+        public TRecord? Named(string id)
+        {
+            if (_served.Any(r => string.Equals(r.LegacyId, id, StringComparison.Ordinal)))
+                return null;
+            if (Guid.TryParse(id, out var uuid))
             {
-                case "sgv":
-                    if (await EchoesUnkeyedRecordAsync(_sensorGlucoseRepository, entry.Id, ct))
-                        continue;
-                    sgvList.Add(await BuildSensorGlucoseAsync(entry, correlationId, ct));
-                    break;
-                case "mbg":
-                    if (await EchoesUnkeyedRecordAsync(_meterGlucoseRepository, entry.Id, ct))
-                        continue;
-                    mbgList.Add(MapToMeterGlucose(entry, correlationId));
-                    break;
-                case "cal":
-                    if (await EchoesUnkeyedRecordAsync(_calibrationRepository, entry.Id, ct))
-                        continue;
-                    calList.Add(MapToCalibration(entry, correlationId));
-                    break;
-                default:
-                    result.SkippedUnsupported++;
-                    unsupportedTypes.Add(SanitizeForLog(entry.Type));
-                    continue;
+                var coerced = MongoObjectId.FromGuid(uuid);
+                return _served.FirstOrDefault(r => r.Id == uuid)
+                    ?? _served.FirstOrDefault(r => string.Equals(r.LegacyId, coerced, StringComparison.Ordinal));
             }
-
-            result.CorrelationId ??= correlationId;
+            return ByPrefix(id);
         }
 
-        if (result.SkippedUnsupported > 0)
+        private TRecord? ByPrefix(string id) => _served
+            .Where(r => string.Equals(MongoObjectId.FromGuid(r.Id), id, StringComparison.OrdinalIgnoreCase))
+            .MinBy(r => r.Id);
+
+        /// <summary>
+        /// Maps <paramref name="entry"/> under the correlation id of the row it writes. An edit naming a
+        /// row by another id writes under that row's legacy id, or onto the row itself when it has none.
+        /// </summary>
+        public async Task AddAsync(
+            Entry entry, bool edit, Dictionary<string, Guid> correlationIds,
+            Func<Guid?, Task<TRecord>> map, DecompositionResult result)
         {
-            Logger.LogWarning(
-                "Skipped {Count} entries whose type Nocturne does not store: {Types}",
-                result.SkippedUnsupported, string.Join(", ", unsupportedTypes));
+            var stored = edit && entry.Id is { } id ? Named(id) : null;
+            var model = await map(stored?.CorrelationId ?? CorrelationIdFor(entry.Id, correlationIds));
+            Models.Add(model);
+            result.CorrelationId ??= model.CorrelationId;
+            if (stored is null)
+            {
+                _upserts.Add(model);
+            }
+            else if (stored.LegacyId is { } legacyId)
+            {
+                model.LegacyId = legacyId;
+                _upserts.Add(model);
+            }
+            else
+            {
+                model.LegacyId = null;
+                _ontoStored.Add((stored, model));
+            }
         }
 
-        if (sgvList.Count > 0)
-            await _patientDeviceStamper.StampAsync(sgvList, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
-        if (mbgList.Count > 0)
-            await _patientDeviceStamper.StampAsync(mbgList, DeviceAttributionCategories.MeterGlucose, batchSource: null, ct);
-
-        using (SystemAttributedBatchWrites(_auditContext))
+        public async Task WriteAsync(DecompositionResult result, WriteOrigin origin, CancellationToken ct)
         {
-            await BulkUpsertAsync(_sensorGlucoseRepository, sgvList, result, origin, ct);
-            await BulkUpsertAsync(_meterGlucoseRepository, mbgList, result, origin, ct);
-            await BulkUpsertAsync(_calibrationRepository, calList, result, origin, ct);
+            await BulkUpsertAsync(repository, _upserts, result, origin, ct);
+            foreach (var (stored, model) in _ontoStored)
+                await WriteOntoStoredAsync(repository, stored, model, result, origin, ct);
         }
-
-        return result;
     }
 
     /// <summary>
-    /// Whether <paramref name="id"/> is the 24-hex form <see cref="MongoObjectId.FromGuid"/> gave a
-    /// stored record that has no legacy id: the id Nightscout write-back sent it under, now pulled
-    /// back by the connector. Keyed on <c>LegacyId</c>, the bulk upsert cannot see that record and
-    /// would store the reading a second time. A record with a legacy id was written back under that
-    /// id, which the bulk upsert already matches.
+    /// A legacy id sent more than once in a batch is written as its last version; a version that
+    /// resolved no device keeps the one an earlier version resolved, as a re-send keeps the device of
+    /// the row it updates.
     /// </summary>
-    private static async Task<bool> EchoesUnkeyedRecordAsync<TRecord>(
-        IV4Repository<TRecord> repository, string? id, CancellationToken ct)
-        where TRecord : class, IV4Record
-        => MongoObjectId.IsGuidPrefixShaped(id)
-           && MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high)
-           && await repository.GetByGuidRangeAsync(low, high, ct) is { LegacyId: null };
+    private static void CarryAttributionAcrossResends<TRecord>(List<TRecord> records)
+        where TRecord : IV4Record, IDeviceAttributed
+    {
+        var resolved = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        foreach (var record in records)
+        {
+            if (record.LegacyId is not { } legacyId)
+                continue;
+            if (record.PatientDeviceId is { } deviceId)
+                resolved[legacyId] = deviceId;
+            else if (resolved.TryGetValue(legacyId, out var earlier))
+                record.PatientDeviceId = earlier;
+        }
+    }
 
     /// <inheritdoc />
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
@@ -310,10 +420,10 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         }
 
         DateTime? from = fromMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+            ? fromMills.Value.ToUtcDateTime()
             : null;
         DateTime? to = toMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+            ? toMills.Value.ToUtcDateTime()
             : null;
 
         var sgDeleted = typeFilter is null or "sgv"
@@ -351,7 +461,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         return new SensorGlucose
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Mgdl = WrittenMgdl(entry),
             Direction = MapDirection(entry.Direction),
             TrendRate = entry.TrendRate,
@@ -377,7 +487,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         return new MeterGlucose
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Mgdl = WrittenMgdl(entry),
             Device = entry.Device,
             App = entry.App,
@@ -396,7 +506,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         return new Calibration
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Slope = entry.Slope,
             Intercept = entry.Intercept,
             Scale = entry.Scale,

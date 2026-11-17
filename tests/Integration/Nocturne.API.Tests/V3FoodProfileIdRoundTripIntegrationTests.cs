@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration;
 /// A v3 food or profile is read, replaced and deleted by the <c>identifier</c> v3 lists it under, and
 /// by the raw <c>_id</c> v3 served before it was coerced, and each reaches the one stored record.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class V3FoodProfileIdRoundTripIntegrationTests : ApiIntegrationTestBase
 {

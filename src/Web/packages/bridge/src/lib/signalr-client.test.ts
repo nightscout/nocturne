@@ -97,7 +97,9 @@ function queueConnections(...connections: FakeHubConnection[]): void {
   });
 }
 
-function createClient(withAlarmHub = false, translator = {} as MessageTranslator): SignalRClient {
+const silentTranslator = () => new MessageTranslator({ setRelayState: () => {} } as never, "rhys");
+
+function createClient(withAlarmHub = false, translator = silentTranslator()): SignalRClient {
   return new SignalRClient(translator, {
     hubUrl: "http://api/hubs/data",
     ...(withAlarmHub ? { alarmHubUrl: "http://api/hubs/alarm" } : {}),
@@ -117,6 +119,36 @@ describe("SignalRClient connection lifecycle", () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+  });
+
+  it("reports the relay up once subscribed to storage events, and down when the data hub closes", async () => {
+    const data = new FakeHubConnection();
+    queueConnections(data);
+    const translator = silentTranslator();
+    const relayState = vi.spyOn(translator, "handleRelayState");
+    const client = createClient(false, translator);
+
+    await client.connect();
+    expect(relayState.mock.calls).toEqual([[true]]);
+
+    await data.stop();
+    expect(relayState.mock.calls).toEqual([[true], [false]]);
+    await client.disconnect();
+  });
+
+  it("does not report the relay up when the hub refuses the subscription", async () => {
+    const data = new FakeHubConnection();
+    data.invoke.mockImplementation(async (methodName: string) =>
+      ({ success: methodName === "Authorize" }) as never);
+    queueConnections(data);
+    const translator = silentTranslator();
+    const relayState = vi.spyOn(translator, "handleRelayState");
+    const client = createClient(false, translator);
+
+    await client.connect();
+
+    expect(relayState.mock.calls).toEqual([[false]]);
+    await client.disconnect();
   });
 
   it("shares one in-flight connection attempt between concurrent connect calls", async () => {
@@ -284,7 +316,7 @@ describe("SignalRClient reconnect confirmation", () => {
   });
 
   function confirmedClient(confirmReconnect: () => Promise<boolean>): SignalRClient {
-    return new SignalRClient({} as MessageTranslator, {
+    return new SignalRClient(silentTranslator(), {
       hubUrl: "http://api/hubs/data",
       reconnectAttempts: 3,
       reconnectDelay: 100,
@@ -388,7 +420,7 @@ describe("SignalRClient current alarm", () => {
     alarmConnection.invoke.mockImplementation(async (methodName: string) =>
       methodName === "CurrentAlarm" ? currentAlarm : subscribe(methodName));
     queueConnections(new FakeHubConnection(), alarmConnection);
-    const client = createClient(true, new MessageTranslator({} as never, "rhys"));
+    const client = createClient(true);
     await client.connect();
     return client;
   }

@@ -27,12 +27,14 @@ public class GlookoDeviceMapper
     private readonly string _connectorSource;
     private readonly GlookoTimeMapper _timeMapper;
     private readonly ILogger _logger;
+    private readonly TimeProvider _clock;
 
-    public GlookoDeviceMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger)
+    public GlookoDeviceMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger, TimeProvider clock)
     {
         _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
         _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     /// <summary>Maps the <c>pumps</c> feed to <see cref="PatientDevice"/>s categorised as InsulinPump.</summary>
@@ -46,6 +48,7 @@ public class GlookoDeviceMapper
     private List<PatientDevice> Transform(
         IEnumerable<GlookoSsv2Device>? devices, DeviceCategory category, string feed)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var results = new List<PatientDevice>();
         if (devices == null) return results;
 
@@ -70,7 +73,6 @@ public class GlookoDeviceMapper
                 continue;
             }
 
-            var now = DateTime.UtcNow;
             results.Add(new PatientDevice
             {
                 // Deterministic id from the connector source + stable key so re-syncs target the same row.

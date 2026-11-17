@@ -26,7 +26,7 @@ public class ShareLinkDto
     /// Whether <see cref="Url"/> can be produced for this link. A reveal reports this from what it
     /// actually found; every other call can only read the columns, which cannot see the
     /// changed-key case, so a true here is a guess until a reveal settles it. The cases are listed
-    /// on <c>TenantEntity.ShareTokenEncrypted</c>.
+    /// on <c>TenantRecord.ShareTokenEncrypted</c>.
     /// </summary>
     public bool CanReveal { get; set; }
 

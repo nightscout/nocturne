@@ -14,12 +14,11 @@ public static class LibreSensorSessionMapper
     /// goes in <see cref="V4RecordBase.Device"/> as well, where device attribution matches serials.
     /// </summary>
     /// <returns>The start, or null when the connection names no activated sensor.</returns>
-    public static DeviceEvent? ToSensorStart(LibreSensor? sensor)
+    public static DeviceEvent? ToSensorStart(LibreSensor? sensor, DateTime now)
     {
         if (sensor?.SerialNumber is not { Length: > 0 } serial || sensor.ActivatedAt is not { } activatedAt || activatedAt <= 0)
             return null;
 
-        var now = DateTime.UtcNow;
         return new DeviceEvent
         {
             Id = Guid.CreateVersion7(),

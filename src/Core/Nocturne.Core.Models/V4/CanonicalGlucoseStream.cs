@@ -1,3 +1,5 @@
+using Nocturne.Core.Constants;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -7,10 +9,16 @@ namespace Nocturne.Core.Models.V4;
 /// <para>
 /// Multiple CGMs worn at once (sensor-overlap warmup, n=1 comparisons) produce overlapping
 /// readings that double-count in statistics and jitter single-stream consumers (v1/v3 clients,
-/// alarms). The canonical view resolves this at read time: per aligned 5-minute UTC bucket, the
+/// alarms). The canonical view resolves this per aligned 5-minute UTC bucket: the
 /// highest-priority stream that has at least one reading wins, and <b>all</b> of that stream's
 /// readings in the bucket are emitted (preserving 1-minute-cadence density). No data is discarded
-/// at rest — selection is a pure projection over what was fetched.
+/// at rest: the outcome is stored on each reading as <c>is_secondary_stream</c>, which canonical
+/// reads filter on.
+/// </para>
+/// <para>
+/// Ephemeral sources (<see cref="DataSources.IsEphemeral"/>) compete only within their own source:
+/// demo and test data are hidden from every non-demo read, so a demo stream winning a bucket would
+/// otherwise leave the real reading hidden behind a reading nobody is shown.
 /// </para>
 /// <para>
 /// A stream is a registered <see cref="PatientDevice"/> when the reading carries
@@ -47,10 +55,10 @@ public static class CanonicalGlucoseStream
         var priority = BuildPriorityMap(readings, devices);
 
         // Per bucket, the present stream with the lowest priority value wins.
-        var bucketWinner = new Dictionary<long, (int Priority, string Key)>();
+        var bucketWinner = new Dictionary<(string, long), (int Priority, string Key)>();
         foreach (var reading in readings)
         {
-            var bucket = reading.Timestamp.Ticks / BucketSize.Ticks;
+            var bucket = BucketOf(reading);
             var key = StreamKey(reading);
             var p = priority[key];
             if (!bucketWinner.TryGetValue(bucket, out var winner) || p < winner.Priority)
@@ -60,12 +68,18 @@ public static class CanonicalGlucoseStream
         var result = new List<SensorGlucose>(readings.Count);
         foreach (var reading in readings)
         {
-            var bucket = reading.Timestamp.Ticks / BucketSize.Ticks;
-            if (bucketWinner[bucket].Key == StreamKey(reading))
+            if (bucketWinner[BucketOf(reading)].Key == StreamKey(reading))
                 result.Add(reading);
         }
         return result;
     }
+
+    /// <summary>
+    /// The bucket a reading competes in: its aligned 5-minute slot, within its source when the source
+    /// is ephemeral.
+    /// </summary>
+    private static (string Class, long Slot) BucketOf(SensorGlucose reading) =>
+        (DataSources.IsEphemeral(reading.DataSource) ? reading.DataSource! : "", reading.Timestamp.Ticks / BucketSize.Ticks);
 
     public static bool HasMultipleStreams(IReadOnlyList<SensorGlucose> readings)
     {

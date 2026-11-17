@@ -11,6 +11,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -47,11 +48,10 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
 
         _sut = new EntryReadService(
             new SensorGlucoseRepository(
-                factory, new Mock<IDeduplicationService>().Object, audit,
+                factory, new Mock<IDuplicateLinker>().Object, audit,
                 NullLogger<SensorGlucoseRepository>.Instance),
             new MeterGlucoseRepository(factory, audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(factory, audit, NullLogger<CalibrationRepository>.Instance),
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             demoMode.Object,
             NullLogger<EntryReadService>.Instance);
     }
@@ -227,17 +227,9 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         // from reads as a non-primary cross-connector duplicate is still stored, and re-inserting
         // it on every upload cycle is the bug FindStoredDuplicateAsync exists to prevent.
         var id = SeedSgv(Start, 120, "Dexcom G6");
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.NewGuid(),
-            TenantId = TestTenantId,
-            RecordId = id,
-            RecordType = "SensorGlucose",
-            SourceTimestamp = new DateTimeOffset(Start, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            IsPrimary = false,
-            CanonicalId = Guid.NewGuid(),
-        });
-        _context.SaveChanges();
+        await DuplicateGroups.LinkAsync(_context, RecordType.SensorGlucose, primary: null, id);
+        (await _context.SensorGlucose.ExcludeDuplicates().AnyAsync(e => e.Id == id)).Should().BeFalse(
+            "the copy must be hidden from reads for the probe's raw-storage semantics to be tested");
 
         var batch = await _sut.CheckDuplicatesAsync([Probe("Dexcom G6", "sgv", Start)]);
 

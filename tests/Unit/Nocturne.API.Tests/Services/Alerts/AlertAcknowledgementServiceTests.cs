@@ -55,7 +55,8 @@ public class AlertAcknowledgementServiceTests
             _broadcast.Object,
             _members.Object,
             _alarmRelay.Object,
-            NullLogger<AlertAcknowledgementService>.Instance);
+            NullLogger<AlertAcknowledgementService>.Instance,
+            TimeProvider.System);
     }
 
     /// <summary>
@@ -287,7 +288,8 @@ public class AlertAcknowledgementServiceTests
             _broadcast.Object,
             _members.Object,
             _alarmRelay.Object,
-            NullLogger<AlertAcknowledgementService>.Instance);
+            NullLogger<AlertAcknowledgementService>.Instance,
+            TimeProvider.System);
 
         var outcome = await service.AcknowledgeExcursionAsync(
             _tenantId, excursionId, "user:viewer", Member(viewer, ViewerPermissions, Scope.DeviceNotify),

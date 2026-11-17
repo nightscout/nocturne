@@ -53,6 +53,10 @@ import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
 
+// The navigation stub's `pushState` adds no history entry, so the `back()` that takes a coach
+// overlay's entry off again would leave the test page.
+window.history.back = () => {};
+
 // A tenantless host keeps the tenant-scoped surfaces (alerts, membership
 // requests, the backup sign-in prompt) unmounted, leaving only the shell.
 type LayoutData = ComponentProps<typeof AuthenticatedLayoutHarness>["data"];
@@ -133,6 +137,20 @@ describe("authenticated layout", () => {
     });
 
     await expect.element(page.getByText("Guest access")).toBeVisible();
+  });
+
+  it("opens a guest's visit with the guest tour, on the countdown", async () => {
+    localStorage.clear();
+    render(AuthenticatedLayoutHarness, {
+      props: {
+        data: layoutData({
+          isGuestSession: true,
+          guestExpiresAt: new Date(BASE + 2 * 60 * 1000).toISOString(),
+        }),
+      },
+    });
+
+    await expect.element(page.getByRole("dialog", { name: "Read-only access" })).toBeVisible();
   });
 
   it.each([

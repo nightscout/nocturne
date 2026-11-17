@@ -39,6 +39,7 @@ namespace Nocturne.API.Services.Chat;
 /// <seealso cref="ChatIdentityPendingLinkService"/>
 public sealed class ChatIdentityDirectoryService(
     INocturneDbContextFactory contextFactory,
+    TimeProvider time,
     ILogger<ChatIdentityDirectoryService> logger)
 {
     /// <summary>
@@ -142,7 +143,7 @@ public sealed class ChatIdentityDirectoryService(
                 DisplayName = suggestedDisplayName,
                 IsDefault = isFirst,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = time.GetUtcNow().UtcDateTime,
             };
 
             db.ChatIdentityDirectory.Add(entry);

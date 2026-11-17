@@ -33,7 +33,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
                 if (w.SoftDeleted) continue;
 
                 // value is grams (e.g. 86700 = 86.7 kg).
-                var weightKg = (decimal)(w.Value / 1000.0);
+                var weightKg = (w.Value / 1000.0).ToDecimal();
                 if (weightKg <= 0) continue;
 
                 results.Add(BuildWeight(w.Timestamp, weightKg, bodyFat: null, "ssv2_weight", w.Guid));
@@ -61,7 +61,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
             {
                 if (w.SoftDeleted || w.Weight is not > 0) continue;
 
-                var weightKg = (decimal)w.Weight.Value;
+                var weightKg = w.Weight.Value.ToDecimal();
 
                 results.Add(BuildWeight(w.Timestamp, weightKg, bodyFat: null, "ssv2_validic_weight", w.Guid));
             }

@@ -32,6 +32,7 @@ public class SensitivityResolverTests : IDisposable
             _activeProfileResolver.Object,
             new ProfileVersionCache(TestTenantCache.Create(_cache)),
             Mock.Of<IProfileActivationResolver>(),
+            TimeProvider.System,
             NullLogger<SensitivityResolver>.Instance);
     }
 

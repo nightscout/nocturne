@@ -19,7 +19,7 @@ public class GlookoV4TreatmentMapperManualInsulinTests
         var logger = Mock.Of<ILogger>();
         var config = new GlookoConnectorConfiguration();
         var timeMapper = new GlookoTimeMapper(config, logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
     }
 
     #region MapV3ManualInsulin — gkInsulinBasal

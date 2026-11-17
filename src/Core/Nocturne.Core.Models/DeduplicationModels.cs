@@ -118,6 +118,16 @@ public record DeduplicationBatchResult(int Processed, int GroupsCreated, int Rec
 /// </summary>
 public record ReconcileResult(int GroupsMerged, bool CaughtUp);
 
+/// <summary>
+/// The rows of one record type whose stored duplicate flag disagreed with their links when the drift
+/// audit read them, by direction, and how many of them it rewrote. A row a concurrent writer put
+/// right first is counted as found but not rewritten.
+/// </summary>
+/// <param name="FlaggedNotDuplicate">Rows flagged as a duplicate with no non-primary link.</param>
+/// <param name="DuplicateNotFlagged">Rows with a non-primary link that were not flagged.</param>
+/// <param name="Repaired">Rows whose flag the audit rewrote.</param>
+public record DuplicateFlagDrift(RecordType RecordType, int FlaggedNotDuplicate, int DuplicateNotFlagged, int Repaired);
+
 public record DeduplicationProgress
 {
     [JsonPropertyName("totalRecords")]

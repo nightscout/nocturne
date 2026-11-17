@@ -25,7 +25,7 @@
   import SleepCompositionChart from "#lib/components/reports/sleep/SleepCompositionChart.svelte";
   import SleepWeeklyBreakdown from "#lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
-  import { SleepScoreSource, SleepSource } from "#lib/api/index.js";
+  import { SleepSource } from "#lib/api/index.js";
   import { laneForStage, laneTexture } from "#lib/utils/sleep-stages.js";
   import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
   import { useSearchParams } from "runed/kit";
@@ -149,16 +149,13 @@
     priorWeek?.dawnRiseDelta == null ? null : `${bgDelta(priorWeek.dawnRiseDelta)} ${bgLabel()}`
   );
 
-  const scoredNightsCount = $derived(sleepNights.filter((n) => n.sleepScore != null).length);
-  const hasComputedScore = $derived(
-    sleepNights.some((n) => n.sleepScore != null && n.scoreSource === SleepScoreSource.Computed)
-  );
+  const scoredNightsCount = $derived(sleepSummary?.scoredNightCount ?? 0);
   const scoreCaption = $derived.by(() => {
     const base = `avg of ${scoredNightsCount} scored night${scoredNightsCount === 1 ? "" : "s"}`;
-    return hasComputedScore ? `${base} · includes estimated` : base;
+    return sleepSummary?.includesEstimatedScore ? `${base} · includes estimated` : base;
   });
 
-  const tirNightsCount = $derived(sleepNights.filter((n) => n.overnightTirPct != null).length);
+  const tirNightsCount = $derived(sleepSummary?.tirNightCount ?? 0);
   const tirCaption = $derived(
     `${tirNightsCount} night${tirNightsCount === 1 ? "" : "s"} with CGM`
   );

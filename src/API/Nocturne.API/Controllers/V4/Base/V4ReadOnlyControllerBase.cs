@@ -22,7 +22,14 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
 {
     protected TRepository Repository { get; } = repository;
 
-    /// <summary>Lists records with pagination, optional date range, device, and source filtering.</summary>
+    /// <summary>
+    /// Lists records with pagination, optional date range, device, and source filtering. `sort`
+    /// is `timestamp_asc` (oldest first) or `timestamp_desc` (newest first, the default). `limit` is
+    /// capped at a maximum page size, and a `from`/`to` range wider than the maximum span is rejected
+    /// with `400 Bad Request`. `pagination.total` is returned only when `includeTotal` is `true`, or
+    /// when a first page shorter than `limit` carries its own length; `includeTotal` counts the date
+    /// range only, not `device` or `source`.
+    /// </summary>
     /// <param name="from">Inclusive start of the date range filter.</param>
     /// <param name="to">Inclusive end of the date range filter.</param>
     /// <param name="limit">Maximum number of records to return. Defaults to `100`.</param>
@@ -78,18 +85,10 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
     protected ActionResult? PrepareListQuery(
         DateTime? from, DateTime? to, string sort, ref int limit, ref int offset, out bool descending)
     {
-        descending = true;
+        if (this.PrepareListPage(sort, ref limit, ref offset, out descending) is { } invalid)
+            return invalid;
 
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        if (this.RejectDateSpan(from, to) is { } overlong)
-            return overlong;
-
-        descending = sort == "timestamp_desc";
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-        return null;
+        return this.RejectDateSpan(from, to);
     }
 
     /// <summary>Retrieves a single record by its unique identifier.</summary>

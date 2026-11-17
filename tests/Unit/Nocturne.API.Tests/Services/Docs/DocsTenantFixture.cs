@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.Caching;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Docs;
 
@@ -122,7 +123,8 @@ internal sealed class DocsTenantFixture : IDisposable
             .ReturnsAsync(Db);
 
         var demoTenantService = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(),
+            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory()), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
+            new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
@@ -130,7 +132,8 @@ internal sealed class DocsTenantFixture : IDisposable
             new Mock<ILogger<DemoTenantService>>().Object);
 
         return new ScalarAuthProvider(
-            dbFactory.Object.AsNocturneFactory(),
+            new OAuthClientRepository(dbFactory.Object.AsNocturneFactory()),
+            new TenantRepository(dbFactory.Object.AsNocturneFactory()),
             demoTenantService,
             SessionService.Object,
             new RedirectUriValidator(),

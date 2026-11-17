@@ -17,6 +17,8 @@
   import HistoryLimitNotice from "#lib/components/layout/HistoryLimitNotice.svelte";
   import FirstReadingChartArea from "#lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
   import SetupStrip from "#lib/components/setup-hub/SetupStrip.svelte";
+  import LogEventButton from "#lib/components/entries/LogEventButton.svelte";
+  import { canLogEvents } from "#lib/components/entries/can-log-events.js";
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import type { PageData } from "./$types";
 
@@ -60,20 +62,27 @@
   );
 
   const showPredictions = $derived(showsPredictions(uiSettings));
+  // Room under the last card for the floating Log event button, so it never covers content.
+  const reserveFloatingAction = $derived(canLogEvents());
 </script>
 
 {#if data.tenantless}
   <TenantsOverview />
 {:else}
-  <div class="@container p-3 @md:p-6 space-y-3 @md:space-y-6">
+  <div
+    class="@container p-3 @md:p-6 space-y-3 @md:space-y-6 {reserveFloatingAction
+      ? 'max-md:pb-24'
+      : ''}"
+  >
     <HistoryLimitNotice />
 
     <div
       {@attach readingInWidget
         ? undefined
-        : coachmark({
-            ...coachFor("quick-tour.current-bg"),
-          })}
+        : coachmark([
+            coachFor("quick-tour.current-bg"),
+            coachFor("share-tour.reading"),
+          ])}
     >
       <CurrentBGDisplay />
     </div>
@@ -96,9 +105,11 @@
         {#snippet glucoseChart(chartVisible: boolean)}
           <div
             {@attach chartVisible
-              ? coachmark({
-                  ...coachFor("quick-tour.chart"),
-                })
+              ? coachmark([
+                  coachFor("quick-tour.chart"),
+                  coachFor("guest-tour.chart"),
+                  coachFor("share-tour.chart"),
+                ])
               : undefined}
           >
             <GlucoseChartCard
@@ -134,5 +145,8 @@
     {#if isMainSectionEnabled(widgets, WidgetId.Treatments)}
       <RecentTreatmentsCard />
     {/if}
+
+    <!-- On a phone the status line, and the Log event button in it, is hidden. -->
+    <LogEventButton placement="floating" />
   </div>
 {/if}

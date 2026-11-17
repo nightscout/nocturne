@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Infrastructure.Data.Entities;
@@ -17,16 +18,27 @@ public class FoodRepository : IFoodRepository
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<FoodRepository> _logger;
+    private readonly ILegacyReadCacheInvalidation? _legacyReads;
 
     /// <summary>
     /// Initializes a new instance of the FoodRepository class
     /// </summary>
+    /// <param name="contexts">Opens the context each operation runs on</param>
     /// <param name="logger">The logger</param>
-    public FoodRepository(INocturneDbContextFactory contexts, ILogger<FoodRepository> logger)
+    /// <param name="legacyReads">Told of each committed food write, when registered</param>
+    public FoodRepository(
+        INocturneDbContextFactory contexts,
+        ILogger<FoodRepository> logger,
+        ILegacyReadCacheInvalidation? legacyReads = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
+        _legacyReads = legacyReads;
     }
+
+    /// <summary>Tells <see cref="ILegacyReadCacheInvalidation"/> foods were written, after every committed write.</summary>
+    private Task ReportWrittenAsync() =>
+        _legacyReads?.WrittenAsync([typeof(Food)]) ?? Task.CompletedTask;
 
     /// <summary>
     /// Get all food entries
@@ -58,6 +70,18 @@ public class FoodRepository : IFoodRepository
         return entity != null ? FoodMapper.ToDomainModel(entity) : null;
     }
 
+    /// <inheritdoc />
+    public async Task<Guid?> ResolveFoodKeyAsync(
+        string id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await FindEntityAsync(db.Foods.AsNoTracking(), id, cancellationToken);
+
+        return entity?.Id;
+    }
+
     /// <summary>
     /// The food <paramref name="id"/> names: its legacy ObjectId, its own UUID, or the id v3 serves
     /// for it (<see cref="MongoObjectId.Coerce"/>), which is the UUID's 24-hex prefix, or a hash of a
@@ -69,10 +93,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken
     )
     {
-        var entity = await foods.FirstOrDefaultAsync(f => f.OriginalId == id, cancellationToken);
-
-        if (entity == null && Guid.TryParse(id, out var guid))
-            entity = await foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
+        var entity = await foods.FirstOrDefaultAsync(RecordIdKey.Matching<FoodEntity>(id), cancellationToken);
 
         if (entity != null || !MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
             return entity;
@@ -242,6 +263,7 @@ public class FoodRepository : IFoodRepository
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
 
         return resultEntities.Select(FoodMapper.ToDomainModel);
     }
@@ -269,6 +291,7 @@ public class FoodRepository : IFoodRepository
 
         FoodMapper.UpdateEntity(entity, food);
         await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
 
         return FoodMapper.ToDomainModel(entity);
     }
@@ -293,6 +316,7 @@ public class FoodRepository : IFoodRepository
         }
 
         await SoftDeleteAsync(db, [entity], cancellationToken);
+        await ReportWrittenAsync();
 
         return true;
     }
@@ -315,6 +339,7 @@ public class FoodRepository : IFoodRepository
         if (entities.Count > 0)
         {
             await SoftDeleteAsync(db, entities, cancellationToken);
+            await ReportWrittenAsync();
         }
 
         return entities.Count;
@@ -416,5 +441,36 @@ public class FoodRepository : IFoodRepository
             .ToListAsync(cancellationToken);
 
         return entities.Select(FoodMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<CatalogFoodPortion?> GetCatalogFoodAsync(
+        string reference,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (Guid.TryParse(reference, out var id))
+            return await GetCatalogFoodAsync(id, cancellationToken);
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.Foods
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.OriginalId == reference, cancellationToken);
+
+        return entity is null ? null : new CatalogFoodPortion(entity.Id, entity.Carbs);
+    }
+
+    /// <inheritdoc />
+    public async Task<CatalogFoodPortion?> GetCatalogFoodAsync(
+        Guid id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.Foods
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
+
+        return entity is null ? null : new CatalogFoodPortion(entity.Id, entity.Carbs);
     }
 }

@@ -7,7 +7,7 @@ using Xunit;
 namespace Nocturne.Connectors.Core.Tests;
 
 /// <summary>
-///     SaveSecretsAsync replaces the whole secrets document, so connectors that rotate a token at
+///     Saving replaces the whole secrets document, so connectors that rotate a token at
 ///     runtime must merge. These cover that the merge keeps what it is not asked to change.
 /// </summary>
 public class ConnectorSecretExtensionsTests
@@ -22,11 +22,10 @@ public class ConnectorSecretExtensionsTests
             .Setup(s => s.GetSecretsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         service
-            .Setup(s => s.SaveSecretsAsync(
-                It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
-                It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Dictionary<string, string>, string?, CancellationToken>(
-                (_, secrets, _, _) =>
+            .Setup(s => s.SaveRuntimeSecretsAsync(
+                It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Dictionary<string, string>, CancellationToken>(
+                (_, secrets, _) =>
                 {
                     saved.Clear();
                     foreach (var (k, v) in secrets) saved[k] = v;
@@ -81,9 +80,8 @@ public class ConnectorSecretExtensionsTests
 
         changed.Should().BeFalse();
         service.Verify(
-            s => s.SaveSecretsAsync(
-                It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
-                It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            s => s.SaveRuntimeSecretsAsync(
+                It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -103,9 +101,8 @@ public class ConnectorSecretExtensionsTests
 
         changed.Should().BeFalse();
         service.Verify(
-            s => s.SaveSecretsAsync(
-                It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
-                It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            s => s.SaveRuntimeSecretsAsync(
+                It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -121,5 +118,21 @@ public class ConnectorSecretExtensionsTests
         saved.Should().Contain("userId", "123");
         saved.Should().Contain("syncCursor", "cursor");
         saved.Should().Contain("password", "pw");
+    }
+
+    [Fact]
+    public async Task MergeSecretsAsync_SavesThroughTheRuntimePathOnly()
+    {
+        var (service, saved) = Storage(new Dictionary<string, string> { ["password"] = "pw" });
+
+        await service.Object.MergeSecretsAsync(
+            "CareLink", new Dictionary<string, string?> { ["refresh_token"] = "new-token" });
+
+        saved.Should().Contain("refresh_token", "new-token");
+        service.Verify(
+            s => s.SaveSecretsAsync(
+                It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

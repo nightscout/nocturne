@@ -6,7 +6,6 @@ using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
@@ -22,11 +21,10 @@ namespace Nocturne.API.Services.Analytics;
 /// Fetches one window of everything Loop Analysis reads and hands it to the Core calculators.
 /// Each page's load and calculation is in its own part (<c>LoopAnalysisService.&lt;Page&gt;.cs</c>);
 /// this one holds what the pages share. Every collection is read uncapped, for the reason given on
-/// <c>StatisticsController.FetchInsulinRecordsAsync</c>.
+/// <see cref="InsulinDeliveryReader.ReadRecordsAsync"/>.
 /// </summary>
 internal sealed partial class LoopAnalysisService(
     ISensorGlucoseRepository glucoseRepository,
-    ICanonicalGlucoseService canonicalGlucose,
     IBolusRepository bolusRepository,
     ICarbIntakeRepository carbIntakeRepository,
     ITempBasalRepository tempBasalRepository,
@@ -126,13 +124,12 @@ internal sealed partial class LoopAnalysisService(
 
     /// <summary>The reads the Daily profile and Loop health pages share, issued together.</summary>
     /// <remarks>
-    /// Boluses are read from <see cref="DailyProfileCalculator.ActingMs"/> before the window so IOB
-    /// and COB at its start see the doses still acting. Temp basals are read from
-    /// <see cref="StatisticsService.TempBasalReadStart"/>, which reaches further back, and to
-    /// <see cref="NetInsulinAboveSchedule.MaxInferredGapMs"/> past it, so a gap that straddles its end
-    /// is bounded by the record that closes it. Overrides are read once, from the same start as temp
-    /// basals, since they scale the schedule those are measured against (<see cref="ScheduledBasal"/>);
-    /// the masks read the same spans.
+    /// Boluses and temp basals start where <see cref="Window.Series"/> says. Reads end at the window's
+    /// end, past the series' last tick, because the doses and the calculable time count to it; temp
+    /// basals end <see cref="NetInsulinAboveSchedule.MaxInferredGapMs"/> past it, so a gap that
+    /// straddles the end is bounded by the record that closes it. Overrides are read once, from the
+    /// same start as temp basals, since they scale the schedule those are measured against
+    /// (<see cref="ScheduledBasal"/>); the masks read the same spans.
     /// </remarks>
     private sealed record Common(
         IReadOnlyList<SensorGlucose> Glucose,
@@ -149,19 +146,19 @@ internal sealed partial class LoopAnalysisService(
     {
         var from = window.From;
         var to = window.To;
-        var fromUtc = ToUtc(from);
-        var toUtc = ToUtc(to);
-        var lookbackUtc = ToUtc(from - DailyProfileCalculator.ActingMs);
+        var fromUtc = from.ToUtcDateTime();
+        var toUtc = to.ToUtcDateTime();
+        var series = window.Series;
 
-        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct);
-        var bolusTask = bolusRepository.GetAsync(lookbackUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct);
+        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct, streams: GlucoseStreams.Canonical);
+        var bolusTask = bolusRepository.GetAsync(series.InsulinReadStart.ToUtcDateTime(), toUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var tempBasalTask = tempBasalRepository.GetAsync(
-            StatisticsService.TempBasalReadStart(fromUtc), ToUtc(to + NetInsulinAboveSchedule.MaxInferredGapMs), null, null, int.MaxValue, descending: false, ct: ct);
+            series.TempBasalReadStart.ToUtcDateTime(), (to + NetInsulinAboveSchedule.MaxInferredGapMs).ToUtcDateTime(), null, null, int.MaxValue, descending: false, ct: ct);
         var spanTask = stateSpanRepository.GetByCategories(
             MaskCategories.Where(c => c != StateSpanCategory.Override), fromUtc, toUtc, ct);
         var deviceTask = patientDeviceRepository.GetByDateRangeAsync(fromUtc, toUtc, ct);
         var overrideTask = ScheduledBasal.ReadOverridesAsync(
-            stateSpanRepository, StatisticsService.TempBasalReadStart(fromUtc).ToMills(), to, ct);
+            stateSpanRepository, series.TempBasalReadStart, to, ct);
         await Task.WhenAll(glucoseTask, bolusTask, tempBasalTask, spanTask, deviceTask, overrideTask);
 
         var spans = await spanTask;
@@ -170,7 +167,7 @@ internal sealed partial class LoopAnalysisService(
         var profiles = await activeProfileResolver.GetProfileSpansForRangeAsync(from, to, ct);
         var clock = await deviceDates.ResolveAsync(ct);
         return new Common(
-            await canonicalGlucose.SelectAsync([.. await glucoseTask], ct),
+            [.. await glucoseTask],
             [.. await bolusTask],
             [.. await tempBasalTask],
             spans,
@@ -187,7 +184,6 @@ internal sealed partial class LoopAnalysisService(
         IReadOnlyList<TempBasal> Temps,
         TherapyTimeline Timeline,
         ScheduledBasal Scheduled,
-        long TickStart,
         bool HasTherapy);
 
     /// <summary>
@@ -202,8 +198,9 @@ internal sealed partial class LoopAnalysisService(
         var from = window.From;
         var to = window.To;
         var hasTherapy = await therapySettingsResolver.HasDataAsync(ct);
-        var tickStart = from - from % TickMs;
-        var actingFrom = tickStart - DailyProfileCalculator.ActingMs;
+        var tickStart = window.Series.FirstTick;
+        var actingFrom = window.Series.TherapyStart;
+        // To the window's end, past the series' last tick: the settings evidence reads it over the whole window.
         var timeline = await therapyTimelineResolver.BuildAsync(actingFrom, to + 1, ct: ct);
 
         var (clipped, evidence) = NetInsulinAboveSchedule.ClipTempBasals(common.TempBasals, Math.Min(to, now));
@@ -222,7 +219,6 @@ internal sealed partial class LoopAnalysisService(
             [.. clipped.OrderBy(t => t.StartMills)],
             timeline,
             scheduled,
-            tickStart,
             hasTherapy);
     }
 
@@ -268,6 +264,11 @@ internal sealed partial class LoopAnalysisService(
         Common common, IReadOnlyList<ApsLoopState> snapshots, long openEnd) =>
         MaskSources(common.Spans, common.Devices, common.DeviceDates, snapshots, common.ProfileIntervals, openEnd);
 
+    /// <param name="spans">The state spans by category: the override, temporary target, exercise, illness, data exclusion and pump mode masks are read from them.</param>
+    /// <param name="devices">The registered devices; the pumps among them with a known algorithm are open-loop evidence.</param>
+    /// <param name="deviceDates">Turns a pump's start and end dates into the interval it was in use.</param>
+    /// <param name="snapshots">The APS snapshot evidence of the open-loop mask.</param>
+    /// <param name="profiles">When each profile was active, passed through as the mask's profiles.</param>
     /// <param name="openEnd">Where a span still open ends: the end of the time its readers look at.</param>
     private static LoopAnalysisMaskSources MaskSources(
         Dictionary<StateSpanCategory, List<StateSpan>> spans,
@@ -323,8 +324,6 @@ internal sealed partial class LoopAnalysisService(
             ? [.. list.Select(s => (s, new MillsInterval(s.StartMills, s.EndMills ?? to)))]
             : [];
 
-    private static DateTime ToUtc(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
-
     private readonly record struct Window(long From, long To)
     {
         public static Window Of(DateTime from, DateTime to) =>
@@ -335,5 +334,8 @@ internal sealed partial class LoopAnalysisService(
         public bool Touches(Window other) => From <= other.To && other.From <= To;
 
         public Window Hull(Window other) => new(Math.Min(From, other.From), Math.Max(To, other.To));
+
+        /// <summary>The IOB/COB series over the window, one tick per slot from the slot holding <see cref="From"/>.</summary>
+        public IobCobSeriesWindow Series => new(From - From % TickMs, To - 1, TickMs);
     }
 }

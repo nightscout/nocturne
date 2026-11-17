@@ -20,7 +20,7 @@ Nightscout installation, providing all the same endpoints and functionality you 
 
 **Prerequisites:**
 
-- .NET 10.0 or later
+- .NET 11.0 or later
 - Postgres database
 
 **Option 1: VS Code Tasks (Recommended for development)**

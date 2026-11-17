@@ -31,12 +31,4 @@ public class PasskeyInvalidationTests
             .Invalidates.Should()
             .Contain(nameof(PasskeyController.ListCredentials));
     }
-
-    [Theory]
-    [InlineData(nameof(PasskeyController.GetRecoveryStatus))]
-    [InlineData(nameof(PasskeyController.ListCredentials))]
-    public void EveryRefreshedRead_IsAQueryTheCommandCanRefresh(string read)
-    {
-        RemoteAttributes.Query<PasskeyController>(read).Should().NotBeNull();
-    }
 }

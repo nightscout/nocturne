@@ -61,7 +61,7 @@ internal sealed class IobCobComputeStage(
         var defaultBasalRate = context.DefaultBasalRate;
 
         var timeline = await therapyTimelineResolver.BuildAsync(
-            context.BufferStartTime, endTime + 1, ct: cancellationToken);
+            context.SeriesWindow.TherapyStart, context.SeriesWindow.TimelineEnd, ct: cancellationToken);
 
         var (iobSeries, cobSeries, minIob, maxIob, maxCob) = BuildIobCobSeries(
             bolusList, carbIntakeList, startTime, endTime, context.NowMills, intervalMinutes,

@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration;
 /// a client that syncs through history learns of a delete no other way. Each test creates through v3,
 /// syncs, deletes, and reads the history from the cursor the sync left the client at.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
 {

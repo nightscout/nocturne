@@ -11,7 +11,7 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 /// </summary>
 public class StatisticsServiceInsufficientDataTests
 {
-    private readonly StatisticsService _service = new();
+    private readonly StatisticsService _service = new(TimeProvider.System);
 
     [Fact]
     public void GlycemicVariability_AllZeroValues_IsNullRatherThanNaN()

@@ -3,80 +3,70 @@ using Nocturne.Services.Demo.Services;
 namespace Nocturne.API.Services.Seeding;
 
 /// <summary>
-/// The two wall clocks of a seed run. Rows the seeder owns (weigh-ins, the timezone timeline, the
-/// DND window, device start dates) are laid out in the tenant's zone, so "today" is the tenant's
-/// local day. The demo generator reads every wall-clock value as host-local, so what it is given, or
-/// must agree with, is laid out in the host's zone from the provider's <see cref="TimeProvider.LocalTimeZone"/>.
+/// The wall clock of a seed run: the instant it started and the tenant's zone, in which the seeder's
+/// own rows and every generated stream lay out their days.
 /// </summary>
 internal sealed class SeedingClock
 {
-    private readonly TimeZoneInfo _hostZone;
+    private const string FallbackZoneId = "Australia/Sydney";
 
-    private SeedingClock(string zoneId, TimeZoneInfo zone, TimeZoneInfo hostZone, DateTime utcNow)
+    private SeedingClock(string zoneId, DemoClock demo, DateTime utcNow)
     {
         ZoneId = zoneId;
-        Zone = zone;
-        _hostZone = hostZone;
+        Demo = demo;
         UtcNow = utcNow;
     }
 
-    /// <summary>The IANA id written to the patient record and the timezone timeline.</summary>
+    /// <summary>The IANA id written to the patient record, the profile and the timezone timeline.</summary>
     public string ZoneId { get; }
 
-    /// <summary>The zone <see cref="ZoneId"/> names.</summary>
-    public TimeZoneInfo Zone { get; }
+    /// <summary>
+    /// The frame handed to the demo generator, in the zone <see cref="ZoneId"/> names. Its own now reads
+    /// the provider live; the run's instant is <see cref="UtcNow"/>.
+    /// </summary>
+    public DemoClock Demo { get; }
 
     /// <summary>The instant the run started.</summary>
     public DateTime UtcNow { get; }
 
     /// <summary>The tenant's wall-clock time at <see cref="UtcNow"/>, Unspecified kind.</summary>
-    public DateTime LocalNow => Wall(UtcNow, Zone);
+    public DateTime LocalNow => Demo.ToLocal(UtcNow);
 
     /// <summary>The tenant's local midnight, Unspecified kind.</summary>
     public DateTime LocalToday => LocalNow.Date;
 
-    /// <summary>The host's wall-clock time at <see cref="UtcNow"/>, Unspecified kind.</summary>
-    public DateTime HostNow => Wall(UtcNow, _hostZone);
-
-    /// <summary>The host's local midnight, Unspecified kind.</summary>
-    public DateTime HostToday => HostNow.Date;
-
     /// <summary>
-    /// Resolves the zone a seed lays its own rows out in: <paramref name="recordedZoneId"/> when the
-    /// patient record already names a zone this host knows, else the host's zone, which the seed
-    /// then writes to the record.
+    /// Resolves the zone a seed lays its days out in: <paramref name="recordedZoneId"/> when the
+    /// patient record already names a zone this host knows, else the provider's local zone, which the
+    /// seed then writes to the record. A provider zone with no IANA id falls back to
+    /// <see cref="FallbackZoneId"/>, for both the record and the layout.
     /// </summary>
     public static SeedingClock Resolve(string? recordedZoneId, TimeProvider time)
     {
         var utcNow = time.GetUtcNow().UtcDateTime;
 
         if (recordedZoneId is { Length: > 0 } && TryFind(recordedZoneId) is { } recorded)
-            return new SeedingClock(recordedZoneId, recorded, time.LocalTimeZone, utcNow);
+            return new SeedingClock(recordedZoneId, new DemoClock(time, recorded), utcNow);
+
+        if (IanaId(time.LocalTimeZone) is { } hostZoneId)
+            return new SeedingClock(hostZoneId, new DemoClock(time, time.LocalTimeZone), utcNow);
 
         return new SeedingClock(
-            DemoTherapyProfile.LocalIanaTimezone(), time.LocalTimeZone, time.LocalTimeZone, utcNow);
+            FallbackZoneId, new DemoClock(time, TimeZoneInfo.FindSystemTimeZoneById(FallbackZoneId)), utcNow);
     }
 
+    /// <summary>A tenant wall-clock time as UTC; see <see cref="DemoClock.ToUtc"/>.</summary>
+    public DateTime ToUtc(DateTime local) => Demo.ToUtc(local);
+
     /// <summary>
-    /// A tenant wall-clock time as UTC. A time that falls in a skipped hour reads at the standard
-    /// offset instead of throwing, as <see cref="DateTime.ToUniversalTime"/> does.
+    /// The zone as an IANA id: a Windows host reports a Windows id, which timezone pickers and
+    /// profile consumers don't recognise.
     /// </summary>
-    public DateTime ToUtc(DateTime local) => ToUtc(local, Zone);
-
-    /// <summary>A host wall-clock time, as the demo generator reads it, as UTC.</summary>
-    public DateTime HostToUtc(DateTime local) => ToUtc(local, _hostZone);
-
-    /// <summary>A UTC time as a host wall-clock time, as the demo generator reads it.</summary>
-    public DateTime UtcToHost(DateTime utc) => Wall(utc, _hostZone);
-
-    private static DateTime Wall(DateTime utc, TimeZoneInfo zone) => DateTime.SpecifyKind(
-        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), zone),
-        DateTimeKind.Unspecified);
-
-    private static DateTime ToUtc(DateTime local, TimeZoneInfo zone)
+    private static string? IanaId(TimeZoneInfo zone)
     {
-        var wall = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
-        return DateTime.SpecifyKind(wall - zone.GetUtcOffset(wall), DateTimeKind.Utc);
+        if (zone.HasIanaId)
+            return zone.Id;
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var iana) ? iana : null;
     }
 
     private static TimeZoneInfo? TryFind(string id)

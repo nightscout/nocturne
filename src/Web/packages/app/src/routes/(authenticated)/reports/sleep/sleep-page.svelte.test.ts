@@ -11,7 +11,6 @@ const hoisted = vi.hoisted(() => ({ trends: {} as Record<string, unknown> }));
 vi.mock("#lib/hooks/actogram-report.svelte.js", () => ({
   useActogramReport: () => ({
     params: {
-      dateRangeMillis: { from: 0, to: 0 },
       dateRangeInput: {},
       dayCount: 1,
     },

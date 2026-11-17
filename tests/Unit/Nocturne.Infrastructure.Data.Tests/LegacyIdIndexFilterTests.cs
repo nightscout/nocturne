@@ -58,12 +58,18 @@ public class LegacyIdIndexFilterTests
     private static IReadOnlyList<IEntityType> LegacyIdEntityTypes(NocturneDbContext ctx)
     {
         var entityTypes = ctx.Model.GetEntityTypes()
-            .Where(e => typeof(ISoftDeletable).IsAssignableFrom(e.ClrType)
-                && e.FindProperty(nameof(IV4Entity.LegacyId)) is not null)
+            .Where(e => typeof(ILegacyIdentified).IsAssignableFrom(e.ClrType))
             .ToList();
 
         entityTypes.Should().HaveCountGreaterThan(10,
             "the v4 granular model spreads legacy ids across every time-series and schedule table");
+        entityTypes.Select(e => e.ClrType).Should().Contain(typeof(StateSpanEntity),
+            "state spans are keyed by legacy id without being a v4 record");
+        ctx.Model.GetEntityTypes()
+            .Where(e => e.FindProperty(nameof(ILegacyIdentified.LegacyId)) is not null)
+            .Except(entityTypes)
+            .Select(e => e.GetTableName())
+            .Should().BeEmpty("a table carrying a legacy id outside the interface would escape these checks");
 
         return entityTypes;
     }
@@ -71,5 +77,5 @@ public class LegacyIdIndexFilterTests
     private static bool IsTenantLegacyIdUniqueIndex(IIndex index) =>
         index.IsUnique
         && index.Properties.Select(p => p.Name).SequenceEqual(
-            [nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)]);
+            [nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)]);
 }

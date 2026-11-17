@@ -1,4 +1,5 @@
 using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -15,6 +16,7 @@ namespace Nocturne.API.Services.Devices;
 public class DeviceAgeService : IDeviceAgeService
 {
     private readonly IDeviceEventRepository _repository;
+    private readonly TimeProvider _time;
     private readonly ILogger<DeviceAgeService> _logger;
 
     // NIGHTSCOUT-COMPAT: upstream CAGE reads Site Change alone. A pod change, however it is reported,
@@ -38,9 +40,13 @@ public class DeviceAgeService : IDeviceAgeService
     private static readonly DeviceAgePreferences DefaultInsulinPrefs = new() { Info = 44, Warn = 48, Urgent = 72 };
     private static readonly DeviceAgePreferences DefaultBatteryPrefs = new() { Info = 312, Warn = 336, Urgent = 360 };
 
-    public DeviceAgeService(IDeviceEventRepository repository, ILogger<DeviceAgeService> logger)
+    public DeviceAgeService(
+        IDeviceEventRepository repository,
+        TimeProvider timeProvider,
+        ILogger<DeviceAgeService> logger)
     {
         _repository = repository;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -62,19 +68,19 @@ public class DeviceAgeService : IDeviceAgeService
         var sensorChange = CreateDeviceAgeInfo(sensorChangeEvent, effectivePrefs, "SAGE", "Sensor");
 
         // Determine which is more recent (min = most recent valid one)
-        var min = "Sensor Start";
+        var min = TreatmentTypes.SensorStart;
         if (sensorChange.Found && sensorStart.Found)
         {
             if (sensorChange.TreatmentDate >= sensorStart.TreatmentDate)
             {
-                min = "Sensor Change";
+                min = TreatmentTypes.SensorChange;
                 // Legacy behavior: if Sensor Change is more recent, hide Sensor Start
                 sensorStart.Found = false;
             }
         }
         else if (sensorChange.Found && !sensorStart.Found)
         {
-            min = "Sensor Change";
+            min = TreatmentTypes.SensorChange;
         }
 
         return new SensorAgeInfo
@@ -99,7 +105,7 @@ public class DeviceAgeService : IDeviceAgeService
         return CreateDeviceAgeInfo(latestEvent, effectivePrefs, "BAGE", "Pump battery");
     }
 
-    private static DeviceAgeInfo CreateDeviceAgeInfo(
+    private DeviceAgeInfo CreateDeviceAgeInfo(
         DeviceEvent? deviceEvent,
         DeviceAgePreferences prefs,
         string group,
@@ -118,7 +124,7 @@ public class DeviceAgeService : IDeviceAgeService
             };
         }
 
-        var ageSpan = DateTime.UtcNow - deviceEvent.Timestamp;
+        var ageSpan = _time.GetUtcNow().UtcDateTime - deviceEvent.Timestamp;
         var totalHours = ageSpan.TotalHours;
         var age = (int)totalHours;
         var days = age / 24;

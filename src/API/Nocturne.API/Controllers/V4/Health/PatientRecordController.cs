@@ -9,7 +9,6 @@ using Nocturne.API.Services.V4;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Projections;
@@ -104,26 +103,6 @@ public class PatientRecordController : ControllerBase
     }
 
     /// <summary>
-    /// The patient's timezone, which every report cuts its days on.
-    /// </summary>
-    /// <remarks>
-    /// Served apart from <see cref="GetPatientRecord"/> because a member who may read reports but not
-    /// therapy data still needs the report's days cut on the patient's calendar. The zone alone says
-    /// nothing clinical.
-    /// </remarks>
-    [HttpGet("timezone")]
-    [RequireScope(Scope.GlucoseRead, Scope.ReportsRead, Scope.TherapyRead)]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(PatientTimezoneResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<PatientTimezoneResponse>> GetPatientTimezone(
-        [FromServices] ITherapySettingsResolver therapySettings,
-        CancellationToken cancellationToken = default)
-    {
-        var timezone = await therapySettings.GetTimezoneAsync(ct: cancellationToken);
-        return Ok(new PatientTimezoneResponse { Timezone = timezone });
-    }
-
-    /// <summary>
     /// Update the patient record
     /// </summary>
     [HttpPut]
@@ -139,7 +118,7 @@ public class PatientRecordController : ControllerBase
         if (!string.Equals(storedTimezone, updated.Timezone, StringComparison.Ordinal))
         {
             await _tenantCache.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, cancellationToken);
-            await _tempBasalRates.AfterProfilesChangedAsync([], cancellationToken);
+            await _tempBasalRates.AfterProfilesChangedAsync(cancellationToken);
         }
         return Ok(updated);
     }

@@ -22,7 +22,7 @@ public class GlookoV4TreatmentMapperSsv2ExtendedBolusTests
     {
         var logger = Mock.Of<ILogger>();
         var timeMapper = new GlookoTimeMapper(new GlookoConnectorConfiguration(), logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
     }
 
     [Fact]

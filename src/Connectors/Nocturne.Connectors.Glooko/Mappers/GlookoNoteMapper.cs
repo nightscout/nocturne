@@ -12,14 +12,16 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 ///     Keyed on the stable Glooko guid (raw-timestamp hash fallback) so re-correction upserts in place;
 ///     soft-delete aware and skips empty text.
 /// </summary>
-public class GlookoNoteMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger)
+public class GlookoNoteMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger, TimeProvider clock)
 {
     private readonly string _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
     private readonly GlookoTimeMapper _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly TimeProvider _clock = clock ?? throw new ArgumentNullException(nameof(clock));
 
     public List<Note> MapSsv2Notes(IReadOnlyList<GlookoSsv2Note> notes)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var results = new List<Note>();
 
         foreach (var note in ConnectorFaults.NonNullRecords(notes, _logger, _connectorSource, "SSV2 note"))
@@ -30,7 +32,6 @@ public class GlookoNoteMapper(string connectorSource, GlookoTimeMapper timeMappe
 
                 var rawTimestamp = _timeMapper.GetRawGlookoDate(note.Timestamp ?? string.Empty, null);
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
-                var now = DateTime.UtcNow;
 
                 var legacyId = !string.IsNullOrEmpty(note.Guid)
                     ? $"glooko_note_{note.Guid}"

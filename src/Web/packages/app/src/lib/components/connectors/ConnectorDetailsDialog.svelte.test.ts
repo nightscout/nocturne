@@ -45,7 +45,7 @@ async function syncing(
     },
   });
 
-  await page.getByRole("button", { name: "Sync now" }).click();
+  await page.getByRole("button", { name: "Sync a date range" }).click();
 }
 
 const syncReturning = (result: SyncResult) => syncing(async () => result);
@@ -78,7 +78,7 @@ describe("ConnectorDetailsDialog", () => {
 
     await expect.element(page.getByText("Nightscout")).toBeVisible();
     expect(
-      page.getByRole("button", { name: "Sync now" }).elements()
+      page.getByRole("button", { name: "Sync a date range" }).elements()
     ).toHaveLength(0);
   });
 
@@ -101,7 +101,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync now" }))
+      .element(page.getByRole("button", { name: "Sync a date range" }))
       .toBeVisible();
   });
 
@@ -126,7 +126,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync now" }))
+      .element(page.getByRole("button", { name: "Sync a date range" }))
       .toBeVisible();
   });
 

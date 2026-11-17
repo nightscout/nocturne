@@ -8,6 +8,7 @@ using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration;
 
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class DocumentCreatedAtRoundTripIntegrationTests : ApiIntegrationTestBase
 {

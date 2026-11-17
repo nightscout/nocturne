@@ -302,6 +302,9 @@ export class RealtimeStore {
   /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
 
+  /** Latest battery voltage of the uploader's link to the pump, null when none is reported. */
+  currentLinkBatteryVoltage = $state<number | null>(null);
+
   /** Glucose thresholds in force now, from the current therapy state; null until its first load. */
   chartThresholds = $state.raw<ChartThresholdsDto | null>(null);
 
@@ -539,6 +542,7 @@ export class RealtimeStore {
         }
         if (currentTherapyState) {
           this.currentReservoir = currentTherapyState.reservoir ?? null;
+          this.currentLinkBatteryVoltage = currentTherapyState.linkBatteryVoltage ?? null;
           this.chartThresholds = currentTherapyState.thresholds ?? null;
         }
         this.currentReadingLoaded = true;
@@ -1324,6 +1328,7 @@ export class RealtimeStore {
     try {
       const therapyState = await currentTherapyStateClient().getCurrentTherapyState();
       this.currentReservoir = therapyState?.reservoir ?? null;
+      this.currentLinkBatteryVoltage = therapyState?.linkBatteryVoltage ?? null;
       this.chartThresholds = therapyState?.thresholds ?? null;
     } catch {
       // Non-critical — the reservoir pill and thresholds keep their last values until the next refresh.

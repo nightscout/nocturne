@@ -18,9 +18,9 @@
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
-  import { formatNumericDate } from "#lib/utils/formatting.js";
   import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
   import ApiReference from "#lib/components/settings/ApiReference.svelte";
+  import SiteAddressCard from "#lib/components/tenants/SiteAddressCard.svelte";
 
   const MAX_NAME_LENGTH = 256;
 
@@ -165,30 +165,7 @@
       </Card.Content>
     </Card.Root>
 
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Address</Card.Title>
-        <Card.Description>
-          You cannot change the address of a site.
-        </Card.Description>
-      </Card.Header>
-      <Card.Content>
-        <dl class="grid grid-cols-1 gap-4 @md:grid-cols-2">
-          <div>
-            <dt class="text-sm font-medium text-muted-foreground">Slug</dt>
-            <dd class="mt-1 font-mono text-sm">{settings.slug}</dd>
-          </div>
-          <div>
-            <dt class="text-sm font-medium text-muted-foreground">Created</dt>
-            <dd class="mt-1 text-sm">
-              {settings.sysCreatedAt
-                ? formatNumericDate(new Date(settings.sysCreatedAt))
-                : "---"}
-            </dd>
-          </div>
-        </dl>
-      </Card.Content>
-    </Card.Root>
+    <SiteAddressCard createdAt={settings.sysCreatedAt} isDemo={!canRename} />
   {/if}
 
   <ApiReference />

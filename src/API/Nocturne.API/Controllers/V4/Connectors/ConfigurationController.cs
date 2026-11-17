@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -78,8 +79,48 @@ public class ConfigurationController : ControllerBase
             return NotFound(new { message = $"No configuration found for connector '{connectorName}'" });
         }
 
-        return Ok(config);
+        return Ok(await WithoutUnusableKeysAsync(connectorName, config, ct));
     }
+
+    /// <summary>
+    /// Drops the stored keys the connector's configuration type does not bind, and the bound keys
+    /// whose stored value does not convert, so a client that sends the document back is not refused
+    /// for what an earlier save stored. Readers on the server still see the whole stored document.
+    /// </summary>
+    private async Task<ConnectorConfigurationResponse> WithoutUnusableKeysAsync(
+        string connectorName,
+        ConnectorConfigurationResponse config,
+        CancellationToken ct)
+    {
+        var known = await _configService.GetBoundKeysAsync(connectorName, ct);
+        if (known is null || JsonNode.Parse(config.Configuration.RootElement.GetRawText()) is not JsonObject stored)
+            return config;
+
+        var unbindable = ConnectorConfigurationBinder.UnbindableKeys(known, config.Configuration.RootElement).ToHashSet();
+        foreach (var key in stored.Select(property => property.Key)
+            .Where(key => IsUnknownKey(key, known) || unbindable.Contains(ConnectorEnabledKey.Matches(key) ? "enabled" : key))
+            .ToList())
+            stored.Remove(key);
+
+        config.Configuration = JsonDocument.Parse(stored.ToJsonString());
+        return config;
+    }
+
+    private static string UnbindableMessage(string key, Type type, JsonElement root)
+    {
+        var enumType = Nullable.GetUnderlyingType(type) ?? type;
+        if (!enumType.IsEnum)
+            return $"Field '{key}' has invalid type";
+
+        var names = string.Join(", ", Enum.GetNames(enumType));
+        var sent = root.EnumerateObject().First(p => (ConnectorEnabledKey.Matches(p.Name) ? "enabled" : p.Name) == key).Value;
+        return sent.ValueKind == JsonValueKind.String
+            ? $"Field '{key}' value '{sent.GetString()}' is not one of: {names}"
+            : $"Field '{key}' must be one of: {names}";
+    }
+
+    private static bool IsUnknownKey(string key, IReadOnlyDictionary<string, Type> known) =>
+        !known.ContainsKey(key) && !ConnectorEnabledKey.Matches(key);
 
     /// <summary>
     /// Gets the JSON Schema for a connector's configuration.
@@ -139,6 +180,7 @@ public class ConfigurationController : ControllerBase
     /// Saves or updates runtime configuration for a connector.
     /// Only properties marked with [RuntimeConfigurable] are accepted.
     /// Validates the configuration against the connector's schema before saving.
+    /// Refused for Google Health, whose options are saved by the Google Health endpoint.
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="configuration">Configuration values as JSON</param>
@@ -158,9 +200,9 @@ public class ConfigurationController : ControllerBase
         _logger.LogInformation("Saving configuration for connector {ConnectorName} by {ModifiedBy}",
             connectorName, modifiedBy);
 
-        if (IsGrantDrivenConnector(connectorName) && SetsEnabled(configuration))
+        if (IsGrantDrivenConnector(connectorName))
         {
-            return RefuseGrantDrivenEnabled();
+            return SetsEnabled(configuration) ? RefuseGrantDrivenEnabled() : RefuseGrantDrivenConfiguration();
         }
 
         // Validate the configuration against the schema
@@ -182,13 +224,39 @@ public class ConfigurationController : ControllerBase
     private static bool SetsEnabled(JsonDocument configuration) =>
         configuration.RootElement.ValueKind == JsonValueKind.Object &&
         configuration.RootElement.EnumerateObject()
-            .Any(property => property.Name.Equals("enabled", StringComparison.OrdinalIgnoreCase));
+            .Any(property => ConnectorEnabledKey.Matches(property.Name));
 
     private ObjectResult RefuseGrantDrivenEnabled() =>
         Problem(
             detail: "Google Health is enabled while it holds a Google sign-in. Disconnect it to stop syncing.",
             statusCode: 400,
             title: "Bad Request");
+
+    private ObjectResult RefuseGrantDrivenConfiguration() =>
+        Problem(
+            detail: "Google Health options are saved at PUT /api/v4/google-health/options, which validates them.",
+            statusCode: 400,
+            title: "Bad Request");
+
+    private ObjectResult RefuseGrantDrivenGrant() =>
+        Problem(
+            detail: "Google Health holds a Google sign-in. Connect and disconnect it at /api/v4/google-health.",
+            statusCode: 400,
+            title: "Bad Request");
+
+    /// <summary>
+    /// Whether <paramref name="value"/> is what the connector already stores under
+    /// <paramref name="field"/>. A number stored before its property became a choice saves back
+    /// unchanged, so the rest of the document stays editable.
+    /// </summary>
+    private async Task<bool> IsStoredNumberAsync(string connectorName, string field, double value, CancellationToken ct)
+    {
+        var stored = await _configService.GetConfigurationAsync(connectorName, ct);
+        return stored?.Configuration is { RootElement: { ValueKind: JsonValueKind.Object } root }
+            && root.TryGetProperty(field, out var current)
+            && current.ValueKind == JsonValueKind.Number
+            && current.GetDouble() == value;
+    }
 
     /// <summary>
     /// Validates the configuration against the connector's schema.
@@ -200,6 +268,16 @@ public class ConfigurationController : ControllerBase
     {
         var errors = new List<string>();
 
+        var known = await _configService.GetBoundKeysAsync(connectorName, ct);
+        if (known is not null && configuration.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            errors.AddRange(configuration.RootElement.EnumerateObject()
+                .Where(property => IsUnknownKey(property.Name, known))
+                .Select(property => $"Unknown field '{property.Name}'"));
+            errors.AddRange(ConnectorConfigurationBinder.UnbindableKeys(known, configuration.RootElement)
+                .Select(key => UnbindableMessage(key, known[key], configuration.RootElement)));
+        }
+
         // Get the schema for this connector
         var schema = await _configService.GetSchemaAsync(connectorName, ct);
         var schemaRoot = schema.RootElement;
@@ -208,7 +286,7 @@ public class ConfigurationController : ControllerBase
         if (!schemaRoot.TryGetProperty("properties", out var schemaProperties))
         {
             // No schema available, allow any configuration
-            return errors;
+            return errors.Distinct().ToList();
         }
 
         var configRoot = configuration.RootElement;
@@ -241,39 +319,12 @@ public class ConfigurationController : ControllerBase
         // Validate each property in the configuration
         foreach (var configProp in configRoot.EnumerateObject())
         {
-            // Skip 'enabled' field - it's always valid
-            if (configProp.Name.Equals("enabled", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
             // Check if the property exists in the schema
             if (!schemaProperties.TryGetProperty(configProp.Name, out var propSchema))
             {
                 // Unknown property - could be a secret field or removed property
                 // Don't error, just skip validation for unknown fields
                 continue;
-            }
-
-            // Validate type
-            if (propSchema.TryGetProperty("type", out var typeProp))
-            {
-                var expectedType = typeProp.GetString();
-                var actualValue = configProp.Value;
-
-                var typeValid = expectedType switch
-                {
-                    "boolean" => actualValue.ValueKind == JsonValueKind.True || actualValue.ValueKind == JsonValueKind.False,
-                    "integer" => actualValue.ValueKind == JsonValueKind.Number && actualValue.TryGetInt64(out _),
-                    "number" => actualValue.ValueKind == JsonValueKind.Number,
-                    "string" => actualValue.ValueKind == JsonValueKind.String,
-                    _ => true
-                };
-
-                if (!typeValid)
-                {
-                    errors.Add($"Field '{configProp.Name}' has invalid type. Expected {expectedType}");
-                }
             }
 
             // Validate minimum/maximum for numbers
@@ -301,10 +352,27 @@ public class ConfigurationController : ControllerBase
             if (propSchema.TryGetProperty("enum", out var enumProp) && configProp.Value.ValueKind == JsonValueKind.String)
             {
                 var actualValue = configProp.Value.GetString();
-                var validValues = enumProp.EnumerateArray().Select(v => v.GetString()).ToHashSet();
-                if (!validValues.Contains(actualValue))
+                var validValues = enumProp.EnumerateArray()
+                    .Where(v => v.ValueKind == JsonValueKind.String)
+                    .Select(v => v.GetString())
+                    .ToHashSet();
+                if (validValues.Count > 0 && !validValues.Contains(actualValue))
                 {
                     errors.Add($"Field '{configProp.Name}' value '{actualValue}' is not one of: {string.Join(", ", validValues)}");
+                }
+            }
+
+            if (propSchema.TryGetProperty("enum", out var numbersProp) && configProp.Value.ValueKind == JsonValueKind.Number)
+            {
+                var actualValue = configProp.Value.GetDouble();
+                var validValues = numbersProp.EnumerateArray()
+                    .Where(v => v.ValueKind == JsonValueKind.Number)
+                    .Select(v => v.GetDouble())
+                    .ToList();
+                if (validValues.Count > 0 && !validValues.Contains(actualValue)
+                    && !await IsStoredNumberAsync(connectorName, configProp.Name, actualValue, ct))
+                {
+                    errors.Add($"Field '{configProp.Name}' value {actualValue} is not one of: {string.Join(", ", validValues)}");
                 }
             }
 
@@ -328,7 +396,7 @@ public class ConfigurationController : ControllerBase
             }
         }
 
-        return errors;
+        return errors.Distinct().ToList();
     }
 
     /// <summary>
@@ -384,6 +452,11 @@ public class ConfigurationController : ControllerBase
         [FromBody] Dictionary<string, string> secrets,
         CancellationToken ct)
     {
+        if (IsGrantDrivenConnector(connectorName))
+        {
+            return RefuseGrantDrivenGrant();
+        }
+
         // Saving a Nightscout API secret adopts it as a working credential (see
         // RequireInteractiveSessionAttribute); other connector credentials hand out nothing.
         if (ConnectorConfigurationService.AdoptedSecret(connectorName, secrets) is not null
@@ -524,11 +597,17 @@ public class ConfigurationController : ControllerBase
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteConfiguration(
         string connectorName,
         CancellationToken ct)
     {
+        if (IsGrantDrivenConnector(connectorName))
+        {
+            return RefuseGrantDrivenGrant();
+        }
+
         _logger.LogInformation("Deleting configuration for connector {ConnectorName}", connectorName);
 
         var deleted = await _configService.DeleteConfigurationAsync(connectorName, ct);

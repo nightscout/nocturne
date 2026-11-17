@@ -25,11 +25,12 @@ public class GlookoAuthTokenProvider(
     IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
     ILogger<GlookoAuthTokenProvider> logger,
-    IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<GlookoConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    IRetryDelayStrategy retryDelayStrategy,
+    TimeProvider? timeProvider = null)
+    : AuthTokenProviderBase<GlookoConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         GlookoConnectorConfiguration config, CancellationToken cancellationToken)
@@ -53,7 +54,6 @@ public class GlookoAuthTokenProvider(
                 metadata = sessionMetadata;
                 return (cookie, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Glooko authentication",
             cancellationToken);
@@ -62,7 +62,7 @@ public class GlookoAuthTokenProvider(
             return (null, DateTime.MinValue, null);
 
         _logger.LogInformation("Glooko authentication successful");
-        return (sessionCookie, DateTime.UtcNow.Add(GlookoConstants.SessionLifetime), metadata);
+        return (sessionCookie, _timeProvider.GetUtcNow().UtcDateTime.Add(GlookoConstants.SessionLifetime), metadata);
     }
 
     /// <summary>

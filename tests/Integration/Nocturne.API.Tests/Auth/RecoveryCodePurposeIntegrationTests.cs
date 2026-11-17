@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// A recovery code redeems only at recovery-mode redeem, never at the login handoff, and a refused
 /// attempt does not spend it.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class RecoveryCodePurposeIntegrationTests : ApiIntegrationTestBase
 {

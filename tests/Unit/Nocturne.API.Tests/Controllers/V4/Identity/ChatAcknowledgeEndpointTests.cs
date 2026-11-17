@@ -12,6 +12,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
 
@@ -61,10 +62,11 @@ public class ChatAcknowledgeEndpointTests : IDisposable
 
         return new ChatIdentityDirectoryController(
             new ChatIdentityDirectoryService(
-                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
+                _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
             new ChatIdentityPendingLinkService(
-                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
+                _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             tenantFactory.Object,
+            new TenantRepository(tenantFactory.Object),
             _tenantAccessor.Object,
             _ackService.Object);
     }

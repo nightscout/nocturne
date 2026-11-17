@@ -9,6 +9,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/alexa endpoint.
 /// Covers Alexa Smart Home skill integration.
 /// </summary>
+[Collection(ParityShards.Two)]
 public partial class AlexaParityTests : ParityTestBase
 {
     [GeneratedRegex(@" as of [^.]*\.")]

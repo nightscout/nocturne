@@ -31,6 +31,7 @@ public class VersionController : ControllerBase
 
     /// <summary>
     /// Get the current system version information.
+    /// On an internal error it still returns 200, with an unknown storage version.
     /// </summary>
     /// <returns>A <see cref="V3Envelope{T}"/> wrapping a <see cref="V3VersionResult"/>.</returns>
     /// <remarks>
@@ -77,7 +78,7 @@ public class VersionController : ControllerBase
                 {
                     Result = new V3VersionResult
                     {
-                        Version = AppVersion.Current,
+                        Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
                         ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
                         SrvDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         Storage = new StorageInfo { Version = "unknown" },

@@ -8,6 +8,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V2;
 /// Parity tests for /api/v2/loop endpoints.
 /// - GET /api/v2/loop/status - Get Loop service configuration status
 /// </summary>
+[Collection(ParityShards.Two)]
 public class LoopParityTests : ParityTestBase
 {
     public LoopParityTests(ParityTestFixture fixture, ITestOutputHelper output)

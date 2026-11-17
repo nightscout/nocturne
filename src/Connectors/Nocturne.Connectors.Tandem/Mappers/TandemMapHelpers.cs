@@ -1,4 +1,5 @@
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Tandem.Mappers;
 
@@ -9,7 +10,7 @@ public static class TandemMapHelpers
     public const string Source = DataSources.TConnectSyncConnector;
 
     /// <summary>Rounds an insulin amount to two decimals, mirroring tconnectsync's insulin_float_round.</summary>
-    public static double Round2(double amount) => Math.Round(amount, 2);
+    public static double Round2(double amount) => ScaledRounding.Round(amount, 2);
 
     /// <summary>Converts a milliunit amount to whole units (rounded to two decimals).</summary>
     public static double MilliunitsToUnits(double milliunits) => Round2(milliunits / 1000.0);

@@ -42,7 +42,7 @@ internal sealed class BasalAmountHandler : IMyLifeStateSpanHandler
         // suspension as its own PumpSuspend/PumpResume event pair.
         var origin = TempBasalOrigin.Scheduled;
 
-        var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, estimatedRate, origin);
+        var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, context.Now, estimatedRate, origin);
         return [tempBasal];
     }
 }

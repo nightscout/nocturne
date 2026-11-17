@@ -12,7 +12,8 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
 
     public (List<Bolus> Boluses, List<CarbIntake> CarbIntakes, List<DecompositionBatch> Batches) MapTreatments(
         TidepoolBolus[]? boluses,
-        TidepoolFood[]? foods)
+        TidepoolFood[]? foods,
+        DateTime now)
     {
         var mappedBoluses = new List<(TidepoolBolus Source, Bolus Mapped)>();
         var mappedCarbs = new List<CarbIntake>();
@@ -24,7 +25,7 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
             {
                 try
                 {
-                    var mapped = MapBolus(bolus);
+                    var mapped = MapBolus(bolus, now);
                     if (mapped != null)
                         mappedBoluses.Add((bolus, mapped));
                 }
@@ -54,7 +55,6 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
                     if (!carbs.HasValue || carbs.Value <= 0) continue;
 
                     var timestamp = food.Time!.Value.ToUniversalTime();
-                    var now = DateTime.UtcNow;
 
                     if (correlationBolusByTime.TryGetValue(food.Time!.Value, out var existingBolus))
                     {
@@ -108,7 +108,7 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
         return (mappedBoluses.Select(b => b.Mapped).ToList(), mappedCarbs, batches);
     }
 
-    private Bolus? MapBolus(TidepoolBolus bolus)
+    private Bolus? MapBolus(TidepoolBolus bolus, DateTime now)
     {
         if (!bolus.Time.HasValue) return null;
 
@@ -116,7 +116,6 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
         if (totalInsulin <= 0) return null;
 
         var timestamp = bolus.Time!.Value.ToUniversalTime();
-        var now = DateTime.UtcNow;
 
         BolusType bolusType;
         if (string.Equals(bolus.SubType, "dual/square", StringComparison.OrdinalIgnoreCase)

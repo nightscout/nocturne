@@ -7,7 +7,9 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
@@ -105,6 +107,10 @@ public class HubCredentialVerifierTests
     {
         var services = new ServiceCollection()
             .AddSingleton(_contexts.AsNocturneFactory())
+            .AddSingleton<ISubjectRepository>(new SubjectRepository(_contexts.AsNocturneFactory()))
+            .AddSingleton<ITenantRepository>(new TenantRepository(_contexts.AsNocturneFactory()))
+            .AddSingleton<IOAuthGrantRepository>(new OAuthGrantRepository(_contexts.AsNocturneFactory()))
+            .AddSingleton<IFirstPartyTokenRepository>(new EfFirstPartyTokenRepository(_contexts.AsNocturneFactory()))
             .AddSingleton(_members.Object)
             .AddSingleton(_guestLinks.Object)
             .AddSingleton(_overview.Object)
@@ -428,7 +434,12 @@ public class HubCredentialVerifierTests
             .Setup(o => o.GetGlucoseReadTenantsAsync(
                 _subject, It.IsAny<IReadOnlySet<string>>(), authType, It.IsAny<CancellationToken>()))
             .ReturnsAsync(tenants
-                .Select(id => new GlucoseReadTenant(new TenantEntity { Id = id }, new HashSet<string>(), false, new HashSet<string>()))
+                .Select(id => new GlucoseReadTenant(
+                    new TenantRecord(Id: id, Slug: "default", DisplayName: "Default", IsActive: true, IsDemo: false, AllowAccessRequests: true, AllowPublicDocs: false,
+                OnboardingCompletedAt: null, SetupHubEnrolledAt: null, SetupStripDismissedRevision: null, PatientRelationship: null, HandedOverAt: null,
+                DefaultGlucoseUnits: null, LastReadingAt: null, ShareTokenHash: null, ShareTokenEncrypted: null, ShareTokenSetAt: null,
+                ShareLastAccessedAt: null, SysCreatedAt: DateTime.UtcNow, SysUpdatedAt: DateTime.UtcNow, DemoConfig: null),
+                    new HashSet<string>(), false, new HashSet<string>()))
                 .ToList());
 
     [Fact]

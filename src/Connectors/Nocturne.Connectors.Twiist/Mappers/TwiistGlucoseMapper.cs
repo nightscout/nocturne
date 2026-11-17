@@ -42,11 +42,9 @@ public class TwiistGlucoseMapper(ILogger logger)
     /// Maps decoded glucose blob records to SensorGlucose V4 models.
     /// </summary>
     public IEnumerable<SensorGlucose> MapGlucoseRecords(
-        IReadOnlyList<GlucoseRecord> records, string? lastTrend = null)
+        IReadOnlyList<GlucoseRecord> records, DateTime now, string? lastTrend = null)
     {
         if (records.Count == 0) return [];
-
-        var now = DateTime.UtcNow;
 
         return records
             .Where(r => r.Mgdl > 0)

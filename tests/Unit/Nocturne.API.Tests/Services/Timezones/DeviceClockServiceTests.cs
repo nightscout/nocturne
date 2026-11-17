@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Timezones;
 using Nocturne.Core.Contracts.Identity;
@@ -22,6 +23,7 @@ public class DeviceClockServiceTests : IDisposable
 
     private readonly NocturneDbContext _db;
     private readonly Guid _tenantId = Guid.CreateVersion7();
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 4, 12, 0, 0, 0, TimeSpan.Zero));
     private readonly Mock<IInAppNotificationService> _notifications = new();
     private readonly TimezoneTimelineService _timeline;
     private readonly DeviceClockService _service;
@@ -40,9 +42,10 @@ public class DeviceClockServiceTests : IDisposable
             .ReturnsAsync(OwnerId);
 
         _timeline = new TimezoneTimelineService(
-            _db.AsFactory(), accessor.Object, NullLogger<TimezoneTimelineService>.Instance);
+            _db.AsFactory(), accessor.Object, _clock, NullLogger<TimezoneTimelineService>.Instance);
         _service = new DeviceClockService(
             _db.AsFactory(), accessor.Object, _timeline, owners.Object, _notifications.Object,
+            _clock,
             NullLogger<DeviceClockService>.Instance);
     }
 
@@ -106,18 +109,31 @@ public class DeviceClockServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task StaleObservations_ArePruned()
+    public async Task StaleObservations_ArePruned_AtTheRetentionCutoff()
     {
         await SeedHomeZoneAsync();
-        var ancient = Batch(DateTime.UtcNow.AddDays(-DeviceClockService.RetentionDays - 30), 120);
-        await _service.RecordObservationsAsync(Connector, [ancient], null, correctionsEnabled: false);
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var ancient = Batch(now.AddDays(-DeviceClockService.RetentionDays).AddMinutes(-1), 120);
+        var justInside = Batch(now.AddDays(-DeviceClockService.RetentionDays).AddMinutes(1), 120);
+        await _service.RecordObservationsAsync(Connector, [ancient, justInside], null, correctionsEnabled: false);
 
         await _service.RecordObservationsAsync(
-            Connector, [Batch(DateTime.UtcNow, -240)], null, correctionsEnabled: false);
+            Connector, [Batch(now, -240)], null, correctionsEnabled: false);
 
-        var remaining = await _db.DeviceClockObservations.ToListAsync();
-        remaining.Should().ContainSingle()
-            .Which.ObservedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        var remaining = await _db.DeviceClockObservations.OrderBy(o => o.ObservedAt).ToListAsync();
+        remaining.Select(o => o.ObservedAt).Should().Equal(justInside.ObservedAtUtc, now);
+    }
+
+    [Fact]
+    public async Task AnnouncedSegment_StampsItsAnchorsWithTheClock()
+    {
+        await SeedHomeZoneAsync();
+
+        await _service.RecordObservationsAsync(Connector, DeviantRun(), null, correctionsEnabled: true);
+
+        var stamped = await _db.DeviceClockObservations.Where(o => o.AppliedAt != null).ToListAsync();
+        stamped.Should().NotBeEmpty();
+        stamped.Should().OnlyContain(o => o.AppliedAt == _clock.GetUtcNow().UtcDateTime);
     }
 
     // ── Derivation and gating ────────────────────────────────────────────────
@@ -131,6 +147,30 @@ public class DeviceClockServiceTests : IDisposable
             Connector, DeviantRun(), null, correctionsEnabled: false);
 
         segments.Should().ContainSingle().Which.OffsetMinutes.Should().Be(120);
+    }
+
+    [Theory]
+    [InlineData(120, 120)]
+    [InlineData(-420, -420)]
+    [InlineData(-240, null)]
+    public async Task DeviceClock_AheadBehindOrEqualToTheTimelineZone_DerivesTheMatchingSegment(
+        int deviceOffsetMinutes, int? expectedSegmentOffset)
+    {
+        // The timeline says EDT (UTC-4): +2h is ahead of it, -7h behind it, -4h equal to it.
+        await SeedHomeZoneAsync();
+        var run = new List<DeviceClockObservation>
+        {
+            Batch(Utc(10, 12), deviceOffsetMinutes),
+            Batch(Utc(10, 18), deviceOffsetMinutes),
+            Batch(Utc(11, 6), deviceOffsetMinutes),
+        };
+
+        var segments = await _service.RecordObservationsAsync(Connector, run, null, correctionsEnabled: false);
+
+        if (expectedSegmentOffset is { } offset)
+            segments.Should().ContainSingle().Which.OffsetMinutes.Should().Be(offset);
+        else
+            segments.Should().BeEmpty();
     }
 
     [Fact]

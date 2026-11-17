@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Notifications;
 using Nocturne.Core.Contracts.Identity;
@@ -27,10 +26,9 @@ namespace Nocturne.API.Services.Platform.InstanceKey;
 public class InstanceKeyChangeService(
     IServiceProvider serviceProvider,
     InstanceKeyCheck keyCheck,
-    UndecryptableSecretScanner scanner,
     IOwnerNoticeLedger ledger,
     ActiveTenantSnapshot activeTenants,
-    INocturneDbContextFactory contexts,
+    ITenantMembershipRepository members,
     TimeProvider timeProvider,
     ILogger<InstanceKeyChangeService> logger) : BackgroundService
 {
@@ -170,7 +168,10 @@ public class InstanceKeyChangeService(
 
     private async Task<bool> ReconcilePlatformAsync(Guid generation, CancellationToken cancellationToken)
     {
-        var found = await scanner.ScanPlatformAsync(cancellationToken);
+        IReadOnlyList<UndecryptablePlatformSetting> found;
+        await using (var scanScope = TenantJobScope.Open(serviceProvider, null, AuditEndpoint))
+            found = await scanScope.ServiceProvider.GetRequiredService<UndecryptableSecretScanner>()
+                .ScanPlatformAsync(cancellationToken);
         var metadata = new Dictionary<string, object>
         {
             ["PlatformSettings"] = found.Select(s => s.Category).ToList(),
@@ -249,17 +250,12 @@ public class InstanceKeyChangeService(
     /// </summary>
     internal async Task<IReadOnlyList<PlatformAdmin>> PlatformAdminsAsync(CancellationToken cancellationToken)
     {
-        await using var db = await contexts.CreatePlatformAsync(cancellationToken);
-        var memberships = await db.TenantMembers.AsNoTracking()
-            .Where(m => m.Subject!.IsPlatformAdmin && m.Subject.IsActive && !m.Subject.IsSystemSubject
-                && m.Tenant!.IsActive)
-            .OrderBy(m => m.SysCreatedAt).ThenBy(m => m.Id)
-            .Select(m => new PlatformAdmin(m.SubjectId, m.TenantId, m.Tenant!.Slug, m.Tenant.DisplayName))
-            .ToListAsync(cancellationToken);
-        var admins = memberships.GroupBy(m => m.SubjectId).Select(g => g.First()).ToList();
+        var directory = await members.ListPlatformAdminsAsync(cancellationToken);
+        var admins = directory.Memberships
+            .Select(m => new PlatformAdmin(m.SubjectId, m.TenantId, m.Slug, m.DisplayName))
+            .ToList();
 
-        var withoutTenant = await db.Subjects.AsNoTracking()
-            .CountAsync(s => s.IsPlatformAdmin && s.IsActive && !s.IsSystemSubject, cancellationToken) - admins.Count;
+        var withoutTenant = directory.ActivePlatformAdmins - admins.Count;
         if (withoutTenant > 0)
             logger.LogWarning(
                 "{Count} platform admins are members of no active tenant and cannot be told which platform settings to re-enter",

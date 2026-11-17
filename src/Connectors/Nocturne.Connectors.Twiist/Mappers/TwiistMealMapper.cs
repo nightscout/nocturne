@@ -13,11 +13,9 @@ public class TwiistMealMapper(ILogger logger)
 {
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public IEnumerable<CarbIntake> MapMeals(List<TwiistMeal>? meals)
+    public IEnumerable<CarbIntake> MapMeals(List<TwiistMeal>? meals, DateTime now)
     {
         if (meals == null || meals.Count == 0) return [];
-
-        var now = DateTime.UtcNow;
 
         return meals
             .Where(m => m.Grams is > 0)

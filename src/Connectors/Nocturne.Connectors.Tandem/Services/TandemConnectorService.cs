@@ -3,11 +3,11 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Connectors.Tandem.Mappers;
 using Nocturne.Connectors.Tandem.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Tandem.Services;
@@ -20,11 +20,9 @@ namespace Nocturne.Connectors.Tandem.Services;
 /// and CGM-session device events, pump suspend/resume, alarms, CGM alerts, sleep/exercise spans,
 /// device status, and profiles.
 /// </summary>
-public class TandemConnectorService : BaseConnectorService<TandemConnectorConfiguration>
+public class TandemConnectorService
+    : TokenConnectorService<TandemConnectorConfiguration, TandemAuthTokenProvider>
 {
-
-    private readonly TandemAuthTokenProvider _tokenProvider;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TandemSourceApiClient _apiClient;
     private readonly IConnectorSyncCursorStore? _cursorStore;
 
@@ -37,15 +35,12 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         IConnectorPublisher? publisher = null,
         IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? timeProvider = null)
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
         _cursorStore = cursorStore;
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
-        _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _apiClient = new TandemSourceApiClient(httpClient, logger);
     }
 
-    protected override string ConnectorSource => DataSources.TConnectSyncConnector;
     public override string ServiceName => "Tandem Source";
 
 
@@ -60,10 +55,16 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
         try
         {
-            var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-            var session = await _tokenProvider.GetCachedSessionAsync();
+            var token = await ValidTokenAsync(config, cancellationToken);
+            if (token is null)
+            {
+                _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
+                return AuthenticationFailedResult();
+            }
+
+            var session = await TokenProvider.GetCachedSessionAsync();
             var pumperId = session?.Metadata?.GetValueOrDefault(TandemAuthTokenProvider.PumperIdKey);
-            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(pumperId))
+            if (string.IsNullOrEmpty(pumperId))
             {
                 _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
                 result.Success = false;
@@ -109,7 +110,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
                 result.Message = string.Join(" ", new[] { ClampNotice(request, device, time), unclosed }
                     .Where(notice => notice is not null));
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogInformation("[{Source}] Tandem sync canceled", ConnectorSource);
             throw;
@@ -129,7 +130,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         if (!activeTypes.Contains(SyncDataType.Profiles))
             return;
 
-        var profile = new TandemProfileMapper(_logger).Map(device.Settings?.Details);
+        var profile = new TandemProfileMapper(_logger).Map(device.Settings?.Details, Clock.GetUtcNow().UtcDateTime);
         if (profile == null)
             return;
 
@@ -138,8 +139,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var unchanged = await PublishedProfileFingerprintAsync(resource, cancellationToken) == fingerprint;
 
         var published = await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
-            result, SyncDataType.Profiles, activeTypes, unchanged ? [] : [profile],
-            PublishProfileDataAsync, config, cancellationToken);
+            result, activeTypes, unchanged ? [] : [profile], config, cancellationToken);
 
         if (published)
             await RememberPublishedProfileAsync(resource, fingerprint, cancellationToken);
@@ -165,7 +165,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         {
             return (await _cursorStore.GetAsync(TandemConstants.ConnectorName, resource, cancellationToken))?.LastGuid;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "[{Source}] Could not read the published profile; publishing", ConnectorSource);
             return null;
@@ -183,7 +183,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             await _cursorStore.SetAsync(
                 TandemConstants.ConnectorName, resource, new ConnectorSyncCursor(null, fingerprint), cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "[{Source}] Could not record the published profile", ConnectorSource);
         }
@@ -196,7 +196,8 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
         // The pump's newest event is a hard ceiling: there is nothing above it to ask for.
-        var ceiling = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? DateTime.UtcNow;
+        var now = Clock.GetUtcNow().UtcDateTime;
+        var ceiling = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? now;
         var end = request.To is { } until && until < ceiling ? until : ceiling;
 
         var start = await ResolveStartAsync(request, config, device, time);
@@ -266,7 +267,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var fetchedThrough = fetchTo < ceiling ? null : (DateTime?)ceiling;
 
         return await PublishEventsAsync(
-            groups, activeTypes, fetchedThrough, window, cgm, bolus, basal, deviceEvents,
+            groups, activeTypes, fetchedThrough, window, now, cgm, bolus, basal, deviceEvents,
             systemEvents, userMode, deviceStatus, result, config, cancellationToken);
     }
 
@@ -296,7 +297,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>
     private async Task<string?> PublishEventsAsync(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups,
-        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough, PublishWindow? window,
+        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough, PublishWindow? window, DateTime now,
         TandemCgmMapper cgm, TandemBolusMapper bolus, TandemBasalMapper basal,
         TandemDeviceEventMapper deviceEvents, TandemSystemEventMapper systemEvents,
         TandemUserModeMapper userMode, TandemDeviceStatusMapper deviceStatus,
@@ -309,27 +310,27 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             window is { } bounds ? records.Where(record => bounds.Holds(at(record))).ToList() : records;
 
         if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                cgm.Map(cgmEvents, now), config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.Bolus, out var bolusEvents))
         {
-            var decomposed = bolus.Map(bolusEvents);
-            await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+            var decomposed = bolus.Map(bolusEvents, now);
+            await PublishRecordTypeAsync(result, activeTypes,
                 Inside(decomposed.Boluses, record => record.Timestamp),
-                PublishBolusDataAsync, config, cancellationToken);
-            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
                 Inside(decomposed.CarbIntakes, record => record.Timestamp),
-                PublishCarbIntakeDataAsync, config, cancellationToken);
-            await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
+                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
                 Inside(decomposed.BolusCalculations, record => record.Timestamp),
-                PublishBolusCalculationDataAsync, config, cancellationToken);
+                config, cancellationToken);
         }
 
         string? unclosed = null;
         if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
         {
-            var spans = basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal);
+            var spans = basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal, now);
 
             // The padded day held no further delivery event, so this span ran longer than the day
             // the fetch reached past the window and is the tenant's to chase, not silently absent.
@@ -338,28 +339,27 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
                     $"The basal span starting {unclosedFrom.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} "
                     + "UTC is not published: the delivery event that ends it is more than a day above the window.";
 
-            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
-                Inside(spans.Spans, record => record.StartTimestamp), PublishTempBasalDataAsync,
-                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                Inside(spans.Spans, record => record.StartTimestamp), config, cancellationToken);
         }
 
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
             TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
-        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-            deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            deviceEvents.Map(devEvents, now), config, cancellationToken);
 
         var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
-        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-            systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes,
+            systemEvents.Map(sysEvents), config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
-            await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+            await PublishRecordTypeAsync(result, activeTypes,
                 Inside(userMode.Map(userModeEvents), record => record.StartTimestamp),
-                PublishStateSpanDataAsync, config, cancellationToken);
+                config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.DeviceStatus, out var dailyBasal))
-            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
-                deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                deviceStatus.Map(dailyBasal), config, cancellationToken);
 
         return unclosed;
     }
@@ -369,15 +369,14 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         DateTime windowStart, DateTime windowEnd, int[]? eventIdsFilter,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
+        var token = await TokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (string.IsNullOrEmpty(token))
             return null;
 
         return await ExecuteWithRetryAsync(
             () => _apiClient.GetPumpLogsAsync(
                 region, token!, pumperId, deviceAssignmentId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
-            _retryDelayStrategy,
-            ReauthenticateWith(_tokenProvider, config, t => token = t, cancellationToken),
+            ReauthenticateWith(config, t => token = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchPumpEvents",
             cancellationToken: cancellationToken);

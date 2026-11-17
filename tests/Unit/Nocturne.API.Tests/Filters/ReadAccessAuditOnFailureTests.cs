@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Filters;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Health;
@@ -101,6 +102,8 @@ public class ReadAccessAuditOnFailureTests
 
             builder.ConfigureServices(services =>
             {
+                services.AddHostedService<ReadAccessLogDrain>();
+
                 var auditConfig = new Mock<ITenantAuditConfigCache>();
                 auditConfig
                     .Setup(c => c.GetConfigAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))

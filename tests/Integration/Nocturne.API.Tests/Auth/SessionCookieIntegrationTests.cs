@@ -15,6 +15,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// rejects invalid/expired tokens (without clearing the domain-wide session cookies),
 /// and falls through to the next handler when no cookies are present.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class SessionCookieIntegrationTests : ApiIntegrationTestBase
 {

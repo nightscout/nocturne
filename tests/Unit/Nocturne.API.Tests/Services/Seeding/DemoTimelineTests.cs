@@ -17,6 +17,7 @@ public class DemoTimelineTests
 {
     private static DemoDataGenerator CreateGenerator(int days = 5) => new(
         Options.Create(new DemoModeConfiguration { BackfillDays = days }),
+        DemoTestClock.Host,
         NullLogger<DemoDataGenerator>.Instance,
         NullLoggerFactory.Instance);
 
@@ -125,7 +126,7 @@ public class DemoTimelineTests
     {
         var time = new DateTime(2026, 3, 17, 14, 30, 0);
         DeviceStatus Create() => DemoDeviceStatusGenerator.Create(
-            time, glucose: 160, iob: 1.2, cob: 25, tempBasalRate: 1.4, tempBasalDuration: 30,
+            time, DemoTestClock.Host, glucose: 160, iob: 1.2, cob: 25, tempBasalRate: 1.4, tempBasalDuration: 30,
             effectiveIsf: 40, effectiveCarbRatio: 10, targetGlucose: 110,
             scheduledBasalRate: 1.0, scenario: DayScenario.Normal);
 
@@ -151,7 +152,7 @@ public class DemoTimelineTests
     public void DeviceStatus_EventualBgRespondsToIobAndCob()
     {
         DeviceStatus Create(double iob, double cob) => DemoDeviceStatusGenerator.Create(
-            new DateTime(2026, 3, 17, 14, 30, 0), glucose: 160, iob: iob, cob: cob,
+            new DateTime(2026, 3, 17, 14, 30, 0), DemoTestClock.Host, glucose: 160, iob: iob, cob: cob,
             tempBasalRate: null, tempBasalDuration: null,
             effectiveIsf: 40, effectiveCarbRatio: 10, targetGlucose: 110,
             scheduledBasalRate: 1.0, scenario: DayScenario.Normal);
@@ -204,10 +205,11 @@ public class DemoTimelineTests
     [Fact]
     public void TherapyProfile_BuildsACompleteNightscoutProfile()
     {
-        var profile = DemoTherapyProfile.BuildProfile(new DemoModeConfiguration(), DateTime.UtcNow);
+        var profile = DemoTherapyProfile.BuildProfile(new DemoModeConfiguration(), DateTime.UtcNow, "Pacific/Auckland");
 
         profile.DefaultProfile.Should().Be(DemoTherapyProfile.ProfileName);
         var store = profile.Store[DemoTherapyProfile.ProfileName];
+        store.Timezone.Should().Be("Pacific/Auckland");
         store.Basal.Should().HaveCount(DemoTherapyProfile.BasalBlocks.Count);
         store.Basal.Should().BeInAscendingOrder(b => b.TimeAsSeconds);
         store.CarbRatio.Should().NotBeEmpty();
@@ -219,7 +221,7 @@ public class DemoTimelineTests
     [Fact]
     public void LifestyleSeeds_PumpModeSpansAreContiguousAndNonOverlapping()
     {
-        var spans = DemoLifestyleSeeds.BuildSpans(DateTime.Now.Date, 30);
+        var spans = DemoLifestyleSeeds.BuildSpans(DateTime.Now.Date, 30, DateTime.Now);
         var pumpModes = spans
             .Where(s => s.Category == StateSpanCategory.PumpMode)
             .OrderBy(s => s.StartLocal)
@@ -236,7 +238,7 @@ public class DemoTimelineTests
     public void LifestyleSeeds_ExerciseArtifactsAlignWithTheWorkoutWindow()
     {
         var today = DateTime.Now.Date;
-        var spans = DemoLifestyleSeeds.BuildSpans(today, 60);
+        var spans = DemoLifestyleSeeds.BuildSpans(today, 60, DateTime.Now);
 
         var exerciseDays = Enumerable.Range(1, 60)
             .Select(d => today.AddDays(-d))
@@ -259,7 +261,7 @@ public class DemoTimelineTests
     {
         // Resolvers read target values from metadata, not from State. The profile is a profile
         // activation, which the seeder writes beside the spans.
-        var spans = DemoLifestyleSeeds.BuildSpans(DateTime.Now.Date, 60);
+        var spans = DemoLifestyleSeeds.BuildSpans(DateTime.Now.Date, 60, DateTime.Now);
 
         spans.Should().NotContain(s => s.Category == StateSpanCategory.Profile);
 
@@ -275,7 +277,7 @@ public class DemoTimelineTests
     [Fact]
     public void LifestyleSeeds_SpansNeverStartInTheFuture()
     {
-        var spans = DemoLifestyleSeeds.BuildSpans(DateTime.Now.Date, 30);
+        var spans = DemoLifestyleSeeds.BuildSpans(DateTime.Now.Date, 30, DateTime.Now);
 
         spans.Should().NotBeEmpty();
         spans.Should().OnlyContain(s => s.StartLocal < DateTime.Now);

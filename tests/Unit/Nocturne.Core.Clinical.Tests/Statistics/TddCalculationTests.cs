@@ -23,7 +23,7 @@ public class TddCalculationTests
 
     public TddCalculationTests()
     {
-        _statisticsService = new StatisticsService();
+        _statisticsService = new StatisticsService(TimeProvider.System);
     }
 
     #region Helper Methods

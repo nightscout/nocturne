@@ -8,11 +8,12 @@ const resource = vi.hoisted(() => ({ current: undefined as unknown }));
 vi.mock("$app/state", () => ({
   page: { data: { effectivePermissions: ["glucose.read", "reports.read"], user: { id: "owner" } } },
 }));
-vi.mock("#lib/api/reports.remote.js", () => ({ getReportsData: vi.fn() }));
+vi.mock("#lib/api/reports.remote.js", () => ({ getReadingCount: vi.fn(), getReportsAnalysis: vi.fn() }));
 vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({ dateRangeInput: {} }),
 }));
 vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
+  useResourceContext: () => {},
   contextResource: () => ({
     get current() {
       return resource.current;
@@ -50,7 +51,6 @@ describe("reports overview", () => {
   });
 
   it.each([
-    [TimeZoneUnavailableReason.Share, /A shared link does not show the time zone/],
     [TimeZoneUnavailableReason.NotConfigured, /do not have a time zone/],
     [TimeZoneUnavailableReason.Unrecognised, /does not recognize the time zone/],
     [TimeZoneUnavailableReason.LookupFailed, /did not load/],

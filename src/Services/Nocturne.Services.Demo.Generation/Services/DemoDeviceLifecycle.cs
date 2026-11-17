@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Services.Demo.Services;
@@ -34,13 +35,13 @@ public static class DemoDeviceLifecycle
     private static readonly DeviceKind[] Kinds =
     [
         new(new TrackerSeedSpec("CGM Sensor", TrackerCategory.Sensor, "radio", 240,
-            "Sensor Start", CompletionReason.Completed), CycleDays: 10, Phase: 3, HourOfDay: 9),
+            TreatmentTypes.SensorStart, CompletionReason.Completed), CycleDays: 10, Phase: 3, HourOfDay: 9),
         new(new TrackerSeedSpec("Infusion Site", TrackerCategory.Cannula, "syringe", 72,
-            "Site Change", CompletionReason.Completed), CycleDays: 3, Phase: 1, HourOfDay: 20),
+            TreatmentTypes.SiteChange, CompletionReason.Completed), CycleDays: 3, Phase: 1, HourOfDay: 20),
         new(new TrackerSeedSpec("Reservoir", TrackerCategory.Reservoir, "cylinder", 72,
-            "Insulin Change", CompletionReason.Refilled), CycleDays: 3, Phase: 1, HourOfDay: 20),
+            TreatmentTypes.InsulinChange, CompletionReason.Refilled), CycleDays: 3, Phase: 1, HourOfDay: 20),
         new(new TrackerSeedSpec("Pump Battery", TrackerCategory.Battery, "battery", 504,
-            "Pump Battery Change", CompletionReason.Completed), CycleDays: 21, Phase: 8, HourOfDay: 19),
+            TreatmentTypes.PumpBatteryChange, CompletionReason.Completed), CycleDays: 21, Phase: 8, HourOfDay: 19),
     ];
 
     /// <summary>Tracker definitions matching the generated schedule.</summary>
@@ -48,22 +49,21 @@ public static class DemoDeviceLifecycle
         Kinds.Select(k => k.Tracker).ToList();
 
     /// <summary>
-    /// All device changes in the window, chronological. One extra cycle before
-    /// the window is included per kind so every age has a defined start even on
-    /// short backfills. <paramref name="localToday"/> is a local midnight;
-    /// timestamps are UTC.
+    /// All device changes in the window up to <paramref name="localNow"/>, chronological. One extra
+    /// cycle before the window is included per kind so every age has a defined start even on short
+    /// backfills. Timestamps are UTC.
     /// </summary>
-    public static List<DeviceChangeEvent> GenerateSchedule(DateTime localToday, int backfillDays)
+    public static List<DeviceChangeEvent> GenerateSchedule(DateTime localNow, int backfillDays, DemoClock clock)
     {
         var events = new List<DeviceChangeEvent>();
         foreach (var kind in Kinds)
         {
             for (var d = backfillDays + kind.CycleDays; d >= 0; d--)
             {
-                var local = ChangeTimeOn(localToday.AddDays(-d), kind.Tracker.TriggerEventType);
-                if (local is null || local > DateTime.Now)
+                var local = ChangeTimeOn(localNow.Date.AddDays(-d), kind.Tracker.TriggerEventType);
+                if (local is null || local > localNow)
                     continue;
-                events.Add(new DeviceChangeEvent(kind.Tracker.TriggerEventType, local.Value.ToUniversalTime()));
+                events.Add(new DeviceChangeEvent(kind.Tracker.TriggerEventType, clock.ToUtc(local.Value)));
             }
         }
 

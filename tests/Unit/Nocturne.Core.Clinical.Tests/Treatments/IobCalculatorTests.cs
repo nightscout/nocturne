@@ -977,4 +977,39 @@ public class IobCalculatorTests
     }
 
     #endregion
+
+    #region Explicit instant
+
+    [Fact]
+    public void CalcBolus_AtAnExplicitInstant_DoesNotDependOnTheWallClock()
+    {
+        var delivered = new DateTimeOffset(2020, 1, 1, 8, 0, 0, TimeSpan.Zero);
+        var bolus = new Bolus { Timestamp = delivered.UtcDateTime, Insulin = 2.0 };
+        var atFixedInstant = delivered.AddMinutes(45).ToUnixTimeMilliseconds();
+
+        var first = _calculator.CalcBolus(bolus, atFixedInstant);
+        var second = _calculator.CalcBolus(bolus, atFixedInstant);
+
+        Assert.InRange(first.IobContrib, 0.01, 1.99);
+        Assert.Equal(first.IobContrib, second.IobContrib);
+        Assert.Equal(first.ActivityContrib, second.ActivityContrib);
+    }
+
+    [Fact]
+    public void FromBoluses_AtAnExplicitInstant_MatchesTheSumOfItsBoluses()
+    {
+        var delivered = new DateTimeOffset(2020, 1, 1, 8, 0, 0, TimeSpan.Zero);
+        var boluses = new List<Bolus>
+        {
+            new() { Timestamp = delivered.UtcDateTime, Insulin = 2.0 },
+            new() { Timestamp = delivered.AddMinutes(30).UtcDateTime, Insulin = 1.0 },
+        };
+        var at = delivered.AddMinutes(60).ToUnixTimeMilliseconds();
+
+        var total = _calculator.FromBoluses(boluses, at);
+
+        Assert.Equal(boluses.Sum(b => _calculator.CalcBolus(b, at).IobContrib), total.Iob, 3);
+    }
+
+    #endregion
 }

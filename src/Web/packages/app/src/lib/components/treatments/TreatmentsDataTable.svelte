@@ -4,6 +4,7 @@
     EntryRecord,
     EntryCategoryId,
   } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
   import { getEntryStyle } from "#lib/constants/entry-categories.js";
   import type {
     Column,
@@ -44,7 +45,7 @@
   import DataTableToolbar from "./DataTableToolbar.svelte";
   import DataTablePagination from "./DataTablePagination.svelte";
   import ColumnFilterPopover from "./ColumnFilterPopover.svelte";
-  import { getDeviceEventTypeLabel } from "#lib/constants/device-event-types.js";
+  import { getDeviceEventTypeLabel } from "#lib/constants/device-event-types.svelte.js";
 
   interface Props {
     rows: EntryRecord[];
@@ -476,9 +477,9 @@
     ...(selectedSources.length > 0 ? [`source: ${selectedSources.join(", ")}`] : []),
   ]);
 
-  const typeFilterOptions: FilterOption[] = Object.entries(ENTRY_CATEGORIES).map(([id, cat]) => ({
-    value: id,
-    label: cat.name,
+  const typeFilterOptions: FilterOption[] = Object.values(ENTRY_CATEGORIES).map((cat) => ({
+    value: cat.id,
+    label: entryCategoryName(cat.id),
   }));
 </script>
 

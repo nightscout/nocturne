@@ -16,6 +16,7 @@ namespace Nocturne.API.Tests.Integration;
 /// units it was uploaded in, so a client that reads it and uploads it again stores the same values,
 /// on real PostgreSQL.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class MmolProfileUnitsIntegrationTests : ApiIntegrationTestBase
 {

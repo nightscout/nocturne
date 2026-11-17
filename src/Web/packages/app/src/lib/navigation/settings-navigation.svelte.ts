@@ -7,6 +7,7 @@
 import type { Component } from "svelte";
 import Building from "@lucide/svelte/icons/building";
 import Building2 from "@lucide/svelte/icons/building-2";
+import MailPlus from "@lucide/svelte/icons/mail-plus";
 import FileSearch from "@lucide/svelte/icons/file-search";
 import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
 import HeartPulse from "@lucide/svelte/icons/heart-pulse";
@@ -169,6 +170,12 @@ function settingsGroups(): SettingsGroup[] {
           description: "All sites on this server, and platform administrators.",
           href: "/settings/admin/tenants",
           icon: Building2,
+        },
+        {
+          title: "Invite people",
+          description: "Links that let people make their own site on this server.",
+          href: "/settings/admin/invites",
+          icon: MailPlus,
         },
         {
           title: "Access requests",

@@ -9,15 +9,18 @@ namespace Nocturne.API.OpenApi;
 /// <c>description</c>, then replaces <c>summary</c> with a human-readable title derived
 /// from the action method name (e.g. <c>CreateEntries</c> → "Create entries").
 /// </summary>
+/// <remarks>
+/// The XML <c>&lt;remarks&gt;</c>, which the generator maps to <c>description</c>, are dropped:
+/// on an action they hold notes for maintainers (the types and guards behind it, the reasons
+/// for its shape), not text for API consumers. Anything a consumer needs goes in the summary.
+/// </remarks>
 public sealed partial class SummaryToDescriptionOperationProcessor : IOperationProcessor
 {
     public bool Process(OperationProcessorContext context)
     {
         var op = context.OperationDescription.Operation;
 
-        // Move current summary → description (only if description is empty).
-        if (!string.IsNullOrWhiteSpace(op.Summary) && string.IsNullOrWhiteSpace(op.Description))
-            op.Description = op.Summary;
+        op.Description = PublishedDescription(op.Summary);
 
         // Derive a readable title from the method name.
         var methodName = context.MethodInfo.Name;
@@ -30,6 +33,9 @@ public sealed partial class SummaryToDescriptionOperationProcessor : IOperationP
 
         return true;
     }
+
+    internal static string? PublishedDescription(string? summary) =>
+        string.IsNullOrWhiteSpace(summary) ? null : summary;
 
     internal static string Humanize(string pascalName)
     {

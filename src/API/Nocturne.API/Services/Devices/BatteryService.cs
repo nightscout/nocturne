@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Battery;
 using Nocturne.Core.Models.V4;
 
@@ -15,6 +16,7 @@ public class BatteryService : IBatteryService
 {
     private readonly IUploaderSnapshotRepository _uploaderSnapshots;
     private readonly IPumpSnapshotRepository _pumpSnapshots;
+    private readonly TimeProvider _time;
     private readonly ILogger<BatteryService> _logger;
 
     private const int DefaultWarnThreshold = 30;
@@ -23,10 +25,12 @@ public class BatteryService : IBatteryService
     public BatteryService(
         IUploaderSnapshotRepository uploaderSnapshots,
         IPumpSnapshotRepository pumpSnapshots,
+        TimeProvider timeProvider,
         ILogger<BatteryService> logger)
     {
         _uploaderSnapshots = uploaderSnapshots;
         _pumpSnapshots = pumpSnapshots;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -40,7 +44,7 @@ public class BatteryService : IBatteryService
 
         try
         {
-            var from = DateTime.UtcNow.AddMinutes(-recentMinutes);
+            var from = _time.GetUtcNow().UtcDateTime.AddMinutes(-recentMinutes);
 
             var uploaderSnapshots = (await _uploaderSnapshots.GetAsync(
                 from: from, to: null, device: null, source: null,
@@ -126,10 +130,10 @@ public class BatteryService : IBatteryService
         try
         {
             var from = fromMills.HasValue
-                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+                ? fromMills.Value.ToUtcDateTime()
                 : (DateTime?)null;
             var to = toMills.HasValue
-                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+                ? toMills.Value.ToUtcDateTime()
                 : (DateTime?)null;
 
             var uploaderSnapshots = await _uploaderSnapshots.GetAsync(
@@ -166,7 +170,7 @@ public class BatteryService : IBatteryService
 
         try
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
             var from = fromMills ?? now - (7 * 24 * 60 * 60 * 1000); // Default 7 days
             var to = toMills ?? now;
 

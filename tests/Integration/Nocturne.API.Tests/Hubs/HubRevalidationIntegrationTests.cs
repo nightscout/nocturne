@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Hubs;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
@@ -23,6 +24,7 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// closes it once they do not: a revoked grant, a removed member or a deactivated tenant. Covers a credential presented
 /// on the upgrade request and one presented in-band.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
 {
@@ -152,6 +154,14 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
     private async Task RevalidateAsync() =>
         await Fixture.Services.GetRequiredService<HubConnectionRevalidator>().RevalidateAsync(CancellationToken.None);
 
+    /// <summary>The status of an HTTP request that presents only <paramref name="token"/>.</summary>
+    private async Task<HttpStatusCode> ProbeAsync(string token)
+    {
+        using var probe = AuthTestHelpers.CreateBearerClient(Fixture, token);
+        probe.DefaultRequestHeaders.Add("X-Forwarded-Host", Fixture.TenantHost);
+        return (await probe.GetAsync("/api/v4/alerts/active")).StatusCode;
+    }
+
     private static async Task ShouldCloseAsync(Task closed, string because) =>
         (await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(closed, because);
 
@@ -176,19 +186,26 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
     public async Task A_token_connection_outlives_its_access_token_and_closes_when_its_grant_is_revoked()
     {
         var (grantId, _) = await SeedSecretAsync();
-        var token = AccessToken(grantId, TimeSpan.FromSeconds(1));
-        var upgrade = await AlertHubWithTokenAsync(token);
-        var inBand = await DataHubWithTokenAsync(token);
+        var lifetime = TimeSpan.FromSeconds(1);
+        string token;
+        HubConnection upgrade, inBand;
+
+        // Minted and admitted on a JWT clock running behind by more than the token's lifetime plus the
+        // validator's skew, so the token's exp is already past on the host's global clock while the hubs
+        // connect: this assumes nothing checks a token's expiry against that clock when it admits a hub
+        // connection. Restoring the JWT clock makes the token expired for JwtService too.
+        using (Fixture.JwtClock.Shift(-(lifetime + JwtService.ClockSkew + TimeSpan.FromSeconds(2))))
+        {
+            token = AccessToken(grantId, lifetime);
+            upgrade = await AlertHubWithTokenAsync(token);
+            inBand = await DataHubWithTokenAsync(token);
+            (await ProbeAsync(token)).Should().Be(HttpStatusCode.OK, "the token is within its lifetime");
+        }
+
         var upgradeClosed = ClosedAsync(upgrade);
         var inBandClosed = ClosedAsync(inBand);
 
-        // Past the validator's 30-second clock skew, so the token itself no longer authenticates.
-        await Task.Delay(TimeSpan.FromSeconds(33));
-        using (var probe = AuthTestHelpers.CreateBearerClient(Fixture, token))
-        {
-            probe.DefaultRequestHeaders.Add("X-Forwarded-Host", Fixture.TenantHost);
-            (await probe.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        }
+        (await ProbeAsync(token)).Should().Be(HttpStatusCode.Unauthorized, "the token has expired");
 
         await RevalidateAsync();
 

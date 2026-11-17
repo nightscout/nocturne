@@ -93,7 +93,7 @@ public class MigrationFailureReportingTests
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static MigrationJobService BuildService(IServiceProvider provider) =>
-        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard());
+        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard(), TimeProvider.System);
 
     private static TestMigrationConnectionRequest TestRequest() => new()
     {

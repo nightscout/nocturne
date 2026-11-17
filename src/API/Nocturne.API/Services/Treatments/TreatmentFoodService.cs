@@ -55,7 +55,7 @@ public class TreatmentFoodService : ITreatmentFoodService
         );
 
         var attributedCarbs = entries.Sum(entry => entry.Carbs);
-        var totalCarbs = (decimal)carbIntakeEntity.Carbs;
+        var totalCarbs = carbIntakeEntity.Carbs.ToDecimal();
 
         return new TreatmentFoodBreakdown
         {
@@ -88,6 +88,12 @@ public class TreatmentFoodService : ITreatmentFoodService
         _logger.LogDebug("Creating food entry for carb intake {CarbIntakeId}", entry.CarbIntakeId);
         return await _treatmentFoodRepository.CreateAsync(entry, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task AddManyAsync(
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default
+    ) => _treatmentFoodRepository.CreateManyAsync(entries, cancellationToken);
 
     /// <inheritdoc />
     public async Task<TreatmentFood?> UpdateAsync(

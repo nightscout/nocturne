@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Helpers;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.Core.Models;
 
@@ -60,6 +61,7 @@ public interface IResponseComparisonService
 public class ResponseComparisonService : IResponseComparisonService
 {
     private readonly IOptions<CompatibilityProxyConfiguration> _configuration;
+    private readonly TimeProvider _time;
     private readonly ILogger<ResponseComparisonService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
@@ -67,13 +69,16 @@ public class ResponseComparisonService : IResponseComparisonService
     /// Initializes a new instance of the ResponseComparisonService class
     /// </summary>
     /// <param name="configuration">Compatibility proxy configuration settings</param>
+    /// <param name="timeProvider">Clock the comparison timestamp is read from</param>
     /// <param name="logger">Logger instance for this service</param>
     public ResponseComparisonService(
         IOptions<CompatibilityProxyConfiguration> configuration,
+        TimeProvider timeProvider,
         ILogger<ResponseComparisonService> logger
     )
     {
         _configuration = configuration;
+        _time = timeProvider;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
         {
@@ -93,18 +98,15 @@ public class ResponseComparisonService : IResponseComparisonService
         var result = new ResponseComparisonResult
         {
             TraceId = traceId,
-            ComparisonTimestamp = DateTimeOffset.UtcNow,
+            ComparisonTimestamp = _time.GetUtcNow(),
         };
-
-        // Sanitize user-controlled path to prevent log forging
-        var sanitizedPath = requestPath?.Replace("\r", "").Replace("\n", "");
 
         try
         {
             _logger.LogDebug(
                 "Starting response comparison for correlation {CorrelationId} on path {RequestPath}",
                 traceId,
-                sanitizedPath
+                LogText.Sanitize(requestPath)
             );
 
             // Check if both responses exist

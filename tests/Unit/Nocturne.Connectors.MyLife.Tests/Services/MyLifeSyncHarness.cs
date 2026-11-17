@@ -24,7 +24,8 @@ internal static class MyLifeSyncHarness
         HttpClient http,
         Guid tenantId,
         Func<MyLifeSoapClient, MyLifeSyncService>? syncServiceFactory = null,
-        IConnectorPublisher? publisher = null)
+        IConnectorPublisher? publisher = null,
+        TimeProvider? clock = null)
     {
         var resolver = new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null);
 
@@ -36,13 +37,14 @@ internal static class MyLifeSyncHarness
         var sessionCache = new MyLifeSessionCache();
         var tokenProvider = new MyLifeAuthTokenProvider(
             http,
-            new ConnectorTokenCache(),
+            new ConnectorTokenCache(clock),
             resolver,
             tenantAccessor.Object,
             soapClient,
             sessionCache,
             NullLogger<MyLifeAuthTokenProvider>.Instance,
-            Mock.Of<IRetryDelayStrategy>());
+            Mock.Of<IRetryDelayStrategy>(),
+            clock);
         var syncService = syncServiceFactory?.Invoke(soapClient)
             ?? new MyLifeSyncService(soapClient, NullLogger<MyLifeSyncService>.Instance);
 
@@ -50,12 +52,14 @@ internal static class MyLifeSyncHarness
             http,
             resolver,
             NullLogger<MyLifeConnectorService>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
             tokenProvider,
             new MyLifeEventProcessor(),
             sessionCache,
             tenantAccessor.Object,
             syncService,
-            publisher);
+            publisher,
+            clock);
 
         return (service, sessionCache, tokenProvider);
     }

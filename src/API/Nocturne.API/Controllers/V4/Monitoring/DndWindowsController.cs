@@ -1,14 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
@@ -21,10 +19,9 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <remarks>
 /// <para>
-/// One active window per scope <em>at any instant</em> is enforced here: creating a window
-/// reconciles the same-scope windows whose span overlaps it — an earlier one is truncated to end
-/// where the new one begins, one it wholly covers is cleared
-/// (<c>cleared_by = "system:superseded"</c>), and a non-overlapping one is left alone. Creates are
+/// One active window per scope <em>at any instant</em> is enforced by
+/// <see cref="IDndWindowRepository.CreateAsync"/>, which reconciles the same-scope windows whose span
+/// overlaps the new one. Creates are
 /// idempotent by the client-supplied id so a device/web retry never double-applies. A
 /// <c>scope=all</c> window is tenant-wide DND and additionally drives the <c>do_not_disturb</c>
 /// condition via the enricher.
@@ -43,15 +40,12 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [DenyNoAccountViewer]
 public class DndWindowsController : ControllerBase
 {
-    /// <summary>Marker stamped on a window cleared because a newer window of the same scope superseded it.</summary>
-    public const string SupersededBy = "system:superseded";
-
-    private readonly INocturneDbContextFactory _contextFactory;
+    private readonly IDndWindowRepository _windows;
 
     /// <summary>Initializes a new instance of <see cref="DndWindowsController"/>.</summary>
-    public DndWindowsController(INocturneDbContextFactory contextFactory)
+    public DndWindowsController(IDndWindowRepository windows)
     {
-        _contextFactory = contextFactory;
+        _windows = windows;
     }
 
     /// <summary>
@@ -63,15 +57,7 @@ public class DndWindowsController : ControllerBase
     [ProducesResponseType(typeof(List<DndWindowResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<DndWindowResponse>>> GetActive(CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
-        var now = DateTime.UtcNow;
-
-        var active = await db.DndWindows
-            .AsNoTracking()
-            .Where(w => w.ClearedAt == null && w.StartedAt <= now && (w.EndsAt == null || now < w.EndsAt))
-            .OrderBy(w => w.StartedAt)
-            .ToListAsync(ct);
-
+        var active = await _windows.GetActiveAsync(scope: null, ct);
         return Ok(active.Select(MapToResponse).ToList());
     }
 
@@ -103,82 +89,16 @@ public class DndWindowsController : ControllerBase
         if (endsAt is { } ends && ends <= startedAt)
             return BadRequest("ends_at must be after started_at.");
 
-        await using var db = await _contextFactory.CreateAsync(ct);
-        var tenantId = db.TenantId;
+        var result = await _windows.CreateAsync(
+            new NewDndWindow(request.Id, scope, startedAt, endsAt, request.Source), ct);
 
-        // Idempotent by client id: a retry returns the stored window unchanged (no re-supersede).
-        var existing = await db.DndWindows
-            .AsNoTracking()
-            .FirstOrDefaultAsync(w => w.Id == request.Id, ct);
-        if (existing is not null)
-            return Ok(MapToResponse(existing));
-
-        // Keep "at most one window of a scope active at any instant" by reconciling against the
-        // *span* of the incoming window rather than against what happens to be active right now.
-        //
-        // Only same-scope windows whose span overlaps the new one are touched. A window that
-        // merely expired, or one scheduled for a later span that this one does not reach, is left
-        // exactly as it is — restamping the first would falsify the audit trail these rows are
-        // retained for, and clearing the second would destroy standing user intent that adding
-        // this mute said nothing about.
-        //
-        // Of the overlapping ones:
-        //  - one that started earlier is *truncated* to end where this one begins, so a running
-        //    mute is handed over at the boundary instead of being switched off;
-        //  - one that starts at or after this window's start is wholly covered, so it is cleared.
-        //
-        // A null EndsAt is an open-ended span, so [started, ∞).
-        var now = DateTime.UtcNow;
-        var overlapping = await db.DndWindows
-            .Where(w => w.Scope == scope && w.ClearedAt == null
-                        && (w.EndsAt == null || w.EndsAt > startedAt)
-                        && (endsAt == null || w.StartedAt < endsAt))
-            .ToListAsync(ct);
-        foreach (var w in overlapping)
+        return result switch
         {
-            if (w.StartedAt < startedAt)
-            {
-                w.EndsAt = startedAt;
-            }
-            else
-            {
-                w.ClearedAt = now;
-                w.ClearedBy = SupersededBy;
-            }
-        }
-
-        var window = new DndWindowEntity
-        {
-            Id = request.Id,
-            TenantId = tenantId,
-            Scope = scope,
-            StartedAt = startedAt,
-            EndsAt = endsAt,
-            Source = request.Source,
-            // CreatedAt is the server receipt time, set by the DB default (CURRENT_TIMESTAMP).
+            { Outcome: DndWindowCreateOutcome.Created, Window: { } created } =>
+                CreatedAtAction(nameof(GetActive), MapToResponse(created)),
+            { Window: { } stored } => Ok(MapToResponse(stored)),
+            _ => Conflict("window id is already in use."),
         };
-        db.DndWindows.Add(window);
-        try
-        {
-            // CreatedAt (DB default) is populated on the tracked entity by INSERT ... RETURNING.
-            await db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException)
-        {
-            // dnd_windows.id is the global PK, but the idempotency lookup above runs under
-            // the tenant query filter (and RLS), so an id owned by another tenant is
-            // invisible and the insert hits the unique constraint. Re-check under this
-            // tenant: a concurrent same-tenant retry resolves idempotently; otherwise the
-            // id belongs to another tenant and this insert can never succeed.
-            var raced = await db.DndWindows
-                .AsNoTracking()
-                .FirstOrDefaultAsync(w => w.Id == request.Id, ct);
-            if (raced is not null)
-                return Ok(MapToResponse(raced));
-            return Conflict("window id is already in use.");
-        }
-
-        return CreatedAtAction(nameof(GetActive), MapToResponse(window));
     }
 
     /// <summary>
@@ -192,23 +112,11 @@ public class DndWindowsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DndWindowResponse>> Clear(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
-
-        var window = await db.DndWindows.FirstOrDefaultAsync(w => w.Id == id, ct);
-        if (window is null)
-            return NotFound();
-
-        // First-writer-wins: don't clobber an existing clear (user-clear or supersede).
-        if (window.ClearedAt is null)
-        {
-            window.ClearedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync(ct);
-        }
-
-        return Ok(MapToResponse(window));
+        var window = await _windows.ClearAsync(id, ct);
+        return window is null ? NotFound() : Ok(MapToResponse(window));
     }
 
-    private static DndWindowResponse MapToResponse(DndWindowEntity w) => new()
+    private static DndWindowResponse MapToResponse(DndWindowRecord w) => new()
     {
         Id = w.Id,
         Scope = w.Scope,

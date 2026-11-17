@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// Integration tests for AlertHub SignalR functionality.
 /// Tests real-time alert subscriptions, acknowledgement broadcasts, tenant isolation, and snooze.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class AlertHubIntegrationTests : ApiIntegrationTestBase
 {

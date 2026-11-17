@@ -28,7 +28,8 @@ public partial class TherapySetupService(
     ICarbRatioScheduleRepository carbRatioRepo,
     ISensitivityScheduleRepository sensitivityRepo,
     ITargetRangeScheduleRepository targetRangeRepo,
-    IPatientRecordRepository patientRecords) : ITherapySetupService
+    IPatientRecordRepository patientRecords,
+    TimeProvider time) : ITherapySetupService
 {
     /// <summary>
     /// Stored numbers are mg/dL whatever the owner typed, and the units label says what they mean;
@@ -44,7 +45,7 @@ public partial class TherapySetupService(
             return new TherapyReview(TherapySource.None, null, null, false, null, null, null, null, null,
                 TherapyUnitPlausibility.Rules);
 
-        var now = DateTime.UtcNow;
+        var now = time.GetUtcNow().UtcDateTime;
         var name = settings.ProfileName;
         var basal = await basalRepo.GetActiveAtAsync(name, now, ct);
         var carbRatio = await carbRatioRepo.GetActiveAtAsync(name, now, ct);
@@ -108,7 +109,7 @@ public partial class TherapySetupService(
         if ((await GetReviewAsync(ct)).Source != TherapySource.None)
             throw new InvalidOperationException("A therapy profile already exists.");
 
-        var now = DateTime.UtcNow;
+        var now = time.GetUtcNow().UtcDateTime;
         var correlationId = Guid.CreateVersion7();
         T Stamp<T>(T record) where T : V4RecordBase
         {

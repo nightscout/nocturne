@@ -14,7 +14,7 @@ internal static class StatisticsServiceMockExtensions
     /// </summary>
     public static Mock<IStatisticsService> WithRealTimeInRange(this Mock<IStatisticsService> statistics)
     {
-        var real = new StatisticsService();
+        var real = new StatisticsService(TimeProvider.System);
         statistics
             .Setup(s => s.CalculateTimeInRange(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<GlycemicThresholds?>()))
             .Returns((IEnumerable<SensorGlucose> entries, GlycemicThresholds? thresholds) =>

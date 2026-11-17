@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;

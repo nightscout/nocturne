@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -11,6 +12,7 @@ namespace Nocturne.API.Tests.Services.Devices;
 public class DeviceAgeServiceTests
 {
     private readonly Mock<IDeviceEventRepository> _repositoryMock;
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 4, 12, 6, 0, 0, TimeSpan.Zero));
     private readonly DeviceAgeService _service;
 
     public DeviceAgeServiceTests()
@@ -18,6 +20,7 @@ public class DeviceAgeServiceTests
         _repositoryMock = new Mock<IDeviceEventRepository>();
         _service = new DeviceAgeService(
             _repositoryMock.Object,
+            _clock,
             NullLogger<DeviceAgeService>.Instance);
     }
 
@@ -26,7 +29,7 @@ public class DeviceAgeServiceTests
     public async Task GetCannulaAgeAsync_WithRecentSiteChange_ReturnsCorrectAge()
     {
         // Arrange
-        var eventTime = DateTime.UtcNow.AddHours(-26);
+        var eventTime = _clock.GetUtcNow().UtcDateTime.AddHours(-26);
         var deviceEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
@@ -89,8 +92,8 @@ public class DeviceAgeServiceTests
     public async Task GetSensorAgeAsync_WithSensorStartAndChange_ReturnsCorrectAge()
     {
         // Arrange
-        var sensorStartTime = DateTime.UtcNow.AddHours(-48);
-        var sensorChangeTime = DateTime.UtcNow.AddHours(-24);
+        var sensorStartTime = _clock.GetUtcNow().UtcDateTime.AddHours(-48);
+        var sensorChangeTime = _clock.GetUtcNow().UtcDateTime.AddHours(-24);
 
         var sensorStartEvent = new DeviceEvent
         {
@@ -137,7 +140,7 @@ public class DeviceAgeServiceTests
     public async Task GetInsulinAgeAsync_WithRecentInsulinChange_ReturnsCorrectAge()
     {
         // Arrange
-        var eventTime = DateTime.UtcNow.AddHours(-12);
+        var eventTime = _clock.GetUtcNow().UtcDateTime.AddHours(-12);
         var deviceEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
@@ -174,7 +177,7 @@ public class DeviceAgeServiceTests
     public async Task GetBatteryAgeAsync_WithRecentBatteryChange_ReturnsCorrectAge()
     {
         // Arrange
-        var eventTime = DateTime.UtcNow.AddHours(-340);
+        var eventTime = _clock.GetUtcNow().UtcDateTime.AddHours(-340);
         var deviceEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
@@ -210,7 +213,7 @@ public class DeviceAgeServiceTests
         var deviceEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
-            Timestamp = DateTime.UtcNow.AddHours(-45),
+            Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-45),
             EventType = DeviceEventType.SiteChange
         };
         _repositoryMock
@@ -248,7 +251,7 @@ public class DeviceAgeServiceTests
     [Trait("Category", "Unit")]
     public async Task GetSensorAgeAsync_StartAndChangeAtSameInstant_HidesStart()
     {
-        var instant = DateTime.UtcNow.AddHours(-10);
+        var instant = _clock.GetUtcNow().UtcDateTime.AddHours(-10);
         _repositoryMock
             .Setup(r => r.GetLatestByEventTypesAsync(
                 It.Is<DeviceEventType[]>(types => types.Contains(DeviceEventType.SensorStart)),
@@ -278,14 +281,14 @@ public class DeviceAgeServiceTests
         var scopedEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
-            Timestamp = DateTime.UtcNow.AddHours(-30),
+            Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-30),
             EventType = DeviceEventType.SiteChange,
             PatientDeviceId = pumpId
         };
         var otherPumpEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
-            Timestamp = DateTime.UtcNow.AddHours(-2),
+            Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-2),
             EventType = DeviceEventType.SiteChange,
             PatientDeviceId = Guid.NewGuid()
         };
@@ -326,7 +329,7 @@ public class DeviceAgeServiceTests
             .ReturnsAsync(new DeviceEvent
             {
                 Id = Guid.NewGuid(),
-                Timestamp = DateTime.UtcNow.AddHours(-2),
+                Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-2),
                 EventType = DeviceEventType.SensorChange,
                 PatientDeviceId = Guid.NewGuid()
             });
@@ -339,7 +342,7 @@ public class DeviceAgeServiceTests
             .ReturnsAsync(new DeviceEvent
             {
                 Id = Guid.NewGuid(),
-                Timestamp = DateTime.UtcNow.AddHours(-100),
+                Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-100),
                 EventType = DeviceEventType.SensorStart,
                 PatientDeviceId = sensorId
             });

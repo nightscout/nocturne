@@ -22,6 +22,7 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// recorded is set on it (<see cref="Nocturne.API.Hubs.HubConnectionReader"/>). <c>LoadRetro</c> reads
 /// through that scope.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : ApiIntegrationTestBase(fixture, output)
@@ -143,7 +144,7 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT set_config('app.current_tenant_id', @tenant, false);
-            SELECT subject_id FROM mutation_audit_log WHERE entity_id = @excursion;
+            SELECT actor_subject_id FROM mutation_audit_log WHERE entity_id = @excursion;
             """;
         cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
         cmd.Parameters.AddWithValue("excursion", excursionId);

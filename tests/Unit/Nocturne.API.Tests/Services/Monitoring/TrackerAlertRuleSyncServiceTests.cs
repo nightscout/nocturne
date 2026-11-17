@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
@@ -23,6 +24,7 @@ public class TrackerAlertRuleSyncServiceTests
     private readonly DbContextOptions<NocturneDbContext> _options;
     private readonly TrackerAlertRuleSyncService _sut;
     private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 4, 12, 6, 0, 0, TimeSpan.Zero));
 
     public TrackerAlertRuleSyncServiceTests()
     {
@@ -51,6 +53,7 @@ public class TrackerAlertRuleSyncServiceTests
             _referenceService.Object,
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(_excursionTracker.Object, _resolutionHandler.Object),
+            _clock,
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }
 
@@ -163,6 +166,37 @@ public class TrackerAlertRuleSyncServiceTests
 
         var thresholds = await db.TrackerNotificationThresholds.ToListAsync();
         thresholds.Should().OnlyContain(t => t.AlertRuleId != null);
+    }
+
+    [Fact]
+    public async Task Sync_stamps_new_rules_and_channels_with_the_clock()
+    {
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(12)]);
+        var created = _clock.GetUtcNow().UtcDateTime;
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using var db = Db();
+        var rule = await db.AlertRules.Include(r => r.Channels).SingleAsync();
+        rule.CreatedAt.Should().Be(created);
+        rule.UpdatedAt.Should().Be(created);
+        rule.Channels.Should().ContainSingle().Which.CreatedAt.Should().Be(created);
+    }
+
+    [Fact]
+    public async Task Resync_moves_updated_at_to_the_clock_and_keeps_created_at()
+    {
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(12)]);
+        var created = _clock.GetUtcNow().UtcDateTime;
+        await _sut.SyncDefinitionAsync(definition.Id);
+        _clock.Advance(TimeSpan.FromHours(3));
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using var db = Db();
+        var rule = await db.AlertRules.SingleAsync();
+        rule.CreatedAt.Should().Be(created);
+        rule.UpdatedAt.Should().Be(created.AddHours(3));
     }
 
     [Fact]

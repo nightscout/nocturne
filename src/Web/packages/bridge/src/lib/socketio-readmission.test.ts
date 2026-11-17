@@ -83,7 +83,10 @@ describe('SocketIOServer re-admission of a socket admitted on its own credential
     );
     await server.readmit(socket as never);
 
-    expect(socket.leave.mock.calls.map(([room]) => room)).toEqual(['tenant:rhys:category:care']);
+    expect(socket.leave.mock.calls.map(([room]) => room)).toEqual([
+      'tenant:rhys:category:care',
+      'tenant:rhys:legacy:treatments',
+    ]);
     expect(socket.disconnect).not.toHaveBeenCalled();
   });
 
@@ -95,14 +98,20 @@ describe('SocketIOServer re-admission of a socket admitted on its own credential
     const server = makeServer();
     const socket = admittedSocket();
     await server.handleAuthorize(socket as never, { token: 'guest-token' });
-    expect(socket.join.mock.calls.map(([room]) => room).sort()).toEqual(
-      ['tenant:rhys:category:care', 'tenant:rhys:category:entries'],
-    );
+    expect(socket.join.mock.calls.map(([room]) => room).sort()).toEqual([
+      'tenant:rhys:category:care',
+      'tenant:rhys:category:entries',
+      'tenant:rhys:legacy:entries',
+      'tenant:rhys:legacy:treatments',
+    ]);
 
     fetchMock.mockResolvedValue(admission({ tenantRelay: false, categories: ['entries'], historyClamped: false }));
     await server.readmit(socket as never);
 
-    expect(socket.leave.mock.calls.map(([room]) => room)).toEqual(['tenant:rhys:category:care']);
+    expect(socket.leave.mock.calls.map(([room]) => room)).toEqual([
+      'tenant:rhys:category:care',
+      'tenant:rhys:legacy:treatments',
+    ]);
     expect(socket.disconnect).not.toHaveBeenCalled();
   });
 
@@ -118,9 +127,12 @@ describe('SocketIOServer re-admission of a socket admitted on its own credential
     fetchMock.mockResolvedValue(admission({ tenantRelay: false, categories: [], historyClamped: false }));
     await server.readmit(socket as never);
 
-    expect(socket.leave.mock.calls.map(([room]) => room).sort()).toEqual(
-      ['tenant:rhys:category:care', 'tenant:rhys:category:entries'],
-    );
+    expect(socket.leave.mock.calls.map(([room]) => room).sort()).toEqual([
+      'tenant:rhys:category:care',
+      'tenant:rhys:category:entries',
+      'tenant:rhys:legacy:entries',
+      'tenant:rhys:legacy:treatments',
+    ]);
   });
 
   it('disconnects a restricted socket once the API refuses its credential', async () => {
@@ -149,7 +161,7 @@ describe('SocketIOServer re-admission of a socket admitted on its own credential
     await server.readmit(socket as never);
 
     expect(socket.leave.mock.calls.map(([room]) => room).sort()).toEqual(
-      ['tenant:rhys', 'tenant:rhys:category:entries'].sort(),
+      ['tenant:rhys', 'tenant:rhys:legacy', 'tenant:rhys:category:entries', 'tenant:rhys:legacy:entries'].sort(),
     );
   });
 

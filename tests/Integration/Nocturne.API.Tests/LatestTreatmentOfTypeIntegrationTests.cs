@@ -15,6 +15,7 @@ namespace Nocturne.API.Tests.Integration;
 /// windowed treatments, read from real rows. Each test anchors at its own time, years apart, so
 /// the rows one test writes sit outside every window another reads.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class LatestTreatmentOfTypeIntegrationTests : ApiIntegrationTestBase
 {

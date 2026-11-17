@@ -27,6 +27,9 @@ public class FoodServiceTests
     {
         _mockFoodRepository = new Mock<IFoodRepository>();
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
+        _mockDocumentProcessingService
+            .Setup(d => d.SanitizeHtml(It.IsAny<string?>()))
+            .Returns((string? value) => value ?? string.Empty);
         _mockSideEffects = new Mock<IWriteSideEffects>();
         _mockLogger = new Mock<ILogger<FoodService>>();
 
@@ -317,6 +320,27 @@ public class FoodServiceTests
 
     #region CreateFoodAsync Tests
 
+    [Theory]
+    [InlineData(FoodWriteMode.Native, 1)]
+    [InlineData(FoodWriteMode.Legacy, 2)]
+    [Trait("Category", "Unit")]
+    public async Task CreateFoodAsync_DropsRepeatedDocumentsOnlyInNativeMode(FoodWriteMode mode, int expected)
+    {
+        IEnumerable<Food>? written = null;
+        _mockFoodRepository
+            .Setup(x => x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Food>, CancellationToken>((foods, _) => written = foods)
+            .ReturnsAsync((IEnumerable<Food> foods, CancellationToken _) => foods);
+
+        await _foodService.CreateFoodAsync(
+            [new Food { Name = "Apple", Carbs = 12 }, new Food { Name = "Apple", Carbs = 12 }],
+            mode,
+            CancellationToken.None
+        );
+
+        written.Should().HaveCount(expected);
+    }
+
     [Fact]
     [Trait("Category", "Unit")]
     [Parity]
@@ -377,7 +401,7 @@ public class FoodServiceTests
             .ReturnsAsync(createdFoods);
 
         // Act
-        var result = await _foodService.CreateFoodAsync(inputFoods, CancellationToken.None);
+        var result = await _foodService.CreateFoodAsync(inputFoods, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();
@@ -416,7 +440,7 @@ public class FoodServiceTests
             .ReturnsAsync(createdFoods);
 
         // Act
-        var result = await _foodService.CreateFoodAsync(inputFoods, CancellationToken.None);
+        var result = await _foodService.CreateFoodAsync(inputFoods, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();
@@ -489,7 +513,7 @@ public class FoodServiceTests
             .ReturnsAsync(createdFoods);
 
         // Act
-        var result = await _foodService.CreateFoodAsync(inputFoods, CancellationToken.None);
+        var result = await _foodService.CreateFoodAsync(inputFoods, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();
@@ -515,7 +539,7 @@ public class FoodServiceTests
 
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.CreateFoodAsync(inputFoods, CancellationToken.None)
+            _foodService.CreateFoodAsync(inputFoods, FoodWriteMode.Native, CancellationToken.None)
         );
         exception.Should().Be(expectedException);
     }
@@ -550,7 +574,7 @@ public class FoodServiceTests
 
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.CreateFoodAsync(inputFoods, CancellationToken.None)
+            _foodService.CreateFoodAsync(inputFoods, FoodWriteMode.Native, CancellationToken.None)
         );
         exception.Should().Be(expectedException);
     }
@@ -598,7 +622,7 @@ public class FoodServiceTests
             .ReturnsAsync(updatedFood);
 
         // Act
-        var result = await _foodService.UpdateFoodAsync(foodId, updateFood, CancellationToken.None);
+        var result = await _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();
@@ -635,7 +659,7 @@ public class FoodServiceTests
             .ReturnsAsync((Food?)null);
 
         // Act
-        var result = await _foodService.UpdateFoodAsync(foodId, updateFood, CancellationToken.None);
+        var result = await _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().BeNull();
@@ -672,7 +696,7 @@ public class FoodServiceTests
 
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.UpdateFoodAsync(foodId, updateFood, CancellationToken.None)
+            _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None)
         );
         exception.Should().Be(expectedException);
     }
@@ -703,7 +727,7 @@ public class FoodServiceTests
 
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.UpdateFoodAsync(foodId, updateFood, CancellationToken.None)
+            _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None)
         );
         exception.Should().Be(expectedException);
     }
@@ -719,7 +743,11 @@ public class FoodServiceTests
     {
         // Arrange
         var foodId = "507f1f77bcf86cd799439011";
+        var stored = new Food { Id = foodId, Name = "Apple" };
 
+        _mockFoodRepository
+            .Setup(x => x.GetFoodByIdAsync(foodId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stored);
         _mockFoodRepository
             .Setup(x => x.DeleteFoodAsync(foodId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -738,7 +766,7 @@ public class FoodServiceTests
         _mockSideEffects.Verify(
             x => x.OnDeletedAsync<Food>(
                 "food",
-                It.IsAny<Food?>(),
+                stored,
                 It.IsAny<WriteEffectOptions>(),
                 It.IsAny<CancellationToken>()
             ),
@@ -881,7 +909,7 @@ public class FoodServiceTests
             .ReturnsAsync(createdFoods);
 
         // Act
-        var result = await _foodService.CreateFoodAsync(inputFoods, CancellationToken.None);
+        var result = await _foodService.CreateFoodAsync(inputFoods, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();
@@ -956,7 +984,7 @@ public class FoodServiceTests
 
         // Act
         var result = await _foodService.CreateFoodAsync(
-            foodsWithDifferentUnits,
+            foodsWithDifferentUnits, FoodWriteMode.Native,
             CancellationToken.None
         );
 
@@ -1020,7 +1048,7 @@ public class FoodServiceTests
             .ReturnsAsync(createdFoods);
 
         // Act
-        var result = await _foodService.CreateFoodAsync(foodsWithGi, CancellationToken.None);
+        var result = await _foodService.CreateFoodAsync(foodsWithGi, FoodWriteMode.Native, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();

@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Caching;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -31,6 +32,7 @@ public class DataOverviewService : IDataOverviewService
     private readonly TenantClockResolver _tenantClock;
     private readonly IStatisticsService _statisticsService;
     private readonly ITenantCache _cache;
+    private readonly TimeProvider _time;
     private readonly ILogger<DataOverviewService> _logger;
 
     /// <summary>
@@ -42,15 +44,18 @@ public class DataOverviewService : IDataOverviewService
     /// <param name="tenantClock">Resolver for the tenant's local clock.</param>
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
     /// <param name="cache">Cross-request cache for the eHbA1c timeline, keyed per year and source.</param>
+    /// <param name="timeProvider">The clock for the current year and the eHbA1c window end.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
         INocturneDbContextFactory factory,
         TenantClockResolver tenantClock,
         IStatisticsService statisticsService,
         ITenantCache cache,
+        TimeProvider timeProvider,
         ILogger<DataOverviewService> logger
     )
     {
+        _time = timeProvider;
         _factory = factory;
         _tenantClock = tenantClock;
         _statisticsService = statisticsService;
@@ -86,7 +91,7 @@ public class DataOverviewService : IDataOverviewService
             // bare MAX() over every table — so one bad row would otherwise stretch the
             // list to its year and open the report on a century of empty ones. Clamping
             // both ends keeps the range non-empty when every record is future-dated.
-            var currentYear = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Year;
+            var currentYear = TimeZoneInfo.ConvertTime(_time.GetUtcNow(), tz).Year;
             var minYear = Math.Min(minLocal.Year, currentYear);
             var maxYear = Math.Min(maxLocal.Year, currentYear);
 
@@ -316,7 +321,7 @@ public class DataOverviewService : IDataOverviewService
 
             if (day.TotalBolusUnits.HasValue || day.TotalBasalUnits.HasValue)
             {
-                day.TotalDailyDose = Math.Round((day.TotalBolusUnits ?? 0) + (day.TotalBasalUnits ?? 0), 2);
+                day.TotalDailyDose = ScaledRounding.Round((day.TotalBolusUnits ?? 0) + (day.TotalBasalUnits ?? 0), 2);
             }
         }
 
@@ -372,7 +377,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.SensorGlucose)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Mgdl }),
             r => r.Timestamp, r => (r.Timestamp, r.Mgdl), allGlucoseByMonth, tz,
             "Failed to collect SensorGlucose for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.Sensor);
@@ -397,7 +402,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0)
                 .Where(e => e.BolusKind != "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.Bolus)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Insulin }),
             r => r.Timestamp, r => r.Insulin, manualBolusByMonth, tz,
             "Failed to collect manual bolus totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.ManualBolus);
@@ -409,7 +414,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0)
                 .Where(e => e.BolusKind == "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.Bolus)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Insulin }),
             r => r.Timestamp, r => r.Insulin, algorithmBolusByMonth, tz,
             "Failed to collect algorithm bolus totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.AlgorithmBolus);
@@ -420,7 +425,7 @@ public class DataOverviewService : IDataOverviewService
             context.TempBasals
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Rate > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.TempBasal)
+                .ExcludeDuplicates()
                 .Select(e => new { StartTimestamp = e.Timestamp, Rate = e.Rate ?? 0, e.EndTimestamp }),
             r => r.StartTimestamp,
             r => r.Rate * (r.EndTimestamp.HasValue
@@ -435,7 +440,7 @@ public class DataOverviewService : IDataOverviewService
             context.CarbIntakes
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Carbs > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.CarbIntake)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Carbs }),
             r => r.Timestamp, r => r.Carbs, carbsByMonth, tz,
             "Failed to collect carb totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.Carbs);
@@ -523,7 +528,7 @@ public class DataOverviewService : IDataOverviewService
         _logger.LogDebug(
             "Getting eHbA1c timeline for year {Year}, dataSources={DataSources}",
             year,
-            dataSources != null ? string.Join(",", dataSources.Select(SanitizeForLog)) : "(all)"
+            dataSources != null ? string.Join(",", dataSources.Select(LogText.Sanitize)) : "(all)"
         );
 
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
@@ -557,8 +562,8 @@ public class DataOverviewService : IDataOverviewService
         var localYearEnd = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
         var localRangeStart = localYearStart.AddDays(-EHbA1cWindowDays);
 
-        var lookbackStartUtc = TimeZoneInfo.ConvertTimeToUtc(localRangeStart, tz);
-        var yearEndUtc = TimeZoneInfo.ConvertTimeToUtc(localYearEnd, tz);
+        var lookbackStartUtc = TimeZoneHelper.ConvertTimeToUtc(localRangeStart, tz);
+        var yearEndUtc = TimeZoneHelper.ConvertTimeToUtc(localYearEnd, tz);
 
         var allReadings = new List<(DateTime Timestamp, double Mgdl)>();
 
@@ -566,7 +571,7 @@ public class DataOverviewService : IDataOverviewService
             .SensorGlucose.Where(e => e.Timestamp >= lookbackStartUtc && e.Timestamp < yearEndUtc)
             .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
             .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-            .ExcludeNonPrimary(context, RecordType.SensorGlucose)
+            .ExcludeDuplicates()
             .Select(e => new { e.Timestamp, e.Mgdl })
             .ToListAsync(cancellationToken);
         allReadings.AddRange(sensorReadings.Select(r => (r.Timestamp, r.Mgdl)));
@@ -606,7 +611,7 @@ public class DataOverviewService : IDataOverviewService
             dailyCount[dayIndex]++;
         }
 
-        var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz);
+        var localNow = TimeZoneInfo.ConvertTime(_time.GetUtcNow(), tz);
         var points = BuildEHbA1cPoints(dailySum, dailyCount, localRangeStart, EHbA1cWindowDays, year, localNow.Date);
         var response = new EHbA1cTimelineResponse { Year = year, Points = points };
 
@@ -694,15 +699,14 @@ public class DataOverviewService : IDataOverviewService
 
             var daysWithData = prefixDaysWithData[i + 1] - prefixDaysWithData[windowStart];
             var weightedMeanMgdl = weightedSum[i] / weightedCount[i];
-            // ADAG-derived eA1C formula (Nathan et al., 2008): %A1C = (mean mg/dL + 46.7) / 28.7.
-            var estimatedA1c = (weightedMeanMgdl + 46.7) / 28.7;
+            var estimatedA1c = GlucoseStatistics.EstimatedA1C(weightedMeanMgdl);
 
             points.Add(
                 new EHbA1cPoint
                 {
                     Date = rangeStart.AddDays(i).ToString("yyyy-MM-dd"),
-                    EstimatedA1cPercent = Math.Round(estimatedA1c, 2),
-                    WeightedAverageGlucoseMgdl = Math.Round(weightedMeanMgdl, 1),
+                    EstimatedA1cPercent = ScaledRounding.Round(estimatedA1c, 2),
+                    WeightedAverageGlucoseMgdl = ScaledRounding.Round(weightedMeanMgdl, 1),
                     ReadingCount = rawCount,
                     DaysWithData = daysWithData,
                 }
@@ -711,12 +715,6 @@ public class DataOverviewService : IDataOverviewService
 
         return points.ToArray();
     }
-
-    /// <summary>
-    /// Strips CR/LF from a caller-supplied value before it reaches a log message, so a crafted
-    /// data-source name cannot forge additional log lines (CWE-117 log injection).
-    /// </summary>
-    private static string SanitizeForLog(string value) => value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
     /// True for anything but the caller's own cancellation, which must propagate; a cancellation
@@ -735,8 +733,8 @@ public class DataOverviewService : IDataOverviewService
         var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
 
         return (
-            TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz),
-            TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz)
+            TimeZoneHelper.ConvertTimeToUtc(localYearStart, tz),
+            TimeZoneHelper.ConvertTimeToUtc(localNextYearStart, tz)
         );
     }
 
@@ -825,8 +823,8 @@ public class DataOverviewService : IDataOverviewService
 
     /// <summary>
     /// Time in range over the covered minutes of <paramref name="readings"/> at the consensus
-    /// bounds rather than the tenant's thresholds: <see cref="GetGriTimelineAsync"/> and
-    /// <see cref="GetDailySummaryAsync"/> take no <c>GlycemicThresholds</c>, so no caller can move
+    /// bounds rather than the tenant's thresholds: <see cref="GetGriTimelineAsync(int, string[], CancellationToken)"/> and
+    /// <see cref="GetDailySummaryAsync(int, string[], CancellationToken)"/> take no <c>GlycemicThresholds</c>, so no caller can move
     /// them.
     /// </summary>
     private TimeInRangeMetrics TimeInRangeOf(IEnumerable<(DateTime Timestamp, double Mgdl)> readings) =>
@@ -862,7 +860,7 @@ public class DataOverviewService : IDataOverviewService
         var timeInRange = TimeInRangeOf(glucoseReadings);
 
         var gri = _statisticsService.CalculateGRI(timeInRange);
-        var averageGlucose = Math.Round(glucoseReadings.Average(reading => reading.Mgdl), 1);
+        var averageGlucose = ScaledRounding.Round(glucoseReadings.Average(reading => reading.Mgdl), 1);
 
         // Compute TDD for the month
         var localMonthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Unspecified);
@@ -881,13 +879,13 @@ public class DataOverviewService : IDataOverviewService
         if (totalBolusUnits > 0 || totalBasalUnits > 0)
         {
             var totalInsulin = totalBolusUnits + totalBasalUnits;
-            totalDailyDose = Math.Round(totalInsulin / daysInMonth, 2);
+            totalDailyDose = ScaledRounding.Round(totalInsulin / daysInMonth, 2);
         }
 
         // Average daily carbs for the month
         double? averageDailyCarbs = null;
         if (carbsByMonth.TryGetValue(month, out var carbSum) && carbSum > 0)
-            averageDailyCarbs = Math.Round(carbSum / daysInMonth, 1);
+            averageDailyCarbs = ScaledRounding.Round(carbSum / daysInMonth, 1);
 
         var periodStartStr = localMonthStart.ToString("yyyy-MM-dd");
         var periodEndStr = localMonthEnd.AddDays(-1).ToString("yyyy-MM-dd");
@@ -982,7 +980,7 @@ public class DataOverviewService : IDataOverviewService
                 .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.SensorGlucose)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Mgdl })
                 .ReadMetricRowsAsync(reads, YearMetricSource.Sensor, cancellationToken);
 
@@ -1032,7 +1030,7 @@ public class DataOverviewService : IDataOverviewService
                 {
                     Date = g.Key.ToString("yyyy-MM-dd"),
                     AvgMgdl = readings.Average(r => r.Mgdl),
-                    TimeInRangePercent = Math.Round(TimeInRangeOf(readings).Percentages.Target, 1),
+                    TimeInRangePercent = ScaledRounding.Round(TimeInRangeOf(readings).Percentages.Target, 1),
                 };
             });
 
@@ -1044,7 +1042,7 @@ public class DataOverviewService : IDataOverviewService
                 dayMap[group.Date] = day;
             }
 
-            day.AverageGlucoseMgdl = Math.Round(group.AvgMgdl, 1);
+            day.AverageGlucoseMgdl = ScaledRounding.Round(group.AvgMgdl, 1);
             day.TimeInRangePercent = group.TimeInRangePercent;
         }
     }
@@ -1074,7 +1072,7 @@ public class DataOverviewService : IDataOverviewService
                 )
                 .Where(e => e.BolusKind != "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.Bolus)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Insulin })
                 .ReadMetricRowsAsync(reads, YearMetricSource.ManualBolus, cancellationToken);
 
@@ -1093,7 +1091,7 @@ public class DataOverviewService : IDataOverviewService
                     }
 
                     if (group.BolusUnits > 0)
-                        day.TotalBolusUnits = Math.Round(group.BolusUnits, 2);
+                        day.TotalBolusUnits = ScaledRounding.Round(group.BolusUnits, 2);
                 }
             }
         }
@@ -1111,7 +1109,7 @@ public class DataOverviewService : IDataOverviewService
                 )
                 .Where(e => e.BolusKind == "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.Bolus)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Insulin })
                 .ReadMetricRowsAsync(reads, YearMetricSource.AlgorithmBolus, cancellationToken);
 
@@ -1129,7 +1127,7 @@ public class DataOverviewService : IDataOverviewService
                         dayMap[group.Date] = day;
                     }
 
-                    day.TotalBolusUnits = Math.Round(
+                    day.TotalBolusUnits = ScaledRounding.Round(
                         (day.TotalBolusUnits ?? 0) + group.BolusUnits,
                         2
                     );
@@ -1149,7 +1147,7 @@ public class DataOverviewService : IDataOverviewService
                     e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Rate > 0
                 )
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.TempBasal)
+                .ExcludeDuplicates()
                 .Select(e => new
                 {
                     StartTimestamp = e.Timestamp,
@@ -1189,7 +1187,7 @@ public class DataOverviewService : IDataOverviewService
                         dayMap[group.Date] = day;
                     }
 
-                    day.TotalBasalUnits = Math.Round(
+                    day.TotalBasalUnits = ScaledRounding.Round(
                         (day.TotalBasalUnits ?? 0) + group.TotalBasal,
                         2
                     );
@@ -1224,7 +1222,7 @@ public class DataOverviewService : IDataOverviewService
                     e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Carbs > 0
                 )
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .ExcludeNonPrimary(context, RecordType.CarbIntake)
+                .ExcludeDuplicates()
                 .Select(e => new { e.Timestamp, e.Carbs })
                 .ReadMetricRowsAsync(reads, YearMetricSource.Carbs, cancellationToken);
 
@@ -1243,7 +1241,7 @@ public class DataOverviewService : IDataOverviewService
                     dayMap[group.Date] = day;
                 }
 
-                day.TotalCarbs = Math.Round(group.TotalCarbs, 1);
+                day.TotalCarbs = ScaledRounding.Round(group.TotalCarbs, 1);
             }
         }
         catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))

@@ -98,6 +98,7 @@ public class SetupHubConversionPostgresTests(SetupHubConversionPostgresTests.Dat
 
             var hub = new DeviceSetupService(
                 factory,
+                new ConnectorConfigurationRepository(factory),
                 patientDevices,
                 new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
                 Mock.Of<IDeviceReattributionService>(),
@@ -105,6 +106,7 @@ public class SetupHubConversionPostgresTests(SetupHubConversionPostgresTests.Dat
                 Mock.Of<ITrackerAlertRuleSyncService>(),
                 Mock.Of<ITherapySettingsResolver>(),
                 Writer(),
+                TimeProvider.System,
                 NullLogger<DeviceSetupService>.Instance);
             var conversion = new LegacyFallbackService(
                 new TrackerRepository(Context(tenant).AsFactory()),

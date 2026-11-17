@@ -21,6 +21,7 @@ public class NotificationV1Service : INotificationV1Service
     private readonly ITenantAccessor _tenantAccessor;
     private readonly LegacyAlarmSnoozeStore _snoozes;
     private readonly LegacyNotificationStore _notifications;
+    private readonly TimeProvider _time;
 
     public NotificationV1Service(
         ILogger<NotificationV1Service> logger,
@@ -28,7 +29,8 @@ public class NotificationV1Service : INotificationV1Service
         ISignalRBroadcastService signalRBroadcastService,
         ITenantAccessor tenantAccessor,
         LegacyAlarmSnoozeStore snoozes,
-        LegacyNotificationStore notifications
+        LegacyNotificationStore notifications,
+        TimeProvider timeProvider
     )
     {
         _logger = logger;
@@ -37,6 +39,7 @@ public class NotificationV1Service : INotificationV1Service
         _tenantAccessor = tenantAccessor;
         _snoozes = snoozes;
         _notifications = notifications;
+        _time = timeProvider;
     }
 
     public async Task<NotificationAckResponse> AckNotificationAsync(
@@ -52,7 +55,7 @@ public class NotificationV1Service : INotificationV1Service
                 request.Group
             );
 
-            var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var currentTime = _time.GetUtcNow().ToUnixTimeMilliseconds();
             var silenceTime = request.Time ?? NotificationAckRequest.DefaultSilenceTimeMs;
 
             if (!_snoozes.TrySnooze(_tenantAccessor.TenantId, request.Level, request.Group, silenceTime))
@@ -141,7 +144,7 @@ public class NotificationV1Service : INotificationV1Service
             {
                 Success = false,
                 Message = "Internal error processing acknowledgment",
-                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
             };
         }
     }
@@ -221,7 +224,7 @@ public class NotificationV1Service : INotificationV1Service
                     {
                         Success = false,
                         Message = "Notification cannot be null",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
                     }
                 );
             }
@@ -246,7 +249,7 @@ public class NotificationV1Service : INotificationV1Service
                 {
                     Success = true,
                     Message = "Admin notification added successfully",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
                 }
             );
         }
@@ -258,7 +261,7 @@ public class NotificationV1Service : INotificationV1Service
                 {
                     Success = false,
                     Message = "Internal error adding admin notification",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
                 }
             );
         }

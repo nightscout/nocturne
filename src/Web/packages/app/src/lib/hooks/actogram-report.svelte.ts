@@ -1,6 +1,4 @@
-import { getActogramData } from "#lib/api/actogram.remote.js";
-import { ACTOGRAM_PADDING_DAYS } from "#lib/components/actogram/index.js";
-import { MS_PER_DAY } from "#lib/components/actogram/actogram.js";
+import { getActogramRange } from "#lib/api/actogram.remote.js";
 import { requireDateParamsContext } from "./date-params.svelte";
 import { contextResource } from "./resource-context.svelte";
 
@@ -14,16 +12,8 @@ import { contextResource } from "./resource-context.svelte";
 export function useActogramReport(errorTitle: string, defaultDays = 14) {
   const params = requireDateParamsContext(defaultDays);
 
-  const paddedFrom = $derived(
-    params.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY
-  );
-
   const resource = contextResource(
-    () =>
-      getActogramData({
-        from: paddedFrom,
-        to: params.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-      }),
+    () => getActogramRange({ from: params.fromDay, to: params.toDay }),
     { errorTitle }
   );
 

@@ -34,7 +34,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [Route("api/v4/glucose/sensor")]
 [RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Entries, TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c)]
+[ClearsTenantCache(TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c)]
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,

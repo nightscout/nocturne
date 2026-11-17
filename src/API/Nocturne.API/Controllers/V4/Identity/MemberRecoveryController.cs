@@ -35,6 +35,7 @@ public class MemberRecoveryController : ControllerBase
         "This account is an instance administrator or also belongs to another space, so only the operator can issue its recovery code.";
 
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ITenantMembershipRepository _members;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantRoleService _tenantRoleService;
     private readonly MemberRecoveryEligibility _eligibility;
@@ -43,6 +44,7 @@ public class MemberRecoveryController : ControllerBase
 
     public MemberRecoveryController(
         INocturneDbContextFactory contexts,
+        ITenantMembershipRepository members,
         ITenantAccessor tenantAccessor,
         ITenantRoleService tenantRoleService,
         MemberRecoveryEligibility eligibility,
@@ -50,6 +52,7 @@ public class MemberRecoveryController : ControllerBase
         ILoginCodeService loginCodeService)
     {
         _contexts = contexts;
+        _members = members;
         _tenantAccessor = tenantAccessor;
         _tenantRoleService = tenantRoleService;
         _eligibility = eligibility;
@@ -92,6 +95,8 @@ public class MemberRecoveryController : ControllerBase
     /// Issues a single-use recovery code for a member who cannot sign in. The plaintext is returned
     /// once; the member redeems it within <see cref="LoginCodeService.LifetimeOf"/> for
     /// <see cref="LoginCodePurpose.Recovery"/>.
+    /// The caller must be signed in as themselves, hold every permission the member holds, and not be confined to less history than the member sees.
+    /// A member's existing recovery codes do not block issuance; redeeming the new code cancels them.
     /// </summary>
     /// <remarks>
     /// The code lets its holder put a passkey on the member's account, so the caller must be signed
@@ -127,10 +132,8 @@ public class MemberRecoveryController : ControllerBase
                 return Problem(detail: OperatorOnlyDetail, statusCode: 409, title: "Conflict");
         }
 
-        var member = await db.TenantMembers
-            .Where(m => m.TenantId == tenantId && m.SubjectId == subjectId)
-            .Select(m => new { m.Id, m.LimitTo24Hours })
-            .FirstAsync(ct);
+        var member = await _members.FindMemberAsync(tenantId, subjectId, ct)
+            ?? throw new InvalidOperationException($"Subject {subjectId} is not a member of tenant {tenantId}.");
 
         var memberPermissions = await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct);
         if (Scope.ValidateGrant(memberPermissions, HttpContext.GetGrantedScopes()) is not null)

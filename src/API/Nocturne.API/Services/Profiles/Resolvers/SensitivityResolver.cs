@@ -18,6 +18,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ProfileVersionCache _versions;
     private readonly IProfileActivationResolver _activations;
+    private readonly TimeProvider _time;
     private readonly ILogger<SensitivityResolver> _logger;
 
     private const double DefaultSensitivity = 50.0;
@@ -29,6 +30,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         IActiveProfileResolver activeProfileResolver,
         ProfileVersionCache versions,
         IProfileActivationResolver activations,
+        TimeProvider timeProvider,
         ILogger<SensitivityResolver> logger)
     {
         _repo = repo;
@@ -37,6 +39,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         _activeProfileResolver = activeProfileResolver;
         _versions = versions;
         _activations = activations;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -75,7 +78,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
     /// </remarks>
     public async Task<double?> GetCurrentSensitivityPercentAsync(CancellationToken ct = default)
     {
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var nowMills = _time.GetUtcNow().ToUnixTimeMilliseconds();
         var active = await _activations.GetAtAsync(nowMills, ct);
         if (active is null || active.Activation.Percentage <= 0)
             return null;

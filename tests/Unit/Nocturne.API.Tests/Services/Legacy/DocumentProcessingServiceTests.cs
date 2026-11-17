@@ -16,7 +16,7 @@ public class DocumentProcessingServiceTests
     public DocumentProcessingServiceTests()
     {
         _loggerMock = new Mock<ILogger<DocumentProcessingService>>();
-        _service = new DocumentProcessingService(_loggerMock.Object);
+        _service = new DocumentProcessingService(TimeProvider.System, _loggerMock.Object);
     }
 
     [Fact]

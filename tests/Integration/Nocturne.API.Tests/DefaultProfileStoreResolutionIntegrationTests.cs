@@ -24,6 +24,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Nightscout's <c>profileFromTime</c> and <c>activeProfileToTime</c> do, whatever the store is
 /// called, on real PostgreSQL.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestBase
 {

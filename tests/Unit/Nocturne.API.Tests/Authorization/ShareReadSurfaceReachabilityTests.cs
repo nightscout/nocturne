@@ -61,6 +61,8 @@ public class ShareReadSurfaceReachabilityTests
             ["Nocturne.API.Controllers.V4.Analytics.StatisticsController"] = Scope.ReportsRead,
             ["Nocturne.API.Controllers.V4.Analytics.DataOverviewController"] = Scope.ReportsRead,
             ["Nocturne.API.Controllers.V4.Analytics.TreatmentLogController"] = Scope.ReportsRead,
+            // The zone every report cuts its windows on; a share reads it through ShareClockReader.
+            ["Nocturne.API.Controllers.V4.Health.PatientTimezoneController"] = Scope.GlucoseRead,
             // Backs the steps and heart-rate reports, which are not member-only, so its gate must
             // admit a share holding any one of its categories;
             // ActogramReadScopeGuard empties the rest. Listed against glucose because the default

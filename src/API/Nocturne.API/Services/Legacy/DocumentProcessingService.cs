@@ -14,10 +14,12 @@ namespace Nocturne.API.Services.Legacy;
 public class DocumentProcessingService : IDocumentProcessingService
 {
     private readonly HtmlSanitizer _htmlSanitizer;
+    private readonly TimeProvider _time;
     private readonly ILogger<DocumentProcessingService> _logger;
 
-    public DocumentProcessingService(ILogger<DocumentProcessingService> logger)
+    public DocumentProcessingService(TimeProvider timeProvider, ILogger<DocumentProcessingService> logger)
     {
+        _time = timeProvider;
         _logger = logger;
         _htmlSanitizer = new HtmlSanitizer();
 
@@ -228,7 +230,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                 {
                     _logger.LogWarning("Invalid timestamp format: {Timestamp}", document.CreatedAt);
                     // Set to current UTC time as fallback
-                    var now = DateTimeOffset.UtcNow;
+                    var now = _time.GetUtcNow();
                     document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                     document.Mills = now.ToUnixTimeMilliseconds();
                     document.UtcOffset = 0;
@@ -247,7 +249,7 @@ public class DocumentProcessingService : IDocumentProcessingService
             else
             {
                 // No timestamp provided at all, set to current UTC time
-                var now = DateTimeOffset.UtcNow;
+                var now = _time.GetUtcNow();
                 document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                 document.Mills = now.ToUnixTimeMilliseconds();
                 document.UtcOffset = 0;
@@ -261,7 +263,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                 document.CreatedAt
             );
             // Fallback to current UTC time
-            var now = DateTimeOffset.UtcNow;
+            var now = _time.GetUtcNow();
             document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
             document.Mills = now.ToUnixTimeMilliseconds();
             document.UtcOffset = 0;

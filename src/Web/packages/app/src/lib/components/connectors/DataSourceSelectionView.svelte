@@ -44,6 +44,12 @@
     onSkip,
   }: Props = $props();
 
+  // Each of these is set up on its own page, not through the credential form this view leads to.
+  const SET_UP_ELSEWHERE = new Set(["googlehealth", "oura"]);
+  const offeredConnectors = $derived(
+    connectors.filter((connector) => !SET_UP_ELSEWHERE.has(connector.id ?? "")),
+  );
+
   type PlatformFilter = "all" | UploaderPlatform;
   let platformFilter = $state<PlatformFilter>("all");
 
@@ -121,14 +127,14 @@
 {:else}
   <div class="@container space-y-8">
     <!-- Cloud Services (Connectors) -->
-    {#if connectors.length > 0}
+    {#if offeredConnectors.length > 0}
       <div class="space-y-3">
         <h2 class="text-sm font-medium text-muted-foreground flex items-center gap-2">
           <Cloud class="h-4 w-4" />
           Cloud services
         </h2>
         <div class="grid gap-3 @xl:grid-cols-2">
-          {#each connectors as connector (connector.id)}
+          {#each offeredConnectors as connector (connector.id)}
             {@const configured = connector.isConfigured ?? false}
             <Item
               variant={configured ? "success" : "outline"}
@@ -251,7 +257,7 @@
     {/if}
 
     <!-- Empty state when both are empty -->
-    {#if connectors.length === 0 && uploaderApps.length === 0}
+    {#if offeredConnectors.length === 0 && uploaderApps.length === 0}
       <EmptyState
         art="plug"
         variant="card"

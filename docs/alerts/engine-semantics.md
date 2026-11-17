@@ -289,7 +289,7 @@ A rule is wall-clock when its root kind, any node of its condition tree, or, whi
 auto-resolve is enabled, any node of its auto-resolve tree is a wall-clock kind. Every
 host must evaluate enabled wall-clock rules periodically as well as per reading, through
 the normal driver sequence (§7). Otherwise such a rule stays unfired for as long as no
-reading arrives. The backend does this from `AlertSweepService` every 30 s; Prelude needs
+reading arrives. The backend does this from `AlertSweepJob` every 30 s per tenant; Prelude needs
 an equivalent periodic evaluation. The crate's `wall_clock::references_wall_clock` reads
 a rule's kinds as §5.2 does, and the backend's sweep asks it which rules to evaluate.
 

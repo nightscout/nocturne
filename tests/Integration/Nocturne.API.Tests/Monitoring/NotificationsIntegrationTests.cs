@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// Integration tests for the v4 notification endpoints at
 /// <c>/api/v4/notifications</c>.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class NotificationsIntegrationTests : ApiIntegrationTestBase
 {

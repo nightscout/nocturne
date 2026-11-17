@@ -30,6 +30,7 @@ namespace Nocturne.API.Services.Chat;
 /// <seealso cref="ChatIdentityService"/>
 public sealed class ChatIdentityPendingLinkService(
     INocturneDbContextFactory contextFactory,
+    TimeProvider time,
     ILogger<ChatIdentityPendingLinkService> logger)
 {
     /// <summary>
@@ -57,7 +58,7 @@ public sealed class ChatIdentityPendingLinkService(
         CancellationToken ct)
     {
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        var now = DateTime.UtcNow;
+        var now = time.GetUtcNow().UtcDateTime;
         var entity = new ChatIdentityPendingLinkEntity
         {
             Token = token,
@@ -119,7 +120,7 @@ public sealed class ChatIdentityPendingLinkService(
             var row = await db.ChatIdentityPendingLinks
                 .FirstOrDefaultAsync(p => p.Token == token, attemptCt);
 
-            if (row is null || row.ExpiresAt < DateTime.UtcNow)
+            if (row is null || row.ExpiresAt < time.GetUtcNow().UtcDateTime)
                 return null;
 
             db.ChatIdentityPendingLinks.Remove(row);
@@ -149,8 +150,9 @@ public sealed class ChatIdentityPendingLinkService(
     public async Task<int> CleanupExpiredAsync(CancellationToken ct)
     {
         await using var db = await contextFactory.CreatePlatformAsync(ct);
+        var now = time.GetUtcNow().UtcDateTime;
         var deleted = await db.ChatIdentityPendingLinks
-            .Where(p => p.ExpiresAt < DateTime.UtcNow)
+            .Where(p => p.ExpiresAt < now)
             .ExecuteDeleteAsync(ct);
 
         if (deleted > 0)

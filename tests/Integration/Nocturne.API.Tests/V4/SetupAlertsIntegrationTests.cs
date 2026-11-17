@@ -16,6 +16,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// in mg/dL whatever the owner reads, route by who Nocturne is for, and the item is done only once
 /// a test alert is confirmed received.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
 {

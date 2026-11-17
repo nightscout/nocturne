@@ -19,14 +19,13 @@ public class LibreSensorGlucoseMapper(ILogger? logger = null)
         { 5, GlucoseDirection.SingleUp }
     };
 
-    public SensorGlucose? ConvertMeasurement(LibreGlucoseMeasurement measurement)
+    public SensorGlucose? ConvertMeasurement(LibreGlucoseMeasurement measurement, DateTime now)
     {
         try
         {
             var timestamp = LibreTimestampParser.Parse(measurement.FactoryTimestamp);
             var direction = TrendArrowMap.GetValueOrDefault(measurement.TrendArrow, GlucoseDirection.NotComputable);
             var mgdl = (double)measurement.ValueInMgPerDl;
-            var now = DateTime.UtcNow;
 
             return new SensorGlucose
             {

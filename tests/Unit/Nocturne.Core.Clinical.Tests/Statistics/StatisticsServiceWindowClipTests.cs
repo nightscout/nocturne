@@ -8,7 +8,7 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 
 public class StatisticsServiceWindowClipTests
 {
-    private readonly StatisticsService _sut = new();
+    private readonly StatisticsService _sut = new(TimeProvider.System);
 
     private static readonly DateTime Start = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime End = Start.AddDays(1);

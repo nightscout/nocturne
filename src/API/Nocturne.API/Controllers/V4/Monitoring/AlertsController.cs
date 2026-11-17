@@ -146,7 +146,8 @@ public class AlertsController : ControllerBase
 
     /// <summary>
     /// Get paginated history of resolved excursions. Test fires are excluded
-    /// by default; pass <paramref name="includeTest"/> = true to include them.
+    /// by default; pass <paramref name="includeTest"/> = true to include them. An oversized
+    /// <c>pageSize</c> or <c>page</c> is clamped to the largest allowed value rather than rejected.
     /// </summary>
     /// <remarks>
     /// <paramref name="pageSize"/> is capped at <see cref="V4ReadLimits.MaxOrdinalPageSize"/> and
@@ -255,7 +256,9 @@ public class AlertsController : ControllerBase
     /// <summary>
     /// Record that the caller saw an alarm that is firing. It changes nothing about the alert: it
     /// is not an acknowledgement and mutes nothing, for the caller or anyone else, and recording it
-    /// again keeps the first. Members with an account see who recorded one, and when.
+    /// again keeps the first. Members with an account see who recorded one, and when. It is the one
+    /// write a public share link may make, when the link shares alerts; who recorded it comes from
+    /// the credential, not the request.
     /// </summary>
     /// <remarks>
     /// The one write a public share link may make. <see cref="RequireScopeAttribute"/> admits an
@@ -318,7 +321,9 @@ public class AlertsController : ControllerBase
     /// <summary>
     /// Acknowledge a single alert excursion. A caller with <c>alerts.readwrite</c> acknowledges it
     /// for everyone; anyone else mutes it for themselves. The response says which applied.
-    /// Returns 404 when the excursion does not exist for the current tenant.
+    /// Returns 404 when the excursion does not exist for the current tenant. Also accepts
+    /// <c>device.notify</c>, which a registered client device and every member holding a permission
+    /// has, but not a guest link.
     /// </summary>
     /// <remarks>
     /// Accepts <see cref="Scope.DeviceNotify"/> as well as <see cref="Scope.AlertsReadWrite"/>:
@@ -373,7 +378,8 @@ public class AlertsController : ControllerBase
     /// and re-notifies when the snooze lapses if it is still firing. Snoozing again replaces the
     /// window. Returns 409 when the instance is already resolved or has used the rule's
     /// <c>snooze.maxCount</c> (<see cref="Nocturne.API.Services.Alerts.SmartSnoozeConfig"/>), a count
-    /// shared with the sweep's smart-snooze extensions.
+    /// shared with the sweep's smart-snooze extensions. Also accepts <c>alerts.acknowledge</c>, which
+    /// a Nightscout token holding <c>notifications:*:ack</c> carries.
     /// </summary>
     /// <remarks>
     /// Accepts <see cref="Scope.AlertsAcknowledge"/> as well as <see cref="Scope.AlertsReadWrite"/>:

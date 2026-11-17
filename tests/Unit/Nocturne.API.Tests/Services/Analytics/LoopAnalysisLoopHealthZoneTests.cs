@@ -86,7 +86,6 @@ public class LoopAnalysisLoopHealthZoneTests
                 It.IsAny<double?>(), It.IsAny<double?>(), It.IsAny<double?>(), It.IsAny<DateTime>(), It.IsAny<DateTime>()))
             .Returns(new AidSystemMetrics());
 
-        var canonical = CanonicalGlucosePassThrough.Create();
         var deviceDates = DeviceDateClockDoubles.Resolver(profileZone: Adelaide.Id);
         var reader = new AidSystemMetricsReader(
             devices.Object,
@@ -94,7 +93,6 @@ public class LoopAnalysisLoopHealthZoneTests
             Mock.Of<ITempBasalRepository>(),
             Mock.Of<IDeviceEventRepository>(),
             Mock.Of<ISensorGlucoseRepository>(),
-            canonical,
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IActiveProfileResolver>(),
             statistics.Object,
@@ -104,7 +102,6 @@ public class LoopAnalysisLoopHealthZoneTests
 
         var service = new LoopAnalysisService(
             glucoseRepository: Mock.Of<ISensorGlucoseRepository>(),
-            canonicalGlucose: canonical,
             bolusRepository: Mock.Of<IBolusRepository>(),
             carbIntakeRepository: Mock.Of<ICarbIntakeRepository>(),
             tempBasalRepository: Mock.Of<ITempBasalRepository>(),

@@ -15,6 +15,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// An authenticated request resolves its membership in one statement before its controller runs, and
 /// keeps nothing past the request: a removal, a revocation or a clamp applies on the next one.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTestBase
 {
@@ -129,6 +130,7 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
 
     private async Task AssertWarmOpensAsync(Action<HttpRequestMessage> authenticate)
     {
+        await MarkEveryCredentialJustUsedAsync();
         using var client = Fixture.CreateHttpClient(ServiceNames.NocturneApi);
         await SendAsync(client, authenticate);
 
@@ -138,7 +140,28 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
         var opens = Fixture.Services.GetRequiredService<ContextOpenLog>().OpensOf(requestId);
         foreach (var open in opens)
             Log($"{(open.BeforeAction ? "before" : "after ")} {open.Kind,-14} {open.Caller}");
+        opens.Should().Contain(o => !o.BeforeAction, "the entries read opens a context in the controller");
+        opens.Should().Contain(
+            o => o.BeforeAction && o.Kind == "tenant", "the credential and membership are read before the controller");
         opens.Where(o => o.BeforeAction).Should().HaveCountLessThanOrEqualTo(2);
+    }
+
+    /// <summary>
+    /// Leaves no last-used stamp due. A seeded membership or grant has never been used, so the warm-up
+    /// request would start the stamps, and any not yet committed when the measured request
+    /// authenticates would start again and open contexts before its controller.
+    /// </summary>
+    private async Task MarkEveryCredentialJustUsedAsync()
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @tenant, false);
+            UPDATE tenant_members SET last_used_at = now();
+            UPDATE oauth_grants SET last_used_at = now();
+            """;
+        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static Action<HttpRequestMessage> Cookie(string session) =>

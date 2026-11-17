@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -16,28 +17,25 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing carbohydrate intake records in the database. A DeduplicationService
+/// Repository for managing carbohydrate intake records in the database. A deduplication
 /// participant on top of the sync-key upsert and keyed delete of
-/// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
-/// (non-primary LinkedRecords filter + keyset cursor), the read-visibility filter behind
-/// <c>CountAsync</c>, and the post-commit dedup linking.
+/// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the <c>GetAsync</c>
+/// overload that adds a keyset cursor to the base read.
 /// </summary>
 public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbIntakeEntity>, ICarbIntakeRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="CarbIntakeRepository"/> class.
     /// </summary>
     public CarbIntakeRepository(
         INocturneDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<CarbIntakeRepository> logger,
-        IV4RecordBroadcaster<CarbIntake>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IV4RecordBroadcaster<CarbIntake>? broadcaster = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
     }
 
     /// <inheritdoc />
@@ -49,23 +47,9 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
     /// <inheritdoc />
     protected override void ApplyUpdate(CarbIntakeEntity target, CarbIntake source) => CarbIntakeMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.CarbIntake;
-
-    /// <summary>
-    /// Routes the base 7-arg form through the extended carb-intake query (non-primary LinkedRecords
-    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
-    /// </summary>
-    public override Task<IEnumerable<CarbIntake>> GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
-        => GetAsync(from, to, device, source, limit, offset, descending,
-            afterTimestamp: null, afterId: null, ct);
-
     /// <summary>
     /// Gets carbohydrate intake records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -92,88 +76,29 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.CarbIntakes.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null)
-            query = query.Where(e => e.Device == device);
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-
-        query = ApplyReadVisibility(query, ctx);
-
-        // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
-        // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
-        if (afterTimestamp.HasValue && afterId.HasValue)
-        {
-            query = descending
-                ? query.Where(e => e.Timestamp < afterTimestamp.Value
-                    || (e.Timestamp == afterTimestamp.Value && e.Id < afterId.Value))
-                : query.Where(e => e.Timestamp > afterTimestamp.Value
-                    || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
-        }
-
-        query = descending
-            ? query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
-            : query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id);
-
-        if (!afterTimestamp.HasValue || !afterId.HasValue)
-        {
-            query = query.Skip(offset);
-        }
-
-        var entities = await query.Take(limit).ToListAsync(ct);
+        var entities = await PagedRead(
+            ctx.CarbIntakes.AsNoTracking(), from, to, device, source, limit, offset, descending,
+            afterTimestamp: afterTimestamp, afterId: afterId).ToListAsync(ct);
         return entities.Select(CarbIntakeMapper.ToDomainModel);
     }
 
-    /// <summary>
-    /// Gets carbohydrate intake records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of carbohydrate intakes.</returns>
-    public async Task<IEnumerable<CarbIntake>> GetByCorrelationIdAsync(
-        Guid correlationId,
+    public async Task<IReadOnlyList<CarbIntake>> GetMealCandidatesAsync(
+        DateTime from,
+        DateTime to,
+        bool demo,
         CancellationToken ct = default
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
+        var query = ctx
             .CarbIntakes.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(CarbIntakeMapper.ToDomainModel);
-    }
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to && e.Carbs > 0);
 
-    /// <summary>
-    /// Insert-time deduplication runs AFTER commit: the ingested rows are durably persisted first, and
-    /// dedup linking is best-effort (a failure is logged, not allowed to roll back the insert). A row
-    /// missed here is never reconciled, which reads only links, but once older than
-    /// <see cref="DeduplicationService.SingletonLinkRetention"/> later records match it as a group of
-    /// its own. Only runs on newly inserted entities — updated-in-place rows were already linked when first inserted.
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<CarbIntakeEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
+        query = demo
+            ? query.Where(e => e.DataSource == DataSources.DemoService)
+            : query.Where(e => e.DataSource != DataSources.DemoService);
 
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: e.Timestamp.ToMills(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.CarbIntake, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "CarbIntake", inserted.Count);
-        }
+        var entities = await query.OrderByDescending(e => e.Timestamp).ToListAsync(ct);
+        return entities.Select(CarbIntakeMapper.ToDomainModel).ToList();
     }
 }

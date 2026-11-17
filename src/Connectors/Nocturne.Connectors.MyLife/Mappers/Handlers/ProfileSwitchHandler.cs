@@ -54,7 +54,7 @@ internal sealed class ProfileSwitchHandler : IMyLifeHandler
             notes = $"Profile: {profileName}";
         }
 
-        var deviceEvent = MyLifeFactory.CreateDeviceEvent(ev, DeviceEventType.ProfileSwitch, notes);
+        var deviceEvent = MyLifeFactory.CreateDeviceEvent(ev, context.Now, DeviceEventType.ProfileSwitch, notes);
         return [deviceEvent];
     }
 

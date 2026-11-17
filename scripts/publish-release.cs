@@ -1,12 +1,13 @@
 // scripts/publish-release.cs
 //
-// Generates the production Docker Compose bundle and commits the results to
-// deploy/ and docs/diagrams/ before tagging a release.
+// Generates the production Docker Compose bundle and the install scripts into deploy/ and
+// docs/diagrams/. The compose-bundle-drift job in .github/workflows/tests.yml regenerates it and fails a pull
+// request whose committed copy differs.
 //
 // Usage:
 //   dotnet run scripts/publish-release.cs
 //
-// Requires: .NET 10 SDK, Aspire CLI
+// Requires: .NET 11 SDK, Aspire CLI
 
 #:project Shared/Shared.csproj
 
@@ -56,6 +57,8 @@ try
     var byoProxyComposePath = Path.Combine(tempDir, "docker-compose.byo-proxy.yaml");
     var postgresDataComposePath = Path.Combine(tempDir, "docker-compose.bind-data.yaml");
     var envMetadataPath = Path.Combine(tempDir, "env-metadata.json");
+    var installScriptPath = Path.Combine(tempDir, "install.sh");
+    var oracleScriptPath = Path.Combine(tempDir, "oracle-cloud-install.sh");
 
     if (!File.Exists(composePath))
     {
@@ -81,6 +84,14 @@ try
         return 1;
     }
 
+    foreach (var script in new[] { installScriptPath, oracleScriptPath })
+    {
+        if (File.Exists(script))
+            continue;
+        Console.Error.WriteLine($"[publish-release] ERROR: aspire publish did not produce {Path.GetFileName(script)}");
+        return 1;
+    }
+
     // Parse via JsonNode rather than reflection-based Deserialize: file-based
     // apps run with reflection serialization disabled, which would throw.
     var envMetadata = JsonNode.Parse(File.ReadAllText(envMetadataPath))!
@@ -100,23 +111,43 @@ try
     // PortainerComposePublisher), so no separate init/ or caddy/ directories are
     // shipped; the bundle is just compose + .env.
     var deployDockerComposeDir = Path.Combine(repoRoot, "deploy", "docker-compose");
+    var dockerComposeWritten = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     Directory.CreateDirectory(deployDockerComposeDir);
-    File.Copy(composePath, Path.Combine(deployDockerComposeDir, "docker-compose.yaml"), overwrite: true);
+    File.Copy(composePath, Owned(deployDockerComposeDir, "docker-compose.yaml", dockerComposeWritten), overwrite: true);
     // Bring-your-own-proxy override (generated alongside the compose by the
     // byo-proxy publish step; absent when Caddy is disabled).
     if (File.Exists(byoProxyComposePath))
-        File.Copy(byoProxyComposePath, Path.Combine(deployDockerComposeDir, "docker-compose.byo-proxy.yaml"), overwrite: true);
-    File.Copy(postgresDataComposePath, Path.Combine(deployDockerComposeDir, "docker-compose.bind-data.yaml"), overwrite: true);
-    File.WriteAllText(Path.Combine(deployDockerComposeDir, ".env.example"), envExample);
+        File.Copy(byoProxyComposePath, Owned(deployDockerComposeDir, "docker-compose.byo-proxy.yaml", dockerComposeWritten), overwrite: true);
+    File.Copy(postgresDataComposePath, Owned(deployDockerComposeDir, "docker-compose.bind-data.yaml", dockerComposeWritten), overwrite: true);
+    File.WriteAllText(Owned(deployDockerComposeDir, ".env.example", dockerComposeWritten), envExample);
+    PruneUnwritten(repoRoot, deployDockerComposeDir, dockerComposeWritten);
     Console.WriteLine("[publish-release] Updated deploy/docker-compose/");
 
     // deploy/portainer/ — self-contained compose with inlined init script.
     var deployPortainerDir = Path.Combine(repoRoot, "deploy", "portainer");
+    var portainerWritten = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     Directory.CreateDirectory(deployPortainerDir);
-    File.Copy(portainerComposePath, Path.Combine(deployPortainerDir, "docker-compose.yaml"), overwrite: true);
-    File.WriteAllText(Path.Combine(deployPortainerDir, ".env.example"), envExample);
-    File.WriteAllText(Path.Combine(deployPortainerDir, "templates.json"), GeneratePortainerTemplate(groups, envMetadata));
+    File.Copy(portainerComposePath, Owned(deployPortainerDir, "docker-compose.yaml", portainerWritten), overwrite: true);
+    File.WriteAllText(Owned(deployPortainerDir, ".env.example", portainerWritten), envExample);
+    File.WriteAllText(Owned(deployPortainerDir, "templates.json", portainerWritten), GeneratePortainerTemplate(groups, envMetadata));
+    PruneUnwritten(repoRoot, deployPortainerDir, portainerWritten);
     Console.WriteLine("[publish-release] Updated deploy/portainer/");
+
+    // deploy/install/ and deploy/oracle-cloud/ — the installer for any Linux server, and the
+    // Oracle Cloud one that embeds it (see InstallScriptPublisher).
+    var deployInstallDir = Path.Combine(repoRoot, "deploy", "install");
+    var installWritten = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    Directory.CreateDirectory(deployInstallDir);
+    File.Copy(installScriptPath, Owned(deployInstallDir, "install.sh", installWritten), overwrite: true);
+    PruneUnwritten(repoRoot, deployInstallDir, installWritten);
+    Console.WriteLine("[publish-release] Updated deploy/install/");
+
+    var deployOracleDir = Path.Combine(repoRoot, "deploy", "oracle-cloud");
+    var oracleWritten = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    Directory.CreateDirectory(deployOracleDir);
+    File.Copy(oracleScriptPath, Owned(deployOracleDir, "oracle-cloud-install.sh", oracleWritten), overwrite: true);
+    PruneUnwritten(repoRoot, deployOracleDir, oracleWritten);
+    Console.WriteLine("[publish-release] Updated deploy/oracle-cloud/");
 
     // docs/diagrams/ — Mermaid architecture diagrams produced by MermaidDiagramPublisher.
     var diagramsDir = Path.Combine(repoRoot, "docs", "diagrams");
@@ -126,7 +157,7 @@ try
     Console.WriteLine("[publish-release] Updated docs/diagrams/");
 
     Console.WriteLine();
-    Console.WriteLine("[publish-release] Done! Commit deploy/ and docs/diagrams/ before tagging.");
+    Console.WriteLine("[publish-release] Done! Commit deploy/ and docs/diagrams/. The compose-bundle-drift job checks them.");
 
     return 0;
 }
@@ -134,6 +165,26 @@ finally
 {
     if (Directory.Exists(tempDir))
         Directory.Delete(tempDir, recursive: true);
+}
+
+// ── output ownership ──────────────────────────────────────────────────────────
+
+static string Owned(string dir, string name, HashSet<string> written)
+{
+    var path = Path.Combine(dir, name);
+    written.Add(path);
+    return path;
+}
+
+static void PruneUnwritten(string repoRoot, string dir, HashSet<string> written)
+{
+    foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+    {
+        if (written.Contains(file))
+            continue;
+        File.Delete(file);
+        Console.WriteLine($"[publish-release] Deleted {Path.GetRelativePath(repoRoot, file).Replace('\\', '/')}");
+    }
 }
 
 // ── env parsing ───────────────────────────────────────────────────────────────
@@ -160,9 +211,6 @@ static EnvVarGroups ParseAspireEnv(string aspireEnvPath, EnvVarMeta[] metadata)
         "DISCORD_APPLICATION_ID",
         "DISCORD_CLIENT_SECRET",
         "DISCORD_PUBLIC_KEY",
-        "GOOGLE_HEALTH_CLIENT_ID",
-        "GOOGLE_HEALTH_CLIENT_SECRET",
-        "GOOGLE_HEALTH_REDIRECT_URI",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_WEBHOOK_SECRET_TOKEN",
         "SLACK_BOT_TOKEN",

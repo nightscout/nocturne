@@ -17,7 +17,7 @@ internal sealed class NoteHandler : IMyLifeHandler
     public IEnumerable<IV4Record> Handle(MyLifeEvent ev, MyLifeContext context)
     {
         var text = ev.InformationFromDevice ?? string.Empty;
-        var note = MyLifeFactory.CreateNote(ev, text, "Alert");
+        var note = MyLifeFactory.CreateNote(ev, context.Now, text, "Alert");
         return [note];
     }
 }

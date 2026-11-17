@@ -1,6 +1,6 @@
 /**
  * Remote functions for the Insulin Dosing Profile (IDP) report. Fetches the sensor
- * reading count, boluses, carb intakes, insulin delivery stats, the profiles in force,
+ * reading count, the hourly insulin delivery pattern, insulin delivery stats, the profiles in force,
  * extended glucose analytics, averaged stats, and basal analysis
  */
 import { getRequestEvent, query } from "$app/server";
@@ -17,10 +17,10 @@ export const getIdpData = query(DateRangeSchema.optional(), async (input) => {
 
   // The page shows how many readings the window holds, not the readings, so one row and the
   // total stand in for them. Every read is independent of the others.
-  const [readings, bolusResult, insulinDeliveryStats, activeSchedules, rangeAnalytics, aidSystemMetrics] =
+  const [readings, hourlyDelivery, insulinDeliveryStats, activeSchedules, rangeAnalytics, aidSystemMetrics] =
     await Promise.all([
       apiClient.sensorGlucose.getAll(startDate, endDate, 1, 0, undefined, undefined, undefined, true),
-      apiClient.bolus.getAll(startDate, endDate, 10000),
+      apiClient.statistics.getHourlyInsulinDelivery(startDate, endDate),
       apiClient.statistics.getInsulinDeliveryStatistics(startDate, endDate),
       // Therapy settings need therapy.read; without it the report renders
       // with no basal schedule rather than not at all.
@@ -28,11 +28,10 @@ export const getIdpData = query(DateRangeSchema.optional(), async (input) => {
       apiClient.statistics.getRangeAnalytics(startDate, endDate),
       apiClient.statistics.getAidSystemMetrics(startDate, endDate),
     ]);
-  const boluses = bolusResult.data ?? [];
-
   return {
     readingCount: readings.pagination?.total ?? 0,
-    boluses,
+    hourlyBolusCounts: hourlyDelivery.hours ?? [],
+    hourlyTimeZoneUnavailableReason: hourlyDelivery.timeZoneUnavailableReason,
     insulinDeliveryStats,
     activeSchedules: activeSchedules ?? [],
     analysis: rangeAnalytics.analysis,

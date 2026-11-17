@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Constants;
@@ -69,7 +70,7 @@ public sealed class NativeProfileSwitchesTests : IDisposable
 
         _resolver = new ProfileActivationResolver(_repository, new ProfileStoreTimelineSource(therapy.Object), cache);
         _native = new NativeProfileSwitches(
-            _repository, new ProfileActivationWriter(_repository, cache, TempBasalTestDeps.NoReresolution()), _resolver, therapy.Object, basal.Object,
+            _repository, new ProfileActivationWriter(_repository, TempBasalTestDeps.NoReresolution()), _resolver, therapy.Object, basal.Object,
             carbRatio.Object, sensitivity.Object, targets.Object, audit.Object, _time);
     }
 

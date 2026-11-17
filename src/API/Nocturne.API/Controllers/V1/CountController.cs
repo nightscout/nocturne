@@ -12,7 +12,7 @@ using Nocturne.Core.Models.Queries;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Authorization;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -20,9 +20,9 @@ namespace Nocturne.API.Controllers.V1;
 /// Count controller that provides 1:1 compatibility with Nightscout count endpoints.
 /// Implements the /api/v1/count/* endpoints from the legacy JavaScript implementation.
 /// </summary>
-/// <seealso cref="IEntryStore"/>
-/// <seealso cref="ITreatmentStore"/>
-/// <seealso cref="DeviceStatusProjectionService"/>
+/// <seealso cref="IEntryService"/>
+/// <seealso cref="ITreatmentService"/>
+/// <seealso cref="IDeviceStatusService"/>
 /// <seealso cref="IProfileProjectionService"/>
 /// <seealso cref="IFoodRepository"/>
 /// <seealso cref="IActivityService"/>
@@ -41,9 +41,9 @@ public class CountController : ControllerBase
 
     private const string UnreadableFindMessage = "The find carries no condition the activity collection can read.";
 
-    private readonly IEntryStore _entryStore;
-    private readonly ITreatmentStore _treatmentStore;
-    private readonly DeviceStatusProjectionService _deviceStatusProjection;
+    private readonly IEntryService _entryService;
+    private readonly ITreatmentService _treatmentService;
+    private readonly IDeviceStatusService _deviceStatuses;
     private readonly IProfileProjectionService _profileProjectionService;
     private readonly IFoodRepository _foodRepository;
     private readonly IActivityService _activityService;
@@ -53,18 +53,18 @@ public class CountController : ControllerBase
     /// <summary>
     /// Initializes a new instance of <see cref="CountController"/>.
     /// </summary>
-    /// <param name="entryStore">Store for glucose entry records.</param>
-    /// <param name="treatmentStore">Store for treatment records.</param>
-    /// <param name="deviceStatusProjection">Projection of V4 snapshots into legacy device status.</param>
+    /// <param name="entryService">Service for glucose entry records.</param>
+    /// <param name="treatmentService">Service for treatment records.</param>
+    /// <param name="deviceStatuses">Service for device status records.</param>
     /// <param name="profileProjectionService">Service for profile projection and counting.</param>
     /// <param name="foodRepository">Repository for food records.</param>
     /// <param name="activityService">Service for activity operations.</param>
     /// <param name="timeProvider">Clock for the legacy default treatment find window.</param>
     /// <param name="logger">Logger instance.</param>
     public CountController(
-        IEntryStore entryStore,
-        ITreatmentStore treatmentStore,
-        DeviceStatusProjectionService deviceStatusProjection,
+        IEntryService entryService,
+        ITreatmentService treatmentService,
+        IDeviceStatusService deviceStatuses,
         IProfileProjectionService profileProjectionService,
         IFoodRepository foodRepository,
         IActivityService activityService,
@@ -72,9 +72,9 @@ public class CountController : ControllerBase
         ILogger<CountController> logger
     )
     {
-        _entryStore = entryStore;
-        _treatmentStore = treatmentStore;
-        _deviceStatusProjection = deviceStatusProjection;
+        _entryService = entryService;
+        _treatmentService = treatmentService;
+        _deviceStatuses = deviceStatuses;
         _profileProjectionService = profileProjectionService;
         _foodRepository = foodRepository;
         _activityService = activityService;
@@ -110,7 +110,7 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _entryStore.CountAsync(find, type, cancellationToken);
+            var count = await _entryService.CountEntriesAsync(find, type, cancellationToken);
 
             _logger.LogDebug("Found {Count} entries matching criteria", count);
             return LegacyCountResult.For(count);
@@ -160,7 +160,7 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _treatmentStore.CountAsync(
+            var count = await _treatmentService.CountTreatmentsAsync(
                 LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow()), cancellationToken);
 
             _logger.LogDebug("Found {Count} treatments matching criteria", count);
@@ -206,8 +206,8 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _deviceStatusProjection.CountMatchingAsync(
-                DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow())),
+            var count = await _deviceStatuses.CountDeviceStatusesAsync(
+                FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow())),
                 cancellationToken);
 
             _logger.LogDebug("Found {Count} device status entries matching criteria", count);
@@ -229,7 +229,8 @@ public class CountController : ControllerBase
     }
 
     /// <summary>
-    /// Count activity entries matching specific criteria
+    /// Count activity entries matching specific criteria.
+    /// The count covers all activity categories, so it requires read access to every one of them.
     /// </summary>
     /// <param name="find">MongoDB-style find query filters (JSON format)</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -286,7 +287,9 @@ public class CountController : ControllerBase
     }
 
     /// <summary>
-    /// Generic count endpoint for any storage type</summary>
+    /// Generic count endpoint for any storage type.
+    /// Requires read access to the category of the requested storage; <c>activity</c> requires every activity category.
+    /// </summary>
     /// <param name="storage">Storage type (entries, treatments, devicestatus, profile, food, activity)</param>
     /// <param name="find">MongoDB-style find query filters (JSON format)</param>
     /// <param name="type">Additional type filter (for entries: sgv, mbg, cal)</param>
@@ -345,21 +348,21 @@ public class CountController : ControllerBase
             switch (storage.ToLowerInvariant())
             {
                 case "entries":
-                    count = await _entryStore.CountAsync(
+                    count = await _entryService.CountEntriesAsync(
                         LegacyFindQueryString.Resolve(HttpContext?.Request, find),
                         type,
                         cancellationToken
                     );
                     break;
                 case "treatments":
-                    count = await _treatmentStore.CountAsync(
+                    count = await _treatmentService.CountTreatmentsAsync(
                         LegacyFindDateWindow.Apply(
                             LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow()),
                         cancellationToken);
                     break;
                 case "devicestatus":
-                    count = await _deviceStatusProjection.CountMatchingAsync(
-                        DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(
+                    count = await _deviceStatuses.CountDeviceStatusesAsync(
+                        FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(
                             LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow())),
                         cancellationToken);
                     break;

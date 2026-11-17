@@ -45,9 +45,10 @@ export default {
   errorHandling: {
     // `parseErrorBody` recovers the reason from an error body NSwag left unparsed;
     // both the 403 and 500 arms read it. `parseIssues` validates the structured
-    // issues the 400/409 arm forwards. See `#lib/api/error-body`.
+    // issues the 400/409 arm forwards, and `parseCode` the problem code the
+    // 400, 404, 409 and 429 arms forward. See `#lib/api/error-body`.
     imports: [
-      `import { parseErrorBody, parseIssues } from '#lib/api/error-body.js';`,
+      `import { parseCode, parseErrorBody, parseIssues } from '#lib/api/error-body.js';`,
     ],
 
     // The default redirects queries to /auth/login on 401. For a public share
@@ -101,6 +102,12 @@ export default {
     // `describeSubmitError` and `remoteErrorMessage` resolve the wording from
     // the status.
     //
+    // Each of those four statuses also forwards a well-formed `code`, the stable
+    // machine code a ProblemDetails carries as an extension, as `body.code`, so
+    // the page can pick its own translated sentence for a status that has
+    // several causes. On 404 and 429 it is the only thing taken from the body:
+    // the `detail` beside it still never reaches the page.
+    //
     // A forwarded 404 reaches a query and a command differently, and both are
     // wanted: a query awaited by a page load renders the not-found page, while a
     // command or form rejects its caller with an `HttpError(404)` — SvelteKit
@@ -113,9 +120,11 @@ export default {
       `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
       `    const message = flat ?? ${reason('e', 'b')};\n` +
       `    const issues = parseIssues(e?.issues) ?? b?.issues;\n` +
-      `    if (status === 429) throw error(429, 'Too many requests');\n` +
-      `    if (status === 404) throw error(404, 'Not found');\n` +
-      `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected', issues ? { issues } : {});\n` +
+      `    const code = parseCode(e?.code) ?? b?.code;\n` +
+      `    const coded = code ? { code } : {};\n` +
+      `    if (status === 429) throw error(429, 'Too many requests', coded);\n` +
+      `    if (status === 404) throw error(404, 'Not found', coded);\n` +
+      `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected', { ...(issues ? { issues } : {}), ...coded });\n` +
       `    throw error(500, message ?? 'Failed to ${functionName}')`,
   },
 };

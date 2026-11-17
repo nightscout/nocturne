@@ -14,7 +14,7 @@ vi.mock("water-ui", async () => ({
   prefersReducedMotion: () => false,
 }));
 
-const hub = vi.hoisted(() => ({ status: undefined as unknown }));
+const hub = $state({ status: undefined as unknown });
 vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
   getSetupHub: () => remoteQuery(() => hub.status),
 }));
@@ -22,13 +22,28 @@ vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
 const tenant = vi.hoisted(() => ({
   relationship: {} as { relationship?: string; patientName?: string },
   setUnits: vi.fn(),
+  setRelationship: vi.fn(),
 }));
 vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getPatientRelationship: () => remoteQuery(() => tenant.relationship),
-  setPatientRelationship: vi.fn(),
+  setPatientRelationship: tenant.setRelationship,
   getUnitsAndTimezone: () =>
     remoteQuery(() => ({ glucoseUnits: "mmol", timezone: "Pacific/Auckland" })),
   setUnitsAndTimezone: tenant.setUnits,
+}));
+const members = vi.hoisted(() => ({ stepDown: vi.fn(), goto: vi.fn() }));
+vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
+  stepDown: members.stepDown,
+}));
+vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
+  getRoles: () =>
+    remoteQuery(() => [
+      { id: "role-caretaker", slug: "caretaker", name: "Caretaker", accessLevel: "ReadAndLogTreatments" },
+    ]),
+}));
+vi.mock("$app/navigation", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  goto: members.goto,
 }));
 vi.mock("#lib/stores/appearance-store.svelte.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -64,7 +79,14 @@ beforeEach(() => {
   sessionStorage.clear();
   tenant.relationship = {};
   tenant.setUnits.mockReset().mockResolvedValue({});
+  tenant.setRelationship.mockReset().mockResolvedValue({});
+  members.stepDown.mockReset().mockResolvedValue({ success: true });
+  members.goto.mockReset().mockResolvedValue(undefined);
 });
+
+function handingOver(handover: SetupHubStatus["handover"]): SetupHubStatus {
+  return { ...hubWith(2), handover };
+}
 
 describe("SetupHub", () => {
   it("lists every item with where it stands, and counts the resolved ones", async () => {
@@ -148,6 +170,89 @@ describe("SetupHub", () => {
     expect(tenant.setUnits).toHaveBeenCalledWith({
       glucoseUnits: "mg/dl",
       timezone: "Pacific/Auckland",
+    });
+  });
+
+  describe("handed over by a helper", () => {
+    const recipient = {
+      helperName: "Alex",
+      callerIsHelper: false,
+      recipientJoined: true,
+      recipientAnswered: false,
+      canStepDown: false,
+    };
+
+    beforeEach(() => {
+      tenant.relationship = { relationship: "Helper", patientName: "Sam" };
+    });
+
+    it("tells the recipient who set it up, and asks who it is for without the helper's answer", async () => {
+      hub.status = handingOver(recipient);
+      render(SetupHub);
+
+      await expect
+        .element(page.getByRole("heading", { name: "Alex set up Nocturne for you." }))
+        .toBeVisible();
+      await expect.element(page.getByText("A few things only you can decide.")).toBeVisible();
+      const question = page.getByTestId("hub-recipient-question");
+      await expect.element(question.getByRole("radio", { name: /^Me/ })).toBeVisible();
+      await expect.element(question.getByRole("radio", { name: /Someone I care for/ })).toBeVisible();
+      expect(question.getByRole("radio", { name: /setting it up for someone else/ }).elements()).toHaveLength(0);
+      await expect.element(page.getByTestId("basics-who")).toHaveTextContent("Not answered yet");
+      await expect.element(page.getByTestId("hub-item-connect-data")).toHaveAttribute("data-state", "Done");
+      expect(page.getByTestId("hub-step-down").query()).toBeNull();
+    });
+
+    it("saves the recipient's answer over the helper's, and keeps the ticks", async () => {
+      hub.status = handingOver(recipient);
+      tenant.setRelationship.mockImplementation(async () => {
+        hub.status = handingOver({ ...recipient, recipientAnswered: true });
+        return {};
+      });
+      render(SetupHub);
+
+      const question = page.getByTestId("hub-recipient-question");
+      await question.getByRole("radio", { name: /^Me/ }).click();
+      await question.getByRole("button", { name: "Save" }).click();
+
+      await vi.waitFor(() =>
+        expect(tenant.setRelationship).toHaveBeenCalledWith(expect.objectContaining({ relationship: "Self" })),
+      );
+      await expect.poll(() => page.getByTestId("hub-recipient-question").query()).toBeNull();
+      await expect.element(page.getByTestId("hub-item-connect-data")).toHaveAttribute("data-state", "Done");
+    });
+
+    it("stops asking once the recipient has answered", async () => {
+      hub.status = handingOver({ ...recipient, recipientAnswered: true });
+      tenant.relationship = { relationship: "Self" };
+      render(SetupHub);
+
+      await expect.element(page.getByRole("heading", { name: "Make Nocturne yours." })).toBeVisible();
+      expect(page.getByTestId("hub-recipient-question").query()).toBeNull();
+      await expect.element(page.getByTestId("basics-who")).toHaveTextContent("You");
+    });
+
+    it("offers the helper no step down before the recipient has joined", async () => {
+      hub.status = handingOver({ ...recipient, callerIsHelper: true, recipientJoined: false });
+      render(SetupHub);
+
+      await expect.element(page.getByRole("heading", { name: "Set Nocturne up for Sam." })).toBeVisible();
+      expect(page.getByTestId("hub-step-down").query()).toBeNull();
+      expect(page.getByTestId("hub-recipient-question").query()).toBeNull();
+    });
+
+    it("lets the helper step down once they can, and sends them to the dashboard", async () => {
+      hub.status = handingOver({ ...recipient, callerIsHelper: true, canStepDown: true });
+      render(SetupHub);
+
+      const card = page.getByTestId("hub-step-down");
+      await expect.element(card.getByText("Can see and log treatments")).toBeVisible();
+      await expect.element(card.getByText("They can also log insulin and carbs, and change alerts.")).toBeVisible();
+      await card.getByRole("button", { name: "Step down" }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "Step down" }).click();
+
+      await vi.waitFor(() => expect(members.stepDown).toHaveBeenCalled());
+      await vi.waitFor(() => expect(members.goto).toHaveBeenCalledWith("/"));
     });
   });
 });

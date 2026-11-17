@@ -43,7 +43,7 @@ public class TrackersControllerTenantAccessTests
     {
         _alerts
             .Setup(a => a.GetUnacknowledgedExcursionIdsAsync(
-                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(

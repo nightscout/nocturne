@@ -228,7 +228,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     {
         var tenantId = _tenantAccessor.TenantId;
         var excursions = await _alerts.GetUnacknowledgedExcursionIdsAsync(
-            tenantId, TrackerAlertRuleSyncService.ManagedByTag(definitionId), ct);
+            TrackerAlertRuleSyncService.ManagedByTag(definitionId), ct);
 
         foreach (var excursionId in excursions)
         {
@@ -290,7 +290,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [RemoteQuery]
     [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
     public ActionResult<string[]> GetDeviceEventTypes() =>
-        Ok(TreatmentTypes.DeviceEventTypeMap.Keys.ToArray());
+        Ok(TreatmentTypeMaps.DeviceEventTypeMap.Keys.ToArray());
 
     /// <summary>
     /// Get a specific tracker definition
@@ -395,8 +395,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
         var created = await _repository.CreateDefinitionAsync(entity, HttpContext.RequestAborted);
 
         // CancellationToken.None: the definition is already committed, so a client
-        // disconnect must not leave it without its managed rules until the next startup
-        // backfill.
+        // disconnect must not leave it without its managed rules until the daily
+        // TrackerAlertRuleBackfillJob.
         await _ruleSync.SyncDefinitionAsync(created.Id, CancellationToken.None);
         await _broadcast.BroadcastTrackerDefinitionUpdateAsync(created.Id);
 

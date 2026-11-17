@@ -58,7 +58,7 @@ internal sealed class BolusHandler : IMyLifeHandler
                 Id = Guid.CreateVersion7(),
                 Source = "mylife",
                 SourceRecordId = MyLifeMapperHelpers.BuildEventKey(ev),
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = context.Now,
             };
             correlationId = batch.Id;
             context.DecompositionBatches.Add(batch);
@@ -86,21 +86,21 @@ internal sealed class BolusHandler : IMyLifeHandler
         // Create Bolus record if there's insulin
         if (hasInsulin)
         {
-            var bolus = MyLifeFactory.CreateBolus(ev, insulin, bolusType, duration, correlationId);
+            var bolus = MyLifeFactory.CreateBolus(ev, context.Now, insulin, bolusType, duration, correlationId);
             results.Add(bolus);
         }
 
         // Create CarbIntake record if there are carbs
         if (hasCarbs)
         {
-            var carbIntake = MyLifeFactory.CreateCarbIntake(ev, carbs!.Value, correlationId);
+            var carbIntake = MyLifeFactory.CreateCarbIntake(ev, context.Now, carbs!.Value, correlationId);
             results.Add(carbIntake);
         }
 
         // Create BolusCalculation record if this was a calculated bolus
         if (isCalculated && info.HasValue)
         {
-            var bolusCalc = CreateBolusCalculation(ev, info.Value, correlationId);
+            var bolusCalc = CreateBolusCalculation(ev, context.Now, info.Value, correlationId);
             if (bolusCalc != null)
                 results.Add(bolusCalc);
         }
@@ -110,6 +110,7 @@ internal sealed class BolusHandler : IMyLifeHandler
 
     private static BolusCalculation? CreateBolusCalculation(
         MyLifeEvent ev,
+        DateTime now,
         JsonElement info,
         Guid? correlationId
     )
@@ -144,6 +145,7 @@ internal sealed class BolusHandler : IMyLifeHandler
 
         return MyLifeFactory.CreateBolusCalculation(
             ev,
+            now,
             bgInput,
             carbInput,
             iob,

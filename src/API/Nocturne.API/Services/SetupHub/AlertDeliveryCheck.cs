@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.SetupHub;
 
@@ -22,7 +24,8 @@ public static class AlertDeliveryCheck
     public static bool DeliversWhileClosed(ChannelType type) =>
         type is not (ChannelType.InApp or ChannelType.WebPush or ChannelType.DeviceAction);
 
-    public static async Task<bool> VerifiedAsync(NocturneDbContext db, CancellationToken ct)
+    public static async Task<bool> VerifiedAsync(
+        NocturneDbContext db, ITenantRepository tenants, IAlertRuleRepository rules, CancellationToken ct)
     {
         var tests = await db.AlertInstances.AsNoTracking()
             .Where(i => i.IsTest
@@ -34,22 +37,16 @@ public static class AlertDeliveryCheck
         if (tests.Count == 0)
             return false;
 
-        var caregiver = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == db.TenantId)
-            .Select(t => t.PatientRelationship)
-            .FirstOrDefaultAsync(ct) == PatientRelationship.Caregiver;
+        var caregiver = (await tenants.GetAsync(db.TenantId, ct))?.PatientRelationship == PatientRelationship.Caregiver;
 
         var ruleIds = tests.Select(t => t.AlertRuleId).Distinct().ToList();
-        var channels = (await db.AlertRuleChannels.AsNoTracking()
-                .Where(c => ruleIds.Contains(c.AlertRuleId))
-                .ToListAsync(ct))
-            .ToLookup(c => c.AlertRuleId);
-        var starters = await EnabledStarterChannelsAsync(db, ct);
+        var channels = await rules.GetChannelsAsync(ruleIds, ct);
+        var starters = await EnabledStarterChannelsAsync(rules, ct);
 
         foreach (var test in tests)
         {
             var sent = await SentToAsync(db, test.Id, ct);
-            if (Matches(sent, channels[test.AlertRuleId])
+            if (Matches(sent, channels.GetValueOrDefault(test.AlertRuleId) ?? [])
                 && starters.All(rule => Matches(sent, rule))
                 && (!caregiver || sent.Any(s => DeliversWhileClosed(s.Type))))
                 return true;
@@ -63,14 +60,12 @@ public static class AlertDeliveryCheck
     /// the rest only while they send where it did: one sent elsewhere from the rule builder, or
     /// switched on after the test, is not known to reach anyone.
     /// </summary>
-    public static async Task<List<List<AlertRuleChannelEntity>>> EnabledStarterChannelsAsync(
-        NocturneDbContext db, CancellationToken ct) =>
-        (await db.AlertRules.AsNoTracking()
-            .Include(r => r.Channels)
-            .Where(r => r.StarterKind != null && r.IsEnabled)
-            .ToListAsync(ct))
-        .Select(r => r.Channels.ToList())
-        .ToList();
+    public static async Task<List<IReadOnlyList<AlertRuleChannelSnapshot>>> EnabledStarterChannelsAsync(
+        IAlertRuleRepository rules, CancellationToken ct) =>
+        (await rules.GetStarterRulesAsync(ct)).Values
+            .Where(r => r.IsEnabled)
+            .Select(r => r.Channels)
+            .ToList();
 
     /// <summary>The rule channels a test was sent to and did not fail on.</summary>
     public static async Task<HashSet<(ChannelType Type, string Destination)>> SentToAsync(
@@ -87,7 +82,7 @@ public static class AlertDeliveryCheck
     /// did not go to is left out: it is a member added to urgent lows, whom a test never reaches.
     /// </summary>
     public static bool Matches(
-        HashSet<(ChannelType Type, string Destination)> sent, IEnumerable<AlertRuleChannelEntity> current)
+        HashSet<(ChannelType Type, string Destination)> sent, IEnumerable<AlertRuleChannelSnapshot> current)
     {
         var testedInApp = sent.Where(s => s.Type == ChannelType.InApp).Select(s => s.Destination).ToHashSet();
         var now = current

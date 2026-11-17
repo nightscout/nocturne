@@ -14,7 +14,7 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 /// </summary>
 public class GlucoseStatisticsCharacterisationTests
 {
-    private readonly StatisticsService _service = new();
+    private readonly StatisticsService _service = new(TimeProvider.System);
 
     /// <summary>
     /// A day's worth of readings that rises through the target band into hyperglycaemia and falls

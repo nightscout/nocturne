@@ -51,6 +51,8 @@ public static class HubConnectionActor
         actor.SubjectId = authorization.SubjectId;
         actor.AuthType = authorization.Source?.AuthType.ToString() ?? actor.AuthType;
         actor.TokenId = authorization.Source?.GrantId ?? actor.TokenId;
+        if (authorization.Source is not null)
+            actor.CredentialFingerprint = authorization.Source.CredentialFingerprint;
         actor.IsSystem = false;
 
         connection.Items[ItemKey] = actor;

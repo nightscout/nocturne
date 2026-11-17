@@ -11,10 +11,12 @@ namespace Nocturne.Services.Demo.Services;
 public class DemoSettingsGenerator
 {
     private readonly DemoModeConfiguration _config;
+    private readonly TimeProvider _time;
 
-    public DemoSettingsGenerator(DemoModeConfiguration config)
+    public DemoSettingsGenerator(DemoModeConfiguration config, TimeProvider time)
     {
         _config = config;
+        _time = time;
     }
 
     /// <summary>
@@ -45,7 +47,7 @@ public class DemoSettingsGenerator
                     Type = "cgm",
                     Status = "connected",
                     Battery = 85,
-                    LastSync = DateTimeOffset.UtcNow.AddMinutes(-5),
+                    LastSync = _time.GetUtcNow().AddMinutes(-5),
                     SerialNumber = "SM12345678",
                 },
                 new()
@@ -57,7 +59,7 @@ public class DemoSettingsGenerator
                     Type = "pump",
                     Status = "connected",
                     Battery = 72,
-                    LastSync = DateTimeOffset.UtcNow.AddMinutes(-2),
+                    LastSync = _time.GetUtcNow().AddMinutes(-2),
                     SerialNumber = "POD98765432",
                 },
             },
@@ -322,7 +324,7 @@ public class DemoSettingsGenerator
                     Type = "cgm",
                     Description = "Dexcom G7 - Share account",
                     Status = "connected",
-                    LastSync = DateTimeOffset.UtcNow.AddMinutes(-2),
+                    LastSync = _time.GetUtcNow().AddMinutes(-2),
                     Icon = "dexcom",
                     Configured = true,
                     Enabled = true,
@@ -334,7 +336,7 @@ public class DemoSettingsGenerator
                     Type = "data",
                     Description = "yoursite.herokuapp.com",
                     Status = "connected",
-                    LastSync = DateTimeOffset.UtcNow.AddMinutes(-15),
+                    LastSync = _time.GetUtcNow().AddMinutes(-15),
                     Icon = "nightscout",
                     Configured = true,
                     Enabled = true,

@@ -209,13 +209,13 @@ public class AlertOrchestratorConditionIssueTests
 
             var enricher = new Mock<ISensorContextEnricher>();
             enricher
-                .Setup(x => x.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(),
-                    It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, Guid _, CancellationToken _) => c);
+                .Setup(x => x.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) => c);
 
             _orchestrator = new AlertOrchestrator(
                 Engine.Object,
                 Mock.Of<IAlertRepository>(),
+                Mock.Of<IAlertRuleRepository>(),
                 tenant.Object,
                 Mock.Of<IAlertDeliveryService>(),
                 enricher.Object,

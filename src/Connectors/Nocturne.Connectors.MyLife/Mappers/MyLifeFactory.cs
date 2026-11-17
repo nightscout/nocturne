@@ -13,11 +13,10 @@ namespace Nocturne.Connectors.MyLife.Mappers;
 /// </summary>
 internal static class MyLifeFactory
 {
-    internal static T CreateBase<T>(MyLifeEvent ev)
+    internal static T CreateBase<T>(MyLifeEvent ev, DateTime now)
         where T : IV4Record, new()
     {
         var timestamp = MyLifeMapperHelpers.FromInstantTicks(ev.EventDateTime);
-        var now = DateTime.UtcNow;
 
         return new T
         {
@@ -30,19 +29,18 @@ internal static class MyLifeFactory
         };
     }
 
-    internal static T CreateBaseWithSuffix<T>(MyLifeEvent ev, string suffix)
+    internal static T CreateBaseWithSuffix<T>(MyLifeEvent ev, DateTime now, string suffix)
         where T : IV4Record, new()
     {
-        var record = CreateBase<T>(ev);
+        var record = CreateBase<T>(ev, now);
         if (!string.IsNullOrWhiteSpace(suffix))
             record.LegacyId = $"{record.LegacyId}-{suffix}";
         return record;
     }
 
-    internal static SensorGlucose CreateSensorGlucose(MyLifeEvent ev, double mgdl)
+    internal static SensorGlucose CreateSensorGlucose(MyLifeEvent ev, DateTime now, double mgdl)
     {
         var timestamp = MyLifeMapperHelpers.FromInstantTicks(ev.EventDateTime);
-        var now = DateTime.UtcNow;
 
         return new SensorGlucose
         {
@@ -58,13 +56,14 @@ internal static class MyLifeFactory
 
     internal static Bolus CreateBolus(
         MyLifeEvent ev,
+        DateTime now,
         double insulin,
         Nocturne.Core.Models.V4.BolusType? bolusType = null,
         double? duration = null,
         Guid? correlationId = null
     )
     {
-        var bolus = CreateBase<Bolus>(ev);
+        var bolus = CreateBase<Bolus>(ev, now);
         bolus.Insulin = insulin;
         bolus.BolusType = bolusType;
         bolus.Duration = duration;
@@ -74,19 +73,20 @@ internal static class MyLifeFactory
 
     internal static CarbIntake CreateCarbIntake(
         MyLifeEvent ev,
+        DateTime now,
         double carbs,
         Guid? correlationId = null
     )
     {
-        var carbIntake = CreateBase<CarbIntake>(ev);
+        var carbIntake = CreateBase<CarbIntake>(ev, now);
         carbIntake.Carbs = carbs;
         carbIntake.CorrelationId = correlationId;
         return carbIntake;
     }
 
-    internal static BGCheck CreateBGCheck(MyLifeEvent ev, double glucose)
+    internal static BGCheck CreateBGCheck(MyLifeEvent ev, DateTime now, double glucose)
     {
-        var bgCheck = CreateBase<BGCheck>(ev);
+        var bgCheck = CreateBase<BGCheck>(ev, now);
         bgCheck.Glucose = glucose;
         bgCheck.GlucoseType = GlucoseType.Finger;
         bgCheck.Units = GlucoseUnit.MgDl;
@@ -95,12 +95,13 @@ internal static class MyLifeFactory
 
     internal static Note CreateNote(
         MyLifeEvent ev,
+        DateTime now,
         string text,
         string? eventType = null,
         bool isAnnouncement = false
     )
     {
-        var note = CreateBase<Note>(ev);
+        var note = CreateBase<Note>(ev, now);
         note.Text = text;
         note.EventType = eventType;
         note.IsAnnouncement = isAnnouncement;
@@ -109,11 +110,12 @@ internal static class MyLifeFactory
 
     internal static DeviceEvent CreateDeviceEvent(
         MyLifeEvent ev,
+        DateTime now,
         DeviceEventType eventType,
         string? notes = null
     )
     {
-        var deviceEvent = CreateBase<DeviceEvent>(ev);
+        var deviceEvent = CreateBase<DeviceEvent>(ev, now);
         deviceEvent.EventType = eventType;
         deviceEvent.Notes = notes;
         return deviceEvent;
@@ -121,6 +123,7 @@ internal static class MyLifeFactory
 
     internal static BolusCalculation CreateBolusCalculation(
         MyLifeEvent ev,
+        DateTime now,
         double? bloodGlucoseInput = null,
         double? carbInput = null,
         double? insulinOnBoard = null,
@@ -128,7 +131,7 @@ internal static class MyLifeFactory
         Guid? correlationId = null
     )
     {
-        var calc = CreateBase<BolusCalculation>(ev);
+        var calc = CreateBase<BolusCalculation>(ev, now);
         calc.BloodGlucoseInput = bloodGlucoseInput;
         calc.CarbInput = carbInput;
         calc.InsulinOnBoard = insulinOnBoard;
