@@ -137,26 +137,20 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(500)]
     [RequireScope(Scope.FoodRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetFoodHistory(
+    public Task<ActionResult> GetFoodHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 food history requested since {LastModified} with limit {Limit}",
+        =>
+        CreateV3HistoryResponseAsync(
+            "food",
             lastModified,
-            limit
+            limit,
+            (since, take) => _foods.GetFoodModifiedSinceAsync(since, take, cancellationToken),
+            records => records.Select(f => ToV3Document(f, f.Id)).ToList(),
+            echoRequestCursorWhenEmpty: true
         );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var page = await _foods.GetFoodModifiedSinceAsync(lastModified, limit, cancellationToken);
-
-        SetHistoryCursorHeaders(page.CursorMills ?? lastModified);
-
-        return CreateV3SuccessResponse(page.Records.Select(f => ToV3Document(f, f.Id)).ToList());
-    }
 
     /// <summary>
     /// Apply V3 filter criteria to a list of food records
