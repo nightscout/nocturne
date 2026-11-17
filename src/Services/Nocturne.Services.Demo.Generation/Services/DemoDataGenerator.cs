@@ -322,7 +322,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                 pending.Add((bolusTime, CreateBolusTreatment(
                     bolusTime,
                     bolus,
-                    meal.FoodType == "Snack" ? "Snack Bolus" : "Meal Bolus"
+                    meal.FoodType == "Snack" ? TreatmentTypes.SnackBolus : TreatmentTypes.MealBolus
                 )));
             }
 
@@ -1088,7 +1088,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Correction Bolus",
+            EventType = TreatmentTypes.CorrectionBolus,
             Insulin = insulin,
             Mills = utc.ToMills(),
             Created_at = utc.ToString("o"),
@@ -1103,7 +1103,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "SMB", // Super Micro Bolus - algorithm-delivered bolus
+            EventType = TreatmentTypes.Smb, // Super Micro Bolus - algorithm-delivered bolus
             Insulin = insulin,
             Mills = utc.ToMills(),
             Created_at = utc.ToString("o"),
@@ -1117,7 +1117,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Carb Correction",
+            EventType = TreatmentTypes.CarbCorrection,
             Carbs = carbs,
             Mills = utc.ToMills(),
             Created_at = utc.ToString("o"),
@@ -1132,7 +1132,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Temp Basal",
+            EventType = TreatmentTypes.TempBasal,
             Rate = rate,
             Duration = duration,
             Mills = utc.ToMills(),
@@ -1182,7 +1182,7 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// </summary>
     private static List<CalibrationPlan> PlanCalibrations(DateTime day)
     {
-        var sensorStart = DemoDeviceLifecycle.ChangeTimeOn(day, "Sensor Start");
+        var sensorStart = DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SensorStart);
         if (sensorStart is null)
             return [];
 
@@ -1296,7 +1296,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "BG Check",
+            EventType = TreatmentTypes.BgCheck,
             Glucose = Math.Max(40, ScaledRounding.Round(glucose + (_random.NextDouble() - 0.5) * 8, 0)),
             GlucoseType = "Finger",
             Units = "mg/dl",
@@ -1354,7 +1354,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                     _realtimeSimulator.AddInsulinDose(nowUtc, treatment.Insulin.Value);
                 if (treatment.Carbs is > 0)
                     _realtimeSimulator.AddCarbs(nowUtc, treatment.Carbs.Value);
-                if (treatment.EventType == "Temp Basal" && treatment.Rate is { } rate)
+                if (treatment.EventType == TreatmentTypes.TempBasal && treatment.Rate is { } rate)
                 {
                     tempRate = rate;
                     tempDuration = treatment.Duration is > 0 ? (int)treatment.Duration.Value : null;

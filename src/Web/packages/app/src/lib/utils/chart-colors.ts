@@ -6,6 +6,7 @@
 // code whose tests run without codegen.
 import type { ChartColor } from '#lib/api/generated/nocturne-api-client.js';
 import type { ChartThresholds } from '#lib/constants/glucose-thresholds.js';
+import type { GlucoseRangePalette } from '#lib/stores/appearance-store.svelte.js';
 
 /**
  * Resolve a ChartColor enum value to a CSS variable reference
@@ -41,8 +42,9 @@ export function getGlucoseColor(
 
 /**
  * Glucose colour mode union. `single` is a caller concern (a fixed colour);
- * `threshold` is the discrete bucket palette; `continuous` is the oklch
- * spectrum interpolation below.
+ * `threshold` is the discrete bucket palette; `continuous` blends colours between anchors:
+ * the oklch spectrum below for the theme palette, the range palette's colours for the
+ * distinct palette (see {@link distinctRangeStops}).
  */
 export type GlucoseColorMode = 'single' | 'threshold' | 'continuous';
 
@@ -50,9 +52,9 @@ export type GlucoseColorMode = 'single' | 'threshold' | 'continuous';
  * Anchor stops for the continuous glucose spectrum.
  * [mgdl, hue, chroma, lightness] in oklch space.
  *
- * This is the only frontend-computed colour in the codebase. It's a
- * documented exception to the "backend computes colours" rule because the
- * spectrum is presentation, not categorisation.
+ * The theme palette's continuous colour. Like the range blend ({@link getGlucoseRangeBlend})
+ * and the heatmap fill, it is a documented exception to the "backend computes colours" rule
+ * because the blend is presentation, not categorisation.
  */
 const SPECTRUM_STOPS: ReadonlyArray<readonly [number, number, number, number]> = [
 	[40, 25, 0.22, 0.58],
@@ -69,8 +71,17 @@ const SPECTRUM_STOPS: ReadonlyArray<readonly [number, number, number, number]> =
 
 export const GLUCOSE_SPECTRUM_ANCHORS: ReadonlyArray<number> = SPECTRUM_STOPS.map((s) => s[0]);
 
-/** Continuous oklch interpolation between anchor stops; clamps below/above. */
-export function getGlucoseColorContinuous(mgdl: number): string {
+/**
+ * Continuous colour at `mgdl`. With `range` (see {@link distinctRangeStops}) the range
+ * palette's colours are blended at their thresholds; without it, the oklch spectrum below.
+ * Clamps below and above the end anchors either way.
+ */
+export function getGlucoseColorContinuous(mgdl: number, range?: ReadonlyArray<GlucoseColorStop>): string {
+	if (range) return getGlucoseRangeBlend(mgdl, range);
+	return getGlucoseSpectrumColor(mgdl);
+}
+
+function getGlucoseSpectrumColor(mgdl: number): string {
 	const first = SPECTRUM_STOPS[0];
 	const last = SPECTRUM_STOPS[SPECTRUM_STOPS.length - 1];
 	let lo = first;
@@ -145,6 +156,24 @@ export function getGlucoseHeatmapFill(
 	mgdl: number,
 	stops = GLUCOSE_HEATMAP_LEGEND_STOPS
 ): string {
+	return blendColorStops(mgdl, stops, 'srgb');
+}
+
+/** A colour drawn at one glucose value. */
+export interface GlucoseColorStop {
+	mgdl: number;
+	color: string;
+}
+
+/**
+ * The colour at `mgdl` between stops ordered low to high, mixed in `space`; an end stop's
+ * colour outside them.
+ */
+function blendColorStops(
+	mgdl: number,
+	stops: ReadonlyArray<GlucoseColorStop>,
+	space: 'srgb' | 'oklch'
+): string {
 	const upper = stops.findIndex(({ mgdl: anchor }) => mgdl <= anchor);
 
 	// Above every anchor (no match) or at/below the first one — clamp to an end stop.
@@ -156,7 +185,42 @@ export function getGlucoseHeatmapFill(
 	const { mgdl: loAnchor, color: loColor } = stops[upper - 1];
 	const { mgdl: hiAnchor, color: hiColor } = stops[upper];
 	const loShare = ((hiAnchor - mgdl) / (hiAnchor - loAnchor)) * 100;
-	return `color-mix(in srgb, ${loColor} ${loShare.toFixed(2)}%, ${hiColor})`;
+	return `color-mix(in ${space}, ${loColor} ${loShare.toFixed(2)}%, ${hiColor})`;
+}
+
+/**
+ * The stops a continuous gradient blends the range palette's colours between, or `undefined`
+ * where the theme's own spectrum is drawn: only the distinct palette replaces it. Built once
+ * per thresholds so a point costs only the bracket search.
+ */
+export function distinctRangeStops(
+	palette: GlucoseRangePalette,
+	thresholds: GlucoseThresholds
+): GlucoseColorStop[] | undefined {
+	return palette === 'clarity' ? glucoseRangeStops(thresholds) : undefined;
+}
+
+/**
+ * The range colours at their thresholds, low to high: in-range sits at the middle of the target
+ * range. Thresholds out of order are sorted by value, so their colours swap places rather than
+ * the blend running backwards.
+ */
+export function glucoseRangeStops(t: GlucoseThresholds): GlucoseColorStop[] {
+	return [
+		{ mgdl: t.veryLow, color: 'var(--glucose-very-low)' },
+		{ mgdl: t.low, color: 'var(--glucose-low)' },
+		{ mgdl: (t.low + t.high) / 2, color: 'var(--glucose-in-range)' },
+		{ mgdl: t.high, color: 'var(--glucose-high)' },
+		{ mgdl: t.veryHigh, color: 'var(--glucose-very-high)' }
+	].sort((a, b) => a.mgdl - b.mgdl);
+}
+
+/** The range colours blended in oklch between their thresholds. */
+export function getGlucoseRangeBlend(
+	mgdl: number,
+	stops: ReadonlyArray<GlucoseColorStop>
+): string {
+	return blendColorStops(mgdl, stops, 'oklch');
 }
 
 /**
