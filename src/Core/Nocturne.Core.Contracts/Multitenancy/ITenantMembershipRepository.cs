@@ -79,15 +79,6 @@ public interface ITenantMembershipRepository
     /// <summary>The subjects of <see cref="ListOwnersAsync"/>, in the same order.</summary>
     Task<IReadOnlyList<Guid>> GetOwnerSubjectIdsAsync(Guid tenantId, CancellationToken ct);
 
-    /// <summary>
-    /// The subjects of <see cref="ListOwnersAsync"/>, to be told of an anonymous access request.
-    /// </summary>
-    /// <remarks>
-    /// System-pinned: "Request access" is rendered on a share host's login page too, where the
-    /// request reads as a share. The callers are pinned by <c>SystemPinnedAllowlistTests</c>.
-    /// </remarks>
-    Task<IReadOnlyList<Guid>> GetOwnerSubjectIdsForAccessRequestAsync(Guid tenantId, CancellationToken ct);
-
     /// <summary>The stored display preferences of the longest-standing owner; null when the tenant has no owner or the owner saved none.</summary>
     Task<string?> GetEarliestOwnerPreferencesAsync(Guid tenantId, CancellationToken ct);
 

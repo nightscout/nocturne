@@ -36,7 +36,6 @@
   import { createImportWatcher } from "#lib/migration/background-import.svelte.js";
   import { MigrationJobState } from "#lib/api/index.js";
   import { toast } from "svelte-sonner";
-  import MembershipRequestAutoSubmit from "#lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { WELCOME_PARAM } from "#lib/components/members/welcome.js";
   import { page } from "$app/state";
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
@@ -335,10 +334,6 @@
         <ImportInBackgroundNotice watcher={importWatcher} />
       {/if}
       {#if !tenantless}
-        <MembershipRequestAutoSubmit
-          isAuthenticated={!!data.user}
-          isGuestSession={data.isGuestSession}
-        />
         {#if satisfiesScope(data.effectivePermissions ?? [], "alerts.read")}
           <AlertSurfaces />
         {/if}

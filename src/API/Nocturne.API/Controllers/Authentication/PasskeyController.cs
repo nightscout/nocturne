@@ -8,7 +8,6 @@ using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
-using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.Authorization;
@@ -17,6 +16,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -58,6 +58,8 @@ namespace Nocturne.API.Controllers.Authentication;
 public class PasskeyController : ControllerBase
 {
     private const string RecoveryCookieName = ".Nocturne.RecoverySession";
+
+    private const string AccessRequestActor = "passkey:access-request";
 
     /// <summary>
     /// How long a spent recovery code stays redeemable for one passkey enrolment. Bounds both the
@@ -855,7 +857,7 @@ public class PasskeyController : ControllerBase
                     displayName,
                     Username: username,
                     IsActive: false,
-                    ApprovalStatus: "Pending",
+                    ApprovalStatus: nameof(ApprovalStatus.Pending),
                     AccessRequestMessage: request.Message?.Trim()),
                 HttpContext.RequestAborted);
         }
@@ -875,16 +877,31 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Complete passkey registration for an anonymous access request.
-    /// Verifies the attestation, stores the credential, and notifies tenant owners via
-    /// <see cref="IInAppNotificationService"/>. The subject remains inactive until an owner approves.
+    /// Complete passkey registration for an anonymous access request: stores the credential and
+    /// files a membership request for the pending subject on the tenant this host resolved to, which
+    /// the owners see and decide (<see cref="IMembershipRequestService"/>). The subject remains
+    /// inactive until one approves.
     /// </summary>
     /// <remarks>
     /// The display name is re-resolved to the pending subject the options step created rather than
     /// trusted, so a registration challenge minted by another flow cannot be redeemed here.
+    /// <para>
+    /// The request is filed in a scope that reads as no one on this tenant: the ceremony is anonymous
+    /// and may run on a share host, whose reader sees neither members nor requests, so read as the
+    /// caller it could not find the members to notify nor a request already filed. It returns only
+    /// the outcome.
+    /// </para>
+    /// <para>
+    /// The credential and the request stand or fall together. A credential whose request was not
+    /// stored is removed, so the visitor can run the ceremony again under the same name. Once the
+    /// credential is stored the filing ignores the visitor's disconnect, and a stored request keeps
+    /// its credential whatever fails after it: an owner who approves it must leave a member who can
+    /// sign in. A request an earlier attempt filed counts as filed.
+    /// </para>
     /// </remarks>
     /// <param name="request">The display name, attestation response, and challenge token from the WebAuthn ceremony.</param>
-    /// <param name="notificationService">Injected notification service for alerting owners.</param>
+    /// <param name="scopes">Opens the scope the membership request is filed in.</param>
+    /// <param name="passkeys">Removes the credential when the request could not be filed.</param>
     /// <returns><c>200 OK</c> on success, or <c>400</c> / <c>404</c> on error.</returns>
     [HttpPost("access-request/complete")]
     [AllowAnonymous]
@@ -895,12 +912,13 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult> AccessRequestComplete(
         [FromBody] AccessRequestCompleteRequest request,
-        [FromServices] IInAppNotificationService notificationService)
+        [FromServices] IServiceScopeFactory scopes,
+        [FromServices] IPasskeyCredentialRepository passkeys)
     {
         var tenantId = _tenantAccessor.TenantId;
         var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 
-        if (tenant == null || !tenant.AllowAccessRequests)
+        if (tenant == null || !tenant.AllowAccessRequests || _tenantAccessor.Context is not { } tenantContext)
             return NotFound();
 
         var displayName = request.DisplayName?.Trim();
@@ -911,48 +929,53 @@ public class PasskeyController : ControllerBase
         if (enrollingSubjectId == null)
             return Problem(detail: "Start the access request again", statusCode: 400, title: "Bad Request");
 
+        PasskeyCredentialResult? credResult = null;
         try
         {
-            var credResult = await _passkeyService.CompleteRegistrationAsync(
+            credResult = await _passkeyService.CompleteRegistrationAsync(
                 request.AttestationResponseJson, request.ChallengeToken, tenant.Id,
                 expectedSubjectId: enrollingSubjectId.Value);
-
-            var message = (await _subjects.GetAsync(credResult.SubjectId, HttpContext.RequestAborted))?.AccessRequestMessage;
-
-            // System-pinned in the repository: "Request access" is rendered on a share host's login page too.
-            var ownerIds = await _members.GetOwnerSubjectIdsForAccessRequestAsync(tenant.Id, HttpContext.RequestAborted);
-
-            foreach (var ownerId in ownerIds)
-            {
-                await notificationService.CreateNotificationAsync(
-                    ownerId.ToString(),
-                    "passkey.anonymous_login_request",
-                    $"{displayName} has requested access",
-                    subtitle: message != null && message.Length > 100 ? message[..100] : message,
-                    sourceId: credResult.SubjectId.ToString(),
-                    actions:
-                    [
-                        new NotificationActionDto
-                        {
-                            ActionId = "review",
-                            Label = "Review",
-                            Variant = "primary",
-                        },
-                    ],
-                    metadata: new Dictionary<string, object>
-                    {
-                        ["navigateTo"] = "/settings/access-requests",
-                    });
-            }
-
-            return Ok();
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Access request passkey registration failed");
+        }
+        catch (Fido2VerificationException ex)
+        {
+            _logger.LogWarning(ex, "Access request passkey attestation was refused");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Access request passkey attestation could not be read");
+        }
+
+        if (credResult is null)
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
+
+        await using var tenantScope = TenantJobScope.Open(scopes, tenantContext, AccessRequestActor);
+        var requests = tenantScope.ServiceProvider.GetRequiredService<IMembershipRequestService>();
+
+        CreateMembershipRequestResult? result = null;
+        try
+        {
+            var message = (await _subjects.GetAsync(credResult.SubjectId, CancellationToken.None))?.AccessRequestMessage;
+            result = await requests.CreateRequestAsync(tenant.Id, credResult.SubjectId, message, CancellationToken.None);
+            return IsFiled(result)
+                ? Ok()
+                : Problem(detail: result.Error, statusCode: 400, title: "Bad Request");
+        }
+        finally
+        {
+            if (!IsFiled(result) && (result is not null || !await HasPendingRequestAsync(requests, tenant.Id, credResult.SubjectId)))
+                await passkeys.RemoveAsync(credResult.CredentialId, credResult.SubjectId, CancellationToken.None);
         }
     }
+
+    private static bool IsFiled(CreateMembershipRequestResult? result) =>
+        result?.Outcome is CreateMembershipRequestOutcome.Created or CreateMembershipRequestOutcome.AlreadyPending;
+
+    private static async Task<bool> HasPendingRequestAsync(IMembershipRequestService requests, Guid tenantId, Guid subjectId) =>
+        await requests.GetMyRequestAsync(tenantId, subjectId, CancellationToken.None) is { Status: MembershipRequestRecord.Pending };
 
     /// <summary>
     /// Generate passkey registration options for an unauthenticated user accepting an invite.

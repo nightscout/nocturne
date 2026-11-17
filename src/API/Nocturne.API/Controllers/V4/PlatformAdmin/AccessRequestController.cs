@@ -72,6 +72,7 @@ public class AccessRequestController(
             request.DirectPermissions,
             request.LimitTo24Hours,
             HttpContext.GetGrantedScopes(),
+            HttpContext.GetSubjectId(),
             ct);
 
         switch (result.Outcome)
@@ -105,7 +106,7 @@ public class AccessRequestController(
     {
         var subject = await subjects.GetAsync(subjectId, ct);
 
-        if (subject is not { ApprovalStatus: "Pending" })
+        if (subject is not { ApprovalStatus: nameof(ApprovalStatus.Pending) })
             return NotFound();
 
         if (await subjectService.DeleteSubjectAsync(subjectId) is SubjectChange.LastOwnerOf lastOwnerOf)

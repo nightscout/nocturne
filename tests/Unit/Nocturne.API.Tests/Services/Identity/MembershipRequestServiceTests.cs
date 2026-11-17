@@ -4,10 +4,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -22,6 +25,7 @@ public class MembershipRequestServiceTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IInAppNotificationService> _notificationService;
+    private readonly Mock<IAuthAuditService> _audit = new();
     private readonly MembershipRequestService _service;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -55,6 +59,7 @@ public class MembershipRequestServiceTests : IDisposable
             _dbContext.AsFactory(),
             new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), TimeProvider.System),
             _notificationService.Object,
+            _audit.Object,
             TimeProvider.System,
             NullLogger<MembershipRequestService>.Instance);
 
@@ -144,14 +149,27 @@ public class MembershipRequestServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateRequestAsync_DuplicatePending_ReturnsFailure()
+    public async Task CreateRequestAsync_DuplicatePending_IsRefusedAndFilesNoSecondRow()
     {
         await _service.CreateRequestAsync(_tenantId, _subjectId, "First request");
 
         var result = await _service.CreateRequestAsync(_tenantId, _subjectId, "Second request");
 
         result.Success.Should().BeFalse();
+        result.Outcome.Should().Be(CreateMembershipRequestOutcome.AlreadyPending);
         result.Error.Should().Contain("pending request already exists");
+        (await _dbContext.MembershipRequests.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CreateRequestAsync_FromAnExistingMember_IsRefusedAsAConflictAndFilesNothing()
+    {
+        var result = await _service.CreateRequestAsync(_tenantId, _adminSubjectId, "Let me in");
+
+        result.Success.Should().BeFalse();
+        result.Outcome.Should().Be(CreateMembershipRequestOutcome.AlreadyMember);
+        (await _dbContext.MembershipRequests.AnyAsync()).Should().BeFalse();
+        NotifiedSubjectIds().Should().BeEmpty();
     }
 
     [Fact]
@@ -503,4 +521,157 @@ public class MembershipRequestServiceTests : IDisposable
         result.Error.Should().Contain("not accepting");
         (await _dbContext.MembershipRequests.AnyAsync()).Should().BeFalse();
     }
+
+    // ──────────────────────────────────────────────
+    // A requester awaiting access (the anonymous passkey ceremony)
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task ApproveRequestAsync_FromARequesterAwaitingAccess_ActivatesThemWithTheMembership()
+    {
+        var requester = await SeedRequesterAsync("Pending", isActive: false);
+
+        var result = await _service.ApproveRequestAsync(
+            await RequestIdOf(requester), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+
+        result.Success.Should().BeTrue();
+        var subject = await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requester);
+        subject.IsActive.Should().BeTrue();
+        subject.ApprovalStatus.Should().Be("Approved");
+        (await _dbContext.TenantMembers.AnyAsync(m => m.TenantId == _tenantId && m.SubjectId == requester)).Should().BeTrue();
+        (await new SubjectRepository(_dbContext.AsFactory()).ListPendingAccessRequestsAsync(CancellationToken.None))
+            .Should().NotContain(s => s.Id == requester, "an approved requester leaves the platform administrators' list");
+        AccessDecisionAudits(requester).Should().ContainSingle().Which.Should().Contain("Approved");
+    }
+
+    [Fact]
+    public async Task ApproveRequestAsync_FromAnActiveRequester_AuditsNoActivation()
+    {
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+
+        (await _service.ApproveRequestAsync(
+            await RequestIdOf(_subjectId), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]))
+            .Success.Should().BeTrue();
+
+        AccessDecisionAudits(_subjectId).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Approved")]
+    [InlineData("Denied")]
+    public async Task ApproveRequestAsync_FromAnInactiveRequesterNotAwaitingAccess_IsRefusedAndChangesNothing(string approvalStatus)
+    {
+        var requester = await SeedRequesterAsync(approvalStatus, isActive: false);
+        var requestId = await RequestIdOf(requester);
+
+        var result = await _service.ApproveRequestAsync(
+            requestId, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("not active");
+        var subject = await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requester);
+        subject.IsActive.Should().BeFalse();
+        subject.ApprovalStatus.Should().Be(approvalStatus);
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == requester)).Should().BeFalse();
+        (await _dbContext.MembershipRequests.AsNoTracking().SingleAsync(r => r.Id == requestId)).Status
+            .Should().Be(MembershipRequestRecord.Pending);
+        ApprovalNotifications().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ApproveRequestAsync_AfterAPlatformAdminDeletedTheRequester_FindsNoRequest()
+    {
+        var requester = await SeedRequesterAsync("Pending", isActive: false);
+        var requestId = await RequestIdOf(requester);
+
+        (await new SubjectRepository(_dbContext.AsFactory()).DeleteAsync(requester, CancellationToken.None))
+            .Should().BeOfType<SubjectChange.Changed>();
+
+        (await _service.GetPendingRequestsAsync(_tenantId)).Should().BeEmpty();
+        var result = await _service.ApproveRequestAsync(
+            requestId, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Request not found.");
+    }
+
+    [Fact]
+    public async Task DenyRequestAsync_FromARequesterAwaitingAccess_MarksThemDeniedAndKeepsThemInactive()
+    {
+        var requester = await SeedRequesterAsync("Pending", isActive: false);
+
+        (await _service.DenyRequestAsync(await RequestIdOf(requester), _tenantId, _adminSubjectId))
+            .Success.Should().BeTrue();
+
+        var subject = await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requester);
+        subject.IsActive.Should().BeFalse();
+        subject.ApprovalStatus.Should().Be("Denied");
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == requester)).Should().BeFalse();
+        (await new SubjectRepository(_dbContext.AsFactory()).ListPendingAccessRequestsAsync(CancellationToken.None))
+            .Should().NotContain(s => s.Id == requester);
+        AccessDecisionAudits(requester).Should().ContainSingle().Which.Should().Contain("Denied");
+    }
+
+    [Fact]
+    public async Task DenyRequestAsync_FromAnActiveRequester_LeavesTheSubjectAsItIs()
+    {
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+
+        (await _service.DenyRequestAsync(await RequestIdOf(_subjectId), _tenantId, _adminSubjectId))
+            .Success.Should().BeTrue();
+
+        var subject = await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == _subjectId);
+        subject.IsActive.Should().BeTrue();
+        subject.ApprovalStatus.Should().Be("Approved");
+        AccessDecisionAudits(_subjectId).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ARequestOnOneTenant_IsNeitherListedNorDecidableOnAnother()
+    {
+        var other = Guid.CreateVersion7();
+        _dbContext.Tenants.Add(new TenantEntity { Id = other, Slug = "other", DisplayName = "Other" });
+        await _dbContext.SaveChangesAsync();
+        var requester = await SeedRequesterAsync("Pending", isActive: false);
+        var requestId = await RequestIdOf(requester);
+
+        (await _service.GetPendingRequestsAsync(_tenantId)).Should().ContainSingle(r => r.Id == requestId);
+        (await _service.GetPendingRequestsAsync(other)).Should().BeEmpty();
+        (await _service.ApproveRequestAsync(requestId, other, [], _adminSubjectId, [Scope.FullAccess]))
+            .Error.Should().Be("Request not found.");
+        (await _service.DenyRequestAsync(requestId, other, _adminSubjectId))
+            .Error.Should().Be("Request not found.");
+        (await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requester)).ApprovalStatus.Should().Be("Pending");
+    }
+
+    /// <summary>A subject in <paramref name="approvalStatus"/> with a pending request on this tenant.</summary>
+    private async Task<Guid> SeedRequesterAsync(string approvalStatus, bool isActive)
+    {
+        var requester = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = requester, Name = "Sam Smith", IsActive = isActive, ApprovalStatus = approvalStatus,
+        });
+        _dbContext.MembershipRequests.Add(new MembershipRequestEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = requester,
+            Message = "I am the school nurse",
+            Status = MembershipRequestRecord.Pending,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
+        return requester;
+    }
+
+    private async Task<Guid> RequestIdOf(Guid subjectId) =>
+        (await _dbContext.MembershipRequests.AsNoTracking().SingleAsync(r => r.SubjectId == subjectId)).Id;
+
+    private IReadOnlyList<string> AccessDecisionAudits(Guid subjectId) =>
+        _audit.Invocations
+            .Where(i => i.Method.Name == nameof(IAuthAuditService.LogAsync)
+                && (string)i.Arguments[0]! == AuthAuditEventType.SubjectUpdated
+                && (Guid?)i.Arguments[1] == subjectId)
+            .Select(i => (string)i.Arguments[6]!)
+            .ToList();
 }

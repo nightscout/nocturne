@@ -94,7 +94,7 @@ public sealed record MembershipRequestRecord(
 public sealed record NewMembershipRequest(Guid TenantId, Guid SubjectId, string? Message, DateTime CreatedAt);
 
 /// <summary>The outcome written onto a pending request.</summary>
-public sealed record MembershipRequestDecision(string Status, Guid DecidedBySubjectId, DateTime DecidedAt, IReadOnlyList<Guid>? RoleIds);
+public sealed record MembershipRequestDecision(string Status, Guid? DecidedBySubjectId, DateTime DecidedAt, IReadOnlyList<Guid>? RoleIds);
 
 /// <summary>One of a subject's memberships with the tenant it is of.</summary>
 public sealed record SubjectMembership(TenantRecord Tenant, TenantMemberRecord Membership);
