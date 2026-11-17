@@ -73,7 +73,8 @@ public sealed record GlucoseDeviceStats(
 
 /// <summary>The latest APS snapshot inside a discovery window from one <c>Device</c>.</summary>
 /// <param name="DataSource">The greatest data source among its rows, or null when none carries one.</param>
-public sealed record ApsDeviceLastSeen(string Device, string? DataSource, DateTime Latest);
+/// <param name="AidAlgorithm">The algorithm its newest snapshot was attributed to, as stored.</param>
+public sealed record ApsDeviceLastSeen(string Device, string? DataSource, DateTime Latest, string? AidAlgorithm = null);
 
 /// <summary>One data type's rows of a source.</summary>
 /// <param name="DataType">A <see cref="SourceDataTypes"/> name.</param>

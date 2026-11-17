@@ -34,8 +34,12 @@ public class ConnectionService(
     public async Task<ConnectionsOverview> GetConnectionsAsync(Guid? viewerSubjectId, CancellationToken ct = default)
     {
         var now = time.GetUtcNow();
-        var buckets = await sourceData.WriterBucketsAsync(
-            now.AddDays(-DataSourceService.DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
+        var windowStart = now.AddDays(-DataSourceService.DiscoveryWindowDays).UtcDateTime;
+        var buckets = await sourceData.WriterBucketsAsync(windowStart, now.AddHours(-24).UtcDateTime, ct);
+        var androidApsDevices = (await sourceData.ApsSnapshotDevicesAsync(windowStart, ct))
+            .Where(d => DataSourceService.IsAndroidAps(d.AidAlgorithm))
+            .Select(d => d.Device)
+            .ToHashSet();
 
         var writerIds = buckets.Where(b => b.WriterGrantId.HasValue).Select(b => b.WriterGrantId!.Value).ToHashSet();
         var grantRecords = (await grants.ListForConnectionsAsync(viewerSubjectId, writerIds, ct))
@@ -67,7 +71,8 @@ public class ConnectionService(
         var connections = grantRecords
             .GroupBy(KeyOf)
             .Select(group => FromGrants(
-                group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts, viewerSubjectId, now))
+                group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts, viewerSubjectId, now,
+                androidApsDevices))
             .ToList();
 
         foreach (var status in await connectorHealth.GetConnectorStatusesAsync(ct))
@@ -76,7 +81,7 @@ public class ConnectionService(
             if (!status.IsEnabled && !status.HasDatabaseConfig && owned.Count == 0)
                 continue;
 
-            connections.Add(FromConnector(status, owned));
+            connections.Add(FromConnector(status, owned, androidApsDevices));
         }
 
         return new ConnectionsOverview
@@ -89,7 +94,7 @@ public class ConnectionService(
                     .ThenByDescending(c => c.LastRecordAt ?? c.LastSyncAt ?? c.LastUsedAt)
                     .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
             ],
-            OtherSources = OtherSourcesOf(otherBuckets, [.. writtenBuckets.Values.SelectMany(b => b)]),
+            OtherSources = OtherSourcesOf(otherBuckets, [.. writtenBuckets.Values.SelectMany(b => b)], androidApsDevices),
             WindowDays = DataSourceService.DiscoveryWindowDays,
         };
     }
@@ -113,7 +118,8 @@ public class ConnectionService(
         List<WriterBucket> buckets,
         IReadOnlyDictionary<Guid, int> deviceCounts,
         Guid? viewerSubjectId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        IReadOnlySet<string> androidApsDevices)
     {
         var newest = credentials[0];
         var isApp = newest.GrantType == OAuthGrantTypes.App;
@@ -157,7 +163,7 @@ public class ConnectionService(
                     }),
             ],
         };
-        ApplyRecords(connection, buckets);
+        ApplyRecords(connection, buckets, androidApsDevices);
 
         connection.Status = StatusOf(connection, credentials, now);
         return connection;
@@ -186,7 +192,8 @@ public class ConnectionService(
             ? now - connection.LastRecordAt < TimeSpan.FromMinutes(SenderActiveMinutes)
             : now - connection.LastUsedAt < ReaderActiveWindow;
 
-    private static Connection FromConnector(ConnectorStatusDto status, List<WriterBucket> buckets)
+    private static Connection FromConnector(
+        ConnectorStatusDto status, List<WriterBucket> buckets, IReadOnlySet<string> androidApsDevices)
     {
         var metadata = ConnectorMetadataService.GetByConnectorId(status.Id);
         var connection = new Connection
@@ -209,7 +216,7 @@ public class ConnectionService(
         if (connection.Status == ConnectionStatus.Error)
             connection.ErrorMessage = status.StateMessage;
 
-        ApplyRecords(connection, buckets);
+        ApplyRecords(connection, buckets, androidApsDevices);
         foreach (var stream in connection.Streams)
             stream.CanDelete = true;
         return connection;
@@ -219,22 +226,24 @@ public class ConnectionService(
     /// The sources no connection wrote. One that shares an origin handle with a credential's records
     /// cannot be deleted by that handle without taking the credential's records with it.
     /// </summary>
-    private static List<ConnectionStream> OtherSourcesOf(List<WriterBucket> unwritten, List<WriterBucket> written)
+    private static List<ConnectionStream> OtherSourcesOf(
+        List<WriterBucket> unwritten, List<WriterBucket> written, IReadOnlySet<string> androidApsDevices)
     {
         var writtenHandles = written
             .SelectMany(b => new[] { b.DataSource, b.Device })
             .Where(handle => !string.IsNullOrEmpty(handle))
             .ToHashSet();
 
-        var sources = StreamsOf(unwritten);
+        var sources = StreamsOf(unwritten, androidApsDevices);
         foreach (var source in sources)
             source.CanDelete = !writtenHandles.Contains(source.Key);
         return sources;
     }
 
-    private static void ApplyRecords(Connection connection, List<WriterBucket> buckets)
+    private static void ApplyRecords(
+        Connection connection, List<WriterBucket> buckets, IReadOnlySet<string> androidApsDevices)
     {
-        connection.Streams = StreamsOf(buckets);
+        connection.Streams = StreamsOf(buckets, androidApsDevices);
         connection.TotalRecords = connection.Streams.Sum(s => s.TotalRecords);
         connection.RecordsLast24Hours = connection.Streams.Sum(s => s.RecordsLast24Hours);
         connection.LastRecordAt = connection.Streams.Max(s => s.LastRecordAt);
@@ -242,7 +251,7 @@ public class ConnectionService(
             connection.RecordCounts[type] = connection.RecordCounts.GetValueOrDefault(type) + count;
     }
 
-    private static List<ConnectionStream> StreamsOf(List<WriterBucket> buckets) =>
+    private static List<ConnectionStream> StreamsOf(List<WriterBucket> buckets, IReadOnlySet<string> androidApsDevices) =>
     [
         .. buckets
             .GroupBy(b => (b.DataSource, b.Device))
@@ -251,6 +260,8 @@ public class ConnectionService(
                 var key = group.Key.DataSource ?? group.Key.Device ?? string.Empty;
                 var described = DataSourceService.CreateDataSourceInfo(
                     group.Key.Device ?? key, group.Key.DataSource, SourceHandle.Unknown);
+                if (group.Key.Device is { } device && androidApsDevices.Contains(device))
+                    DataSourceService.DescribeAsAndroidAps(described);
                 var stream = new ConnectionStream
                 {
                     Key = key,

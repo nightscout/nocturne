@@ -25,12 +25,16 @@ public class ConnectionServiceTests
     private readonly List<WriterBucket> _buckets = [];
     private readonly List<OAuthGrantRecord> _grantRecords = [];
     private readonly List<ConnectorStatusDto> _statuses = [];
+    private readonly List<ApsDeviceLastSeen> _apsDevices = [];
 
     private Task<ConnectionsOverview> ListAsync()
     {
         _sourceData
             .Setup(s => s.WriterBucketsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(_buckets);
+        _sourceData
+            .Setup(s => s.ApsSnapshotDevicesAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_apsDevices);
         _grants
             .Setup(g => g.ListForConnectionsAsync(Viewer, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(_grantRecords);
@@ -90,6 +94,22 @@ public class ConnectionServiceTests
         connection.Streams.Should().HaveCount(5);
         connection.RecordCounts[SourceDataTypes.Boluses].Should().Be(60);
         overview.OtherSources.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("AndroidAps", "AndroidAPS")]
+    [InlineData("OpenAps", "OpenAPS")]
+    public async Task ALoopStatusStreamIsNamedByItsNewestSnapshotsAlgorithm(string aidAlgorithm, string name)
+    {
+        var token = Grant(OAuthGrantTypes.Direct, "AAPS");
+        _grantRecords.Add(token);
+        _buckets.Add(Bucket(SourceDataTypes.DeviceStatus, token.Id, null, "openaps://phone", 100));
+        _apsDevices.Add(new ApsDeviceLastSeen("openaps://phone", null, Now.UtcDateTime, aidAlgorithm));
+
+        var overview = await ListAsync();
+
+        var stream = overview.Connections.Should().ContainSingle().Subject.Streams.Should().ContainSingle().Subject;
+        stream.Name.Should().Be(name);
     }
 
     [Fact]

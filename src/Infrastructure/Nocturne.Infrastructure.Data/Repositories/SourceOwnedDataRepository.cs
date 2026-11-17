@@ -101,10 +101,11 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
                 Device = g.Key!,
                 DataSource = g.Max(ds => ds.DataSource),
                 Latest = g.Max(ds => ds.Timestamp),
+                AidAlgorithm = g.OrderByDescending(ds => ds.Timestamp).Select(ds => ds.AidAlgorithm).FirstOrDefault(),
             })
             .ToListAsync(ct);
 
-        return devices.Select(d => new ApsDeviceLastSeen(d.Device, d.DataSource, d.Latest)).ToList();
+        return devices.Select(d => new ApsDeviceLastSeen(d.Device, d.DataSource, d.Latest, d.AidAlgorithm)).ToList();
     }
 
     /// <inheritdoc/>
