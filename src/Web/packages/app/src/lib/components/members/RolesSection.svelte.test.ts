@@ -114,6 +114,30 @@ describe("RolesSection", () => {
     await expect.element(dialog.getByRole("alert")).toHaveTextContent(REFUSAL);
   });
 
+  it("shows the translated sentence for a role name that is taken, not the server's text", async () => {
+    createImpl = async () => error(409, "A role with this name already exists.", { code: "role_name_taken" });
+
+    render(RolesSection);
+    await page.getByRole("button", { name: "Create role" }).click();
+    await page.getByRole("dialog").getByLabelText("Name").fill("Caretaker");
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+
+    await expect
+      .element(page.getByRole("dialog").getByRole("alert"))
+      .toHaveTextContent("A role with this name already exists. Use a different name.");
+  });
+
+  it("shows the translated sentence for a rename to a taken name", async () => {
+    updateImpl = async () => error(409, "A role with this name already exists.", { code: "role_name_taken" });
+
+    await openEditAndRename("Owner");
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect
+      .element(page.getByRole("dialog").getByRole("alert"))
+      .toHaveTextContent("A role with this name already exists. Use a different name.");
+  });
+
   it("does not carry a refused create's message into the next create", async () => {
     createImpl = async () => error(400, REFUSAL);
 
